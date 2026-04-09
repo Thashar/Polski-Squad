@@ -131,7 +131,7 @@ class RankingService {
      */
     parseScoreValue(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|[KMBTQ])?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|SX|[KMBTQ])?$/);
         if (!match) return 0;
         const number = parseFloat(match[1]);
         const unit = match[2];
@@ -145,6 +145,7 @@ class RankingService {
      */
     formatScore(value) {
         const units = [
+            { name: 'Sx', value: 1000000000000000000000 },
             { name: 'Qi', value: 1000000000000000000 },
             { name: 'Q', value: 1000000000000000 },
             { name: 'T', value: 1000000000000 },

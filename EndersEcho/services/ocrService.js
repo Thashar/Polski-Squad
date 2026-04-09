@@ -56,12 +56,12 @@ class OCRService {
             
             await fs.unlink(processedPath).catch(() => {});
             
-            const hasBest = /best\s*:/i.test(text.trim());
-            const hasTotal = /total\s*:/i.test(text.trim());
-            
-            // Znajdź wartości po "Best:" i "Total:"
-            const bestMatch = text.trim().match(/best\s*:\s*([^\n\r]*)/i);
-            const totalMatch = text.trim().match(/total\s*:\s*([^\n\r]*)/i);
+            const hasBest = /best\s*:|最高記録/i.test(text.trim());
+            const hasTotal = /total\s*:|合計/i.test(text.trim());
+
+            // Znajdź wartości po "Best:" / "最高記録：" i "Total:" / "合計："
+            const bestMatch = text.trim().match(/(?:best\s*:|最高記録[：:]\s*)([^\n\r]*)/i);
+            const totalMatch = text.trim().match(/(?:total\s*:|合計[：:]\s*)([^\n\r]*)/i);
             const bestValue = bestMatch ? bestMatch[1].trim() : '';
             const totalValue = totalMatch ? totalMatch[1].trim() : '';
             
@@ -247,9 +247,9 @@ class OCRService {
             }
         }
 
-        // KROK 1: Sprawdź linijkę z "Best:" - czy jest wynik z jednostką?
-        logger.info('KROK 1: Sprawdzam linijkę z "Best:" - czy jest wynik z jednostką...');
-        const bestScorePattern = /best\s*:?\s*[©»]*\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/gi;
+        // KROK 1: Sprawdź linijkę z "Best:" / "最高記録" - czy jest wynik z jednostką?
+        logger.info('KROK 1: Sprawdzam linijkę z "Best:" / "最高記録" - czy jest wynik z jednostką...');
+        const bestScorePattern = /(?:best\s*:?|最高記録[：:]?)\s*[©»]*\s*(\d+(?:\.\d+)?(?:Qi|Sx|[KMBTQ])+)/gi;
         let matches = text.match(bestScorePattern);
 
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
@@ -307,9 +307,9 @@ class OCRService {
             }
         }
 
-        // KROK 3: Wróć do linijki "Best:" i znormalizuj wynik bez jednostki
-        logger.info('KROK 3: Wracam do linijki "Best:" i sprawdzam wynik bez jednostki...');
-        const bestScoreNoUnitPattern = /best\s*:?\s*[©»]*[^\d]*(\d+(?:\.\d+)?)[^\w]*$/gmi;
+        // KROK 3: Wróć do linijki "Best:" / "最高記録" i znormalizuj wynik bez jednostki
+        logger.info('KROK 3: Wracam do linijki "Best:" / "最高記録" i sprawdzam wynik bez jednostki...');
+        const bestScoreNoUnitPattern = /(?:best\s*:?|最高記録[：:]?)\s*[©»]*[^\d]*(\d+(?:\.\d+)?)[^\w]*$/gmi;
         const noUnitMatches = text.match(bestScoreNoUnitPattern);
 
         if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logScoreAnalysis) {
@@ -409,8 +409,8 @@ class OCRService {
     extractBossName(text) {
         const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
 
-        // NOWA LOGIKA: Szukaj linii z "Victory" i weź następną linię jako nazwę bossa
-        const victoryIndex = lines.findIndex(line => /victory/i.test(line));
+        // NOWA LOGIKA: Szukaj linii z "Victory" (ang.) lub "勝利" (jap.) i weź następną linię jako nazwę bossa
+        const victoryIndex = lines.findIndex(line => /victory|勝利/i.test(line));
 
         if (victoryIndex !== -1 && victoryIndex + 1 < lines.length) {
             // Znaleziono "Victory" i jest następna linia

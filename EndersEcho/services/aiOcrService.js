@@ -50,10 +50,10 @@ class AIOCRService {
             const base64Image = pngBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            // === KROK 1: Sprawdź czy jest "Victory" ===
-            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "Victory"...`);
+            // === KROK 1: Sprawdź czy jest "Victory" (ang.) lub "勝利" (jap.) ===
+            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "Victory" lub "勝利"...`);
 
-            const checkPrompt = `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
+            const checkPrompt = `Poszukaj na załączonym screenie czy występuje fraza "Victory" (angielski) lub "勝利" (japoński). Jeżeli nie znajdziesz żadnej z tych fraz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
 
             const checkMessage = await this.client.messages.create({
                 model: this.model,
@@ -161,11 +161,15 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
             // === KROK 3: Wyciągnij nazwę bossa i wynik ===
             logger.info(`[AI OCR] KROK 3: Wyciągam nazwę bossa i wynik...`);
 
-            const extractPrompt = `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
+            const extractPrompt = `Odczytaj zawartość zdjęcia. Screen może być po angielsku lub po japońsku - wykryj język automatycznie.
 
-WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi
+GDZIE SZUKAĆ DANYCH:
+- Ekran angielski: baner "Victory" → pod nim nazwa bossa → etykieta "Best:" → etykieta "Total:"
+- Ekran japoński: baner "勝利！" → pod nim nazwa bossa → etykieta "最高記録：" (= Best) → etykieta "合計：" (= Total)
+
+WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
-UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
+UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
 
 ⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
 Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
@@ -173,8 +177,9 @@ NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoc
 NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
 NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
 Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
+Nazwę bossa przepisz DOKŁADNIE tak jak jest na ekranie (łącznie z japońskimi znakami jeśli ekran jest japoński).
 
-Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i napisz w następującym formacie:
+Odczytaj nazwę bossa, dokładny wynik (Best / 最高記録) wraz z jednostką, oraz Total (合計) i napisz w następującym formacie:
 <nazwa bossa>
 <wynik>
 <total>`;
@@ -357,7 +362,7 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         }
 
         // Regex: cyfry (opcjonalnie z kropką i cyframi dziesiętnymi) + opcjonalna jednostka
-        const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi)?$/i);
+        const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
         if (!match) {
             logger.info(`[AI OCR] Normalizacja: Nie udało się sparsować wyniku "${score}"`);
             return score;
@@ -427,10 +432,11 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
             'B': 1e9,
             'T': 1e12,
             'Q': 1e15,
-            'QI': 1e18
+            'QI': 1e18,
+            'SX': 1e21
         };
 
-        const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi)?$/i);
+        const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
         if (!match) return null;
 
         const number = parseFloat(match[1]);
