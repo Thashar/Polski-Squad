@@ -152,24 +152,24 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 
     async _extractData(base64Image, mediaType, lang) {
         const prompt = lang === 'jpn'
-            ? `Odczytaj zawartość zdjęcia. Poniżej napisu "勝利！" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (最高記録). Na ekranie jest też wartość "合計" - odczytaj ją również.
+            ? `この画像の内容を読み取ってください。「勝利！」の下にボス名があります。ボス名の下にスコア（最高記録）があります。画面には「合計」の値もあります。それも読み取ってください。
 
-WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
-UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
-UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
+重要 — スコアの単位（小さい順）: K, M, B, T, Q, Qi, Sx
+注意：単位の「Q」は数字の「0」に似て見えることがあります — 正確に識別してください。
+注意：スコアの最後の文字は常に単位（アルファベット）であり、数字ではありません。「18540」のように文字がない場合、最後の文字はおそらく「Q」であり「0」ではありません。
 
-⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
-Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
-NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
-NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
-NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
-Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
-Przetłumacz nazwę bossa na angielski. Jeśli nie znasz tłumaczenia, przepisz oryginalną nazwę.
+⚠️ スコア読み取りの重要ルール：
+画面に表示されている通りに正確に読み取ってください。
+画像に明確に表示されていない区切り文字（カンマや小数点）を追加しないでください。
+数字を「千」単位として解釈してカンマを追加しないでください。
+画面にない数字を追加しないでください。
+スコアの最後の文字に特に注意してください — それは単位（アルファベット）であり、数字ではありません。
+ボス名を英語に翻訳してください。翻訳がわからない場合は元の名前をそのまま記載してください。
 
-Odczytaj nazwę bossa (przetłumaczoną na angielski), dokładny wynik (最高記録) wraz z jednostką, oraz wartość 合計 i napisz w następującym formacie:
-<nazwa bossa po angielsku>
-<wynik>
-<total>`
+ボス名（英語訳）、スコア（最高記録）と単位、合計の値を以下の形式で記載してください：
+<英語のボス名>
+<スコア>
+<合計>`
             : `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
 
 WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
