@@ -288,10 +288,9 @@ class RankingService {
         const embed = new EmbedBuilder()
             .setColor(isGlobal ? 0x5865f2 : 0xffd700)
             .setTitle(title)
-            .setDescription(rankingText)
-            .addFields({ name: msgs.rankingStats, value: statsLines.join('\n'), inline: false });
+            .setDescription(rankingText);
 
-        // Pole statystyk wywołującego
+        // Pole statystyk wywołującego (pierwsze)
         if (callerStats !== null) {
             let callerValue;
             if (!callerStats.score) {
@@ -305,6 +304,9 @@ class RankingService {
             }
             embed.addFields({ name: msgs.rankingYourStats, value: callerValue, inline: false });
         }
+
+        // Pole statystyk ogólnych (drugie)
+        embed.addFields({ name: msgs.rankingStats, value: statsLines.join('\n'), inline: false });
 
         embed
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
