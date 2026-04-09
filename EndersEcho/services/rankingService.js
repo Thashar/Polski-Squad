@@ -250,7 +250,7 @@ class RankingService {
                 const isCurrentUser = player.userId === userId;
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
                 const serverInitial = targetGuild?.name?.[0] || '';
-                const serverSuffix = serverInitial ? `. ${serverInitial}` : '';
+                const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
 
                 const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}${serverSuffix}\n`;
 
