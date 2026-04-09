@@ -209,7 +209,7 @@ class RankingService {
      * @returns {Promise<EmbedBuilder>}
      */
     async createRankingEmbed(players, page, totalPages, userId, guild, options = {}) {
-        const { mode = 'server', client = null } = options;
+        const { mode = 'server', client = null, callerStats = null } = options;
         const msgs = options.messages || this.config.messages;
         const isGlobal = mode === 'global';
 
@@ -275,16 +275,38 @@ class RankingService {
 
         const title = isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle;
 
+        // Pole statystyk
+        const serverCount = this.config.guilds.length;
+        const statsLines = [
+            formatMessage(msgs.rankingPlayersCount, { count: players.length }),
+            formatMessage(msgs.rankingServersCount, { count: serverCount })
+        ];
+        if (players.length > 0) {
+            statsLines.push(formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }));
+        }
+
         const embed = new EmbedBuilder()
             .setColor(isGlobal ? 0x5865f2 : 0xffd700)
             .setTitle(title)
             .setDescription(rankingText)
-            .addFields({
-                name: msgs.rankingStats,
-                value: formatMessage(msgs.rankingPlayersCount, { count: players.length }) +
-                       (players.length > 0 ? '\n' + formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
-                inline: false
-            })
+            .addFields({ name: msgs.rankingStats, value: statsLines.join('\n'), inline: false });
+
+        // Pole statystyk wywołującego
+        if (callerStats !== null) {
+            let callerValue;
+            if (!callerStats.score) {
+                callerValue = msgs.rankingNotInRanking;
+            } else {
+                callerValue = [
+                    `🎯 **${msgs.rankingYourScore}:** ${callerStats.score}`,
+                    `🏠 **${msgs.rankingYourServerPos}:** ${callerStats.serverPosition ? `#${callerStats.serverPosition}` : '—'}`,
+                    `🌐 **${msgs.rankingYourGlobalPos}:** ${callerStats.globalPosition ? `#${callerStats.globalPosition}` : '—'}`
+                ].join('\n');
+            }
+            embed.addFields({ name: msgs.rankingYourStats, value: callerValue, inline: false });
+        }
+
+        embed
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 

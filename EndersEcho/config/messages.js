@@ -19,8 +19,14 @@ const pol = {
     rankingTitle: '🏆 Ranking Graczy',
     rankingStats: 'Statystyki',
     rankingPlayersCount: '👥 Liczba graczy: {count}',
+    rankingServersCount: '🌍 Serwery: {count}',
     rankingHighestScore: '🏆 Najwyższy wynik: {score}',
     rankingPage: 'Strona {current} z {total}',
+    rankingYourStats: '👤 Twoje statystyki',
+    rankingYourScore: 'Wynik',
+    rankingYourServerPos: 'Na serwerze',
+    rankingYourGlobalPos: 'Globalnie',
+    rankingNotInRanking: 'Nie jesteś jeszcze w rankingu.',
 
     // Pozycja gracza w rankingu
     rankingPosition: 'Miejsce w rankingu: {pos}',
@@ -129,8 +135,14 @@ const eng = {
     rankingTitle: '🏆 Player Ranking',
     rankingStats: 'Statistics',
     rankingPlayersCount: '👥 Players: {count}',
+    rankingServersCount: '🌍 Servers: {count}',
     rankingHighestScore: '🏆 Highest score: {score}',
     rankingPage: 'Page {current} of {total}',
+    rankingYourStats: '👤 Your stats',
+    rankingYourScore: 'Score',
+    rankingYourServerPos: 'On server',
+    rankingYourGlobalPos: 'Global',
+    rankingNotInRanking: 'You are not in the ranking yet.',
 
     // Player ranking position
     rankingPosition: 'Ranking position: {pos}',
