@@ -283,13 +283,13 @@ class RankingService {
 
         const fields = [];
         fields.push({
-            name: `#${startIndex + 1} – #${Math.min(startIndex + halfSize, endIndex)}`,
+            name: '\u200b',
             value: text1,
             inline: false
         });
         if (text2 !== null) {
             fields.push({
-                name: `#${startIndex + halfSize + 1} – #${endIndex}`,
+                name: '\u200b',
                 value: text2,
                 inline: false
             });
