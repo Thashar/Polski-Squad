@@ -306,9 +306,9 @@ class RankingService {
      */
     createRankingButtons(page, totalPages, disabled = false, messages = null) {
         const msgs = messages || this.config.messages;
-        const row = new ActionRowBuilder();
 
-        row.addComponents(
+        const navRow = new ActionRowBuilder();
+        navRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_first')
                 .setLabel(msgs.buttonFirst)
@@ -334,7 +334,16 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1)
         );
 
-        return row;
+        const backRow = new ActionRowBuilder();
+        backRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('ranking_back')
+                .setLabel(msgs.buttonBack)
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled)
+        );
+
+        return [navRow, backRow];
     }
 
     /**
