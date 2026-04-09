@@ -177,10 +177,10 @@ NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoc
 NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
 NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
 Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
-Nazwę bossa przepisz DOKŁADNIE tak jak jest na ekranie (łącznie z japońskimi znakami jeśli ekran jest japoński).
+Jeśli nazwa bossa jest po japońsku, przetłumacz ją na angielski. Jeśli nie znasz tłumaczenia, przepisz oryginalną nazwę.
 
 Odczytaj nazwę bossa, dokładny wynik (Best / 最高記録) wraz z jednostką, oraz Total (合計) i napisz w następującym formacie:
-<nazwa bossa>
+<nazwa bossa po angielsku>
 <wynik>
 <total>`;
 
