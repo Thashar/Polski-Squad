@@ -109,7 +109,7 @@ module.exports = {
     ranking: {
         dataDir: path.join(__dirname, '../data'),
         legacyFile: path.join(__dirname, '../data/ranking.json'),
-        playersPerPage: 10,
+        playersPerPage: 20,
         paginationTimeout: 3600000 // 1 godzina
     },
 

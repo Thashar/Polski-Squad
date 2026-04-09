@@ -216,78 +216,97 @@ class RankingService {
         const endIndex = Math.min(startIndex + this.config.ranking.playersPerPage, players.length);
         const currentPagePlayers = players.slice(startIndex, endIndex);
 
-        let rankingText = '';
-
-        for (const [index, player] of currentPagePlayers.entries()) {
-            try {
-                const actualPosition = startIndex + index + 1;
-                let position;
-                if (actualPosition <= 3) {
-                    const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
-                    position = medalMap[actualPosition];
-                } else {
-                    position = `${actualPosition}.`;
-                }
-
-                const date = new Date(player.timestamp);
-                const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-
-                const targetGuild = isGlobal
-                    ? (client?.guilds.cache.get(player.sourceGuildId) || null)
-                    : guild;
-
-                let displayName = player.username || `ID:${player.userId}`;
+        // Buduje tekst dla fragmentu graczy
+        const buildFieldText = async (slice, sliceStartIndex) => {
+            let text = '';
+            for (const [index, player] of slice.entries()) {
                 try {
-                    if (targetGuild) {
-                        const member = await targetGuild.members.fetch(player.userId);
-                        displayName = member.displayName;
+                    const actualPosition = sliceStartIndex + index + 1;
+                    let position;
+                    if (actualPosition <= 3) {
+                        const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
+                        position = medalMap[actualPosition];
+                    } else {
+                        position = `${actualPosition}.`;
                     }
-                } catch {
-                    // fallback na zapisane username
+
+                    const date = new Date(player.timestamp);
+                    const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+
+                    const targetGuild = isGlobal
+                        ? (client?.guilds.cache.get(player.sourceGuildId) || null)
+                        : guild;
+
+                    let displayName = player.username || `ID:${player.userId}`;
+                    try {
+                        if (targetGuild) {
+                            const member = await targetGuild.members.fetch(player.userId);
+                            displayName = member.displayName;
+                        }
+                    } catch {
+                        // fallback na zapisane username
+                    }
+
+                    const bossName = player.bossName || msgs.unknownBoss;
+                    const isCurrentUser = player.userId === userId;
+                    const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
+                    const serverInitial = (() => {
+                        const n = targetGuild?.name;
+                        if (!n) return '';
+                        const m = n.match(/^(?:\p{Regional_Indicator}{2}|\p{Emoji_Presentation}\uFE0F?(?:\u200D\p{Emoji_Presentation}\uFE0F?)*)/u);
+                        return m ? m[0] : ([...n][0] || '');
+                    })();
+                    const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
+
+                    const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}${serverSuffix}\n`;
+
+                    if (text.length + lineText.length > 1024) {
+                        logger.warn(`⚠️ Osiągnięto limit 1024 znaków w polu, przerywam na pozycji ${actualPosition}`);
+                        break;
+                    }
+                    text += lineText;
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas przetwarzania gracza ${index}: ${error.message}`);
                 }
-
-                const bossName = player.bossName || msgs.unknownBoss;
-                const isCurrentUser = player.userId === userId;
-                const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-                const serverInitial = (() => {
-                    const n = targetGuild?.name;
-                    if (!n) return '';
-                    // Flagi (dwa Regional_Indicator), ZWJ sequence, lub zwykłe emoji/znak
-                    const m = n.match(/^(?:\p{Regional_Indicator}{2}|\p{Emoji_Presentation}\uFE0F?(?:\u200D\p{Emoji_Presentation}\uFE0F?)*)/u);
-                    return m ? m[0] : ([...n][0] || '');
-                })();
-                const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
-
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}** *(${shortDate})* • ${bossName}${serverSuffix}\n`;
-
-                rankingText += lineText;
-
-                if (rankingText.length > 1800) {
-                    logger.warn(`⚠️ Osiągnięto limit 1800 znaków, przerywam na pozycji ${actualPosition}`);
-                    break;
-                }
-            } catch (error) {
-                logger.error(`❌ Błąd podczas przetwarzania gracza ${index}: ${error.message}`);
-                continue;
             }
-        }
+            return text || msgs.noDataOnPage;
+        };
 
-        if (!rankingText.trim()) {
-            rankingText = msgs.noDataOnPage;
+        const halfSize = 10;
+        const firstSlice = currentPagePlayers.slice(0, halfSize);
+        const secondSlice = currentPagePlayers.slice(halfSize);
+
+        const text1 = await buildFieldText(firstSlice, startIndex);
+        const text2 = secondSlice.length > 0
+            ? await buildFieldText(secondSlice, startIndex + halfSize)
+            : null;
+
+        const fields = [];
+        fields.push({
+            name: `#${startIndex + 1} – #${Math.min(startIndex + halfSize, endIndex)}`,
+            value: text1,
+            inline: false
+        });
+        if (text2 !== null) {
+            fields.push({
+                name: `#${startIndex + halfSize + 1} – #${endIndex}`,
+                value: text2,
+                inline: false
+            });
         }
+        fields.push({
+            name: msgs.rankingStats,
+            value: formatMessage(msgs.rankingPlayersCount, { count: players.length }) +
+                   (players.length > 0 ? '\n' + formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
+            inline: false
+        });
 
         const title = isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle;
 
         const embed = new EmbedBuilder()
             .setColor(isGlobal ? 0x5865f2 : 0xffd700)
             .setTitle(title)
-            .setDescription(rankingText)
-            .addFields({
-                name: msgs.rankingStats,
-                value: formatMessage(msgs.rankingPlayersCount, { count: players.length }) +
-                       (players.length > 0 ? '\n' + formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }) : ''),
-                inline: false
-            })
+            .addFields(fields)
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 
