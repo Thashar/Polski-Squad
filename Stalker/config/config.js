@@ -179,5 +179,8 @@ module.exports = {
     ],
 
     // Kanał wyświetlania kolejki OCR
-    queueChannelId: '1437122516974829679'
+    queueChannelId: '1437122516974829679',
+
+    // Kanał skanowania ekwipunku (Core Stock)
+    equipmentChannelId: '1491801320602992690'
 };

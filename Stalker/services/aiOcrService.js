@@ -182,6 +182,80 @@ class AIOCRService {
             error: isValid ? undefined : 'NO_PLAYERS_FOUND'
         };
     }
+
+    /**
+     * Analizuje zdjęcie z Core Stock (ekwipunek gracza)
+     * @param {Buffer} imageBuffer - Bufor obrazu
+     * @returns {Promise<{items: Object, isValid: boolean, error?: string}>}
+     */
+    async analyzeEquipmentImage(imageBuffer) {
+        if (!this.enabled) {
+            throw new Error('AI OCR nie jest włączony - brak ANTHROPIC_API_KEY lub USE_STALKER_AI_OCR=false');
+        }
+
+        try {
+            logger.info('[AI OCR - Equipment] Rozpoczynam analizę ekwipunku...');
+
+            const pngBuffer = await sharp(imageBuffer).png().toBuffer();
+            const base64Image = pngBuffer.toString('base64');
+
+            const prompt = `Analyze this Survivor.io screenshot showing the "Core Stock" inventory section.
+Extract all items visible in the list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
+Return ONLY a JSON object mapping item names to their total quantities, like this example:
+{"Transmute Core": 29, "Xeno Pet Core": 75, "Mount Core": 7, "Relic Core": 155, "Resonance Chip": 68, "Survivor Awakening Core": 131}
+If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
+
+            const message = await this.client.messages.create({
+                model: this.model,
+                max_tokens: 500,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: { type: 'base64', media_type: 'image/png', data: base64Image }
+                        },
+                        { type: 'text', text: prompt }
+                    ]
+                }]
+            });
+
+            const responseText = message.content[0].text.trim();
+            logger.info(`[AI OCR - Equipment] Odpowiedź: ${responseText}`);
+
+            // Wyciągnij JSON z odpowiedzi (Claude może dodać tekst przed/po)
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                return { items: {}, isValid: false, error: 'NO_JSON_IN_RESPONSE' };
+            }
+
+            const parsed = JSON.parse(jsonMatch[0]);
+
+            if (parsed.error === 'not_core_stock') {
+                return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
+            }
+
+            // Walidacja - wszystkie wartości muszą być liczbami >= 0
+            const items = {};
+            for (const [name, qty] of Object.entries(parsed)) {
+                const num = Number(qty);
+                if (typeof name === 'string' && name.length > 0 && !isNaN(num) && num >= 0) {
+                    items[name] = num;
+                }
+            }
+
+            if (Object.keys(items).length === 0) {
+                return { items: {}, isValid: false, error: 'NO_ITEMS_FOUND' };
+            }
+
+            logger.info(`[AI OCR - Equipment] Odczytano ${Object.keys(items).length} przedmiotów`);
+            return { items, isValid: true };
+
+        } catch (error) {
+            logger.error('[AI OCR - Equipment] Błąd analizy:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = AIOCRService;

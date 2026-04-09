@@ -31,6 +31,10 @@ class OCRService {
         this.queueMessageId = null; // ID wiadomości z embdem kolejki
         this.queueChannelId = this.config.queueChannelId;
 
+        // Kanał ekwipunku (drugi embed kolejki z przyciskiem "Skanuj ekwipunek")
+        this.equipmentMessageId = null;
+        this.equipmentChannelId = this.config.equipmentChannelId;
+
         // Referencje do innych serwisów (ustawiane później przez setServices)
         this.reminderService = null;
         this.punishmentService = null;
@@ -1367,6 +1371,17 @@ class OCRService {
      * Aktualizuje wyświetlanie kolejki na kanale
      */
     async updateQueueDisplay(guildId) {
+        // Aktualizuj oba kanały równolegle
+        await Promise.all([
+            this._updateMainQueueChannel(guildId),
+            this._updateEquipmentChannel(guildId)
+        ]);
+    }
+
+    /**
+     * Aktualizuje embed kolejki na głównym kanale OCR
+     */
+    async _updateMainQueueChannel(guildId) {
         try {
             if (!this.client || !this.queueChannelId) return;
 
@@ -1377,11 +1392,8 @@ class OCRService {
             }
 
             const embed = await this.createQueueEmbed(guildId);
-
-            // Dodaj przyciski komend i przycisk "Wyjdź z kolejki"
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
-            // Przyciski w jednym rzędzie
             const faza1Button = new ButtonBuilder()
                 .setCustomId('queue_cmd_faza1')
                 .setLabel('Faza 1')
@@ -1466,7 +1478,6 @@ class OCRService {
             const row4 = new ActionRowBuilder()
                 .addComponents(wdupieButton);
 
-            // Jeśli mamy zapisane ID wiadomości, spróbuj zaktualizować
             if (this.queueMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
@@ -1474,16 +1485,58 @@ class OCRService {
                     logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
                     return;
                 } catch (error) {
-                    // Wiadomość nie istnieje lub została usunięta
                     logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda, tworzę nowy jako pierwszą wiadomość');
                     this.queueMessageId = null;
                 }
             }
 
-            // Nie wysyłaj nowej wiadomości - zostanie wysłana podczas inicjalizacji bota
             logger.warn('[OCR-QUEUE] ⚠️ Brak embeda kolejki - zostanie utworzony podczas inicjalizacji');
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji wyświetlania kolejki:', error);
+            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji głównego kanału kolejki:', error);
+        }
+    }
+
+    /**
+     * Aktualizuje embed kolejki na kanale ekwipunku (z przyciskiem "Skanuj ekwipunek")
+     */
+    async _updateEquipmentChannel(guildId) {
+        try {
+            if (!this.client || !this.equipmentChannelId) return;
+
+            const channel = await this.client.channels.fetch(this.equipmentChannelId);
+            if (!channel) return;
+
+            const embed = await this.createQueueEmbed(guildId);
+            const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+
+            const scanButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_equipment')
+                .setLabel('Skanuj ekwipunek')
+                .setEmoji('🎒')
+                .setStyle(ButtonStyle.Primary);
+
+            const leaveQueueButton = new ButtonBuilder()
+                .setCustomId('queue_leave')
+                .setLabel('Wyjdź z kolejki')
+                .setEmoji('🚪')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+
+            if (this.equipmentMessageId) {
+                try {
+                    const message = await channel.messages.fetch(this.equipmentMessageId);
+                    await message.edit({ embeds: [embed], components: [row] });
+                    return;
+                } catch (error) {
+                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda ekwipunku');
+                    this.equipmentMessageId = null;
+                }
+            }
+
+            logger.warn('[OCR-QUEUE] ⚠️ Brak embeda ekwipunku - zostanie utworzony podczas inicjalizacji');
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji kanału ekwipunku:', error);
         }
     }
 
@@ -1718,6 +1771,64 @@ class OCRService {
         } catch (error) {
             logger.error('[OCR-QUEUE] ❌ Błąd inicjalizacji wyświetlania kolejki:', error);
         }
+
+        // Zainicjalizuj kanał ekwipunku (drugi embed kolejki)
+        await this._initializeEquipmentChannel(client);
+    }
+
+    /**
+     * Inicjalizuje embed kolejki na kanale ekwipunku
+     */
+    async _initializeEquipmentChannel(client) {
+        try {
+            if (!this.equipmentChannelId) return;
+
+            const channel = await client.channels.fetch(this.equipmentChannelId);
+            if (!channel) {
+                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału ekwipunku');
+                return;
+            }
+
+            const messages = await channel.messages.fetch({ limit: 100 });
+
+            let equipmentMessage = null;
+            for (const [, message] of messages) {
+                if (message.author.id === client.user.id &&
+                    message.embeds.length > 0 &&
+                    message.embeds[0].title === '📋 Kolejka OCR') {
+                    equipmentMessage = message;
+                }
+            }
+
+            const embed = await this.createQueueEmbed(channel.guildId);
+            const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
+
+            const scanButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_equipment')
+                .setLabel('Skanuj ekwipunek')
+                .setEmoji('🎒')
+                .setStyle(ButtonStyle.Primary);
+
+            const leaveQueueButton = new ButtonBuilder()
+                .setCustomId('queue_leave')
+                .setLabel('Wyjdź z kolejki')
+                .setEmoji('🚪')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+
+            if (equipmentMessage) {
+                await equipmentMessage.edit({ embeds: [embed], components: [row] });
+                this.equipmentMessageId = equipmentMessage.id;
+                logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed ekwipunku (ID: ' + equipmentMessage.id + ')');
+            } else {
+                const message = await channel.send({ embeds: [embed], components: [row] });
+                this.equipmentMessageId = message.id;
+                logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed ekwipunku (ID: ' + message.id + ')');
+            }
+        } catch (error) {
+            logger.error('[OCR-QUEUE] ❌ Błąd inicjalizacji kanału ekwipunku:', error);
+        }
     }
 
     // ==================== SYSTEM KOLEJKOWANIA OCR ====================
@@ -1754,9 +1865,12 @@ class OCRService {
      * Określa timeout dla sesji na podstawie komendy
      */
     getSessionTimeout(commandName) {
-        // Wszystkie sesje OCR: 15 minut (maksymalny czas)
-        // Timeout kolejki (rezerwacji) pozostaje 3 minuty
-        return 15 * 60 * 1000; // 15 minut dla wszystkich komend
+        // Skan ekwipunku: 1 minuta (czas na przesłanie zdjęcia)
+        if (commandName === 'Skanuj ekwipunek') {
+            return 1 * 60 * 1000;
+        }
+        // Wszystkie inne sesje OCR: 15 minut (maksymalny czas)
+        return 15 * 60 * 1000;
     }
 
     async startOCRSession(guildId, userId, commandName) {

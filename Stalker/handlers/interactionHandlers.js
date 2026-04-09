@@ -1359,6 +1359,21 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId === 'queue_cmd_equipment') {
+        await handleEquipmentScanCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'equipment_save') {
+        await handleEquipmentSave(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'equipment_cancel') {
+        await interaction.update({ content: '❌ Anulowano zapis ekwipunku.', embeds: [], components: [], files: [] });
+        return;
+    }
+
     // ============ KONIEC OBSŁUGI PRZYCISKÓW KOMEND Z KOLEJKI ============
 
     // ============ OBSŁUGA PRZYCISKU "WYJDŹ Z KOLEJKI" ============
@@ -10082,6 +10097,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
         description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
 
+        // Sekcja Ekwipunek (Core Stock) - dane z /skanuj-ekwipunek
+        try {
+            const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
+            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
+            const equipData = JSON.parse(equipRaw);
+            const userEquip = equipData[userId];
+            if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
+                const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
+                description += `\n### 🎒 EKWIPUNEK (Core Stock)\n`;
+                for (const [name, qty] of Object.entries(userEquip.items)) {
+                    description += `**${name}:** ${qty.toLocaleString('pl-PL')}\n`;
+                }
+                description += `*Aktualizacja: ${updatedDate}*\n`;
+            }
+        } catch {
+            // Brak danych ekwipunku - pomijamy sekcję
+        }
+
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {
             description += `\n### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
@@ -11811,6 +11844,208 @@ async function handleMsgCommand(interaction, config, broadcastMessageService, cl
     } catch (error) {
         logger.error('[MSG] ❌ Błąd obsługi komendy /msg:', error);
         await interaction.editReply('❌ Wystąpił błąd podczas wysyłania wiadomości.');
+    }
+}
+
+// ============ SKANOWANIE EKWIPUNKU (CORE STOCK) ============
+
+async function handleEquipmentScanCommand(interaction, sharedState) {
+    const { config, ocrService } = sharedState;
+    const guildId = interaction.guild.id;
+    const userId = interaction.user.id;
+    const commandName = 'Skanuj ekwipunek';
+
+    // Sprawdź uprawnienia - tylko członkowie klanu lub admin
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Ta funkcja jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    // Sprawdź stan kolejki (synchroniczne operacje - przed deferReply)
+    const hasReservation = ocrService.hasReservation(guildId, userId);
+    const isOCRActive = ocrService.isOCRActive(guildId);
+    const isQueueEmpty = ocrService.isQueueEmpty(guildId);
+    const willBeQueued = !hasReservation && (isOCRActive || !isQueueEmpty);
+
+    // Defer reply przed operacjami async (Discord wymaga odpowiedzi w 3 sekundy)
+    await interaction.deferReply({ ephemeral: true });
+
+    if (willBeQueued) {
+        const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName);
+        await interaction.editReply({
+            content: `⏳ Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n👋 Otrzymasz powiadomienia na kanale kolejki co 30 sekund, gdy będzie Twoja kolej (masz 1 minutę na przesłanie zdjęcia).`
+        });
+        return;
+    }
+
+    // Użytkownik może zacząć teraz - uruchom sesję OCR
+    await ocrService.startOCRSession(guildId, userId, commandName);
+
+    // Poproś o zdjęcie
+    await interaction.editReply({
+        content: `🎒 **Skanuj ekwipunek**\n\nWyślij zdjęcie ze swoim **Core Stock** (zakładka "Core Stock" w Detailed Stats).\n\n⏳ Masz **1 minutę** na przesłanie zdjęcia.`
+    });
+
+    // Collector wiadomości z obrazem (1 minuta)
+    const filter = m => m.author.id === userId && m.attachments.size > 0;
+    const collector = interaction.channel.createMessageCollector({ filter, time: 60000, max: 1 });
+
+    collector.on('collect', async (message) => {
+        try {
+            const attachment = message.attachments.first();
+
+            if (!attachment.contentType || !attachment.contentType.startsWith('image/')) {
+                await interaction.editReply({ content: '❌ Przesłany plik nie jest obrazem. Spróbuj ponownie klikając "Skanuj ekwipunek".' });
+                await ocrService.endOCRSession(guildId, userId, true);
+                try { await message.delete(); } catch {}
+                return;
+            }
+
+            await interaction.editReply({ content: '🔍 Analizuję zdjęcie... Proszę czekać.' });
+
+            // Usuń wiadomość użytkownika
+            try { await message.delete(); } catch {}
+
+            // Pobierz obraz
+            const axios = require('axios');
+            const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
+            const imageBuffer = Buffer.from(response.data);
+
+            // Analizuj z AI
+            const aiResult = await ocrService.aiOcrService.analyzeEquipmentImage(imageBuffer);
+
+            if (!aiResult.isValid) {
+                let errorMsg = '❌ Nie udało się odczytać ekwipunku.';
+                if (aiResult.error === 'NOT_CORE_STOCK') {
+                    errorMsg = '❌ Zdjęcie nie przedstawia ekranu **Core Stock**. Otwórz zakładkę "Core Stock" w Detailed Stats i spróbuj ponownie.';
+                } else if (!ocrService.aiOcrService.enabled) {
+                    errorMsg = '❌ AI OCR jest wyłączony. Skontaktuj się z administratorem.';
+                }
+                await interaction.editReply({ content: errorMsg });
+                await ocrService.endOCRSession(guildId, userId, true);
+                return;
+            }
+
+            // Zbuduj opis wyników
+            const itemLines = Object.entries(aiResult.items)
+                .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+                .join('\n');
+
+            const { EmbedBuilder: EmbedBuilderLocal, ButtonBuilder: ButtonBuilderLocal, ActionRowBuilder: ActionRowBuilderLocal, ButtonStyle: ButtonStyleLocal, AttachmentBuilder: AttachmentBuilderLocal } = require('discord.js');
+
+            const resultEmbed = new EmbedBuilderLocal()
+                .setTitle('🎒 Wyniki skanu ekwipunku')
+                .setDescription(`**Odczytane przedmioty:**\n${itemLines}\n\n💾 Czy zapisać te dane?`)
+                .setColor('#00FF00')
+                .setTimestamp()
+                .setImage(`attachment://equipment_scan.png`);
+
+            const saveButton = new ButtonBuilderLocal()
+                .setCustomId('equipment_save')
+                .setLabel('Zapisz')
+                .setEmoji('💾')
+                .setStyle(ButtonStyleLocal.Success);
+
+            const cancelButton = new ButtonBuilderLocal()
+                .setCustomId('equipment_cancel')
+                .setLabel('Anuluj')
+                .setEmoji('❌')
+                .setStyle(ButtonStyleLocal.Danger);
+
+            const row = new ActionRowBuilderLocal().addComponents(saveButton, cancelButton);
+
+            // Prześlij obraz do pokazania w ephemeralu
+            const fileAttachment = new AttachmentBuilderLocal(imageBuffer, { name: 'equipment_scan.png' });
+
+            // Zapisz dane tymczasowo do obsługi przez equipment_save
+            if (!interaction.client._equipmentPending) interaction.client._equipmentPending = new Map();
+            interaction.client._equipmentPending.set(userId, {
+                items: aiResult.items,
+                guildId,
+                expiresAt: Date.now() + 5 * 60 * 1000
+            });
+
+            await interaction.editReply({
+                content: null,
+                embeds: [resultEmbed],
+                components: [row],
+                files: [fileAttachment]
+            });
+
+            // Zakończ sesję OCR
+            await ocrService.endOCRSession(guildId, userId, true);
+
+        } catch (error) {
+            logger.error('[EQUIPMENT] ❌ Błąd analizy zdjęcia:', error);
+            await interaction.editReply({ content: '❌ Wystąpił błąd podczas analizy zdjęcia.' });
+            await ocrService.endOCRSession(guildId, userId, true);
+        }
+    });
+
+    collector.on('end', async (collected) => {
+        if (collected.size === 0) {
+            // Timeout - sesja już powinna być zakończona przez system kolejki
+            try {
+                await interaction.editReply({ content: '⏰ Czas minął. Nie przesłano zdjęcia w ciągu 1 minuty. Kliknij przycisk ponownie, aby spróbować.' });
+            } catch {}
+        }
+    });
+}
+
+async function handleEquipmentSave(interaction, sharedState) {
+    const userId = interaction.user.id;
+    const pending = interaction.client._equipmentPending?.get(userId);
+
+    if (!pending || Date.now() > pending.expiresAt) {
+        await interaction.update({ content: '❌ Dane wygasły. Spróbuj ponownie.', embeds: [], components: [], files: [] });
+        return;
+    }
+
+    try {
+        const path = require('path');
+        const fs = require('fs').promises;
+        const dataPath = path.join(__dirname, '../data/equipment_data.json');
+
+        let data = {};
+        try {
+            const raw = await fs.readFile(dataPath, 'utf8');
+            data = JSON.parse(raw);
+        } catch {}
+
+        data[userId] = {
+            items: pending.items,
+            updatedAt: new Date().toISOString()
+        };
+
+        await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
+        await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
+
+        interaction.client._equipmentPending.delete(userId);
+
+        const itemLines = Object.entries(pending.items)
+            .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+            .join('\n');
+
+        const { EmbedBuilder: EmbedBuilderLocal } = require('discord.js');
+        const successEmbed = new EmbedBuilderLocal()
+            .setTitle('✅ Ekwipunek zapisany')
+            .setDescription(`Dane zostały zapisane i będą widoczne w \`/player-status\`.\n\n${itemLines}`)
+            .setColor('#00FF00')
+            .setTimestamp();
+
+        await interaction.update({ embeds: [successEmbed], components: [], files: [] });
+        logger.info(`[EQUIPMENT] ✅ Zapisano ekwipunek dla ${userId}`);
+
+    } catch (error) {
+        logger.error('[EQUIPMENT] ❌ Błąd zapisu ekwipunku:', error);
+        await interaction.update({ content: '❌ Błąd podczas zapisu danych.', embeds: [], components: [], files: [] });
     }
 }
 

@@ -13,7 +13,18 @@
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
-5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia
+5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
+13. **Skan Ekwipunku (Core Stock)** - Przycisk "🎒 Skanuj ekwipunek" na kanale `1491801320602992690`:
+   - Dostępny dla wszystkich członków klanu (targetRoles)
+   - Wchodzi do wspólnej kolejki OCR (1-minutowy timeout sesji)
+   - Po dostaniu dostępu: użytkownik ma 1 minutę na wysłanie zdjęcia zakładki "Core Stock"
+   - Analiza przez AI (Claude Vision): wyciąga nazwę przedmiotu + pierwszą liczbę przed "/" (ilość "All")
+   - Prompt AI: wyciąga JSON `{"Transmute Core": 29, ...}` z ekranu Core Stock
+   - Wyniki wyświetlane w ephemeralu ze zdjęciem + przyciski "💾 Zapisz" / "❌ Anuluj"
+   - Po zapisie: dane agregowane per userId w `data/equipment_data.json`
+   - Format: `{ userId: { items: {...}, updatedAt: ISO_string } }`
+   - Dane widoczne w `/player-status` w sekcji "### 🎒 EKWIPUNEK (Core Stock)"
+   - Dane tymczasowe (pending) przechowywane w `client._equipmentPending` Map (wygasają po 5 min)
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2)
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
