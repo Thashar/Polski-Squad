@@ -595,6 +595,71 @@ class RankingService {
     }
 
     /**
+     * Tworzy embed powiadomienia o zmianie w globalnym Top 3
+     * @param {string} userName
+     * @param {string} bestScore
+     * @param {string|null} previousScore
+     * @param {string} userAvatarUrl
+     * @param {number} globalPosition - 1, 2 lub 3
+     * @param {number|null} prevGlobalPosition - poprzednia pozycja globalna lub null
+     * @param {string} sourceGuildName - nazwa serwera, na którym pobito rekord
+     * @param {Object|null} messages
+     * @param {string|null} previousTimestamp
+     * @returns {EmbedBuilder}
+     */
+    createGlobalTop3Embed(userName, bestScore, previousScore, userAvatarUrl, globalPosition, prevGlobalPosition, sourceGuildName, messages, previousTimestamp) {
+        const msgs = messages || this.config.messages;
+
+        const medal = this.getPositionMedal(globalPosition);
+        const embedColor = this.getPositionColor(globalPosition);
+
+        let progressText;
+        if (previousScore) {
+            const previousScoreValue = this.parseScoreValue(previousScore);
+            const newScoreValue = this.parseScoreValue(bestScore);
+            const improvement = newScoreValue - previousScoreValue;
+            const newScoreUnit = this.getScoreUnit(bestScore);
+            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
+            progressText = `${previousScore} ➜ ${bestScore} (${improvementText})`;
+        } else {
+            progressText = bestScore;
+        }
+
+        let positionNote = '';
+        if (!prevGlobalPosition || prevGlobalPosition > 3) {
+            positionNote = ` *(${msgs.globalTop3EnteredTop3})*`;
+        } else if (prevGlobalPosition > globalPosition) {
+            positionNote = ` *(${formatMessage(msgs.globalTop3PositionImproved, { prevPos: prevGlobalPosition })})*`;
+        }
+
+        const descHeader = formatMessage(msgs.globalTop3Description, { username: userName, medal, position: globalPosition });
+        const descLines = [descHeader, ''];
+
+        if (previousScore) {
+            descLines.push(`**${msgs.recordProgress}:** ${progressText}`);
+        } else {
+            descLines.push(`**${msgs.recordNewScore}:** ${bestScore}`);
+        }
+
+        descLines.push(`**${msgs.globalTop3GlobalPosition}:** ${medal} #${globalPosition}${positionNote}`);
+        descLines.push(`**${msgs.globalTop3Server}:** ${sourceGuildName}`);
+
+        const dateStr = new Date().toLocaleDateString(msgs.recordDateLocale || 'pl-PL');
+        const timeSince = this.formatTimeSince(previousTimestamp);
+        const dateLine = timeSince
+            ? `**${msgs.recordDateLabel}:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
+            : `**${msgs.recordDateLabel}:** ${dateStr}`;
+        descLines.push(dateLine);
+
+        return new EmbedBuilder()
+            .setColor(embedColor)
+            .setTitle(msgs.globalTop3Title)
+            .setDescription(descLines.join('\n'))
+            .setThumbnail(userAvatarUrl)
+            .setTimestamp();
+    }
+
+    /**
      * Aktualizuje ranking użytkownika na danym serwerze
      * @param {string} guildId
      * @param {string} userId

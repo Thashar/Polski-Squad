@@ -255,6 +255,8 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
 
+            const prevGlobalRanking = await this.rankingService.getGlobalRanking();
+
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                 guildId, userId, userName, bestScore, bossName
             );
@@ -363,6 +365,57 @@ class InteractionHandler {
                 await this.logService.logMessage('success', 'Role TOP zostały zaktualizowane po nowym rekordzie', interaction);
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
+            }
+
+            // Powiadomienie o zmianie w Global Top 3
+            try {
+                const newGlobalRanking = await this.rankingService.getGlobalRanking();
+                const newGlobalUserIndex = newGlobalRanking.findIndex(p => p.userId === userId);
+                const newGlobalPosition = newGlobalUserIndex !== -1 ? newGlobalUserIndex + 1 : null;
+
+                if (newGlobalPosition && newGlobalPosition <= 3) {
+                    const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
+                    const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
+                    const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
+
+                    if (globalScoreChanged) {
+                        const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
+                        const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
+                        const sourceGuildName = interaction.guild.name;
+                        const notifAvatarUrl = interaction.user.displayAvatarURL();
+
+                        logger.info(`🌐 Zmiana w Global Top 3: ${userName} na pozycji #${newGlobalPosition}`);
+
+                        for (const guildCfg of this.config.guilds) {
+                            try {
+                                const targetGuild = interaction.client.guilds.cache.get(guildCfg.id);
+                                if (!targetGuild) continue;
+                                const channel = targetGuild.channels.cache.get(guildCfg.allowedChannelId);
+                                if (!channel) continue;
+
+                                const guildMsgs = this.msgs(guildCfg.id);
+                                const globalEmbed = this.rankingService.createGlobalTop3Embed(
+                                    userName,
+                                    bestScore,
+                                    currentScore ? currentScore.score : null,
+                                    notifAvatarUrl,
+                                    newGlobalPosition,
+                                    prevGlobalPosition,
+                                    sourceGuildName,
+                                    guildMsgs,
+                                    currentScore ? currentScore.timestamp : null
+                                );
+
+                                await channel.send({ embeds: [globalEmbed] });
+                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}`);
+                            } catch (notifError) {
+                                logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}:`, notifError);
+                            }
+                        }
+                    }
+                }
+            } catch (globalCheckError) {
+                logger.error('❌ Błąd sprawdzania/wysyłania Global Top 3:', globalCheckError);
             }
 
             await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));

@@ -29,6 +29,13 @@
      - Pola: Postęp (`stary ➜ nowy`), Poprawa (`+X`), Data, Pozycja z medalem emoji
      - Author (górny pasek): ikona roli + nazwa roli (jeśli rola ma ikonę/emoji)
      - Thumbnail: avatar gracza | Image: screenshot wyniku
+   - **Powiadomienie Global Top 3** (`rankingService.createGlobalTop3Embed`):
+     - Wysyłane na kanał każdego serwera gdy gracz wchodzi lub poprawia wynik w globalnym Top 3 (pozycje 1-3)
+     - Warunek: `isNewRecord = true` ORAZ wynik gracza w globalnym rankingu faktycznie wzrósł (eliminuje przypadek gdy nowy rekord lokalny jest słabszy od wyniku z innego serwera)
+     - Embed zawiera: kto, jaki wynik (z postępem `stary ➜ nowy +X`), na jakim serwerze, kiedy (+ ile temu poprzedni), lokata globalna z medalem i adnotacją (wejście do Top3 / awans z #N)
+     - Kolor embeda wg pozycji globalnej (złoty/srebrny/brązowy)
+     - Każdy serwer otrzymuje wiadomość **w swoim języku** (pol/eng wg konfiguracji `ENDERSECHO_GUILD_N_LANG`)
+     - Powiadomienie idzie do `allowedChannelId` każdego serwera
 
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
