@@ -93,6 +93,14 @@ const pol = {
     topRoleAssigned: '✅ Przyznano rolę {roleName} użytkownikowi {username}',
     topRoleRemoved: '🗑️ Usunięto rolę {roleName} od {username}',
 
+    // Global Top 3 notification
+    globalTop3Title: '🌐 ZMIANA W TOP 3 GLOBALNYM!',
+    globalTop3Description: '## {username} jest teraz {medal} #{position} w globalnym rankingu!',
+    globalTop3Server: '🌍 Serwer',
+    globalTop3GlobalPosition: '🌐 Pozycja globalna',
+    globalTop3EnteredTop3: 'wejście do Top 3',
+    globalTop3PositionImproved: 'awans z #{prevPos}',
+
     // Wspólne
     unknownBoss: 'Nieznany',
     unknownBossLabel: 'Nieznany boss',
@@ -193,6 +201,14 @@ const eng = {
     topRoleError: '❌ Error updating TOP roles',
     topRoleAssigned: '✅ Role {roleName} assigned to {username}',
     topRoleRemoved: '🗑️ Role {roleName} removed from {username}',
+
+    // Global Top 3 notification
+    globalTop3Title: '🌐 GLOBAL TOP 3 CHANGE!',
+    globalTop3Description: '## {username} is now {medal} #{position} in the global ranking!',
+    globalTop3Server: '🌍 Server',
+    globalTop3GlobalPosition: '🌐 Global Position',
+    globalTop3EnteredTop3: 'entered Top 3',
+    globalTop3PositionImproved: 'promoted from #{prevPos}',
 
     // Common
     unknownBoss: 'Unknown',
