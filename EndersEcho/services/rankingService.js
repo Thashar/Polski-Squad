@@ -508,7 +508,7 @@ class RankingService {
             const newScoreValue = this.parseScoreValue(bestScore);
             const improvement = newScoreValue - previousScoreValue;
             const newScoreUnit = this.getScoreUnit(bestScore);
-            const improvementText = `+${this.formatProgressInUnit(improvement, newScoreUnit)}`;
+            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
             progressText = `${previousScore} ➜ ${bestScore} (${improvementText})`;
         }
 
