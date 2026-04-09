@@ -257,7 +257,7 @@ class RankingService {
                 })();
                 const serverSuffix = serverInitial ? ` • ${serverInitial}` : '';
 
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n`;
+                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
 
                 rankingText += lineText;
 
