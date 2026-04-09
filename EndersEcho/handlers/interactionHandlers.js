@@ -376,12 +376,12 @@ class InteractionHandler {
                 if (newGlobalPosition && newGlobalPosition <= 3) {
                     const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
                     const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
+                    const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
+                    const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
                     const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
                     const positionChanged = prevGlobalPosition !== newGlobalPosition;
 
                     if (globalScoreChanged && positionChanged) {
-                        const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
-                        const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
                         const sourceGuildName = interaction.guild.name;
                         const notifAvatarUrl = interaction.user.displayAvatarURL();
 
