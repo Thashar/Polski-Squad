@@ -42,65 +42,82 @@ class AIOCRService {
         try {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
 
-            // Konwertuj obraz na PNG używając sharp (normalizacja formatu)
-            const pngBuffer = await sharp(imagePath)
-                .png()
-                .toBuffer();
-
+            const pngBuffer = await sharp(imagePath).png().toBuffer();
             const base64Image = pngBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            // === KROK 1: Sprawdź czy jest "Victory" (ang.) lub "勝利" (jap.) ===
-            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "Victory" lub "勝利"...`);
+            let fakeCheckDone = false;
 
-            const checkPrompt = `Poszukaj na załączonym screenie czy występuje fraza "Victory" (angielski) lub "勝利" (japoński). Jeżeli nie znajdziesz żadnej z tych fraz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
+            for (const lang of ['eng', 'jpn']) {
+                const langLabel = lang === 'eng' ? 'angielski' : 'japoński';
 
-            const checkMessage = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 50,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mediaType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: checkPrompt
-                        }
-                    ]
-                }]
-            });
+                // KROK 1: sprawdź ekran zwycięstwa
+                logger.info(`[AI OCR] KROK 1 (${langLabel}): Sprawdzam ekran zwycięstwa...`);
+                const victoryFound = await this._checkVictory(base64Image, mediaType, lang);
 
-            const checkResponse = checkMessage.content[0].text.trim();
-            logger.info(`[AI OCR] KROK 1 - Odpowiedź: "${checkResponse}"`);
+                if (!victoryFound) {
+                    logger.warn(`[AI OCR] KROK 1 (${langLabel}): Nie znaleziono — próbuję następny język`);
+                    continue;
+                }
 
-            // Sprawdź czy znaleziono "Victory"
-            // Sprawdzamy czy odpowiedź NIE zawiera frazy "nie znaleziono" (case insensitive)
-            const foundVictory = !checkResponse.toLowerCase().includes('nie znaleziono');
+                logger.info(`[AI OCR] KROK 1 (${langLabel}): Znaleziono`);
 
-            if (!foundVictory) {
-                logger.warn(`[AI OCR] KROK 1 - Nie znaleziono "Victory", przerywam analizę`);
-                return {
-                    bossName: null,
-                    score: null,
-                    confidence: 0,
-                    isValidVictory: false,
-                    error: 'INVALID_SCREENSHOT'
-                };
+                // KROK 2: weryfikacja autentyczności (tylko raz)
+                if (!fakeCheckDone) {
+                    logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
+                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType);
+                    fakeCheckDone = true;
+
+                    if (!isAuthentic) {
+                        logger.warn(`[AI OCR] KROK 2: WYKRYTO PODROBIONE ZDJĘCIE!`);
+                        return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+                    }
+                    logger.info(`[AI OCR] KROK 2: Zdjęcie autentyczne`);
+                }
+
+                // KROK 3: wyciągnij dane
+                logger.info(`[AI OCR] KROK 3 (${langLabel}): Wyciągam dane...`);
+                const extractResponse = await this._extractData(base64Image, mediaType, lang);
+                logger.info(`[AI OCR] KROK 3 (${langLabel}) - Odpowiedź Claude:`);
+                logger.info(extractResponse);
+
+                const result = this.parseAIResponse(extractResponse);
+                logger.info(`[AI OCR] KROK 3 (${langLabel}) - Wynik parsowania:`, result);
+
+                if (result.isValidVictory) return result;
+
+                logger.warn(`[AI OCR] KROK 3 (${langLabel}): Nie udało się odczytać danych — próbuję następny język`);
             }
 
-            logger.info(`[AI OCR] KROK 1 - "Victory" znaleznione, przechodzę do KROKU 2`);
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
 
-            // === KROK 2: Sprawdź czy zdjęcie nie jest fałszywe ===
-            logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
+        } catch (error) {
+            logger.error(`[AI OCR] Błąd analizy obrazu:`, error);
+            throw error;
+        }
+    }
 
-            const fakeCheckPrompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
+    async _checkVictory(base64Image, mediaType, lang) {
+        const prompt = lang === 'jpn'
+            ? `Poszukaj na załączonym screenie czy występuje fraza "勝利" lub "勝利！". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`
+            : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
+
+        const message = await this.client.messages.create({
+            model: this.model,
+            max_tokens: 50,
+            messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
+                { type: 'text', text: prompt }
+            ]}]
+        });
+
+        const response = message.content[0].text.trim();
+        logger.info(`[AI OCR] KROK 1 (${lang}) - Odpowiedź: "${response}"`);
+        return !response.toLowerCase().includes('nie znaleziono');
+    }
+
+    async _checkAuthentic(base64Image, mediaType) {
+        const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
 DOKŁADNĄ ANALIZĘ LICZB
 Sprawdzenie KAŻDEGO piksela w cyfrach
 Analiza spójności czcionkiWE WSZYSTKICH ZNAKACH
@@ -114,58 +131,28 @@ METODOLOGIA SPRAWDZENIA
 Porównaj KAŻDY element z wzorcem oryginalnego interfejsu
 Zwróć uwagę na NAJMNIEJSZE rozbieżności
 Sprawdź KAŻDĄ literę i cyfrę pod kątem zgodności
-Sprawdz czy dostało coś dopisane odręcznie. 
+Sprawdz czy dostało coś dopisane odręcznie.
 INSTRUKCJA WYKONANIA:
-Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK". 
+Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK".
 Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 
-            const fakeCheckMessage = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 10,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mediaType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: fakeCheckPrompt
-                        }
-                    ]
-                }]
-            });
+        const message = await this.client.messages.create({
+            model: this.model,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
+                { type: 'text', text: prompt }
+            ]}]
+        });
 
-            const fakeCheckResponse = fakeCheckMessage.content[0].text.trim().toUpperCase();
-            logger.info(`[AI OCR] KROK 2 - Odpowiedź: "${fakeCheckResponse}"`);
+        const response = message.content[0].text.trim().toUpperCase();
+        logger.info(`[AI OCR] KROK 2 - Odpowiedź: "${response}"`);
+        return !response.includes('NOK');
+    }
 
-            // Sprawdź czy zdjęcie jest autentyczne
-            if (fakeCheckResponse.includes('NOK')) {
-                logger.warn(`[AI OCR] KROK 2 - WYKRYTO PODROBIONE ZDJĘCIE!`);
-                return {
-                    bossName: null,
-                    score: null,
-                    confidence: 0,
-                    isValidVictory: false,
-                    error: 'FAKE_PHOTO'
-                };
-            }
-
-            logger.info(`[AI OCR] KROK 2 - Zdjęcie autentyczne, przechodzę do KROKU 3`);
-
-            // === KROK 3: Wyciągnij nazwę bossa i wynik ===
-            logger.info(`[AI OCR] KROK 3: Wyciągam nazwę bossa i wynik...`);
-
-            const extractPrompt = `Odczytaj zawartość zdjęcia. Screen może być po angielsku lub po japońsku - wykryj język automatycznie.
-
-GDZIE SZUKAĆ DANYCH:
-- Ekran angielski: baner "Victory" → pod nim nazwa bossa → etykieta "Best:" → etykieta "Total:"
-- Ekran japoński: baner "勝利！" → pod nim nazwa bossa → etykieta "最高記録：" (= Best) → etykieta "合計：" (= Total)
+    async _extractData(base64Image, mediaType, lang) {
+        const prompt = lang === 'jpn'
+            ? `Odczytaj zawartość zdjęcia. Poniżej napisu "勝利！" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (最高記録). Na ekranie jest też wartość "合計" - odczytaj ją również.
 
 WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
@@ -177,49 +164,40 @@ NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoc
 NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
 NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
 Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
-Jeśli nazwa bossa jest po japońsku, przetłumacz ją na angielski. Jeśli nie znasz tłumaczenia, przepisz oryginalną nazwę.
+Przetłumacz nazwę bossa na angielski. Jeśli nie znasz tłumaczenia, przepisz oryginalną nazwę.
 
-Odczytaj nazwę bossa, dokładny wynik (Best / 最高記録) wraz z jednostką, oraz Total (合計) i napisz w następującym formacie:
+Odczytaj nazwę bossa (przetłumaczoną na angielski), dokładny wynik (最高記録) wraz z jednostką, oraz wartość 合計 i napisz w następującym formacie:
 <nazwa bossa po angielsku>
+<wynik>
+<total>`
+            : `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
+
+WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
+UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
+UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
+
+⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
+Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
+NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
+NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
+NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
+Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
+
+Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i napisz w następującym formacie:
+<nazwa bossa>
 <wynik>
 <total>`;
 
-            const extractMessage = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 500,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mediaType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: extractPrompt
-                        }
-                    ]
-                }]
-            });
+        const message = await this.client.messages.create({
+            model: this.model,
+            max_tokens: 500,
+            messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
+                { type: 'text', text: prompt }
+            ]}]
+        });
 
-            const extractResponse = extractMessage.content[0].text;
-            logger.info(`[AI OCR] KROK 3 - Odpowiedź Claude:`);
-            logger.info(extractResponse);
-
-            // Parsuj odpowiedź AI
-            const result = this.parseAIResponse(extractResponse);
-            logger.info(`[AI OCR] KROK 3 - Wynik parsowania:`, result);
-
-            return result;
-
-        } catch (error) {
-            logger.error(`[AI OCR] Błąd analizy obrazu:`, error);
-            throw error;
-        }
+        return message.content[0].text;
     }
 
     /**
