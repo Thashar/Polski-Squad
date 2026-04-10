@@ -2051,22 +2051,8 @@ class OCRService {
             }
         }
 
-        // Powiadom użytkownika
-        try {
-            if (!this.client) return;
-            const user = await this.client.users.fetch(userId);
-            const timeoutMinutes = this.getSessionTimeout(active.commandName) / (60 * 1000);
-            await user.send({
-                embeds: [new (require('discord.js')).EmbedBuilder()
-                    .setTitle('⏰ Sesja wygasła')
-                    .setDescription(`Twoja sesja OCR (\`${active.commandName}\`) wygasła z powodu braku aktywności (${timeoutMinutes} min).\n\nMożesz użyć komendy ponownie, aby rozpocząć nową sesję.`)
-                    .setColor('#FF0000')
-                    .setTimestamp()
-                ]
-            });
-        } catch (error) {
-            logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia o wygasłej sesji:`, error.message);
-        }
+        logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+
 
         // Wyczyść kanał kolejki
         await Promise.all([
@@ -2138,21 +2124,7 @@ class OCRService {
         const { userId, commandName, interaction, autoStartFn } = nextPerson;
         logger.info(`[OCR-QUEUE] 🚀 Auto-start sesji dla ${userId} (${commandName})`);
 
-        // Wyślij DM z powiadomieniem
-        try {
-            const { EmbedBuilder } = require('discord.js');
-            const user = await this.client.users.fetch(userId);
-            await user.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Twoja sesja OCR dla \`${commandName}\` została automatycznie uruchomiona.\n\nSprawdź swój poprzedni ephemeral na kanale kolejki.`)
-                    .setColor('#00FF00')
-                    .setTimestamp()
-                ]
-            });
-        } catch (error) {
-            logger.warn(`[OCR-QUEUE] ⚠️ Nie można wysłać DM do ${userId}: ${error.message}`);
-        }
+
 
         // Wyślij ghost ping na odpowiednim kanale
         try {
