@@ -11917,7 +11917,6 @@ async function handleCoreRankingCommand(interaction, sharedState) {
     const row2 = new ARB().addComponents(coreButtons.slice(3, 6));
 
     await interaction.reply({
-        content: '🎒 **Core Ranking** — wybierz rodzaj cora, aby zobaczyć ranking:',
         components: [row1, row2],
         flags: MessageFlags.Ephemeral
     });
