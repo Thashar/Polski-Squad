@@ -11910,13 +11910,13 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
 
             await interaction.editReply({ content: '🔍 Analizuję zdjęcie... Proszę czekać.' });
 
-            // Usuń wiadomość użytkownika
-            try { await message.delete(); } catch {}
-
-            // Pobierz obraz
+            // Pobierz obraz PRZED usunięciem wiadomości (po usunięciu URL staje się niedostępny)
             const axios = require('axios');
             const response = await axios.get(attachment.url, { responseType: 'arraybuffer' });
             const imageBuffer = Buffer.from(response.data);
+
+            // Usuń wiadomość użytkownika dopiero po pobraniu obrazu
+            try { await message.delete(); } catch {}
 
             // Analizuj z AI
             const aiResult = await ocrService.aiOcrService.analyzeEquipmentImage(imageBuffer);
