@@ -10017,9 +10017,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 const userEquip = equipData[userId];
                 if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
                     const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
-                    description += `🎒 **Core Stock** *(${updatedDate}):* `;
-                    const parts = Object.entries(userEquip.items).map(([name, qty]) => `${name}: **${qty.toLocaleString('pl-PL')}**`);
-                    description += parts.join(' | ') + '\n';
+                    description += `🎒 **Core Stock** *(${updatedDate}):*\n`;
+                    for (const [name, qty] of Object.entries(userEquip.items)) {
+                        description += fmtEquipmentLine(name, qty) + '\n';
+                    }
                 }
             } catch {
                 // Brak danych ekwipunku - pomijamy
@@ -11848,6 +11849,20 @@ async function handleMsgCommand(interaction, config, broadcastMessageService, cl
 
 // ============ SKANOWANIE EKWIPUNKU (CORE STOCK) ============
 
+const EQUIPMENT_ICONS = {
+    'Transmute Core':          '<:II_TransmuteCore:1458440558602092647>',
+    'Xeno Pet Core':           '<:II_PetAW:1407383326830104658>',
+    'Mount Core':              '<:II_MountCore:1492137886680748113>',
+    'Relic Core':              '<:II_RC:1385139885924421653>',
+    'Resonance Chip':          '<:II_Chip:1402532787059294229>',
+    'Survivor Awakening Core': '<:II_AW:1402532745804124242>'
+};
+
+function fmtEquipmentLine(name, qty) {
+    const icon = EQUIPMENT_ICONS[name] || '🔹';
+    return `${icon} **${name}:** ${qty.toLocaleString('pl-PL')}`;
+}
+
 async function handleEquipmentScanCommand(interaction, sharedState) {
     const { config, ocrService } = sharedState;
     const guildId = interaction.guild.id;
@@ -11934,7 +11949,7 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
 
             // Zbuduj opis wyników
             const itemLines = Object.entries(aiResult.items)
-                .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+                .map(([name, qty]) => fmtEquipmentLine(name, qty))
                 .join('\n');
 
             const { EmbedBuilder: EmbedBuilderLocal, ButtonBuilder: ButtonBuilderLocal, ActionRowBuilder: ActionRowBuilderLocal, ButtonStyle: ButtonStyleLocal, AttachmentBuilder: AttachmentBuilderLocal } = require('discord.js');
@@ -12029,7 +12044,7 @@ async function handleEquipmentSave(interaction, sharedState) {
         interaction.client._equipmentPending.delete(userId);
 
         const itemLines = Object.entries(pending.items)
-            .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+            .map(([name, qty]) => fmtEquipmentLine(name, qty))
             .join('\n');
 
         const { EmbedBuilder: EmbedBuilderLocal } = require('discord.js');
