@@ -202,7 +202,15 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/msg`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
+
+**Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
+- Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)
+- Po kliknięciu: ranking graczy według ilości wybranego cora (malejąco)
+- Format linii: `#1 Nick **ilość** 🔥` (pozycja, nick, pogrubiona ilość, ikona klanu)
+- Brak klanu → ikona 💀
+- Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
+- Max 30 pozycji w rankingu (z informacją o liczbie pozostałych)
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---

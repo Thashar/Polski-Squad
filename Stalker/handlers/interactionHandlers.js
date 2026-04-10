@@ -77,7 +77,7 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres'];
+    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -156,6 +156,9 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'clan-progres':
             await handleClanProgresCommand(interaction, sharedState);
+            break;
+        case 'core-ranking':
+            await handleCoreRankingCommand(interaction, sharedState);
             break;
         case 'player-raport':
             await handlePlayerRaportCommand(interaction, sharedState);
@@ -2208,6 +2211,8 @@ async function handleButton(interaction, sharedState) {
         await handleProgresNavButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('clan_status_prev|') || interaction.customId.startsWith('clan_status_next|')) {
         await handleClanStatusPageButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('core_ranking|')) {
+        await handleCoreRankingButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('confirm_reminder_')) {
         await handleConfirmReminderButton(interaction, sharedState);
     }
@@ -2465,6 +2470,10 @@ async function registerSlashCommands(client) {
                     .setRequired(true)
                     .setAutocomplete(true)
             ),
+
+        new SlashCommandBuilder()
+            .setName('core-ranking')
+            .setDescription('Wyświetla rankingi graczy według ilości corów z ekwipunku'),
 
         new SlashCommandBuilder()
             .setName('player-raport')
@@ -11861,6 +11870,132 @@ const EQUIPMENT_ICONS = {
 function fmtEquipmentLine(name, qty) {
     const icon = EQUIPMENT_ICONS[name] || '🔹';
     return `${icon} **${name}:** ${qty.toLocaleString('pl-PL')}`;
+}
+
+// ============ CORE RANKING ============
+
+async function handleCoreRankingCommand(interaction, sharedState) {
+    const { config } = sharedState;
+
+    // Sprawdź uprawnienia - tylko członkowie klanu lub admin
+    const clanRoleIds = Object.values(config.targetRoles);
+    const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
+    const isAdmin = interaction.member.permissions.has('Administrator');
+
+    if (!hasClanRole && !isAdmin) {
+        await interaction.reply({
+            content: '❌ Komenda `/core-ranking` jest dostępna tylko dla członków klanu.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    const { ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
+
+    // Parsuj custom emoji string "<:name:id>" na obiekt emoji dla discord.js
+    const parseEmoji = (str) => {
+        const m = str.match(/^<:(\w+):(\d+)>$/);
+        return m ? { name: m[1], id: m[2] } : str;
+    };
+
+    // Jeden przycisk per core (6 sztuk)
+    const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+        new BB()
+            .setCustomId(`core_ranking|${name}`)
+            .setLabel(name)
+            .setEmoji(parseEmoji(icon))
+            .setStyle(BS.Secondary)
+    );
+
+    // Rozmieść na max 2 wiersze (po 3 przyciski)
+    const row1 = new ARB().addComponents(coreButtons.slice(0, 3));
+    const row2 = new ARB().addComponents(coreButtons.slice(3, 6));
+
+    await interaction.reply({
+        content: '🎒 **Core Ranking** — wybierz rodzaj cora, aby zobaczyć ranking:',
+        components: [row1, row2],
+        flags: MessageFlags.Ephemeral
+    });
+}
+
+async function handleCoreRankingButton(interaction, sharedState) {
+    const { config } = sharedState;
+    const coreName = interaction.customId.split('|').slice(1).join('|');
+
+    await interaction.deferUpdate();
+
+    try {
+        // Wczytaj dane ekwipunku
+        const fs = require('fs').promises;
+        const path = require('path');
+        const dataPath = path.join(__dirname, '../data/equipment_data.json');
+
+        let equipData = {};
+        try {
+            equipData = JSON.parse(await fs.readFile(dataPath, 'utf8'));
+        } catch {
+            await interaction.editReply({ content: '❌ Brak danych ekwipunku. Nikt jeszcze nie przesłał zdjęcia Core Stock.', components: [], embeds: [] });
+            return;
+        }
+
+        // Filtruj użytkowników posiadających dane dla wybranego cora
+        const entries = [];
+        for (const [userId, userData] of Object.entries(equipData)) {
+            if (!userData.items || userData.items[coreName] === undefined) continue;
+            entries.push({ userId, qty: userData.items[coreName] });
+        }
+
+        if (entries.length === 0) {
+            await interaction.editReply({ content: `❌ Brak danych dla **${coreName}**.`, components: interaction.message.components, embeds: [] });
+            return;
+        }
+
+        // Posortuj malejąco
+        entries.sort((a, b) => b.qty - a.qty);
+
+        // Pobierz memberów serwera
+        const members = await safeFetchMembers(interaction.guild);
+
+        // Zbuduj linie rankingu
+        const lines = entries.map((entry, i) => {
+            const member = members.get(entry.userId);
+            const nick = member ? member.displayName : `<@${entry.userId}>`;
+
+            // Ikona klanu
+            let clanIcon = '💀';
+            if (member) {
+                for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        const clanName = config.roleDisplayNames[clanKey] || '';
+                        clanIcon = Array.from(clanName)[0] || '💀';
+                        break;
+                    }
+                }
+            }
+
+            return `${i + 1}. ${nick} **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
+        });
+
+        // Podziel na strony po 30 linii jeśli za długo
+        const MAX_LINES = 30;
+        const displayLines = lines.slice(0, MAX_LINES);
+        const extra = lines.length > MAX_LINES ? `\n*...i ${lines.length - MAX_LINES} więcej*` : '';
+
+        const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
+        const { EmbedBuilder: EBLocal } = require('discord.js');
+        const embed = new EBLocal()
+            .setTitle(`${coreIcon} Ranking — ${coreName}`)
+            .setDescription(displayLines.join('\n') + extra)
+            .setColor('#00BFFF')
+            .setFooter({ text: `Łącznie graczy z danymi: ${lines.length}` })
+            .setTimestamp();
+
+        await interaction.editReply({ content: null, embeds: [embed], components: interaction.message.components });
+
+    } catch (error) {
+        logger.error('[CORE-RANKING] ❌ Błąd:', error);
+        await interaction.editReply({ content: '❌ Błąd podczas generowania rankingu.', components: interaction.message.components, embeds: [] });
+    }
 }
 
 async function handleEquipmentScanCommand(interaction, sharedState) {
