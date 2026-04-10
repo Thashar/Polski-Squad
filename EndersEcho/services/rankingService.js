@@ -645,7 +645,7 @@ class RankingService {
      * @param {string|null} previousTimestamp
      * @returns {EmbedBuilder}
      */
-    createGlobalTop3Embed(userName, bestScore, previousScore, userAvatarUrl, globalPosition, prevGlobalPosition, sourceGuildName, messages, previousTimestamp) {
+    createGlobalTop3Embed(userName, bestScore, previousScore, userAvatarUrl, globalPosition, prevGlobalPosition, sourceGuildName, messages, previousTimestamp, attachmentName = null) {
         const msgs = messages || this.config.messages;
 
         const medal = this.getPositionMedal(globalPosition);
@@ -694,6 +694,7 @@ class RankingService {
             .setTitle(msgs.globalTop3Title)
             .setDescription(descLines.join('\n'))
             .setThumbnail(userAvatarUrl)
+            .setImage(attachmentName ? `attachment://${attachmentName}` : null)
             .setTimestamp();
     }
 
