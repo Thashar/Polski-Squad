@@ -1512,7 +1512,7 @@ class OCRService {
             const scanButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_equipment')
                 .setLabel('Skanuj ekwipunek')
-                .setEmoji('🎒')
+                .setEmoji('📸')
                 .setStyle(ButtonStyle.Primary);
 
             const leaveQueueButton = new ButtonBuilder()
@@ -1521,12 +1521,19 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
-            const row = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+            const rankingButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_core_ranking')
+                .setLabel('Ranking')
+                .setEmoji('🏆')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row1 = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+            const row2 = new ActionRowBuilder().addComponents(rankingButton);
 
             if (this.equipmentMessageId) {
                 try {
                     const message = await channel.messages.fetch(this.equipmentMessageId);
-                    await message.edit({ embeds: [embed], components: [row] });
+                    await message.edit({ embeds: [embed], components: [row1, row2] });
                     return;
                 } catch (error) {
                     logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda ekwipunku');
@@ -1806,7 +1813,7 @@ class OCRService {
             const scanButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_equipment')
                 .setLabel('Skanuj ekwipunek')
-                .setEmoji('🎒')
+                .setEmoji('📸')
                 .setStyle(ButtonStyle.Primary);
 
             const leaveQueueButton = new ButtonBuilder()
@@ -1815,14 +1822,21 @@ class OCRService {
                 .setEmoji('🚪')
                 .setStyle(ButtonStyle.Danger);
 
-            const row = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+            const rankingButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_core_ranking')
+                .setLabel('Ranking')
+                .setEmoji('🏆')
+                .setStyle(ButtonStyle.Secondary);
+
+            const row1 = new ActionRowBuilder().addComponents(scanButton, leaveQueueButton);
+            const row2 = new ActionRowBuilder().addComponents(rankingButton);
 
             if (equipmentMessage) {
-                await equipmentMessage.edit({ embeds: [embed], components: [row] });
+                await equipmentMessage.edit({ embeds: [embed], components: [row1, row2] });
                 this.equipmentMessageId = equipmentMessage.id;
                 logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed ekwipunku (ID: ' + equipmentMessage.id + ')');
             } else {
-                const message = await channel.send({ embeds: [embed], components: [row] });
+                const message = await channel.send({ embeds: [embed], components: [row1, row2] });
                 this.equipmentMessageId = message.id;
                 logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed ekwipunku (ID: ' + message.id + ')');
             }

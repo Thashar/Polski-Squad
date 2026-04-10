@@ -1367,6 +1367,11 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId === 'queue_cmd_core_ranking') {
+        await handleCoreRankingCommand(interaction, sharedState);
+        return;
+    }
+
     if (interaction.customId === 'equipment_save') {
         await handleEquipmentSave(interaction, sharedState);
         return;

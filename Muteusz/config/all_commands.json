@@ -377,6 +377,12 @@
           "requiredPermission": "clan_member"
         },
         {
+          "name": "/core-ranking",
+          "description": "Wyświetla rankingi graczy według ilości corów (Transmute, Relic, Xeno Pet itp.) ze skanów ekwipunku",
+          "usage": "/core-ranking → kliknij przycisk z ikoną wybranego cora → ranking graczy od najwyższej ilości",
+          "requiredPermission": "clan_member"
+        },
+        {
           "name": "/player-raport",
           "description": "Wyświetla raport problematycznych graczy w klanie (tylko dla moderatorów)",
           "usage": "/player-raport → wybierz klan → bot analizuje wszystkich graczy",
