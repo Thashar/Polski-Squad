@@ -2705,7 +2705,7 @@ async function handleEditEventSelect(interaction, sharedState) {
         .setCustomId('interval')
         .setLabel('Interwał powtarzania (opcjonalnie)')
         .setStyle(TextInputStyle.Short)
-        .setValue(event.interval)
+        .setValue(event.interval ?? '')
         .setRequired(false)
         .setMaxLength(10);
 
