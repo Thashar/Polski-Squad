@@ -10008,6 +10008,23 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (endersEchoRank !== null) {
                 description += `🏹 **Enders Echo:** #${endersEchoRank} / ${endersEchoTotal} — rekord: **${endersEchoScore}**\n`;
             }
+
+            // Ekwipunek (Core Stock) - dane z przycisku "Skanuj ekwipunek"
+            try {
+                const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
+                const equipRaw = await fs.readFile(equipDataPath, 'utf8');
+                const equipData = JSON.parse(equipRaw);
+                const userEquip = equipData[userId];
+                if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
+                    const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
+                    description += `🎒 **Core Stock** *(${updatedDate}):* `;
+                    const parts = Object.entries(userEquip.items).map(([name, qty]) => `${name}: **${qty.toLocaleString('pl-PL')}**`);
+                    description += parts.join(' | ') + '\n';
+                }
+            } catch {
+                // Brak danych ekwipunku - pomijamy
+            }
+
             description += `\n`;
         }
 
@@ -10096,24 +10113,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
         description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
-
-        // Sekcja Ekwipunek (Core Stock) - dane z /skanuj-ekwipunek
-        try {
-            const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
-            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
-            const equipData = JSON.parse(equipRaw);
-            const userEquip = equipData[userId];
-            if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
-                const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
-                description += `\n### 🎒 EKWIPUNEK (Core Stock)\n`;
-                for (const [name, qty] of Object.entries(userEquip.items)) {
-                    description += `**${name}:** ${qty.toLocaleString('pl-PL')}\n`;
-                }
-                description += `*Aktualizacja: ${updatedDate}*\n`;
-            }
-        } catch {
-            // Brak danych ekwipunku - pomijamy sekcję
-        }
 
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {
