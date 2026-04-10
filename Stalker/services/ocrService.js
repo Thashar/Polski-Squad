@@ -24,8 +24,7 @@ class OCRService {
 
         // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
         this.activeProcessing = new Map(); // guildId → {userId, commandName, expiresAt, timeout}
-        this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName}]
-        this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout, commandName}
+        this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName, interaction, autoStartFn}]
 
         // Wyświetlanie kolejki
         this.queueMessageId = null; // ID wiadomości z embdem kolejki
@@ -1290,13 +1289,12 @@ class OCRService {
     async createQueueEmbed(guildId) {
         const queue = this.waitingQueue.get(guildId) || [];
         const active = this.activeProcessing.get(guildId);
-        const reservation = this.queueReservation.get(guildId);
 
         // Dynamiczny kolor embeda
         let embedColor = '#00FF00'; // Zielony (domyślnie - pusta kolejka)
 
-        if (active || reservation) {
-            // Jeśli coś jest w użyciu lub jest rezerwacja
+        if (active) {
+            // Jeśli coś jest w użyciu
             if (queue.length > 2) {
                 embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby w kolejce)
             } else {
@@ -1331,20 +1329,6 @@ class OCRService {
             }
         }
 
-        // Rezerwacja
-        if (reservation && !active) {
-            try {
-                const guild = await this.client.guilds.fetch(guildId);
-                const member = await guild.members.fetch(reservation.userId);
-                const expiryTimestamp = Math.floor(reservation.expiresAt / 1000);
-                description += `⏰ **Rezerwacja:**\n`;
-                description += `${member.displayName} - \`${reservation.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
-            } catch (error) {
-                description += `⏰ **Rezerwacja:**\n`;
-                description += `Użytkownik ${reservation.userId} - \`${reservation.commandName}\`\n\n`;
-            }
-        }
-
         // Kolejka oczekujących
         if (queue.length > 0) {
             description += `⏳ **Kolejka oczekujących:** (${queue.length})\n\n`;
@@ -1359,7 +1343,7 @@ class OCRService {
                     description += `**${i + 1}.** Użytkownik ${person.userId} - \`${person.commandName}\`\n`;
                 }
             }
-        } else if (!active && !reservation) {
+        } else if (!active) {
             description += `✅ **Kolejka pusta**\n\nOCR jest dostępny do użycia!`;
         }
 
@@ -1883,17 +1867,6 @@ class OCRService {
     // ==================== SYSTEM KOLEJKOWANIA OCR ====================
 
     /**
-     * Sprawdza czy użytkownik ma rezerwację OCR
-     */
-    hasReservation(guildId, userId) {
-        if (!this.queueReservation.has(guildId)) {
-            return false;
-        }
-        const reservation = this.queueReservation.get(guildId);
-        return reservation.userId === userId;
-    }
-
-    /**
      * Sprawdza czy ktoś obecnie używa OCR
      */
     isOCRActive(guildId) {
@@ -1923,34 +1896,6 @@ class OCRService {
     }
 
     async startOCRSession(guildId, userId, commandName) {
-        // Usuń rezerwację jeśli istnieje
-        if (this.queueReservation.has(guildId)) {
-            const reservation = this.queueReservation.get(guildId);
-
-            // Zatrzymaj ghost ping
-            if (reservation.ghostPingInterval) {
-                clearInterval(reservation.ghostPingInterval);
-                logger.info(`[OCR-QUEUE] ⏹️ Zatrzymano ghost ping - użytkownik rozpoczął sesję`);
-            }
-
-            // Usuń ostatnią wiadomość ghost ping
-            if (reservation.ghostPingMessageId) {
-                try {
-                    const channel = await this.client.channels.fetch(this.queueChannelId);
-                    const message = await channel.messages.fetch(reservation.ghostPingMessageId);
-                    await message.delete();
-                    logger.info(`[OCR-QUEUE] 🗑️ Usunięto ostatnią wiadomość ghost ping - sesja rozpoczęta`);
-                } catch (error) {
-                    // Ignoruj błąd - wiadomość już może być usunięta
-                }
-            }
-
-            if (reservation.timeout) {
-                clearTimeout(reservation.timeout);
-            }
-            this.queueReservation.delete(guildId);
-        }
-
         // Usuń z kolejki jeśli tam jest
         if (this.waitingQueue.has(guildId)) {
             const queue = this.waitingQueue.get(guildId);
@@ -2053,23 +1998,8 @@ class OCRService {
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
 
-        // Sprawdź czy są osoby w kolejce
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-
-            if (queue.length > 0) {
-                // Pobierz pierwszą osobę z kolejki
-                const nextPerson = queue[0];
-                logger.info(`[OCR-QUEUE] 📢 Następna osoba: ${nextPerson.userId} (${nextPerson.commandName})`);
-
-                // Stwórz rezerwację na 3 minuty
-                await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
-
-                // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
-            } else {
-                this.waitingQueue.delete(guildId);
-            }
-        }
+        // Auto-start sesji dla następnej osoby w kolejce
+        await this.autoStartNextInQueue(guildId);
     }
 
     /**
@@ -2147,20 +2077,8 @@ class OCRService {
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
 
-        // Sprawdź czy są osoby w kolejce i powiadom następną
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-
-            if (queue.length > 0) {
-                const nextPerson = queue[0];
-                logger.info(`[OCR-QUEUE] 📢 Następna osoba po wygaśnięciu: ${nextPerson.userId} (${nextPerson.commandName})`);
-
-                // Stwórz rezerwację na 3 minuty
-                await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
-            } else {
-                this.waitingQueue.delete(guildId);
-            }
-        }
+        // Auto-start sesji dla następnej osoby w kolejce
+        await this.autoStartNextInQueue(guildId);
     }
 
     /**
@@ -2177,7 +2095,7 @@ class OCRService {
     /**
      * Dodaje użytkownika do kolejki OCR
      */
-    async addToOCRQueue(guildId, userId, commandName) {
+    async addToOCRQueue(guildId, userId, commandName, interaction, autoStartFn) {
         if (!this.waitingQueue.has(guildId)) {
             this.waitingQueue.set(guildId, []);
         }
@@ -2189,7 +2107,7 @@ class OCRService {
             return { position: queue.findIndex(item => item.userId === userId) + 1 };
         }
 
-        queue.push({ userId, addedAt: Date.now(), commandName });
+        queue.push({ userId, addedAt: Date.now(), commandName, interaction, autoStartFn });
         const position = queue.length;
 
         logger.info(`[OCR-QUEUE] ➕ ${userId} dodany do kolejki OCR (pozycja: ${position}, komenda: ${commandName})`);
@@ -2201,142 +2119,62 @@ class OCRService {
     }
 
     /**
-     * Tworzy rezerwację OCR dla pierwszej osoby w kolejce
+     * Automatycznie startuje sesję OCR dla następnej osoby w kolejce
      */
-    async createOCRReservation(guildId, userId, commandName) {
-        // Wyczyść poprzednią rezerwację jeśli istnieje
-        if (this.queueReservation.has(guildId)) {
-            const oldReservation = this.queueReservation.get(guildId);
-            if (oldReservation.timeout) {
-                clearTimeout(oldReservation.timeout);
-            }
-            // Zatrzymaj ghost ping z poprzedniej rezerwacji
-            if (oldReservation.ghostPingInterval) {
-                clearInterval(oldReservation.ghostPingInterval);
-            }
-            // Usuń ostatnią wiadomość ghost ping
-            if (oldReservation.ghostPingMessageId) {
-                try {
-                    const channel = await this.client.channels.fetch(this.queueChannelId);
-                    const message = await channel.messages.fetch(oldReservation.ghostPingMessageId);
-                    await message.delete();
-                } catch (error) {
-                    // Ignoruj błąd - wiadomość już może być usunięta
-                }
-            }
+    async autoStartNextInQueue(guildId) {
+        if (!this.waitingQueue.has(guildId)) return;
+
+        const queue = this.waitingQueue.get(guildId);
+        if (queue.length === 0) {
+            this.waitingQueue.delete(guildId);
+            return;
         }
 
-        const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
+        const nextPerson = queue.shift();
+        if (queue.length === 0) {
+            this.waitingQueue.delete(guildId);
+        }
 
-        const timeout = setTimeout(async () => {
-            logger.warn(`[OCR-QUEUE] ⏰ Rezerwacja wygasła dla ${userId}`);
-            await this.expireOCRReservation(guildId, userId);
-        }, 3 * 60 * 1000);
+        const { userId, commandName, interaction, autoStartFn } = nextPerson;
+        logger.info(`[OCR-QUEUE] 🚀 Auto-start sesji dla ${userId} (${commandName})`);
 
-        // Rozpocznij ghost ping co 30 sekund
-        let ghostPingMessageId = null;
-        const sendGhostPing = async () => {
+        // Wyślij DM z powiadomieniem
+        try {
+            const { EmbedBuilder } = require('discord.js');
+            const user = await this.client.users.fetch(userId);
+            await user.send({
+                embeds: [new EmbedBuilder()
+                    .setTitle('✅ Twoja kolej!')
+                    .setDescription(`Twoja sesja OCR dla \`${commandName}\` została automatycznie uruchomiona.\n\nSprawdź swój poprzedni ephemeral na kanale kolejki.`)
+                    .setColor('#00FF00')
+                    .setTimestamp()
+                ]
+            });
+        } catch (error) {
+            logger.warn(`[OCR-QUEUE] ⚠️ Nie można wysłać DM do ${userId}: ${error.message}`);
+        }
+
+        // Wyślij ghost ping na kanale kolejki
+        try {
+            if (this.client && this.queueChannelId) {
+                const queueChannel = await this.client.channels.fetch(this.queueChannelId);
+                if (queueChannel) {
+                    await queueChannel.send(`<@${userId}> ✅ Twoja kolej! Sesja \`${commandName}\` została automatycznie uruchomiona.`);
+                }
+            }
+        } catch (error) {
+            logger.warn(`[OCR-QUEUE] ⚠️ Nie można wysłać ghost pinga: ${error.message}`);
+        }
+
+        // Wywołaj callback sesji
+        if (autoStartFn && interaction) {
             try {
-                if (!this.client || !this.queueChannelId) return;
-
-                const channel = await this.client.channels.fetch(this.queueChannelId);
-                if (!channel) return;
-
-                // Usuń poprzednią wiadomość ghost ping
-                if (ghostPingMessageId) {
-                    try {
-                        const oldMessage = await channel.messages.fetch(ghostPingMessageId);
-                        await oldMessage.delete();
-                    } catch (error) {
-                        // Ignoruj błąd - wiadomość już może być usunięta
-                    }
-                }
-
-                // Wyślij nową wiadomość ghost ping
-                const message = await channel.send(`<@${userId}> 👋 Twoja kolej! Użyj komendy, w celu przeprowadzenia analizy zdjęć!`);
-                ghostPingMessageId = message.id;
-
-                // Aktualizuj ID w rezerwacji (potrzebne dla czyszczenia)
-                const reservation = this.queueReservation.get(guildId);
-                if (reservation) {
-                    reservation.ghostPingMessageId = ghostPingMessageId;
-                }
-
-                logger.info(`[OCR-QUEUE] 👻 Wysłano ghost ping do ${userId}`);
+                await autoStartFn(interaction);
             } catch (error) {
-                logger.error(`[OCR-QUEUE] ❌ Błąd wysyłania ghost ping:`, error.message);
-            }
-        };
-
-        // Wyślij pierwszy ghost ping natychmiast
-        await sendGhostPing();
-
-        // Rozpocznij interval co 30 sekund
-        const ghostPingInterval = setInterval(sendGhostPing, 30 * 1000);
-
-        this.queueReservation.set(guildId, {
-            userId,
-            expiresAt,
-            timeout,
-            commandName,
-            ghostPingInterval,
-            ghostPingMessageId
-        });
-
-        // Aktualizuj wyświetlanie kolejki
-        await this.updateQueueDisplay(guildId);
-
-        logger.info(`[OCR-QUEUE] ✅ Utworzono rezerwację dla ${userId} z ghost pingiem co 30s`);
-    }
-
-    /**
-     * Wygasa rezerwację i przechodzi do następnej osoby
-     */
-    async expireOCRReservation(guildId, userId) {
-        // Zatrzymaj ghost ping PRZED usunięciem rezerwacji
-        const reservation = this.queueReservation.get(guildId);
-        if (reservation) {
-            if (reservation.ghostPingInterval) {
-                clearInterval(reservation.ghostPingInterval);
-                logger.info(`[OCR-QUEUE] ⏹️ Zatrzymano ghost ping dla ${userId}`);
-            }
-            // Usuń ostatnią wiadomość ghost ping
-            if (reservation.ghostPingMessageId) {
-                try {
-                    const channel = await this.client.channels.fetch(this.queueChannelId);
-                    const message = await channel.messages.fetch(reservation.ghostPingMessageId);
-                    await message.delete();
-                    logger.info(`[OCR-QUEUE] 🗑️ Usunięto ostatnią wiadomość ghost ping`);
-                } catch (error) {
-                    // Ignoruj błąd - wiadomość już może być usunięta
-                }
+                logger.error(`[OCR-QUEUE] ❌ Błąd auto-start dla ${userId}:`, error.message);
+                await this.endOCRSession(guildId, userId, true);
             }
         }
-
-        this.queueReservation.delete(guildId);
-
-        // Usuń z kolejki
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-            const index = queue.findIndex(item => item.userId === userId);
-
-            if (index !== -1) {
-                queue.splice(index, 1);
-                logger.info(`[OCR-QUEUE] ➖ ${userId} usunięty z kolejki (timeout)`);
-
-                // Przejdź do następnej osoby
-                if (queue.length > 0) {
-                    const nextPerson = queue[0];
-                    await this.createOCRReservation(guildId, nextPerson.userId, nextPerson.commandName);
-                } else {
-                    this.waitingQueue.delete(guildId);
-                }
-            }
-        }
-
-        // KLUCZOWE: Aktualizuj wyświetlanie NA KOŃCU, po usunięciu użytkownika z kolejki
-        // Dzięki temu jeśli był jedyny w kolejce, embed pokaże pustą kolejkę
-        await this.updateQueueDisplay(guildId);
     }
 
     /**
@@ -2382,22 +2220,6 @@ class OCRService {
      * Usuwa użytkownika z kolejki (anulowanie)
      */
     async removeFromOCRQueue(guildId, userId) {
-        // Usuń z rezerwacji
-        if (this.queueReservation.has(guildId)) {
-            const reservation = this.queueReservation.get(guildId);
-            if (reservation.userId === userId) {
-                if (reservation.timeout) {
-                    clearTimeout(reservation.timeout);
-                }
-                this.queueReservation.delete(guildId);
-                logger.info(`[OCR-QUEUE] ➖ Usunięto rezerwację dla ${userId}`);
-
-                // Aktualizuj wyświetlanie kolejki
-                await this.updateQueueDisplay(guildId);
-                return true;
-            }
-        }
-
         // Usuń z kolejki
         if (this.waitingQueue.has(guildId)) {
             const queue = this.waitingQueue.get(guildId);
