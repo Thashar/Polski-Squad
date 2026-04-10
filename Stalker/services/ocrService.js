@@ -1589,6 +1589,41 @@ class OCRService {
         }
     }
 
+    async cleanupEquipmentChannelMessages() {
+        try {
+            if (!this.client || !this.equipmentChannelId) {
+                return;
+            }
+
+            const channel = await this.client.channels.fetch(this.equipmentChannelId);
+            if (!channel) {
+                return;
+            }
+
+            const messages = await channel.messages.fetch({ limit: 100 });
+
+            let deletedCount = 0;
+            for (const [messageId, message] of messages) {
+                if (messageId === this.equipmentMessageId) {
+                    continue;
+                }
+
+                try {
+                    await message.delete();
+                    deletedCount++;
+                } catch (error) {
+                    // Ignoruj błędy usuwania
+                }
+            }
+
+            if (deletedCount > 0) {
+                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono ${deletedCount} wiadomości z kanału ekwipunku`);
+            }
+        } catch (error) {
+            // Ignoruj błędy czyszczenia
+        }
+    }
+
     /**
      * Czyści wszystkie wiadomości z kanału kolejki OCR
      */
@@ -2010,7 +2045,10 @@ class OCRService {
         }
 
         // Wyczyść kanał kolejki (usuń wszystkie wiadomości oprócz pierwszej z embedem)
-        await this.cleanupQueueChannelMessages();
+        await Promise.all([
+            this.cleanupQueueChannelMessages(),
+            this.cleanupEquipmentChannelMessages()
+        ]);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
@@ -2101,7 +2139,10 @@ class OCRService {
         }
 
         // Wyczyść kanał kolejki
-        await this.cleanupQueueChannelMessages();
+        await Promise.all([
+            this.cleanupQueueChannelMessages(),
+            this.cleanupEquipmentChannelMessages()
+        ]);
 
         // Aktualizuj wyświetlanie kolejki
         await this.updateQueueDisplay(guildId);
