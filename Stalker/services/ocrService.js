@@ -2154,12 +2154,15 @@ class OCRService {
             logger.warn(`[OCR-QUEUE] ⚠️ Nie można wysłać DM do ${userId}: ${error.message}`);
         }
 
-        // Wyślij ghost ping na kanale kolejki
+        // Wyślij ghost ping na odpowiednim kanale
         try {
-            if (this.client && this.queueChannelId) {
-                const queueChannel = await this.client.channels.fetch(this.queueChannelId);
-                if (queueChannel) {
-                    await queueChannel.send(`<@${userId}> ✅ Twoja kolej! Sesja \`${commandName}\` została automatycznie uruchomiona.`);
+            const pingChannelId = commandName === 'Skanuj ekwipunek'
+                ? this.equipmentChannelId
+                : this.queueChannelId;
+            if (this.client && pingChannelId) {
+                const pingChannel = await this.client.channels.fetch(pingChannelId);
+                if (pingChannel) {
+                    await pingChannel.send(`<@${userId}> ✅ Twoja kolej! Sesja \`${commandName}\` została automatycznie uruchomiona.`);
                 }
             }
         } catch (error) {
