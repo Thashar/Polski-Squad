@@ -407,6 +407,10 @@ class InteractionHandler {
                                 }
 
                                 const guildMsgs = this.msgs(guildCfg.id);
+                                // Na serwerze macierzystym plik był już w embeddzie rekordu — nie dołączamy go ponownie
+                                const isSourceGuild = guildCfg.id === interaction.guildId;
+                                const notifAttachmentName = isSourceGuild ? null : imageAttachment.name;
+
                                 const globalEmbed = this.rankingService.createGlobalTop3Embed(
                                     userName,
                                     bestScore,
@@ -416,11 +420,16 @@ class InteractionHandler {
                                     prevGlobalPosition,
                                     sourceGuildName,
                                     guildMsgs,
-                                    currentScore ? currentScore.timestamp : null
+                                    currentScore ? currentScore.timestamp : null,
+                                    notifAttachmentName
                                 );
 
-                                await channel.send({ embeds: [globalEmbed] });
-                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}`);
+                                if (isSourceGuild) {
+                                    await channel.send({ embeds: [globalEmbed] });
+                                } else {
+                                    await channel.send({ embeds: [globalEmbed], files: [imageAttachment] });
+                                }
+                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez pliku — serwer macierzysty)' : ' (z plikiem)'}`);
                             } catch (notifError) {
                                 logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
                             }
