@@ -10008,6 +10008,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (endersEchoRank !== null) {
                 description += `🏹 **Enders Echo:** #${endersEchoRank} / ${endersEchoTotal} — rekord: **${endersEchoScore}**\n`;
             }
+
+            // Ekwipunek (Core Stock) - dane z przycisku "Skanuj ekwipunek"
+            try {
+                const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
+                const equipRaw = await fs.readFile(equipDataPath, 'utf8');
+                const equipData = JSON.parse(equipRaw);
+                const userEquip = equipData[userId];
+                if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
+                    const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
+                    description += `🎒 **Core Stock** *(${updatedDate}):*\n`;
+                    for (const [name, qty] of Object.entries(userEquip.items)) {
+                        description += fmtEquipmentLine(name, qty) + '\n';
+                    }
+                }
+            } catch {
+                // Brak danych ekwipunku - pomijamy
+            }
+
             description += `\n`;
         }
 
@@ -10096,24 +10114,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
         description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
-
-        // Sekcja Ekwipunek (Core Stock) - dane z /skanuj-ekwipunek
-        try {
-            const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
-            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
-            const equipData = JSON.parse(equipRaw);
-            const userEquip = equipData[userId];
-            if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
-                const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
-                description += `\n### 🎒 EKWIPUNEK (Core Stock)\n`;
-                for (const [name, qty] of Object.entries(userEquip.items)) {
-                    description += `**${name}:** ${qty.toLocaleString('pl-PL')}\n`;
-                }
-                description += `*Aktualizacja: ${updatedDate}*\n`;
-            }
-        } catch {
-            // Brak danych ekwipunku - pomijamy sekcję
-        }
 
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {
@@ -11849,6 +11849,20 @@ async function handleMsgCommand(interaction, config, broadcastMessageService, cl
 
 // ============ SKANOWANIE EKWIPUNKU (CORE STOCK) ============
 
+const EQUIPMENT_ICONS = {
+    'Transmute Core':          '<:II_TransmuteCore:1458440558602092647>',
+    'Xeno Pet Core':           '<:II_PetAW:1407383326830104658>',
+    'Mount Core':              '<:II_MountCore:1492137886680748113>',
+    'Relic Core':              '<:II_RC:1385139885924421653>',
+    'Resonance Chip':          '<:II_Chip:1402532787059294229>',
+    'Survivor Awakening Core': '<:II_AW:1402532745804124242>'
+};
+
+function fmtEquipmentLine(name, qty) {
+    const icon = EQUIPMENT_ICONS[name] || '🔹';
+    return `${icon} **${name}:** ${qty.toLocaleString('pl-PL')}`;
+}
+
 async function handleEquipmentScanCommand(interaction, sharedState) {
     const { config, ocrService } = sharedState;
     const guildId = interaction.guild.id;
@@ -11935,7 +11949,7 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
 
             // Zbuduj opis wyników
             const itemLines = Object.entries(aiResult.items)
-                .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+                .map(([name, qty]) => fmtEquipmentLine(name, qty))
                 .join('\n');
 
             const { EmbedBuilder: EmbedBuilderLocal, ButtonBuilder: ButtonBuilderLocal, ActionRowBuilder: ActionRowBuilderLocal, ButtonStyle: ButtonStyleLocal, AttachmentBuilder: AttachmentBuilderLocal } = require('discord.js');
@@ -12030,7 +12044,7 @@ async function handleEquipmentSave(interaction, sharedState) {
         interaction.client._equipmentPending.delete(userId);
 
         const itemLines = Object.entries(pending.items)
-            .map(([name, qty]) => `**${name}:** ${qty.toLocaleString('pl-PL')}`)
+            .map(([name, qty]) => fmtEquipmentLine(name, qty))
             .join('\n');
 
         const { EmbedBuilder: EmbedBuilderLocal } = require('discord.js');
