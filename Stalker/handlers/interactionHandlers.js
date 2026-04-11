@@ -9024,10 +9024,15 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         if (hasCxRecent1 && !hasCxRecent2) wins1++;
         else if (hasCxRecent2 && !hasCxRecent1) wins2++;
         else if (hasCxRecent1 && hasCxRecent2) { wins1 += 0.5; wins2 += 0.5; }
-        // Core Stock (suma wszystkich corów - więcej = lepiej)
-        const coreTotal1 = coreStock1 ? Object.values(coreStock1).reduce((s, v) => s + v, 0) : null;
-        const coreTotal2 = coreStock2 ? Object.values(coreStock2).reduce((s, v) => s + v, 0) : null;
-        if (coreTotal1 !== null && coreTotal2 !== null) addResult(coreTotal1, coreTotal2);
+        // Core Stock — każdy typ cora osobny punkt (więcej = lepiej)
+        if (coreStock1 || coreStock2) {
+            const CORE_TYPES = ['Transmute Core', 'Xeno Pet Core', 'Mount Core', 'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'];
+            for (const coreType of CORE_TYPES) {
+                const v1 = coreStock1?.[coreType] ?? null;
+                const v2 = coreStock2?.[coreType] ?? null;
+                if (v1 !== null && v2 !== null) addResult(v1, v2);
+            }
+        }
         // Pozycja globalna (niższa = lepsza)
         if (pos1 > 0 && pos2 > 0) addResult(pos2, pos1); // odwrócone: niższa pozycja = lepiej
         // Kary (mniej = lepiej)
