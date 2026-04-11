@@ -11924,7 +11924,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 }
             }
 
-            return `#${i + 1} ${nick} - **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
+            return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
         });
 
         const extra = entries.length > MAX_LINES ? entries.length - MAX_LINES : 0;
@@ -11942,7 +11942,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
             const chunk = lines.slice(i, i + 10);
             const isLast = i + 10 >= lines.length;
             const fieldValue = chunk.join('\n') + (isLast && extra > 0 ? `\n*...i ${extra} więcej*` : '');
-            embed.addFields({ name: '\u200b', value: fieldValue, inline: false });
+            embed.addFields({ name: '\u200b', value: fieldValue, inline: true });
         }
 
         await interaction.editReply({ content: null, embeds: [embed], components: interaction.message.components });
