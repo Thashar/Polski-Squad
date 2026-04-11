@@ -8842,6 +8842,16 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             }
         } catch (e) { /* brak pliku - ok */ }
 
+        // Wczytaj dane Core Stock dla obu graczy
+        let coreStock1 = null, coreStock2 = null;
+        try {
+            const equipPath = require('path').join(__dirname, '../data/equipment_data.json');
+            const equipRaw = await fs.readFile(equipPath, 'utf8');
+            const equipData = JSON.parse(equipRaw);
+            if (equipData[userInfo1.userId]?.items) coreStock1 = equipData[userInfo1.userId].items;
+            if (equipData[userInfo2.userId]?.items) coreStock2 = equipData[userInfo2.userId].items;
+        } catch (e) { /* brak pliku - ok */ }
+
         const m1 = calcMetrics(data1);
         const m2 = calcMetrics(data2);
 
@@ -8930,7 +8940,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         // Formatuj pole statystyk gracza (pełne inline field)
-        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal) {
+        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal, coreStock) {
             const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
             let f = '';
             f += `🏰 **${clanDisplay}**\n`;
@@ -8963,6 +8973,13 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
             if (eeRank !== null) {
                 f += `🏹 **EE:** #${eeRank}/${eeTotal} — ${eeScore}\n`;
+            }
+            if (coreStock && Object.keys(coreStock).length > 0) {
+                const totalCores = Object.values(coreStock).reduce((s, v) => s + v, 0);
+                f += `\n🎒 **Core Stock** *(${totalCores.toLocaleString('pl-PL')})*\n`;
+                for (const [name, qty] of Object.entries(coreStock)) {
+                    f += fmtEquipmentLine(name, qty) + '\n';
+                }
             }
             f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
             return f;
@@ -9007,6 +9024,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         if (hasCxRecent1 && !hasCxRecent2) wins1++;
         else if (hasCxRecent2 && !hasCxRecent1) wins2++;
         else if (hasCxRecent1 && hasCxRecent2) { wins1 += 0.5; wins2 += 0.5; }
+        // Core Stock (suma wszystkich corów - więcej = lepiej)
+        const coreTotal1 = coreStock1 ? Object.values(coreStock1).reduce((s, v) => s + v, 0) : null;
+        const coreTotal2 = coreStock2 ? Object.values(coreStock2).reduce((s, v) => s + v, 0) : null;
+        if (coreTotal1 !== null && coreTotal2 !== null) addResult(coreTotal1, coreTotal2);
         // Pozycja globalna (niższa = lepsza)
         if (pos1 > 0 && pos2 > 0) addResult(pos2, pos1); // odwrócone: niższa pozycja = lepiej
         // Kary (mniej = lepiej)
@@ -9036,8 +9057,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2), inline: true },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
             );
 
