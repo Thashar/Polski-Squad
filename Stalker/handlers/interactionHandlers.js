@@ -9084,8 +9084,9 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .addFields(
                 { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1), inline: true },
                 { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2), inline: true },
+                { name: '\u200b', value: '\u200b', inline: false },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych', inline: true },
-                { name: '🎒 WYNIK PORÓWNANIA CORE STOCK', value: coreWinnerField, inline: true }
+                { name: '🎒PORÓWNANIE CORE STOCK', value: coreWinnerField, inline: true }
             );
 
         // Oblicz pozycje klanowe dla obu graczy (ostatnie 12 tygodni)
