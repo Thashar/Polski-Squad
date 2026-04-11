@@ -9029,8 +9029,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         let coreWins1 = 0, coreWins2 = 0;
         if (coreStock1 || coreStock2) {
             for (const coreType of CORE_TYPES) {
-                const v1 = coreStock1?.[coreType] ?? null;
-                const v2 = coreStock2?.[coreType] ?? null;
+                const v1 = coreStock1 ? (coreStock1[coreType] ?? 0) : null;
+                const v2 = coreStock2 ? (coreStock2[coreType] ?? 0) : null;
                 if (v1 !== null && v2 !== null) {
                     if (v1 > v2) coreWins1++;
                     else if (v2 > v1) coreWins2++;
