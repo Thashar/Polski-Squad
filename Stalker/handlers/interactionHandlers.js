@@ -8974,11 +8974,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (eeRank !== null) {
                 f += `🏹 **EE:** #${eeRank}/${eeTotal} — ${eeScore}\n`;
             }
-            if (coreStock && Object.keys(coreStock).length > 0) {
+            if (coreStock) {
                 const totalCores = Object.values(coreStock).reduce((s, v) => s + v, 0);
                 f += `\n🎒 **Core Stock** *(${totalCores.toLocaleString('pl-PL')})*\n`;
-                for (const [name, qty] of Object.entries(coreStock)) {
-                    f += fmtEquipmentLine(name, qty) + '\n';
+                for (const name of Object.keys(EQUIPMENT_ICONS)) {
+                    const qty = coreStock[name];
+                    f += qty !== undefined ? fmtEquipmentLine(name, qty) + '\n' : `${EQUIPMENT_ICONS[name]} **${name}:** Brak\n`;
                 }
             }
             f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
@@ -9029,8 +9030,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         let coreWins1 = 0, coreWins2 = 0;
         if (coreStock1 || coreStock2) {
             for (const coreType of CORE_TYPES) {
-                const v1 = coreStock1?.[coreType] ?? null;
-                const v2 = coreStock2?.[coreType] ?? null;
+                const v1 = coreStock1 ? (coreStock1[coreType] ?? 0) : null;
+                const v2 = coreStock2 ? (coreStock2[coreType] ?? 0) : null;
                 if (v1 !== null && v2 !== null) {
                     if (v1 > v2) coreWins1++;
                     else if (v2 > v1) coreWins2++;
