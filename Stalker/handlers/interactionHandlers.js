@@ -9983,6 +9983,24 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             description += mvpLines.join('\n') + '\n\n';
         }
 
+        // Sekcja Core Stock (między STATYSTYKI a WSPÓŁCZYNNIKI)
+        try {
+            const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
+            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
+            const equipData = JSON.parse(equipRaw);
+            const userEquip = equipData[userId];
+            if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
+                const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
+                description += `### 🎒 CORE STOCK (${updatedDate})\n`;
+                for (const [name, qty] of Object.entries(userEquip.items)) {
+                    description += fmtEquipmentLine(name, qty) + '\n';
+                }
+                description += '\n';
+            }
+        } catch {
+            // Brak danych ekwipunku - pomijamy
+        }
+
         // Sekcja 3: Współczynniki (zawsze pokazuj)
         description += `### 🌡️ WSPÓŁCZYNNIKI\n`;
 
@@ -10067,23 +10085,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             .setDescription(description)
             .setColor('#00BFFF')
             .setTimestamp();
-
-        // Pole Core Stock (osobne pole poniżej Statystyk)
-        try {
-            const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
-            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
-            const equipData = JSON.parse(equipRaw);
-            const userEquip = equipData[userId];
-            if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
-                const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
-                const itemLines = Object.entries(userEquip.items)
-                    .map(([name, qty]) => fmtEquipmentLine(name, qty))
-                    .join('\n');
-                embed.addFields({ name: `🎒 Core Stock *(${updatedDate})*`, value: itemLines, inline: false });
-            }
-        } catch {
-            // Brak danych ekwipunku - pomijamy
-        }
 
         // Ustaw auto-usuwanie po 5 minutach
         const deleteAt = Date.now() + (5 * 60 * 1000);
