@@ -8695,7 +8695,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         function fmtProgress(prog, pct) {
-            if (prog === null) return '*brak danych*';
+            if (prog === null) return 'Brak';
             const sign = prog >= 0 ? '▲' : '▼';
             const color = prog >= 0 ? '🟢' : '🔴';
             return `${sign} ${Math.abs(prog).toLocaleString('pl-PL')} (${Math.abs(pct).toFixed(1)}%) ${color}`;
@@ -8929,7 +8929,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
 
         // Formatuj współczynnik jako kółko + procent (lub brak danych)
         function fmtCoeff(val) {
-            if (val === null) return '🟢 *brak*';
+            if (val === null) return 'Brak';
             const c = val >= 90 ? '🟢' : val >= 80 ? '🟡' : val >= 70 ? '🟠' : '🔴';
             return `${c} ${val.toFixed(1)}%`;
         }
@@ -8952,17 +8952,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
             f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
-            if (lastCombat) {
-                const _rc = (lastCombat.relicCores ?? 0).toLocaleString('pl-PL');
-                const _atk = fmtAttack(lastCombat.attack ?? 0);
-                f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rc}\n`;
-                f += `**⚔️ Atak:** ${_atk}\n`;
-            } else {
-                f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** Brak danych. Aktualizacja niebawem...\n`;
-                f += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
-            }
+            const _rc = lastCombat ? (lastCombat.relicCores ?? 0).toLocaleString('pl-PL') : 'Brak';
+            const _atk = lastCombat ? fmtAttack(lastCombat.attack ?? 0) : 'Brak';
+            f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rc}\n`;
+            f += `**⚔️ Atak:** ${_atk}\n`;
             f += `\n`;
-            f += `📈 **Trend:** ${m.trendIcon || ''} ${m.trendDescription || '-'}\n`;
+            f += `📈 **Trend:** ${m.trendDescription ? `${m.trendIcon || ''} ${m.trendDescription}` : 'Brak'}\n`;
             f += `\n`;
             f += `🎯 **Rzetelność:** ${fmtCoeff(coeff.wyjebanieFactor)}\n`;
             f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}${cxStar}\n`;
@@ -8971,9 +8966,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `\n`;
             f += `⭐ **MVP:** ${fmtMvp(mvp)}\n`;
             f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
-            if (eeRank !== null) {
-                f += `🏹 **EE:** #${eeRank}/${eeTotal} — ${eeScore}\n`;
-            }
+            f += `🏹 **EE:** ${eeRank !== null ? `#${eeRank}/${eeTotal} — ${eeScore}` : 'Brak'}\n`;
             if (coreStock) {
                 const totalCores = Object.values(coreStock).reduce((s, v) => s + v, 0);
                 f += `\n🎒 **Core Stock** *(${totalCores.toLocaleString('pl-PL')})*\n`;
@@ -8981,8 +8974,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                     const qty = coreStock[name];
                     f += qty !== undefined ? fmtEquipmentLine(name, qty) + '\n' : `${EQUIPMENT_ICONS[name]} **${name}:** Brak\n`;
                 }
+            } else {
+                f += `\n🎒 **Core Stock:** Brak\n`;
             }
-            f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
+            f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'Brak'}`;
             return f;
         }
 
