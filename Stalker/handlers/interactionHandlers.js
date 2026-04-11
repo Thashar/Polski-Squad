@@ -11907,7 +11907,8 @@ async function handleCoreRankingButton(interaction, sharedState) {
         const members = await safeFetchMembers(interaction.guild);
 
         // Zbuduj linie rankingu
-        const lines = entries.map((entry, i) => {
+        const MAX_LINES = 30;
+        const lines = entries.slice(0, MAX_LINES).map((entry, i) => {
             const member = members.get(entry.userId);
             const nick = member ? member.displayName : `<@${entry.userId}>`;
 
@@ -11923,22 +11924,26 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 }
             }
 
-            return `${i + 1}. ${nick} **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
+            return `#${i + 1} ${nick} - **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
         });
 
-        // Podziel na strony po 30 linii jeśli za długo
-        const MAX_LINES = 30;
-        const displayLines = lines.slice(0, MAX_LINES);
-        const extra = lines.length > MAX_LINES ? `\n*...i ${lines.length - MAX_LINES} więcej*` : '';
+        const extra = entries.length > MAX_LINES ? entries.length - MAX_LINES : 0;
 
         const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
         const { EmbedBuilder: EBLocal } = require('discord.js');
         const embed = new EBLocal()
             .setTitle(`${coreIcon} Ranking — ${coreName}`)
-            .setDescription(displayLines.join('\n') + extra)
             .setColor('#00BFFF')
-            .setFooter({ text: `Łącznie graczy z danymi: ${lines.length}` })
+            .setFooter({ text: `Łącznie graczy z danymi: ${entries.length}` })
             .setTimestamp();
+
+        // Pola po max 10 wpisów, bez nagłówków
+        for (let i = 0; i < lines.length; i += 10) {
+            const chunk = lines.slice(i, i + 10);
+            const isLast = i + 10 >= lines.length;
+            const fieldValue = chunk.join('\n') + (isLast && extra > 0 ? `\n*...i ${extra} więcej*` : '');
+            embed.addFields({ name: '\u200b', value: fieldValue, inline: false });
+        }
 
         await interaction.editReply({ content: null, embeds: [embed], components: interaction.message.components });
 
