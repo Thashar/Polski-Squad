@@ -271,6 +271,7 @@ class TablicaMenedzer {
 
     // Zaktualizuj panel kontrolny (indywidualne embedy usunięte)
     async updateAllEmbeds() {
+        if (!this.client.isReady()) return;
         await this.updateControlPanel();
     }
 
@@ -470,6 +471,14 @@ class TablicaMenedzer {
                 this.logger.warn('Panel kontrolny nie znaleziony - pomijam aktualizację (zostanie utworzony przy następnym restarcie bota)');
             }
         } catch (error) {
+            if (error.message?.includes('token to be set') || error.message?.includes('Expected token')) {
+                const now = Date.now();
+                if (now - this.lastNetworkErrorLog > 300000) {
+                    this.lastNetworkErrorLog = now;
+                    this.logger.warn('Panel kontrolny: klient Discord nie jest gotowy (brak tokena REST) - pomijam aktualizację');
+                }
+                return;
+            }
             this.logger.error('Nie udało się zaktualizować panelu kontrolnego:', error);
         }
     }
