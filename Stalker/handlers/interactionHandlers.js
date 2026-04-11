@@ -8974,11 +8974,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (eeRank !== null) {
                 f += `🏹 **EE:** #${eeRank}/${eeTotal} — ${eeScore}\n`;
             }
-            if (coreStock && Object.keys(coreStock).length > 0) {
+            if (coreStock) {
                 const totalCores = Object.values(coreStock).reduce((s, v) => s + v, 0);
                 f += `\n🎒 **Core Stock** *(${totalCores.toLocaleString('pl-PL')})*\n`;
-                for (const [name, qty] of Object.entries(coreStock)) {
-                    f += fmtEquipmentLine(name, qty) + '\n';
+                for (const name of Object.keys(EQUIPMENT_ICONS)) {
+                    const qty = coreStock[name];
+                    f += qty !== undefined ? fmtEquipmentLine(name, qty) + '\n' : `${EQUIPMENT_ICONS[name]} **${name}:** Brak\n`;
                 }
             }
             f += `⚠️ **Kary:** ${lifePts > 0 ? lifePts : 'brak'}`;
