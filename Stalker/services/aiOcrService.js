@@ -248,6 +248,17 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
                 return { items: {}, isValid: false, error: 'NO_ITEMS_FOUND' };
             }
 
+            // Walidacja nazw przedmiotów - tylko dozwolone typy corów
+            const ALLOWED_ITEMS = new Set([
+                'Transmute Core', 'Xeno Pet Core', 'Mount Core',
+                'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'
+            ]);
+            const invalidKeys = Object.keys(items).filter(k => !ALLOWED_ITEMS.has(k));
+            if (invalidKeys.length > 0) {
+                logger.warn(`[AI OCR - Equipment] Nieznane przedmioty: ${invalidKeys.join(', ')}`);
+                return { items: {}, isValid: false, error: 'INVALID_ITEMS' };
+            }
+
             logger.info(`[AI OCR - Equipment] Odczytano ${Object.keys(items).length} przedmiotów`);
             return { items, isValid: true };
 
