@@ -9024,13 +9024,18 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         if (hasCxRecent1 && !hasCxRecent2) wins1++;
         else if (hasCxRecent2 && !hasCxRecent1) wins2++;
         else if (hasCxRecent1 && hasCxRecent2) { wins1 += 0.5; wins2 += 0.5; }
-        // Core Stock — każdy typ cora osobny punkt (więcej = lepiej)
+        // Core Stock — każdy typ cora osobny punkt (oddzielne porównanie, poza głównym wynikiem)
+        const CORE_TYPES = ['Transmute Core', 'Xeno Pet Core', 'Mount Core', 'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'];
+        let coreWins1 = 0, coreWins2 = 0;
         if (coreStock1 || coreStock2) {
-            const CORE_TYPES = ['Transmute Core', 'Xeno Pet Core', 'Mount Core', 'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'];
             for (const coreType of CORE_TYPES) {
                 const v1 = coreStock1?.[coreType] ?? null;
                 const v2 = coreStock2?.[coreType] ?? null;
-                if (v1 !== null && v2 !== null) addResult(v1, v2);
+                if (v1 !== null && v2 !== null) {
+                    if (v1 > v2) coreWins1++;
+                    else if (v2 > v1) coreWins2++;
+                    else { coreWins1 += 0.5; coreWins2 += 0.5; }
+                }
             }
         }
         // Pozycja globalna (niższa = lepsza)
@@ -9056,6 +9061,32 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         else if (wins2 > wins1) winnerField = `🥇 **${name2}** wygrywa **${fmt(wins2)} - ${fmt(wins1)}**`;
         else winnerField = `⚖️ **Remis ${fmt(wins1)} - ${fmt(wins2)}**`;
 
+        // Buduj pole Core Stock
+        let coreWinnerField = '';
+        if (!coreStock1 && !coreStock2) {
+            coreWinnerField = '*Żaden z graczy nie przesłał danych Core Stock.*';
+        } else if (!coreStock1) {
+            coreWinnerField = `*Brak danych Core Stock dla **${name1}**.*`;
+        } else if (!coreStock2) {
+            coreWinnerField = `*Brak danych Core Stock dla **${name2}**.*`;
+        } else {
+            const fmtCore = (n) => Number.isInteger(n) ? n.toString() : n.toFixed(1);
+            if (coreWins1 > coreWins2) coreWinnerField = `🥇 **${name1}** wygrywa **${fmtCore(coreWins1)} - ${fmtCore(coreWins2)}**`;
+            else if (coreWins2 > coreWins1) coreWinnerField = `🥇 **${name2}** wygrywa **${fmtCore(coreWins2)} - ${fmtCore(coreWins1)}**`;
+            else coreWinnerField = `⚖️ **Remis ${fmtCore(coreWins1)} - ${fmtCore(coreWins2)}**`;
+            // Szczegóły per core
+            for (const coreType of CORE_TYPES) {
+                const v1 = coreStock1?.[coreType] ?? null;
+                const v2 = coreStock2?.[coreType] ?? null;
+                if (v1 === null && v2 === null) continue;
+                const icon = fmtEquipmentLine(coreType, 0).split(' ')[0];
+                const s1 = v1 !== null ? v1.toLocaleString('pl-PL') : '*brak*';
+                const s2 = v2 !== null ? v2.toLocaleString('pl-PL') : '*brak*';
+                const winner = (v1 !== null && v2 !== null) ? (v1 > v2 ? ' ◀' : v2 > v1 ? ' ▶' : '') : '';
+                coreWinnerField += `\n${icon} **${s1}**${v1 > v2 ? winner : ''} — **${s2}**${v2 > v1 ? winner : ''}`;
+            }
+        }
+
         const embed = new EmbedBuilder()
             .setTitle(`⚔️ PORÓWNANIE  —  ${name1}  vs  ${name2}`)
             .setColor('#9B59B6')
@@ -9064,7 +9095,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .addFields(
                 { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1), inline: true },
                 { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2), inline: true },
-                { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' }
+                { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych' },
+                { name: '🎒 WYNIK PORÓWNANIA CORE STOCK', value: coreWinnerField }
             );
 
         // Oblicz pozycje klanowe dla obu graczy (ostatnie 12 tygodni)
