@@ -12026,6 +12026,8 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
                     let errorMsg = '❌ Nie udało się odczytać ekwipunku.';
                     if (aiResult.error === 'NOT_CORE_STOCK') {
                         errorMsg = '❌ Zdjęcie nie przedstawia ekranu **Core Stock**. Otwórz zakładkę "Core Stock" w Detailed Stats i spróbuj ponownie.';
+                    } else if (aiResult.error === 'INVALID_ITEMS') {
+                        errorMsg = '❌ Zdjęcie zawiera nierozpoznane dane. Upewnij się, że wrzucasz screen zakładki **Core Stock** w Detailed Stats.';
                     } else if (!ocrService.aiOcrService.enabled) {
                         errorMsg = '❌ AI OCR jest wyłączony. Skontaktuj się z administratorem.';
                     }
