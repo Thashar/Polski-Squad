@@ -190,17 +190,21 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
  */
 function setupEventHandlers() {
     client.once('ready', async () => {
-        await onReady();
-        // Inicjalizuj serwis loterii z klientem Discord
-        await lotteryService.initialize(client);
-        // Inicjalizuj serwis głosowania z klientem Discord
-        await votingService.initialize(client);
-        await registerSlashCommands(client, config);
+        try {
+            await onReady();
+            // Inicjalizuj serwis loterii z klientem Discord
+            await lotteryService.initialize(client);
+            // Inicjalizuj serwis głosowania z klientem Discord
+            await votingService.initialize(client);
+            await registerSlashCommands(client, config);
 
-        await updateActivationMessage(
-            client, config.robot1Users, 'Kontroler', 'robot_activate_kontroler_',
-            path.join(__dirname, 'data', 'robot_activation_msg.json')
-        );
+            await updateActivationMessage(
+                client, config.robot1Users, 'Kontroler', 'robot_activate_kontroler_',
+                path.join(__dirname, 'data', 'robot_activation_msg.json')
+            );
+        } catch (error) {
+            logger.error('❌ Błąd krytyczny podczas inicjalizacji Kontroler:', error);
+        }
     });
     client.on('messageCreate', async (message) => {
         if (message.channel.type === ChannelType.DM && !message.author.bot) {

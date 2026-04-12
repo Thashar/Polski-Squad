@@ -88,8 +88,9 @@ async function isAdminMember(guild, userId) {
 }
 
 client.once(Events.ClientReady, async () => {
+  try {
     await logService.logMessage('success', `Bot ${client.user.tag} jest online!`);
-    
+
     // Załaduj członków do cache
     try {
         let totalMembers = 0;
@@ -142,6 +143,9 @@ client.once(Events.ClientReady, async () => {
     await setupReportButtonMessage(client, config);
 
     logger.success('✅ Muteusz gotowy - moderacja, media (100MB), zarządzanie rolami, blokowanie obrazów i słów, Chaos Mode, system zgłoszeń');
+  } catch (error) {
+    logger.error('❌ Błąd krytyczny podczas inicjalizacji Muteusz:', error);
+  }
 });
 
 client.on(Events.MessageCreate, async (message) => {

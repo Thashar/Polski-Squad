@@ -140,6 +140,7 @@ const sharedState = {
 };
 
 client.once(Events.ClientReady, async () => {
+  try {
     logger.success('✅ Stalker gotowy - kary za bossów (OCR), urlopy');
 
     // Inicjalizacja serwisów
@@ -251,6 +252,9 @@ client.once(Events.ClientReady, async () => {
 
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
 
+  } catch (error) {
+    logger.error('❌ Błąd krytyczny podczas inicjalizacji Stalker:', error);
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
