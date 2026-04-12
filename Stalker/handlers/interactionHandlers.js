@@ -10025,10 +10025,22 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             const equipData = JSON.parse(equipRaw);
             const userEquip = equipData[userId];
             if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
+                // Oblicz pozycje w rankingu dla każdego typu cora
+                const coreRankings = {};
+                for (const coreName of Object.keys(userEquip.items)) {
+                    const sorted = Object.entries(equipData)
+                        .filter(([, d]) => d.items?.[coreName] !== undefined)
+                        .sort(([, a], [, b]) => (b.items[coreName] ?? 0) - (a.items[coreName] ?? 0));
+                    const pos = sorted.findIndex(([uid]) => uid === userId) + 1;
+                    coreRankings[coreName] = { pos, total: sorted.length };
+                }
+
                 const updatedDate = new Date(userEquip.updatedAt).toLocaleDateString('pl-PL');
                 description += `### 🎒 CORE STOCK (${updatedDate})\n`;
                 for (const [name, qty] of Object.entries(userEquip.items)) {
-                    description += fmtEquipmentLine(name, qty) + '\n';
+                    const r = coreRankings[name];
+                    const rankStr = r ? ` *(#${r.pos}/${r.total})*` : '';
+                    description += fmtEquipmentLine(name, qty) + rankStr + '\n';
                 }
                 description += '\n';
             }
