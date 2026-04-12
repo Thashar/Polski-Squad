@@ -151,10 +151,11 @@
 - **Skala:** Dynamiczna - min(nonZero) = `▁`, max(nonZero) = `█`, proporcjonalnie dla reszty
 - **Implementacja:** `sparklineData = last12Weeks.map(...).reverse()` - reverse bo last12Weeks jest od najnowszego
 - **Algorytm trendRatio (wykres + tekst):** Wymaga min. 13 tygodni z wynikiem > 0
-  - `recentProgress = score_newest - score_4_weeks_ago`
+  - `progress4 = score_newest - score_4_weeks_ago`
   - `progress12 = score_newest - score_12_weeks_ago`
-  - `baseline = |progress12| / 3` (średni progres na 4 tygodnie z okna 12)
-  - `trendRatio = recentProgress / baseline` (clamp 0–2.0)
+  - `trendRatio = (progress12 / 3) / progress4` (clamp 0–2.0; 0 gdy progress4 ≤ 0)
+  - Wysoki ratio → kwartalna średnia silniejsza niż ostatni miesiąc (dobra długoterminowa trajektoria)
+  - Niski ratio → ostatni miesiąc wyprzedza kwartalną średnią
   - Wykres rolling: liczony dla każdego tygodnia od indeksu 12 wzwyż (nie cała historia)
 
 **Komenda `/player-compare`** - Porównanie dwóch graczy:
