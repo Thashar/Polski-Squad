@@ -8632,27 +8632,18 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 m.engagementFactor = (progWeeks / (data.length - 1)) * 100;
             }
             if (m.monthlyProgress !== null && data.length >= 5) {
-                // Ta sama formuła co player status:
-                // okno ostatnich 12 wpisów + rzeczywisty span kalendarza (nie liczba wpisów)
-                const window12 = data.slice(0, 12).filter(d => d.score > 0);
-                if (window12.length >= 2) {
-                    const newest = window12[0];
-                    const oldest = window12[window12.length - 1];
-                    const windowProgress = newest.score - oldest.score;
-                    const weekSpan = newest.year === oldest.year
-                        ? newest.weekNumber - oldest.weekNumber
-                        : (52 - oldest.weekNumber) + newest.weekNumber;
-                    const adj = weekSpan > 0
-                        ? Math.abs(windowProgress / weekSpan * 4)
-                        : Math.abs(windowProgress / (window12.length - 1) * 4);
-                    if (adj > 0) {
-                        m.trendRatio = m.monthlyProgress / adj;
-                        if (m.trendRatio >= 1.5)      { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
-                        else if (m.trendRatio > 1.1)  { m.trendDescription = 'Rosnący';            m.trendIcon = '↗️'; }
-                        else if (m.trendRatio >= 0.9) { m.trendDescription = 'Constans';           m.trendIcon = '⚖️'; }
-                        else if (m.trendRatio > 0.5)  { m.trendDescription = 'Malejący';           m.trendIcon = '↘️'; }
-                        else                          { m.trendDescription = 'Gwałtownie malejący'; m.trendIcon = '🪦'; }
-                    }
+                // Trend: progres ostatnich 4 tygodni vs średni progres na 4 tygodnie z okna 12 tygodni
+                const allNonZero = data.filter(d => d.score > 0);
+                if (allNonZero.length >= 13) {
+                    const recentProgress = allNonZero[0].score - allNonZero[4].score;
+                    const progress12 = allNonZero[0].score - allNonZero[12].score;
+                    const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
+                    m.trendRatio = recentProgress / baseline;
+                    if (m.trendRatio >= 1.5)      { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
+                    else if (m.trendRatio > 1.1)  { m.trendDescription = 'Rosnący';            m.trendIcon = '↗️'; }
+                    else if (m.trendRatio >= 0.9) { m.trendDescription = 'Constans';           m.trendIcon = '⚖️'; }
+                    else if (m.trendRatio > 0.5)  { m.trendDescription = 'Malejący';           m.trendIcon = '↘️'; }
+                    else                          { m.trendDescription = 'Gwałtownie malejący'; m.trendIcon = '🪦'; }
                 }
             }
             return m;
@@ -9669,13 +9660,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let trendIcon = null;
 
         const chronologicalAll = [...allPlayerData].reverse().filter(d => d.score > 0);
-        if (chronologicalAll.length >= 3) {
+        if (chronologicalAll.length >= 13) {
             const lastIdx = chronologicalAll.length - 1;
-            const windowSize = Math.min(lastIdx, 4);
-            const recentProgress = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - windowSize].score;
-            const longerTermProgress = chronologicalAll[lastIdx].score - chronologicalAll[0].score;
-            const historicalAvgPer4 = (longerTermProgress / lastIdx) * windowSize;
-            const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
+            const recentProgress = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 4].score;
+            const progress12 = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 12].score;
+            const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
             trendRatio = Math.min(2.0, Math.max(0, recentProgress / baseline));
 
             if (trendRatio >= 1.5)      { trendDescription = 'Gwałtownie rosnący'; trendIcon = '🚀'; }
@@ -12928,32 +12917,30 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
 }
 
 // Wykres trendu — oś Y = rolling trendRatio (ta sama formuła co główny wskaźnik)
-// Rosnące okno: min(i, 4) tygodni — pierwsze punkty używają krótszego okna żeby pokryć wszystkie 12 tygodni
+// Okno 12 tygodni: baseline = progress12 / 3, recent = progress4, ratio = recent / baseline
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
-    // Wszystkie dane chronologicznie (od najstarszego) — baseline z pełnej historii
+    // Wszystkie dane chronologicznie (od najstarszego) — tylko punkty z wynikiem > 0
     const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
-    if (chronological.length < 3) return null;
+    if (chronological.length < 14) return null;
 
-    // Rolling trendRatio z rosnącym oknem (obliczane na WSZYSTKICH danych):
-    //   windowSize         = min(i, 4)                             (1→2→3→4→4→4...)
-    //   recentProgress     = score[i] - score[i - windowSize]      (progres w oknie)
-    //   historicalAvgSame  = (score[i] - score[0]) / i * windowSize (avg za ten sam okres, baseline = cała historia)
-    //   ratio = recentProgress / |historicalAvgSame|
+    // Rolling trendRatio z oknem 12 tygodni:
+    //   recentProgress = score[i] - score[i - 4]       (progres ostatnich 4 tygodni)
+    //   progress12     = score[i] - score[i - 12]       (progres ostatnich 12 tygodni)
+    //   baseline       = |progress12| / 3               (avg za 4 tygodnie z okna 12)
+    //   ratio = recentProgress / baseline
     const allRawRatios = [];
-    for (let i = 1; i < chronological.length; i++) {
-        const windowSize = Math.min(i, 4);
-        const monthlyProgress = chronological[i].score - chronological[i - windowSize].score;
-        const longerTermProgress = chronological[i].score - chronological[0].score;
-        const historicalAvgPer4 = (longerTermProgress / i) * windowSize;
-        const baseline = Math.abs(historicalAvgPer4) > 0 ? Math.abs(historicalAvgPer4) : 1;
+    for (let i = 12; i < chronological.length; i++) {
+        const recentProgress = chronological[i].score - chronological[i - 4].score;
+        const progress12 = chronological[i].score - chronological[i - 12].score;
+        const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
         allRawRatios.push({
-            ratio: Math.min(2.0, Math.max(0, monthlyProgress / baseline)),
+            ratio: Math.min(2.0, Math.max(0, recentProgress / baseline)),
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
-    // Wyświetlamy N-4 punkty (pomijamy pierwsze 4 z małym oknem, gdzie ratio≈1), max 20
-    const displayCount = Math.min(20, Math.max(2, allRawRatios.length - 4));
+    // Wyświetlamy ostatnie N punktów (max 20)
+    const displayCount = Math.min(20, allRawRatios.length);
     const ratioData = allRawRatios.slice(-displayCount);
     if (ratioData.length < 2) return null;
 
@@ -13234,19 +13221,17 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const color1 = '#5865F2'; // gracz 1 — niebieski
     const color2 = '#EB459E'; // gracz 2 — różowy
 
-    // Rolling trendRatio z rosnącym oknem — ta sama formuła co generateTrendChart
+    // Rolling trendRatio z oknem 12 tygodni — ta sama formuła co generateTrendChart
     function computeRollingRatios(data) {
         const chron = [...data].reverse().filter(d => d.score > 0);
-        if (chron.length < 3) return [];
+        if (chron.length < 14) return [];
         const raw = [];
-        for (let i = 1; i < chron.length; i++) {
-            const windowSize = Math.min(i, 4);
-            const monthly = chron[i].score - chron[i - windowSize].score;
-            const longer = chron[i].score - chron[0].score;
-            const avgPerWindow = (longer / i) * windowSize;
-            const base = Math.abs(avgPerWindow) > 0 ? Math.abs(avgPerWindow) : 1;
+        for (let i = 12; i < chron.length; i++) {
+            const recentProgress = chron[i].score - chron[i - 4].score;
+            const progress12 = chron[i].score - chron[i - 12].score;
+            const base = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
             raw.push({
-                ratio: Math.min(2.0, Math.max(0, monthly / base)),
+                ratio: Math.min(2.0, Math.max(0, recentProgress / base)),
                 weekNumber: chron[i].weekNumber,
                 year: chron[i].year,
                 key: `${chron[i].year}-${String(chron[i].weekNumber).padStart(2, '0')}`
@@ -13265,9 +13250,9 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
         if (!weekSet.has(r.key)) weekSet.set(r.key, { weekNumber: r.weekNumber, year: r.year, key: r.key });
     }
     const sortedWeeks = [...weekSet.values()].sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber);
-    // Wyświetlaj N-4 tygodnie (max 20) — N = player z większą liczbą ratio, pomija pierwsze 4 (ratio≈1)
+    // Wyświetlaj ostatnie N tygodni (max 20) — N = player z większą liczbą ratio
     const maxRatioLen = Math.max(ratios1.length, ratios2.length);
-    const displayCount = Math.min(20, Math.max(2, maxRatioLen - 4));
+    const displayCount = Math.min(20, Math.max(2, maxRatioLen));
     const allWeeks = sortedWeeks.slice(-displayCount);
     if (allWeeks.length < 2) return null;
 
@@ -13280,9 +13265,7 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const toY = (r) => M.top + cH - (r / maxRatio) * cH;
 
     function getPlayerPts(ratios) {
-        // Pomijamy pierwsze 4 ratio każdego gracza (małe okno, ratio≈1)
-        const meaningful = ratios.slice(4);
-        return meaningful.map(r => {
+        return ratios.map(r => {
             const idx = allWeeks.findIndex(w => w.key === r.key);
             if (idx === -1) return null;
             return { x: toX(idx), y: toY(r.ratio) };
