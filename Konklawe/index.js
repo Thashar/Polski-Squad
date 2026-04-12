@@ -122,7 +122,11 @@ async function initializeServices() {
  */
 async function onReady() {
     logger.success('✅ Konklawe gotowy - gra w hasła, błogosławienia JP2');
-    await commandService.registerSlashCommands();
+    try {
+        await commandService.registerSlashCommands();
+    } catch (error) {
+        logger.error('❌ Błąd rejestracji komend Konklawe:', error);
+    }
 
     // Przywróć nicki dla wygasłych klątw (efektów które wygasły podczas offline bota)
     try {

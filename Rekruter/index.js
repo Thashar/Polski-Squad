@@ -134,8 +134,9 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
 }
 
 client.once('ready', async () => {
+  try {
     logger.success('✅ Rekruter gotowy - rekrutacja z OCR, boost tracking');
-    
+
     // Rejestracja komend slash
     await registerSlashCommands(client, config);
     
@@ -206,6 +207,9 @@ client.once('ready', async () => {
         client, config.robot2Users, 'Rekruter', 'robot_activate_rekruter_',
         path.join(__dirname, 'data', 'robot_activation_msg.json')
     );
+  } catch (error) {
+    logger.error('❌ Błąd krytyczny podczas inicjalizacji Rekruter:', error);
+  }
 });
 
 client.on('interactionCreate', async interaction => {

@@ -55,11 +55,19 @@ client.once(Events.ClientReady, async () => {
         logger.error('❌ Błąd pobierania wątków:', error.message);
     }
 
-    await registerSlashCommands(client);
+    try {
+        await registerSlashCommands(client);
+    } catch (error) {
+        logger.error('❌ Błąd rejestracji komend Szkolenia:', error);
+    }
 
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, AI Chat');
 
-    await checkThreads(client, sharedState, config, true);
+    try {
+        await checkThreads(client, sharedState, config, true);
+    } catch (error) {
+        logger.error('❌ Błąd sprawdzania wątków przy starcie:', error);
+    }
 
     const cronExpression = `${config.timing.checkMinute} ${config.timing.checkHour} * * *`;
     cron.schedule(cronExpression, () => {
