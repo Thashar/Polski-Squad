@@ -11950,9 +11950,8 @@ async function handleCoreRankingButton(interaction, sharedState) {
         // Pobierz memberów serwera
         const members = await safeFetchMembers(interaction.guild);
 
-        // Zbuduj linie rankingu
-        const MAX_LINES = 30;
-        const lines = entries.slice(0, MAX_LINES).map((entry, i) => {
+        // Zbuduj linie rankingu (max 250 = 25 pól × 10, limit Discord)
+        const lines = entries.slice(0, 250).map((entry, i) => {
             const member = members.get(entry.userId);
             const nick = member ? member.displayName : `<@${entry.userId}>`;
 
@@ -11971,8 +11970,6 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
         });
 
-        const extra = entries.length > MAX_LINES ? entries.length - MAX_LINES : 0;
-
         const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
         const { EmbedBuilder: EBLocal } = require('discord.js');
         const embed = new EBLocal()
@@ -11984,8 +11981,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
         // Pola po max 10 wpisów, bez nagłówków
         for (let i = 0; i < lines.length; i += 10) {
             const chunk = lines.slice(i, i + 10);
-            const isLast = i + 10 >= lines.length;
-            const fieldValue = chunk.join('\n') + (isLast && extra > 0 ? `\n*...i ${extra} więcej*` : '');
+            const fieldValue = chunk.join('\n');
             embed.addFields({ name: '\u200b', value: fieldValue, inline: true });
         }
 
