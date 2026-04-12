@@ -8635,10 +8635,11 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 // Trend: progres ostatnich 4 tygodni vs średni progres na 4 tygodnie z okna 12 tygodni
                 const allNonZero = data.filter(d => d.score > 0);
                 if (allNonZero.length >= 13) {
-                    const recentProgress = allNonZero[0].score - allNonZero[4].score;
+                    const progress4 = allNonZero[0].score - allNonZero[4].score;
                     const progress12 = allNonZero[0].score - allNonZero[12].score;
-                    const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
-                    m.trendRatio = recentProgress / baseline;
+                    m.trendRatio = progress4 > 0
+                        ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
+                        : 0;
                     if (m.trendRatio >= 1.5)      { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
                     else if (m.trendRatio > 1.1)  { m.trendDescription = 'Rosnący';            m.trendIcon = '↗️'; }
                     else if (m.trendRatio >= 0.9) { m.trendDescription = 'Constans';           m.trendIcon = '⚖️'; }
@@ -9662,10 +9663,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         const chronologicalAll = [...allPlayerData].reverse().filter(d => d.score > 0);
         if (chronologicalAll.length >= 13) {
             const lastIdx = chronologicalAll.length - 1;
-            const recentProgress = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 4].score;
+            const progress4 = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 4].score;
             const progress12 = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 12].score;
-            const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
-            trendRatio = Math.min(2.0, Math.max(0, recentProgress / baseline));
+            trendRatio = progress4 > 0
+                ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
+                : 0;
 
             if (trendRatio >= 1.5)      { trendDescription = 'Gwałtownie rosnący'; trendIcon = '🚀'; }
             else if (trendRatio > 1.1)  { trendDescription = 'Rosnący';            trendIcon = '↗️'; }
@@ -12925,17 +12927,19 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     if (chronological.length < 14) return null;
 
     // Rolling trendRatio z oknem 12 tygodni:
-    //   recentProgress = score[i] - score[i - 4]       (progres ostatnich 4 tygodni)
-    //   progress12     = score[i] - score[i - 12]       (progres ostatnich 12 tygodni)
-    //   baseline       = |progress12| / 3               (avg za 4 tygodnie z okna 12)
-    //   ratio = recentProgress / baseline
+    //   progress4  = score[i] - score[i - 4]           (progres ostatnich 4 tygodni)
+    //   progress12 = score[i] - score[i - 12]          (progres ostatnich 12 tygodni)
+    //   ratio = (progress12 / 3) / progress4           (avg kwartalny / miesięczny)
+    //   jeśli progress4 <= 0: ratio = 0
     const allRawRatios = [];
     for (let i = 12; i < chronological.length; i++) {
-        const recentProgress = chronological[i].score - chronological[i - 4].score;
+        const progress4 = chronological[i].score - chronological[i - 4].score;
         const progress12 = chronological[i].score - chronological[i - 12].score;
-        const baseline = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
+        const ratio = progress4 > 0
+            ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
+            : 0;
         allRawRatios.push({
-            ratio: Math.min(2.0, Math.max(0, recentProgress / baseline)),
+            ratio,
             lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
         });
     }
@@ -13227,11 +13231,13 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
         if (chron.length < 14) return [];
         const raw = [];
         for (let i = 12; i < chron.length; i++) {
-            const recentProgress = chron[i].score - chron[i - 4].score;
+            const progress4 = chron[i].score - chron[i - 4].score;
             const progress12 = chron[i].score - chron[i - 12].score;
-            const base = Math.abs(progress12 / 3) > 0 ? Math.abs(progress12 / 3) : 1;
+            const ratio = progress4 > 0
+                ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
+                : 0;
             raw.push({
-                ratio: Math.min(2.0, Math.max(0, recentProgress / base)),
+                ratio,
                 weekNumber: chron[i].weekNumber,
                 year: chron[i].year,
                 key: `${chron[i].year}-${String(chron[i].weekNumber).padStart(2, '0')}`
