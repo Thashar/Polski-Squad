@@ -152,6 +152,7 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
 }
 
 client.once(Events.ClientReady, async () => {
+  try {
     logger.success('✅ Wydarzynier gotowy - lobby partii, bazar, przypomnienia, eventy');
 
     // Wczytaj lobby i timery z plików
@@ -190,6 +191,9 @@ client.once(Events.ClientReady, async () => {
         path.join(__dirname, 'data', 'robot_activation_msg.json')
     );
 
+  } catch (error) {
+    logger.error('❌ Błąd krytyczny podczas inicjalizacji Wydarzynier:', error);
+  }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
