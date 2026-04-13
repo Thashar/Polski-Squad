@@ -471,11 +471,19 @@ class TablicaMenedzer {
                 this.logger.warn('Panel kontrolny nie znaleziony - pomijam aktualizację (zostanie utworzony przy następnym restarcie bota)');
             }
         } catch (error) {
+            const now = Date.now();
             if (error.message?.includes('token to be set') || error.message?.includes('Expected token')) {
-                const now = Date.now();
                 if (now - this.lastNetworkErrorLog > 300000) {
                     this.lastNetworkErrorLog = now;
                     this.logger.warn('Panel kontrolny: klient Discord nie jest gotowy (brak tokena REST) - pomijam aktualizację');
+                }
+                return;
+            }
+            const isNetworkError = error.code === 'ENOTFOUND' || error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED';
+            if (isNetworkError) {
+                if (now - this.lastNetworkErrorLog > 300000) {
+                    this.lastNetworkErrorLog = now;
+                    this.logger.warn(`Panel kontrolny: błąd sieci (${error.code}) - pomijam aktualizację`);
                 }
                 return;
             }
