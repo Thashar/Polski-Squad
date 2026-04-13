@@ -197,15 +197,6 @@ client.once(Events.ClientReady, async () => {
         logger.info(`✅ Deadline jeszcze nie minął (${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}) - przyciski pozostają aktywne`);
     }
 
-    // Ingestion danych graczy z Gary bota przy starcie (próba nadrobienia zaległości)
-    setTimeout(async () => {
-        try {
-            await garyCombatIngestionService.ingest();
-        } catch (err) {
-            logger.error('GaryCombatIngestion: błąd przy starcie:', err.message);
-        }
-    }, 15000); // 15s opóźnienia, żeby cache ról Discord się załadował
-
     // Cron: co środę o 18:55 — 9 minut po snapshocie Gary (18:46)
     cron.schedule('55 18 * * 3', async () => {
         logger.info('⏰ GaryCombatIngestion: uruchamiam ingestion danych z Gary...');
