@@ -144,6 +144,86 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
     }
 
     /**
+     * Analizuje zdjęcie zakładki Core Stock przez Claude Vision
+     * @param {string} imagePath - Ścieżka do obrazu
+     * @returns {Promise<{items: Object, isValid: boolean, error?: string}>}
+     */
+    async analyzeCoreStockImage(imagePath) {
+        if (!this.apiKey) {
+            throw new Error('Brak ANTHROPIC_API_KEY - nie można przeskanować Core Stock');
+        }
+
+        try {
+            logger.info(`[AI OCR - CoreStock] Rozpoczynam analizę: ${imagePath}`);
+
+            const pngBuffer = await sharp(imagePath).png().toBuffer();
+            const base64Image = pngBuffer.toString('base64');
+
+            const prompt = `Analyze this Survivor.io screenshot showing the "Core Stock" inventory section.
+Extract all items visible in the list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
+Return ONLY a JSON object mapping item names to their total quantities, like this example:
+{"Transmute Core": 29, "Xeno Pet Core": 75, "Mount Core": 7, "Relic Core": 155, "Resonance Chip": 68, "Survivor Awakening Core": 131}
+If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
+
+            const anthropicClient = this.client || new Anthropic({ apiKey: this.apiKey });
+            const model = this.model || process.env.ANTHROPIC_MODEL || 'claude-3-haiku-20240307';
+
+            const message = await anthropicClient.messages.create({
+                model: model,
+                max_tokens: 500,
+                messages: [{
+                    role: 'user',
+                    content: [
+                        {
+                            type: 'image',
+                            source: { type: 'base64', media_type: 'image/png', data: base64Image }
+                        },
+                        { type: 'text', text: prompt }
+                    ]
+                }]
+            });
+
+            const responseText = message.content[0].text.trim();
+            logger.info(`[AI OCR - CoreStock] Odpowiedź: ${responseText}`);
+
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                return { items: {}, isValid: false, error: 'NO_JSON_IN_RESPONSE' };
+            }
+
+            const parsed = JSON.parse(jsonMatch[0]);
+
+            if (parsed.error === 'not_core_stock') {
+                return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
+            }
+
+            const ALLOWED_ITEMS = new Set([
+                'Transmute Core', 'Xeno Pet Core', 'Mount Core',
+                'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'
+            ]);
+
+            const items = {};
+            for (const [name, qty] of Object.entries(parsed)) {
+                const num = Number(qty);
+                if (typeof name === 'string' && name.length > 0 && !isNaN(num) && num >= 0 && ALLOWED_ITEMS.has(name)) {
+                    items[name] = num;
+                }
+            }
+
+            if (Object.keys(items).length === 0) {
+                return { items: {}, isValid: false, error: 'NO_ITEMS_FOUND' };
+            }
+
+            logger.info(`[AI OCR - CoreStock] Odczytano ${Object.keys(items).length} przedmiotów`);
+            return { items, isValid: true };
+
+        } catch (error) {
+            logger.error(`[AI OCR - CoreStock] Błąd analizy:`, error);
+            throw error;
+        }
+    }
+
+    /**
      * Parsuje odpowiedź Claude i wyciąga nick + atak
      * @param {string} responseText - Odpowiedź AI
      * @returns {{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}}
