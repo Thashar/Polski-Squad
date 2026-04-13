@@ -8,7 +8,7 @@ module.exports = {
     lunarLevelQuestion: "Na jakim poziomie trudności ostatnio robiłeś/robiłaś **Lunar Mine Expedition**?",
     lunarPointsQuestion: "Ile punktów uzyskałeś/uzyskałaś ostatnio w **I fazie Lunar Mine Expedition**?",
     otherPurposeMessage: "Rozumiem, że szukasz Polskiej społeczności, ale masz już swój klan.\n## Bardzo dobrze trafiłeś!\n\nZanim dostaniesz dostęp do serwera, musimy sprawdzić o Tobie kilka rzeczy.\n**W tym celu wklej na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
-    statsQuestion: "Wklej tu na czacie screen swojej postaci!\nPamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
+    statsQuestion: "Wklej tu na czacie screen swojej postaci!\n**Pamiętaj, że zdjęcie musi być screenem z gry i nie może być edytowane!**",
     invalidRC: "Podaj poprawną ilość RC!",
     invalidLunarLevel: "Podaj poprawny poziom Lunar Mine Expedition (1-16)!",
     invalidLunarPoints: "Podaj poprawną ilość punktów z I fazy Lunar Mine Expedition (0-5000)!",
