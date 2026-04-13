@@ -38,7 +38,7 @@ module.exports = {
     // System Przypomnień i Eventów
     notificationsBoardChannelId: process.env.WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL,
     timezone: 'Europe/Warsaw',
-    boardUpdateInterval: 60000, // 1 minuta
+    boardUpdateInterval: 300000, // 5 minut (Discord timestamps aktualizują się automatycznie po stronie klienta)
     maxNotificationsPerUser: 50,
     maxTotalNotifications: 200,
     
