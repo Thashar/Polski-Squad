@@ -35,9 +35,6 @@ class TablicaMenedzer {
             this.controlPanelMessageId = this.eventMenedzer.getControlPanelMessageId();
             this.manualPanelMessageId = this.eventMenedzer.getManualPanelMessageId();
 
-            // Rozpocznij okresowe aktualizacje
-            this.startPeriodicUpdates();
-
             // Początkowa synchronizacja
             await this.syncAllNotifications();
 
