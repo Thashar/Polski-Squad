@@ -1,7 +1,14 @@
 ### 🎯 Rekruter Bot
 
 **Funkcjonalność:** Wieloetapowa rekrutacja z OCR → Kwalifikacja klanów: <100K=brak, 100K-599K=Clan0, 600K-799K=Clan1, 800K-1.19M=Clan2, 1.2M+=Main
-**OCR - Dwa tryby:**
+**Flow rekrutacji (ścieżka "Szukam klanu"):**
+1. Klik "Szukam klanu" → `step: waiting_core_stock` → prośba o zdjęcie Core Stock
+2. Skan Core Stock przez AI → `coreStock = {item: qty}` → `step: waiting_lunar_level`
+3. Wpisanie poziomu LME → `step: waiting_lunar_points`
+4. Wpisanie punktów I fazy → `step: waiting_image`
+5. Zdjęcie postaci (OCR) → kwalifikacja do klanu → embed powitalny
+
+**OCR - Dwa tryby (zdjęcie postaci):**
 1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
 2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa analiza przez AI
    - Włączany przez `USE_AI_OCR=true` w .env
@@ -11,6 +18,14 @@
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
      - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (500 tokenów)
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
+
+**Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`
+   - Wymagany `ANTHROPIC_API_KEY` (niezależnie od `USE_AI_OCR`)
+   - Prompt AI wyciąga JSON `{"Relic Core": N, "Transmute Core": N, ...}` (6 typów)
+   - Walidacja: tylko dozwolone nazwy przedmiotów, wartości >= 0
+   - Błędy: `NOT_CORE_STOCK` (złe zdjęcie), `NO_ITEMS_FOUND`, `NO_JSON_IN_RESPONSE`
+   - Wyniki zapisywane w `state.userInfo.coreStock` (obiekt item→qty)
+   - W embedzie powitalnym: pole **🎒 Core Stock** z ikonami każdego przedmiotu
 
 **Serwisy:**
 - `memberNotificationService.js` - Śledzenie boostów, losowe gratulacje, powiadomienia o odejściu (link do profilu + nick serwerowy)

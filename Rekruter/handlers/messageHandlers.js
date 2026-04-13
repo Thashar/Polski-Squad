@@ -97,8 +97,8 @@ async function handleMessage(
   const step = state.userStates.get(message.author.id)?.step;
 
   switch (step) {
-    case 'waiting_rc':
-      await handleRCInput(message, state, config);
+    case 'waiting_core_stock':
+      await handleCoreStockImage(message, state, config);
       break;
 
     case 'waiting_lunar_level':
@@ -121,32 +121,78 @@ async function handleMessage(
 /* ========================================================================== */
 /*                             POSZCZEGÓLNE KROKI                             */
 /* ========================================================================== */
-async function handleRCInput(msg, state, config) {
-  const val = parseInt(msg.content, 10);
-  await safeDeleteMessage(msg);
-
-  if (isNaN(val) || val < 0 || val > 500) {
+async function handleCoreStockImage(msg, state, config) {
+  if (msg.attachments.size === 0) {
+    await safeDeleteMessage(msg);
     await updateUserEphemeralReply(
       msg.author.id,
-      config.messages.invalidRC,
+      'Musisz przesłać zdjęcie Core Stock!',
       [],
       state.userEphemeralReplies
     );
     return;
   }
 
-  state.userInfo.get(msg.author.id).rcAmount = val;
-  state.userStates.set(msg.author.id, {
-    step: 'waiting_lunar_level',
-    rcAmount: val
-  });
+  const file = msg.attachments.first();
+  if (!file.contentType?.startsWith('image/')) {
+    await safeDeleteMessage(msg);
+    await updateUserEphemeralReply(
+      msg.author.id,
+      'Prześlij prawidłowy obraz!',
+      [],
+      state.userEphemeralReplies
+    );
+    return;
+  }
 
   await updateUserEphemeralReply(
     msg.author.id,
-    config.messages.lunarLevelQuestion,
+    '🤖 Analizuję zdjęcie Core Stock...',
     [],
     state.userEphemeralReplies
   );
+
+  const imgPath = path.join(
+    __dirname,
+    '../temp',
+    `cs_${Date.now()}_${msg.author.id}.png`
+  );
+  await downloadImage(file.url, imgPath);
+  await safeDeleteMessage(msg);
+
+  try {
+    const aiOcrService = new AIOCRService(config);
+    const result = await aiOcrService.analyzeCoreStockImage(imgPath);
+
+    // Usuń plik tymczasowy
+    try { const fs = require('fs').promises; await fs.unlink(imgPath); } catch {/* pomijamy */}
+
+    if (!result.isValid) {
+      const errMsg = result.error === 'NOT_CORE_STOCK'
+        ? config.messages.invalidCoreStockImage
+        : config.messages.coreStockError;
+      await updateUserEphemeralReply(msg.author.id, errMsg, [], state.userEphemeralReplies);
+      return;
+    }
+
+    state.userInfo.get(msg.author.id).coreStock = result.items;
+    state.userStates.set(msg.author.id, { step: 'waiting_lunar_level' });
+
+    await updateUserEphemeralReply(
+      msg.author.id,
+      config.messages.lunarLevelQuestion,
+      [],
+      state.userEphemeralReplies
+    );
+  } catch (err) {
+    try { const fs = require('fs').promises; await fs.unlink(imgPath); } catch {/* pomijamy */}
+    await updateUserEphemeralReply(
+      msg.author.id,
+      config.messages.coreStockError,
+      [],
+      state.userEphemeralReplies
+    );
+  }
 }
 
 async function handleLunarLevelInput(msg, state, config) {
@@ -166,7 +212,6 @@ async function handleLunarLevelInput(msg, state, config) {
   state.userInfo.get(msg.author.id).lunarLevel = lvl;
   state.userStates.set(msg.author.id, {
     step: 'waiting_lunar_points',
-    rcAmount:  state.userInfo.get(msg.author.id).rcAmount,
     lunarLevel: lvl
   });
 
@@ -195,7 +240,6 @@ async function handleLunarPointsInput(msg, state, config) {
   state.userInfo.get(msg.author.id).lunarPoints = pts;
   state.userStates.set(msg.author.id, {
     step:        'waiting_image',
-    rcAmount:    state.userInfo.get(msg.author.id).rcAmount,
     lunarLevel:  state.userInfo.get(msg.author.id).lunarLevel,
     lunarPoints: pts
   });

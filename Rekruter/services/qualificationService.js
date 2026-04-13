@@ -90,12 +90,20 @@ async function sendUserSummary(user, channelId, state, config) {
   const channel = state.client.channels.cache.get(channelId);
   if (!channel) return;
 
+  const CORE_ICONS = {
+    'Transmute Core':          '<:II_TransmuteCore:1458440558602092647>',
+    'Xeno Pet Core':           '<:II_PetAW:1407383326830104658>',
+    'Mount Core':              '<:II_MountCore:1492137886680748113>',
+    'Relic Core':              '<:II_RC:1385139885924421653>',
+    'Resonance Chip':          '<:II_Chip:1402532787059294229>',
+    'Survivor Awakening Core': '<:II_AW:1402532745804124242>'
+  };
+
   let txt = `<a:discord_logo:1389177319968473140> **Użytkownik Discord:** ${info.username}\n`;
-  if (info.playerNick)      txt += `<:J_SurvivorJoey:1326511743555600451> **Nick w grze:** ${info.playerNick}\n`;
-  if (info.characterAttack) txt += `<:L_ATK:1209754263228522516> **Atak postaci:** ${info.characterAttack.toLocaleString()}\n`;
-  if (info.rcAmount != null)txt += `<:I_RC:1385139885924421653> **Ilość RC:** ${info.rcAmount}\n`;
-  if (info.lunarLevel != null)txt += `<:I_LVL:1389178270888759296> **Lunar Mine – Poziom:** ${info.lunarLevel}\n`;
-  if (info.lunarPoints!= null)txt += `<:M_Medal:1209754405373747260> **Lunar Mine – Punkty I fazy:** ${info.lunarPoints.toLocaleString()}\n`;
+  if (info.playerNick)        txt += `<:J_SurvivorJoey:1326511743555600451> **Nick w grze:** ${info.playerNick}\n`;
+  if (info.characterAttack)   txt += `<:L_ATK:1209754263228522516> **Atak postaci:** ${info.characterAttack.toLocaleString()}\n`;
+  if (info.lunarLevel != null) txt += `<:I_LVL:1389178270888759296> **Lunar Mine – Poziom:** ${info.lunarLevel}\n`;
+  if (info.lunarPoints != null) txt += `<:M_Medal:1209754405373747260> **Lunar Mine – Punkty I fazy:** ${info.lunarPoints.toLocaleString()}\n`;
 
   const embed = new EmbedBuilder()
     .setColor(0x0099ff)
@@ -103,6 +111,13 @@ async function sendUserSummary(user, channelId, state, config) {
     .setDescription(txt)
     .setThumbnail(user.displayAvatarURL())
     .setTimestamp();
+
+  if (info.coreStock && Object.keys(info.coreStock).length > 0) {
+    const coreLines = Object.entries(info.coreStock)
+      .map(([name, qty]) => `${CORE_ICONS[name] || '❓'} **${name}:** ${qty}`)
+      .join('\n');
+    embed.addFields({ name: '🎒 Core Stock', value: coreLines });
+  }
 
   const msg = { embeds: [embed] };
   const imgPath = state.userImages.get(user.id);

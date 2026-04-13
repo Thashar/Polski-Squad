@@ -185,7 +185,7 @@ async function handleYesPolish(interaction, state, config) {
     username:        interaction.user.username,
     isPolish:        true,
     purpose:         null,
-    rcAmount:        null,
+    coreStock:       null,
     lunarLevel:      null,
     lunarPoints:     null,
     characterAttack: null,
@@ -217,11 +217,11 @@ async function handleYesPolish(interaction, state, config) {
 /* --------------------------- ścieżka „Szukam klanu” ---------------------- */
 async function handleLookingClan(interaction, state, config) {
   state.userInfo.get(interaction.user.id).purpose = 'Szukam klanu';
-  state.userStates.set(interaction.user.id, { step: 'waiting_rc' });
+  state.userStates.set(interaction.user.id, { step: 'waiting_core_stock' });
 
   await updateUserEphemeralReply(
     interaction.user.id,
-    config.messages.rcQuestion,
+    config.messages.coreStockQuestion,
     [],
     state.userEphemeralReplies
   );
