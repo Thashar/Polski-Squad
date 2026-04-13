@@ -33,14 +33,11 @@ async function safeFetchMembers(guild, logger = null, force = false) {
 
     // Jeśli fetch już jest w toku, poczekaj i użyj cache
     if (throttleData && throttleData.isInProgress) {
-        log.warn(`[🔒 THROTTLE] Fetch już w toku dla guild ${guild.name}, używam cache`);
         return guild.members.cache;
     }
 
     // Jeśli ostatni fetch był niedawno i nie wymuszamy, użyj cache
     if (!force && throttleData && (now - throttleData.lastFetch) < MEMBERS_FETCH_COOLDOWN) {
-        const secondsLeft = Math.ceil((MEMBERS_FETCH_COOLDOWN - (now - throttleData.lastFetch)) / 1000);
-        log.info(`[🔒 THROTTLE] Pomijam fetch dla guild ${guild.name} (cooldown: ${secondsLeft}s), używam cache (${guild.members.cache.size} członków)`);
         return guild.members.cache;
     }
 
