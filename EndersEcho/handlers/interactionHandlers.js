@@ -334,14 +334,17 @@ class InteractionHandler {
                 currentScore ? currentScore.timestamp : null
             );
 
+            let uploadedImageUrl = null;
             try {
                 await interaction.editReply({ content: msgs.newRecordConfirmed });
 
-                await interaction.followUp({
+                const followUpMsg = await interaction.followUp({
                     embeds: [publicEmbed],
                     files: [imageAttachment]
                 });
 
+                // Przechwytujemy CDN URL przesłanego pliku, żeby użyć go w powiadomieniach na innych serwerach
+                uploadedImageUrl = followUpMsg.attachments.first()?.url || null;
                 logger.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
             } catch (newRecordError) {
                 logger.error('❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie:', newRecordError);
@@ -407,9 +410,10 @@ class InteractionHandler {
                                 }
 
                                 const guildMsgs = this.msgs(guildCfg.id);
-                                // Na serwerze macierzystym plik był już w embeddzie rekordu — nie dołączamy go ponownie
+                                // Na serwerze macierzystym plik był już w embeddzie rekordu — bez duplikatu.
+                                // Na innych serwerach używamy CDN URL z już wysłanego pliku (bez ponownego uploadu).
                                 const isSourceGuild = guildCfg.id === interaction.guildId;
-                                const notifAttachmentName = isSourceGuild ? null : imageAttachment.name;
+                                const embedImageUrl = isSourceGuild ? null : uploadedImageUrl;
 
                                 const globalEmbed = this.rankingService.createGlobalTop3Embed(
                                     userName,
@@ -421,15 +425,11 @@ class InteractionHandler {
                                     sourceGuildName,
                                     guildMsgs,
                                     currentScore ? currentScore.timestamp : null,
-                                    notifAttachmentName
+                                    embedImageUrl
                                 );
 
-                                if (isSourceGuild) {
-                                    await channel.send({ embeds: [globalEmbed] });
-                                } else {
-                                    await channel.send({ embeds: [globalEmbed], files: [imageAttachment] });
-                                }
-                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez pliku — serwer macierzysty)' : ' (z plikiem)'}`);
+                                await channel.send({ embeds: [globalEmbed] });
+                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez zdjęcia — serwer macierzysty)' : (embedImageUrl ? ' (ze zdjęciem CDN)' : ' (bez zdjęcia — brak CDN URL)')}`);
                             } catch (notifError) {
                                 logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
                             }

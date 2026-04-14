@@ -694,7 +694,7 @@ class RankingService {
             .setTitle(msgs.globalTop3Title)
             .setDescription(descLines.join('\n'))
             .setThumbnail(userAvatarUrl)
-            .setImage(attachmentName ? `attachment://${attachmentName}` : null)
+            .setImage(attachmentName || null)
             .setTimestamp();
     }
 
