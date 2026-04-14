@@ -6,7 +6,9 @@
  *  • przyciski propozycji zmiany nicku
  */
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const path = require('path');
+const fs = require('fs');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { delay, updateUserEphemeralReply } = require('../utils/helpers');
 const { safeAddRole } = require('../services/roleService');
 const {
@@ -219,11 +221,17 @@ async function handleLookingClan(interaction, state, config) {
   state.userInfo.get(interaction.user.id).purpose = 'Szukam klanu';
   state.userStates.set(interaction.user.id, { step: 'waiting_core_stock' });
 
+  const examplePath = path.join(__dirname, '../files/Core_Stock.jpg');
+  const files = fs.existsSync(examplePath)
+    ? [new AttachmentBuilder(examplePath, { name: 'Core_Stock.jpg' })]
+    : [];
+
   await updateUserEphemeralReply(
     interaction.user.id,
     config.messages.coreStockQuestion,
     [],
-    state.userEphemeralReplies
+    state.userEphemeralReplies,
+    files
   );
 }
 
