@@ -70,7 +70,7 @@ async function pushEvent(type, discordId, payload = {}) {
             const text = await res.text().catch(() => '');
             logger.error(`pushEvent(${type}) — błąd HTTP ${res.status}: ${text}`);
         } else {
-            logger.debug(`pushEvent(${type}) — OK`);
+            logger.info(`pushEvent(${type}) — OK`);
         }
     } catch (err) {
         // Nie rzucamy błędu dalej — nieudany push nie powinien blokować komendy bota.
