@@ -15,7 +15,7 @@ async function safeDeleteMessage(message) {
     }
 }
 
-async function updateUserEphemeralReply(userId, content, components = [], userEphemeralReplies) {
+async function updateUserEphemeralReply(userId, content, components = [], userEphemeralReplies, files = []) {
     const userReply = userEphemeralReplies.get(userId);
     if (!userReply) {
         logger.info(`[BOT] Brak ephemeral reply dla użytkownika ${userId}`);
@@ -26,6 +26,7 @@ async function updateUserEphemeralReply(userId, content, components = [], userEp
         await userReply.editReply({
             content: content,
             components: components,
+            files: files,
             ephemeral: true
         });
         logger.info(`[BOT] ✅ Zaktualizowano ephemeral reply dla użytkownika ${userId}`);
