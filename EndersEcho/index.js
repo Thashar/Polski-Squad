@@ -5,6 +5,7 @@ const AIOCRService = require('./services/aiOcrService');
 const RankingService = require('./services/rankingService');
 const LogService = require('./services/logService');
 const RoleService = require('./services/roleService');
+const NotificationService = require('./services/notificationService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -23,7 +24,8 @@ const aiOcrService = new AIOCRService(config);
 const rankingService = new RankingService(config);
 const logService = new LogService(config);
 const roleService = new RoleService(config, rankingService);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService);
+const notificationService = new NotificationService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService);
 
 /**
  * Inicjalizuje bota EndersEcho

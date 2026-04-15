@@ -44,13 +44,22 @@
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`
+5. **System Powiadomień DM** - `notificationService.js` + `interactionHandlers.js`:
+   - `/notifications` → ephemeral z przyciskami: `[🔔 Ustaw powiadomienie]` i `[🔕 Usuń powiadomienie]`
+   - **Subskrypcja:** użytkownik wybiera serwer → gracza z rankingu → potwierdza → subskrypcja zapisana w `data/notifications.json`
+   - **Wysyłanie DM:** po każdym nowym rekordzie bot szuka subskrybentów danego gracza i wysyła im DM z kopią embeda rekordu + zdjęciem + stopką `notifDmFooter`
+   - `createDmNotifEmbed(recordEmbed, messages)` — klonuje embed rekordu i dodaje stopkę w `rankingService.js`
+   - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
+   - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
+
+**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`
 
 **Struktura danych:**
 ```
 EndersEcho/data/
 ├── ranking_{guildId1}.json   # Ranking serwera 1
 ├── ranking_{guildId2}.json   # Ranking serwera 2
+├── notifications.json        # Subskrypcje powiadomień DM
 └── ...
 ```
 
