@@ -163,6 +163,29 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
+    // System zmiany nazwy kanału - emoji statusu (🛑/🟢)
+    if (!message.author.bot && message.guild && message.content) {
+        const trimmedContent = message.content.trim();
+        if (trimmedContent === '🛑' || trimmedContent === '🟢') {
+            const isAdmin = await isAdminMember(message.guild, message.author.id);
+            if (isAdmin) {
+                try {
+                    const channel = message.channel;
+                    const currentName = channel.name;
+                    // Usuń emoji na początku nazwy kanału wraz z opcjonalnym myślnikiem
+                    const cleanName = currentName.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}][-]?/u, '');
+                    const newName = trimmedContent + cleanName;
+                    await channel.setName(newName);
+                    await message.delete().catch(() => {});
+                    logger.info(`🏷️ Admin ${message.author.tag} zmienił emoji kanału #${currentName} → #${newName}`);
+                } catch (error) {
+                    logger.error(`❌ Błąd zmiany nazwy kanału przez emoji: ${error.message}`);
+                }
+                return;
+            }
+        }
+    }
+
     await messageHandler.handleMessage(message, client);
 });
 
