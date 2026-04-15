@@ -822,23 +822,27 @@ class InteractionHandler {
         }
         const sorted = await this._getNotifSortedPlayers(selectedGuildId, interaction.client);
         const PAGE_SIZE = 25;
+        const options = sorted.slice(0, PAGE_SIZE).map(p =>
+            new StringSelectMenuOptionBuilder()
+                .setValue(p.userId)
+                .setLabel(p.displayName.substring(0, 100))
+        );
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`notif_player_select_${selectedGuildId}`)
+            .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
+            .addOptions(options);
+        const selectRow = new ActionRowBuilder().addComponents(selectMenu);
         if (sorted.length <= PAGE_SIZE) {
-            const options = sorted.map(p =>
-                new StringSelectMenuOptionBuilder()
-                    .setValue(p.userId)
-                    .setLabel(p.displayName.substring(0, 100))
-            );
-            const selectMenu = new StringSelectMenuBuilder()
-                .setCustomId(`notif_player_select_${selectedGuildId}`)
-                .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
-                .addOptions(options);
             await interaction.editReply({
                 content: msgs.notifSelectPlayer,
-                components: [new ActionRowBuilder().addComponents(selectMenu)]
+                components: [selectRow]
             });
         } else {
-            const components = this._buildNotifPageButtons(sorted, selectedGuildId);
-            await interaction.editReply({ content: msgs.notifSelectPlayer, components });
+            const buttonRows = this._buildNotifPageButtons(sorted, selectedGuildId, 0);
+            await interaction.editReply({
+                content: msgs.notifSelectPlayer,
+                components: [...buttonRows, selectRow]
+            });
         }
     }
 
@@ -970,13 +974,16 @@ class InteractionHandler {
 
     /**
      * Buduje wiersze przycisków paginacji z zakresami liter dla listy graczy.
-     * Maks. 5 przycisków × 5 wierszy = 25 stron po 25 graczy = do 625 graczy.
+     * Maks. 4 wiersze × 5 przycisków = 20 stron po 25 graczy = do 500 graczy
+     * (5. wiersz jest zarezerwowany dla select menu w tej samej wiadomości).
+     * @param {number} activeOffset - offset aktualnie wyświetlanej strony (podświetlony na zielono)
      */
-    _buildNotifPageButtons(players, guildId) {
+    _buildNotifPageButtons(players, guildId, activeOffset = 0) {
         const PAGE_SIZE = 25;
         const rows = [];
         let currentRow = [];
         for (let offset = 0; offset < players.length; offset += PAGE_SIZE) {
+            if (rows.length >= 4 && currentRow.length === 0) break; // max 4 wiersze
             const page = players.slice(offset, offset + PAGE_SIZE);
             const firstName = (page[0].displayName || '?')[0].toUpperCase();
             const lastName = (page[page.length - 1].displayName || '?')[0].toUpperCase();
@@ -985,14 +992,14 @@ class InteractionHandler {
                 new ButtonBuilder()
                     .setCustomId(`notif_page_${guildId}_${offset}`)
                     .setLabel(label)
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(offset === activeOffset ? ButtonStyle.Success : ButtonStyle.Primary)
             );
             if (currentRow.length === 5) {
                 rows.push(new ActionRowBuilder().addComponents(currentRow));
                 currentRow = [];
             }
         }
-        if (currentRow.length > 0) {
+        if (currentRow.length > 0 && rows.length < 4) {
             rows.push(new ActionRowBuilder().addComponents(currentRow));
         }
         return rows;
@@ -1020,9 +1027,11 @@ class InteractionHandler {
             .setCustomId(`notif_player_select_${guildId}`)
             .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
             .addOptions(options);
+        const buttonRows = this._buildNotifPageButtons(sorted, guildId, offset);
+        const selectRow = new ActionRowBuilder().addComponents(selectMenu);
         await interaction.editReply({
             content: msgs.notifSelectPlayer,
-            components: [new ActionRowBuilder().addComponents(selectMenu)]
+            components: [...buttonRows, selectRow]
         });
     }
 
