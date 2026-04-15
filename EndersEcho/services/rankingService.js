@@ -699,6 +699,21 @@ class RankingService {
     }
 
     /**
+     * Tworzy embed DM powiadomienia — kopia embeda rekordu z dodatkową informacją w stopce.
+     * @param {EmbedBuilder} recordEmbed
+     * @param {Object} messages
+     * @returns {EmbedBuilder}
+     */
+    createDmNotifEmbed(recordEmbed, messages) {
+        const msgs = messages || this.config.messages;
+        // Clone the embed data and add footer
+        const data = recordEmbed.toJSON();
+        const dmEmbed = new EmbedBuilder(data);
+        dmEmbed.setFooter({ text: msgs.notifDmFooter });
+        return dmEmbed;
+    }
+
+    /**
      * Aktualizuje ranking użytkownika na danym serwerze
      * @param {string} guildId
      * @param {string} userId

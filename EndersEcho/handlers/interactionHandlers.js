@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { downloadFile, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -7,13 +7,14 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
         this.rankingService = rankingService;
         this.logService = logService;
         this.roleService = roleService;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -68,7 +69,11 @@ class InteractionHandler {
                 .addBooleanOption(option =>
                     option.setName('enabled')
                         .setDescription('Enable (true) or disable (false) detailed logging')
-                        .setRequired(false))
+                        .setRequired(false)),
+
+            new SlashCommandBuilder()
+                .setName('notifications')
+                .setDescription('Manage record break notifications for players'),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -105,9 +110,12 @@ class InteractionHandler {
                 case 'update':  await this.handleUpdateCommand(interaction);  break;
                 case 'remove':  await this.handleRemoveCommand(interaction);  break;
                 case 'ocr-debug': await this.handleOcrDebugCommand(interaction); break;
+                case 'notifications': await this.handleNotificationsCommand(interaction); break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
+        } else if (interaction.isStringSelectMenu()) {
+            await this.handleSelectMenuInteraction(interaction);
         }
     }
 
@@ -451,6 +459,27 @@ class InteractionHandler {
                 logger.error('❌ Błąd sprawdzania/wysyłania Global Top 3:', globalCheckError);
             }
 
+            // DM powiadomienia dla subskrybentów
+            try {
+                const subscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
+                if (subscribers.length > 0) {
+                    logger.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
+                    for (const subscriberId of subscribers) {
+                        try {
+                            const subscriberUser = await interaction.client.users.fetch(subscriberId);
+                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
+                            const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
+                            await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
+                            logger.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
+                        } catch (dmError) {
+                            logger.warn(`⚠️ Nie można wysłać DM do ${subscriberId}: ${dmError.message}`);
+                        }
+                    }
+                }
+            } catch (dmCheckError) {
+                logger.error('❌ Błąd wysyłania DM powiadomień:', dmCheckError);
+            }
+
             await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
 
         } catch (error) {
@@ -519,6 +548,24 @@ class InteractionHandler {
     async handleButtonInteraction(interaction) {
         try {
             const customId = interaction.customId;
+
+            // === Przyciski powiadomień ===
+            if (customId === 'notif_set') {
+                await this._handleNotifSet(interaction);
+                return;
+            }
+            if (customId === 'notif_remove') {
+                await this._handleNotifRemove(interaction);
+                return;
+            }
+            if (customId.startsWith('notif_confirm_')) {
+                await this._handleNotifConfirm(interaction, customId);
+                return;
+            }
+            if (customId === 'notif_cancel') {
+                await this._handleNotifCancel(interaction);
+                return;
+            }
 
             // === Przyciski wyboru serwera/global ===
             if (customId.startsWith('ranking_select_')) {
@@ -696,6 +743,216 @@ class InteractionHandler {
             embeds: [],
             components: selectRows
         });
+    }
+
+    /**
+     * Obsługuje komendę /notifications
+     */
+    async handleNotificationsCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('notif_set')
+                .setLabel(msgs.notifSetButton)
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('notif_remove')
+                .setLabel(msgs.notifRemoveButton)
+                .setStyle(ButtonStyle.Danger)
+        );
+        await interaction.reply({ content: msgs.notifDescription, components: [row], flags: ['Ephemeral'] });
+    }
+
+    /**
+     * Obsługuje select menu i inne interakcje z powiadomieniami
+     */
+    async handleSelectMenuInteraction(interaction) {
+        if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
+        try {
+            const customId = interaction.customId;
+            if (customId === 'notif_server_select') {
+                await this._handleNotifServerSelect(interaction);
+            } else if (customId.startsWith('notif_player_select_')) {
+                await this._handleNotifPlayerSelect(interaction, customId);
+            } else if (customId === 'notif_remove_select') {
+                await this._handleNotifRemoveSelect(interaction);
+            }
+        } catch (error) {
+            logger.error('Błąd w handleSelectMenuInteraction:', error);
+            const msgs = this.msgs(interaction.guildId);
+            try {
+                if (interaction.deferred || interaction.replied) {
+                    await interaction.editReply({ content: msgs.rankingError, components: [] });
+                }
+            } catch {}
+        }
+    }
+
+    async _handleNotifSet(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const options = this.config.guilds.map(g => {
+            const guildName = interaction.client.guilds.cache.get(g.id)?.name || g.id;
+            return new StringSelectMenuOptionBuilder()
+                .setValue(g.id)
+                .setLabel(guildName.substring(0, 100));
+        });
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('notif_server_select')
+            .setPlaceholder(msgs.notifSelectServerPlaceholder)
+            .addOptions(options);
+        await interaction.editReply({
+            content: msgs.notifSelectServer,
+            components: [new ActionRowBuilder().addComponents(selectMenu)]
+        });
+    }
+
+    async _handleNotifServerSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const selectedGuildId = interaction.values[0];
+        const players = await this.rankingService.getSortedPlayers(selectedGuildId);
+        if (players.length === 0) {
+            await interaction.editReply({ content: msgs.notifNoPlayers, components: [] });
+            return;
+        }
+        const targetGuild = interaction.client.guilds.cache.get(selectedGuildId);
+        const options = [];
+        for (const player of players.slice(0, 25)) {
+            let displayName = player.username || `ID:${player.userId}`;
+            if (targetGuild) {
+                try {
+                    const member = await targetGuild.members.fetch(player.userId);
+                    displayName = member.displayName;
+                } catch {}
+            }
+            options.push(
+                new StringSelectMenuOptionBuilder()
+                    .setValue(player.userId)
+                    .setLabel(displayName.substring(0, 100))
+            );
+        }
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`notif_player_select_${selectedGuildId}`)
+            .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
+            .addOptions(options);
+        await interaction.editReply({
+            content: msgs.notifSelectPlayer,
+            components: [new ActionRowBuilder().addComponents(selectMenu)]
+        });
+    }
+
+    async _handleNotifPlayerSelect(interaction, customId) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const selectedGuildId = customId.replace('notif_player_select_', '');
+        const selectedUserId = interaction.values[0];
+        const targetGuildName = interaction.client.guilds.cache.get(selectedGuildId)?.name || selectedGuildId;
+        let targetUsername = selectedUserId;
+        const players = await this.rankingService.getSortedPlayers(selectedGuildId);
+        const player = players.find(p => p.userId === selectedUserId);
+        if (player) targetUsername = player.username || selectedUserId;
+        const targetGuild = interaction.client.guilds.cache.get(selectedGuildId);
+        if (targetGuild) {
+            try {
+                const member = await targetGuild.members.fetch(selectedUserId);
+                targetUsername = member.displayName;
+            } catch {}
+        }
+        const confirmText = formatMessage(msgs.notifConfirmText, { username: targetUsername, guild: targetGuildName });
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`notif_confirm_${selectedUserId}_${selectedGuildId}`)
+                .setLabel(msgs.notifConfirmYes)
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('notif_cancel')
+                .setLabel(msgs.notifConfirmNo)
+                .setStyle(ButtonStyle.Secondary)
+        );
+        await interaction.editReply({ content: confirmText, components: [row] });
+    }
+
+    async _handleNotifConfirm(interaction, customId) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        // customId: notif_confirm_{userId}_{guildId}  (snowflakes contain only digits)
+        const parts = customId.split('_');
+        // parts: ['notif','confirm', userId, guildId]
+        const targetUserId = parts[2];
+        const targetGuildId = parts[3];
+        const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+        let targetUsername = targetUserId;
+        const players = await this.rankingService.getSortedPlayers(targetGuildId);
+        const player = players.find(p => p.userId === targetUserId);
+        if (player) targetUsername = player.username || targetUserId;
+        const targetGuild = interaction.client.guilds.cache.get(targetGuildId);
+        if (targetGuild) {
+            try {
+                const member = await targetGuild.members.fetch(targetUserId);
+                targetUsername = member.displayName;
+            } catch {}
+        }
+        const added = await this.notificationService.addSubscription(
+            interaction.user.id, targetUserId, targetGuildId, targetUsername, targetGuildName
+        );
+        if (!added) {
+            await interaction.editReply({
+                content: formatMessage(msgs.notifAlreadySet, { username: targetUsername, guild: targetGuildName }),
+                components: []
+            });
+            return;
+        }
+        await interaction.editReply({
+            content: formatMessage(msgs.notifSuccess, { username: targetUsername, guild: targetGuildName }),
+            components: []
+        });
+    }
+
+    async _handleNotifCancel(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        await interaction.editReply({ content: msgs.notifCancelled, components: [] });
+    }
+
+    async _handleNotifRemove(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const subs = await this.notificationService.getSubscriptions(interaction.user.id);
+        if (subs.length === 0) {
+            await interaction.editReply({ content: msgs.notifRemoveNone, components: [] });
+            return;
+        }
+        const options = subs.slice(0, 25).map(sub =>
+            new StringSelectMenuOptionBuilder()
+                .setValue(`${sub.targetUserId}_${sub.targetGuildId}`)
+                .setLabel(`${sub.targetUsername} — ${sub.targetGuildName}`.substring(0, 100))
+        );
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId('notif_remove_select')
+            .setPlaceholder(msgs.notifRemoveSelectPlaceholder)
+            .addOptions(options);
+        await interaction.editReply({
+            content: msgs.notifRemoveTitle,
+            components: [new ActionRowBuilder().addComponents(selectMenu)]
+        });
+    }
+
+    async _handleNotifRemoveSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const [targetUserId, targetGuildId] = interaction.values[0].split('_');
+        const subs = await this.notificationService.getSubscriptions(interaction.user.id);
+        const sub = subs.find(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
+        const removed = await this.notificationService.removeSubscription(interaction.user.id, targetUserId, targetGuildId);
+        if (removed && sub) {
+            await interaction.editReply({
+                content: formatMessage(msgs.notifRemoveSuccess, { username: sub.targetUsername, guild: sub.targetGuildName }),
+                components: []
+            });
+        } else {
+            await interaction.editReply({ content: msgs.notifCancelled, components: [] });
+        }
     }
 
     /**
