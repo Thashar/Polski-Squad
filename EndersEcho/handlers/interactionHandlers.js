@@ -566,6 +566,10 @@ class InteractionHandler {
                 await this._handleNotifCancel(interaction);
                 return;
             }
+            if (customId.startsWith('notif_page_')) {
+                await this._handleNotifPageSelect(interaction, customId);
+                return;
+            }
 
             // === Przyciski wyboru serwera/global ===
             if (customId.startsWith('ranking_select_')) {
@@ -816,30 +820,26 @@ class InteractionHandler {
             await interaction.editReply({ content: msgs.notifNoPlayers, components: [] });
             return;
         }
-        const targetGuild = interaction.client.guilds.cache.get(selectedGuildId);
-        const options = [];
-        for (const player of players.slice(0, 25)) {
-            let displayName = player.username || `ID:${player.userId}`;
-            if (targetGuild) {
-                try {
-                    const member = await targetGuild.members.fetch(player.userId);
-                    displayName = member.displayName;
-                } catch {}
-            }
-            options.push(
+        const sorted = await this._getNotifSortedPlayers(selectedGuildId, interaction.client);
+        const PAGE_SIZE = 25;
+        if (sorted.length <= PAGE_SIZE) {
+            const options = sorted.map(p =>
                 new StringSelectMenuOptionBuilder()
-                    .setValue(player.userId)
-                    .setLabel(displayName.substring(0, 100))
+                    .setValue(p.userId)
+                    .setLabel(p.displayName.substring(0, 100))
             );
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId(`notif_player_select_${selectedGuildId}`)
+                .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
+                .addOptions(options);
+            await interaction.editReply({
+                content: msgs.notifSelectPlayer,
+                components: [new ActionRowBuilder().addComponents(selectMenu)]
+            });
+        } else {
+            const components = this._buildNotifPageButtons(sorted, selectedGuildId);
+            await interaction.editReply({ content: msgs.notifSelectPlayer, components });
         }
-        const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`notif_player_select_${selectedGuildId}`)
-            .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
-            .addOptions(options);
-        await interaction.editReply({
-            content: msgs.notifSelectPlayer,
-            components: [new ActionRowBuilder().addComponents(selectMenu)]
-        });
     }
 
     async _handleNotifPlayerSelect(interaction, customId) {
@@ -934,6 +934,94 @@ class InteractionHandler {
             .addOptions(options);
         await interaction.editReply({
             content: msgs.notifRemoveTitle,
+            components: [new ActionRowBuilder().addComponents(selectMenu)]
+        });
+    }
+
+    /**
+     * Pobiera graczy z rankingu z display names i sortuje alfabetycznie (znaki specjalne na końcu).
+     */
+    async _getNotifSortedPlayers(guildId, client) {
+        const players = await this.rankingService.getSortedPlayers(guildId);
+        const targetGuild = client.guilds.cache.get(guildId);
+        const result = [];
+        for (const player of players) {
+            let displayName = player.username || `ID:${player.userId}`;
+            if (targetGuild) {
+                try {
+                    const member = await targetGuild.members.fetch(player.userId);
+                    displayName = member.displayName;
+                } catch {}
+            }
+            result.push({ ...player, displayName });
+        }
+        const isLetter = name => /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(name);
+        result.sort((a, b) => {
+            const nameA = a.displayName.toLowerCase();
+            const nameB = b.displayName.toLowerCase();
+            const letterA = isLetter(nameA);
+            const letterB = isLetter(nameB);
+            if (letterA && !letterB) return -1;
+            if (!letterA && letterB) return 1;
+            return nameA.localeCompare(nameB, 'pl', { sensitivity: 'base' });
+        });
+        return result;
+    }
+
+    /**
+     * Buduje wiersze przycisków paginacji z zakresami liter dla listy graczy.
+     * Maks. 5 przycisków × 5 wierszy = 25 stron po 25 graczy = do 625 graczy.
+     */
+    _buildNotifPageButtons(players, guildId) {
+        const PAGE_SIZE = 25;
+        const rows = [];
+        let currentRow = [];
+        for (let offset = 0; offset < players.length; offset += PAGE_SIZE) {
+            const page = players.slice(offset, offset + PAGE_SIZE);
+            const firstName = (page[0].displayName || '?')[0].toUpperCase();
+            const lastName = (page[page.length - 1].displayName || '?')[0].toUpperCase();
+            const label = firstName === lastName ? firstName : `${firstName} - ${lastName}`;
+            currentRow.push(
+                new ButtonBuilder()
+                    .setCustomId(`notif_page_${guildId}_${offset}`)
+                    .setLabel(label)
+                    .setStyle(ButtonStyle.Primary)
+            );
+            if (currentRow.length === 5) {
+                rows.push(new ActionRowBuilder().addComponents(currentRow));
+                currentRow = [];
+            }
+        }
+        if (currentRow.length > 0) {
+            rows.push(new ActionRowBuilder().addComponents(currentRow));
+        }
+        return rows;
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku strony — wyświetla select menu z graczami z danego zakresu.
+     * customId: notif_page_{guildId}_{offset}
+     */
+    async _handleNotifPageSelect(interaction, customId) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const withoutPrefix = customId.replace('notif_page_', '');
+        const lastUnderscore = withoutPrefix.lastIndexOf('_');
+        const guildId = withoutPrefix.substring(0, lastUnderscore);
+        const offset = parseInt(withoutPrefix.substring(lastUnderscore + 1), 10);
+        const sorted = await this._getNotifSortedPlayers(guildId, interaction.client);
+        const page = sorted.slice(offset, offset + 25);
+        const options = page.map(p =>
+            new StringSelectMenuOptionBuilder()
+                .setValue(p.userId)
+                .setLabel(p.displayName.substring(0, 100))
+        );
+        const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`notif_player_select_${guildId}`)
+            .setPlaceholder(msgs.notifSelectPlayerPlaceholder)
+            .addOptions(options);
+        await interaction.editReply({
+            content: msgs.notifSelectPlayer,
             components: [new ActionRowBuilder().addComponents(selectMenu)]
         });
     }
