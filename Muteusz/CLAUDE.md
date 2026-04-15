@@ -28,6 +28,8 @@
 
 11. **Komenda /msg** - `interactionHandlers.js`: Wysyłanie wiadomości botem na dowolny kanał tekstowy. Tylko dla administratorów. Parametry: `kanał` (wymagany), `wiadomość` (wymagana), `ping` (opcjonalne - ID ról oddzielone przecinkami, "everyone" lub "here"). Pingi doklejane są przed treścią wiadomości.
 
+13. **Zmiana nazwy kanału emoji** - `index.js`: Gdy administrator wyśle wiadomość zawierającą WYŁĄCZNIE 🛑 lub 🟢 na dowolnym kanale, bot usuwa ikonę z początku nazwy kanału i wstawia wysłane emoji. Wiadomość administratora jest automatycznie usuwana po wykonaniu akcji. Jeśli nazwa kanału nie zaczyna się od emoji, nowe emoji zostaje dodane na początku. Obsługuje myślnik po emoji (np. `🟢-general` → `🛑-general`).
+
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
 **Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
