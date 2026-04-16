@@ -39,6 +39,8 @@ async function sleep(ms) {
 
 /**
  * Internal fetch wrapper. Logs + retries on 5xx/network, does not throw.
+ * Returns the parsed JSON body on success, or undefined on failure /
+ * disabled mode — callers should treat the return value as optional.
  */
 async function pushSync(path, body, { retries = DEFAULT_RETRIES } = {}) {
     if (!APP_API_URL || !BOT_API_KEY) {
@@ -58,7 +60,11 @@ async function pushSync(path, body, { retries = DEFAULT_RETRIES } = {}) {
             });
 
             if (res.ok) {
-                return;
+                try {
+                    return await res.json();
+                } catch {
+                    return;
+                }
             }
 
             // 4xx = bad payload, retries won't help — log and give up.
@@ -118,12 +124,37 @@ const sync = {
     endersEchoSnapshot: (data) => pushSync('/endersecho-snapshot', data),
 };
 
+/**
+ * Batch wrappers — POST { items: [...] } to /api/bot/<resource>/batch.
+ * API accepts up to 500 items per request; callers (e.g. appBackfill)
+ * must chunk large inputs to that limit.
+ *
+ * Returns the API response body when available:
+ *   { ok, applied, skipped, failed, errors: [{index, error}], durationMs }
+ * or undefined when disabled / on failure (same contract as pushSync).
+ */
+const BATCH_MAX = 500;
+
+const syncBatch = {
+    playerIdentity:      (items) => pushSync('/player-identity/batch',      { items }),
+    nickObservation:     (items) => pushSync('/nick-observation/batch',     { items }),
+    phaseResult:         (items) => pushSync('/phase-result/batch',         { items }),
+    punishmentEvent:     (items) => pushSync('/punishment-event/batch',     { items }),
+    coreStock:           (items) => pushSync('/core-stock/batch',           { items }),
+    reminderEvent:       (items) => pushSync('/reminder-event/batch',       { items }),
+    combatWeekly:        (items) => pushSync('/combat-weekly/batch',        { items }),
+    cxEntry:             (items) => pushSync('/cx-entry/batch',             { items }),
+    endersEchoSnapshot:  (items) => pushSync('/endersecho-snapshot/batch',  { items }),
+};
+
 function isEnabled() {
     return Boolean(APP_API_URL && BOT_API_KEY);
 }
 
 module.exports = {
     sync,
+    syncBatch,
+    BATCH_MAX,
     eventId,
     isoWeekStartUTC,
     pushSync,
