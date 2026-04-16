@@ -32,7 +32,15 @@
 
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+14. **App Sync Backfill** - `interactionHandlers.handleAppSyncBackfillCommand`: Komenda `/appsync-backfill` (admin-only) uruchamia `AppBackfillRunner` (`utils/appBackfill.js`), który wypycha historyczne dane z lokalnych JSON-ów (Stalker/data, shared_data) do web API przez batchowe endpointy `/api/bot/<resource>/batch` (500 items/req, raw SQL `ON CONFLICT DO UPDATE` lub `createMany skipDuplicates` po stronie API).
+   - Opcje: `resource` (jeden z 8), `bot` (stalker/kontroler/endersecho), `guild` (filtr guildId), `dry_run` (tylko zlicza bez pushowania)
+   - Mutex `client._appsyncBackfill` — jeden backfill na raz
+   - **Pattern reply + live embed:** ephemeral reply tylko potwierdza start, cały progres idzie do publicznej wiadomości na kanale edytowanej `message.edit()` throttle co 5s — przeżywa wygaśnięcie tokenu interakcji Discord (15 min)
+   - Embed: progress bar per zasób (▓▓▓░░░░░░░), postęp całkowity, filtry, czas trwania, kolor zielony/czerwony/pomarańczowy w zależności od stanu
+   - No-op gdy `APP_API_URL`/`BOT_API_KEY` nie ustawione — komunikat ostrzegawczy
+   - Endpointy batch są idempotentne (upsert lub deterministyczny id), bezpieczne do wielokrotnego odpalenia
+
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/appsync-backfill`, `/msg`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---

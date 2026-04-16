@@ -113,6 +113,12 @@
           "requiredPermission": "administrator"
         },
         {
+          "name": "/appsync-backfill",
+          "description": "Wypycha historyczne dane botów do web API przez batchowe endpointy (wymaga APP_API_URL + BOT_API_KEY)",
+          "usage": "/appsync-backfill [resource:...] [bot:...] [guild:...] [dry_run:true|false]",
+          "requiredPermission": "administrator"
+        },
+        {
           "name": "/data-archive",
           "description": "Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną, nie usuwana automatycznie)",
           "usage": "/data-archive",

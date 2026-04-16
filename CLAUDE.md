@@ -693,6 +693,24 @@ BOT_API_KEY=<min. 32-znakowy sekret, identyczny z BOT_API_KEY w API>
 | **Kontroler** | `handlers/messageHandlers` (po OCR CX) | `cx-entry` |
 | **EndersEcho** | `services/rankingService` (`saveSharedRanking`) | `endersecho-snapshot` |
 
+#### One-time backfill — `utils/appBackfill.js`
+
+Jednorazowy runner do zalewania web API historycznymi danymi z lokalnych JSON-ów. Używany przez slash command `/appsync-backfill` w Muteuszu (admin-only).
+
+- **Batchowe endpointy** — zamiast pojedynczych pushów (`/api/bot/<resource>`) runner używa `/api/bot/<resource>/batch` przyjmujących `{ items: [...] }` do 500 rekordów per request. 30-60× szybciej przy dużych wsadach.
+- **`syncBatch` w `appSync.js`** — 9 batchowych wrapperów obok istniejących single-row (`syncBatch.phaseResult(items)`, `syncBatch.punishmentEvent(items)` itd.). Zwracają `{ applied, skipped, failed, errors, durationMs }`.
+- **`AppBackfillRunner extends EventEmitter`** — klasa z metodami `plan()` (zlicza rekordy bez pushowania), `runAll()` i `runResource(name)`. Emituje `start`, `resourceStart`, `batch`, `resourceDone`, `done`, `error`, `abort`.
+- **Idempotentne** — wszystkie endpointy batchowe są upsertowe (raw SQL `ON CONFLICT DO UPDATE`) lub używają `createMany skipDuplicates` z deterministycznym `id`. Bezpieczne do wielokrotnego odpalenia.
+- **Źródła danych** (czytane niezależnie od stanu botów):
+  - `Stalker/data/phases/guild_*/player_index.json` → `player-identity`, `nick-observation`
+  - `Stalker/data/phases/guild_*/phase{1,2}/*/week-*.json` → `phase-result`
+  - `Stalker/data/punishments.json` → `punishment-event` (deterministyczne `eventId` takie samo jak hot-path)
+  - `Stalker/data/player_combat_discord.json` → `combat-weekly`
+  - `Stalker/data/equipment_data.json` → `core-stock`
+  - `shared_data/cx_history.json` → `cx-entry`
+  - `shared_data/endersecho_ranking.json` → `endersecho-snapshot`
+- **Filtry:** `resource` (pojedynczy), `bot` (stalker/kontroler/endersecho), `guildId`, `dryRun` (tylko zlicza).
+
 ---
 
 ## Szczegóły Botów

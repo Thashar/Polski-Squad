@@ -297,6 +297,45 @@ class InteractionHandler {
                 .setDescription('Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną)'),
 
             new SlashCommandBuilder()
+                .setName('appsync-backfill')
+                .setDescription('Wypycha historyczne dane botów do web API przez batchowe endpointy (admin)')
+                .addStringOption(option =>
+                    option.setName('resource')
+                        .setDescription('Pojedynczy zasób (domyślnie: wszystkie)')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'player-identity',     value: 'player-identity' },
+                            { name: 'nick-observation',    value: 'nick-observation' },
+                            { name: 'phase-result',        value: 'phase-result' },
+                            { name: 'punishment-event',    value: 'punishment-event' },
+                            { name: 'combat-weekly',       value: 'combat-weekly' },
+                            { name: 'core-stock',          value: 'core-stock' },
+                            { name: 'cx-entry',            value: 'cx-entry' },
+                            { name: 'endersecho-snapshot', value: 'endersecho-snapshot' }
+                        )
+                )
+                .addStringOption(option =>
+                    option.setName('bot')
+                        .setDescription('Wszystkie zasoby jednego bota (domyślnie: wszystkie)')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'Stalker',    value: 'stalker' },
+                            { name: 'Kontroler',  value: 'kontroler' },
+                            { name: 'EndersEcho', value: 'endersecho' }
+                        )
+                )
+                .addStringOption(option =>
+                    option.setName('guild')
+                        .setDescription('Filtr guildId (dla phase-result / punishment-event)')
+                        .setRequired(false)
+                )
+                .addBooleanOption(option =>
+                    option.setName('dry_run')
+                        .setDescription('Tylko policz rekordy, nie pushuj do API')
+                        .setRequired(false)
+                ),
+
+            new SlashCommandBuilder()
                 .setName('msg')
                 .setDescription('Wysyła wiadomość botem na wybrany kanał (tylko administrator)')
                 .addStringOption(option =>
@@ -428,6 +467,9 @@ class InteractionHandler {
                     break;
                 case 'data-archive':
                     await this.handleDataArchiveCommand(interaction);
+                    break;
+                case 'appsync-backfill':
+                    await this.handleAppSyncBackfillCommand(interaction);
                     break;
                 case 'msg':
                     await this.handleMsgCommand(interaction);
@@ -3293,6 +3335,274 @@ class InteractionHandler {
                 interaction
             );
         }
+    }
+
+    /**
+     * Obsługuje komendę /appsync-backfill — wypycha historyczne dane botów
+     * do web API przez batchowe endpointy.
+     *
+     * Timeout interakcji Discord (15 min na token) omijamy wzorcem
+     * "reply + live embed": ephemeral reply jest tylko potwierdzeniem
+     * startu; cały progres idzie do publicznej wiadomości na kanale,
+     * edytowanej throttle'owanym `message.edit()` (nie zależy od tokenu
+     * interakcji, żyje dowolnie długo). Runner działa w tle niezależnie
+     * od stanu interakcji.
+     *
+     * @param {ChatInputCommandInteraction} interaction
+     */
+    async handleAppSyncBackfillCommand(interaction) {
+        const { MessageFlags, EmbedBuilder } = require('discord.js');
+        const { AppBackfillRunner } = require('../../utils/appBackfill');
+        const { isEnabled } = require('../../utils/appSync');
+
+        // Uprawnienia — zgodnie z /data-archive tylko admin.
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tej komendy może użyć tylko administrator serwera.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        if (!isEnabled()) {
+            await interaction.reply({
+                content: '⚠️ `APP_API_URL` lub `BOT_API_KEY` nie jest ustawione — backfill nie ma dokąd pisać.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // Mutex — jeden backfill na raz. Stan w client._appsyncBackfill.
+        const client = interaction.client;
+        if (client._appsyncBackfill?.running) {
+            await interaction.reply({
+                content: `⚠️ Backfill już jest w toku (uruchomiony przez ${client._appsyncBackfill.triggeredBy}). Czekaj aż się skończy albo kliknij **Przerwij** na embedzie.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const resourceOpt = interaction.options.getString('resource');
+        const botOpt = interaction.options.getString('bot');
+        const guildOpt = interaction.options.getString('guild');
+        const dryRun = interaction.options.getBoolean('dry_run') ?? false;
+
+        await this.logService.logMessage('info',
+            `Administrator ${interaction.user.tag} wywołał /appsync-backfill (resource=${resourceOpt ?? 'all'}, bot=${botOpt ?? 'all'}, guild=${guildOpt ?? 'all'}, dry=${dryRun})`,
+            interaction
+        );
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const runner = new AppBackfillRunner({
+            dryRun,
+            resource: resourceOpt,
+            bot: botOpt,
+            guildId: guildOpt,
+        });
+
+        // Zaplanuj — potrzebujemy totali, zanim stworzymy embed.
+        let plan;
+        try {
+            plan = await runner.plan();
+        } catch (err) {
+            logger.error('❌ Backfill plan error:', err);
+            await interaction.editReply({
+                content: `❌ Nie mogłem zeskanować plików lokalnych: \`${err.message || err}\``,
+            });
+            return;
+        }
+
+        const totalRows = Object.values(plan).reduce((s, v) => s + v, 0);
+        if (totalRows === 0) {
+            await interaction.editReply({
+                content: '📭 Filtry nie znalazły żadnych rekordów do wypchnięcia.',
+            });
+            return;
+        }
+
+        // Publiczny embed — przeżyje wygaśnięcie tokenu interakcji.
+        const startedAt = new Date();
+        const header = `🔄 APP SYNC BACKFILL${dryRun ? ' — DRY RUN' : ''} — W TRAKCIE`;
+        const initialEmbed = new EmbedBuilder()
+            .setTitle(header)
+            .setColor(0x3498db)
+            .setDescription(this._formatBackfillPlan(plan, 0, totalRows))
+            .addFields(
+                { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
+                { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
+                { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, dryRun }), inline: false }
+            )
+            .setTimestamp(startedAt);
+
+        const progressMsg = await interaction.channel.send({ embeds: [initialEmbed] });
+
+        await interaction.editReply({
+            content: `⏳ Uruchamiam backfill. Postęp: ${progressMsg.url}`,
+        });
+
+        // Throttled edit — Discord rate limit na edit w kanale to ~5 req/5s;
+        // 1× na 5s daje spory margines.
+        const EDIT_THROTTLE_MS = 5000;
+        let lastEditAt = 0;
+        const progressState = {
+            plan,
+            totals: {},
+            currentResource: null,
+            totalRows,
+            processedRows: 0,
+        };
+
+        const renderEmbed = (opts = {}) => {
+            const { done = false, aborted = false, error = null, durationMs = null } = opts;
+            const title = error
+                ? '❌ APP SYNC BACKFILL — BŁĄD'
+                : aborted
+                    ? '🛑 APP SYNC BACKFILL — PRZERWANY'
+                    : done
+                        ? `✅ APP SYNC BACKFILL${dryRun ? ' — DRY RUN' : ''} — ZAKOŃCZONY`
+                        : header;
+            const color = error ? 0xe74c3c : aborted ? 0xe67e22 : done ? 0x2ecc71 : 0x3498db;
+
+            return new EmbedBuilder()
+                .setTitle(title)
+                .setColor(color)
+                .setDescription(this._formatBackfillPlan(progressState.plan, progressState.processedRows, progressState.totalRows, progressState.totals, progressState.currentResource))
+                .addFields(
+                    { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
+                    { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
+                    { name: durationMs !== null ? 'Czas trwania' : 'Status', value: durationMs !== null ? `${(durationMs / 1000).toFixed(1)}s` : (progressState.currentResource ? `🔄 ${progressState.currentResource}` : '⏳ start...'), inline: true },
+                    { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, dryRun }), inline: false },
+                    ...(error ? [{ name: 'Błąd', value: `\`\`\`${String(error).slice(0, 900)}\`\`\`` }] : [])
+                )
+                .setTimestamp(new Date());
+        };
+
+        const scheduleEdit = async (force = false) => {
+            const now = Date.now();
+            if (!force && now - lastEditAt < EDIT_THROTTLE_MS) return;
+            lastEditAt = now;
+            try {
+                await progressMsg.edit({ embeds: [renderEmbed()] });
+            } catch (err) {
+                logger.warn(`Backfill: progress edit failed: ${err.message}`);
+            }
+        };
+
+        runner.on('resourceStart', ({ resource }) => {
+            progressState.currentResource = resource;
+            progressState.totals[resource] = { applied: 0, skipped: 0, failed: 0 };
+            scheduleEdit();
+        });
+
+        runner.on('batch', ({ resource, processed, applied, skipped, failed }) => {
+            progressState.totals[resource] = { applied, skipped, failed };
+            const resourceProcessedBefore = (progressState._lastResourceProcessed || {})[resource] || 0;
+            progressState.processedRows += Math.max(0, processed - resourceProcessedBefore);
+            progressState._lastResourceProcessed = progressState._lastResourceProcessed || {};
+            progressState._lastResourceProcessed[resource] = processed;
+            scheduleEdit();
+        });
+
+        runner.on('resourceDone', ({ resource, applied, skipped, failed, total }) => {
+            progressState.totals[resource] = { applied, skipped, failed, done: true, total };
+            scheduleEdit(true);
+        });
+
+        let runnerError = null;
+        runner.on('pushError', ({ resource, error }) => {
+            logger.error(`Backfill error${resource ? ` [${resource}]` : ''}: ${error}`);
+            runnerError = error;
+        });
+
+        // Zarejestruj mutex i uruchom w tle.
+        client._appsyncBackfill = {
+            running: true,
+            triggeredBy: interaction.user.tag,
+            runner,
+            progressMessageUrl: progressMsg.url,
+        };
+
+        try {
+            const summary = await runner.runAll();
+            await progressMsg.edit({
+                embeds: [renderEmbed({
+                    done: !summary.aborted,
+                    aborted: summary.aborted,
+                    error: runnerError,
+                    durationMs: summary.durationMs,
+                })],
+            });
+
+            await this.logService.logMessage('success',
+                `Backfill zakończony przez ${interaction.user.tag}. Czas: ${(summary.durationMs / 1000).toFixed(1)}s. Totale: ${JSON.stringify(summary.totals)}`,
+                interaction
+            );
+        } catch (err) {
+            logger.error('❌ Backfill fatal:', err);
+            await progressMsg.edit({
+                embeds: [renderEmbed({ error: err.message || String(err), durationMs: Date.now() - startedAt.getTime() })],
+            });
+            await this.logService.logMessage('error',
+                `Backfill failed dla ${interaction.user.tag}: ${err.message || err}`,
+                interaction
+            );
+        } finally {
+            client._appsyncBackfill = null;
+        }
+    }
+
+    /**
+     * Renderuje listę zasobów + progress bary per zasób + podsumowanie
+     * dla embeda backfillu.
+     */
+    _formatBackfillPlan(plan, processed, total, totals = {}, currentResource = null) {
+        const lines = [];
+        const overallPct = total > 0 ? Math.floor((processed / total) * 100) : 0;
+        lines.push(`**Postęp całkowity:** ${this._progressBar(overallPct)} ${overallPct}%`);
+        lines.push(`${processed.toLocaleString('pl-PL')} / ${total.toLocaleString('pl-PL')} rekordów`);
+        lines.push('');
+
+        for (const [resource, count] of Object.entries(plan)) {
+            const t = totals[resource] || {};
+            const applied = t.applied || 0;
+            const skipped = t.skipped || 0;
+            const failed = t.failed || 0;
+            const isCurrent = resource === currentResource;
+            const isDone = t.done === true;
+
+            let icon;
+            if (isDone) icon = failed > 0 ? '⚠️' : '✅';
+            else if (isCurrent) icon = '🔄';
+            else if (count === 0) icon = '📭';
+            else icon = '⏸';
+
+            const totalApplied = applied + skipped;
+            const stats = count === 0
+                ? '(brak danych)'
+                : isDone
+                    ? `${applied.toLocaleString('pl-PL')}✓${skipped > 0 ? ` ${skipped}↻` : ''}${failed > 0 ? ` ${failed}✗` : ''} / ${count.toLocaleString('pl-PL')}`
+                    : isCurrent
+                        ? `${totalApplied.toLocaleString('pl-PL')} / ${count.toLocaleString('pl-PL')}`
+                        : `- / ${count.toLocaleString('pl-PL')}`;
+            lines.push(`${icon} \`${resource.padEnd(22)}\` ${stats}`);
+        }
+
+        return lines.join('\n');
+    }
+
+    _progressBar(pct, length = 10) {
+        const filled = Math.round((pct / 100) * length);
+        return '▓'.repeat(filled) + '░'.repeat(length - filled);
+    }
+
+    _formatBackfillFilters({ resource, bot, guild, dryRun }) {
+        const parts = [];
+        parts.push(`**Zasób:** ${resource || 'wszystkie'}`);
+        parts.push(`**Bot:** ${bot || 'wszystkie'}`);
+        parts.push(`**Guild:** ${guild || 'wszystkie'}`);
+        parts.push(`**Tryb:** ${dryRun ? 'dry-run' : 'live'}`);
+        return parts.join(' · ');
     }
 
     /**
