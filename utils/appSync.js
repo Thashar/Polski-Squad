@@ -16,7 +16,7 @@
  *     callers to pass a deterministic `id`. Use eventId() to generate one.
  *
  * Config:
- *   APP_API_URL — base URL of the web API (no trailing slash).
+ *   APP_API_URL — base URL of the web API (trailing slash is stripped automatically).
  *   BOT_API_KEY — shared secret; must match the API's env var.
  *   When either is missing, all calls silently no-op (keeps dev/test easy).
  */
@@ -26,7 +26,8 @@ const { createBotLogger } = require('./consoleLogger');
 
 const logger = createBotLogger('AppSync');
 
-const APP_API_URL = process.env.APP_API_URL;
+// Strip any accidental trailing slash so URL construction never produces //.
+const APP_API_URL = process.env.APP_API_URL?.replace(/\/+$/, '');
 const BOT_API_KEY = process.env.BOT_API_KEY;
 
 const DEFAULT_RETRIES = 3;
