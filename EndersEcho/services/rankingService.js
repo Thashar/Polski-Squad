@@ -108,25 +108,58 @@ class RankingService {
             const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
 
-            const sorted = await this.getGlobalRanking();
-            const players = sorted.map((player, index) => ({
-                rank: index + 1,
-                userId: player.userId,
-                username: player.username,
-                score: player.score,
-                scoreValue: player.scoreValue,
-                bossName: player.bossName || null,
-                timestamp: player.timestamp,
-                sourceGuildId: player.sourceGuildId
-            }));
+            // Wczytaj wszystkie rankingi serwerów w jednym przebiegu —
+            // potrzebne do obliczenia globalnego rankingu i rankingów per-serwer.
+            const perGuildData = new Map(); // guildId -> { userId: data }
+            const bestPerPlayer = new Map(); // userId -> best data
+            for (const guild of this.config.guilds) {
+                const ranking = await this.loadRanking(guild.id);
+                perGuildData.set(guild.id, ranking);
+                for (const [userId, data] of Object.entries(ranking)) {
+                    const existing = bestPerPlayer.get(userId);
+                    if (!existing || data.scoreValue > existing.scoreValue) {
+                        bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guild.id });
+                    }
+                }
+            }
+
+            // Ranking globalny (posortowany malejąco)
+            const globalSorted = Array.from(bestPerPlayer.values())
+                .sort((a, b) => b.scoreValue - a.scoreValue);
+
+            // Rankingi per-serwer: posortowane userId dla każdej gildii
+            const perGuildSortedIds = new Map();
+            for (const [guildId, ranking] of perGuildData) {
+                const sorted = Object.entries(ranking)
+                    .filter(([, d]) => d.scoreValue > 0)
+                    .sort(([, a], [, b]) => b.scoreValue - a.scoreValue)
+                    .map(([userId]) => userId);
+                perGuildSortedIds.set(guildId, sorted);
+            }
+
+            const players = globalSorted.map((player, index) => {
+                const guildIds = perGuildSortedIds.get(player.sourceGuildId) || [];
+                const serverRankIdx = guildIds.indexOf(player.userId);
+                return {
+                    rank: index + 1,
+                    userId: player.userId,
+                    username: player.username,
+                    score: player.score,
+                    scoreValue: player.scoreValue,
+                    bossName: player.bossName || null,
+                    timestamp: player.timestamp,
+                    sourceGuildId: player.sourceGuildId,
+                    serverRank: serverRankIdx >= 0 ? serverRankIdx + 1 : null,
+                    serverTotalPlayers: guildIds.length || null,
+                };
+            });
 
             const sharedData = { updatedAt: new Date().toISOString(), players };
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
 
-            // Mirror do web API — endpoint upsertowy po (discordId, snapshotDate).
-            // snapshotDate przycinamy do doby UTC, żeby restart bota i wielokrotne
-            // zapisy w ciągu dnia aktualizowały ten sam wiersz zamiast tworzyć duplikaty.
+            // Mirror do web API — endpoint upsertowy po discordId.
+            // snapshotDate przycinamy do doby UTC.
             // scoreNumeric: toFixed(0) zamiast String(), bo String() dla wartości
             // >= 1e21 (Sx, duże Qi) daje notację wykładniczą "1.65e+21", którą API
             // odrzuca walidacją /^\d+$/.
@@ -144,6 +177,8 @@ class RankingService {
                         rank: player.rank,
                         scoreNumeric: score.toFixed(0),
                         totalPlayers: players.length,
+                        serverRank: player.serverRank,
+                        serverTotalPlayers: player.serverTotalPlayers,
                     });
                 }
             }
