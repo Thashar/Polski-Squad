@@ -12213,7 +12213,8 @@ async function handleEquipmentSave(interaction, sharedState) {
 
         appSync.coreStock({
             discordId: userId,
-            scannedAt,
+            guildId: interaction.guildId,
+            takenAt: scannedAt,
             items: pending.items,
         });
 
