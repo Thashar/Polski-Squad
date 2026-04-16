@@ -636,17 +636,19 @@ Współdzielony HTTP client do wypychania zapisów botów do Polski Squad web AP
 const { sync: appSync, eventId, isoWeekStartUTC } = require('../../utils/appSync');
 
 // Upsertowe (idempotentne po kluczu naturalnym):
+// UWAGA: nazwy pól muszą 1:1 odpowiadać Zod schemom z polski-squad/app (apps/api/src/routes/bot.ts).
+// Wszystkie pola *At / *Date to ISO-8601 z "Z" (new Date().toISOString()).
 appSync.playerIdentity({ discordId, guildId, currentNick, lastSeenAt });
 appSync.nickObservation({ discordId, nick, observedAt });
-appSync.phaseResult({ guildId, discordId, phase, year, weekNumber, weekStartsAt, clan, score, displayNameAtTime, recordedAt, recordedBy });
-appSync.combatWeekly({ discordId, year, weekNumber, weekStartsAt, rc, tc, attack });
-appSync.coreStock({ discordId, scannedAt, items });
-appSync.endersEchoSnapshot({ discordId, rank, score, snapshotAt });
+appSync.phaseResult({ guildId, discordId, phase /* 'PHASE_1'|'PHASE_2' */, year, weekNumber /* 1-53 */, weekStartsAt, clan, score, displayNameAtTime, recordedAt, recordedBy });
+appSync.combatWeekly({ discordId, year, weekNumber /* 1-53 */, weekStartsAt, rc, tc, attack /* string lub number - API zamieni na string */ });
+appSync.coreStock({ discordId, guildId, takenAt, items /* { [coreType]: number } */ });
+appSync.endersEchoSnapshot({ discordId, snapshotDate, rank /* >=1 */, scoreNumeric /* String(int) */, totalPlayers });
 
 // Event logi (wymagają deterministycznego `id` — użyj eventId(...)):
-appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind, reasonNote, occurredAt });
+appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind /* 'BOSS_FAIL'|'MANUAL'|'WEEKLY_RESET'|'MANUAL_REMOVAL'|'OTHER' */, reasonNote, occurredAt, issuedBy });
 appSync.reminderEvent({ id: eventId('reminder_sent', userId, ...), guildId, discordId, type: 'SENT'|'CONFIRMED', channelId, occurredAt });
-appSync.cxEntry({ id: eventId('cx', userId, ...), discordId, score, occurredAt });
+appSync.cxEntry({ id: eventId('cx', userId, ...), discordId, score, completedAt });
 ```
 
 #### Idempotentność
@@ -665,12 +667,12 @@ async function saveCXResult(userId, score) {
     await this.saveCxHistory(cxHistory);
 
     // Push do web API (fire-and-forget, bezpieczne w dev bez env)
-    const occurredAt = new Date().toISOString();
+    const completedAt = new Date().toISOString();
     appSync.cxEntry({
-        id: eventId('cx', userId, occurredAt, score),
+        id: eventId('cx', userId, completedAt, score),
         discordId: userId,
         score,
-        occurredAt,
+        completedAt,
     });
 }
 ```
