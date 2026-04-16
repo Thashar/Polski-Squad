@@ -41,9 +41,11 @@ async function initializeBot() {
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
 
-        // Eksportuj aktualny globalny ranking do shared_data przy starcie
+        // Eksportuj aktualny globalny ranking do shared_data przy starcie.
+        // syncToApi: false — ranking się nie zmienił od ostatniego zapisu, nie ma
+        // sensu spamować Web API tym samym snapshotem przy każdym restarcie.
         try {
-            await rankingService.saveSharedRanking();
+            await rankingService.saveSharedRanking({ syncToApi: false });
         } catch (e) {
             logger.warn('Nie można wyeksportować rankingu do shared_data przy starcie:', e.message);
         }

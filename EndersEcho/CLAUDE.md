@@ -18,6 +18,7 @@
    - Eksport do `shared_data/endersecho_ranking.json` (globalny, format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp, sourceGuildId}]}`)
    - Eksport przy każdym zapisie i przy starcie bota
    - **Sync do Web API:** Po eksporcie `saveSharedRanking()` wypycha każdego gracza do `/api/bot/endersecho-snapshot` (upsert po `discordId+snapshotDate`). `snapshotDate` jest przycinany do doby UTC (00:00Z) — restart bota i wielokrotne zapisy w ciągu dnia aktualizują ten sam wiersz zamiast tworzyć duplikaty. Gracze bez prawidłowego `scoreValue` (NaN/undefined/ujemne) są pomijani. `scoreNumeric` jest formatowany przez `toFixed(0)` (nie `String()`), żeby wartości >= 1e21 (jednostki Sx, duże Qi) nie lądowały w notacji wykładniczej `"1.65e+21"` odrzucanej przez walidację API (`/^\d+$/`). Cicho no-op gdy brak `APP_API_URL`/`BOT_API_KEY`. Zobacz shared `utils/appSync.js`.
+   - **Pomijanie sync na starcie:** `saveSharedRanking({ syncToApi: false })` — wywoływane z `index.js` przy `ready`, żeby restart bota nie spamował API rankingiem, który się nie zmienił. Lokalny eksport `shared_data/endersecho_ranking.json` nadal wykonuje się zawsze. Sync do API uruchamia się dopiero przy nowym wyniku OCR (przez `saveRanking()` → `saveSharedRanking()` bez argumentów, default `syncToApi: true`).
    - **Migracja:** Przy pierwszym starcie stary `ranking.json` jest automatycznie migrowany do `ranking_{guild1Id}.json`
 
 3. **Role TOP (opcjonalne)** - `roleService.js`:

@@ -98,9 +98,12 @@ class RankingService {
     }
 
     /**
-     * Eksportuje globalny ranking do shared_data/endersecho_ranking.json
+     * Eksportuje globalny ranking do shared_data/endersecho_ranking.json.
+     * @param {{ syncToApi?: boolean }} [options] — syncToApi=false pomija push
+     *   do Web API (używane przy starcie bota, żeby nie spamować API rankingiem,
+     *   który się nie zmienił). Lokalny eksport JSON wykonuje się zawsze.
      */
-    async saveSharedRanking() {
+    async saveSharedRanking({ syncToApi = true } = {}) {
         try {
             const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
@@ -127,20 +130,22 @@ class RankingService {
             // scoreNumeric: toFixed(0) zamiast String(), bo String() dla wartości
             // >= 1e21 (Sx, duże Qi) daje notację wykładniczą "1.65e+21", którą API
             // odrzuca walidacją /^\d+$/.
-            const now = new Date();
-            const snapshotDate = new Date(Date.UTC(
-                now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
-            )).toISOString();
-            for (const player of players) {
-                const score = Number(player.scoreValue);
-                if (!Number.isFinite(score) || score < 0) continue;
-                appSync.endersEchoSnapshot({
-                    discordId: player.userId,
-                    snapshotDate,
-                    rank: player.rank,
-                    scoreNumeric: score.toFixed(0),
-                    totalPlayers: players.length,
-                });
+            if (syncToApi) {
+                const now = new Date();
+                const snapshotDate = new Date(Date.UTC(
+                    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
+                )).toISOString();
+                for (const player of players) {
+                    const score = Number(player.scoreValue);
+                    if (!Number.isFinite(score) || score < 0) continue;
+                    appSync.endersEchoSnapshot({
+                        discordId: player.userId,
+                        snapshotDate,
+                        rank: player.rank,
+                        scoreNumeric: score.toFixed(0),
+                        totalPlayers: players.length,
+                    });
+                }
             }
         } catch (error) {
             logger.error('Błąd eksportu rankingu do shared_data:', error);
