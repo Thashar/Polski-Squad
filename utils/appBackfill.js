@@ -201,8 +201,23 @@ async function collectPhaseResults({ guildIdFilter } = {}) {
 
                     // Phase1 ma `players`, phase2 może mieć `summary.players` albo `players`.
                     const players = weekData.summary?.players || weekData.players || [];
+
+                    // Dla Fazy 2: buduj mapę userId → {r1, r2, r3} z danych rund
+                    const roundScoresMap = new Map();
+                    if (phaseNum === 2 && Array.isArray(weekData.rounds)) {
+                        for (const roundData of weekData.rounds) {
+                            if (!Array.isArray(roundData?.players)) continue;
+                            for (const rp of roundData.players) {
+                                if (!rp?.userId) continue;
+                                if (!roundScoresMap.has(rp.userId)) roundScoresMap.set(rp.userId, {});
+                                roundScoresMap.get(rp.userId)[`r${roundData.round}`] = rp.score;
+                            }
+                        }
+                    }
+
                     for (const p of players) {
                         if (!p?.userId || !p?.displayName || typeof p.score !== 'number') continue;
+                        const rounds = roundScoresMap.get(p.userId) || {};
                         items.push({
                             guildId,
                             discordId: p.userId,
@@ -212,6 +227,9 @@ async function collectPhaseResults({ guildIdFilter } = {}) {
                             weekStartsAt,
                             clan,
                             score: p.score,
+                            round1Score: rounds.r1 ?? null,
+                            round2Score: rounds.r2 ?? null,
+                            round3Score: rounds.r3 ?? null,
                             displayNameAtTime: p.displayName,
                             recordedAt,
                             recordedBy,
