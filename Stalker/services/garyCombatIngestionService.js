@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const { sync: appSync, isoWeekStartUTC } = require('../../utils/appSync');
 
 const WEEKLY_DIR      = path.join(__dirname, '../../shared_data/lme_weekly');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
@@ -311,6 +312,24 @@ class GaryCombatIngestionService {
             const dir = path.dirname(LOCAL_COMBAT_FILE);
             if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
             fs.writeFileSync(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
+
+            // Po zapisie lokalnej bazy, mirroruj wszystkie (gracz × tydzień) do web API.
+            // Endpoint jest idempotentny (natural key: discordId+year+weekNumber),
+            // więc bezpiecznie wypychamy całą historię przy każdym ingestion.
+            for (const [userId, info] of Object.entries(localData.players || {})) {
+                for (const week of info.weeks || []) {
+                    if (!week.weekNumber || !week.year) continue;
+                    appSync.combatWeekly({
+                        discordId: userId,
+                        year: week.year,
+                        weekNumber: week.weekNumber,
+                        weekStartsAt: isoWeekStartUTC(week.year, week.weekNumber),
+                        rc: week.relicCores || 0,
+                        tc: week.transmuteCores || 0, // Gary obecnie nie dostarcza TC — zarezerwowane
+                        attack: String(week.attack || 0),
+                    });
+                }
+            }
 
             // Klanowcy którzy NIE otrzymali danych w tej ingestion
             const clanMembersWithoutData = [];

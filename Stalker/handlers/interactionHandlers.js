@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const { sync: appSync } = require('../../utils/appSync');
 const fs = require('fs').promises;
 
 const logger = createBotLogger('Stalker');
@@ -12198,13 +12199,20 @@ async function handleEquipmentSave(interaction, sharedState) {
             data = JSON.parse(raw);
         } catch {}
 
+        const scannedAt = new Date().toISOString();
         data[userId] = {
             items: pending.items,
-            updatedAt: new Date().toISOString()
+            updatedAt: scannedAt
         };
 
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
         await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
+
+        appSync.coreStock({
+            discordId: userId,
+            scannedAt,
+            items: pending.items,
+        });
 
         interaction.client._equipmentPending.delete(userId);
 

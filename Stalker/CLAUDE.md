@@ -218,7 +218,18 @@
 - Brak klanu → ikona 💀
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
 - Max 30 pozycji w rankingu (z informacją o liczbie pozostałych)
-**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
+
+**Sync do Web API (opcjonalny)** - `../utils/appSync.js` (współdzielony helper bot-wide): HTTP client wypychający zapisy do Polski Squad web API (`polski-squad/app`). Dostępny dla **każdego bota** — wystarczy `require('../../utils/appSync')` z dowolnego serwisu. W Stalkerze integracja jest wbudowana bezpośrednio w serwisy (brak monkey-patchingu):
+- `databaseService.updatePlayerIndex()` → `POST /api/bot/player-identity` + `/nick-observation`
+- `databaseService.savePhase1Result()` / `savePhase2Result()` / `savePhase2Results()` → `POST /api/bot/phase-result` (per gracz, idempotent po `guildId+discordId+phase+year+weekNumber`)
+- `databaseService.addPunishmentPoints()` / `removePunishmentPoints()` / `cleanupWeeklyPoints()` → `POST /api/bot/punishment-event` (deterministyczne `eventId` — bezpieczne powtórki)
+- `garyCombatIngestionService.ingest()` → `POST /api/bot/combat-weekly` (wszystkie gracz×tydzień po zapisie lokalnego pliku)
+- `reminderService` → `POST /api/bot/reminder-event` typu `SENT` (wysyłka DM) i `CONFIRMED` (kliknięcie przycisku potwierdzenia)
+- **Fire-and-forget:** Każdy push jest asynchroniczny z retry 3× (backoff 2s/4s/6s). Błędy są logowane, ale **nigdy nie blokują ani nie przerywają** głównej logiki bota — lokalne JSON pozostają źródłem prawdy.
+- **Disabled mode:** Gdy brak `APP_API_URL` lub `BOT_API_KEY`, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
+- **Idempotentność:** Endpointy upsertowe (phase-result, combat-weekly, player-identity, nick-observation) używają kluczy naturalnych po stronie API. Eventy (punishment-event, reminder-event) wymagają deterministycznego `id` generowanego przez `eventId(...)` — powtórne wysłanie to no-op.
+
+**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID, **APP_API_URL, BOT_API_KEY** (opcjonalne — sync do web API)
 
 ---
 
@@ -267,6 +278,11 @@ STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 # AI OCR (opcjonalne)
 USE_STALKER_AI_OCR=false
 STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
+
+# Sync do Polski Squad web API (opcjonalne)
+# Gdy puste — wszystkie wywołania appSync są no-op (bezpieczne w dev).
+APP_API_URL=https://api.polski-squad.example
+BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## Najlepsze Praktyki

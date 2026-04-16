@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { sync: appSync } = require('../../utils/appSync');
 
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -119,6 +120,20 @@ class RankingService {
             const sharedData = { updatedAt: new Date().toISOString(), players };
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
+
+            // Mirror do web API — endpoint upsertowy po (discordId, snapshotDate),
+            // więc bezpiecznie wypychamy całą listę przy każdym eksporcie.
+            // scoreNumeric jako string żeby API mogło sparsować do BigInt
+            // (wyniki EE sięgają quintillion+).
+            for (const player of players) {
+                appSync.endersEchoSnapshot({
+                    discordId: player.userId,
+                    snapshotDate: sharedData.updatedAt,
+                    rank: player.rank,
+                    scoreNumeric: String(Math.floor(player.scoreValue)),
+                    totalPlayers: players.length,
+                });
+            }
         } catch (error) {
             logger.error('Błąd eksportu rankingu do shared_data:', error);
         }

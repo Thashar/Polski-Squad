@@ -3,6 +3,7 @@
 **4 Systemy:**
 1. **OCR Dwukanałowy** - `ocrService.js`: CX (1500min, 0-2800/100, skip1, rola 2800+), Daily (910min, 0-1050/10, skip3, 2x nick), normalizacja znaków (o→0, z→2, l→1, sg→9)
    - **Zapis CX do shared_data:** Po udanym OCR na kanale CX, wynik jest zapisywany do `shared_data/cx_history.json` (klucz: userId, historia max 20 wyników). Używane przez Stalker Bot w `/player-status` i `/player-compare`
+   - **Sync do Web API:** Po zapisie CX do shared_data, `handlers/messageHandlers.js` wywołuje `appSync.cxEntry(...)` (deterministyczny `eventId` po guild+user+timestamp+score). Cicho no-op gdy brak `APP_API_URL`/`BOT_API_KEY`. Zobacz `utils/appSync.js` (shared).
 2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
 3. **Dywersja w klanie** - `votingService.js`:
    - Trigger: Fraza "działasz na szkodę klanu" w odpowiedzi do użytkownika
@@ -37,6 +38,10 @@
 KONTROLER_TOKEN=bot_token_here
 KONTROLER_CLIENT_ID=client_id
 KONTROLER_GUILD_ID=guild_id
+
+# Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
+APP_API_URL=https://api.polski-squad.example
+BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## Najlepsze Praktyki

@@ -616,6 +616,84 @@ node manual-backup.js
 
 ---
 
+### 6. Sync do Polski Squad Web API (appSync)
+
+**Plik:** `utils/appSync.js` (współdzielony, bot-wide)
+
+#### Przeznaczenie
+
+Współdzielony HTTP client do wypychania zapisów botów do Polski Squad web API (`polski-squad/app`). Każdy bot, który zapisuje dane lokalnie w JSON i chce je zsynchronizować z web API, powinien wywoływać odpowiednie wrappery **bezpośrednio w miejscu zapisu** — ten sam wzorzec, co `consoleLogger`/`nicknameManager`.
+
+#### Zasada integracji
+
+- **Bezpośrednio w serwisie** — po każdym udanym `await fs.writeFile(...)` / `this.saveXxx(...)` wołamy `appSync.<resource>(...)`. Brak monkey-patchingu, brak DI przez konstruktor, brak wiringu w `index.js`.
+- **Fire-and-forget** — pushy są asynchroniczne z retry 3× (backoff 2s/4s/6s). Błędy są logowane, ale **nigdy nie blokują ani nie przerywają** głównej logiki bota. Lokalne JSON pozostają źródłem prawdy.
+- **Disabled mode** — gdy brak `APP_API_URL` lub `BOT_API_KEY`, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
+
+#### API (9 typowanych wrapperów)
+
+```javascript
+const { sync: appSync, eventId, isoWeekStartUTC } = require('../../utils/appSync');
+
+// Upsertowe (idempotentne po kluczu naturalnym):
+appSync.playerIdentity({ discordId, guildId, currentNick, lastSeenAt });
+appSync.nickObservation({ discordId, nick, observedAt });
+appSync.phaseResult({ guildId, discordId, phase, year, weekNumber, weekStartsAt, clan, score, displayNameAtTime, recordedAt, recordedBy });
+appSync.combatWeekly({ discordId, year, weekNumber, weekStartsAt, rc, tc, attack });
+appSync.coreStock({ discordId, scannedAt, items });
+appSync.endersEchoSnapshot({ discordId, rank, score, snapshotAt });
+
+// Event logi (wymagają deterministycznego `id` — użyj eventId(...)):
+appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind, reasonNote, occurredAt });
+appSync.reminderEvent({ id: eventId('reminder_sent', userId, ...), guildId, discordId, type: 'SENT'|'CONFIRMED', channelId, occurredAt });
+appSync.cxEntry({ id: eventId('cx', userId, ...), discordId, score, occurredAt });
+```
+
+#### Idempotentność
+
+- **Upsertowe endpointy** (`phase-result`, `combat-weekly`, `player-identity`, `nick-observation`, `core-stock`, `endersecho-snapshot`) używają kluczy naturalnych po stronie API. Powtórne wysłanie tego samego payloadu to no-op.
+- **Event logi** (`punishment-event`, `reminder-event`, `cx-entry`) wymagają deterministycznego `id` generowanego przez `eventId(...)`. Te same inputy → to samo id → bezpieczne powtórki.
+
+#### Przykład integracji w nowym bocie
+
+```javascript
+// np. Kontroler/services/cxService.js
+const { sync: appSync, eventId } = require('../../utils/appSync');
+
+async function saveCXResult(userId, score) {
+    // ... istniejący zapis do shared_data/cx_history.json ...
+    await this.saveCxHistory(cxHistory);
+
+    // Push do web API (fire-and-forget, bezpieczne w dev bez env)
+    const occurredAt = new Date().toISOString();
+    appSync.cxEntry({
+        id: eventId('cx', userId, occurredAt, score),
+        discordId: userId,
+        score,
+        occurredAt,
+    });
+}
+```
+
+#### Zmienne środowiskowe (wspólne dla wszystkich botów)
+
+```env
+APP_API_URL=https://api.polski-squad.example   # bez trailing slash
+BOT_API_KEY=<min. 32-znakowy sekret, identyczny z BOT_API_KEY w API>
+```
+
+#### Obecne pokrycie
+
+| Bot | Serwis / Handler | Endpointy |
+|---|---|---|
+| **Stalker** | `services/databaseService` | `phase-result`, `player-identity`, `nick-observation`, `punishment-event` |
+| **Stalker** | `services/garyCombatIngestionService` | `combat-weekly` |
+| **Stalker** | `services/reminderService` | `reminder-event` (SENT, CONFIRMED) |
+| **Stalker** | `handlers/interactionHandlers` (`handleEquipmentSave`) | `core-stock` |
+| **Kontroler** | `handlers/messageHandlers` (po OCR CX) | `cx-entry` |
+| **EndersEcho** | `services/rankingService` (`saveSharedRanking`) | `endersecho-snapshot` |
+
+---
 
 ## Szczegóły Botów
 
