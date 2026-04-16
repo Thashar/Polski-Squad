@@ -343,16 +343,16 @@ class MessageHandler {
                 }
 
                 const userId = member.user.id;
-                const occurredAt = new Date().toISOString();
+                const completedAt = new Date().toISOString();
                 if (!cxHistory[userId]) {
                     cxHistory[userId] = { scores: [] };
                 }
 
                 cxHistory[userId].displayName = member.displayName;
-                cxHistory[userId].lastCxDate = occurredAt;
+                cxHistory[userId].lastCxDate = completedAt;
                 cxHistory[userId].scores.push({
                     score: result.score,
-                    date: occurredAt,
+                    date: completedAt,
                     guildId: guild.id
                 });
 
@@ -365,12 +365,10 @@ class MessageHandler {
                 logger.info(`💾 Zapisano wynik CX gracza ${member.displayName}: ${result.score} pkt`);
 
                 appSync.cxEntry({
-                    id: eventId('cx', guild.id, userId, occurredAt, result.score),
-                    guildId: guild.id,
+                    id: eventId('cx', guild.id, userId, completedAt, result.score),
                     discordId: userId,
-                    displayName: member.displayName,
                     score: result.score,
-                    occurredAt,
+                    completedAt,
                 });
             } catch (e) {
                 logger.error(`❌ Błąd zapisu CX history: ${e.message}`);

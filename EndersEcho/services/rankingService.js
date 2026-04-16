@@ -121,18 +121,17 @@ class RankingService {
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
 
-            // Mirror do web API — endpoint upsertowy po (discordId, snapshotAt),
+            // Mirror do web API — endpoint upsertowy po (discordId, snapshotDate),
             // więc bezpiecznie wypychamy całą listę przy każdym eksporcie.
+            // scoreNumeric jako string żeby API mogło sparsować do BigInt
+            // (wyniki EE sięgają quintillion+).
             for (const player of players) {
                 appSync.endersEchoSnapshot({
                     discordId: player.userId,
-                    username: player.username,
+                    snapshotDate: sharedData.updatedAt,
                     rank: player.rank,
-                    score: String(player.score),
-                    scoreValue: player.scoreValue,
-                    bossName: player.bossName || null,
-                    sourceGuildId: player.sourceGuildId,
-                    snapshotAt: sharedData.updatedAt,
+                    scoreNumeric: String(Math.floor(player.scoreValue)),
+                    totalPlayers: players.length,
                 });
             }
         } catch (error) {
