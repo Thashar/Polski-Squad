@@ -510,11 +510,14 @@ class DatabaseService {
             punishments[guildId][userId].lifetime_points = 0;
         }
 
-        punishments[guildId][userId].points = Math.max(0, punishments[guildId][userId].points - points);
-        // Gdy punkty spadają do 0 — zeruj też lifetime_points (czyste konto)
-        if (punishments[guildId][userId].points === 0) {
+        const oldPoints = punishments[guildId][userId].points;
+        punishments[guildId][userId].points = Math.max(0, oldPoints - points);
+
+        if (oldPoints > 0 && punishments[guildId][userId].points === 0) {
+            // Punkty aktywne spadły do 0 — zeruj też lifetime (czyste konto)
             punishments[guildId][userId].lifetime_points = 0;
         } else {
+            // Points już były 0 lub nadal > 0 — odejmuj proporcjonalnie tylko od lifetime
             punishments[guildId][userId].lifetime_points = Math.max(0, punishments[guildId][userId].lifetime_points - points);
         }
 
