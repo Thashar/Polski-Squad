@@ -161,9 +161,14 @@ async function collectNickObservations({ guildIdFilter } = {}) {
 }
 
 async function collectPhaseResults({ guildIdFilter } = {}) {
-    const items = [];
+    // Używamy Map po unikalnym kluczu API (guildId+discordId+phase+year+weekNumber),
+    // żeby uniknąć `ON CONFLICT DO UPDATE command cannot affect row a second time`
+    // jeśli w plikach pojawią się duplikaty (np. ten sam gracz dwa razy w jednym
+    // week-X_clan.json, albo ten sam gracz w dwóch różnych klanach tego samego
+    // tygodnia). Ostatni wpis (chronologicznie po recordedAt) wygrywa.
+    const deduped = new Map();
     const phasesDir = path.join(STALKER_DATA, 'phases');
-    if (!(await fileExists(phasesDir))) return items;
+    if (!(await fileExists(phasesDir))) return [];
 
     const guildDirs = await fs.readdir(phasesDir);
     for (const gd of guildDirs) {
@@ -201,12 +206,15 @@ async function collectPhaseResults({ guildIdFilter } = {}) {
 
                     // Phase1 ma `players`, phase2 może mieć `summary.players` albo `players`.
                     const players = weekData.summary?.players || weekData.players || [];
+                    const phase = phaseNum === 1 ? 'PHASE_1' : 'PHASE_2';
                     for (const p of players) {
                         if (!p?.userId || !p?.displayName || typeof p.score !== 'number') continue;
-                        items.push({
+                        const key = `${guildId}\u0000${p.userId}\u0000${phase}\u0000${year}\u0000${weekNumber}`;
+                        const prev = deduped.get(key);
+                        const item = {
                             guildId,
                             discordId: p.userId,
-                            phase: phaseNum === 1 ? 'PHASE_1' : 'PHASE_2',
+                            phase,
                             year,
                             weekNumber,
                             weekStartsAt,
@@ -215,13 +223,17 @@ async function collectPhaseResults({ guildIdFilter } = {}) {
                             displayNameAtTime: p.displayName,
                             recordedAt,
                             recordedBy,
-                        });
+                        };
+                        // Ostatni zapis wygrywa — używamy recordedAt jako kryterium.
+                        if (!prev || new Date(recordedAt) >= new Date(prev.recordedAt)) {
+                            deduped.set(key, item);
+                        }
                     }
                 }
             }
         }
     }
-    return items;
+    return [...deduped.values()];
 }
 
 async function collectPunishmentEvents({ guildIdFilter } = {}) {
@@ -340,11 +352,21 @@ async function collectEndersEchoSnapshot() {
     const total = data.players.length;
     for (const p of data.players) {
         if (!p?.userId || typeof p.rank !== 'number') continue;
+
+        // scoreValue może być stringiem / undefined / overflowem Number.
+        // Walidacja API oczekuje stringa pasującego do /^\d+$/, więc
+        // akceptujemy tylko skończone nieujemne liczby i zrzucamy
+        // resztę (lepiej pominąć wpis niż wyrzucić 400 na cały batch).
+        const scoreNum = Number(p.scoreValue);
+        if (!Number.isFinite(scoreNum) || scoreNum < 0) continue;
+        const scoreNumeric = Math.trunc(scoreNum).toString();
+        if (!/^\d+$/.test(scoreNumeric)) continue;
+
         items.push({
             discordId: p.userId,
             snapshotDate,
             rank: p.rank,
-            scoreNumeric: String(Math.floor(p.scoreValue || 0)),
+            scoreNumeric,
             totalPlayers: total,
         });
     }
