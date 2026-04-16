@@ -124,20 +124,21 @@ class RankingService {
             // Mirror do web API — endpoint upsertowy po (discordId, snapshotDate).
             // snapshotDate przycinamy do doby UTC, żeby restart bota i wielokrotne
             // zapisy w ciągu dnia aktualizowały ten sam wiersz zamiast tworzyć duplikaty.
-            // scoreNumeric jako string żeby API mogło sparsować do BigInt
-            // (wyniki EE sięgają quintillion+).
+            // scoreNumeric: toFixed(0) zamiast String(), bo String() dla wartości
+            // >= 1e21 (Sx, duże Qi) daje notację wykładniczą "1.65e+21", którą API
+            // odrzuca walidacją /^\d+$/.
             const now = new Date();
             const snapshotDate = new Date(Date.UTC(
                 now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
             )).toISOString();
             for (const player of players) {
-                const score = Math.floor(Number(player.scoreValue));
+                const score = Number(player.scoreValue);
                 if (!Number.isFinite(score) || score < 0) continue;
                 appSync.endersEchoSnapshot({
                     discordId: player.userId,
                     snapshotDate,
                     rank: player.rank,
-                    scoreNumeric: String(score),
+                    scoreNumeric: score.toFixed(0),
                     totalPlayers: players.length,
                 });
             }
