@@ -1,5 +1,6 @@
 const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { sync: appSync, eventId } = require('../../utils/appSync');
 const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
@@ -342,15 +343,16 @@ class MessageHandler {
                 }
 
                 const userId = member.user.id;
+                const occurredAt = new Date().toISOString();
                 if (!cxHistory[userId]) {
                     cxHistory[userId] = { scores: [] };
                 }
 
                 cxHistory[userId].displayName = member.displayName;
-                cxHistory[userId].lastCxDate = new Date().toISOString();
+                cxHistory[userId].lastCxDate = occurredAt;
                 cxHistory[userId].scores.push({
                     score: result.score,
-                    date: new Date().toISOString(),
+                    date: occurredAt,
                     guildId: guild.id
                 });
 
@@ -361,6 +363,15 @@ class MessageHandler {
 
                 await fs.writeFile(cxHistoryPath, JSON.stringify(cxHistory, null, 2), 'utf8');
                 logger.info(`💾 Zapisano wynik CX gracza ${member.displayName}: ${result.score} pkt`);
+
+                appSync.cxEntry({
+                    id: eventId('cx', guild.id, userId, occurredAt, result.score),
+                    guildId: guild.id,
+                    discordId: userId,
+                    displayName: member.displayName,
+                    score: result.score,
+                    occurredAt,
+                });
             } catch (e) {
                 logger.error(`❌ Błąd zapisu CX history: ${e.message}`);
             }

@@ -6,6 +6,7 @@ const https = require('https');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const { sync: appSync, eventId } = require('../../utils/appSync');
 
 const logger = createBotLogger('Stalker');
 class ReminderService {
@@ -100,15 +101,26 @@ class ReminderService {
 
                                 // Dodaj użytkownika do aktywnych sesji DM (do śledzenia wiadomości)
                                 const confirmationChannelId = this.config.confirmationChannels[roleId];
+                                const sentAt = Date.now();
                                 this.activeReminderDMs.set(member.id, {
                                     roleId: roleId,
                                     guildId: guild.id,
                                     confirmationChannelId: confirmationChannelId,
-                                    sentAt: Date.now(),
+                                    sentAt,
                                     repliedToMessage: false // Czy bot już odpowiedział na wiadomość użytkownika
                                 });
                                 // Zapisz do pliku
                                 await this.saveActiveReminderDMs();
+
+                                const occurredAt = new Date(sentAt).toISOString();
+                                appSync.reminderEvent({
+                                    id: eventId('reminder_sent', member.id, guild.id, roleId, occurredAt),
+                                    guildId: guild.id,
+                                    discordId: member.id,
+                                    type: 'SENT',
+                                    channelId: confirmationChannelId || null,
+                                    occurredAt,
+                                });
 
                                 dmsSent++;
                                 logger.info(`📨 Wysłano DM do ${member.user.tag}`);
@@ -999,10 +1011,24 @@ class ReminderService {
      * Usuwa użytkownika z aktywnych sesji DM (gdy potwierdzi przycisk)
      */
     async removeActiveReminderDM(userId) {
+        // Snapshot metadanych PRZED usunięciem — potrzebujemy guildId/channelId do eventu.
+        const dmData = this.activeReminderDMs.get(userId);
         const removed = this.activeReminderDMs.delete(userId);
         if (removed) {
             logger.info(`[REMINDER-DM] 🗑️ Usunięto aktywną sesję DM dla użytkownika ${userId}`);
             await this.saveActiveReminderDMs();
+
+            if (dmData) {
+                const occurredAt = new Date().toISOString();
+                appSync.reminderEvent({
+                    id: eventId('reminder_confirmed', userId, dmData.guildId || '', occurredAt),
+                    guildId: dmData.guildId || 'unknown',
+                    discordId: userId,
+                    type: 'CONFIRMED',
+                    channelId: dmData.confirmationChannelId || null,
+                    occurredAt,
+                });
+            }
         }
         return removed;
     }

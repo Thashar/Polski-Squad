@@ -17,6 +17,7 @@
    - **Globalny:** `getGlobalRanking()` — najlepszy wynik gracza ze wszystkich serwerów (z adnotacją skąd pochodzi)
    - Eksport do `shared_data/endersecho_ranking.json` (globalny, format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp, sourceGuildId}]}`)
    - Eksport przy każdym zapisie i przy starcie bota
+   - **Sync do Web API:** Po eksporcie `saveSharedRanking()` wypycha każdego gracza do `/api/bot/endersecho-snapshot` (upsert po `discordId+snapshotAt`). Cicho no-op gdy brak `APP_API_URL`/`BOT_API_KEY`. Zobacz shared `utils/appSync.js`.
    - **Migracja:** Przy pierwszym starcie stary `ranking.json` jest automatycznie migrowany do `ranking_{guild1Id}.json`
 
 3. **Role TOP (opcjonalne)** - `roleService.js`:
@@ -99,6 +100,10 @@ ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
+
+# Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
+APP_API_URL=https://api.polski-squad.example
+BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## Najlepsze Praktyki
