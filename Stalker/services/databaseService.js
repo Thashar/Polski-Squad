@@ -1088,7 +1088,20 @@ class DatabaseService {
 
         const now = weekData.updatedAt;
         const weekStartsAt = isoWeekStartUTC(year, weekNumber);
+
+        // Buduj mapę userId -> {r1, r2, r3} z danych rund
+        const roundScoresMap = new Map();
+        for (const roundData of roundsData || []) {
+            for (const player of roundData.players || []) {
+                if (!roundScoresMap.has(player.userId)) {
+                    roundScoresMap.set(player.userId, {});
+                }
+                roundScoresMap.get(player.userId)[`r${roundData.round}`] = player.score;
+            }
+        }
+
         for (const player of summaryPlayers || []) {
+            const rounds = roundScoresMap.get(player.userId) || {};
             appSync.phaseResult({
                 guildId,
                 discordId: player.userId,
@@ -1098,6 +1111,9 @@ class DatabaseService {
                 weekStartsAt,
                 clan,
                 score: player.score,
+                round1Score: rounds.r1 ?? null,
+                round2Score: rounds.r2 ?? null,
+                round3Score: rounds.r3 ?? null,
                 displayNameAtTime: player.displayName,
                 recordedAt: now,
                 recordedBy: createdBy || null,
