@@ -98,9 +98,13 @@ class RankingService {
     }
 
     /**
-     * Eksportuje globalny ranking do shared_data/endersecho_ranking.json
+     * Eksportuje globalny ranking do shared_data/endersecho_ranking.json.
+     * @param {Object} [options]
+     * @param {boolean} [options.pushToApi=true] — czy wypchnąć snapshot do web API.
+     *   Na starcie bota dane się nie zmieniają, więc wołamy z `false`,
+     *   żeby nie generować zbędnego ruchu do API.
      */
-    async saveSharedRanking() {
+    async saveSharedRanking({ pushToApi = true } = {}) {
         try {
             const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
@@ -121,9 +125,11 @@ class RankingService {
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
 
+            if (!pushToApi) return;
+
             // Mirror do web API — endpoint upsertowy po (discordId, snapshotDate).
-            // snapshotDate przycinamy do doby UTC, żeby restart bota i wielokrotne
-            // zapisy w ciągu dnia aktualizowały ten sam wiersz zamiast tworzyć duplikaty.
+            // snapshotDate przycinamy do doby UTC, żeby wielokrotne zapisy w ciągu dnia
+            // aktualizowały ten sam wiersz zamiast tworzyć duplikaty.
             // scoreNumeric jako string żeby API mogło sparsować do BigInt
             // (wyniki EE sięgają quintillion+).
             const now = new Date();
