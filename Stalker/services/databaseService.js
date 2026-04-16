@@ -511,8 +511,12 @@ class DatabaseService {
         }
 
         punishments[guildId][userId].points = Math.max(0, punishments[guildId][userId].points - points);
-        // Odejmij także od lifetime_points
-        punishments[guildId][userId].lifetime_points = Math.max(0, punishments[guildId][userId].lifetime_points - points);
+        // Gdy punkty spadają do 0 — zeruj też lifetime_points (czyste konto)
+        if (punishments[guildId][userId].points === 0) {
+            punishments[guildId][userId].lifetime_points = 0;
+        } else {
+            punishments[guildId][userId].lifetime_points = Math.max(0, punishments[guildId][userId].lifetime_points - points);
+        }
 
         punishments[guildId][userId].history.push({
             points: -points,

@@ -10,7 +10,7 @@
      - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
      - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`
      - Walidacja wyników: 0–999999 (obsługuje wyniki 5-cyfrowe i wyższe)
-2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00)
+2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto). Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
 5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.

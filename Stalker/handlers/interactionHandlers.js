@@ -439,8 +439,11 @@ async function handlePointsCommand(interaction, config, databaseService, punishm
             await interaction.editReply({ content: `✅ Dodano ${amount} punktów dla ${user}.` });
         } else if (amount < 0) {
             // Usuń punkty
-            await punishmentService.removePointsManually(interaction.guild, user.id, Math.abs(amount));
-            await interaction.editReply({ content: `✅ Usunięto ${Math.abs(amount)} punktów dla ${user}.` });
+            const afterRemoval = await punishmentService.removePointsManually(interaction.guild, user.id, Math.abs(amount));
+            const newPoints = afterRemoval ? afterRemoval.points : 0;
+            const newLifetime = afterRemoval ? (afterRemoval.lifetime_points || 0) : 0;
+            const lifetimeInfo = newLifetime === 0 ? ' (lifetime: 0 ✅)' : ` (lifetime: ${newLifetime})`;
+            await interaction.editReply({ content: `✅ Usunięto ${Math.abs(amount)} punktów dla ${user}. Pozostało: **${newPoints} pkt**${lifetimeInfo}` });
         } else {
             // amount === 0
             const userData = await databaseService.getUserPunishments(interaction.guild.id, user.id);
