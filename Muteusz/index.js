@@ -163,7 +163,7 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
-    // System zmiany nazwy kanału - emoji statusu (🛑/🟢)
+    // System zmiany nazwy kanału - emoji statusu (🛑/🟢) lub wartość liczbowa (np. "23k", "34,8k")
     const CHANNEL_RENAME_ROLE_ID = '1196586785413795850';
     const CHANNEL_RENAME_ALLOWED_CHANNELS = new Set([
         '1194298890069999756',
@@ -172,7 +172,9 @@ client.on(Events.MessageCreate, async (message) => {
     ]);
     if (!message.author.bot && message.guild && message.content) {
         const trimmedContent = message.content.trim();
-        if (trimmedContent === '🛑' || trimmedContent === '🟢') {
+        const isStatusEmoji = trimmedContent === '🛑' || trimmedContent === '🟢';
+        const isValuePattern = /^\d+([.,]\d+)?k?$/i.test(trimmedContent);
+        if (isStatusEmoji || isValuePattern) {
             const isAdmin = await isAdminMember(message.guild, message.author.id);
             const hasRenameRole = message.member?.roles.cache.has(CHANNEL_RENAME_ROLE_ID) &&
                 CHANNEL_RENAME_ALLOWED_CHANNELS.has(message.channelId);
@@ -180,14 +182,16 @@ client.on(Events.MessageCreate, async (message) => {
                 try {
                     const channel = message.channel;
                     const currentName = channel.name;
-                    // Usuń emoji na początku nazwy kanału wraz z opcjonalnym myślnikiem
-                    const cleanName = currentName.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}][-]?/u, '');
+                    // Usuń emoji LUB wartość liczbową na początku nazwy kanału wraz z opcjonalnym myślnikiem
+                    const cleanName = currentName
+                        .replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}][-]?/u, '')
+                        .replace(/^\d+([.,]\d+)?k?[-]?/i, '');
                     const newName = trimmedContent + cleanName;
                     await channel.setName(newName);
                     await message.delete().catch(() => {});
-                    logger.info(`🏷️ ${message.author.tag} zmienił emoji kanału #${currentName} → #${newName}`);
+                    logger.info(`🏷️ ${message.author.tag} zmienił prefix kanału #${currentName} → #${newName}`);
                 } catch (error) {
-                    logger.error(`❌ Błąd zmiany nazwy kanału przez emoji: ${error.message}`);
+                    logger.error(`❌ Błąd zmiany nazwy kanału przez prefix: ${error.message}`);
                 }
                 return;
             }
