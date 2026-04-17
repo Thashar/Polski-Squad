@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
 const { downloadFile, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -15,6 +15,8 @@ class InteractionHandler {
         this.logService = logService;
         this.roleService = roleService;
         this.notificationService = notificationService;
+        // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
+        this._infoSessions = new Map();
     }
 
     /**
@@ -74,6 +76,11 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('notifications')
                 .setDescription('Manage record break notifications for players'),
+
+            new SlashCommandBuilder()
+                .setName('info')
+                .setDescription('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -97,6 +104,12 @@ class InteractionHandler {
      */
     async handleInteraction(interaction) {
         if (interaction.isChatInputCommand()) {
+            // /info działa z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            if (interaction.commandName === 'info') {
+                await this.handleInfoCommand(interaction);
+                return;
+            }
+
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
                 await interaction.reply({
                     content: this.msgs(interaction.guildId).channelNotAllowed,
@@ -116,6 +129,10 @@ class InteractionHandler {
             await this.handleButtonInteraction(interaction);
         } else if (interaction.isStringSelectMenu()) {
             await this.handleSelectMenuInteraction(interaction);
+        } else if (interaction.isModalSubmit()) {
+            if (interaction.customId === 'info_modal') {
+                await this._handleInfoModalSubmit(interaction);
+            }
         }
     }
 
@@ -548,6 +565,20 @@ class InteractionHandler {
     async handleButtonInteraction(interaction) {
         try {
             const customId = interaction.customId;
+
+            // === Przyciski /info ===
+            if (customId === 'info_send') {
+                await this._handleInfoSend(interaction);
+                return;
+            }
+            if (customId === 'info_edit') {
+                await this._handleInfoEdit(interaction);
+                return;
+            }
+            if (customId === 'info_cancel') {
+                await this._handleInfoCancel(interaction);
+                return;
+            }
 
             // === Przyciski powiadomień ===
             if (customId === 'notif_set') {
@@ -1050,6 +1081,168 @@ class InteractionHandler {
         } else {
             await interaction.editReply({ content: msgs.notifCancelled, components: [] });
         }
+    }
+
+    // =========================================================
+    // KOMENDA /info — wiadomość informacyjna na wszystkie serwery
+    // =========================================================
+
+    /**
+     * Buduje modal do tworzenia/edycji wiadomości informacyjnej.
+     * @param {{ title?: string, description?: string, icon?: string, image?: string }} prefill
+     */
+    _buildInfoModal(prefill = {}) {
+        const titleInput = new TextInputBuilder()
+            .setCustomId('embedTitle')
+            .setLabel('Tytuł (opcjonalnie)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('Tytuł wiadomości')
+            .setRequired(false)
+            .setMaxLength(256);
+        if (prefill.title) titleInput.setValue(prefill.title);
+
+        const descInput = new TextInputBuilder()
+            .setCustomId('embedDescription')
+            .setLabel('Opis')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Treść wiadomości...')
+            .setRequired(true)
+            .setMaxLength(4000);
+        if (prefill.description) descInput.setValue(prefill.description);
+
+        const iconInput = new TextInputBuilder()
+            .setCustomId('embedIcon')
+            .setLabel('Ikona URL (opcjonalnie)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('https://...')
+            .setRequired(false);
+        if (prefill.icon) iconInput.setValue(prefill.icon);
+
+        const imageInput = new TextInputBuilder()
+            .setCustomId('embedImage')
+            .setLabel('Obraz URL (opcjonalnie)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('https://...')
+            .setRequired(false);
+        if (prefill.image) imageInput.setValue(prefill.image);
+
+        return new ModalBuilder()
+            .setCustomId('info_modal')
+            .setTitle('Nowa wiadomość informacyjna')
+            .addComponents(
+                new ActionRowBuilder().addComponents(titleInput),
+                new ActionRowBuilder().addComponents(descInput),
+                new ActionRowBuilder().addComponents(iconInput),
+                new ActionRowBuilder().addComponents(imageInput)
+            );
+    }
+
+    /**
+     * Buduje czerwony embed na podstawie danych sesji.
+     * @param {{ title?: string, description: string, icon?: string, image?: string }} data
+     */
+    _buildInfoEmbed(data) {
+        const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setDescription(data.description);
+        if (data.title) embed.setTitle(data.title);
+        if (data.icon) embed.setThumbnail(data.icon);
+        if (data.image) embed.setImage(data.image);
+        return embed;
+    }
+
+    /**
+     * Obsługuje komendę /info — sprawdza userId, pokazuje modal.
+     */
+    async handleInfoCommand(interaction) {
+        if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
+            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+        const prefill = this._infoSessions.get(interaction.user.id) || {};
+        await interaction.showModal(this._buildInfoModal(prefill));
+    }
+
+    /**
+     * Obsługuje submit modala /info — zapisuje dane, pokazuje podgląd z przyciskami.
+     */
+    async _handleInfoModalSubmit(interaction) {
+        if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
+            await interaction.reply({ content: 'Brak uprawnień.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const title = interaction.fields.getTextInputValue('embedTitle').trim() || null;
+        const description = interaction.fields.getTextInputValue('embedDescription').trim();
+        const icon = interaction.fields.getTextInputValue('embedIcon').trim() || null;
+        const image = interaction.fields.getTextInputValue('embedImage').trim() || null;
+
+        const data = { title, description, icon, image };
+        this._infoSessions.set(interaction.user.id, data);
+
+        const embed = this._buildInfoEmbed(data);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('info_send').setLabel('Wyślij').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('info_edit').setLabel('Edytuj').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('info_cancel').setLabel('Anuluj').setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.reply({
+            content: `**Podgląd** — wiadomość zostanie wysłana na **${this.config.guilds.length}** serwer(ów):`,
+            embeds: [embed],
+            components: [row],
+            flags: ['Ephemeral']
+        });
+    }
+
+    /**
+     * Obsługuje przycisk "Wyślij" — wysyła embed na kanały wszystkich serwerów.
+     */
+    async _handleInfoSend(interaction) {
+        const data = this._infoSessions.get(interaction.user.id);
+        if (!data) {
+            await interaction.update({ content: 'Sesja wygasła. Użyj `/info` ponownie.', embeds: [], components: [] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+        const embed = this._buildInfoEmbed(data);
+        let sent = 0;
+        let failed = 0;
+
+        for (const guildCfg of this.config.guilds) {
+            try {
+                const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
+                if (!channel) { failed++; continue; }
+                await channel.send({ embeds: [embed] });
+                sent++;
+            } catch (err) {
+                logger.error(`Błąd wysyłania /info do serwera ${guildCfg.id}: ${err.message}`);
+                failed++;
+            }
+        }
+
+        this._infoSessions.delete(interaction.user.id);
+        const summary = failed > 0
+            ? `✅ Wysłano na **${sent}** serwer(ów). ❌ Błąd na **${failed}** serwer(ach).`
+            : `✅ Wiadomość wysłana na **${sent}** serwer(ów).`;
+        await interaction.editReply({ content: summary, embeds: [], components: [] });
+    }
+
+    /**
+     * Obsługuje przycisk "Edytuj" — pokazuje modal z wypełnionymi danymi z sesji.
+     */
+    async _handleInfoEdit(interaction) {
+        const data = this._infoSessions.get(interaction.user.id) || {};
+        await interaction.showModal(this._buildInfoModal(data));
+    }
+
+    /**
+     * Obsługuje przycisk "Anuluj" — czyści sesję.
+     */
+    async _handleInfoCancel(interaction) {
+        this._infoSessions.delete(interaction.user.id);
+        await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
     }
 
     /**
