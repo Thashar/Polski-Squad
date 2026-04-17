@@ -962,8 +962,13 @@ async function handleEditScheduledResume(interaction, sharedState) {
     const scheduledId = interaction.customId.replace('edit_scheduled_resume_', '');
 
     try {
-        await przypomnieniaMenedzer.resumeScheduled(scheduledId);
+        const resumeResult = await przypomnieniaMenedzer.resumeScheduled(scheduledId);
         await tablicaMenedzer.ensureControlPanel();
+
+        if (resumeResult && resumeResult.deleted) {
+            await interaction.update({ content: '⏰ Jednorazowe przypomnienie wygasło podczas wstrzymania i zostało usunięte.', components: [] });
+            return;
+        }
 
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         if (!updated) {
@@ -2426,7 +2431,16 @@ async function handleBoardScheduledResume(interaction, sharedState) {
     const scheduledId = interaction.customId.replace('scheduled_resume_', '');
 
     try {
-        await przypomnieniaMenedzer.resumeScheduled(scheduledId);
+        const resumeResult = await przypomnieniaMenedzer.resumeScheduled(scheduledId);
+
+        if (resumeResult && resumeResult.deleted) {
+            await tablicaMenedzer.ensureControlPanel();
+            await interaction.followUp({
+                content: '⏰ Jednorazowe przypomnienie wygasło podczas wstrzymania i zostało usunięte.',
+                ephemeral: true
+            });
+            return;
+        }
 
         const updated = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
         await tablicaMenedzer.updateEmbed(updated);
