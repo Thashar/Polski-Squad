@@ -28,7 +28,7 @@
 
 11. **Komenda /msg** - `interactionHandlers.js`: Wysyłanie wiadomości botem na dowolny kanał tekstowy. Tylko dla administratorów. Parametry: `kanał` (wymagany), `wiadomość` (wymagana), `ping` (opcjonalne - ID ról oddzielone przecinkami, "everyone" lub "here"). Pingi doklejane są przed treścią wiadomości.
 
-13. **Zmiana nazwy kanału emoji** - `index.js`: Gdy administrator wyśle wiadomość zawierającą WYŁĄCZNIE 🛑 lub 🟢 na dowolnym kanale, bot usuwa ikonę z początku nazwy kanału i wstawia wysłane emoji. Wiadomość administratora jest automatycznie usuwana po wykonaniu akcji. Jeśli nazwa kanału nie zaczyna się od emoji, nowe emoji zostaje dodane na początku. Obsługuje myślnik po emoji (np. `🟢-general` → `🛑-general`).
+13. **Zmiana nazwy kanału emoji** - `index.js`: Gdy administrator (lub osoba z rolą `1196586785413795850`) wyśle wiadomość zawierającą WYŁĄCZNIE 🛑 lub 🟢, bot usuwa ikonę z początku nazwy kanału i wstawia wysłane emoji. Wiadomość jest automatycznie usuwana. Obsługuje myślnik po emoji (np. `🟢-general` → `🛑-general`). Admini mogą używać na dowolnym kanale; rola `1196586785413795850` tylko na kanałach: `1194298890069999756`, `1200051393843695699`, `1262792174475673610`.
 
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
