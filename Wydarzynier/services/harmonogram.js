@@ -72,6 +72,21 @@ class Harmonogram {
                 }
             }
         }
+
+        // Usuń jednorazowe wstrzymane przypomnienia, których czas wykonania minął
+        const allScheduled = this.przypomnieniaMenedzer.getAllScheduled();
+        for (const sch of allScheduled) {
+            if (sch.status !== 'paused' || sch.isManual) continue;
+            if (sch.interval && !sch.isOneTime) continue;
+            const nextTriggerTime = new Date(sch.nextTrigger);
+            if (now >= nextTriggerTime) {
+                await this.tablicaMenedzer.deleteEmbed(sch);
+                await this.przypomnieniaMenedzer.deleteScheduled(sch.id);
+                await this.przypomnieniaMenedzer.deleteTemplate(sch.templateId);
+                await this.tablicaMenedzer.ensureControlPanel();
+                this.logger.info(`Jednorazowe wstrzymane przypomnienie ${sch.id} wygasło - usunięto`);
+            }
+        }
     }
 
     async triggerScheduled(scheduled) {
