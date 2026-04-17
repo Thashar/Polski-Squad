@@ -368,7 +368,49 @@ class PrzypomnieniaMenedzer {
 
     // Wznów zaplanowane przypomnienie
     async resumeScheduled(id) {
-        return await this.updateScheduled(id, { status: 'active' });
+        const scheduled = this.getScheduled(id);
+        if (!scheduled) return false;
+
+        const now = new Date();
+        const nextTrigger = new Date(scheduled.nextTrigger);
+
+        if (nextTrigger > now) {
+            return await this.updateScheduled(id, { status: 'active' });
+        }
+
+        // nextTrigger minął podczas wstrzymania
+        if (scheduled.isOneTime || !scheduled.interval) {
+            await this.deleteScheduled(id);
+            await this.deleteTemplate(scheduled.templateId);
+            this.logger.info(`Jednorazowe przypomnienie ${id} wygasło podczas wstrzymania - usunięto`);
+            return { deleted: true };
+        }
+
+        // Cykliczne: przesuń nextTrigger do następnej przyszłej daty
+        let current = nextTrigger;
+        let triggerCount = scheduled.triggerCount || 0;
+
+        while (current <= now) {
+            if (scheduled.interval === 'msc') {
+                const originalDay = scheduled.monthlyDay || getWarsawComponents(current).day;
+                current = addOneMonthWarsaw(current, originalDay);
+            } else if (scheduled.interval === 'ee') {
+                const cyclePosition = triggerCount % 9;
+                const intervalMs = cyclePosition === 8
+                    ? 4 * 24 * 60 * 60 * 1000
+                    : 3 * 24 * 60 * 60 * 1000;
+                current = new Date(current.getTime() + intervalMs);
+            } else {
+                current = new Date(current.getTime() + scheduled.intervalMs);
+            }
+            triggerCount++;
+        }
+
+        return await this.updateScheduled(id, {
+            status: 'active',
+            nextTrigger: current.toISOString(),
+            triggerCount
+        });
     }
 
     // Zaktualizuj następne wyzwolenie dla zaplanowanego przypomnienia
@@ -454,7 +496,7 @@ class PrzypomnieniaMenedzer {
         return this.data.scheduled.filter(s => s.status === 'active').length;
     }
 
-    // ==================== WIADOMOŚCI DO USUNIĘCIA (TYP 1 - USTANDARYZOWANE) ====================
+    // ==================== WIADOMOŚCI DO USU_NIĘCIA (TYP 1 - USTANDARYZOWANE) ====================
 
     // Dodaj wiadomość do usunięcia po 23h 50min
     async addMessageToDelete(messageId, channelId) {
