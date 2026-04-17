@@ -11,6 +11,16 @@ class RankingService {
     constructor(config) {
         this.config = config;
         this.activeRankings = new Map();
+        // Kolejka operacji per-guild — zapobiega race condition przy równoczesnych /update
+        this._writeQueues = new Map();
+    }
+
+    // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy
+    _enqueue(guildId, fn) {
+        const prev = this._writeQueues.get(guildId) ?? Promise.resolve();
+        const next = prev.then(fn, fn);
+        this._writeQueues.set(guildId, next);
+        return next;
     }
 
     /**
@@ -785,38 +795,41 @@ class RankingService {
      * @param {string|null} bossName
      */
     async updateUserRanking(guildId, userId, userName, bestScore, bossName = null) {
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info(`🔍 DEBUG: updateUserRanking - guildId: ${guildId}, userId: ${userId}, bestScore: "${bestScore}"`);
-        }
-
-        const ranking = await this.loadRanking(guildId);
-        const newScoreValue = this.parseScoreValue(bestScore);
-        const currentScore = ranking[userId];
-
-        let isNewRecord = false;
-
-        if (!currentScore) {
-            isNewRecord = true;
-        } else {
-            const currentScoreValue = this.parseScoreValue(currentScore.score);
-            if (newScoreValue > currentScoreValue) {
-                isNewRecord = true;
+        // Całe read-modify-write w kolejce per-guild — eliminuje race condition przy równoczesnych /update
+        return this._enqueue(guildId, async () => {
+            if (this.config.ocr.detailedLogging.enabled) {
+                logger.info(`🔍 DEBUG: updateUserRanking - guildId: ${guildId}, userId: ${userId}, bestScore: "${bestScore}"`);
             }
-        }
 
-        if (isNewRecord) {
-            ranking[userId] = {
-                score: bestScore,
-                username: userName,
-                timestamp: new Date().toISOString(),
-                scoreValue: newScoreValue,
-                userId,
-                bossName: bossName || this.config.messages.unknownBossLabel
-            };
-            await this.saveRanking(guildId, ranking);
-        }
+            const ranking = await this.loadRanking(guildId);
+            const newScoreValue = this.parseScoreValue(bestScore);
+            const currentScore = ranking[userId];
 
-        return { isNewRecord, ranking, currentScore };
+            let isNewRecord = false;
+
+            if (!currentScore) {
+                isNewRecord = true;
+            } else {
+                const currentScoreValue = this.parseScoreValue(currentScore.score);
+                if (newScoreValue > currentScoreValue) {
+                    isNewRecord = true;
+                }
+            }
+
+            if (isNewRecord) {
+                ranking[userId] = {
+                    score: bestScore,
+                    username: userName,
+                    timestamp: new Date().toISOString(),
+                    scoreValue: newScoreValue,
+                    userId,
+                    bossName: bossName || this.config.messages.unknownBossLabel
+                };
+                await this.saveRanking(guildId, ranking);
+            }
+
+            return { isNewRecord, ranking, currentScore };
+        });
     }
 
     /**
