@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-const SEPARATOR = '────────────────────────────────────────────────────────────────────────────────';
+const SEPARATOR = '────────────────────────────────────────';
 
 function getTimestamp() {
     return new Date().toLocaleString('pl-PL', {
