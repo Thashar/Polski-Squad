@@ -65,18 +65,11 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('remove')
                 .setDescription('Remove a player from the ranking (admins only)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addUserOption(option =>
                     option.setName('user')
                         .setDescription('User to remove from the ranking')
                         .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('ocr-debug')
-                .setDescription('Toggle detailed OCR logging')
-                .addBooleanOption(option =>
-                    option.setName('enabled')
-                        .setDescription('Enable (true) or disable (false) detailed logging')
-                        .setRequired(false)),
 
             new SlashCommandBuilder()
                 .setName('notifications')
@@ -88,7 +81,7 @@ class InteractionHandler {
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
-                .setName('block-ocr')
+                .setName('ocr-on-off')
                 .setDescription('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
@@ -128,12 +121,12 @@ class InteractionHandler {
      */
     async handleInteraction(interaction) {
         if (interaction.isChatInputCommand()) {
-            // /info i /block-ocr działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            // /info i /ocr-on-off działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
             if (interaction.commandName === 'info') {
                 await this.handleInfoCommand(interaction);
                 return;
             }
-            if (interaction.commandName === 'block-ocr') {
+            if (interaction.commandName === 'ocr-on-off') {
                 await this.handleBlockOcrCommand(interaction);
                 return;
             }
@@ -160,7 +153,6 @@ class InteractionHandler {
                 case 'ranking': await this.handleRankingCommand(interaction); break;
                 case 'update':  await this.handleUpdateCommand(interaction);  break;
                 case 'remove':  await this.handleRemoveCommand(interaction);  break;
-                case 'ocr-debug': await this.handleOcrDebugCommand(interaction); break;
                 case 'notifications': await this.handleNotificationsCommand(interaction); break;
             }
         } else if (interaction.isButton()) {

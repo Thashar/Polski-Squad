@@ -575,27 +575,33 @@
       "description": "Bot do rankingu wyników bossów z automatycznym przypisywaniem ról TOP",
       "commands": [
         {
+          "name": "/info",
+          "description": "Wysyła wiadomość informacyjną na wszystkie serwery (tylko dla wybranych użytkowników)",
+          "usage": "/info",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/notifications",
+          "description": "Zarządza powiadomieniami DM o nowych rekordach graczy",
+          "usage": "/notifications",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/ocr-on-off",
+          "description": "Blokuje / odblokowuje komendę /update na wszystkich serwerach",
+          "usage": "/ocr-on-off",
+          "requiredPermission": "administrator"
+        },
+        {
           "name": "/ranking",
           "description": "Wyświetla prywatny ranking wyników bossów (paginacja 10/stronę)",
           "usage": "/ranking",
           "requiredPermission": "public"
         },
         {
-          "name": "/update",
-          "description": "Aktualizuje swój wynik w rankingu (OCR screenshot)",
-          "usage": "/update załącznik:[screenshot z wynikiem]",
-          "requiredPermission": "public"
-        },
-        {
           "name": "/remove",
-          "description": "Usuwa gracza z rankingu (admin only)",
+          "description": "Usuwa gracza z rankingu",
           "usage": "/remove użytkownik:@user",
-          "requiredPermission": "administrator"
-        },
-        {
-          "name": "/ocr-debug",
-          "description": "Przełącza szczegółowe logowanie OCR",
-          "usage": "/ocr-debug",
           "requiredPermission": "administrator"
         },
         {
@@ -609,6 +615,12 @@
           "description": "Wyświetla listę zablokowanych użytkowników (posortowaną od najkrótszej kary do permanentnych) i umożliwia ich odblokowanie.",
           "usage": "/unblock",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/update",
+          "description": "Aktualizuje swój wynik w rankingu (OCR screenshot)",
+          "usage": "/update załącznik:[screenshot z wynikiem]",
+          "requiredPermission": "public"
         }
       ]
     }
