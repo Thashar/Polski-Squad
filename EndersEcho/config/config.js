@@ -42,6 +42,7 @@ function parseGuildsConfig() {
 
         // Tag serwera w globalnym rankingu (opcjonalny, np. "🔥 PS" lub "⚔️ CS")
         const tag = process.env[`ENDERSECHO_GUILD_${i}_TAG`] || null;
+        const icon = process.env[`ENDERSECHO_GUILD_${i}_ICON`] || null;
 
         // Role TOP są w pełni opcjonalne
         const top1 = process.env[`ENDERSECHO_GUILD_${i}_TOP1_ROLE`];
@@ -60,6 +61,7 @@ function parseGuildsConfig() {
             allowedChannelId: channelId,
             lang,
             tag,
+            icon,
             // null jeśli żadna rola nie skonfigurowana — roleService pomija wtedy aktualizację
             topRoles: Object.keys(topRoles).length > 0 ? topRoles : null
         });
@@ -83,6 +85,7 @@ module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     infoUserId: process.env.ENDERSECHO_INFO_USER_ID || null,
+    logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
 
     // Lista skonfigurowanych serwerów
     guilds,

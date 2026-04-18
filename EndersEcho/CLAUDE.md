@@ -89,7 +89,8 @@ ENDERSECHO_CLIENT_ID=client_id
 ENDERSECHO_GUILD_1_ID=guild_id
 ENDERSECHO_GUILD_1_CHANNEL=channel_id
 ENDERSECHO_GUILD_1_LANG=pol          # pol lub eng (domyślnie pol)
-ENDERSECHO_GUILD_1_TAG=🔥 PS         # Tag w globalnym rankingu (opcjonalny, np. "🔥 PS" lub "⚔️ CS")
+ENDERSECHO_GUILD_1_TAG=🔥 PS         # Tag w globalnym rankingu i w logu Discord (opcjonalny)
+ENDERSECHO_GUILD_1_ICON=https://...  # URL ikony serwera — avatar w dedykowanym logu (opcjonalny)
 
 # Role TOP serwera 1 (opcjonalne — jeśli brak, bot nie zarządza rolami)
 ENDERSECHO_GUILD_1_TOP1_ROLE=role_id
@@ -102,7 +103,8 @@ ENDERSECHO_GUILD_1_TOP11TO30_ROLE=role_id
 ENDERSECHO_GUILD_2_ID=guild_id
 ENDERSECHO_GUILD_2_CHANNEL=channel_id
 ENDERSECHO_GUILD_2_LANG=eng          # pol lub eng (domyślnie pol)
-ENDERSECHO_GUILD_2_TAG=⚔️ CS         # Tag w globalnym rankingu (opcjonalny)
+ENDERSECHO_GUILD_2_TAG=⚔️ CS         # Tag w globalnym rankingu i w logu Discord (opcjonalny)
+ENDERSECHO_GUILD_2_ICON=https://...  # URL ikony serwera (opcjonalny)
 # Role TOP serwera 2 (opcjonalne)
 ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 # ... itd.
@@ -115,6 +117,11 @@ ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
 # Komenda /info (wymagane do działania /info)
 ENDERSECHO_INFO_USER_ID=discord_user_id
 
+# Dedykowany kanał logów EndersEcho (opcjonalne — jeśli ustawiony, logi NIE trafiają do głównego webhooka)
+# Każdy serwer pojawia się z własnym avatarem (ENDERSECHO_GUILD_N_ICON) i nazwą (TAG)
+# Separator kreską pojawia się przy każdej zmianie serwera
+ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
+
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example
 BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -122,7 +129,9 @@ BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ## Najlepsze Praktyki
 
-- **Logger:** `createBotLogger('EndersEcho')`
+- **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
+- **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
+- **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera
 - **OCR Debug:** `/ocr-debug true`
 - **Ranking per-serwer:** `rankingService.loadRanking(guildId)` / `saveRanking(guildId, ranking)`
 - **Ranking globalny:** `rankingService.getGlobalRanking()` (merge wszystkich serwerów, best per player)
