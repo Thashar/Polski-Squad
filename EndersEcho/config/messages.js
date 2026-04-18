@@ -129,6 +129,13 @@ const pol = {
     notifRemoveNone: '📭 Nie masz żadnych ustawionych powiadomień.',
     notifDmFooter: '👁️ Obserwujesz tego gracza — powiadomienie subskrypcyjne',
 
+    // /block-ocr
+    ocrBlocked: '🚫 **Analiza zdjęć jest tymczasowo zablokowana.**\nZostaniesz powiadomiony gdy zostanie wznowiona.',
+    ocrBlockEnabled: '🔒 **Analiza OCR zablokowana** — komenda `/update` jest teraz wyłączona na wszystkich serwerach.',
+    ocrBlockDisabled: '🔓 **Analiza OCR odblokowana** — komenda `/update` jest teraz dostępna.',
+    ocrResumedTitle: '✅ Analiza zdjęć wznowiona!',
+    ocrResumedDescription: 'Komenda `/update` jest ponownie dostępna. Możesz przesyłać screeny wyników.',
+
     // Wspólne
     unknownBoss: 'Nieznany',
     unknownBossLabel: 'Nieznany boss',
@@ -265,6 +272,13 @@ const eng = {
     notifRemoveSuccess: '✅ Removed notification for **{username}** from server **{guild}**.',
     notifRemoveNone: '📭 You have no notifications set.',
     notifDmFooter: '👁️ You are following this player — subscription notification',
+
+    // /block-ocr
+    ocrBlocked: '🚫 **Screenshot analysis is temporarily blocked.**\nYou will be notified when it resumes.',
+    ocrBlockEnabled: '🔒 **OCR analysis blocked** — the `/update` command is now disabled on all servers.',
+    ocrBlockDisabled: '🔓 **OCR analysis unblocked** — the `/update` command is now available.',
+    ocrResumedTitle: '✅ Screenshot analysis resumed!',
+    ocrResumedDescription: 'The `/update` command is available again. You can submit result screenshots.',
 
     // Common
     unknownBoss: 'Unknown',

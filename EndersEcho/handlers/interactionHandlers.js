@@ -2,6 +2,7 @@ const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBu
 const { downloadFile, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const OcrBlockService = require('../services/ocrBlockService');
 
 const logger = createBotLogger('EndersEcho');
 const path = require('path');
@@ -15,6 +16,7 @@ class InteractionHandler {
         this.logService = logService;
         this.roleService = roleService;
         this.notificationService = notificationService;
+        this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
     }
@@ -83,6 +85,11 @@ class InteractionHandler {
                 .setName('info')
                 .setDescription('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('block-ocr')
+                .setDescription('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -106,9 +113,13 @@ class InteractionHandler {
      */
     async handleInteraction(interaction) {
         if (interaction.isChatInputCommand()) {
-            // /info działa z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            // /info i /block-ocr działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
             if (interaction.commandName === 'info') {
                 await this.handleInfoCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'block-ocr') {
+                await this.handleBlockOcrCommand(interaction);
                 return;
             }
 
@@ -198,6 +209,11 @@ class InteractionHandler {
             return;
         }
 
+        if (this.ocrBlockService.isBlocked()) {
+            await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
+            return;
+        }
+
         await interaction.deferReply({ flags: ['Ephemeral'] });
         await interaction.editReply({ content: msgs.updateProcessing });
 
@@ -224,6 +240,7 @@ class InteractionHandler {
                         gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
                     } else {
                         gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                        await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                         await fs.unlink(tempImagePath);
 
                         if (aiResult.error === 'FAKE_PHOTO') {
@@ -240,6 +257,7 @@ class InteractionHandler {
 
                     const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
                     if (!hasRequiredWords) {
+                        await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
                         await fs.unlink(tempImagePath);
                         await interaction.editReply(msgs.updateNoRequiredWords);
                         return;
@@ -262,6 +280,7 @@ class InteractionHandler {
 
                 const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
                 if (!hasRequiredWords) {
+                    await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
                     await fs.unlink(tempImagePath);
                     await interaction.editReply(msgs.updateNoRequiredWords);
                     return;
@@ -1247,6 +1266,96 @@ class InteractionHandler {
     async _handleInfoCancel(interaction) {
         this._infoSessions.delete(interaction.user.id);
         await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
+    }
+
+    async handleBlockOcrCommand(interaction) {
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const userNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+
+        if (this.ocrBlockService.isBlocked()) {
+            // Odblokowanie — wyślij powiadomienie na wszystkie serwery
+            await this.ocrBlockService.unblock(interaction.user.id, userNick);
+            logger.info(`🔓 OCR odblokowany przez ${userNick}`);
+
+            for (const guildCfg of this.config.guilds) {
+                try {
+                    const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
+                    if (!channel) continue;
+                    const guildMsgs = this.msgs(guildCfg.id);
+                    const embed = new EmbedBuilder()
+                        .setColor(0x00C853)
+                        .setTitle(guildMsgs.ocrResumedTitle)
+                        .setDescription(guildMsgs.ocrResumedDescription)
+                        .setTimestamp();
+                    await channel.send({ embeds: [embed] });
+                } catch (err) {
+                    logger.warn(`⚠️ Nie można wysłać powiadomienia o odblokowaniu do serwera ${guildCfg.id}: ${err.message}`);
+                }
+            }
+
+            const replyMsgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: replyMsgs.ocrBlockDisabled, flags: ['Ephemeral'] });
+        } else {
+            // Zablokowanie
+            await this.ocrBlockService.block(interaction.user.id, userNick);
+            logger.warn(`🔒 OCR zablokowany przez ${userNick}`);
+            const replyMsgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: replyMsgs.ocrBlockEnabled, flags: ['Ephemeral'] });
+        }
+    }
+
+    async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
+        if (!this.config.invalidReportChannelId) return;
+        try {
+            const channel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
+            if (!channel) return;
+
+            const serverNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+            const discordUsername = interaction.user.username;
+            const serverName = interaction.guild?.name || 'Nieznany serwer';
+            const now = new Date();
+            const timestamp = now.toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
+
+            const reasonLabels = {
+                'FAKE_PHOTO': '🔴 Wykryto podrobione / edytowane zdjęcie',
+                'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
+                'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
+            };
+            const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
+            const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
+
+            const ext = path.extname(imagePath) || '.png';
+            const fileName = `rejected_${Date.now()}${ext}`;
+            const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
+
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle('⚠️ Odrzucony screen')
+                .addFields(
+                    { name: 'Nick na serwerze', value: serverNick, inline: true },
+                    { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
+                    { name: 'Serwer', value: serverName, inline: true },
+                    { name: 'Czas', value: timestamp, inline: true },
+                    { name: 'Powód odrzucenia', value: reasonText, inline: false }
+                )
+                .setImage(`attachment://${fileName}`)
+                .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
+
+            await channel.send({ embeds: [embed], files: [fileAttachment] });
+            gl.info(`📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
+        } catch (err) {
+            gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
+        }
     }
 
     /**

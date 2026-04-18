@@ -64,7 +64,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`, `/block-ocr`
 
 **Struktura danych:**
 ```
@@ -121,6 +121,16 @@ ENDERSECHO_INFO_USER_ID=discord_user_id
 # Każdy serwer pojawia się z własnym avatarem (ENDERSECHO_GUILD_N_ICON) i nazwą (TAG)
 # Separator kreską pojawia się przy każdej zmianie serwera
 ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
+
+# Kanał raportów odrzuconych screenów (opcjonalne)
+# Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
+# Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
+ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
+
+# Użytkownicy uprawnieni do /block-ocr (ID rozdzielone przecinkami)
+# Komenda blokuje/odblokowuje /update globalnie; przy odblokowaniu wysyła embed do wszystkich kanałów
+# Stan persystowany w data/ocr_blocked.json
+ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example
