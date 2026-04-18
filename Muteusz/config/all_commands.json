@@ -593,12 +593,6 @@
           "requiredPermission": "administrator"
         },
         {
-          "name": "/ocr-debug",
-          "description": "Przełącza szczegółowe logowanie OCR",
-          "usage": "/ocr-debug",
-          "requiredPermission": "administrator"
-        },
-        {
           "name": "/test",
           "description": "Testuje analizę screenshota przez AI — porównuje z wzorcem i wyciąga dane (boss + wynik) bez zapisu. Pokazuje ephemeral podgląd czy byłby to nowy rekord.",
           "usage": "/test obraz:[screenshot do przetestowania]",

@@ -68,7 +68,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`, `/block-ocr`, `/test`, `/unblock`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/block-ocr`, `/test`, `/unblock`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
@@ -153,7 +153,7 @@ BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 - **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera
-- **OCR Debug:** `/ocr-debug true`
+- **OCR Debug:** Brak komendy — logowanie OCR jest wyłączone
 - **Ranking per-serwer:** `rankingService.loadRanking(guildId)` / `saveRanking(guildId, ranking)`
 - **Ranking globalny:** `rankingService.getGlobalRanking()` (merge wszystkich serwerów, best per player)
 - **Role opcjonalne:** Zawsze przekazuj `guildConfig?.topRoles || null` do `roleService.updateTopRoles()`

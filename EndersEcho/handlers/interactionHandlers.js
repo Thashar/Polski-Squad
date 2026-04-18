@@ -71,14 +71,6 @@ class InteractionHandler {
                         .setRequired(true)),
 
             new SlashCommandBuilder()
-                .setName('ocr-debug')
-                .setDescription('Toggle detailed OCR logging')
-                .addBooleanOption(option =>
-                    option.setName('enabled')
-                        .setDescription('Enable (true) or disable (false) detailed logging')
-                        .setRequired(false)),
-
-            new SlashCommandBuilder()
                 .setName('notifications')
                 .setDescription('Manage record break notifications for players'),
 
@@ -160,7 +152,6 @@ class InteractionHandler {
                 case 'ranking': await this.handleRankingCommand(interaction); break;
                 case 'update':  await this.handleUpdateCommand(interaction);  break;
                 case 'remove':  await this.handleRemoveCommand(interaction);  break;
-                case 'ocr-debug': await this.handleOcrDebugCommand(interaction); break;
                 case 'notifications': await this.handleNotificationsCommand(interaction); break;
             }
         } else if (interaction.isButton()) {
