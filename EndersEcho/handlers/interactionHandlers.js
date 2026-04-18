@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
-const { downloadFile, formatMessage } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const OcrBlockService = require('../services/ocrBlockService');
@@ -318,7 +318,6 @@ class InteractionHandler {
                     } else {
                         gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
                         await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-                        await fs.unlink(tempImagePath);
 
                         if (aiResult.error === 'FAKE_PHOTO') {
                             await interaction.editReply(msgs.fakePhotoDetected);
@@ -399,7 +398,6 @@ class InteractionHandler {
                         }
                     }
 
-                    await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
@@ -568,19 +566,17 @@ class InteractionHandler {
                 gl.error(`❌ Błąd wysyłania DM powiadomień: ${dmCheckError.message}`);
             }
 
-            await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-
         } catch (error) {
             await this.logService.logOCRError(error, 'handleUpdateCommand', interaction.guildId);
-
-            if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-            }
 
             try {
                 await interaction.editReply(msgs.updateError);
             } catch (replyError) {
                 gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
+            }
+        } finally {
+            if (tempImagePath) {
+                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
             }
         }
     }
@@ -649,10 +645,10 @@ class InteractionHandler {
             gl.info(`🤖 [/test] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
             const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
+            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
-                await fs.unlink(tempImagePath);
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()
@@ -666,7 +662,6 @@ class InteractionHandler {
 
             if (!aiResult.isValidVictory) {
                 await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-                await fs.unlink(tempImagePath);
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
             }
@@ -692,11 +687,6 @@ class InteractionHandler {
             if (!isNewRecord) {
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-                    const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
-
-                    const fsSync = require('fs');
-                    const fileStats = fsSync.statSync(tempImagePath);
-                    gl.info(`📁 [/test] Plik do załączenia - rozmiar: ${(fileStats.size / (1024 * 1024)).toFixed(2)}MB`);
 
                     const imageAttachment = new AttachmentBuilder(tempImagePath, {
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
@@ -729,7 +719,6 @@ class InteractionHandler {
                         }
                     }
 
-                    await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
@@ -738,7 +727,6 @@ class InteractionHandler {
 
             // Nowy rekord — publiczne ogłoszenie
             const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
             const imageAttachment = new AttachmentBuilder(tempImagePath, {
                 name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}`
             });
@@ -837,7 +825,7 @@ class InteractionHandler {
                                 let notifImageRef = null;
                                 let notifFiles;
                                 if (!isSourceGuild) {
-                                    const notifAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
+                                    const notifAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
                                     notifImageRef = `attachment://${notifAttachment.name}`;
                                     notifFiles = [notifAttachment];
                                 }
@@ -881,7 +869,7 @@ class InteractionHandler {
                     for (const subscriberId of subscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
-                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
+                            const dmAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
                             const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
                             await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
                             gl.info(`✅ [/test] Wysłano DM powiadomienie do ${subscriberId}`);
@@ -894,19 +882,17 @@ class InteractionHandler {
                 gl.error(`❌ [/test] Błąd wysyłania DM powiadomień: ${dmCheckError.message}`);
             }
 
-            await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-
         } catch (error) {
             await this.logService.logOCRError(error, 'handleTestCommand', interaction.guildId);
-
-            if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-            }
 
             try {
                 await interaction.editReply(msgs.updateError);
             } catch (replyError) {
                 gl.error(`Błąd podczas wysyłania komunikatu o błędzie (/test): ${replyError.message}`);
+            }
+        } finally {
+            if (tempImagePath) {
+                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
             }
         }
     }
@@ -2074,7 +2060,6 @@ class InteractionHandler {
         const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
         if (!hasRequiredWords) {
             await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
-            await fs.unlink(tempImagePath);
             await interaction.editReply(msgs.updateNoRequiredWords);
             return null;
         }
@@ -2083,7 +2068,6 @@ class InteractionHandler {
         const bestScore = this.ocrService.extractScoreAfterBest(extractedText, gl);
 
         if (!bestScore || bestScore.trim() === '') {
-            await fs.unlink(tempImagePath);
             await interaction.editReply(msgs.updateNoScore);
             return null;
         }
