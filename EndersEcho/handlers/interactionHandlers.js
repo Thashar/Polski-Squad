@@ -174,6 +174,7 @@ class InteractionHandler {
      */
     async handleUpdateCommand(interaction) {
         await this.logService.logCommandUsage('update', interaction);
+        const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
         const attachment = interaction.options.getAttachment('obraz');
@@ -214,15 +215,15 @@ class InteractionHandler {
             // === AI OCR (jeśli włączony) ===
             if (this.aiOcrService.enabled) {
                 try {
-                    logger.info('🤖 Używam AI OCR do analizy obrazu...');
+                    gl.info('🤖 Używam AI OCR do analizy obrazu...');
                     const aiResult = await this.aiOcrService.analyzeVictoryImage(tempImagePath);
 
                     if (aiResult.isValidVictory) {
                         bestScore = aiResult.score;
                         bossName = aiResult.bossName;
-                        logger.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
+                        gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
                     } else {
-                        logger.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                        gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
                         await fs.unlink(tempImagePath);
 
                         if (aiResult.error === 'FAKE_PHOTO') {
@@ -234,7 +235,7 @@ class InteractionHandler {
                         return;
                     }
                 } catch (aiError) {
-                    logger.error('❌ AI OCR błąd, przechodzę na tradycyjny OCR:', aiError);
+                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
                     await interaction.editReply({ content: msgs.aiOcrUnavailable });
 
                     const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
@@ -257,7 +258,7 @@ class InteractionHandler {
                 }
             } else {
                 // === Tradycyjny OCR ===
-                logger.info('🔍 Używam tradycyjnego OCR...');
+                gl.info('🔍 Używam tradycyjnego OCR...');
 
                 const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath);
                 if (!hasRequiredWords) {
@@ -290,7 +291,7 @@ class InteractionHandler {
 
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
 
-            logger.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
+            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
 
             if (!isNewRecord) {
                 try {
@@ -299,7 +300,7 @@ class InteractionHandler {
 
                     const fsSync = require('fs');
                     const fileStats = fsSync.statSync(tempImagePath);
-                    logger.info(`📁 Plik do załączenia - rozmiar: ${(fileStats.size / (1024 * 1024)).toFixed(2)}MB`);
+                    gl.info(`📁 Plik do załączenia - rozmiar: ${(fileStats.size / (1024 * 1024)).toFixed(2)}MB`);
 
                     const imageAttachment = new AttachmentBuilder(tempImagePath, {
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
@@ -316,9 +317,9 @@ class InteractionHandler {
                             files: [imageAttachment],
                             flags: ['Ephemeral']
                         });
-                        logger.info('✅ Wysłano embed z wynikiem (brak rekordu)');
+                        gl.info('✅ Wysłano embed z wynikiem (brak rekordu)');
                     } catch (editReplyError) {
-                        logger.error('❌ Błąd podczas wysyłania embed (brak rekordu):', editReplyError);
+                        gl.error(`❌ Błąd podczas wysyłania embed (brak rekordu): ${editReplyError.message}`);
                         try {
                             await interaction.editReply({
                                 content: formatMessage(msgs.noRecordFallback, {
@@ -328,11 +329,11 @@ class InteractionHandler {
                                 })
                             });
                         } catch (fallbackError) {
-                            logger.error('❌ Nie można wysłać fallback odpowiedzi:', fallbackError);
+                            gl.error(`❌ Nie można wysłać fallback odpowiedzi: ${fallbackError.message}`);
                         }
                     }
 
-                    await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
+                    await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
@@ -369,9 +370,9 @@ class InteractionHandler {
                     files: [imageAttachment]
                 });
 
-                logger.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
+                gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
             } catch (newRecordError) {
-                logger.error('❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie:', newRecordError);
+                gl.error(`❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie: ${newRecordError.message}`);
                 try {
                     await interaction.editReply({
                         content: formatMessage(msgs.newRecordFallback, {
@@ -381,7 +382,7 @@ class InteractionHandler {
                         })
                     });
                 } catch (fallbackError) {
-                    logger.error('❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu:', fallbackError);
+                    gl.error(`❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu: ${fallbackError.message}`);
                 }
             }
 
@@ -402,7 +403,7 @@ class InteractionHandler {
                 const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
                 const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
 
-                logger.info(`🌐 Global Top 3 check: userId=${userId}, prevPos=${prevGlobalPosition ?? 'brak'}, newPos=${newGlobalPosition ?? 'brak'}`);
+                gl.info(`🌐 Global Top 3 check: userId=${userId}, prevPos=${prevGlobalPosition ?? 'brak'}, newPos=${newGlobalPosition ?? 'brak'}`);
 
                 if (newGlobalPosition && newGlobalPosition <= 3) {
                     const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
@@ -410,13 +411,13 @@ class InteractionHandler {
                     const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
                     const positionChanged = prevGlobalPosition !== newGlobalPosition;
 
-                    logger.info(`🌐 W Top 3: globalScoreChanged=${globalScoreChanged}, positionChanged=${positionChanged} (${prevGlobalPosition ?? 'brak'} → ${newGlobalPosition})`);
+                    gl.info(`🌐 W Top 3: globalScoreChanged=${globalScoreChanged}, positionChanged=${positionChanged} (${prevGlobalPosition ?? 'brak'} → ${newGlobalPosition})`);
 
                     if (globalScoreChanged && positionChanged) {
                         const sourceGuildName = interaction.guild.name;
                         const notifAvatarUrl = interaction.user.displayAvatarURL();
 
-                        logger.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${this.config.guilds.length} serwerów`);
+                        gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${this.config.guilds.length} serwerów`);
 
                         for (const guildCfg of this.config.guilds) {
                             try {
@@ -425,11 +426,11 @@ class InteractionHandler {
                                 try {
                                     channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                                 } catch (fetchErr) {
-                                    logger.warn(`⚠️ Nie można pobrać kanału ${guildCfg.allowedChannelId} dla serwera ${guildCfg.id}: ${fetchErr.message}`);
+                                    gl.warn(`⚠️ Nie można pobrać kanału ${guildCfg.allowedChannelId} dla serwera ${guildCfg.id}: ${fetchErr.message}`);
                                     continue;
                                 }
                                 if (!channel) {
-                                    logger.warn(`⚠️ Kanał ${guildCfg.allowedChannelId} nie istnieje`);
+                                    gl.warn(`⚠️ Kanał ${guildCfg.allowedChannelId} nie istnieje`);
                                     continue;
                                 }
 
@@ -463,55 +464,55 @@ class InteractionHandler {
                                 const sendPayload = { embeds: [globalEmbed] };
                                 if (notifFiles) sendPayload.files = notifFiles;
                                 await channel.send(sendPayload);
-                                logger.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez zdjęcia — serwer macierzysty)' : ' (ze zdjęciem)'}`);
+                                gl.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez zdjęcia — serwer macierzysty)' : ' (ze zdjęciem)'}`);
                             } catch (notifError) {
-                                logger.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
+                                gl.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
                             }
                         }
                     } else {
-                        logger.info(`🌐 Warunki nie spełnione — nie wysyłam powiadomień`);
+                        gl.info(`🌐 Warunki nie spełnione — nie wysyłam powiadomień`);
                     }
                 } else {
-                    logger.info(`🌐 Gracz poza Top 3 (pos=${newGlobalPosition ?? 'brak'}) — nie wysyłam powiadomień`);
+                    gl.info(`🌐 Gracz poza Top 3 (pos=${newGlobalPosition ?? 'brak'}) — nie wysyłam powiadomień`);
                 }
             } catch (globalCheckError) {
-                logger.error('❌ Błąd sprawdzania/wysyłania Global Top 3:', globalCheckError);
+                gl.error(`❌ Błąd sprawdzania/wysyłania Global Top 3: ${globalCheckError.message}`);
             }
 
             // DM powiadomienia dla subskrybentów
             try {
                 const subscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
                 if (subscribers.length > 0) {
-                    logger.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
+                    gl.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
                     for (const subscriberId of subscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
                             const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
                             const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
                             await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
-                            logger.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
+                            gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {
-                            logger.warn(`⚠️ Nie można wysłać DM do ${subscriberId}: ${dmError.message}`);
+                            gl.warn(`⚠️ Nie można wysłać DM do ${subscriberId}: ${dmError.message}`);
                         }
                     }
                 }
             } catch (dmCheckError) {
-                logger.error('❌ Błąd wysyłania DM powiadomień:', dmCheckError);
+                gl.error(`❌ Błąd wysyłania DM powiadomień: ${dmCheckError.message}`);
             }
 
-            await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
+            await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
 
         } catch (error) {
             await this.logService.logOCRError(error, 'handleUpdateCommand', interaction.guildId);
 
             if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
+                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
             }
 
             try {
                 await interaction.editReply(msgs.updateError);
             } catch (replyError) {
-                logger.error('Błąd podczas wysyłania komunikatu o błędzie:', replyError.message);
+                gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
             }
         }
     }

@@ -20,7 +20,8 @@ class LogService {
      * @param {import('discord.js').CommandInteraction} interaction
      */
     async logCommandUsage(commandName, interaction) {
-        this._gl(interaction.guildId).info(`[${interaction.user.tag}] Użycie komendy /${commandName}`);
+        const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        this._gl(interaction.guildId).info(`[${nick}] Użycie komendy /${commandName}`);
     }
 
     /**
