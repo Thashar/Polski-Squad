@@ -331,15 +331,7 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `Pierwsze zdjęcie to wzorzec prawidłowego ekranu wyników bossa z gry mobilnej. Drugie zdjęcie jest przesłane przez użytkownika.
-
-Ignoruj wszelki tekst — skup się wyłącznie na elementach wizualnych. Sprawdź czy na drugim zdjęciu widoczne są OBA poniższe elementy:
-1. Pomarańczowo-złota ozdobna wstęga/baner w górnej części centralnego panelu wyników
-2. Zielone liczby widoczne wewnątrz panelu wyników
-
-Napisz "OK" tylko jeśli OBA elementy są wyraźnie widoczne na drugim zdjęciu.
-Napisz "NOK" jeśli choćby jeden element jest nieobecny.
-Napisz tylko jedno słowo: "OK" lub "NOK":`;
+        const prompt = `Czy te dwa zdjęcia są do siebie podobne w co najmniej 95%? Napisz tylko jedno słowo: "OK" jeśli tak, "NOK" jeśli nie.`;
 
         const message = await this.client.messages.create({
             model: this.model,
