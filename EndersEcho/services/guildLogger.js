@@ -69,7 +69,7 @@ class GuildLogger {
         // Format jak w konsoli: 🏆 ENDERSECHO [timestamp] • message
         // plus opcjonalny prefix tagu serwera
         const tagPrefix = guildTag ? `${guildTag} ` : '';
-        const line = `${tagPrefix}${BOT_EMOJI} **${BOT_NAME}** [${timestamp}] ${levelEmoji} ${message}`;
+        const line = `${tagPrefix}[${timestamp}] ${levelEmoji} ${message}`;
         const content = isNewGuild ? `${SEPARATOR}\n${line}` : line;
 
         const payload = { content };
