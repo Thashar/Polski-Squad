@@ -209,7 +209,8 @@ class InteractionHandler {
             return;
         }
 
-        if (this.ocrBlockService.isBlocked()) {
+        const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
+        if (this.ocrBlockService.isBlocked() && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
