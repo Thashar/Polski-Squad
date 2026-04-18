@@ -1145,7 +1145,7 @@ class InteractionHandler {
         const embed = new EmbedBuilder()
             .setColor(0xFF0000)
             .setDescription(data.description)
-            .setAuthor({ name: user.username, iconURL: user.displayAvatarURL() });
+            .setAuthor({ name: user.displayName, iconURL: user.displayAvatarURL() });
         if (data.title) embed.setTitle(data.title);
         if (data.icon) embed.setThumbnail(data.icon);
         if (data.image) embed.setImage(data.image);
