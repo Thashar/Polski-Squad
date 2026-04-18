@@ -308,7 +308,7 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
         let webhookMessage;
         if (isNewWebhookBot) {
             // Nowy bot - dodaj separator
-            const separator = '────────────────────────────────────────────────────────────────────────────────';
+            const separator = '────────────────────────────────────────';
             webhookMessage = `${separator}\n[${timestamp}] ${emoji} **${botName.toUpperCase()}** ${levelEmoji} ${message}`;
         } else {
             // Ten sam bot - tylko wiadomość
@@ -358,7 +358,7 @@ function formatMessage(botName, message, level = 'info') {
             break;
     }
     
-    const separator = colors.gray + '─'.repeat(80) + colors.reset;
+    const separator = colors.gray + '─'.repeat(40) + colors.reset;
     const header = `${color}${colors.bright}${emoji} ${botName.toUpperCase()}${colors.reset}`;
     const timeStamp = `${colors.gray}[${timestamp}]${colors.reset}`;
     const levelIndicator = `${levelColor}${levelEmoji}${colors.reset}`;

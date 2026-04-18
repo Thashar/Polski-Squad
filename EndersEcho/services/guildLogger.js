@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-const SEPARATOR = '────────────────────────────────────────────────────────────────────────────────';
+const SEPARATOR = '────────────────────────────────────────';
 
 function getTimestamp() {
     return new Date().toLocaleString('pl-PL', {
@@ -70,7 +70,7 @@ class GuildLogger {
             ? `${SEPARATOR}\n${prefix}[${timestamp}] ${levelEmoji} ${message}`
             : `${prefix}[${timestamp}] ${levelEmoji} ${message}`;
 
-        const payload = { content, username: guildName };
+        const payload = { content };
         if (guildIcon) payload.avatar_url = guildIcon;
 
         this._enqueue(payload);
