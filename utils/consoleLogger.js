@@ -129,6 +129,10 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const WEBHOOK_URL = process.env.DISCORD_LOG_WEBHOOK_URL;
 const WEBHOOK_URL_BACKUP = process.env.DISCORD_LOG_WEBHOOK_URL_BACKUP || WEBHOOK_URL; // Fallback do głównego jeśli nie ustawiony
 const WEBHOOK_ENABLED = !!WEBHOOK_URL;
+// Boty które mają własny webhook — pomijamy je w głównym kanale logów
+const BOTS_WITH_OWN_WEBHOOK = new Set(
+    process.env.ENDERSECHO_LOG_WEBHOOK_URL ? ['EndersEcho'] : []
+);
 
 // Kolejka webhook'ów i rate limiting
 const webhookQueue = [];
@@ -237,6 +241,8 @@ function sendWebhookRequest(webhookData, webhookUrl) {
 // Funkcja do wysyłania logów przez Discord webhook (dodaje do kolejki)
 function sendToDiscordWebhook(botName, message, level = 'info') {
     if (!WEBHOOK_ENABLED) return;
+    // Bot ma własny dedykowany webhook — nie logujemy do głównego kanału
+    if (BOTS_WITH_OWN_WEBHOOK.has(botName)) return;
 
     try {
         const timestamp = getTimestamp();

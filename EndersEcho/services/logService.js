@@ -1,72 +1,74 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 class LogService {
-    constructor(config) {
+    constructor(config, guildLogger) {
         this.config = config;
         this.logger = createBotLogger('EndersEcho');
+        this.guildLogger = guildLogger;
     }
 
     /**
-     * Loguje wiadomość do konsoli
-     * @param {string} type - Typ wiadomości (info, warn, error, success)
-     * @param {string} message - Treść wiadomości
-     * @param {Object} interaction - Opcjonalna interakcja Discord
+     * Zwraca logger z kontekstem serwera (jeśli guildId podany) lub base logger.
+     * @param {string|null} guildId
      */
-    async logMessage(type, message, interaction = null) {
-        const prefix = interaction ? `[${interaction.user.tag}] ` : '';
-        const fullMessage = `${prefix}${message}`;
-        
-        switch(type) {
-            case 'error':
-                this.logger.error(fullMessage);
-                break;
-            case 'warn':
-                this.logger.warn(fullMessage);
-                break;
-            case 'success':
-                this.logger.info(`✅ ${fullMessage}`);
-                break;
-            default:
-                this.logger.info(fullMessage);
-        }
+    _gl(guildId) {
+        return guildId ? this.guildLogger.forGuild(guildId) : this.logger;
     }
 
     /**
-     * Loguje błąd OCR
-     * @param {Error} error - Błąd
-     * @param {string} context - Kontekst błędu
-     */
-    async logOCRError(error, context) {
-        await this.logMessage('error', `Błąd OCR w ${context}: ${error.message}`);
-    }
-
-    /**
-     * Loguje błąd rankingu
-     * @param {Error} error - Błąd
-     * @param {string} context - Kontekst błędu
-     */
-    async logRankingError(error, context) {
-        await this.logMessage('error', `Błąd rankingu w ${context}: ${error.message}`);
-    }
-
-    /**
-     * Loguje sukces aktualizacji wyniku
-     * @param {string} userName - Nazwa użytkownika
-     * @param {string} score - Wynik
-     * @param {boolean} isNewRecord - Czy to nowy rekord
-     */
-    async logScoreUpdate(userName, score, isNewRecord) {
-        const status = isNewRecord ? 'NOWY REKORD' : 'Bez rekordu';
-        await this.logMessage('info', `Aktualizacja wyniku: ${userName} - ${score} [${status}]`);
-    }
-
-    /**
-     * Loguje użycie komendy
-     * @param {string} commandName - Nazwa komendy
-     * @param {Object} interaction - Interakcja Discord
+     * @param {string} commandName
+     * @param {import('discord.js').CommandInteraction} interaction
      */
     async logCommandUsage(commandName, interaction) {
-        await this.logMessage('info', `Użycie komendy /${commandName}`, interaction);
+        this._gl(interaction.guildId).info(`[${interaction.user.tag}] Użycie komendy /${commandName}`);
+    }
+
+    /**
+     * @param {string} userName
+     * @param {string} score
+     * @param {boolean} isNewRecord
+     * @param {string|null} guildId
+     */
+    async logScoreUpdate(userName, score, isNewRecord, guildId = null) {
+        const status = isNewRecord ? 'NOWY REKORD' : 'Bez rekordu';
+        this._gl(guildId).info(`Aktualizacja wyniku: ${userName} - ${score} [${status}]`);
+    }
+
+    /**
+     * @param {Error} error
+     * @param {string} context
+     * @param {string|null} guildId
+     */
+    async logOCRError(error, context, guildId = null) {
+        this._gl(guildId).error(`Błąd OCR w ${context}: ${error.message}`);
+    }
+
+    /**
+     * @param {Error} error
+     * @param {string} context
+     * @param {string|null} guildId
+     */
+    async logRankingError(error, context, guildId = null) {
+        this._gl(guildId).error(`Błąd rankingu w ${context}: ${error.message}`);
+    }
+
+    /**
+     * Ogólny log — bez kontekstu serwera (fallback do base loggera).
+     * @param {string} type
+     * @param {string} message
+     * @param {import('discord.js').CommandInteraction|null} interaction
+     */
+    async logMessage(type, message, interaction = null) {
+        const guildId = interaction?.guildId || null;
+        const prefix = interaction ? `[${interaction.user.tag}] ` : '';
+        const fullMessage = `${prefix}${message}`;
+        const log = this._gl(guildId);
+        switch (type) {
+            case 'error':   log.error(fullMessage);   break;
+            case 'warn':    log.warn(fullMessage);    break;
+            case 'success': log.success(fullMessage); break;
+            default:        log.info(fullMessage);    break;
+        }
     }
 }
 

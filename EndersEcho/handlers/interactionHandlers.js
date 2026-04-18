@@ -156,7 +156,7 @@ class InteractionHandler {
             });
 
         } catch (error) {
-            await this.logService.logRankingError(error, 'handleRankingCommand');
+            await this.logService.logRankingError(error, 'handleRankingCommand', interaction.guildId);
 
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: msgs.rankingError, flags: ['Ephemeral'] });
@@ -286,7 +286,7 @@ class InteractionHandler {
                 guildId, userId, userName, bestScore, bossName
             );
 
-            await this.logService.logScoreUpdate(userName, bestScore, isNewRecord);
+            await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
 
             logger.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
 
@@ -500,7 +500,7 @@ class InteractionHandler {
             await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
 
         } catch (error) {
-            await this.logService.logOCRError(error, 'handleUpdateCommand');
+            await this.logService.logOCRError(error, 'handleUpdateCommand', interaction.guildId);
 
             if (tempImagePath) {
                 await fs.unlink(tempImagePath).catch(err => logger.error('Błąd usuwania pliku tymczasowego:', err));
