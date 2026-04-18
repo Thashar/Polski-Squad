@@ -540,7 +540,7 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /test — testuje analizę obrazu bez zapisu wyników (tylko admin)
+     * Obsługuje komendę /test — weryfikuje zdjęcie wzorcem, zapisuje dane jak /update
      * @param {CommandInteraction} interaction
      */
     async handleTestCommand(interaction) {
@@ -554,6 +554,11 @@ class InteractionHandler {
                 content: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
                 flags: ['Ephemeral']
             });
+            return;
+        }
+
+        if (!this.aiOcrService.enabled) {
+            await interaction.reply({ content: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).', flags: ['Ephemeral'] });
             return;
         }
 
@@ -595,40 +600,30 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            let bestScore = null;
-            let bossName = null;
+            gl.info(`🤖 [/test] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
-            // === AI OCR (jeśli włączony) — bez weryfikacji Victory i autentyczności ===
-            if (this.aiOcrService.enabled) {
-                try {
-                    gl.info('🤖 [/test] Używam AI OCR bez weryfikacji...');
-                    const aiResult = await this.aiOcrService.analyzeWithoutVerification(tempImagePath, gl);
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
 
-                    if (aiResult.isValidVictory) {
-                        bestScore = aiResult.score;
-                        bossName = aiResult.bossName;
-                        gl.success(`✅ [/test] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
-                    } else {
-                        gl.warn(`⚠️ [/test] AI OCR nie mogło odczytać danych: ${aiResult.error}`);
-                        await interaction.editReply(msgs.invalidScreenshot);
-                        return;
-                    }
-                } catch (aiError) {
-                    gl.error(`❌ [/test] AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
-                    await interaction.editReply({ content: msgs.aiOcrUnavailable });
-
-                    const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                    if (!trad1) return;
-                    ({ bestScore, bossName } = trad1);
-                }
-            } else {
-                // === Tradycyjny OCR ===
-                gl.info('🔍 [/test] Używam tradycyjnego OCR...');
-
-                const trad2 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                if (!trad2) return;
-                ({ bestScore, bossName } = trad2);
+            if (aiResult.error === 'NOT_SIMILAR') {
+                await interaction.editReply({
+                    content: '',
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle('❌ Zdjęcie nie pasuje do wzorca')
+                        .setDescription('AI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa.')
+                        .setTimestamp()]
+                });
+                return;
             }
+
+            if (!aiResult.isValidVictory) {
+                await interaction.editReply(msgs.invalidScreenshot);
+                return;
+            }
+
+            const bestScore = aiResult.score;
+            const bossName = aiResult.bossName;
+            gl.success(`✅ [/test] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
 
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
