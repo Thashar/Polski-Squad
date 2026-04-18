@@ -333,12 +333,13 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
         const prompt = `The first image is a reference screenshot of the correct boss result screen from a mobile game. The second image is submitted by a user.
 
-Ignore all text — focus only on visual layout. Check if the second image contains BOTH of these elements:
+Ignore all text — focus only on visual elements. Check if the second image contains ALL THREE of these elements:
 1. An orange/gold decorative ribbon-shaped banner at the top of a central result panel
-2. A horizontal row of exactly 4 hexagonal-shaped item icons near the bottom of that panel
+2. Green-colored numbers visible inside the result panel
+3. A red horizontal health bar at the very top of the screen (boss HP bar)
 
-Answer "OK" only if BOTH elements are clearly visible in the second image.
-Answer "NOK" if either element is missing.
+Answer "OK" only if ALL THREE elements are clearly visible in the second image.
+Answer "NOK" if even one element is missing.
 Write only one word: "OK" or "NOK":`;
 
         const message = await this.client.messages.create({
