@@ -331,19 +331,22 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `Pierwsze zdjęcie to wzorzec prawidłowego screenshota z ekranem wyników bossa z gry. Drugie zdjęcie to zdjęcie przesłane przez użytkownika do weryfikacji.
+        const prompt = `The first image is a reference screenshot showing the correct boss result screen from a mobile game. The second image is submitted by a user for verification.
 
-Na prawidłowym screenie z wynikiem bossa MUSZĄ być obecne WSZYSTKIE poniższe elementy:
-1. Pomarańczowy/złoty baner z napisem "Victory" (angielski) LUB "勝利！" (japoński) — widoczny wyraźnie w górnej części panelu wyników
-2. Szary/srebrny zaokrąglony panel wyników zajmujący środkową część ekranu
-3. Duża liczba wyniku z jednostką (np. 157.1Qi, 65419.5Qi) — wynik tej rundy
-4. Pole "Best:" z wartością (angielski) LUB "最高記録：" z wartością (japoński)
-5. Pole "Total:" z wartością (angielski) LUB "合計：" z wartością (japoński)
-6. Rząd sześciokątnych ikon ekwipunku (4 ikony w hexagonalnych ramkach)
-7. HUD gry widoczny w tle — pasek HP bossa na górze ekranu, timer (03:00), przycisk pauzy
+Ignore all text completely — the game supports many languages. Focus only on the visual layout and UI elements.
 
-Jeśli drugie zdjęcie zawiera WSZYSTKIE wymienione elementy — napisz tylko jedno słowo: "OK"
-Jeśli choćby JEDEN z wymienionych elementów jest nieobecny lub ekran przedstawia inny widok gry — napisz tylko jedno słowo: "NOK"`;
+The correct boss result screen has ALL of the following visual characteristics:
+1. An orange/gold decorative banner shape at the top of a central result panel (a wide horizontal ribbon-like element)
+2. A large gray/silver rounded rectangular panel occupying the center of the screen
+3. One very large number with a unit suffix displayed prominently in the center of that panel (the round score)
+4. Two darker horizontal rows below the large number, each containing a smaller number with a unit suffix (one row for best record, one for total)
+5. A horizontal row of exactly 4 hexagonal-shaped item icons near the bottom of the panel
+6. A red health bar visible at the top of the screen (boss HP bar from the game HUD)
+7. A pause button (two vertical bars icon) visible in the top-left corner of the screen
+
+Answer "OK" only if the second image contains ALL 7 of these visual elements.
+Answer "NOK" if even ONE element is missing, or if the screen shows any other game view.
+Write only one word: "OK" or "NOK":`;
 
         const message = await this.client.messages.create({
             model: this.model,
