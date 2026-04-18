@@ -114,8 +114,8 @@
         },
         {
           "name": "/appsync-backfill",
-          "description": "Wypycha historyczne dane botów do web API przez batchowe endpointy (wymaga APP_API_URL + BOT_API_KEY)",
-          "usage": "/appsync-backfill [resource:...] [bot:...] [guild:...] [dry_run:true|false]",
+          "description": "Wypycha historyczne dane botów do web API (domyślnie production; api_url nadpisuje URL np. dla stagingu)",
+          "usage": "/appsync-backfill [resource:...] [bot:...] [guild:...] [api_url:https://...] [dry_run:true|false]",
           "requiredPermission": "administrator"
         },
         {

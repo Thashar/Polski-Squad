@@ -329,6 +329,11 @@ class InteractionHandler {
                         .setDescription('Filtr guildId (dla phase-result / punishment-event)')
                         .setRequired(false)
                 )
+                .addStringOption(option =>
+                    option.setName('api_url')
+                        .setDescription('Nadpisuje APP_API_URL (np. wypchnij na staging zamiast produkcji)')
+                        .setRequired(false)
+                )
                 .addBooleanOption(option =>
                     option.setName('dry_run')
                         .setDescription('Tylko policz rekordy, nie pushuj do API')
@@ -3353,20 +3358,11 @@ class InteractionHandler {
     async handleAppSyncBackfillCommand(interaction) {
         const { MessageFlags, EmbedBuilder } = require('discord.js');
         const { AppBackfillRunner } = require('../../utils/appBackfill');
-        const { isEnabled } = require('../../utils/appSync');
 
         // Uprawnienia — zgodnie z /data-archive tylko admin.
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tej komendy może użyć tylko administrator serwera.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        if (!isEnabled()) {
-            await interaction.reply({
-                content: '⚠️ `APP_API_URL` lub `BOT_API_KEY` nie jest ustawione — backfill nie ma dokąd pisać.',
                 flags: MessageFlags.Ephemeral
             });
             return;
@@ -3385,10 +3381,30 @@ class InteractionHandler {
         const resourceOpt = interaction.options.getString('resource');
         const botOpt = interaction.options.getString('bot');
         const guildOpt = interaction.options.getString('guild');
+        const apiUrlOpt = interaction.options.getString('api_url');
         const dryRun = interaction.options.getBoolean('dry_run') ?? false;
 
+        // Domyślnie leci na produkcję (APP_API_URL z env). Parametr api_url
+        // nadpisuje tylko URL — token bota (BOT_API_KEY) jest ten sam dla
+        // wszystkich środowisk i zawsze pochodzi z env.
+        const apiUrl = apiUrlOpt ? apiUrlOpt.trim().replace(/\/+$/, '') : (process.env.APP_API_URL || null);
+        const apiKey = process.env.BOT_API_KEY || null;
+        const missingEnv = [];
+        if (!apiUrl) missingEnv.push('APP_API_URL (lub parametr api_url)');
+        if (!apiKey) missingEnv.push('BOT_API_KEY');
+        if (missingEnv.length > 0) {
+            await interaction.reply({
+                content: `⚠️ Backfill nie ma dokąd pisać — brakuje: ${missingEnv.join(', ')}.`,
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        // URL z parametru traktujemy jako "custom"; bez parametru = produkcja.
+        const targetLabel = apiUrlOpt ? 'custom' : 'production';
+
         await this.logService.logMessage('info',
-            `Administrator ${interaction.user.tag} wywołał /appsync-backfill (resource=${resourceOpt ?? 'all'}, bot=${botOpt ?? 'all'}, guild=${guildOpt ?? 'all'}, dry=${dryRun})`,
+            `Administrator ${interaction.user.tag} wywołał /appsync-backfill (url=${apiUrl}, resource=${resourceOpt ?? 'all'}, bot=${botOpt ?? 'all'}, guild=${guildOpt ?? 'all'}, dry=${dryRun})`,
             interaction
         );
 
@@ -3399,6 +3415,9 @@ class InteractionHandler {
             resource: resourceOpt,
             bot: botOpt,
             guildId: guildOpt,
+            apiUrl,
+            apiKey,
+            target: targetLabel,
         });
 
         // Zaplanuj — potrzebujemy totali, zanim stworzymy embed.
@@ -3431,7 +3450,7 @@ class InteractionHandler {
             .addFields(
                 { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
                 { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
-                { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, dryRun }), inline: false }
+                { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetLabel, apiUrl, dryRun }), inline: false }
             )
             .setTimestamp(startedAt);
 
@@ -3472,7 +3491,7 @@ class InteractionHandler {
                     { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
                     { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
                     { name: durationMs !== null ? 'Czas trwania' : 'Status', value: durationMs !== null ? `${(durationMs / 1000).toFixed(1)}s` : (progressState.currentResource ? `🔄 ${progressState.currentResource}` : '⏳ start...'), inline: true },
-                    { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, dryRun }), inline: false },
+                    { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetLabel, apiUrl, dryRun }), inline: false },
                     ...(error ? [{ name: 'Błąd', value: `\`\`\`${String(error).slice(0, 900)}\`\`\`` }] : [])
                 )
                 .setTimestamp(new Date());
@@ -3596,8 +3615,9 @@ class InteractionHandler {
         return '▓'.repeat(filled) + '░'.repeat(length - filled);
     }
 
-    _formatBackfillFilters({ resource, bot, guild, dryRun }) {
+    _formatBackfillFilters({ resource, bot, guild, target, apiUrl, dryRun }) {
         const parts = [];
+        parts.push(`**Target:** ${target || 'production'}${apiUrl ? ` (${apiUrl})` : ''}`);
         parts.push(`**Zasób:** ${resource || 'wszystkie'}`);
         parts.push(`**Bot:** ${bot || 'wszystkie'}`);
         parts.push(`**Guild:** ${guild || 'wszystkie'}`);

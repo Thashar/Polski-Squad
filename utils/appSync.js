@@ -19,6 +19,11 @@
  *   APP_API_URL — base URL of the web API (trailing slash is stripped automatically).
  *   BOT_API_KEY — shared secret; must match the API's env var.
  *   When either is missing, all calls silently no-op (keeps dev/test easy).
+ *
+ *   Default export (`sync`, `syncBatch`, `pushSync`, `isEnabled`) uses the
+ *   env vars above — production target by convention. For ad-hoc routing
+ *   (np. backfill do staging), użyj `createAppSync({ apiUrl, apiKey })`,
+ *   który zwraca niezależny zestaw wrapperów z własną konfiguracją URL/key.
  */
 
 const crypto = require('crypto');
@@ -26,64 +31,104 @@ const { createBotLogger } = require('./consoleLogger');
 
 const logger = createBotLogger('AppSync');
 
-// Strip any accidental trailing slash so URL construction never produces //.
-const APP_API_URL = process.env.APP_API_URL?.replace(/\/+$/, '');
-const BOT_API_KEY = process.env.BOT_API_KEY;
-
 const DEFAULT_RETRIES = 3;
 const BACKOFF_MS = 2000;
+const BATCH_MAX = 500;
 
 async function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Internal fetch wrapper. Logs + retries on 5xx/network, does not throw.
- * Returns the parsed JSON body on success, or undefined on failure /
- * disabled mode — callers should treat the return value as optional.
+ * Buduje zestaw klientów (`sync`, `syncBatch`, `pushSync`, `isEnabled`)
+ * związany z konkretną parą (apiUrl, apiKey). Bez argumentów czyta
+ * `APP_API_URL` / `BOT_API_KEY` z env (produkcyjny default).
+ *
+ * @param {{ apiUrl?: string, apiKey?: string }} [overrides]
  */
-async function pushSync(path, body, { retries = DEFAULT_RETRIES } = {}) {
-    if (!APP_API_URL || !BOT_API_KEY) {
-        // Cicho pomijamy — brak konfiguracji oznacza dev/test bez web API.
-        return;
-    }
+function createAppSync(overrides = {}) {
+    // Strip any accidental trailing slash so URL construction never produces //.
+    const apiUrl = (overrides.apiUrl ?? process.env.APP_API_URL)?.replace(/\/+$/, '') || null;
+    const apiKey = overrides.apiKey ?? process.env.BOT_API_KEY ?? null;
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-            const res = await fetch(`${APP_API_URL}/api/bot${path}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${BOT_API_KEY}`,
-                },
-                body: JSON.stringify(body),
-            });
+    /**
+     * Internal fetch wrapper. Logs + retries on 5xx/network, does not throw.
+     * Returns the parsed JSON body on success, or undefined on failure /
+     * disabled mode — callers should treat the return value as optional.
+     */
+    async function pushSync(path, body, { retries = DEFAULT_RETRIES } = {}) {
+        if (!apiUrl || !apiKey) {
+            // Cicho pomijamy — brak konfiguracji oznacza dev/test bez web API.
+            return;
+        }
 
-            if (res.ok) {
-                try {
-                    return await res.json();
-                } catch {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                const res = await fetch(`${apiUrl}/api/bot${path}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                    },
+                    body: JSON.stringify(body),
+                });
+
+                if (res.ok) {
+                    try {
+                        return await res.json();
+                    } catch {
+                        return;
+                    }
+                }
+
+                // 4xx = bad payload, retries won't help — log and give up.
+                if (res.status >= 400 && res.status < 500) {
+                    const text = await res.text().catch(() => '');
+                    logger.error(`appSync ${path} — 4xx ${res.status}: ${text}`);
                     return;
                 }
-            }
 
-            // 4xx = bad payload, retries won't help — log and give up.
-            if (res.status >= 400 && res.status < 500) {
-                const text = await res.text().catch(() => '');
-                logger.error(`appSync ${path} — 4xx ${res.status}: ${text}`);
-                return;
+                // 5xx = server error, fall through to retry branch.
+                throw new Error(`server ${res.status}`);
+            } catch (err) {
+                if (attempt === retries) {
+                    logger.error(`appSync ${path} — failed after ${retries} attempts: ${err.message || err}`);
+                    return;
+                }
+                await sleep(BACKOFF_MS * attempt);
             }
-
-            // 5xx = server error, fall through to retry branch.
-            throw new Error(`server ${res.status}`);
-        } catch (err) {
-            if (attempt === retries) {
-                logger.error(`appSync ${path} — failed after ${retries} attempts: ${err.message || err}`);
-                return;
-            }
-            await sleep(BACKOFF_MS * attempt);
         }
     }
+
+    const sync = {
+        playerIdentity: (data) => pushSync('/player-identity', data),
+        nickObservation: (data) => pushSync('/nick-observation', data),
+        phaseResult: (data) => pushSync('/phase-result', data),
+        punishmentEvent: (data) => pushSync('/punishment-event', data),
+        coreStock: (data) => pushSync('/core-stock', data),
+        reminderEvent: (data) => pushSync('/reminder-event', data),
+        combatWeekly: (data) => pushSync('/combat-weekly', data),
+        cxEntry: (data) => pushSync('/cx-entry', data),
+        endersEchoSnapshot: (data) => pushSync('/endersecho-snapshot', data),
+    };
+
+    const syncBatch = {
+        playerIdentity:      (items) => pushSync('/player-identity/batch',      { items }),
+        nickObservation:     (items) => pushSync('/nick-observation/batch',     { items }),
+        phaseResult:         (items) => pushSync('/phase-result/batch',         { items }),
+        punishmentEvent:     (items) => pushSync('/punishment-event/batch',     { items }),
+        coreStock:           (items) => pushSync('/core-stock/batch',           { items }),
+        reminderEvent:       (items) => pushSync('/reminder-event/batch',       { items }),
+        combatWeekly:        (items) => pushSync('/combat-weekly/batch',        { items }),
+        cxEntry:             (items) => pushSync('/cx-entry/batch',             { items }),
+        endersEchoSnapshot:  (items) => pushSync('/endersecho-snapshot/batch',  { items }),
+    };
+
+    function isEnabled() {
+        return Boolean(apiUrl && apiKey);
+    }
+
+    return { sync, syncBatch, pushSync, isEnabled, apiUrl };
 }
 
 /**
@@ -110,53 +155,17 @@ function isoWeekStartUTC(year, weekNumber) {
     return new Date(ms).toISOString();
 }
 
-// ── Typed wrappers (1:1 with API endpoints) ─────────────────────────────────
+// ── Default instance (env-backed, production by convention) ─────────────────
 
-const sync = {
-    playerIdentity: (data) => pushSync('/player-identity', data),
-    nickObservation: (data) => pushSync('/nick-observation', data),
-    phaseResult: (data) => pushSync('/phase-result', data),
-    punishmentEvent: (data) => pushSync('/punishment-event', data),
-    coreStock: (data) => pushSync('/core-stock', data),
-    reminderEvent: (data) => pushSync('/reminder-event', data),
-    combatWeekly: (data) => pushSync('/combat-weekly', data),
-    cxEntry: (data) => pushSync('/cx-entry', data),
-    endersEchoSnapshot: (data) => pushSync('/endersecho-snapshot', data),
-};
-
-/**
- * Batch wrappers — POST { items: [...] } to /api/bot/<resource>/batch.
- * API accepts up to 500 items per request; callers (e.g. appBackfill)
- * must chunk large inputs to that limit.
- *
- * Returns the API response body when available:
- *   { ok, applied, skipped, failed, errors: [{index, error}], durationMs }
- * or undefined when disabled / on failure (same contract as pushSync).
- */
-const BATCH_MAX = 500;
-
-const syncBatch = {
-    playerIdentity:      (items) => pushSync('/player-identity/batch',      { items }),
-    nickObservation:     (items) => pushSync('/nick-observation/batch',     { items }),
-    phaseResult:         (items) => pushSync('/phase-result/batch',         { items }),
-    punishmentEvent:     (items) => pushSync('/punishment-event/batch',     { items }),
-    coreStock:           (items) => pushSync('/core-stock/batch',           { items }),
-    reminderEvent:       (items) => pushSync('/reminder-event/batch',       { items }),
-    combatWeekly:        (items) => pushSync('/combat-weekly/batch',        { items }),
-    cxEntry:             (items) => pushSync('/cx-entry/batch',             { items }),
-    endersEchoSnapshot:  (items) => pushSync('/endersecho-snapshot/batch',  { items }),
-};
-
-function isEnabled() {
-    return Boolean(APP_API_URL && BOT_API_KEY);
-}
+const defaultClient = createAppSync();
 
 module.exports = {
-    sync,
-    syncBatch,
+    sync: defaultClient.sync,
+    syncBatch: defaultClient.syncBatch,
+    pushSync: defaultClient.pushSync,
+    isEnabled: defaultClient.isEnabled,
+    createAppSync,
     BATCH_MAX,
     eventId,
     isoWeekStartUTC,
-    pushSync,
-    isEnabled,
 };
