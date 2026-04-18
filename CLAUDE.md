@@ -629,6 +629,7 @@ Współdzielony HTTP client do wypychania zapisów botów do Polski Squad web AP
 - **Bezpośrednio w serwisie** — po każdym udanym `await fs.writeFile(...)` / `this.saveXxx(...)` wołamy `appSync.<resource>(...)`. Brak monkey-patchingu, brak DI przez konstruktor, brak wiringu w `index.js`.
 - **Fire-and-forget** — pushy są asynchroniczne z retry 3× (backoff 2s/4s/6s). Błędy są logowane, ale **nigdy nie blokują ani nie przerywają** głównej logiki bota. Lokalne JSON pozostają źródłem prawdy.
 - **Disabled mode** — gdy brak `APP_API_URL` lub `BOT_API_KEY`, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
+- **Target routing (production default, staging opt-in)** — domyślny eksport (`sync`, `syncBatch`) jest związany z `APP_API_URL` / `BOT_API_KEY` i kieruje ruch hot-path'owy na produkcję. Konsumenci, którzy muszą dosterować na inne środowisko (obecnie tylko `/appsync-backfill`), używają factory `createAppSync({ apiUrl, apiKey })`, który zwraca niezależny klient z własną parą URL/key. Hot-path bot sync ZAWSZE idzie na production — target override jest zarezerwowany dla ad-hoc narzędzi.
 
 #### API (9 typowanych wrapperów)
 
@@ -680,8 +681,13 @@ async function saveCXResult(userId, score) {
 #### Zmienne środowiskowe (wspólne dla wszystkich botów)
 
 ```env
+# Production (default target dla wszystkich pushów — hot-path + backfill bez --target)
 APP_API_URL=https://api.polski-squad.example   # bez trailing slash
 BOT_API_KEY=<min. 32-znakowy sekret, identyczny z BOT_API_KEY w API>
+
+# Staging (opcjonalne — tylko dla `/appsync-backfill target:staging`)
+APP_API_URL_STAGING=https://staging-api.polski-squad.example
+BOT_API_KEY_STAGING=<sekret dla staging API; brak → fallback do BOT_API_KEY nie działa, staging wymaga własnego>
 ```
 
 #### Obecne pokrycie
@@ -712,6 +718,7 @@ Jednorazowy runner do zalewania web API historycznymi danymi z lokalnych JSON-ó
   - `shared_data/cx_history.json` → `cx-entry`
   - `shared_data/endersecho_ranking.json` → `endersecho-snapshot`
 - **Filtry:** `resource` (pojedynczy), `bot` (stalker/kontroler/endersecho), `guildId`, `dryRun` (tylko zlicza).
+- **Target override:** `AppBackfillRunner` przyjmuje `{ apiUrl, apiKey, target }`. `/appsync-backfill` mapuje opcję slasha `target` (production/staging, domyślnie production) na env: production → `APP_API_URL` + `BOT_API_KEY`, staging → `APP_API_URL_STAGING` + `BOT_API_KEY_STAGING`. Jeżeli wybrany target nie ma env, komenda odmawia z listą brakujących kluczy. Runner buduje dedykowany klient przez `createAppSync()` — target dotyczy WYŁĄCZNIE tego backfillu i nie wpływa na hot-path bot sync (który zawsze idzie na production).
 
 ---
 

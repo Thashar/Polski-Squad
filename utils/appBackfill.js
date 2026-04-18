@@ -30,7 +30,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const EventEmitter = require('events');
 
-const { syncBatch, BATCH_MAX, eventId, isoWeekStartUTC, isEnabled } = require('./appSync');
+const { createAppSync, BATCH_MAX, eventId, isoWeekStartUTC } = require('./appSync');
 const { safeParse } = require('./safeJSON');
 const { createBotLogger } = require('./consoleLogger');
 
@@ -380,22 +380,38 @@ const COLLECTORS = {
     'endersecho-snapshot': collectEndersEchoSnapshot,
 };
 
-const BATCH_SENDERS = {
-    'player-identity':     (items) => syncBatch.playerIdentity(items),
-    'nick-observation':    (items) => syncBatch.nickObservation(items),
-    'phase-result':        (items) => syncBatch.phaseResult(items),
-    'punishment-event':    (items) => syncBatch.punishmentEvent(items),
-    'combat-weekly':       (items) => syncBatch.combatWeekly(items),
-    'core-stock':          (items) => syncBatch.coreStock(items),
-    'cx-entry':            (items) => syncBatch.cxEntry(items),
-    'endersecho-snapshot': (items) => syncBatch.endersEchoSnapshot(items),
-};
+/** Mapowanie zasób → metoda w `syncBatch`. Runner buduje własny klient
+ *  (`createAppSync`), więc w hot-path używamy tej mapy przez
+ *  `this.batchSenders[resource]`. */
+function buildBatchSenders(syncBatch) {
+    return {
+        'player-identity':     (items) => syncBatch.playerIdentity(items),
+        'nick-observation':    (items) => syncBatch.nickObservation(items),
+        'phase-result':        (items) => syncBatch.phaseResult(items),
+        'punishment-event':    (items) => syncBatch.punishmentEvent(items),
+        'combat-weekly':       (items) => syncBatch.combatWeekly(items),
+        'core-stock':          (items) => syncBatch.coreStock(items),
+        'cx-entry':            (items) => syncBatch.cxEntry(items),
+        'endersecho-snapshot': (items) => syncBatch.endersEchoSnapshot(items),
+    };
+}
 
 // ──────────────────────────────────────────────────────────────────────
 //  Runner
 // ──────────────────────────────────────────────────────────────────────
 
 class AppBackfillRunner extends EventEmitter {
+    /**
+     * @param {Object} [options]
+     * @param {boolean} [options.dryRun]
+     * @param {string}  [options.bot]        stalker | kontroler | endersecho
+     * @param {string}  [options.resource]   jeden z RESOURCES
+     * @param {string}  [options.guildId]    filtr po guildId
+     * @param {number}  [options.batchSize]  <= BATCH_MAX (500)
+     * @param {string}  [options.apiUrl]     override bazowego URL (np. staging); default = APP_API_URL
+     * @param {string}  [options.apiKey]     override API key; default = BOT_API_KEY
+     * @param {string}  [options.target]     etykieta logowa ("production"/"staging")
+     */
     constructor(options = {}) {
         super();
         this.dryRun = Boolean(options.dryRun);
@@ -406,6 +422,17 @@ class AppBackfillRunner extends EventEmitter {
         };
         this.batchSize = Math.min(Math.max(1, options.batchSize || BATCH_MAX), BATCH_MAX);
         this._aborted = false;
+
+        // Buduj dedykowany klient appSync dla tego runnera — pozwala na
+        // kierowanie backfillu do innego środowiska niż domyślne
+        // (np. staging zamiast produkcji).
+        this.appSync = createAppSync({
+            apiUrl: options.apiUrl,
+            apiKey: options.apiKey,
+        });
+        this.batchSenders = buildBatchSenders(this.appSync.syncBatch);
+        this.target = options.target || null;
+        this.apiUrl = this.appSync.apiUrl;
     }
 
     abort() {
@@ -438,8 +465,8 @@ class AppBackfillRunner extends EventEmitter {
     }
 
     async runAll() {
-        if (!isEnabled()) {
-            const err = 'APP_API_URL / BOT_API_KEY nie ustawione — backfill nie ma dokąd pisać.';
+        if (!this.appSync.isEnabled()) {
+            const err = `APP_API_URL / BOT_API_KEY nie ustawione dla targetu "${this.target || 'default'}" — backfill nie ma dokąd pisać.`;
             logger.error(err);
             this.emit('pushError', { resource: null, error: err });
             return { disabled: true };
@@ -497,7 +524,7 @@ class AppBackfillRunner extends EventEmitter {
             const chunk = items.slice(offset, offset + this.batchSize);
             let response;
             try {
-                response = await BATCH_SENDERS[resource](chunk);
+                response = await this.batchSenders[resource](chunk);
             } catch (err) {
                 summary.failed += chunk.length;
                 this.emit('pushError', {
