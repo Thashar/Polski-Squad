@@ -23,6 +23,12 @@ class GuildLogger {
         this._lastGuildId = null;
         this._queue = [];
         this._processing = false;
+
+        if (this.webhookUrl) {
+            logger.info(`📋 GuildLogger: dedykowany webhook skonfigurowany`);
+        } else {
+            logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOG_WEBHOOK_URL — logi tylko w konsoli`);
+        }
     }
 
     /**
@@ -75,19 +81,21 @@ class GuildLogger {
             try {
                 await this._sendWebhook(payload);
                 await new Promise(r => setTimeout(r, 1000));
-            } catch { /* nie przerywaj przy błędach sieciowych */ }
+            } catch (err) {
+                logger.warn(`GuildLogger webhook error: ${err.message}`);
+            }
         }
         this._processing = false;
     }
 
     _sendWebhook(payload) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const body = JSON.stringify(payload);
             const url = new URL(this.webhookUrl);
             const req = https.request(
                 {
                     hostname: url.hostname,
-                    path: url.pathname,
+                    path: url.pathname + url.search,
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -95,15 +103,21 @@ class GuildLogger {
                     }
                 },
                 res => {
+                    res.resume();
                     if (res.statusCode === 429) {
-                        setTimeout(() => this._sendWebhook(payload).then(resolve), 5000);
+                        setTimeout(() => this._sendWebhook(payload).then(resolve).catch(reject), 5000);
+                    } else if (res.statusCode >= 400) {
+                        logger.warn(`GuildLogger webhook HTTP ${res.statusCode}`);
+                        resolve();
                     } else {
                         resolve();
                     }
-                    res.resume();
                 }
             );
-            req.on('error', resolve);
+            req.on('error', (err) => {
+                logger.warn(`GuildLogger webhook request error: ${err.message}`);
+                reject(err);
+            });
             req.write(body);
             req.end();
         });
