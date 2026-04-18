@@ -331,7 +331,9 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć. Jeśli oba przedstawiają podobny ekran wyników z podobnymi elementami wizualnymi — napisz tylko jedno słowo: "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ekran wyników tej samej gry — napisz tylko jedno słowo: "NOK".`;
+        const prompt = `Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć. Jeśli oba przedstawiają podobny ekran wyników z podobnymi elementami wizualnymi — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ekran wyników tej samej gry — odpowiedz "NOK".
+
+KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
 
         const message = await this.client.messages.create({
             model: this.model,
