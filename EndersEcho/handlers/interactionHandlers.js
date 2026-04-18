@@ -104,7 +104,11 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('add-role-ranking')
                 .setDescription('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)')
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addRoleOption(option =>
+                    option.setName('rola')
+                        .setDescription('Rola, dla której chcesz utworzyć ranking')
+                        .setRequired(true)),
 
             new SlashCommandBuilder()
                 .setName('remove-role-ranking')
@@ -1321,42 +1325,28 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
         const guildId = interaction.guildId;
-        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        const role = interaction.options.getRole('rola');
         const MAX = 10;
+
+        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
 
         if (existing.length >= MAX) {
             await interaction.editReply({ content: `❌ Osiągnięto limit **${MAX}** rankingów ról. Usuń istniejący przed dodaniem nowego.` });
             return;
         }
 
-        let roles;
-        try {
-            roles = await interaction.guild.roles.fetch();
-        } catch (err) {
-            await interaction.editReply({ content: '❌ Nie można pobrać listy ról serwera.' });
+        const result = await this.roleRankingConfigService.addRoleRanking(guildId, role.id, role.name);
+
+        if (!result.ok) {
+            const msg = result.reason === 'limit'
+                ? `❌ Osiągnięto limit ${MAX} rankingów ról.`
+                : `⚠️ Ranking dla roli **${role.name}** już istnieje.`;
+            await interaction.editReply({ content: msg });
             return;
         }
-
-        const existingIds = new Set(existing.map(r => r.roleId));
-        const options = roles
-            .filter(r => !r.managed && r.id !== interaction.guild.id && !existingIds.has(r.id))
-            .sort((a, b) => b.position - a.position)
-            .first(25)
-            .map(r => ({ label: r.name.substring(0, 100), value: r.id }));
-
-        if (options.length === 0) {
-            await interaction.editReply({ content: '⚠️ Brak dostępnych ról do dodania (wszystkie już dodane lub brak ról na serwerze).' });
-            return;
-        }
-
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('ee_add_role_select')
-            .setPlaceholder('Wybierz rolę...')
-            .addOptions(options);
 
         await interaction.editReply({
-            content: `📋 Wybierz rolę, dla której chcesz utworzyć ranking (${existing.length}/${MAX} zajętych):`,
-            components: [new ActionRowBuilder().addComponents(select)]
+            content: `✅ Dodano ranking dla roli **${role.name}**. Pojawi się w komendzie \`/ranking\` po wybraniu tego serwera.`
         });
     }
 
@@ -1388,37 +1378,6 @@ class InteractionHandler {
         await interaction.editReply({
             content: '🗑️ Wybierz ranking roli do usunięcia:',
             components: [new ActionRowBuilder().addComponents(select)]
-        });
-    }
-
-    /**
-     * Obsługuje wybór roli w /add-role-ranking
-     */
-    async _handleAddRoleSelect(interaction) {
-        const roleId = interaction.values[0];
-        const guildId = interaction.guildId;
-
-        let role;
-        try {
-            role = await interaction.guild.roles.fetch(roleId);
-        } catch {
-            await interaction.update({ content: '❌ Nie można pobrać wybranej roli.', components: [] });
-            return;
-        }
-
-        const result = await this.roleRankingConfigService.addRoleRanking(guildId, roleId, role.name);
-
-        if (!result.ok) {
-            const msg = result.reason === 'limit'
-                ? '❌ Osiągnięto limit 10 rankingów ról.'
-                : `⚠️ Ranking dla roli **${role.name}** już istnieje.`;
-            await interaction.update({ content: msg, components: [] });
-            return;
-        }
-
-        await interaction.update({
-            content: `✅ Dodano ranking dla roli **${role.name}**. Pojawi się w komendzie \`/ranking\` po wybraniu tego serwera.`,
-            components: []
         });
     }
 
@@ -1482,11 +1441,6 @@ class InteractionHandler {
                     embeds: [],
                     components: []
                 });
-                return;
-            }
-
-            if (customId === 'ee_add_role_select') {
-                await this._handleAddRoleSelect(interaction);
                 return;
             }
 
