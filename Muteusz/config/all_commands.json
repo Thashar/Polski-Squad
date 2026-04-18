@@ -584,7 +584,7 @@
           "name": "/notifications",
           "description": "Zarządza powiadomieniami DM o nowych rekordach graczy",
           "usage": "/notifications",
-          "requiredPermission": "administrator"
+          "requiredPermission": "public"
         },
         {
           "name": "/ocr-on-off",

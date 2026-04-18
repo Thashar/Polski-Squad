@@ -73,8 +73,7 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('notifications')
-                .setDescription('Manage record break notifications for players')
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDescription('Manage record break notifications for players'),
 
             new SlashCommandBuilder()
                 .setName('info')
@@ -993,10 +992,6 @@ class InteractionHandler {
      * Obsługuje komendę /notifications
      */
     async handleNotificationsCommand(interaction) {
-        if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
-            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
-            return;
-        }
         const msgs = this.msgs(interaction.guildId);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
