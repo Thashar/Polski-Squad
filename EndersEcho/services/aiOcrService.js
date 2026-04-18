@@ -331,21 +331,14 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `The first image is a reference screenshot showing the correct boss result screen from a mobile game. The second image is submitted by a user for verification.
+        const prompt = `The first image is a reference screenshot of the correct boss result screen from a mobile game. The second image is submitted by a user.
 
-Ignore all text completely — the game supports many languages. Focus only on the visual layout and UI elements.
+Ignore all text — focus only on visual layout. Check if the second image contains BOTH of these elements:
+1. An orange/gold decorative ribbon-shaped banner at the top of a central result panel
+2. A horizontal row of exactly 4 hexagonal-shaped item icons near the bottom of that panel
 
-The correct boss result screen has ALL of the following visual characteristics:
-1. An orange/gold decorative banner shape at the top of a central result panel (a wide horizontal ribbon-like element)
-2. A large gray/silver rounded rectangular panel occupying the center of the screen
-3. One very large number with a unit suffix displayed prominently in the center of that panel (the round score)
-4. Two darker horizontal rows below the large number, each containing a smaller number with a unit suffix (one row for best record, one for total)
-5. A horizontal row of exactly 4 hexagonal-shaped item icons near the bottom of the panel
-6. A red health bar visible at the top of the screen (boss HP bar from the game HUD)
-7. A pause button (two vertical bars icon) visible in the top-left corner of the screen
-
-Answer "OK" only if the second image contains ALL 7 of these visual elements.
-Answer "NOK" if even ONE element is missing, or if the screen shows any other game view.
+Answer "OK" only if BOTH elements are clearly visible in the second image.
+Answer "NOK" if either element is missing.
 Write only one word: "OK" or "NOK":`;
 
         const message = await this.client.messages.create({
