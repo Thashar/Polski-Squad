@@ -1681,7 +1681,7 @@ class InteractionHandler {
             const reportRow = new ActionRowBuilder().addComponents(approveBtn, blockBtn);
 
             await channel.send({ embeds: [embed], files: [fileAttachment], components: [reportRow] });
-            gl.info(`✅ 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
+            gl.info(`🛑 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
         } catch (err) {
             gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
         }
