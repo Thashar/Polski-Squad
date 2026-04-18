@@ -369,11 +369,17 @@ class RankingService {
             if (!callerStats.score) {
                 callerValue = msgs.rankingNotInRanking;
             } else {
-                callerValue = [
+                const lines = [
                     `🎯 **${msgs.rankingYourScore}:** ${callerStats.score}`,
                     `🏠 **${msgs.rankingYourServerPos}:** ${callerStats.serverPosition ? `#${callerStats.serverPosition}` : '—'}`,
                     `🌐 **${msgs.rankingYourGlobalPos}:** ${callerStats.globalPosition ? `#${callerStats.globalPosition}` : '—'}`
-                ].join('\n');
+                ];
+                if (callerStats.rolePositions?.length > 0) {
+                    for (const rp of callerStats.rolePositions) {
+                        lines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
+                    }
+                }
+                callerValue = lines.join('\n');
             }
             embed.addFields({ name: msgs.rankingYourStats, value: callerValue, inline: false });
         }
@@ -632,7 +638,7 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = []) {
         const msgs = messages || this.config.messages;
 
         // Oblicz postęp i poprawę w jednej linii
@@ -704,6 +710,12 @@ class RankingService {
                 posLine += `  *(${msgs.recordNewEntry})*`;
             }
             descLines.push(posLine);
+        }
+
+        if (rolePositions?.length > 0) {
+            for (const rp of rolePositions) {
+                descLines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
+            }
         }
 
         const timeSince = this.formatTimeSince(previousTimestamp);

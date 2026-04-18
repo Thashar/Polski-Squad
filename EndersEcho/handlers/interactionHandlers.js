@@ -220,6 +220,33 @@ class InteractionHandler {
     }
 
     /**
+     * Zwraca pozycje użytkownika we wszystkich rankingach ról, które posiada.
+     * Sprawdza tylko role z cache memberów (zero extra requestów do Discord).
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {Guild} guild
+     * @param {Collection} memberRoles - interaction.member.roles.cache
+     * @returns {Promise<Array<{roleName: string, position: number}>>}
+     */
+    async _computeRolePositions(guildId, userId, guild, memberRoles) {
+        if (!this.roleRankingConfigService || !memberRoles || !guild) return [];
+        try {
+            const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+            const result = [];
+            for (const rr of roleRankings) {
+                if (!memberRoles.has(rr.roleId)) continue;
+                const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, guild, this.roleRankingConfigService);
+                const idx = rolePlayers.findIndex(p => p.userId === userId);
+                if (idx !== -1) result.push({ roleName: rr.roleName, position: idx + 1 });
+            }
+            return result;
+        } catch (err) {
+            logger.warn(`Błąd pobierania pozycji ról dla użytkownika ${userId}: ${err.message}`);
+            return [];
+        }
+    }
+
+    /**
      * Obsługuje komendę /update
      * @param {CommandInteraction} interaction
      */
@@ -387,6 +414,7 @@ class InteractionHandler {
             });
 
             const guildConfig = this.config.getGuildConfig(interaction.guildId);
+            const rolePositions = await this._computeRolePositions(guildId, userId, interaction.guild, interaction.member?.roles?.cache);
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -398,7 +426,8 @@ class InteractionHandler {
                 msgs,
                 interaction.guild,
                 guildConfig?.topRoles || null,
-                currentScore ? currentScore.timestamp : null
+                currentScore ? currentScore.timestamp : null,
+                rolePositions
             );
 
             try {
@@ -715,6 +744,7 @@ class InteractionHandler {
             });
 
             const guildConfig = this.config.getGuildConfig(interaction.guildId);
+            const rolePositions = await this._computeRolePositions(guildId, userId, interaction.guild, interaction.member?.roles?.cache);
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -726,7 +756,8 @@ class InteractionHandler {
                 msgs,
                 interaction.guild,
                 guildConfig?.topRoles || null,
-                currentScore ? currentScore.timestamp : null
+                currentScore ? currentScore.timestamp : null,
+                rolePositions
             );
 
             try {
@@ -1137,8 +1168,26 @@ class InteractionHandler {
                 callerStats = {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
-                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null
+                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
+                    rolePositions: []
                 };
+
+                // Pozycje w rankingach ról — sprawdzamy tylko role które użytkownik ma (zero extra requestów na role check)
+                if (mode === 'server' && guildId && this.roleRankingConfigService) {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    const memberRoles = interaction.member?.roles?.cache;
+                    const rankingGuild = guild || interaction.client.guilds.cache.get(guildId);
+                    if (roleRankings.length > 0 && memberRoles && rankingGuild) {
+                        for (const rr of roleRankings) {
+                            if (!memberRoles.has(rr.roleId)) continue;
+                            const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, rankingGuild, this.roleRankingConfigService);
+                            const roleIdx = rolePlayers.findIndex(p => p.userId === callerUserId);
+                            if (roleIdx !== -1) {
+                                callerStats.rolePositions.push({ roleName: rr.roleName, position: roleIdx + 1 });
+                            }
+                        }
+                    }
+                }
             } catch (statsErr) {
                 logger.error('Błąd pobierania statystyk wywołującego:', statsErr);
             }
