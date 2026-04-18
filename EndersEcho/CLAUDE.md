@@ -11,10 +11,10 @@
        - **KROK 3:** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
-   - **Komenda /test (wszyscy):** Używa `analyzeWithoutVerification()` w `aiOcrService.js`:
-     - Pomija weryfikację Victory i autentyczności zdjęcia — bezpośrednio ekstrakcja danych (boss + score), język ang + jpn (500 tokenów)
-     - Fallback na tradycyjny OCR gdy AI wyłączony lub błąd AI
-     - Zachowuje pełny flow `/update`: zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
+   - **Komenda /test (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` w `aiOcrService.js`:
+     - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów)
+     - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów)
+     - Po udanej weryfikacji: pełny flow jak `/update` — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
