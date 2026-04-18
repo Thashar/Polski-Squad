@@ -7,6 +7,7 @@ const LogService = require('./services/logService');
 const GuildLogger = require('./services/guildLogger');
 const RoleService = require('./services/roleService');
 const NotificationService = require('./services/notificationService');
+const UserBlockService = require('./services/userBlockService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -27,7 +28,8 @@ const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
 const notificationService = new NotificationService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService);
+const userBlockService = new UserBlockService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService);
 
 /**
  * Inicjalizuje bota EndersEcho
