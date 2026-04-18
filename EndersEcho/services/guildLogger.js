@@ -4,6 +4,8 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('EndersEcho');
 
 const SEPARATOR = '────────────────────────────────────────';
+const BOT_EMOJI = '🏆';
+const BOT_NAME = 'ENDERSECHO';
 
 function getTimestamp() {
     return new Date().toLocaleString('pl-PL', {
@@ -26,7 +28,6 @@ class GuildLogger {
 
         if (this.webhookUrl) {
             logger.info(`📋 GuildLogger: dedykowany webhook skonfigurowany`);
-            // Test połączenia przy starcie
             this._sendTestMessage();
         } else {
             logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOG_WEBHOOK_URL — logi tylko w konsoli`);
@@ -35,7 +36,7 @@ class GuildLogger {
 
     /**
      * Zwraca logger z kontekstem konkretnego serwera.
-     * Logi mają avatar i nazwę serwera; separator pojawia się przy zmianie serwera.
+     * Logi mają tag serwera jako prefix i separator przy zmianie serwera.
      * @param {string} guildId
      */
     forGuild(guildId) {
@@ -48,27 +49,28 @@ class GuildLogger {
     }
 
     _sendTestMessage() {
-        const payload = { content: `✅ EndersEcho GuildLogger online — ${getTimestamp()}`, username: 'EndersEcho' };
-        this._enqueue(payload);
+        const ts = getTimestamp();
+        const content = `${SEPARATOR}\n${BOT_EMOJI} **${BOT_NAME}** [${ts}] ✅ GuildLogger online`;
+        this._enqueue({ content });
     }
 
     _log(guildId, message, level) {
         logger[level](message);
         if (!this.webhookUrl) return;
-        console.log(`[GuildLogger DEBUG] _log wywołany: guild=${guildId} level=${level} msg=${message.substring(0, 50)}`);
 
         const guildConfig = this.config.getGuildConfig(guildId);
-        const guildName = guildConfig?.tag || guildId;
+        const guildTag = guildConfig?.tag || null;
         const guildIcon = guildConfig?.icon || null;
         const isNewGuild = this._lastGuildId !== guildId;
         this._lastGuildId = guildId;
 
         const levelEmoji = LEVEL_EMOJI[level] || '•';
         const timestamp = getTimestamp();
-        const prefix = guildName ? `${guildName} ` : '';
-        const content = isNewGuild
-            ? `${SEPARATOR}\n${prefix}[${timestamp}] ${levelEmoji} ${message}`
-            : `${prefix}[${timestamp}] ${levelEmoji} ${message}`;
+        // Format jak w konsoli: 🏆 ENDERSECHO [timestamp] • message
+        // plus opcjonalny prefix tagu serwera
+        const tagPrefix = guildTag ? `${guildTag} ` : '';
+        const line = `${tagPrefix}[${timestamp}] ${levelEmoji} ${message}`;
+        const content = isNewGuild ? `${SEPARATOR}\n${line}` : line;
 
         const payload = { content };
         if (guildIcon) payload.avatar_url = guildIcon;
@@ -112,7 +114,6 @@ class GuildLogger {
                 },
                 res => {
                     res.resume();
-                    console.log(`[GuildLogger DEBUG] HTTP status: ${res.statusCode}`);
                     if (res.statusCode === 429) {
                         setTimeout(() => this._sendWebhook(payload).then(resolve).catch(reject), 5000);
                     } else if (res.statusCode >= 400) {

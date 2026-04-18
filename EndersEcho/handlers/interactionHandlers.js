@@ -51,10 +51,12 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('update')
-                .setDescription('Update your score from a result screenshot')
+                .setDescription('Accepts screenshots in English and Japanese')
+                .setDescriptionLocalizations({ pl: 'Przyjmuje screeny w języku angielskim oraz japońskim' })
                 .addAttachmentOption(option =>
                     option.setName('obraz')
-                        .setDescription('Image containing "Best:" and "Total:"')
+                        .setDescription('Accepts screenshots in English and Japanese')
+                        .setDescriptionLocalizations({ pl: 'Przyjmuje screeny w języku angielskim oraz japońskim' })
                         .setRequired(true)),
 
             new SlashCommandBuilder()
