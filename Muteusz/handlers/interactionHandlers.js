@@ -330,13 +330,9 @@ class InteractionHandler {
                         .setRequired(false)
                 )
                 .addStringOption(option =>
-                    option.setName('target')
-                        .setDescription('Środowisko docelowe (domyślnie: production)')
+                    option.setName('api_url')
+                        .setDescription('Nadpisuje APP_API_URL (np. wypchnij na staging zamiast produkcji)')
                         .setRequired(false)
-                        .addChoices(
-                            { name: 'Production (domyślnie)', value: 'production' },
-                            { name: 'Staging',                value: 'staging' }
-                        )
                 )
                 .addBooleanOption(option =>
                     option.setName('dry_run')
@@ -3385,23 +3381,30 @@ class InteractionHandler {
         const resourceOpt = interaction.options.getString('resource');
         const botOpt = interaction.options.getString('bot');
         const guildOpt = interaction.options.getString('guild');
-        const targetOpt = interaction.options.getString('target') || 'production';
+        const apiUrlOpt = interaction.options.getString('api_url');
         const dryRun = interaction.options.getBoolean('dry_run') ?? false;
 
-        // Produkcja to domyślny cel (APP_API_URL / BOT_API_KEY). Staging wymaga
-        // osobnej pary env — bez niej nie ruszamy, żeby nie wypchnąć danych
-        // na zły serwer.
-        const targetConfig = this._resolveBackfillTarget(targetOpt);
-        if (!targetConfig.apiUrl || !targetConfig.apiKey) {
+        // Domyślnie leci na produkcję (APP_API_URL z env). Parametr api_url
+        // nadpisuje tylko URL — token bota (BOT_API_KEY) jest ten sam dla
+        // wszystkich środowisk i zawsze pochodzi z env.
+        const apiUrl = apiUrlOpt ? apiUrlOpt.trim().replace(/\/+$/, '') : (process.env.APP_API_URL || null);
+        const apiKey = process.env.BOT_API_KEY || null;
+        const missingEnv = [];
+        if (!apiUrl) missingEnv.push('APP_API_URL (lub parametr api_url)');
+        if (!apiKey) missingEnv.push('BOT_API_KEY');
+        if (missingEnv.length > 0) {
             await interaction.reply({
-                content: `⚠️ Target \`${targetOpt}\` nie ma skonfigurowanych zmiennych środowiskowych (${targetConfig.missing.join(', ')}) — backfill nie ma dokąd pisać.`,
+                content: `⚠️ Backfill nie ma dokąd pisać — brakuje: ${missingEnv.join(', ')}.`,
                 flags: MessageFlags.Ephemeral
             });
             return;
         }
 
+        // URL z parametru traktujemy jako "custom"; bez parametru = produkcja.
+        const targetLabel = apiUrlOpt ? 'custom' : 'production';
+
         await this.logService.logMessage('info',
-            `Administrator ${interaction.user.tag} wywołał /appsync-backfill (target=${targetOpt}, resource=${resourceOpt ?? 'all'}, bot=${botOpt ?? 'all'}, guild=${guildOpt ?? 'all'}, dry=${dryRun})`,
+            `Administrator ${interaction.user.tag} wywołał /appsync-backfill (url=${apiUrl}, resource=${resourceOpt ?? 'all'}, bot=${botOpt ?? 'all'}, guild=${guildOpt ?? 'all'}, dry=${dryRun})`,
             interaction
         );
 
@@ -3412,9 +3415,9 @@ class InteractionHandler {
             resource: resourceOpt,
             bot: botOpt,
             guildId: guildOpt,
-            apiUrl: targetConfig.apiUrl,
-            apiKey: targetConfig.apiKey,
-            target: targetOpt,
+            apiUrl,
+            apiKey,
+            target: targetLabel,
         });
 
         // Zaplanuj — potrzebujemy totali, zanim stworzymy embed.
@@ -3447,7 +3450,7 @@ class InteractionHandler {
             .addFields(
                 { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
                 { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
-                { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetOpt, apiUrl: targetConfig.apiUrl, dryRun }), inline: false }
+                { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetLabel, apiUrl, dryRun }), inline: false }
             )
             .setTimestamp(startedAt);
 
@@ -3488,7 +3491,7 @@ class InteractionHandler {
                     { name: 'Uruchomiony przez', value: `<@${interaction.user.id}>`, inline: true },
                     { name: 'Start', value: `<t:${Math.floor(startedAt.getTime() / 1000)}:T>`, inline: true },
                     { name: durationMs !== null ? 'Czas trwania' : 'Status', value: durationMs !== null ? `${(durationMs / 1000).toFixed(1)}s` : (progressState.currentResource ? `🔄 ${progressState.currentResource}` : '⏳ start...'), inline: true },
-                    { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetOpt, apiUrl: targetConfig.apiUrl, dryRun }), inline: false },
+                    { name: 'Filtry', value: this._formatBackfillFilters({ resource: resourceOpt, bot: botOpt, guild: guildOpt, target: targetLabel, apiUrl, dryRun }), inline: false },
                     ...(error ? [{ name: 'Błąd', value: `\`\`\`${String(error).slice(0, 900)}\`\`\`` }] : [])
                 )
                 .setTimestamp(new Date());
@@ -3620,34 +3623,6 @@ class InteractionHandler {
         parts.push(`**Guild:** ${guild || 'wszystkie'}`);
         parts.push(`**Tryb:** ${dryRun ? 'dry-run' : 'live'}`);
         return parts.join(' · ');
-    }
-
-    /**
-     * Resolves (apiUrl, apiKey) for the given target name. Production uses
-     * domyślne zmienne (`APP_API_URL` / `BOT_API_KEY`) — są one źródłem prawdy
-     * dla hot-path'owych sync'ów z botów. Staging wymaga osobnego kompletu
-     * (`APP_API_URL_STAGING` / `BOT_API_KEY_STAGING`) i jest dostępny tylko
-     * dla backfillu.
-     *
-     * @param {'production'|'staging'} target
-     * @returns {{ target: string, apiUrl: string|null, apiKey: string|null, missing: string[] }}
-     */
-    _resolveBackfillTarget(target) {
-        if (target === 'staging') {
-            const apiUrl = process.env.APP_API_URL_STAGING || null;
-            const apiKey = process.env.BOT_API_KEY_STAGING || null;
-            const missing = [];
-            if (!apiUrl) missing.push('APP_API_URL_STAGING');
-            if (!apiKey) missing.push('BOT_API_KEY_STAGING');
-            return { target: 'staging', apiUrl, apiKey, missing };
-        }
-        // production (default)
-        const apiUrl = process.env.APP_API_URL || null;
-        const apiKey = process.env.BOT_API_KEY || null;
-        const missing = [];
-        if (!apiUrl) missing.push('APP_API_URL');
-        if (!apiKey) missing.push('BOT_API_KEY');
-        return { target: 'production', apiUrl, apiKey, missing };
     }
 
     /**
