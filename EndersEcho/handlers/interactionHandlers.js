@@ -65,6 +65,7 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('remove')
                 .setDescription('Remove a player from the ranking (admins only)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addUserOption(option =>
                     option.setName('user')
                         .setDescription('User to remove from the ranking')
@@ -72,7 +73,8 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('notifications')
-                .setDescription('Manage record break notifications for players'),
+                .setDescription('Manage record break notifications for players')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
                 .setName('info')
@@ -80,7 +82,7 @@ class InteractionHandler {
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
-                .setName('block-ocr')
+                .setName('ocr-on-off')
                 .setDescription('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
@@ -120,12 +122,12 @@ class InteractionHandler {
      */
     async handleInteraction(interaction) {
         if (interaction.isChatInputCommand()) {
-            // /info i /block-ocr działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            // /info i /ocr-on-off działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
             if (interaction.commandName === 'info') {
                 await this.handleInfoCommand(interaction);
                 return;
             }
-            if (interaction.commandName === 'block-ocr') {
+            if (interaction.commandName === 'ocr-on-off') {
                 await this.handleBlockOcrCommand(interaction);
                 return;
             }

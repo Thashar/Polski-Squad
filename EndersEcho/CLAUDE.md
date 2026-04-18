@@ -68,7 +68,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/block-ocr`, `/test`, `/unblock`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/test`, `/unblock`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
