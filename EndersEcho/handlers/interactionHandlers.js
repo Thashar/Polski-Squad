@@ -88,12 +88,12 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('test')
-                .setDescription('Accepts screenshots without photo verification')
-                .setDescriptionLocalizations({ pl: 'Przyjmuje screeny bez weryfikacji zdjęcia' })
+                .setDescription('Add a new Ender\'s Echo score for analysis')
+                .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
                 .addAttachmentOption(option =>
                     option.setName('obraz')
-                        .setDescription('Accepts screenshots without photo verification')
-                        .setDescriptionLocalizations({ pl: 'Przyjmuje screeny bez weryfikacji zdjęcia' })
+                        .setDescription('Add a new Ender\'s Echo score for analysis')
+                        .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
                         .setRequired(true)),
 
             new SlashCommandBuilder()
