@@ -54,7 +54,17 @@
    - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`
+6. **Komenda /info** — wysyłanie wiadomości informacyjnej na wszystkie serwery (`interactionHandlers.js`):
+   - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`)
+   - Wykonać może tylko użytkownik o ID z `ENDERSECHO_INFO_USER_ID` w .env
+   - `/info` → modal z 4 polami: Tytuł (opcjonalnie), Opis (wymagany), Ikona URL (opcjonalnie), Obraz URL (opcjonalnie)
+   - Po wypełnieniu → ephemeral podgląd z czerwonym embedem + 3 przyciski: **Wyślij**, **Edytuj**, **Anuluj**
+   - **Wyślij** → wysyła embed na `allowedChannelId` każdego serwera z `config.guilds`, raportuje wynik
+   - **Edytuj** → pokazuje modal ponownie z wypełnionymi danymi z sesji
+   - **Anuluj** → czyści sesję
+   - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
+
+**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`
 
 **Struktura danych:**
 ```
@@ -101,6 +111,9 @@ ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
+
+# Komenda /info (wymagane do działania /info)
+ENDERSECHO_INFO_USER_ID=discord_user_id
 
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example

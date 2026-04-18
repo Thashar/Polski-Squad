@@ -82,6 +82,7 @@ logger.info(`📋 Załadowano konfigurację dla ${guilds.length} serwer(ów)`);
 module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
     clientId: process.env.ENDERSECHO_CLIENT_ID,
+    infoUserId: process.env.ENDERSECHO_INFO_USER_ID || null,
 
     // Lista skonfigurowanych serwerów
     guilds,
