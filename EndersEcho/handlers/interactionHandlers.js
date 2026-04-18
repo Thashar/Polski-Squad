@@ -88,10 +88,12 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('test')
-                .setDescription('Dodaj nowy wynik Ender\'s Echo do analizy')
+                .setDescription('Add a new Ender\'s Echo score for analysis')
+                .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
                 .addAttachmentOption(option =>
                     option.setName('obraz')
-                        .setDescription('Dodaj nowy wynik Ender\'s Echo do analizy')
+                        .setDescription('Add a new Ender\'s Echo score for analysis')
+                        .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
                         .setRequired(true)),
 
             new SlashCommandBuilder()
