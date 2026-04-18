@@ -26,6 +26,8 @@ class GuildLogger {
 
         if (this.webhookUrl) {
             logger.info(`📋 GuildLogger: dedykowany webhook skonfigurowany`);
+            // Test połączenia przy starcie
+            this._sendTestMessage();
         } else {
             logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOG_WEBHOOK_URL — logi tylko w konsoli`);
         }
@@ -45,9 +47,15 @@ class GuildLogger {
         };
     }
 
+    _sendTestMessage() {
+        const payload = { content: `✅ EndersEcho GuildLogger online — ${getTimestamp()}`, username: 'EndersEcho' };
+        this._enqueue(payload);
+    }
+
     _log(guildId, message, level) {
         logger[level](message);
         if (!this.webhookUrl) return;
+        console.log(`[GuildLogger DEBUG] _log wywołany: guild=${guildId} level=${level} msg=${message.substring(0, 50)}`);
 
         const guildConfig = this.config.getGuildConfig(guildId);
         const guildName = guildConfig?.tag || guildId;
@@ -104,6 +112,7 @@ class GuildLogger {
                 },
                 res => {
                     res.resume();
+                    console.log(`[GuildLogger DEBUG] HTTP status: ${res.statusCode}`);
                     if (res.statusCode === 429) {
                         setTimeout(() => this._sendWebhook(payload).then(resolve).catch(reject), 5000);
                     } else if (res.statusCode >= 400) {
