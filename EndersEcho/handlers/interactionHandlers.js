@@ -1827,6 +1827,7 @@ class InteractionHandler {
                 'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
                 'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
                 'NOT_SIMILAR': '🟡 Zdjęcie nie pasuje do wzorca (komenda /test)',
+                'INVALID_SCORE_FORMAT': '🟠 Odczytany wynik nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx)',
             };
             const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
             const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
