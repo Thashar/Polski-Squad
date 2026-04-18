@@ -193,6 +193,12 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         score = this.normalizeScore(score, log);
         if (score && total) score = this.validateScoreAgainstTotal(score, total, log);
 
+        const validScorePattern = /^\d+(?:\.\d+)?(K|M|B|T|Q|Qi|Sx)$/i;
+        if (score && !validScorePattern.test(score)) {
+            log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx) — odrzucam`);
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
+        }
+
         const isValid = !!(bossName && score && score.length > 0);
         if (!isValid) {
             log.warn(`[AI OCR] Walidacja ✗ boss:"${bossName}" score:"${score}"`);
