@@ -683,7 +683,7 @@ async function saveCXResult(userId, score) {
 ```env
 # Production — default target dla wszystkich pushów (hot-path + backfill bez api_url).
 # Ten sam BOT_API_KEY działa dla staging i produkcji, więc osobnych env-ów nie potrzebujemy.
-APP_API_URL=https://api.polski-squad.example   # bez trailing slash
+APP_API_URL=https://api.polski-squad.example   # trailing slash i końcowe /api są strippowane automatycznie
 BOT_API_KEY=<min. 32-znakowy sekret, identyczny z BOT_API_KEY w API>
 ```
 

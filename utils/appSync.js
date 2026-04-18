@@ -16,7 +16,9 @@
  *     callers to pass a deterministic `id`. Use eventId() to generate one.
  *
  * Config:
- *   APP_API_URL — base URL of the web API (trailing slash is stripped automatically).
+ *   APP_API_URL — base URL of the web API. Trailing slash and a trailing `/api`
+ *     segment are stripped automatically, so `https://host`, `https://host/`
+ *     and `https://host/api/` are all equivalent.
  *   BOT_API_KEY — shared secret; must match the API's env var.
  *   When either is missing, all calls silently no-op (keeps dev/test easy).
  *
@@ -47,8 +49,13 @@ async function sleep(ms) {
  * @param {{ apiUrl?: string, apiKey?: string }} [overrides]
  */
 function createAppSync(overrides = {}) {
-    // Strip any accidental trailing slash so URL construction never produces //.
-    const apiUrl = (overrides.apiUrl ?? process.env.APP_API_URL)?.replace(/\/+$/, '') || null;
+    // Normalize base URL: strip trailing slashes and an optional trailing `/api`,
+    // so both `https://host` and `https://host/api/` produce the same final path
+    // (`/api/bot/...`) instead of accidentally doubling `/api/api/bot/...`.
+    const rawUrl = overrides.apiUrl ?? process.env.APP_API_URL;
+    const apiUrl = rawUrl
+        ? rawUrl.replace(/\/+$/, '').replace(/\/api$/, '') || null
+        : null;
     const apiKey = overrides.apiKey ?? process.env.BOT_API_KEY ?? null;
 
     /**
