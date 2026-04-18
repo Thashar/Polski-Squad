@@ -605,6 +605,8 @@ class InteractionHandler {
             const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
 
             if (aiResult.error === 'NOT_SIMILAR') {
+                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
+                await fs.unlink(tempImagePath);
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()
@@ -617,6 +619,8 @@ class InteractionHandler {
             }
 
             if (!aiResult.isValidVictory) {
+                await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+                await fs.unlink(tempImagePath);
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
             }
@@ -1822,6 +1826,7 @@ class InteractionHandler {
                 'FAKE_PHOTO': '🔴 Wykryto podrobione / edytowane zdjęcie',
                 'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
                 'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
+                'NOT_SIMILAR': '🟡 Zdjęcie nie pasuje do wzorca (komenda /test)',
             };
             const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
             const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
