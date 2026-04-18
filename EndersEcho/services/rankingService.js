@@ -369,11 +369,17 @@ class RankingService {
             if (!callerStats.score) {
                 callerValue = msgs.rankingNotInRanking;
             } else {
-                callerValue = [
+                const lines = [
                     `🎯 **${msgs.rankingYourScore}:** ${callerStats.score}`,
                     `🏠 **${msgs.rankingYourServerPos}:** ${callerStats.serverPosition ? `#${callerStats.serverPosition}` : '—'}`,
                     `🌐 **${msgs.rankingYourGlobalPos}:** ${callerStats.globalPosition ? `#${callerStats.globalPosition}` : '—'}`
-                ].join('\n');
+                ];
+                if (callerStats.rolePositions?.length > 0) {
+                    for (const rp of callerStats.rolePositions) {
+                        lines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
+                    }
+                }
+                callerValue = lines.join('\n');
             }
             embed.addFields({ name: msgs.rankingYourStats, value: callerValue, inline: false });
         }

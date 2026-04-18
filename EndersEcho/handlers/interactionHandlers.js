@@ -1137,8 +1137,26 @@ class InteractionHandler {
                 callerStats = {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
-                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null
+                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
+                    rolePositions: []
                 };
+
+                // Pozycje w rankingach ról — sprawdzamy tylko role które użytkownik ma (zero extra requestów na role check)
+                if (mode === 'server' && guildId && this.roleRankingConfigService) {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    const memberRoles = interaction.member?.roles?.cache;
+                    const rankingGuild = guild || interaction.client.guilds.cache.get(guildId);
+                    if (roleRankings.length > 0 && memberRoles && rankingGuild) {
+                        for (const rr of roleRankings) {
+                            if (!memberRoles.has(rr.roleId)) continue;
+                            const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, rankingGuild, this.roleRankingConfigService);
+                            const roleIdx = rolePlayers.findIndex(p => p.userId === callerUserId);
+                            if (roleIdx !== -1) {
+                                callerStats.rolePositions.push({ roleName: rr.roleName, position: roleIdx + 1 });
+                            }
+                        }
+                    }
+                }
             } catch (statsErr) {
                 logger.error('Błąd pobierania statystyk wywołującego:', statsErr);
             }
