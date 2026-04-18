@@ -90,6 +90,15 @@ class InteractionHandler {
                 .setName('block-ocr')
                 .setDescription('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('test')
+                .setDescription('Testuje analizę screenshota bez zapisu wyników (tylko dla adminów)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addAttachmentOption(option =>
+                    option.setName('obraz')
+                        .setDescription('Screenshot do przetestowania')
+                        .setRequired(true)),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -120,6 +129,11 @@ class InteractionHandler {
             }
             if (interaction.commandName === 'block-ocr') {
                 await this.handleBlockOcrCommand(interaction);
+                return;
+            }
+
+            if (interaction.commandName === 'test') {
+                await this.handleTestCommand(interaction);
                 return;
             }
 
@@ -503,6 +517,150 @@ class InteractionHandler {
                 await interaction.editReply(msgs.updateError);
             } catch (replyError) {
                 gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
+            }
+        }
+    }
+
+    /**
+     * Obsługuje komendę /test — testuje analizę obrazu bez zapisu wyników (tylko admin)
+     * @param {CommandInteraction} interaction
+     */
+    async handleTestCommand(interaction) {
+        const gl = this.logService._gl(interaction.guildId);
+
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (!this.aiOcrService.enabled) {
+            await interaction.reply({ content: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const attachment = interaction.options.getAttachment('obraz');
+
+        const isImage = this.config.images.supportedExtensions.some(ext =>
+            attachment.name.toLowerCase().endsWith(ext)
+        );
+
+        if (!isImage) {
+            await interaction.reply({ content: '❌ Przesłany plik nie jest obrazem. Obsługiwane formaty: PNG, JPG, JPEG, GIF, BMP.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (attachment.size > this.config.images.maxSize) {
+            const maxSizeMB = Math.round(this.config.images.maxSize / (1024 * 1024));
+            await interaction.reply({ content: `❌ Plik jest zbyt duży. Maksymalny rozmiar: ${maxSizeMB}MB.`, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        await interaction.editReply({ content: '🔍 Analizuję zdjęcie (tryb testowy)...' });
+
+        let tempImagePath = null;
+
+        try {
+            await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
+
+            tempImagePath = path.join(this.config.ocr.tempDir, `test_${Date.now()}_${attachment.name}`);
+            await downloadFile(attachment.url, tempImagePath);
+
+            gl.info(`[/test] Uruchamiam analizę testową dla ${interaction.user.username}`);
+
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
+
+            if (aiResult.error === 'NOT_SIMILAR') {
+                const embed = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle('🔬 Wynik testu')
+                    .setDescription('❌ **Zdjęcie nie pasuje do wzorca**\n\nAI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa (różni się od wzorca `Wzór.jpg`).')
+                    .setTimestamp();
+
+                await interaction.editReply({ content: '', embeds: [embed] });
+                return;
+            }
+
+            if (!aiResult.isValidVictory) {
+                const embed = new EmbedBuilder()
+                    .setColor(0xFF8C00)
+                    .setTitle('🔬 Wynik testu')
+                    .setDescription(`❌ **Nie udało się odczytać danych**\n\nZdjęcie zostało rozpoznane jako pasujące do wzorca, ale AI nie mogło wyciągnąć wyników.\n\n**Błąd:** \`${aiResult.error || 'UNKNOWN'}\``)
+                    .setTimestamp();
+
+                await interaction.editReply({ content: '', embeds: [embed] });
+                return;
+            }
+
+            // Odczyt rankingu (tylko do odczytu — bez zapisu)
+            const guildId = interaction.guildId;
+            const userId = interaction.user.id;
+            const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+
+            const ranking = await this.rankingService.loadRanking(guildId);
+            const existingEntry = ranking[userId] || null;
+
+            let wouldBeRecord = false;
+            let recordDiff = null;
+
+            if (existingEntry) {
+                const newVal = this.aiOcrService.parseScoreToNumber(aiResult.score);
+                const oldVal = existingEntry.scoreValue ?? this.aiOcrService.parseScoreToNumber(existingEntry.score);
+                if (newVal !== null && oldVal !== null) {
+                    wouldBeRecord = newVal > oldVal;
+                    if (!wouldBeRecord) {
+                        const diffRaw = oldVal - newVal;
+                        const units = [
+                            { label: 'Sx', val: 1e21 }, { label: 'Qi', val: 1e18 },
+                            { label: 'Q', val: 1e15 }, { label: 'T', val: 1e12 },
+                            { label: 'B', val: 1e9  }, { label: 'M', val: 1e6  },
+                            { label: 'K', val: 1e3  }
+                        ];
+                        const unit = units.find(u => diffRaw >= u.val) || { label: '', val: 1 };
+                        recordDiff = `${(diffRaw / unit.val).toFixed(2)}${unit.label}`;
+                    }
+                }
+            } else {
+                wouldBeRecord = true;
+            }
+
+            const statusLine = wouldBeRecord
+                ? '🏆 **Byłby to nowy rekord!**'
+                : `📊 Wynik niższy od obecnego rekordu (różnica: -${recordDiff ?? '?'})`;
+
+            const embed = new EmbedBuilder()
+                .setColor(wouldBeRecord ? 0xFFD700 : 0xFF9900)
+                .setTitle('🔬 Wynik testu (podgląd bez zapisu)')
+                .setDescription(`✅ **Zdjęcie pasuje do wzorca** — dane odczytane poprawnie.\n\n${statusLine}`)
+                .addFields(
+                    { name: '👤 Gracz', value: userName, inline: true },
+                    { name: '🎯 Boss', value: aiResult.bossName || '—', inline: true },
+                    { name: '📈 Odczytany wynik', value: aiResult.score || '—', inline: true },
+                    { name: '📋 Obecny rekord', value: existingEntry ? existingEntry.score : '*(brak wpisu)*', inline: true },
+                    { name: '🔒 Zapis', value: '**Wyłączony** — to tylko podgląd', inline: true }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'Tryb testowy /test — wyniki nie są zapisywane' });
+
+            const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
+            const fileExtension = attachment.name.split('.').pop() || 'png';
+            const imageAttachment = new AttachmentBuilder(tempImagePath, {
+                name: `test_${safeUserName}_${Date.now()}.${fileExtension}`
+            });
+
+            embed.setImage(`attachment://${imageAttachment.name}`);
+
+            await interaction.editReply({ content: '', embeds: [embed], files: [imageAttachment] });
+            gl.info(`[/test] Zakończono testową analizę dla ${interaction.user.username}: boss="${aiResult.bossName}" score="${aiResult.score}" wouldBeRecord=${wouldBeRecord}`);
+
+        } catch (error) {
+            gl.error(`[/test] Błąd: ${error.message}`);
+            try {
+                await interaction.editReply({ content: `❌ Błąd podczas analizy: \`${error.message}\`` });
+            } catch { /* ignoruj */ }
+        } finally {
+            if (tempImagePath) {
+                await fs.unlink(tempImagePath).catch(() => {});
             }
         }
     }

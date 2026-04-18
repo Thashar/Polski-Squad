@@ -287,6 +287,71 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         log.warn(`[AI OCR] validateTotal: nie udało się skorygować "${score}"`);
         return score;
     }
+
+    async analyzeTestImage(imagePath, log = logger) {
+        if (!this.enabled) throw new Error('AI OCR nie jest włączony');
+
+        const wzorPath = path.join(__dirname, '../files/Wzór.jpg');
+
+        try {
+            const [uploadedBuffer, wzorBuffer] = await Promise.all([
+                sharp(imagePath).png().toBuffer(),
+                sharp(wzorPath).png().toBuffer()
+            ]);
+
+            const uploadedBase64 = uploadedBuffer.toString('base64');
+            const wzorBase64 = wzorBuffer.toString('base64');
+            const mediaType = 'image/png';
+
+            log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
+            const isSimilar = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log);
+
+            if (!isSimilar) {
+                log.warn('[AI Test] Zdjęcie niepodobne do wzorca');
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR' };
+            }
+
+            log.info('[AI Test] Zdjęcie podobne do wzorca → wyciągam dane...');
+
+            const extractResponse = await this._extractData(uploadedBase64, mediaType, 'eng');
+            const result = this.parseAIResponse(extractResponse, log);
+
+            if (result.isValidVictory) {
+                log.info(`[AI Test] Boss="${result.bossName}" score="${result.score}"`);
+            } else {
+                log.warn(`[AI Test] Nie udało się wyciągnąć danych: ${result.error}`);
+            }
+
+            return result;
+
+        } catch (error) {
+            log.error(`[AI Test] Błąd analizy obrazu: ${error.message}`);
+            throw error;
+        }
+    }
+
+    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
+        const prompt = `Otrzymujesz dwa screenshoty z gry. Pierwsze zdjęcie to wzorzec — przykład prawidłowego screenshota z ekranem wyników bossa. Drugie zdjęcie to zdjęcie przesłane przez użytkownika.
+
+Sprawdź wyłącznie czy oba zdjęcia przedstawiają ten sam typ ekranu z gry (ekran wyników bossa). Nie oceniaj autentyczności ani prawdziwości wyniku.
+
+Jeśli oba zdjęcia wyglądają jak ekran wyników bossa w tej samej grze — napisz tylko jedno słowo: "OK"
+Jeśli zdjęcia przedstawiają różne typy ekranów lub drugie zdjęcie nie jest ekranem wyników bossa — napisz tylko jedno słowo: "NOK"`;
+
+        const message = await this.client.messages.create({
+            model: this.model,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: [
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: wzorBase64 } },
+                { type: 'image', source: { type: 'base64', media_type: mediaType, data: uploadedBase64 } },
+                { type: 'text', text: prompt }
+            ]}]
+        });
+
+        const response = message.content[0].text.trim().toUpperCase();
+        log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
+        return !response.includes('NOK');
+    }
 }
 
 module.exports = AIOCRService;
