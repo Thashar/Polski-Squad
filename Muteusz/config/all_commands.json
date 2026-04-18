@@ -603,6 +603,12 @@
           "description": "Testuje analizę screenshota przez AI — porównuje z wzorcem i wyciąga dane (boss + wynik) bez zapisu. Pokazuje ephemeral podgląd czy byłby to nowy rekord.",
           "usage": "/test obraz:[screenshot do przetestowania]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/unblock",
+          "description": "Wyświetla listę zablokowanych użytkowników (posortowaną od najkrótszej kary do permanentnych) i umożliwia ich odblokowanie.",
+          "usage": "/unblock",
+          "requiredPermission": "administrator"
         }
       ]
     }
