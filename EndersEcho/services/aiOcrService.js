@@ -331,7 +331,7 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `Czy te dwa zdjęcia są podobne? Napisz tylko jedno słowo: "OK" jeśli tak, "NOK" jeśli nie.`;
+        const prompt = `Czy te dwa zdjęcia są chociaż trochę do siebie podobne lub mają wspólne elementy? Napisz tylko jedno słowo: "OK" jeśli tak, "NOK" jeśli nie.`;
 
         const message = await this.client.messages.create({
             model: this.model,
