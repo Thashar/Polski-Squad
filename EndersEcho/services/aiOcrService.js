@@ -331,16 +331,15 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `The first image is a reference screenshot of the correct boss result screen from a mobile game. The second image is submitted by a user.
+        const prompt = `Pierwsze zdjęcie to wzorzec prawidłowego ekranu wyników bossa z gry mobilnej. Drugie zdjęcie jest przesłane przez użytkownika.
 
-Ignore all text — focus only on visual elements. Check if the second image contains ALL THREE of these elements:
-1. An orange/gold decorative ribbon-shaped banner at the top of a central result panel
-2. Green-colored numbers visible inside the result panel
-3. A red horizontal health bar at the very top of the screen (boss HP bar)
+Ignoruj wszelki tekst — skup się wyłącznie na elementach wizualnych. Sprawdź czy na drugim zdjęciu widoczne są OBA poniższe elementy:
+1. Pomarańczowo-złota ozdobna wstęga/baner w górnej części centralnego panelu wyników
+2. Zielone liczby widoczne wewnątrz panelu wyników
 
-Answer "OK" only if ALL THREE elements are clearly visible in the second image.
-Answer "NOK" if even one element is missing.
-Write only one word: "OK" or "NOK":`;
+Napisz "OK" tylko jeśli OBA elementy są wyraźnie widoczne na drugim zdjęciu.
+Napisz "NOK" jeśli choćby jeden element jest nieobecny.
+Napisz tylko jedno słowo: "OK" lub "NOK":`;
 
         const message = await this.client.messages.create({
             model: this.model,
