@@ -8,7 +8,7 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -17,6 +17,7 @@ class InteractionHandler {
         this.roleService = roleService;
         this.notificationService = notificationService;
         this.userBlockService = userBlockService;
+        this.roleRankingConfigService = roleRankingConfigService;
         this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
@@ -99,6 +100,16 @@ class InteractionHandler {
                 .setName('unblock')
                 .setDescription('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('add-role-ranking')
+                .setDescription('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('remove-role-ranking')
+                .setDescription('Usuwa ranking roli (tylko dla adminów)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -151,10 +162,12 @@ class InteractionHandler {
             }
 
             switch (interaction.commandName) {
-                case 'ranking': await this.handleRankingCommand(interaction); break;
-                case 'update':  await this.handleUpdateCommand(interaction);  break;
-                case 'remove':  await this.handleRemoveCommand(interaction);  break;
-                case 'notifications': await this.handleNotificationsCommand(interaction); break;
+                case 'ranking':            await this.handleRankingCommand(interaction);          break;
+                case 'update':             await this.handleUpdateCommand(interaction);           break;
+                case 'remove':             await this.handleRemoveCommand(interaction);           break;
+                case 'notifications':      await this.handleNotificationsCommand(interaction);    break;
+                case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
+                case 'remove-role-ranking':await this.handleRemoveRoleRankingCommand(interaction);break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -997,6 +1010,12 @@ class InteractionHandler {
                 return;
             }
 
+            // === Przyciski rankingu roli ===
+            if (customId.startsWith('ranking_role_')) {
+                await this._handleRoleRankingSelect(interaction, customId);
+                return;
+            }
+
             // === Przycisk powrotu do wyboru ===
             if (customId === 'ranking_back') {
                 await this._handleRankingBack(interaction);
@@ -1048,7 +1067,7 @@ class InteractionHandler {
                     callerStats: rankingData.callerStats || null
                 }
             );
-            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, msgs);
+            const buttons = this.rankingService.createRankingButtons(newPage, rankingData.totalPages, false, msgs, rankingData.roleRows || []);
 
             await interaction.editReply({ embeds: [embed], components: buttons });
 
@@ -1120,6 +1139,19 @@ class InteractionHandler {
                 logger.error('Błąd pobierania statystyk wywołującego:', statsErr);
             }
 
+            // Przyciski rankingów ról (tylko dla trybu serwera)
+            let roleRows = [];
+            if (mode === 'server' && guildId && this.roleRankingConfigService) {
+                try {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    if (roleRankings.length > 0) {
+                        roleRows = this.rankingService.createRoleRankingButtons(roleRankings, guildId);
+                    }
+                } catch (roleErr) {
+                    logger.warn('Błąd ładowania rankingów ról:', roleErr);
+                }
+            }
+
             const embed = await this.rankingService.createRankingEmbed(
                 players, currentPage, totalPages, interaction.user.id, guild,
                 {
@@ -1129,7 +1161,7 @@ class InteractionHandler {
                     callerStats
                 }
             );
-            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false, rankMsgs);
+            const buttons = this.rankingService.createRankingButtons(currentPage, totalPages, false, rankMsgs, roleRows);
 
             const reply = await interaction.editReply({
                 content: null,
@@ -1145,7 +1177,8 @@ class InteractionHandler {
                 messageId: reply.id,
                 mode,
                 guildId,
-                callerStats
+                callerStats,
+                roleRows
             });
 
         } catch (error) {
@@ -1161,11 +1194,252 @@ class InteractionHandler {
     async _handleRankingBack(interaction) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
+
+        const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
+
+        // Powrót z rankingu roli → przywróć ranking serwera
+        if (rankingData?.mode === 'role' && rankingData.parentGuildId) {
+            try {
+                const parentGuildId = rankingData.parentGuildId;
+                const players = await this.rankingService.getSortedPlayers(parentGuildId);
+                const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
+                const guild = interaction.client.guilds.cache.get(parentGuildId) || null;
+
+                let roleRows = [];
+                if (this.roleRankingConfigService) {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(parentGuildId);
+                    if (roleRankings.length > 0) {
+                        roleRows = this.rankingService.createRoleRankingButtons(roleRankings, parentGuildId);
+                    }
+                }
+
+                const embed = await this.rankingService.createRankingEmbed(
+                    players, 0, totalPages, rankingData.userId, guild,
+                    { mode: 'server', client: null, messages: msgs, callerStats: rankingData.callerStats || null }
+                );
+                const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows);
+
+                const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+                this.rankingService.addActiveRanking(reply.id, {
+                    players, currentPage: 0, totalPages,
+                    userId: rankingData.userId, messageId: reply.id,
+                    mode: 'server', guildId: parentGuildId,
+                    callerStats: rankingData.callerStats || null, roleRows
+                });
+                return;
+            } catch (err) {
+                logger.error('Błąd powrotu z rankingu roli:', err);
+            }
+        }
+
+        // Domyślny powrót → wybór serwera/global
         const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs);
         await interaction.editReply({
             content: msgs.rankingSelectPrompt,
             embeds: [],
             components: selectRows
+        });
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku rankingu roli
+     */
+    async _handleRoleRankingSelect(interaction, customId) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+
+        // customId: ranking_role_{guildId}_{roleId}
+        const withoutPrefix = customId.replace('ranking_role_', '');
+        const firstUnderscore = withoutPrefix.indexOf('_');
+        const guildId = withoutPrefix.substring(0, firstUnderscore);
+        const roleId = withoutPrefix.substring(firstUnderscore + 1);
+
+        const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
+        const parentCallerStats = rankingData?.callerStats || null;
+        const parentUserId = rankingData?.userId || interaction.user.id;
+
+        try {
+            const guild = interaction.client.guilds.cache.get(guildId) || interaction.guild;
+            if (!guild) {
+                await interaction.editReply({ content: '❌ Nie można pobrać danych serwera.', embeds: [], components: [] });
+                return;
+            }
+
+            const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+            const roleCfg = roleRankings.find(r => r.roleId === roleId);
+            const roleName = roleCfg?.roleName || roleId;
+
+            const players = await this.rankingService.getSortedPlayersByRole(guildId, roleId, guild, this.roleRankingConfigService);
+
+            if (players.length === 0) {
+                await interaction.editReply({
+                    content: `📋 Brak graczy z rolą **${roleName}** w rankingu.`,
+                    embeds: [],
+                    components: this.rankingService.createRankingButtons(0, 1, false, msgs)
+                });
+                // Zachowaj cache z mode=role żeby Back działał
+                const reply = await interaction.fetchReply();
+                this.rankingService.addActiveRanking(reply.id, {
+                    players: [], currentPage: 0, totalPages: 1,
+                    userId: parentUserId, messageId: reply.id,
+                    mode: 'role', guildId, parentGuildId: guildId, roleId,
+                    callerStats: parentCallerStats, roleRows: []
+                });
+                return;
+            }
+
+            const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
+
+            const embed = await this.rankingService.createRankingEmbed(
+                players, 0, totalPages, parentUserId, guild,
+                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, titleOverride: `🎖️ Ranking roli: ${roleName}` }
+            );
+            const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs);
+
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+            this.rankingService.addActiveRanking(reply.id, {
+                players, currentPage: 0, totalPages,
+                userId: parentUserId, messageId: reply.id,
+                mode: 'role', guildId, parentGuildId: guildId, roleId,
+                callerStats: parentCallerStats, roleRows: []
+            });
+
+        } catch (err) {
+            logger.error('Błąd w _handleRoleRankingSelect:', err);
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
+        }
+    }
+
+    /**
+     * Obsługuje komendę /add-role-ranking
+     */
+    async handleAddRoleRankingCommand(interaction) {
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        const guildId = interaction.guildId;
+        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        const MAX = 10;
+
+        if (existing.length >= MAX) {
+            await interaction.editReply({ content: `❌ Osiągnięto limit **${MAX}** rankingów ról. Usuń istniejący przed dodaniem nowego.` });
+            return;
+        }
+
+        let roles;
+        try {
+            roles = await interaction.guild.roles.fetch();
+        } catch (err) {
+            await interaction.editReply({ content: '❌ Nie można pobrać listy ról serwera.' });
+            return;
+        }
+
+        const existingIds = new Set(existing.map(r => r.roleId));
+        const options = roles
+            .filter(r => !r.managed && r.id !== interaction.guild.id && !existingIds.has(r.id))
+            .sort((a, b) => b.position - a.position)
+            .first(25)
+            .map(r => ({ label: r.name.substring(0, 100), value: r.id }));
+
+        if (options.length === 0) {
+            await interaction.editReply({ content: '⚠️ Brak dostępnych ról do dodania (wszystkie już dodane lub brak ról na serwerze).' });
+            return;
+        }
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('ee_add_role_select')
+            .setPlaceholder('Wybierz rolę...')
+            .addOptions(options);
+
+        await interaction.editReply({
+            content: `📋 Wybierz rolę, dla której chcesz utworzyć ranking (${existing.length}/${MAX} zajętych):`,
+            components: [new ActionRowBuilder().addComponents(select)]
+        });
+    }
+
+    /**
+     * Obsługuje komendę /remove-role-ranking
+     */
+    async handleRemoveRoleRankingCommand(interaction) {
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        const guildId = interaction.guildId;
+        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+
+        if (existing.length === 0) {
+            await interaction.editReply({ content: '⚠️ Brak skonfigurowanych rankingów ról na tym serwerze.' });
+            return;
+        }
+
+        const options = existing.map(r => ({ label: r.roleName.substring(0, 100), value: r.roleId }));
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('ee_remove_role_select')
+            .setPlaceholder('Wybierz ranking roli do usunięcia...')
+            .addOptions(options);
+
+        await interaction.editReply({
+            content: '🗑️ Wybierz ranking roli do usunięcia:',
+            components: [new ActionRowBuilder().addComponents(select)]
+        });
+    }
+
+    /**
+     * Obsługuje wybór roli w /add-role-ranking
+     */
+    async _handleAddRoleSelect(interaction) {
+        const roleId = interaction.values[0];
+        const guildId = interaction.guildId;
+
+        let role;
+        try {
+            role = await interaction.guild.roles.fetch(roleId);
+        } catch {
+            await interaction.update({ content: '❌ Nie można pobrać wybranej roli.', components: [] });
+            return;
+        }
+
+        const result = await this.roleRankingConfigService.addRoleRanking(guildId, roleId, role.name);
+
+        if (!result.ok) {
+            const msg = result.reason === 'limit'
+                ? '❌ Osiągnięto limit 10 rankingów ról.'
+                : `⚠️ Ranking dla roli **${role.name}** już istnieje.`;
+            await interaction.update({ content: msg, components: [] });
+            return;
+        }
+
+        await interaction.update({
+            content: `✅ Dodano ranking dla roli **${role.name}**. Pojawi się w komendzie \`/ranking\` po wybraniu tego serwera.`,
+            components: []
+        });
+    }
+
+    /**
+     * Obsługuje wybór roli w /remove-role-ranking
+     */
+    async _handleRemoveRoleSelect(interaction) {
+        const roleId = interaction.values[0];
+        const guildId = interaction.guildId;
+
+        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        const roleCfg = existing.find(r => r.roleId === roleId);
+        const roleName = roleCfg?.roleName || roleId;
+
+        const removed = await this.roleRankingConfigService.removeRoleRanking(guildId, roleId);
+
+        await interaction.update({
+            content: removed
+                ? `✅ Usunięto ranking roli **${roleName}**.`
+                : `⚠️ Ranking roli **${roleName}** nie istnieje.`,
+            components: []
         });
     }
 
@@ -1208,6 +1482,16 @@ class InteractionHandler {
                     embeds: [],
                     components: []
                 });
+                return;
+            }
+
+            if (customId === 'ee_add_role_select') {
+                await this._handleAddRoleSelect(interaction);
+                return;
+            }
+
+            if (customId === 'ee_remove_role_select') {
+                await this._handleRemoveRoleSelect(interaction);
                 return;
             }
 

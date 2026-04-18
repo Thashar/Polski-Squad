@@ -47,9 +47,21 @@
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
    - Nazwy serwerów pobierane dynamicznie z `client.guilds.cache`
-   - Po kliknięciu → ranking z paginacją (10/strona, 1h timeout)
+   - Po kliknięciu serwera → ranking z paginacją (10/strona, 1h timeout) + przyciski rankingów ról (jeśli skonfigurowane)
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
+   - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)
+
+6. **Rankingi Ról** - `roleRankingConfigService.js` + `interactionHandlers.js`:
+   - `/add-role-ranking` (admin) → select menu z rolami serwera → dodaje ranking roli, max **10 ról** per serwer
+   - `/remove-role-ranking` (admin) → select menu z aktualnymi rankingami ról → usuwa wybrany
+   - Konfiguracja persystowana w `data/role_rankings_{guildId}.json` (`[{ roleId, roleName, addedAt }]`)
+   - Po wybraniu serwera w `/ranking` → pod paginacją pojawiają się przyciski `[NazwaRoli]` (max 2 wiersze po 5)
+   - Kliknięcie przycisku roli → ranking filtrowany do graczy aktualnie posiadających tę rolę
+   - Filtrowanie: batch-fetch tylko graczy z rankingu (nie całego serwera) → `guild.members.fetch({ user: [...ids] })`
+   - **Cache RAM** (3 min TTL): wyniki fetch trzymane w `_memberCache` Map → kolejne kliknięcia bez dodatkowych requestów
+   - Powrót z rankingu roli (`ranking_back`) → wraca do rankingu serwera (z przyciskami ról)
+   - Wymaga `GatewayIntentBits.GuildMembers` (Privileged) włączonego w Discord Developer Portal
 
 5. **System Powiadomień DM** - `notificationService.js` + `interactionHandlers.js`:
    - `/notifications` → ephemeral z przyciskami: `[🔔 Ustaw powiadomienie]` i `[🔕 Usuń powiadomienie]`
@@ -69,7 +81,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/test`, `/unblock`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
