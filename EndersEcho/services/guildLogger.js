@@ -51,9 +51,10 @@ class GuildLogger {
 
         const levelEmoji = LEVEL_EMOJI[level] || '•';
         const timestamp = getTimestamp();
+        const prefix = guildName ? `${guildName} ` : '';
         const content = isNewGuild
-            ? `${SEPARATOR}\n[${timestamp}] ${levelEmoji} ${message}`
-            : `[${timestamp}] ${levelEmoji} ${message}`;
+            ? `${SEPARATOR}\n${prefix}[${timestamp}] ${levelEmoji} ${message}`
+            : `${prefix}[${timestamp}] ${levelEmoji} ${message}`;
 
         const payload = { content, username: guildName };
         if (guildIcon) payload.avatar_url = guildIcon;
