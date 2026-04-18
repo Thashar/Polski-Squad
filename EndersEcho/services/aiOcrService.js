@@ -331,12 +331,19 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
-        const prompt = `Otrzymujesz dwa screenshoty z gry. Pierwsze zdjęcie to wzorzec — przykład prawidłowego screenshota z ekranem wyników bossa. Drugie zdjęcie to zdjęcie przesłane przez użytkownika.
+        const prompt = `Pierwsze zdjęcie to wzorzec prawidłowego screenshota z ekranem wyników bossa z gry. Drugie zdjęcie to zdjęcie przesłane przez użytkownika do weryfikacji.
 
-Sprawdź wyłącznie czy oba zdjęcia przedstawiają ten sam typ ekranu z gry (ekran wyników bossa). Nie oceniaj autentyczności ani prawdziwości wyniku.
+Na prawidłowym screenie z wynikiem bossa MUSZĄ być obecne WSZYSTKIE poniższe elementy:
+1. Pomarańczowy/złoty baner z napisem "Victory" (angielski) LUB "勝利！" (japoński) — widoczny wyraźnie w górnej części panelu wyników
+2. Szary/srebrny zaokrąglony panel wyników zajmujący środkową część ekranu
+3. Duża liczba wyniku z jednostką (np. 157.1Qi, 65419.5Qi) — wynik tej rundy
+4. Pole "Best:" z wartością (angielski) LUB "最高記録：" z wartością (japoński)
+5. Pole "Total:" z wartością (angielski) LUB "合計：" z wartością (japoński)
+6. Rząd sześciokątnych ikon ekwipunku (4 ikony w hexagonalnych ramkach)
+7. HUD gry widoczny w tle — pasek HP bossa na górze ekranu, timer (03:00), przycisk pauzy
 
-Jeśli oba zdjęcia wyglądają jak ekran wyników bossa w tej samej grze — napisz tylko jedno słowo: "OK"
-Jeśli zdjęcia przedstawiają różne typy ekranów lub drugie zdjęcie nie jest ekranem wyników bossa — napisz tylko jedno słowo: "NOK"`;
+Jeśli drugie zdjęcie zawiera WSZYSTKIE wymienione elementy — napisz tylko jedno słowo: "OK"
+Jeśli choćby JEDEN z wymienionych elementów jest nieobecny lub ekran przedstawia inny widok gry — napisz tylko jedno słowo: "NOK"`;
 
         const message = await this.client.messages.create({
             model: this.model,
