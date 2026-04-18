@@ -8,7 +8,7 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -16,6 +16,7 @@ class InteractionHandler {
         this.logService = logService;
         this.roleService = roleService;
         this.notificationService = notificationService;
+        this.userBlockService = userBlockService;
         this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
@@ -99,6 +100,11 @@ class InteractionHandler {
                     option.setName('obraz')
                         .setDescription('Screenshot do przetestowania')
                         .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('unblock')
+                .setDescription('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -137,6 +143,11 @@ class InteractionHandler {
                 return;
             }
 
+            if (interaction.commandName === 'unblock') {
+                await this.handleUnblockCommand(interaction);
+                return;
+            }
+
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
                 await interaction.reply({
                     content: this.msgs(interaction.guildId).channelNotAllowed,
@@ -159,6 +170,11 @@ class InteractionHandler {
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'info_modal') {
                 await this._handleInfoModalSubmit(interaction);
+                return;
+            }
+            if (interaction.customId.startsWith('ee_block_modal_')) {
+                await this._handleBlockUserModal(interaction);
+                return;
             }
         }
     }
@@ -202,6 +218,15 @@ class InteractionHandler {
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
+
+        if (this.userBlockService.isBlocked(interaction.user.id)) {
+            await interaction.reply({
+                content: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
+                flags: ['Ephemeral']
+            });
+            return;
+        }
+
         const attachment = interaction.options.getAttachment('obraz');
 
         const isImage = this.config.images.supportedExtensions.some(ext =>
@@ -717,6 +742,46 @@ class InteractionHandler {
         try {
             const customId = interaction.customId;
 
+            // === Przyciski raportów odrzuconych screenów ===
+            if (customId.startsWith('ee_approve_')) {
+                if (!interaction.member.permissions.has('Administrator')) {
+                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    return;
+                }
+                const adminName = interaction.member?.displayName || interaction.user.username;
+                await interaction.update({
+                    content: `✅ Zatwierdzone przez **${adminName}**`,
+                    embeds: interaction.message.embeds,
+                    components: []
+                });
+                return;
+            }
+
+            if (customId.startsWith('ee_block_')) {
+                if (!interaction.member.permissions.has('Administrator')) {
+                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    return;
+                }
+                const parts = customId.split('_');
+                const targetUserId = parts[2];
+                const targetGuildId = parts[3];
+                const modal = new ModalBuilder()
+                    .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}`)
+                    .setTitle('Zablokuj użytkownika')
+                    .addComponents(
+                        new ActionRowBuilder().addComponents(
+                            new TextInputBuilder()
+                                .setCustomId('duration')
+                                .setLabel('Czas blokady (np. 1h, 7d, 30m) — puste = permanentnie')
+                                .setStyle(TextInputStyle.Short)
+                                .setRequired(false)
+                                .setPlaceholder('Zostaw puste dla blokady permanentnej')
+                        )
+                    );
+                await interaction.showModal(modal);
+                return;
+            }
+
             // === Przyciski /info ===
             if (customId === 'info_send') {
                 await this._handleInfoSend(interaction);
@@ -953,9 +1018,28 @@ class InteractionHandler {
      * Obsługuje select menu i inne interakcje z powiadomieniami
      */
     async handleSelectMenuInteraction(interaction) {
-        if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
         try {
             const customId = interaction.customId;
+
+            if (customId === 'ee_unblock_select') {
+                if (!interaction.member.permissions.has('Administrator')) {
+                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    return;
+                }
+                const targetUserId = interaction.values[0];
+                const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
+                const success = await this.userBlockService.unblockUser(targetUserId);
+                const username = entry?.username || targetUserId;
+                await interaction.update({
+                    content: success ? `✅ Odblokowano użytkownika **${username}**.` : '⚠️ Użytkownik nie był zablokowany.',
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
+
             if (customId === 'notif_server_select') {
                 await this._handleNotifServerSelect(interaction);
             } else if (customId.startsWith('notif_player_select_')) {
@@ -1397,6 +1481,94 @@ class InteractionHandler {
         await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
     }
 
+    async _handleBlockUserModal(interaction) {
+        const parts = interaction.customId.split('_');
+        const targetUserId = parts[3];
+        const targetGuildId = parts[4];
+        const durationStr = interaction.fields.getTextInputValue('duration').trim();
+
+        let targetGuild;
+        try {
+            targetGuild = await interaction.client.guilds.fetch(targetGuildId);
+        } catch {
+            targetGuild = null;
+        }
+
+        let targetUsername = targetUserId;
+        try {
+            const member = await targetGuild?.members.fetch(targetUserId);
+            targetUsername = member?.displayName || member?.user.username || targetUserId;
+        } catch {
+            try {
+                const user = await interaction.client.users.fetch(targetUserId);
+                targetUsername = user.username;
+            } catch { /* zostaw userId */ }
+        }
+
+        const guildName = targetGuild?.name || targetGuildId;
+
+        const blockedUntil = await this.userBlockService.blockUser(
+            targetUserId, targetUsername, targetGuildId, guildName, durationStr
+        );
+
+        const timeLabel = blockedUntil
+            ? `do <t:${Math.floor(blockedUntil / 1000)}:F>`
+            : '**permanentnie**';
+
+        const adminName = interaction.member?.displayName || interaction.user.username;
+
+        await interaction.update({
+            content: `🔒 Użytkownik **${targetUsername}** zablokowany ${timeLabel} przez **${adminName}**`,
+            embeds: interaction.message.embeds,
+            components: []
+        });
+
+        logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
+    }
+
+    async handleUnblockCommand(interaction) {
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const blocked = this.userBlockService.getBlockedUsers();
+
+        if (blocked.length === 0) {
+            await interaction.reply({ content: '✅ Brak zablokowanych użytkowników.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const options = blocked.slice(0, 25).map(entry => {
+            const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+            const desc = `${entry.guildName} | Pozostało: ${timeLabel}`;
+            return {
+                label: entry.username.slice(0, 100),
+                description: desc.slice(0, 100),
+                value: entry.userId
+            };
+        });
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('ee_unblock_select')
+            .setPlaceholder('Wybierz użytkownika do odblokowania')
+            .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(select);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF4444)
+            .setTitle('🔒 Zablokowani użytkownicy OCR')
+            .setDescription(blocked.slice(0, 25).map((entry, i) => {
+                const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+                return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
+            }).join('\n'))
+            .setFooter({ text: `Łącznie: ${blocked.length} zablokowanych` })
+            .setTimestamp();
+
+        await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
+    }
+
     async handleBlockOcrCommand(interaction) {
         const allowedIds = this.config.blockOcrUserIds;
         if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
@@ -1502,7 +1674,21 @@ class InteractionHandler {
                 .setImage(`attachment://${fileName}`)
                 .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
 
-            await channel.send({ embeds: [embed], files: [fileAttachment] });
+            const approveBtn = new ButtonBuilder()
+                .setCustomId(`ee_approve_${interaction.user.id}`)
+                .setLabel('Zatwierdź')
+                .setEmoji('✅')
+                .setStyle(ButtonStyle.Secondary);
+
+            const blockBtn = new ButtonBuilder()
+                .setCustomId(`ee_block_${interaction.user.id}_${interaction.guildId}`)
+                .setLabel('Zablokuj użytkownika')
+                .setEmoji('🔒')
+                .setStyle(ButtonStyle.Danger);
+
+            const reportRow = new ActionRowBuilder().addComponents(approveBtn, blockBtn);
+
+            await channel.send({ embeds: [embed], files: [fileAttachment], components: [reportRow] });
             gl.info(`✅ 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
         } catch (err) {
             gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);

@@ -68,7 +68,14 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`, `/block-ocr`, `/test`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/ocr-debug`, `/notifications`, `/info`, `/block-ocr`, `/test`, `/unblock`
+
+**System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
+- Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
+- **Zablokuj** otwiera modal z polem czasu (np. `1h`, `7d`, `30m` — puste = permanentnie)
+- Zablokowany użytkownik przy próbie `/update` widzi komunikat o blokadzie i konieczności kontaktu z adminem
+- `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania
+- Persistencja przeżywa restart bota
 
 **Struktura danych:**
 ```
