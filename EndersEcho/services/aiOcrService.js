@@ -294,14 +294,14 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         return score;
     }
 
-    async analyzeTestImage(imagePath, log = logger) {
+    async analyzeTestImage(imageSource, log = logger) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const wzorPath = path.join(__dirname, '../files/Wzór.jpg');
 
         try {
             const [uploadedBuffer, wzorBuffer] = await Promise.all([
-                sharp(imagePath).png().toBuffer(),
+                sharp(imageSource).png().toBuffer(),
                 sharp(wzorPath).png().toBuffer()
             ]);
 

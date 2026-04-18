@@ -39,7 +39,25 @@ async function downloadFile(url, filepath) {
     });
 }
 
+/**
+ * Pobiera plik z URL do bufora w pamięci (bez zapisu na dysk)
+ * @param {string} url - URL do pobrania
+ * @returns {Promise<Buffer>}
+ */
+async function downloadBuffer(url) {
+    return new Promise((resolve, reject) => {
+        const protocol = url.startsWith('https:') ? https : http;
+        const chunks = [];
+        protocol.get(url, (response) => {
+            response.on('data', chunk => chunks.push(chunk));
+            response.on('end', () => resolve(Buffer.concat(chunks)));
+            response.on('error', reject);
+        }).on('error', reject);
+    });
+}
+
 module.exports = {
     formatMessage,
-    downloadFile
+    downloadFile,
+    downloadBuffer
 };

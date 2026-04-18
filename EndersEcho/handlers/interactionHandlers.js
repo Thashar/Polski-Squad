@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
-const { downloadFile, formatMessage } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const OcrBlockService = require('../services/ocrBlockService');
@@ -638,21 +638,17 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
         await interaction.editReply({ content: msgs.updateProcessing });
 
-        let tempImagePath = null;
-
         try {
-            await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
-
-            tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
-            await downloadFile(attachment.url, tempImagePath);
-
             gl.info(`🤖 [/test] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
-            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
+            const imageBuffer = await downloadBuffer(attachment.url);
+            const attachmentExt = attachment.name ? path.extname(attachment.name) || '.jpg' : '.jpg';
+            const fileExtension = attachmentExt.replace('.', '');
+
+            const aiResult = await this.aiOcrService.analyzeTestImage(imageBuffer, gl);
 
             if (aiResult.error === 'NOT_SIMILAR') {
-                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
-                await fs.unlink(tempImagePath);
+                await this._sendInvalidScreenReport(interaction, imageBuffer, 'NOT_SIMILAR', gl, attachmentExt);
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()
@@ -665,8 +661,7 @@ class InteractionHandler {
             }
 
             if (!aiResult.isValidVictory) {
-                await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-                await fs.unlink(tempImagePath);
+                await this._sendInvalidScreenReport(interaction, imageBuffer, aiResult.error, gl, attachmentExt);
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
             }
@@ -692,13 +687,8 @@ class InteractionHandler {
             if (!isNewRecord) {
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-                    const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
-                    const fsSync = require('fs');
-                    const fileStats = fsSync.statSync(tempImagePath);
-                    gl.info(`📁 [/test] Plik do załączenia - rozmiar: ${(fileStats.size / (1024 * 1024)).toFixed(2)}MB`);
-
-                    const imageAttachment = new AttachmentBuilder(tempImagePath, {
+                    const imageAttachment = new AttachmentBuilder(imageBuffer, {
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
                     });
 
@@ -729,7 +719,6 @@ class InteractionHandler {
                         }
                     }
 
-                    await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
@@ -738,8 +727,7 @@ class InteractionHandler {
 
             // Nowy rekord — publiczne ogłoszenie
             const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
-            const imageAttachment = new AttachmentBuilder(tempImagePath, {
+            const imageAttachment = new AttachmentBuilder(imageBuffer, {
                 name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}`
             });
 
@@ -837,7 +825,7 @@ class InteractionHandler {
                                 let notifImageRef = null;
                                 let notifFiles;
                                 if (!isSourceGuild) {
-                                    const notifAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
+                                    const notifAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
                                     notifImageRef = `attachment://${notifAttachment.name}`;
                                     notifFiles = [notifAttachment];
                                 }
@@ -881,7 +869,7 @@ class InteractionHandler {
                     for (const subscriberId of subscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
-                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
+                            const dmAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
                             const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
                             await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
                             gl.info(`✅ [/test] Wysłano DM powiadomienie do ${subscriberId}`);
@@ -894,14 +882,8 @@ class InteractionHandler {
                 gl.error(`❌ [/test] Błąd wysyłania DM powiadomień: ${dmCheckError.message}`);
             }
 
-            await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-
         } catch (error) {
             await this.logService.logOCRError(error, 'handleTestCommand', interaction.guildId);
-
-            if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-            }
 
             try {
                 await interaction.editReply(msgs.updateError);
@@ -2092,7 +2074,7 @@ class InteractionHandler {
         return { bestScore, bossName };
     }
 
-    async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
+    async _sendInvalidScreenReport(interaction, imageData, reason, gl, attachmentExt = null) {
         if (!this.config.invalidReportChannelId) return;
         try {
             const channel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
@@ -2119,9 +2101,9 @@ class InteractionHandler {
             const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
             const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
 
-            const ext = path.extname(imagePath) || '.png';
+            const ext = attachmentExt || (Buffer.isBuffer(imageData) ? '.jpg' : (path.extname(imageData) || '.png'));
             const fileName = `rejected_${Date.now()}${ext}`;
-            const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
+            const fileAttachment = new AttachmentBuilder(imageData, { name: fileName });
 
             const embed = new EmbedBuilder()
                 .setColor(color)
