@@ -55,7 +55,7 @@ class AIOCRService {
                 const result = this.parseAIResponse(extractResponse, log);
 
                 if (result.isValidVictory) {
-                    log.info(`[AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
+                    log.info(`✅ [AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
                     return result;
                 }
 
@@ -187,7 +187,7 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         let total = null;
         if (lines.length >= 3) {
             total = this.normalizeScore(lines[2].replace(/^total[:\s]*/i, '').trim(), log);
-            if (total) log.info(`[AI OCR] Total: "${total}"`);
+            if (total) log.info(`✅ [AI OCR] Total: "${total}"`);
         }
 
         score = this.normalizeScore(score, log);
@@ -279,7 +279,7 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
             const corrected = match[1].slice(0, -1) + match[2];
             const correctedNum = this.parseScoreToNumber(corrected);
             if (correctedNum !== null && correctedNum <= totalNum) {
-                log.info(`[AI OCR] validateTotal: "${score}" → "${corrected}"`);
+                log.info(`✅ [AI OCR] validateTotal: "${score}" → "${corrected}"`);
                 return corrected;
             }
         }

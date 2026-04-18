@@ -1503,7 +1503,7 @@ class InteractionHandler {
                 .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
 
             await channel.send({ embeds: [embed], files: [fileAttachment] });
-            gl.info(`📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
+            gl.info(`✅ 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
         } catch (err) {
             gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
         }

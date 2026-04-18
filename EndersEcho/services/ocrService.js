@@ -39,7 +39,8 @@ class OCRService {
             const bestValue  = bestMatch  ? bestMatch[1].trim()  : '';
             const totalValue = totalMatch ? totalMatch[1].trim() : '';
 
-            log.info(`Word check → Best:"${bestValue || '—'}" Total:"${totalValue || '—'}" [${hasBest && hasTotal ? '✓' : '✗'}]`);
+            const wcOk = hasBest && hasTotal;
+            log[wcOk ? 'info' : 'warn'](`${wcOk ? '✅' : '⚠️'} Word check → Best:"${bestValue || '—'}" Total:"${totalValue || '—'}"`);
 
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
                 log.info(`Word check raw text: "${text.trim()}"`);
@@ -89,7 +90,7 @@ class OCRService {
 
             const trimmedText = text.trim();
             const preview = trimmedText.length > 120 ? trimmedText.substring(0, 120) + '…' : trimmedText;
-            log.info(`OCR: "${preview}" (${trimmedText.length} znaków)`);
+            log.info(`✅ OCR: "${preview}" (${trimmedText.length} znaków)`);
 
             if (this.config.ocr.detailedLogging.enabled && this.config.ocr.detailedLogging.logTextExtraction) {
                 log.info(`OCR pełny tekst: "${trimmedText}"`);
@@ -136,7 +137,7 @@ class OCRService {
                 const wholePart = result.match(/^(\d+)/)?.[1] || '';
                 if (wholePart.length <= 5) {
                     result = this.fixScoreFormat(result, log);
-                    log.info(`Score: "${result}" (KROK 1 — Best+jednostka)`);
+                    log.info(`✅ Score: "${result}" (KROK 1 — Best+jednostka)`);
                     return result;
                 }
                 log.warn(`Score KROK 1: "${result}" — ${wholePart.length} cyfr > 5, pomijam`);
@@ -152,7 +153,7 @@ class OCRService {
                 const wholePart = score.match(/^(\d+)/)?.[1] || '';
                 if (wholePart.length <= 5) {
                     score = this.fixScoreFormat(score, log);
-                    log.info(`Score: "${score}" (KROK 2 — linia wyżej)`);
+                    log.info(`✅ Score: "${score}" (KROK 2 — linia wyżej)`);
                     return score;
                 }
                 log.warn(`Score KROK 2: "${score}" — ${wholePart.length} cyfr > 5, pomijam`);
@@ -167,13 +168,13 @@ class OCRService {
             if (scoreMatch) {
                 const result = this.normalizeScoreWithoutUnit(scoreMatch[1], log);
                 if (result) {
-                    log.info(`Score: "${result}" (KROK 3 — bez jednostki, znormalizowany)`);
+                    log.info(`✅ Score: "${result}" (KROK 3 — bez jednostki, znormalizowany)`);
                     return result;
                 }
             }
         }
 
-        log.info(`Score: null (brak dopasowań)`);
+        log.warn(`⚠️ Score: null (brak dopasowań)`);
         return null;
     }
 
@@ -202,7 +203,7 @@ class OCRService {
         result = this.fixScoreFormat(result, log);
 
         if (result && /\d+(?:\.\d+)?(?:Qi|[KMBTQ])/i.test(result)) {
-            log.info(`normalizeNoUnit: "${score}" → "${result}"`);
+            log.info(`✅ normalizeNoUnit: "${score}" → "${result}"`);
             return result;
         }
 
@@ -217,7 +218,8 @@ class OCRService {
         if (victoryIndex !== -1 && victoryIndex + 1 < lines.length) {
             const bossLine = lines[victoryIndex + 1];
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
-            log.info(`Boss: "${cleanBossName || 'null'}" (Victory@line${victoryIndex + 1})`);
+            if (cleanBossName) log.info(`✅ Boss: "${cleanBossName}" (Victory@line${victoryIndex + 1})`);
+            else log.warn(`⚠️ Boss: null (Victory@line${victoryIndex + 1}, pusta linia)`);
             return cleanBossName || null;
         }
 
@@ -225,11 +227,12 @@ class OCRService {
             const hasDigits = /\d/.test(lines[1]);
             const bossLine = hasDigits ? lines[0] : lines[1];
             const cleanBossName = bossLine.replace(/[^\w\s\-]/g, '').trim();
-            log.info(`Boss: "${cleanBossName || 'null'}" (fallback, linia ${hasDigits ? 1 : 2})`);
+            if (cleanBossName) log.info(`✅ Boss: "${cleanBossName}" (fallback, linia ${hasDigits ? 1 : 2})`);
+            else log.warn(`⚠️ Boss: null (fallback, pusta linia)`);
             return cleanBossName || null;
         }
 
-        log.info(`Boss: null (za mało linii)`);
+        log.warn(`⚠️ Boss: null (za mało linii)`);
         return null;
     }
 }
