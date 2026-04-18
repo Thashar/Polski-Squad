@@ -14,7 +14,6 @@ class AIOCRService {
     constructor(config) {
         this.config = config;
 
-        // Anthropic API
         this.apiKey = process.env.ENDERSECHO_ANTHROPIC_API_KEY;
         this.enabled = !!this.apiKey && config.ocr.useAI === true;
 
@@ -29,18 +28,13 @@ class AIOCRService {
         }
     }
 
-    /**
-     * Analizuje zdjęcie wyniku przez Claude Vision
-     * @param {string} imagePath - Ścieżka do obrazu
-     * @returns {Promise<{bossName: string|null, score: string|null, confidence: number, isValidVictory: boolean, error?: string}>}
-     */
-    async analyzeVictoryImage(imagePath) {
+    async analyzeVictoryImage(imagePath, log = logger) {
         if (!this.enabled) {
             throw new Error('AI OCR nie jest włączony');
         }
 
         try {
-            logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
+            log.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
 
             const pngBuffer = await sharp(imagePath).png().toBuffer();
             const base64Image = pngBuffer.toString('base64');
@@ -51,53 +45,50 @@ class AIOCRService {
             for (const lang of ['eng', 'jpn']) {
                 const langLabel = lang === 'eng' ? 'angielski' : 'japoński';
 
-                // KROK 1: sprawdź ekran zwycięstwa
-                logger.info(`[AI OCR] KROK 1 (${langLabel}): Sprawdzam ekran zwycięstwa...`);
-                const victoryFound = await this._checkVictory(base64Image, mediaType, lang);
+                log.info(`[AI OCR] KROK 1 (${langLabel}): Sprawdzam ekran zwycięstwa...`);
+                const victoryFound = await this._checkVictory(base64Image, mediaType, lang, log);
 
                 if (!victoryFound) {
-                    logger.warn(`[AI OCR] KROK 1 (${langLabel}): Nie znaleziono — próbuję następny język`);
+                    log.warn(`[AI OCR] KROK 1 (${langLabel}): Nie znaleziono — próbuję następny język`);
                     continue;
                 }
 
-                logger.info(`[AI OCR] KROK 1 (${langLabel}): Znaleziono`);
+                log.info(`[AI OCR] KROK 1 (${langLabel}): Znaleziono`);
 
-                // KROK 2: weryfikacja autentyczności (tylko raz)
                 if (!fakeCheckDone) {
-                    logger.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
-                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType);
+                    log.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
+                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType, log);
                     fakeCheckDone = true;
 
                     if (!isAuthentic) {
-                        logger.warn(`[AI OCR] KROK 2: WYKRYTO PODROBIONE ZDJĘCIE!`);
+                        log.warn(`[AI OCR] KROK 2: WYKRYTO PODROBIONE ZDJĘCIE!`);
                         return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
                     }
-                    logger.info(`[AI OCR] KROK 2: Zdjęcie autentyczne`);
+                    log.info(`[AI OCR] KROK 2: Zdjęcie autentyczne`);
                 }
 
-                // KROK 3: wyciągnij dane
-                logger.info(`[AI OCR] KROK 3 (${langLabel}): Wyciągam dane...`);
+                log.info(`[AI OCR] KROK 3 (${langLabel}): Wyciągam dane...`);
                 const extractResponse = await this._extractData(base64Image, mediaType, lang);
-                logger.info(`[AI OCR] KROK 3 (${langLabel}) - Odpowiedź Claude:`);
-                logger.info(extractResponse);
+                log.info(`[AI OCR] KROK 3 (${langLabel}) - Odpowiedź Claude:`);
+                log.info(extractResponse);
 
-                const result = this.parseAIResponse(extractResponse);
-                logger.info(`[AI OCR] KROK 3 (${langLabel}) - Wynik parsowania:`, result);
+                const result = this.parseAIResponse(extractResponse, log);
+                log.info(`[AI OCR] KROK 3 (${langLabel}) - Wynik parsowania: ${JSON.stringify(result)}`);
 
                 if (result.isValidVictory) return result;
 
-                logger.warn(`[AI OCR] KROK 3 (${langLabel}): Nie udało się odczytać danych — próbuję następny język`);
+                log.warn(`[AI OCR] KROK 3 (${langLabel}): Nie udało się odczytać danych — próbuję następny język`);
             }
 
             return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
 
         } catch (error) {
-            logger.error(`[AI OCR] Błąd analizy obrazu:`, error);
+            log.error(`[AI OCR] Błąd analizy obrazu: ${error.message}`);
             throw error;
         }
     }
 
-    async _checkVictory(base64Image, mediaType, lang) {
+    async _checkVictory(base64Image, mediaType, lang, log = logger) {
         const prompt = lang === 'jpn'
             ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
             : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
@@ -112,11 +103,11 @@ class AIOCRService {
         });
 
         const response = message.content[0].text.trim();
-        logger.info(`[AI OCR] KROK 1 (${lang}) - Odpowiedź: "${response}"`);
+        log.info(`[AI OCR] KROK 1 (${lang}) - Odpowiedź: "${response}"`);
         return !response.toLowerCase().includes('nie znaleziono');
     }
 
-    async _checkAuthentic(base64Image, mediaType) {
+    async _checkAuthentic(base64Image, mediaType, log = logger) {
         const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
 DOKŁADNĄ ANALIZĘ LICZB
 Sprawdzenie KAŻDEGO piksela w cyfrach
@@ -146,18 +137,16 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
         });
 
         const response = message.content[0].text.trim().toUpperCase();
-        logger.info(`[AI OCR] KROK 2 - Odpowiedź: "${response}"`);
+        log.info(`[AI OCR] KROK 2 - Odpowiedź: "${response}"`);
         return !response.includes('NOK');
     }
 
     async _extractData(base64Image, mediaType, lang) {
         const prompt = lang === 'jpn'
             ? `この画像の内容を読み取ってください。「勝利！」の下にボス名があります。ボス名の下にスコア（最高記録）があります。画面には「合計」の値もあります。それも読み取ってください。
-
 重要 — スコアの単位（小さい順）: K, M, B, T, Q, Qi, Sx
 注意：単位の「Q」は数字の「0」に似て見えることがあります — 正確に識別してください。
 注意：スコアの最後の文字は常に単位（アルファベット）であり、数字ではありません。「18540」のように文字がない場合、最後の文字はおそらく「Q」であり「0」ではありません。
-
 ⚠️ スコア読み取りの重要ルール：
 画面に表示されている通りに正確に読み取ってください。
 画像に明確に表示されていない区切り文字（カンマや小数点）を追加しないでください。
@@ -169,18 +158,15 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 <スコア>
 <合計>`
             : `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
-
 WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
 UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
 UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
-
 ⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
 Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
 NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
 NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
 NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
 Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
-
 Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i napisz w następującym formacie:
 <nazwa bossa>
 <wynik>
@@ -198,15 +184,9 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         return message.content[0].text;
     }
 
-    /**
-     * Parsuje odpowiedź Claude i wyciąga nazwę bossa + wynik
-     * @param {string} responseText - Odpowiedź AI
-     * @returns {{bossName: string|null, score: string|null, confidence: number, isValidVictory: boolean, error?: string}}
-     */
-    parseAIResponse(responseText) {
+    parseAIResponse(responseText, log = logger) {
         const lowerResponse = responseText.toLowerCase();
 
-        // Sprawdź czy AI wykrył niepoprawny screen
         const invalidKeywords = [
             'niepoprawny screen',
             'przesłano niepoprawny',
@@ -220,78 +200,54 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
 
         for (const keyword of invalidKeywords) {
             if (lowerResponse.includes(keyword)) {
-                logger.info(`[AI OCR] AI wykrył niepoprawny screen (keyword: "${keyword}")`);
-                return {
-                    bossName: null,
-                    score: null,
-                    confidence: 0,
-                    isValidVictory: false,
-                    error: 'INVALID_SCREENSHOT'
-                };
+                log.info(`[AI OCR] AI wykrył niepoprawny screen (keyword: "${keyword}")`);
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
             }
         }
 
-        // Wyciągnij nazwę bossa, wynik i total - pierwsze trzy niepuste linie
         const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         if (lines.length < 2) {
-            logger.warn(`[AI OCR] AI zwrócił za mało linii (${lines.length})`);
-            return {
-                bossName: null,
-                score: null,
-                confidence: 0,
-                isValidVictory: false,
-                error: 'PARSING_ERROR'
-            };
+            log.warn(`[AI OCR] AI zwrócił za mało linii (${lines.length})`);
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'PARSING_ERROR' };
         }
 
-        // Pierwsza linia = nazwa bossa (usuń potencjalne prefix "Boss:" lub podobne)
         let bossName = lines[0]
             .replace(/^boss[:\s]*/i, '')
             .replace(/^nazwa[:\s]*bossa[:\s]*/i, '')
             .trim();
 
-        // Druga linia = wynik (usuń potencjalne prefix "Wynik:" lub podobne)
         let score = lines[1]
             .replace(/^wynik[:\s]*/i, '')
             .replace(/^score[:\s]*/i, '')
             .replace(/^best[:\s]*/i, '')
             .trim();
 
-        // Trzecia linia = total (opcjonalna)
         let total = null;
         if (lines.length >= 3) {
-            total = lines[2]
-                .replace(/^total[:\s]*/i, '')
-                .trim();
-            total = this.normalizeScore(total);
-            logger.info(`[AI OCR] Odczytano Total: "${total}"`);
+            total = lines[2].replace(/^total[:\s]*/i, '').trim();
+            total = this.normalizeScore(total, log);
+            log.info(`[AI OCR] Odczytano Total: "${total}"`);
         }
 
-        // Normalizacja wyniku (max 5 cyfr + jednostka)
-        score = this.normalizeScore(score);
+        score = this.normalizeScore(score, log);
 
-        // Walidacja score vs Total - jeśli score > total, prawdopodobnie AI dodał cyfrę 0 zamiast rozpoznać literę jednostki
         if (score && total) {
-            score = this.validateScoreAgainstTotal(score, total);
+            score = this.validateScoreAgainstTotal(score, total, log);
         }
 
-        // Walidacja
         const isValid = bossName && score && score.length > 0;
 
         if (!isValid) {
-            logger.warn(`[AI OCR] Walidacja nie powiodła się - boss: "${bossName}", wynik: "${score}"`);
+            log.warn(`[AI OCR] Walidacja nie powiodła się - boss: "${bossName}", wynik: "${score}"`);
         }
 
-        // Oblicz confidence (prosta heurystyka)
         let confidence = 0;
         if (bossName) {
             confidence += 50;
             if (bossName.length >= 3) confidence += 10;
         }
-        if (score && score.length > 0) {
-            confidence += 40;
-        }
+        if (score && score.length > 0) confidence += 40;
 
         return {
             bossName: isValid ? bossName : null,
@@ -302,83 +258,55 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         };
     }
 
-    /**
-     * Normalizuje wynik - max 5 cyfr PRZED kropką + jednostka
-     * Zasady:
-     * - Max 5 cyfr PRZED kropką (część całkowita)
-     * - Jeśli przed kropką 1 cyfra → po kropce max 2 cyfry
-     * - Jeśli przed kropką 2-5 cyfr → po kropce max 1 cyfra
-     * - Jeśli jest 6+ cyfr przed kropką → obcina do 5
-     * @param {string} score - Wynik do normalizacji
-     * @returns {string} - Znormalizowany wynik
-     */
-    normalizeScore(score) {
+    normalizeScore(score, log = logger) {
         if (!score) return score;
 
-        // === Usuwanie przecinków (AI czasem halucynuje separatory tysięcy) ===
         if (score.includes(',')) {
             const cleanedScore = score.replace(/,/g, '');
-            logger.info(`[AI OCR] Normalizacja: Usunięto przecinek: "${score}" → "${cleanedScore}"`);
+            log.info(`[AI OCR] Normalizacja: Usunięto przecinek: "${score}" → "${cleanedScore}"`);
             score = cleanedScore;
         }
 
-        // === POST-PROCESSING: Naprawa błędnej interpretacji jednostki Qi ===
-        // AI często myli Q z cyfrą 0, np. "364.4Qi" → "364.40i"
-        // Jeśli wynik kończy się na "0i" (gdzie 0 to pomylone Q) → zamień na "Qi"
         if (/\d0i$/i.test(score)) {
             const fixedScore = score.replace(/(\d)0i$/i, '$1Qi');
-            logger.info(`[AI OCR] Post-processing: Naprawiono "0i" → "Qi": "${score}" → "${fixedScore}"`);
+            log.info(`[AI OCR] Post-processing: Naprawiono "0i" → "Qi": "${score}" → "${fixedScore}"`);
             score = fixedScore;
-        }
-        // Jeśli jednostka to samo "i" (bez Q przed) → zamień na "Qi"
-        else if (/\di$/i.test(score) && !/Qi$/i.test(score)) {
+        } else if (/\di$/i.test(score) && !/Qi$/i.test(score)) {
             const fixedScore = score.replace(/i$/i, 'Qi');
-            logger.info(`[AI OCR] Post-processing: Naprawiono "i" → "Qi": "${score}" → "${fixedScore}"`);
+            log.info(`[AI OCR] Post-processing: Naprawiono "i" → "Qi": "${score}" → "${fixedScore}"`);
             score = fixedScore;
         }
 
-        // Regex: cyfry (opcjonalnie z kropką i cyframi dziesiętnymi) + opcjonalna jednostka
         const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
         if (!match) {
-            logger.info(`[AI OCR] Normalizacja: Nie udało się sparsować wyniku "${score}"`);
+            log.info(`[AI OCR] Normalizacja: Nie udało się sparsować wyniku "${score}"`);
             return score;
         }
 
-        let numberPart = match[1].replace(/,/g, '.'); // Zamień przecinki na kropki
+        let numberPart = match[1].replace(/,/g, '.');
         const unit = match[2] || '';
 
-        // Rozdziel na część całkowitą i dziesiętną
         const parts = numberPart.split('.');
         let integerPart = parts[0] || '';
         let decimalPart = parts[1] || '';
 
         const originalScore = score;
 
-        // Jeśli jest jednostka, normalizuj liczbę cyfr
         if (unit) {
-            // Sprawdź część CAŁKOWITĄ (przed kropką) - max 5 cyfr
             if (integerPart.length > 5) {
-                logger.warn(`[AI OCR] Normalizacja: Wykryto ${integerPart.length} cyfr przed kropką z jednostką ${unit} - obcinam do 5`);
+                log.warn(`[AI OCR] Normalizacja: Wykryto ${integerPart.length} cyfr przed kropką z jednostką ${unit} - obcinam do 5`);
                 integerPart = integerPart.substring(0, 5);
             }
 
-            // Sprawdź część dziesiętną (po kropce)
             if (decimalPart) {
                 if (integerPart.length === 1) {
-                    // 1 cyfra przed kropką → max 2 po kropce
-                    if (decimalPart.length > 2) {
-                        decimalPart = decimalPart.substring(0, 2);
-                    }
+                    if (decimalPart.length > 2) decimalPart = decimalPart.substring(0, 2);
                 } else {
-                    // 2-5 cyfr przed kropką → max 1 po kropce
-                    if (decimalPart.length > 1) {
-                        decimalPart = decimalPart.substring(0, 1);
-                    }
+                    if (decimalPart.length > 1) decimalPart = decimalPart.substring(0, 1);
                 }
             }
         }
 
-        // Zbuduj znormalizowany wynik
         let normalizedScore;
         if (decimalPart) {
             normalizedScore = `${integerPart}.${decimalPart}${unit}`;
@@ -387,29 +315,18 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         }
 
         if (normalizedScore !== originalScore) {
-            logger.info(`[AI OCR] Normalizacja: "${originalScore}" → "${normalizedScore}"`);
+            log.info(`[AI OCR] Normalizacja: "${originalScore}" → "${normalizedScore}"`);
         }
 
         return normalizedScore;
     }
 
-    /**
-     * Konwertuje wynik z jednostką na liczbę do porównania
-     * np. "1854Q" → 1854e15, "6513.3Q" → 6513.3e15
-     * @param {string} score - Wynik z jednostką
-     * @returns {number|null} - Wartość liczbowa lub null jeśli nie da się sparsować
-     */
     parseScoreToNumber(score) {
         if (!score) return null;
 
         const unitMultipliers = {
-            'K': 1e3,
-            'M': 1e6,
-            'B': 1e9,
-            'T': 1e12,
-            'Q': 1e15,
-            'QI': 1e18,
-            'SX': 1e21
+            'K': 1e3, 'M': 1e6, 'B': 1e9, 'T': 1e12,
+            'Q': 1e15, 'QI': 1e18, 'SX': 1e21
         };
 
         const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
@@ -422,42 +339,32 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         return number * multiplier;
     }
 
-    /**
-     * Waliduje score vs Total - jeśli score > total, prawdopodobnie AI dodał cyfrę zamiast jednostki
-     * np. AI odczytał "18540Q" zamiast "1854Q" (0 to w rzeczywistości Q)
-     * @param {string} score - Wynik Best
-     * @param {string} total - Wynik Total
-     * @returns {string} - Skorygowany wynik
-     */
-    validateScoreAgainstTotal(score, total) {
+    validateScoreAgainstTotal(score, total, log = logger) {
         const scoreNum = this.parseScoreToNumber(score);
         const totalNum = this.parseScoreToNumber(total);
 
         if (scoreNum === null || totalNum === null) return score;
 
-        // Jeśli score > total → coś jest nie tak
         if (scoreNum > totalNum) {
-            logger.warn(`[AI OCR] Walidacja Total: score (${score} = ${scoreNum}) > total (${total} = ${totalNum}) - próbuję skorygować`);
+            log.warn(`[AI OCR] Walidacja Total: score (${score} = ${scoreNum}) > total (${total} = ${totalNum}) - próbuję skorygować`);
 
-            // Spróbuj usunąć ostatnią cyfrę przed jednostką (np. "18540Q" → "1854Q")
             const match = score.match(/^([\d.]+)(K|M|B|T|Q|QI|Qi)$/i);
             if (match) {
                 const numberPart = match[1];
                 const unit = match[2];
 
-                // Usuń ostatnią cyfrę z części liczbowej
                 if (numberPart.length > 1) {
                     const corrected = numberPart.slice(0, -1) + unit;
                     const correctedNum = this.parseScoreToNumber(corrected);
 
                     if (correctedNum !== null && correctedNum <= totalNum) {
-                        logger.info(`[AI OCR] Walidacja Total: Skorygowano "${score}" → "${corrected}" (usunięto dodatkową cyfrę przed jednostką)`);
+                        log.info(`[AI OCR] Walidacja Total: Skorygowano "${score}" → "${corrected}" (usunięto dodatkową cyfrę przed jednostką)`);
                         return corrected;
                     }
                 }
             }
 
-            logger.warn(`[AI OCR] Walidacja Total: Nie udało się automatycznie skorygować wyniku "${score}"`);
+            log.warn(`[AI OCR] Walidacja Total: Nie udało się automatycznie skorygować wyniku "${score}"`);
         }
 
         return score;
