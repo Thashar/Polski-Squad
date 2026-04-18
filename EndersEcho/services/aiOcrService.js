@@ -6,10 +6,6 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-/**
- * AI OCR Service - Analiza zdjęć wyników przez Anthropic API
- * Używa Claude Vision do odczytu nazwy bossa i wyniku z ekranu gry
- */
 class AIOCRService {
     constructor(config) {
         this.config = config;
@@ -29,57 +25,44 @@ class AIOCRService {
     }
 
     async analyzeVictoryImage(imagePath, log = logger) {
-        if (!this.enabled) {
-            throw new Error('AI OCR nie jest włączony');
-        }
+        if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         try {
-            log.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
-
             const pngBuffer = await sharp(imagePath).png().toBuffer();
             const base64Image = pngBuffer.toString('base64');
             const mediaType = 'image/png';
-
             let fakeCheckDone = false;
 
             for (const lang of ['eng', 'jpn']) {
-                const langLabel = lang === 'eng' ? 'angielski' : 'japoński';
+                const label = lang === 'eng' ? 'ang' : 'jpn';
 
-                log.info(`[AI OCR] KROK 1 (${langLabel}): Sprawdzam ekran zwycięstwa...`);
-                const victoryFound = await this._checkVictory(base64Image, mediaType, lang, log);
-
+                const victoryFound = await this._checkVictory(base64Image, mediaType, lang);
                 if (!victoryFound) {
-                    log.warn(`[AI OCR] KROK 1 (${langLabel}): Nie znaleziono — próbuję następny język`);
+                    log.info(`[AI OCR] ${label}: ✗Victory → próbuję ${lang === 'eng' ? 'japoński' : 'koniec'}`);
                     continue;
                 }
 
-                log.info(`[AI OCR] KROK 1 (${langLabel}): Znaleziono`);
-
                 if (!fakeCheckDone) {
-                    log.info(`[AI OCR] KROK 2: Sprawdzam autentyczność zdjęcia...`);
-                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType, log);
+                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType);
                     fakeCheckDone = true;
-
                     if (!isAuthentic) {
-                        log.warn(`[AI OCR] KROK 2: WYKRYTO PODROBIONE ZDJĘCIE!`);
+                        log.warn(`[AI OCR] ${label}: ✓Victory ✗autentyczne → FAKE_PHOTO`);
                         return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
                     }
-                    log.info(`[AI OCR] KROK 2: Zdjęcie autentyczne`);
                 }
 
-                log.info(`[AI OCR] KROK 3 (${langLabel}): Wyciągam dane...`);
                 const extractResponse = await this._extractData(base64Image, mediaType, lang);
-                log.info(`[AI OCR] KROK 3 (${langLabel}) - Odpowiedź Claude:`);
-                log.info(extractResponse);
-
                 const result = this.parseAIResponse(extractResponse, log);
-                log.info(`[AI OCR] KROK 3 (${langLabel}) - Wynik parsowania: ${JSON.stringify(result)}`);
 
-                if (result.isValidVictory) return result;
+                if (result.isValidVictory) {
+                    log.info(`[AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
+                    return result;
+                }
 
-                log.warn(`[AI OCR] KROK 3 (${langLabel}): Nie udało się odczytać danych — próbuję następny język`);
+                log.warn(`[AI OCR] ${label}: ✓Victory ✓autentyczne ✗dane → ${lang === 'eng' ? 'próbuję japoński' : 'INVALID_SCREENSHOT'}`);
             }
 
+            log.warn(`[AI OCR] Brak wyniku po wszystkich językach`);
             return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
 
         } catch (error) {
@@ -88,7 +71,7 @@ class AIOCRService {
         }
     }
 
-    async _checkVictory(base64Image, mediaType, lang, log = logger) {
+    async _checkVictory(base64Image, mediaType, lang) {
         const prompt = lang === 'jpn'
             ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
             : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
@@ -102,12 +85,10 @@ class AIOCRService {
             ]}]
         });
 
-        const response = message.content[0].text.trim();
-        log.info(`[AI OCR] KROK 1 (${lang}) - Odpowiedź: "${response}"`);
-        return !response.toLowerCase().includes('nie znaleziono');
+        return !message.content[0].text.trim().toLowerCase().includes('nie znaleziono');
     }
 
-    async _checkAuthentic(base64Image, mediaType, log = logger) {
+    async _checkAuthentic(base64Image, mediaType) {
         const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
 DOKŁADNĄ ANALIZĘ LICZB
 Sprawdzenie KAŻDEGO piksela w cyfrach
@@ -136,9 +117,7 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
             ]}]
         });
 
-        const response = message.content[0].text.trim().toUpperCase();
-        log.info(`[AI OCR] KROK 2 - Odpowiedź: "${response}"`);
-        return !response.includes('NOK');
+        return !message.content[0].text.trim().toUpperCase().includes('NOK');
     }
 
     async _extractData(base64Image, mediaType, lang) {
@@ -188,70 +167,44 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         const lowerResponse = responseText.toLowerCase();
 
         const invalidKeywords = [
-            'niepoprawny screen',
-            'przesłano niepoprawny',
-            'trzeba przesłać screen',
-            'nie wykryłem',
-            'nie wykryto',
-            'brak victory',
-            'nie znalazłem',
-            'nie można odczytać'
+            'niepoprawny screen', 'przesłano niepoprawny', 'trzeba przesłać screen',
+            'nie wykryłem', 'nie wykryto', 'brak victory', 'nie znalazłem', 'nie można odczytać'
         ];
-
-        for (const keyword of invalidKeywords) {
-            if (lowerResponse.includes(keyword)) {
-                log.info(`[AI OCR] AI wykrył niepoprawny screen (keyword: "${keyword}")`);
-                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
-            }
+        if (invalidKeywords.some(kw => lowerResponse.includes(kw))) {
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
         }
 
         const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         if (lines.length < 2) {
-            log.warn(`[AI OCR] AI zwrócił za mało linii (${lines.length})`);
+            log.warn(`[AI OCR] Odpowiedź za krótka (${lines.length} linii): "${responseText.trim()}"`);
             return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'PARSING_ERROR' };
         }
 
-        let bossName = lines[0]
-            .replace(/^boss[:\s]*/i, '')
-            .replace(/^nazwa[:\s]*bossa[:\s]*/i, '')
-            .trim();
-
-        let score = lines[1]
-            .replace(/^wynik[:\s]*/i, '')
-            .replace(/^score[:\s]*/i, '')
-            .replace(/^best[:\s]*/i, '')
-            .trim();
+        let bossName = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
+        let score    = lines[1].replace(/^wynik[:\s]*/i, '').replace(/^score[:\s]*/i, '').replace(/^best[:\s]*/i, '').trim();
 
         let total = null;
         if (lines.length >= 3) {
-            total = lines[2].replace(/^total[:\s]*/i, '').trim();
-            total = this.normalizeScore(total, log);
-            log.info(`[AI OCR] Odczytano Total: "${total}"`);
+            total = this.normalizeScore(lines[2].replace(/^total[:\s]*/i, '').trim(), log);
+            if (total) log.info(`[AI OCR] Total: "${total}"`);
         }
 
         score = this.normalizeScore(score, log);
+        if (score && total) score = this.validateScoreAgainstTotal(score, total, log);
 
-        if (score && total) {
-            score = this.validateScoreAgainstTotal(score, total, log);
-        }
-
-        const isValid = bossName && score && score.length > 0;
-
+        const isValid = !!(bossName && score && score.length > 0);
         if (!isValid) {
-            log.warn(`[AI OCR] Walidacja nie powiodła się - boss: "${bossName}", wynik: "${score}"`);
+            log.warn(`[AI OCR] Walidacja ✗ boss:"${bossName}" score:"${score}"`);
         }
 
         let confidence = 0;
-        if (bossName) {
-            confidence += 50;
-            if (bossName.length >= 3) confidence += 10;
-        }
+        if (bossName) { confidence += 50; if (bossName.length >= 3) confidence += 10; }
         if (score && score.length > 0) confidence += 40;
 
         return {
             bossName: isValid ? bossName : null,
-            score: isValid ? score : null,
+            score:    isValid ? score    : null,
             confidence: Math.min(confidence, 100),
             isValidVictory: isValid,
             error: isValid ? undefined : 'VALIDATION_FAILED'
@@ -262,111 +215,76 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         if (!score) return score;
 
         if (score.includes(',')) {
-            const cleanedScore = score.replace(/,/g, '');
-            log.info(`[AI OCR] Normalizacja: Usunięto przecinek: "${score}" → "${cleanedScore}"`);
-            score = cleanedScore;
+            const cleaned = score.replace(/,/g, '');
+            log.info(`[AI OCR] normalizeScore: usunięto przecinek "${score}" → "${cleaned}"`);
+            score = cleaned;
         }
 
         if (/\d0i$/i.test(score)) {
-            const fixedScore = score.replace(/(\d)0i$/i, '$1Qi');
-            log.info(`[AI OCR] Post-processing: Naprawiono "0i" → "Qi": "${score}" → "${fixedScore}"`);
-            score = fixedScore;
+            const fixed = score.replace(/(\d)0i$/i, '$1Qi');
+            log.info(`[AI OCR] normalizeScore: "0i" → "Qi" "${score}" → "${fixed}"`);
+            score = fixed;
         } else if (/\di$/i.test(score) && !/Qi$/i.test(score)) {
-            const fixedScore = score.replace(/i$/i, 'Qi');
-            log.info(`[AI OCR] Post-processing: Naprawiono "i" → "Qi": "${score}" → "${fixedScore}"`);
-            score = fixedScore;
+            const fixed = score.replace(/i$/i, 'Qi');
+            log.info(`[AI OCR] normalizeScore: "i" → "Qi" "${score}" → "${fixed}"`);
+            score = fixed;
         }
 
         const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
-        if (!match) {
-            log.info(`[AI OCR] Normalizacja: Nie udało się sparsować wyniku "${score}"`);
-            return score;
-        }
+        if (!match) return score;
 
         let numberPart = match[1].replace(/,/g, '.');
         const unit = match[2] || '';
-
         const parts = numberPart.split('.');
         let integerPart = parts[0] || '';
         let decimalPart = parts[1] || '';
-
         const originalScore = score;
 
         if (unit) {
             if (integerPart.length > 5) {
-                log.warn(`[AI OCR] Normalizacja: Wykryto ${integerPart.length} cyfr przed kropką z jednostką ${unit} - obcinam do 5`);
+                log.warn(`[AI OCR] normalizeScore: obcięto ${integerPart.length} cyfr → 5 (${unit})`);
                 integerPart = integerPart.substring(0, 5);
             }
-
             if (decimalPart) {
-                if (integerPart.length === 1) {
-                    if (decimalPart.length > 2) decimalPart = decimalPart.substring(0, 2);
-                } else {
-                    if (decimalPart.length > 1) decimalPart = decimalPart.substring(0, 1);
-                }
+                const maxDec = integerPart.length === 1 ? 2 : 1;
+                if (decimalPart.length > maxDec) decimalPart = decimalPart.substring(0, maxDec);
             }
         }
 
-        let normalizedScore;
-        if (decimalPart) {
-            normalizedScore = `${integerPart}.${decimalPart}${unit}`;
-        } else {
-            normalizedScore = `${integerPart}${unit}`;
+        const normalized = decimalPart ? `${integerPart}.${decimalPart}${unit}` : `${integerPart}${unit}`;
+        if (normalized !== originalScore) {
+            log.info(`[AI OCR] normalizeScore: "${originalScore}" → "${normalized}"`);
         }
 
-        if (normalizedScore !== originalScore) {
-            log.info(`[AI OCR] Normalizacja: "${originalScore}" → "${normalizedScore}"`);
-        }
-
-        return normalizedScore;
+        return normalized;
     }
 
     parseScoreToNumber(score) {
         if (!score) return null;
-
-        const unitMultipliers = {
-            'K': 1e3, 'M': 1e6, 'B': 1e9, 'T': 1e12,
-            'Q': 1e15, 'QI': 1e18, 'SX': 1e21
-        };
-
+        const unitMultipliers = { K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15, QI: 1e18, SX: 1e21 };
         const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
         if (!match) return null;
-
-        const number = parseFloat(match[1]);
-        const unit = (match[2] || '').toUpperCase();
-        const multiplier = unitMultipliers[unit] || 1;
-
-        return number * multiplier;
+        return parseFloat(match[1]) * (unitMultipliers[(match[2] || '').toUpperCase()] || 1);
     }
 
     validateScoreAgainstTotal(score, total, log = logger) {
         const scoreNum = this.parseScoreToNumber(score);
         const totalNum = this.parseScoreToNumber(total);
+        if (scoreNum === null || totalNum === null || scoreNum <= totalNum) return score;
 
-        if (scoreNum === null || totalNum === null) return score;
+        log.warn(`[AI OCR] validateTotal: score ${score} > total ${total} — próbuję korektę`);
 
-        if (scoreNum > totalNum) {
-            log.warn(`[AI OCR] Walidacja Total: score (${score} = ${scoreNum}) > total (${total} = ${totalNum}) - próbuję skorygować`);
-
-            const match = score.match(/^([\d.]+)(K|M|B|T|Q|QI|Qi)$/i);
-            if (match) {
-                const numberPart = match[1];
-                const unit = match[2];
-
-                if (numberPart.length > 1) {
-                    const corrected = numberPart.slice(0, -1) + unit;
-                    const correctedNum = this.parseScoreToNumber(corrected);
-
-                    if (correctedNum !== null && correctedNum <= totalNum) {
-                        log.info(`[AI OCR] Walidacja Total: Skorygowano "${score}" → "${corrected}" (usunięto dodatkową cyfrę przed jednostką)`);
-                        return corrected;
-                    }
-                }
+        const match = score.match(/^([\d.]+)(K|M|B|T|Q|QI|Qi)$/i);
+        if (match && match[1].length > 1) {
+            const corrected = match[1].slice(0, -1) + match[2];
+            const correctedNum = this.parseScoreToNumber(corrected);
+            if (correctedNum !== null && correctedNum <= totalNum) {
+                log.info(`[AI OCR] validateTotal: "${score}" → "${corrected}"`);
+                return corrected;
             }
-
-            log.warn(`[AI OCR] Walidacja Total: Nie udało się automatycznie skorygować wyniku "${score}"`);
         }
 
+        log.warn(`[AI OCR] validateTotal: nie udało się skorygować "${score}"`);
         return score;
     }
 }

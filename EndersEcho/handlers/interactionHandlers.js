@@ -255,47 +255,17 @@ class InteractionHandler {
                     gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
                     await interaction.editReply({ content: msgs.aiOcrUnavailable });
 
-                    const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
-                    if (!hasRequiredWords) {
-                        await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
-                        await fs.unlink(tempImagePath);
-                        await interaction.editReply(msgs.updateNoRequiredWords);
-                        return;
-                    }
-
-                    const extractedText = await this.ocrService.extractTextFromImage(tempImagePath, gl);
-                    bestScore = this.ocrService.extractScoreAfterBest(extractedText, gl);
-
-                    if (!bestScore || bestScore.trim() === '') {
-                        await fs.unlink(tempImagePath);
-                        await interaction.editReply(msgs.updateNoScore);
-                        return;
-                    }
-
-                    bossName = this.ocrService.extractBossName(extractedText, gl);
+                    const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
+                    if (!trad1) return;
+                    ({ bestScore, bossName } = trad1);
                 }
             } else {
                 // === Tradycyjny OCR ===
                 gl.info('🔍 Używam tradycyjnego OCR...');
 
-                const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
-                if (!hasRequiredWords) {
-                    await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
-                    await fs.unlink(tempImagePath);
-                    await interaction.editReply(msgs.updateNoRequiredWords);
-                    return;
-                }
-
-                const extractedText = await this.ocrService.extractTextFromImage(tempImagePath, gl);
-                bestScore = this.ocrService.extractScoreAfterBest(extractedText, gl);
-
-                if (!bestScore || bestScore.trim() === '') {
-                    await fs.unlink(tempImagePath);
-                    await interaction.editReply(msgs.updateNoScore);
-                    return;
-                }
-
-                bossName = this.ocrService.extractBossName(extractedText, gl);
+                const trad2 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
+                if (!trad2) return;
+                ({ bestScore, bossName } = trad2);
             }
 
             const guildId = interaction.guildId;
@@ -1307,6 +1277,28 @@ class InteractionHandler {
             const replyMsgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: replyMsgs.ocrBlockEnabled, flags: ['Ephemeral'] });
         }
+    }
+
+    async _runTraditionalOCR(tempImagePath, interaction, msgs, gl) {
+        const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
+        if (!hasRequiredWords) {
+            await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
+            await fs.unlink(tempImagePath);
+            await interaction.editReply(msgs.updateNoRequiredWords);
+            return null;
+        }
+
+        const extractedText = await this.ocrService.extractTextFromImage(tempImagePath, gl);
+        const bestScore = this.ocrService.extractScoreAfterBest(extractedText, gl);
+
+        if (!bestScore || bestScore.trim() === '') {
+            await fs.unlink(tempImagePath);
+            await interaction.editReply(msgs.updateNoScore);
+            return null;
+        }
+
+        const bossName = this.ocrService.extractBossName(extractedText, gl);
+        return { bestScore, bossName };
     }
 
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
