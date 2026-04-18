@@ -8,6 +8,7 @@ const GuildLogger = require('./services/guildLogger');
 const RoleService = require('./services/roleService');
 const NotificationService = require('./services/notificationService');
 const UserBlockService = require('./services/userBlockService');
+const RoleRankingConfigService = require('./services/roleRankingConfigService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -17,7 +18,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMembers
     ]
 });
 
@@ -29,7 +31,8 @@ const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
 const notificationService = new NotificationService(config);
 const userBlockService = new UserBlockService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService);
+const roleRankingConfigService = new RoleRankingConfigService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService);
 
 /**
  * Inicjalizuje bota EndersEcho

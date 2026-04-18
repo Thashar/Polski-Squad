@@ -346,7 +346,7 @@ class RankingService {
             rankingText = msgs.noDataOnPage;
         }
 
-        const title = isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle;
+        const title = options.titleOverride || (isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle);
 
         // Pole statystyk
         const serverCount = this.config.guilds.length;
@@ -401,7 +401,7 @@ class RankingService {
      * @param {Object|null} messages - opcjonalny zestaw komunikatów
      * @returns {ActionRowBuilder}
      */
-    createRankingButtons(page, totalPages, disabled = false, messages = null) {
+    createRankingButtons(page, totalPages, disabled = false, messages = null, roleRows = []) {
         const msgs = messages || this.config.messages;
 
         const navRow = new ActionRowBuilder();
@@ -428,11 +428,8 @@ class RankingService {
                 .setCustomId('ranking_last')
                 .setLabel(msgs.buttonLast)
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled || page >= totalPages - 1)
-        );
+                .setDisabled(disabled || page >= totalPages - 1),
 
-        const backRow = new ActionRowBuilder();
-        backRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_back')
                 .setLabel(msgs.buttonBack)
@@ -440,7 +437,47 @@ class RankingService {
                 .setDisabled(disabled)
         );
 
-        return [navRow, backRow];
+        return [navRow, ...roleRows];
+    }
+
+    /**
+     * Tworzy wiersze przycisków dla rankingów ról danego serwera.
+     * Maks. 10 ról = 2 wiersze po 5.
+     * @param {Array} roleRankings - lista { roleId, roleName }
+     * @param {string} guildId
+     * @returns {ActionRowBuilder[]}
+     */
+    createRoleRankingButtons(roleRankings, guildId) {
+        const rows = [];
+        for (let i = 0; i < roleRankings.length; i += 5) {
+            const row = new ActionRowBuilder();
+            const chunk = roleRankings.slice(i, i + 5);
+            for (const rr of chunk) {
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ranking_role_${guildId}_${rr.roleId}`)
+                        .setLabel(rr.roleName.substring(0, 80))
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
+            rows.push(row);
+        }
+        return rows;
+    }
+
+    /**
+     * Filtruje ranking do graczy posiadających daną rolę.
+     * @param {string} guildId
+     * @param {string} roleId
+     * @param {Guild} guild
+     * @param {RoleRankingConfigService} roleRankingConfigService
+     * @returns {Promise<Array>}
+     */
+    async getSortedPlayersByRole(guildId, roleId, guild, roleRankingConfigService) {
+        const allPlayers = await this.getSortedPlayers(guildId);
+        const playerIds = allPlayers.map(p => p.userId);
+        const membersWithRole = await roleRankingConfigService.getMembersWithRole(guild, roleId, playerIds);
+        return allPlayers.filter(p => membersWithRole.has(p.userId));
     }
 
     /**
