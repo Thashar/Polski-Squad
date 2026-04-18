@@ -85,6 +85,7 @@ module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     infoUserId: process.env.ENDERSECHO_INFO_USER_ID || null,
+    blockOcrUserIds: (process.env.ENDERSECHO_BLOCK_OCR_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
     invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
 

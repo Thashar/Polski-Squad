@@ -2,6 +2,7 @@ const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBu
 const { downloadFile, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const OcrBlockService = require('../services/ocrBlockService');
 
 const logger = createBotLogger('EndersEcho');
 const path = require('path');
@@ -15,6 +16,7 @@ class InteractionHandler {
         this.logService = logService;
         this.roleService = roleService;
         this.notificationService = notificationService;
+        this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
     }
@@ -83,6 +85,11 @@ class InteractionHandler {
                 .setName('info')
                 .setDescription('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('block-ocr')
+                .setDescription('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -106,9 +113,13 @@ class InteractionHandler {
      */
     async handleInteraction(interaction) {
         if (interaction.isChatInputCommand()) {
-            // /info działa z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            // /info i /block-ocr działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
             if (interaction.commandName === 'info') {
                 await this.handleInfoCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'block-ocr') {
+                await this.handleBlockOcrCommand(interaction);
                 return;
             }
 
@@ -195,6 +206,11 @@ class InteractionHandler {
                 content: formatMessage(msgs.updateFileTooLarge, { maxMB: maxSizeMB, fileMB: fileSizeMB }),
                 flags: ['Ephemeral']
             });
+            return;
+        }
+
+        if (this.ocrBlockService.isBlocked()) {
+            await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
 
@@ -1250,6 +1266,47 @@ class InteractionHandler {
     async _handleInfoCancel(interaction) {
         this._infoSessions.delete(interaction.user.id);
         await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
+    }
+
+    async handleBlockOcrCommand(interaction) {
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const userNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+
+        if (this.ocrBlockService.isBlocked()) {
+            // Odblokowanie — wyślij powiadomienie na wszystkie serwery
+            await this.ocrBlockService.unblock(interaction.user.id, userNick);
+            logger.info(`🔓 OCR odblokowany przez ${userNick}`);
+
+            for (const guildCfg of this.config.guilds) {
+                try {
+                    const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
+                    if (!channel) continue;
+                    const guildMsgs = this.msgs(guildCfg.id);
+                    const embed = new EmbedBuilder()
+                        .setColor(0x00C853)
+                        .setTitle(guildMsgs.ocrResumedTitle)
+                        .setDescription(guildMsgs.ocrResumedDescription)
+                        .setTimestamp();
+                    await channel.send({ embeds: [embed] });
+                } catch (err) {
+                    logger.warn(`⚠️ Nie można wysłać powiadomienia o odblokowaniu do serwera ${guildCfg.id}: ${err.message}`);
+                }
+            }
+
+            const replyMsgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: replyMsgs.ocrBlockDisabled, flags: ['Ephemeral'] });
+        } else {
+            // Zablokowanie
+            await this.ocrBlockService.block(interaction.user.id, userNick);
+            logger.warn(`🔒 OCR zablokowany przez ${userNick}`);
+            const replyMsgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: replyMsgs.ocrBlockEnabled, flags: ['Ephemeral'] });
+        }
     }
 
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
