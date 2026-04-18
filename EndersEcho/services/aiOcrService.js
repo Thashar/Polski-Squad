@@ -288,6 +288,37 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
         return score;
     }
 
+    async analyzeWithoutVerification(imagePath, log = logger) {
+        if (!this.enabled) throw new Error('AI OCR nie jest włączony');
+
+        try {
+            const pngBuffer = await sharp(imagePath).png().toBuffer();
+            const base64Image = pngBuffer.toString('base64');
+            const mediaType = 'image/png';
+
+            for (const lang of ['eng', 'jpn']) {
+                const label = lang === 'eng' ? 'ang' : 'jpn';
+
+                const extractResponse = await this._extractData(base64Image, mediaType, lang);
+                const result = this.parseAIResponse(extractResponse, log);
+
+                if (result.isValidVictory) {
+                    log.info(`✅ [AI OCR /test] ${label}: boss="${result.bossName}" score="${result.score}"`);
+                    return result;
+                }
+
+                log.warn(`[AI OCR /test] ${label}: ✗dane → ${lang === 'eng' ? 'próbuję japoński' : 'INVALID_SCREENSHOT'}`);
+            }
+
+            log.warn('[AI OCR /test] Brak wyniku po wszystkich językach');
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
+
+        } catch (error) {
+            log.error(`[AI OCR /test] Błąd analizy obrazu: ${error.message}`);
+            throw error;
+        }
+    }
+
     async analyzeTestImage(imagePath, log = logger) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
