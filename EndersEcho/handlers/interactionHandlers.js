@@ -1141,10 +1141,11 @@ class InteractionHandler {
      * Buduje czerwony embed na podstawie danych sesji.
      * @param {{ title?: string, description: string, icon?: string, image?: string }} data
      */
-    _buildInfoEmbed(data) {
+    _buildInfoEmbed(data, user) {
         const embed = new EmbedBuilder()
             .setColor(0xFF0000)
-            .setDescription(data.description);
+            .setDescription(data.description)
+            .setAuthor({ name: user.username, iconURL: user.displayAvatarURL() });
         if (data.title) embed.setTitle(data.title);
         if (data.icon) embed.setThumbnail(data.icon);
         if (data.image) embed.setImage(data.image);
@@ -1177,10 +1178,10 @@ class InteractionHandler {
         const icon = interaction.fields.getTextInputValue('embedIcon').trim() || null;
         const image = interaction.fields.getTextInputValue('embedImage').trim() || null;
 
-        const data = { title, description, icon, image };
+        const data = { title, description, icon, image, user: interaction.user };
         this._infoSessions.set(interaction.user.id, data);
 
-        const embed = this._buildInfoEmbed(data);
+        const embed = this._buildInfoEmbed(data, interaction.user);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('info_send').setLabel('Wyślij').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('info_edit').setLabel('Edytuj').setStyle(ButtonStyle.Secondary),
@@ -1206,7 +1207,7 @@ class InteractionHandler {
         }
 
         await interaction.deferUpdate();
-        const embed = this._buildInfoEmbed(data);
+        const embed = this._buildInfoEmbed(data, data.user);
         let sent = 0;
         let failed = 0;
 
