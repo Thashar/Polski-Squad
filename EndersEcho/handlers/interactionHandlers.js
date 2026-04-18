@@ -224,6 +224,7 @@ class InteractionHandler {
                         gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
                     } else {
                         gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                        await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                         await fs.unlink(tempImagePath);
 
                         if (aiResult.error === 'FAKE_PHOTO') {
@@ -240,6 +241,7 @@ class InteractionHandler {
 
                     const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
                     if (!hasRequiredWords) {
+                        await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
                         await fs.unlink(tempImagePath);
                         await interaction.editReply(msgs.updateNoRequiredWords);
                         return;
@@ -262,6 +264,7 @@ class InteractionHandler {
 
                 const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
                 if (!hasRequiredWords) {
+                    await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
                     await fs.unlink(tempImagePath);
                     await interaction.editReply(msgs.updateNoRequiredWords);
                     return;
@@ -1247,6 +1250,55 @@ class InteractionHandler {
     async _handleInfoCancel(interaction) {
         this._infoSessions.delete(interaction.user.id);
         await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
+    }
+
+    async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
+        if (!this.config.invalidReportChannelId) return;
+        try {
+            const channel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
+            if (!channel) return;
+
+            const serverNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+            const discordUsername = interaction.user.username;
+            const serverName = interaction.guild?.name || 'Nieznany serwer';
+            const now = new Date();
+            const timestamp = now.toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
+
+            const reasonLabels = {
+                'FAKE_PHOTO': '🔴 Wykryto podrobione / edytowane zdjęcie',
+                'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
+                'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
+            };
+            const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
+            const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
+
+            const ext = path.extname(imagePath) || '.png';
+            const fileName = `rejected_${Date.now()}${ext}`;
+            const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
+
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle('⚠️ Odrzucony screen')
+                .addFields(
+                    { name: 'Nick na serwerze', value: serverNick, inline: true },
+                    { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
+                    { name: 'Serwer', value: serverName, inline: true },
+                    { name: 'Czas', value: timestamp, inline: true },
+                    { name: 'Powód odrzucenia', value: reasonText, inline: false }
+                )
+                .setImage(`attachment://${fileName}`)
+                .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
+
+            await channel.send({ embeds: [embed], files: [fileAttachment] });
+            gl.info(`📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
+        } catch (err) {
+            gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
+        }
     }
 
     /**

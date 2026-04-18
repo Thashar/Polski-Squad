@@ -86,6 +86,7 @@ module.exports = {
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     infoUserId: process.env.ENDERSECHO_INFO_USER_ID || null,
     logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
+    invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
 
     // Lista skonfigurowanych serwerów
     guilds,

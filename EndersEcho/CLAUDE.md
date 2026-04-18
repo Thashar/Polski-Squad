@@ -122,6 +122,11 @@ ENDERSECHO_INFO_USER_ID=discord_user_id
 # Separator kreską pojawia się przy każdej zmianie serwera
 ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 
+# Kanał raportów odrzuconych screenów (opcjonalne)
+# Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
+# Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
+ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
+
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example
 BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
