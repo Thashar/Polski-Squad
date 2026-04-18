@@ -421,13 +421,13 @@ class RankingService {
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
                 .setLabel(msgs.buttonPrev)
-                .setStyle(ButtonStyle.Primary)
+                .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page === 0),
 
             new ButtonBuilder()
                 .setCustomId('ranking_next')
                 .setLabel(msgs.buttonNext)
-                .setStyle(ButtonStyle.Primary)
+                .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
             new ButtonBuilder()
@@ -463,7 +463,7 @@ class RankingService {
                     new ButtonBuilder()
                         .setCustomId(`ranking_role_${guildId}_${rr.roleId}`)
                         .setLabel(rr.roleName.substring(0, 80))
-                        .setStyle(ButtonStyle.Secondary)
+                        .setStyle(ButtonStyle.Primary)
                 );
             }
             rows.push(row);
