@@ -63,8 +63,8 @@ class InteractionHandler {
 
                 new SlashCommandBuilder()
                     .setName('update')
-                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
-                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                    .setDescription('Add a new Ender\'s Echo score for analysis')
+                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
                     .addAttachmentOption(option =>
                         option.setName('obraz')
                             .setDescription('Screenshot of the boss result screen')
