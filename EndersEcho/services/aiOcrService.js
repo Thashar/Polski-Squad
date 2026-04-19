@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -10,18 +10,33 @@ class AIOCRService {
     constructor(config) {
         this.config = config;
 
-        this.apiKey = process.env.ENDERSECHO_ANTHROPIC_API_KEY;
+        this.apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
         this.enabled = !!this.apiKey && config.ocr.useAI === true;
 
         if (this.enabled) {
-            this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = process.env.ENDERSECHO_ANTHROPIC_MODEL || 'claude-3-haiku-20240307';
-            logger.success(`✅ AI OCR aktywny - model: ${this.model}`);
+            this.genAI = new GoogleGenerativeAI(this.apiKey);
+            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.0-flash';
+            logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);
         } else if (!this.apiKey) {
-            logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_ANTHROPIC_API_KEY');
+            logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_GOOGLE_AI_API_KEY');
         } else {
             logger.info('ℹ️ AI OCR wyłączony - USE_ENDERSECHO_AI_OCR=false');
         }
+    }
+
+    _getModel(maxOutputTokens) {
+        return this.genAI.getGenerativeModel({
+            model: this.modelName,
+            generationConfig: { maxOutputTokens }
+        });
+    }
+
+    async _generateContent(parts, maxOutputTokens) {
+        const model = this._getModel(maxOutputTokens);
+        const result = await model.generateContent({
+            contents: [{ role: 'user', parts }]
+        });
+        return result.response.text();
     }
 
     async analyzeVictoryImage(imagePath, log = logger) {
@@ -76,16 +91,12 @@ class AIOCRService {
             ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
             : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
 
-        const message = await this.client.messages.create({
-            model: this.model,
-            max_tokens: 50,
-            messages: [{ role: 'user', content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-                { type: 'text', text: prompt }
-            ]}]
-        });
+        const responseText = await this._generateContent([
+            { inlineData: { data: base64Image, mimeType: mediaType } },
+            { text: prompt }
+        ], 50);
 
-        return !message.content[0].text.trim().toLowerCase().includes('nie znaleziono');
+        return !responseText.trim().toLowerCase().includes('nie znaleziono');
     }
 
     async _checkAuthentic(base64Image, mediaType) {
@@ -108,16 +119,12 @@ INSTRUKCJA WYKONANIA:
 Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK".
 Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 
-        const message = await this.client.messages.create({
-            model: this.model,
-            max_tokens: 10,
-            messages: [{ role: 'user', content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-                { type: 'text', text: prompt }
-            ]}]
-        });
+        const responseText = await this._generateContent([
+            { inlineData: { data: base64Image, mimeType: mediaType } },
+            { text: prompt }
+        ], 10);
 
-        return !message.content[0].text.trim().toUpperCase().includes('NOK');
+        return !responseText.trim().toUpperCase().includes('NOK');
     }
 
     async _extractData(base64Image, mediaType, lang) {
@@ -151,16 +158,10 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
 <wynik>
 <total>`;
 
-        const message = await this.client.messages.create({
-            model: this.model,
-            max_tokens: 500,
-            messages: [{ role: 'user', content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Image } },
-                { type: 'text', text: prompt }
-            ]}]
-        });
-
-        return message.content[0].text;
+        return await this._generateContent([
+            { inlineData: { data: base64Image, mimeType: mediaType } },
+            { text: prompt }
+        ], 500);
     }
 
     parseAIResponse(responseText, log = logger) {
@@ -341,17 +342,13 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
 
 KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
 
-        const message = await this.client.messages.create({
-            model: this.model,
-            max_tokens: 10,
-            messages: [{ role: 'user', content: [
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: wzorBase64 } },
-                { type: 'image', source: { type: 'base64', media_type: mediaType, data: uploadedBase64 } },
-                { type: 'text', text: prompt }
-            ]}]
-        });
+        const responseText = await this._generateContent([
+            { inlineData: { data: wzorBase64, mimeType: mediaType } },
+            { inlineData: { data: uploadedBase64, mimeType: mediaType } },
+            { text: prompt }
+        ], 10);
 
-        const response = message.content[0].text.trim().toUpperCase();
+        const response = responseText.trim().toUpperCase();
         log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
         return !response.includes('NOK');
     }
