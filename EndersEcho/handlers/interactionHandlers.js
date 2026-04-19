@@ -286,7 +286,7 @@ class InteractionHandler {
 
         if (this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
-                content: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
+                content: msgs.userBlocked,
                 flags: ['Ephemeral']
             });
             return;
@@ -322,7 +322,7 @@ class InteractionHandler {
         const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
         if (!limitCheck.allowed) {
             await interaction.reply({
-                content: `❌ Osiągnąłeś dzienny limit **${limitCheck.limit}** użyć komend /update i /test. Spróbuj jutro.`,
+                content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }),
                 flags: ['Ephemeral']
             });
             return;
@@ -630,14 +630,14 @@ class InteractionHandler {
 
         if (this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
-                content: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
+                content: msgs.userBlocked,
                 flags: ['Ephemeral']
             });
             return;
         }
 
         if (!this.aiOcrService.enabled) {
-            await interaction.reply({ content: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.testAiOcrRequired, flags: ['Ephemeral'] });
             return;
         }
 
@@ -671,7 +671,7 @@ class InteractionHandler {
         const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
         if (!limitCheck.allowed) {
             await interaction.reply({
-                content: `❌ Osiągnąłeś dzienny limit **${limitCheck.limit}** użyć komend /update i /test. Spróbuj jutro.`,
+                content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }),
                 flags: ['Ephemeral']
             });
             return;
@@ -699,8 +699,8 @@ class InteractionHandler {
                     content: '',
                     embeds: [new EmbedBuilder()
                         .setColor(0xFF0000)
-                        .setTitle('❌ Zdjęcie nie pasuje do wzorca')
-                        .setDescription('AI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa.')
+                        .setTitle(msgs.testNotSimilarTitle)
+                        .setDescription(msgs.testNotSimilarDescription)
                         .setTimestamp()]
                 });
                 return;
@@ -997,13 +997,14 @@ class InteractionHandler {
 
             // === Przyciski raportów odrzuconych screenów ===
             if (customId.startsWith('ee_approve_')) {
+                const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
-                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
                 const adminName = interaction.member?.displayName || interaction.user.username;
                 await interaction.update({
-                    content: `✅ Zatwierdzone przez **${adminName}**`,
+                    content: formatMessage(msgs.approveSuccess, { adminName }),
                     embeds: interaction.message.embeds,
                     components: []
                 });
@@ -1011,8 +1012,9 @@ class InteractionHandler {
             }
 
             if (customId.startsWith('ee_block_')) {
+                const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
-                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
                 const parts = customId.split('_');
@@ -1020,15 +1022,15 @@ class InteractionHandler {
                 const targetGuildId = parts[3];
                 const modal = new ModalBuilder()
                     .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}`)
-                    .setTitle('Zablokuj użytkownika')
+                    .setTitle(msgs.blockUserModalTitle)
                     .addComponents(
                         new ActionRowBuilder().addComponents(
                             new TextInputBuilder()
                                 .setCustomId('duration')
-                                .setLabel('Czas blokady (np. 1h, 7d, 30m) — puste = permanentnie')
+                                .setLabel(msgs.blockUserTimeLabel)
                                 .setStyle(TextInputStyle.Short)
                                 .setRequired(false)
-                                .setPlaceholder('Zostaw puste dla blokady permanentnej')
+                                .setPlaceholder(msgs.blockUserTimePlaceholder)
                         )
                     );
                 await interaction.showModal(modal);
@@ -1346,7 +1348,7 @@ class InteractionHandler {
         try {
             const guild = interaction.client.guilds.cache.get(guildId) || interaction.guild;
             if (!guild) {
-                await interaction.editReply({ content: '❌ Nie można pobrać danych serwera.', embeds: [], components: [] });
+                await interaction.editReply({ content: msgs.roleRankingServerError, embeds: [], components: [] });
                 return;
             }
 
@@ -1399,8 +1401,9 @@ class InteractionHandler {
      * Obsługuje komendę /add-role-ranking
      */
     async handleAddRoleRankingCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
             return;
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
@@ -1412,7 +1415,7 @@ class InteractionHandler {
         const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
 
         if (existing.length >= MAX) {
-            await interaction.editReply({ content: `❌ Osiągnięto limit **${MAX}** rankingów ról. Usuń istniejący przed dodaniem nowego.` });
+            await interaction.editReply({ content: formatMessage(msgs.roleRankingLimitReached, { max: MAX }) });
             return;
         }
 
@@ -1420,14 +1423,14 @@ class InteractionHandler {
 
         if (!result.ok) {
             const msg = result.reason === 'limit'
-                ? `❌ Osiągnięto limit ${MAX} rankingów ról.`
+                ? formatMessage(msgs.roleRankingLimitReached, { max: MAX })
                 : `⚠️ Ranking dla roli **${role.name}** już istnieje.`;
             await interaction.editReply({ content: msg });
             return;
         }
 
         await interaction.editReply({
-            content: `✅ Dodano ranking dla roli **${role.name}**. Pojawi się w komendzie \`/ranking\` po wybraniu tego serwera.`
+            content: formatMessage(msgs.roleRankingAdded, { roleName: role.name })
         });
     }
 
@@ -1435,8 +1438,9 @@ class InteractionHandler {
      * Obsługuje komendę /remove-role-ranking
      */
     async handleRemoveRoleRankingCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
             return;
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
@@ -1445,7 +1449,7 @@ class InteractionHandler {
         const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
 
         if (existing.length === 0) {
-            await interaction.editReply({ content: '⚠️ Brak skonfigurowanych rankingów ról na tym serwerze.' });
+            await interaction.editReply({ content: msgs.roleRankingNoRankings });
             return;
         }
 
@@ -1509,8 +1513,9 @@ class InteractionHandler {
             const customId = interaction.customId;
 
             if (customId === 'ee_unblock_select') {
+                const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
-                    await interaction.reply({ content: '❌ Brak uprawnień.', flags: ['Ephemeral'] });
+                    await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
                 const targetUserId = interaction.values[0];
@@ -1518,7 +1523,7 @@ class InteractionHandler {
                 const success = await this.userBlockService.unblockUser(targetUserId);
                 const username = entry?.username || targetUserId;
                 await interaction.update({
-                    content: success ? `✅ Odblokowano użytkownika **${username}**.` : '⚠️ Użytkownik nie był zablokowany.',
+                    content: success ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound,
                     embeds: [],
                     components: []
                 });
@@ -1884,7 +1889,8 @@ class InteractionHandler {
      */
     async handleInfoCommand(interaction) {
         if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
-            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
         const prefill = this._infoSessions.get(interaction.user.id) || {};
@@ -1895,8 +1901,9 @@ class InteractionHandler {
      * Obsługuje submit modala /info — zapisuje dane, pokazuje podgląd z przyciskami.
      */
     async _handleInfoModalSubmit(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
-            await interaction.reply({ content: 'Brak uprawnień.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
 
@@ -1916,7 +1923,7 @@ class InteractionHandler {
         );
 
         await interaction.reply({
-            content: `**Podgląd** — wiadomość zostanie wysłana na **${this.config.guilds.length}** serwer(ów):`,
+            content: formatMessage(msgs.infoPreview, { count: this.config.guilds.length }),
             embeds: [embed],
             components: [row],
             flags: ['Ephemeral']
@@ -1929,7 +1936,8 @@ class InteractionHandler {
     async _handleInfoSend(interaction) {
         const data = this._infoSessions.get(interaction.user.id);
         if (!data) {
-            await interaction.update({ content: 'Sesja wygasła. Użyj `/info` ponownie.', embeds: [], components: [] });
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.update({ content: msgs.infoSessionExpired, embeds: [], components: [] });
             return;
         }
 
@@ -2019,15 +2027,16 @@ class InteractionHandler {
     }
 
     async handleUnblockCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
             return;
         }
 
         const blocked = this.userBlockService.getBlockedUsers();
 
         if (blocked.length === 0) {
-            await interaction.reply({ content: '✅ Brak zablokowanych użytkowników.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.unblockNoBlocked, flags: ['Ephemeral'] });
             return;
         }
 
@@ -2050,7 +2059,7 @@ class InteractionHandler {
 
         const embed = new EmbedBuilder()
             .setColor(0xFF4444)
-            .setTitle('🔒 Zablokowani użytkownicy OCR')
+            .setTitle(msgs.unblockTitle)
             .setDescription(blocked.slice(0, 25).map((entry, i) => {
                 const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
                 return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
@@ -2062,9 +2071,10 @@ class InteractionHandler {
     }
 
     async handleLimitCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         const allowedIds = this.config.blockOcrUserIds;
         if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
-            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
 
@@ -2073,13 +2083,13 @@ class InteractionHandler {
 
         const modal = new ModalBuilder()
             .setCustomId('limit_modal')
-            .setTitle('Dzienny limit użyć /update i /test');
+            .setTitle(msgs.limitModalTitle);
 
         const limitInput = new TextInputBuilder()
             .setCustomId('limit_value')
-            .setLabel('Liczba prób dziennie (puste = brak limitu)')
+            .setLabel(msgs.limitModalLabel)
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('np. 3')
+            .setPlaceholder(msgs.limitModalPlaceholder)
             .setValue(currentText)
             .setRequired(false);
 
@@ -2088,28 +2098,30 @@ class InteractionHandler {
     }
 
     async _handleLimitModal(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         const raw = interaction.fields.getTextInputValue('limit_value').trim();
 
         if (raw === '') {
             await this.usageLimitService.setLimit(null);
-            await interaction.reply({ content: '✅ Dzienny limit użyć został **usunięty** — brak ograniczeń.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.limitRemoved, flags: ['Ephemeral'] });
             return;
         }
 
         const parsed = parseInt(raw, 10);
         if (isNaN(parsed) || parsed < 1) {
-            await interaction.reply({ content: '❌ Podaj dodatnią liczbę całkowitą lub zostaw pole puste (brak limitu).', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.limitInvalidValue, flags: ['Ephemeral'] });
             return;
         }
 
         await this.usageLimitService.setLimit(parsed);
-        await interaction.reply({ content: `✅ Dzienny limit ustawiony na **${parsed}** użycie(ia) komend /update i /test na użytkownika.`, flags: ['Ephemeral'] });
+        await interaction.reply({ content: formatMessage(msgs.limitSet, { limit: parsed }), flags: ['Ephemeral'] });
     }
 
     async handleBlockOcrCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
         const allowedIds = this.config.blockOcrUserIds;
         if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
-            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
 

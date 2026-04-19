@@ -140,6 +140,52 @@ const pol = {
     unknownBoss: 'Nieznany',
     unknownBossLabel: 'Nieznany boss',
     generalError: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+
+    // Uprawnienia
+    noPermission: 'Brak uprawnień do tej komendy.',
+
+    // Blokada użytkownika
+    userBlocked: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
+
+    // Dzienny limit
+    dailyLimitExceeded: '❌ Osiągnąłeś dzienny limit **{limit}** użyć komend /update i /test. Spróbuj jutro.',
+
+    // /test — wymagania i weryfikacja
+    testAiOcrRequired: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).',
+    testNotSimilarTitle: '❌ Zdjęcie nie pasuje do wzorca',
+    testNotSimilarDescription: 'AI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa.',
+
+    // Rankingi ról
+    roleRankingServerError: '❌ Nie można pobrać danych serwera.',
+    roleRankingLimitReached: '❌ Osiągnięto limit **{max}** rankingów ról. Usuń istniejący przed dodaniem nowego.',
+    roleRankingAdded: '✅ Dodano ranking dla roli **{roleName}**. Pojawi się w komendzie `/ranking` po wybraniu tego serwera.',
+    roleRankingNoRankings: '⚠️ Brak skonfigurowanych rankingów ról na tym serwerze.',
+
+    // /unblock
+    unblockTitle: '🔒 Zablokowani użytkownicy OCR',
+    unblockNoBlocked: '✅ Brak zablokowanych użytkowników.',
+    unblockSuccess: '✅ Odblokowano użytkownika **{username}**.',
+    unblockNotFound: '⚠️ Użytkownik nie był zablokowany.',
+
+    // Zatwierdzenie screena
+    approveSuccess: '✅ Zatwierdzone przez **{adminName}**',
+
+    // Modal /limit
+    limitModalTitle: 'Dzienny limit użyć /update i /test',
+    limitModalLabel: 'Liczba prób dziennie (puste = brak limitu)',
+    limitModalPlaceholder: 'np. 3',
+    limitRemoved: '✅ Dzienny limit użyć został **usunięty** — brak ograniczeń.',
+    limitInvalidValue: '❌ Podaj dodatnią liczbę całkowitą lub zostaw pole puste (brak limitu).',
+    limitSet: '✅ Dzienny limit ustawiony na **{limit}** użycie(ia) komend /update i /test na użytkownika.',
+
+    // Modal blokady użytkownika
+    blockUserModalTitle: 'Zablokuj użytkownika',
+    blockUserTimeLabel: 'Czas blokady (np. 1h, 7d, 30m) — puste = permanentnie',
+    blockUserTimePlaceholder: 'Zostaw puste dla blokady permanentnej',
+
+    // /info
+    infoPreview: '**Podgląd** — wiadomość zostanie wysłana na **{count}** serwer(ów):',
+    infoSessionExpired: 'Sesja wygasła. Użyj `/info` ponownie.',
 };
 
 const eng = {
@@ -284,6 +330,52 @@ const eng = {
     unknownBoss: 'Unknown',
     unknownBossLabel: 'Unknown boss',
     generalError: '❌ An error occurred while processing the command.',
+
+    // Permissions
+    noPermission: 'You do not have permission to use this command.',
+
+    // User block
+    userBlocked: '🚫 Your account has been blocked due to submitting a fake screenshot. Contact a server administrator to appeal.',
+
+    // Daily limit
+    dailyLimitExceeded: '❌ You have reached the daily limit of **{limit}** uses of /update and /test. Try again tomorrow.',
+
+    // /test — requirements and verification
+    testAiOcrRequired: '❌ The `/test` command requires AI OCR to be enabled (`USE_ENDERSECHO_AI_OCR=true`).',
+    testNotSimilarTitle: '❌ Screenshot does not match the template',
+    testNotSimilarDescription: 'The AI determined that the submitted screenshot does not show a boss result screen.',
+
+    // Role rankings
+    roleRankingServerError: '❌ Unable to fetch server data.',
+    roleRankingLimitReached: '❌ Reached the limit of **{max}** role rankings. Remove an existing one before adding a new one.',
+    roleRankingAdded: '✅ Added ranking for role **{roleName}**. It will appear in the `/ranking` command when this server is selected.',
+    roleRankingNoRankings: '⚠️ No role rankings configured on this server.',
+
+    // /unblock
+    unblockTitle: '🔒 Blocked OCR Users',
+    unblockNoBlocked: '✅ No blocked users.',
+    unblockSuccess: '✅ Unblocked user **{username}**.',
+    unblockNotFound: '⚠️ User was not blocked.',
+
+    // Screen approval
+    approveSuccess: '✅ Approved by **{adminName}**',
+
+    // /limit modal
+    limitModalTitle: 'Daily /update and /test usage limit',
+    limitModalLabel: 'Number of daily attempts (empty = no limit)',
+    limitModalPlaceholder: 'e.g. 3',
+    limitRemoved: '✅ Daily usage limit has been **removed** — no restrictions.',
+    limitInvalidValue: '❌ Enter a positive integer or leave the field empty (no limit).',
+    limitSet: '✅ Daily limit set to **{limit}** use(s) of /update and /test per user.',
+
+    // User block modal
+    blockUserModalTitle: 'Block user',
+    blockUserTimeLabel: 'Block duration (e.g. 1h, 7d, 30m) — empty = permanent',
+    blockUserTimePlaceholder: 'Leave empty for permanent block',
+
+    // /info
+    infoPreview: '**Preview** — message will be sent to **{count}** server(s):',
+    infoSessionExpired: 'Session expired. Use `/info` again.',
 };
 
 module.exports = { pol, eng };
