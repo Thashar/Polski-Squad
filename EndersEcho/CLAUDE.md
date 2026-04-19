@@ -31,11 +31,18 @@
        - **KROK 3:** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
-   - **Komenda /test (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` w `aiOcrService.js`:
+   - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + ekstrakcja:
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów)
      - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów)
-     - Po udanej weryfikacji: pełny flow jak `/update` — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
-     - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService`)
+     - Gdy screen niepodobny do wzorca → embed `testNotSimilarTitle/Description` (brak zapisu)
+     - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
+     - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
+     - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
+   - **Komenda /test (wszyscy, tradycyjny + opcjonalny AI OCR):** Używa `analyzeVictoryImage()` lub tradycyjnego OCR:
+     - Gdy AI OCR włączony: sprawdzenie Victory + autentyczności + ekstrakcja; fallback na tradycyjny OCR przy błędzie API
+     - Gdy AI OCR wyłączony: tradycyjny Tesseract OCR
+     - Po udanej analizie: pełny flow jak `/update` — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
+     - NIE wymaga AI OCR; respektuje blokadę użytkownika i globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
    - **Per-serwer:** Osobny plik `data/ranking_{guildId}.json` dla każdego serwera
@@ -180,7 +187,7 @@ ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
 
 # Użytkownicy uprawnieni do /block-ocr (ID rozdzielone przecinkami)
-# Komenda blokuje/odblokowuje /update globalnie; przy odblokowaniu wysyła embed do wszystkich kanałów
+# Komenda blokuje/odblokowuje /update i/lub /test (opcja target: update/test/both); przy odblokowaniu wysyła embed do wszystkich kanałów
 # Stan persystowany w data/ocr_blocked.json
 ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 
