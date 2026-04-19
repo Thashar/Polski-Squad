@@ -81,7 +81,15 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`
+
+**Komenda /limit** — dzienny limit użyć /update i /test (`usageLimitService.js`):
+- Widoczna tylko dla administratorów, wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
+- `/limit` → modal z polem „Liczba prób dziennie" (puste = brak limitu)
+- Limit globalny per-użytkownik per-dzień (UTC), wspólny dla /update i /test
+- Po przekroczeniu → ephemeral z informacją i prośbą o próbę jutro
+- Persistencja: `data/usage_limits.json` (`{ limit, dailyUsage: { "userId_YYYY-MM-DD": count } }`)
+- Stare wpisy usage automatycznie czyszczone przy każdym zapisie (tylko dzisiaj zostaje)
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)

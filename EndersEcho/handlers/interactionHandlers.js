@@ -8,7 +8,7 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -18,6 +18,7 @@ class InteractionHandler {
         this.notificationService = notificationService;
         this.userBlockService = userBlockService;
         this.roleRankingConfigService = roleRankingConfigService;
+        this.usageLimitService = usageLimitService;
         this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
@@ -114,6 +115,11 @@ class InteractionHandler {
                 .setName('remove-role-ranking')
                 .setDescription('Usuwa ranking roli (tylko dla adminów)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('limit')
+                .setDescription('Ustaw dzienny limit użyć komend /update i /test na użytkownika (tylko dla wybranych)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -144,6 +150,10 @@ class InteractionHandler {
             }
             if (interaction.commandName === 'ocr-on-off') {
                 await this.handleBlockOcrCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'limit') {
+                await this.handleLimitCommand(interaction);
                 return;
             }
 
@@ -184,6 +194,10 @@ class InteractionHandler {
             }
             if (interaction.customId.startsWith('ee_block_modal_')) {
                 await this._handleBlockUserModal(interaction);
+                return;
+            }
+            if (interaction.customId === 'limit_modal') {
+                await this._handleLimitModal(interaction);
                 return;
             }
         }
@@ -288,6 +302,15 @@ class InteractionHandler {
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
         if (this.ocrBlockService.isBlocked() && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
+        if (!limitCheck.allowed) {
+            await interaction.reply({
+                content: `❌ Osiągnąłeś dzienny limit **${limitCheck.limit}** użyć komend /update i /test. Spróbuj jutro.`,
+                flags: ['Ephemeral']
+            });
             return;
         }
 
@@ -628,6 +651,15 @@ class InteractionHandler {
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
         if (this.ocrBlockService.isBlocked() && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
+        if (!limitCheck.allowed) {
+            await interaction.reply({
+                content: `❌ Osiągnąłeś dzienny limit **${limitCheck.limit}** użyć komend /update i /test. Spróbuj jutro.`,
+                flags: ['Ephemeral']
+            });
             return;
         }
 
@@ -2013,6 +2045,51 @@ class InteractionHandler {
             .setTimestamp();
 
         await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
+    }
+
+    async handleLimitCommand(interaction) {
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: 'Brak uprawnień do tej komendy.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const currentLimit = this.usageLimitService.getLimit();
+        const currentText = currentLimit !== null ? String(currentLimit) : '';
+
+        const modal = new ModalBuilder()
+            .setCustomId('limit_modal')
+            .setTitle('Dzienny limit użyć /update i /test');
+
+        const limitInput = new TextInputBuilder()
+            .setCustomId('limit_value')
+            .setLabel('Liczba prób dziennie (puste = brak limitu)')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('np. 3')
+            .setValue(currentText)
+            .setRequired(false);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(limitInput));
+        await interaction.showModal(modal);
+    }
+
+    async _handleLimitModal(interaction) {
+        const raw = interaction.fields.getTextInputValue('limit_value').trim();
+
+        if (raw === '') {
+            await this.usageLimitService.setLimit(null);
+            await interaction.reply({ content: '✅ Dzienny limit użyć został **usunięty** — brak ograniczeń.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const parsed = parseInt(raw, 10);
+        if (isNaN(parsed) || parsed < 1) {
+            await interaction.reply({ content: '❌ Podaj dodatnią liczbę całkowitą lub zostaw pole puste (brak limitu).', flags: ['Ephemeral'] });
+            return;
+        }
+
+        await this.usageLimitService.setLimit(parsed);
+        await interaction.reply({ content: `✅ Dzienny limit ustawiony na **${parsed}** użycie(ia) komend /update i /test na użytkownika.`, flags: ['Ephemeral'] });
     }
 
     async handleBlockOcrCommand(interaction) {
