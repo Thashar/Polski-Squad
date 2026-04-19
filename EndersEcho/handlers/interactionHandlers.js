@@ -63,12 +63,12 @@ class InteractionHandler {
 
                 new SlashCommandBuilder()
                     .setName('update')
-                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
-                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                    .setDescription('Verify a new Ender\'s Echo score with AI template check')
+                    .setDescriptionLocalizations(pl('Zweryfikuj nowy wynik Ender\'s Echo z weryfikacją wzorca AI'))
                     .addAttachmentOption(option =>
                         option.setName('obraz')
-                            .setDescription('Screenshot of the boss result screen')
-                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
+                            .setDescription('Screenshot of the boss result screen (verified against template)')
+                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa (weryfikowany wzorcem)'))
                             .setRequired(true)),
 
                 new SlashCommandBuilder()
@@ -95,18 +95,28 @@ class InteractionHandler {
 
                 new SlashCommandBuilder()
                     .setName('ocr-on-off')
-                    .setDescription('Block / unblock the /update command on all servers (selected users only)')
-                    .setDescriptionLocalizations(pl('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                    .setDescription('Block / unblock /update and/or /test on all servers (selected users only)')
+                    .setDescriptionLocalizations(pl('Zablokuj / odblokuj /update i/lub /test na wszystkich serwerach (tylko dla wybranych)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                    .addStringOption(option =>
+                        option.setName('target')
+                            .setDescription('Which command to block/unblock (default: both)')
+                            .setDescriptionLocalizations(pl('Którą komendę zablokować/odblokować (domyślnie: obie)'))
+                            .setRequired(false)
+                            .addChoices(
+                                { name: '/update', value: 'update' },
+                                { name: '/test', value: 'test' },
+                                { name: 'Obie komendy', value: 'both' }
+                            )),
 
                 new SlashCommandBuilder()
                     .setName('test')
-                    .setDescription('Add a new Ender\'s Echo score for analysis')
-                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
+                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
+                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
                     .addAttachmentOption(option =>
                         option.setName('obraz')
-                            .setDescription('Add a new Ender\'s Echo score for analysis')
-                            .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
+                            .setDescription('Screenshot of the boss result screen')
+                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                             .setRequired(true)),
 
                 new SlashCommandBuilder()
@@ -292,6 +302,11 @@ class InteractionHandler {
             return;
         }
 
+        if (!this.aiOcrService.enabled) {
+            await interaction.reply({ content: msgs.testAiOcrRequired, flags: ['Ephemeral'] });
+            return;
+        }
+
         const attachment = interaction.options.getAttachment('obraz');
 
         const isImage = this.config.images.supportedExtensions.some(ext =>
@@ -314,7 +329,7 @@ class InteractionHandler {
         }
 
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
-        if (this.ocrBlockService.isBlocked() && !isOcrAuthorized) {
+        if (this.ocrBlockService.isBlocked('update') && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
@@ -339,47 +354,33 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            let bestScore = null;
-            let bossName = null;
+            gl.info(`🤖 [/update] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
-            // === AI OCR (jeśli włączony) ===
-            if (this.aiOcrService.enabled) {
-                try {
-                    gl.info('🤖 Używam AI OCR do analizy obrazu...');
-                    const aiResult = await this.aiOcrService.analyzeVictoryImage(tempImagePath, gl);
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
+            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
-                    if (aiResult.isValidVictory) {
-                        bestScore = aiResult.score;
-                        bossName = aiResult.bossName;
-                        gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
-                    } else {
-                        gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
-                        await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-
-                        if (aiResult.error === 'FAKE_PHOTO') {
-                            await interaction.editReply(msgs.fakePhotoDetected);
-                            return;
-                        }
-
-                        await interaction.editReply(msgs.invalidScreenshot);
-                        return;
-                    }
-                } catch (aiError) {
-                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
-                    await interaction.editReply({ content: msgs.aiOcrUnavailable });
-
-                    const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                    if (!trad1) return;
-                    ({ bestScore, bossName } = trad1);
-                }
-            } else {
-                // === Tradycyjny OCR ===
-                gl.info('🔍 Używam tradycyjnego OCR...');
-
-                const trad2 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                if (!trad2) return;
-                ({ bestScore, bossName } = trad2);
+            if (aiResult.error === 'NOT_SIMILAR') {
+                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
+                await interaction.editReply({
+                    content: '',
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setTitle(msgs.testNotSimilarTitle)
+                        .setDescription(msgs.testNotSimilarDescription)
+                        .setTimestamp()]
+                });
+                return;
             }
+
+            if (!aiResult.isValidVictory) {
+                await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+                await interaction.editReply(msgs.invalidScreenshot);
+                return;
+            }
+
+            const bestScore = aiResult.score;
+            const bossName = aiResult.bossName;
+            gl.success(`✅ [/update] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
 
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
@@ -636,11 +637,6 @@ class InteractionHandler {
             return;
         }
 
-        if (!this.aiOcrService.enabled) {
-            await interaction.reply({ content: msgs.testAiOcrRequired, flags: ['Ephemeral'] });
-            return;
-        }
-
         const attachment = interaction.options.getAttachment('obraz');
 
         const isImage = this.config.images.supportedExtensions.some(ext =>
@@ -663,7 +659,7 @@ class InteractionHandler {
         }
 
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
-        if (this.ocrBlockService.isBlocked() && !isOcrAuthorized) {
+        if (this.ocrBlockService.isBlocked('test') && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
@@ -688,33 +684,47 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            gl.info(`🤖 [/test] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
+            let bestScore = null;
+            let bossName = null;
 
-            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
+            // === AI OCR (jeśli włączony) ===
+            if (this.aiOcrService.enabled) {
+                try {
+                    gl.info('🤖 Używam AI OCR do analizy obrazu...');
+                    const aiResult = await this.aiOcrService.analyzeVictoryImage(tempImagePath, gl);
 
-            if (aiResult.error === 'NOT_SIMILAR') {
-                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
-                await interaction.editReply({
-                    content: '',
-                    embeds: [new EmbedBuilder()
-                        .setColor(0xFF0000)
-                        .setTitle(msgs.testNotSimilarTitle)
-                        .setDescription(msgs.testNotSimilarDescription)
-                        .setTimestamp()]
-                });
-                return;
+                    if (aiResult.isValidVictory) {
+                        bestScore = aiResult.score;
+                        bossName = aiResult.bossName;
+                        gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
+                    } else {
+                        gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                        await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+
+                        if (aiResult.error === 'FAKE_PHOTO') {
+                            await interaction.editReply(msgs.fakePhotoDetected);
+                            return;
+                        }
+
+                        await interaction.editReply(msgs.invalidScreenshot);
+                        return;
+                    }
+                } catch (aiError) {
+                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
+                    await interaction.editReply({ content: msgs.aiOcrUnavailable });
+
+                    const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
+                    if (!trad1) return;
+                    ({ bestScore, bossName } = trad1);
+                }
+            } else {
+                // === Tradycyjny OCR ===
+                gl.info('🔍 Używam tradycyjnego OCR...');
+
+                const trad2 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
+                if (!trad2) return;
+                ({ bestScore, bossName } = trad2);
             }
-
-            if (!aiResult.isValidVictory) {
-                await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-                await interaction.editReply(msgs.invalidScreenshot);
-                return;
-            }
-
-            const bestScore = aiResult.score;
-            const bossName = aiResult.bossName;
-            gl.success(`✅ [/test] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
 
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
@@ -728,7 +738,9 @@ class InteractionHandler {
 
             await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
 
-            gl.info(`🎯 [/test] Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
+            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
+
+            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
             if (!isNewRecord) {
                 try {
@@ -871,7 +883,7 @@ class InteractionHandler {
                                 let notifImageRef = null;
                                 let notifFiles;
                                 if (!isSourceGuild) {
-                                    const notifAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
+                                    const notifAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
                                     notifImageRef = `attachment://${notifAttachment.name}`;
                                     notifFiles = [notifAttachment];
                                 }
@@ -915,7 +927,7 @@ class InteractionHandler {
                     for (const subscriberId of subscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
-                            const dmAttachment = new AttachmentBuilder(imageBuffer, { name: imageAttachment.name });
+                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
                             const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
                             await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
                             gl.info(`✅ [/test] Wysłano DM powiadomienie do ${subscriberId}`);
@@ -2126,11 +2138,18 @@ class InteractionHandler {
         }
 
         const userNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        const target = interaction.options.getString('target') || 'both';
+        const targetCommands = target === 'both' ? ['update', 'test'] : [target];
 
-        if (this.ocrBlockService.isBlocked()) {
+        const currentlyBlocked = this.ocrBlockService.getBlockedCommands();
+        const allTargetBlocked = targetCommands.every(cmd => currentlyBlocked.includes(cmd));
+
+        const cmdLabel = targetCommands.map(c => `\`/${c}\``).join(', ');
+
+        if (allTargetBlocked) {
             // Odblokowanie — wyślij powiadomienie na wszystkie serwery
-            await this.ocrBlockService.unblock(interaction.user.id, userNick);
-            logger.info(`🔓 OCR odblokowany przez ${userNick}`);
+            await this.ocrBlockService.unblock(interaction.user.id, userNick, targetCommands);
+            logger.info(`🔓 OCR odblokowany dla ${cmdLabel} przez ${userNick}`);
 
             for (const guildCfg of this.config.guilds) {
                 try {
@@ -2140,7 +2159,7 @@ class InteractionHandler {
                     const embed = new EmbedBuilder()
                         .setColor(0x00C853)
                         .setTitle(guildMsgs.ocrResumedTitle)
-                        .setDescription(guildMsgs.ocrResumedDescription)
+                        .setDescription(formatMessage(guildMsgs.ocrResumedDescription, { commands: cmdLabel }))
                         .setTimestamp();
                     await channel.send({ embeds: [embed] });
                 } catch (err) {
@@ -2148,14 +2167,12 @@ class InteractionHandler {
                 }
             }
 
-            const replyMsgs = this.msgs(interaction.guildId);
-            await interaction.reply({ content: replyMsgs.ocrBlockDisabled, flags: ['Ephemeral'] });
+            await interaction.reply({ content: formatMessage(msgs.ocrBlockDisabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
         } else {
             // Zablokowanie
-            await this.ocrBlockService.block(interaction.user.id, userNick);
-            logger.warn(`🔒 OCR zablokowany przez ${userNick}`);
-            const replyMsgs = this.msgs(interaction.guildId);
-            await interaction.reply({ content: replyMsgs.ocrBlockEnabled, flags: ['Ephemeral'] });
+            await this.ocrBlockService.block(interaction.user.id, userNick, targetCommands);
+            logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} przez ${userNick}`);
+            await interaction.reply({ content: formatMessage(msgs.ocrBlockEnabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
         }
     }
 

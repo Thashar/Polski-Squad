@@ -131,10 +131,10 @@ const pol = {
 
     // /block-ocr
     ocrBlocked: '🚫 **Analiza zdjęć jest tymczasowo zablokowana.**\nZostaniesz powiadomiony gdy zostanie wznowiona.',
-    ocrBlockEnabled: '🔒 **Analiza OCR zablokowana** — komenda `/update` jest teraz wyłączona na wszystkich serwerach.',
-    ocrBlockDisabled: '🔓 **Analiza OCR odblokowana** — komenda `/update` jest teraz dostępna.',
+    ocrBlockEnabled: '🔒 **Analiza OCR zablokowana** — komendy {commands} są teraz wyłączone na wszystkich serwerach.',
+    ocrBlockDisabled: '🔓 **Analiza OCR odblokowana** — komendy {commands} są teraz dostępne.',
     ocrResumedTitle: '✅ Analiza zdjęć wznowiona!',
-    ocrResumedDescription: 'Komenda `/update` jest ponownie dostępna. Możesz przesyłać screeny wyników.',
+    ocrResumedDescription: 'Komendy {commands} są ponownie dostępne. Możesz przesyłać screeny wyników.',
 
     // Wspólne
     unknownBoss: 'Nieznany',
@@ -321,10 +321,10 @@ const eng = {
 
     // /block-ocr
     ocrBlocked: '🚫 **Screenshot analysis is temporarily blocked.**\nYou will be notified when it resumes.',
-    ocrBlockEnabled: '🔒 **OCR analysis blocked** — the `/update` command is now disabled on all servers.',
-    ocrBlockDisabled: '🔓 **OCR analysis unblocked** — the `/update` command is now available.',
+    ocrBlockEnabled: '🔒 **OCR analysis blocked** — commands {commands} are now disabled on all servers.',
+    ocrBlockDisabled: '🔓 **OCR analysis unblocked** — commands {commands} are now available.',
     ocrResumedTitle: '✅ Screenshot analysis resumed!',
-    ocrResumedDescription: 'The `/update` command is available again. You can submit result screenshots.',
+    ocrResumedDescription: 'Commands {commands} are available again. You can submit result screenshots.',
 
     // Common
     unknownBoss: 'Unknown',
