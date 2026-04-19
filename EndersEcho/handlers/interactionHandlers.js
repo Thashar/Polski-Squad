@@ -49,99 +49,102 @@ class InteractionHandler {
      * @param {Client} client
      */
     async registerSlashCommands(client) {
-        const commands = [
-            new SlashCommandBuilder()
-                .setName('ranking')
-                .setDescription('Display the player ranking (choose server or global)')
-                .setDescriptionLocalizations({ pl: 'Wyświetl ranking graczy (wybierz serwer lub globalny)' }),
-
-            new SlashCommandBuilder()
-                .setName('update')
-                .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
-                .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)' })
-                .addAttachmentOption(option =>
-                    option.setName('obraz')
-                        .setDescription('Screenshot of the boss result screen')
-                        .setDescriptionLocalizations({ pl: 'Screenshot ekranu wyników bossa' })
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('remove')
-                .setDescription('Remove a player from the ranking (admins only)')
-                .setDescriptionLocalizations({ pl: 'Usuń gracza z rankingu (tylko dla adminów)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addUserOption(option =>
-                    option.setName('user')
-                        .setDescription('User to remove from the ranking')
-                        .setDescriptionLocalizations({ pl: 'Użytkownik do usunięcia z rankingu' })
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('notifications')
-                .setDescription('Manage record break notifications for players')
-                .setDescriptionLocalizations({ pl: 'Zarządzaj powiadomieniami o pobiciach rekordów graczy' }),
-
-            new SlashCommandBuilder()
-                .setName('info')
-                .setDescription('Send an info message to all servers (selected users only)')
-                .setDescriptionLocalizations({ pl: 'Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('ocr-on-off')
-                .setDescription('Block / unblock the /update command on all servers (selected users only)')
-                .setDescriptionLocalizations({ pl: 'Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('test')
-                .setDescription('Add a new Ender\'s Echo score for analysis')
-                .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
-                .addAttachmentOption(option =>
-                    option.setName('obraz')
-                        .setDescription('Add a new Ender\'s Echo score for analysis')
-                        .setDescriptionLocalizations({ pl: 'Dodaj nowy wynik Ender\'s Echo do analizy' })
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('unblock')
-                .setDescription('View blocked users and unblock them (admins only)')
-                .setDescriptionLocalizations({ pl: 'Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('add-role-ranking')
-                .setDescription('Add a ranking for role holders (admins only)')
-                .setDescriptionLocalizations({ pl: 'Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addRoleOption(option =>
-                    option.setName('rola')
-                        .setDescription('Role for which you want to create a ranking')
-                        .setDescriptionLocalizations({ pl: 'Rola, dla której chcesz utworzyć ranking' })
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('remove-role-ranking')
-                .setDescription('Remove a role ranking (admins only)')
-                .setDescriptionLocalizations({ pl: 'Usuwa ranking roli (tylko dla adminów)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('limit')
-                .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
-                .setDescriptionLocalizations({ pl: 'Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)' })
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-        ];
-
         const rest = new REST().setToken(this.config.token);
 
         for (const guildConfig of this.config.guilds) {
+            const isPol = guildConfig.lang === 'pol';
+            const pl = (text) => isPol ? { pl: text } : {};
+
+            const commands = [
+                new SlashCommandBuilder()
+                    .setName('ranking')
+                    .setDescription('Display the player ranking (choose server or global)')
+                    .setDescriptionLocalizations(pl('Wyświetl ranking graczy (wybierz serwer lub globalny)')),
+
+                new SlashCommandBuilder()
+                    .setName('update')
+                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
+                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                    .addAttachmentOption(option =>
+                        option.setName('obraz')
+                            .setDescription('Screenshot of the boss result screen')
+                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
+                            .setRequired(true)),
+
+                new SlashCommandBuilder()
+                    .setName('remove')
+                    .setDescription('Remove a player from the ranking (admins only)')
+                    .setDescriptionLocalizations(pl('Usuń gracza z rankingu (tylko dla adminów)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                    .addUserOption(option =>
+                        option.setName('user')
+                            .setDescription('User to remove from the ranking')
+                            .setDescriptionLocalizations(pl('Użytkownik do usunięcia z rankingu'))
+                            .setRequired(true)),
+
+                new SlashCommandBuilder()
+                    .setName('notifications')
+                    .setDescription('Manage record break notifications for players')
+                    .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
+
+                new SlashCommandBuilder()
+                    .setName('info')
+                    .setDescription('Send an info message to all servers (selected users only)')
+                    .setDescriptionLocalizations(pl('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+                new SlashCommandBuilder()
+                    .setName('ocr-on-off')
+                    .setDescription('Block / unblock the /update command on all servers (selected users only)')
+                    .setDescriptionLocalizations(pl('Zablokuj / odblokuj komendę /update na wszystkich serwerach (tylko dla wybranych)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+                new SlashCommandBuilder()
+                    .setName('test')
+                    .setDescription('Add a new Ender\'s Echo score for analysis')
+                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
+                    .addAttachmentOption(option =>
+                        option.setName('obraz')
+                            .setDescription('Add a new Ender\'s Echo score for analysis')
+                            .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
+                            .setRequired(true)),
+
+                new SlashCommandBuilder()
+                    .setName('unblock')
+                    .setDescription('View blocked users and unblock them (admins only)')
+                    .setDescriptionLocalizations(pl('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+                new SlashCommandBuilder()
+                    .setName('add-role-ranking')
+                    .setDescription('Add a ranking for role holders (admins only)')
+                    .setDescriptionLocalizations(pl('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                    .addRoleOption(option =>
+                        option.setName('rola')
+                            .setDescription('Role for which you want to create a ranking')
+                            .setDescriptionLocalizations(pl('Rola, dla której chcesz utworzyć ranking'))
+                            .setRequired(true)),
+
+                new SlashCommandBuilder()
+                    .setName('remove-role-ranking')
+                    .setDescription('Remove a role ranking (admins only)')
+                    .setDescriptionLocalizations(pl('Usuwa ranking roli (tylko dla adminów)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+                new SlashCommandBuilder()
+                    .setName('limit')
+                    .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
+                    .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+            ];
+
             try {
                 await rest.put(
                     Routes.applicationGuildCommands(this.config.clientId, guildConfig.id),
                     { body: commands }
                 );
-                logger.info(`✅ Zarejestrowano komendy dla serwera ${guildConfig.id}`);
+                logger.info(`✅ Zarejestrowano komendy dla serwera ${guildConfig.id} (${guildConfig.lang})`);
             } catch (error) {
                 logger.error(`Błąd rejestracji slash commands dla serwera ${guildConfig.id}:`, error);
             }
