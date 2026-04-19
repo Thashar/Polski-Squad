@@ -9,6 +9,7 @@ const RoleService = require('./services/roleService');
 const NotificationService = require('./services/notificationService');
 const UserBlockService = require('./services/userBlockService');
 const RoleRankingConfigService = require('./services/roleRankingConfigService');
+const UsageLimitService = require('./services/usageLimitService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -32,7 +33,8 @@ const roleService = new RoleService(config, rankingService);
 const notificationService = new NotificationService(config);
 const userBlockService = new UserBlockService(config);
 const roleRankingConfigService = new RoleRankingConfigService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService);
+const usageLimitService = new UsageLimitService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -44,6 +46,9 @@ async function initializeBot() {
 
         // Inicjalizuj OCR service
         await ocrService.initialize();
+
+        // Wczytaj limit dzienny
+        await usageLimitService.load();
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
