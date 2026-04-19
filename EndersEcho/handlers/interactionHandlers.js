@@ -2151,25 +2151,9 @@ class InteractionHandler {
         const cmdLabel = targetCommands.map(c => `\`/${c}\``).join(', ');
 
         if (allTargetBlocked) {
-            // Odblokowanie — wyślij powiadomienie na wszystkie serwery
+            // Odblokowanie
             await this.ocrBlockService.unblock(interaction.user.id, userNick, targetCommands);
             logger.info(`🔓 OCR odblokowany dla ${cmdLabel} przez ${userNick}`);
-
-            for (const guildCfg of this.config.guilds) {
-                try {
-                    const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
-                    if (!channel) continue;
-                    const guildMsgs = this.msgs(guildCfg.id);
-                    const embed = new EmbedBuilder()
-                        .setColor(0x00C853)
-                        .setTitle(guildMsgs.ocrResumedTitle)
-                        .setDescription(formatMessage(guildMsgs.ocrResumedDescription, { commands: cmdLabel }))
-                        .setTimestamp();
-                    await channel.send({ embeds: [embed] });
-                } catch (err) {
-                    logger.warn(`⚠️ Nie można wysłać powiadomienia o odblokowaniu do serwera ${guildCfg.id}: ${err.message}`);
-                }
-            }
 
             await interaction.reply({ content: formatMessage(msgs.ocrBlockDisabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
         } else {
