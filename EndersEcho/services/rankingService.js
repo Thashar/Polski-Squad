@@ -351,8 +351,8 @@ class RankingService {
         // Pole statystyk
         const serverCount = this.config.guilds.length;
         const statsLines = [
-            formatMessage(msgs.rankingPlayersCount, { count: players.length }),
-            ...(isGlobal ? [formatMessage(msgs.rankingServersCount, { count: serverCount })] : [])
+            ...(isGlobal ? [formatMessage(msgs.rankingServersCount, { count: serverCount })] : []),
+            formatMessage(msgs.rankingPlayersCount, { count: players.length })
         ];
         if (players.length > 0) {
             statsLines.push(formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }));
