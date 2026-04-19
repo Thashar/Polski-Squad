@@ -63,12 +63,12 @@ class InteractionHandler {
 
                 new SlashCommandBuilder()
                     .setName('update')
-                    .setDescription('Verify a new Ender\'s Echo score with AI template check')
-                    .setDescriptionLocalizations(pl('Zweryfikuj nowy wynik Ender\'s Echo z weryfikacją wzorca AI'))
+                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
+                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
                     .addAttachmentOption(option =>
                         option.setName('obraz')
-                            .setDescription('Screenshot of the boss result screen (verified against template)')
-                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa (weryfikowany wzorcem)'))
+                            .setDescription('Screenshot of the boss result screen')
+                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                             .setRequired(true)),
 
                 new SlashCommandBuilder()
@@ -399,7 +399,6 @@ class InteractionHandler {
             if (!isNewRecord) {
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-                    const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
                     const fsSync = require('fs');
                     const fileStats = fsSync.statSync(tempImagePath);
@@ -444,7 +443,6 @@ class InteractionHandler {
 
             // Nowy rekord — publiczne ogłoszenie
             const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
             const imageAttachment = new AttachmentBuilder(tempImagePath, {
                 name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}`
             });
