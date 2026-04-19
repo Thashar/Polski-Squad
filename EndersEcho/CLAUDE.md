@@ -23,7 +23,7 @@
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
-   - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa walidacja
+   - **AI OCR (opcjonalny):** `aiOcrService.js` - Google AI API (Gemini Vision), dwuetapowa walidacja
      - Włączany przez `USE_ENDERSECHO_AI_OCR=true` w .env
      - Trzyetapowa walidacja (trzy osobne requesty do API):
        - **KROK 1:** Sprawdza czy jest "Victory" (50 tokenów)
@@ -170,8 +170,8 @@ ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 
 # AI OCR (opcjonalne)
 USE_ENDERSECHO_AI_OCR=false
-ENDERSECHO_ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
-ENDERSECHO_ANTHROPIC_MODEL=claude-3-haiku-20240307
+ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
+ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.0-flash
 
 # Komenda /info (wymagane do działania /info)
 ENDERSECHO_INFO_USER_ID=discord_user_id
