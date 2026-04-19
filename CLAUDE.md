@@ -649,7 +649,7 @@ appSync.endersEchoSnapshot({ discordId, snapshotDate, rank /* >=1 */, scoreNumer
 // Event logi (wymagają deterministycznego `id` — użyj eventId(...)):
 appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind /* 'BOSS_FAIL'|'MANUAL'|'WEEKLY_RESET'|'MANUAL_REMOVAL'|'OTHER' */, reasonNote, occurredAt, issuedBy });
 appSync.reminderEvent({ id: eventId('reminder_sent', userId, ...), guildId, discordId, type: 'SENT'|'CONFIRMED', channelId, occurredAt });
-appSync.cxEntry({ id: eventId('cx', userId, ...), discordId, score, completedAt });
+appSync.cxEntry({ id: eventId('cx', userId, ...), discordId, guildId, score, completedAt });
 ```
 
 #### Idempotentność
@@ -672,6 +672,7 @@ async function saveCXResult(userId, score) {
     appSync.cxEntry({
         id: eventId('cx', userId, completedAt, score),
         discordId: userId,
+        guildId,
         score,
         completedAt,
     });

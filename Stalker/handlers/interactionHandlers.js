@@ -12205,7 +12205,8 @@ async function handleEquipmentSave(interaction, sharedState) {
         const scannedAt = new Date().toISOString();
         data[userId] = {
             items: pending.items,
-            updatedAt: scannedAt
+            updatedAt: scannedAt,
+            guildId: interaction.guildId
         };
 
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });

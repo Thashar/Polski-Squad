@@ -367,6 +367,7 @@ class MessageHandler {
                 appSync.cxEntry({
                     id: eventId('cx', guild.id, userId, completedAt, result.score),
                     discordId: userId,
+                    guildId: guild.id,
                     score: result.score,
                     completedAt,
                 });
