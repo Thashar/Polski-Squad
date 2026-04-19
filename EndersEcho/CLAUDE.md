@@ -1,19 +1,22 @@
 ### 🏆 EndersEcho Bot
 
 **⚠️ ZASADA DWUJĘZYCZNOŚCI KOMEND (KRYTYCZNE):**
-- Każda komenda slash MUSI mieć opis w angielskim (`.setDescription()`) ORAZ polskie tłumaczenie (`.setDescriptionLocalizations({ pl: '...' })`)
-- Dotyczy też opisów opcji (`.addAttachmentOption`, `.addUserOption`, `.addRoleOption`, itp.)
-- Angielski = domyślny fallback dla innych języków; Polski = nadpisuje dla `pl` locale
+- Każda komenda slash MUSI mieć opis angielski (`.setDescription()`) ORAZ polskie tłumaczenie przez helper `pl()`
+- Komendy rejestrowane są **osobno per serwer** — serwery `eng` nie dostają `pl` lokalizacji, serwery `pol` dostają
+- Helper `pl` tworzony jest wewnątrz pętli po serwerach: `const pl = (text) => isPol ? { pl: text } : {};`
 - Wzorzec obowiązkowy dla każdej nowej komendy:
   ```javascript
+  // Wewnątrz pętli for (const guildConfig of this.config.guilds):
+  // const isPol = guildConfig.lang === 'pol';
+  // const pl = (text) => isPol ? { pl: text } : {};
   new SlashCommandBuilder()
       .setName('nazwa')
       .setDescription('English description')
-      .setDescriptionLocalizations({ pl: 'Polski opis' })
+      .setDescriptionLocalizations(pl('Polski opis'))
       .addAttachmentOption(option =>
           option.setName('option_name')
               .setDescription('English option description')
-              .setDescriptionLocalizations({ pl: 'Polski opis opcji' })
+              .setDescriptionLocalizations(pl('Polski opis opcji'))
               .setRequired(true))
   ```
 
