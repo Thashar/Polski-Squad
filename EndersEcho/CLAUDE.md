@@ -1,5 +1,22 @@
 ### 🏆 EndersEcho Bot
 
+**⚠️ ZASADA DWUJĘZYCZNOŚCI KOMEND (KRYTYCZNE):**
+- Każda komenda slash MUSI mieć opis w angielskim (`.setDescription()`) ORAZ polskie tłumaczenie (`.setDescriptionLocalizations({ pl: '...' })`)
+- Dotyczy też opisów opcji (`.addAttachmentOption`, `.addUserOption`, `.addRoleOption`, itp.)
+- Angielski = domyślny fallback dla innych języków; Polski = nadpisuje dla `pl` locale
+- Wzorzec obowiązkowy dla każdej nowej komendy:
+  ```javascript
+  new SlashCommandBuilder()
+      .setName('nazwa')
+      .setDescription('English description')
+      .setDescriptionLocalizations({ pl: 'Polski opis' })
+      .addAttachmentOption(option =>
+          option.setName('option_name')
+              .setDescription('English option description')
+              .setDescriptionLocalizations({ pl: 'Polski opis opcji' })
+              .setRequired(true))
+  ```
+
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
