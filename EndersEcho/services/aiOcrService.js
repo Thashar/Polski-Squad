@@ -1,6 +1,13 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
+
+const SAFETY_SETTINGS_OFF = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -27,7 +34,8 @@ class AIOCRService {
     _getModel(maxOutputTokens) {
         return this.genAI.getGenerativeModel({
             model: this.modelName,
-            generationConfig: { maxOutputTokens }
+            generationConfig: { maxOutputTokens },
+            safetySettings: SAFETY_SETTINGS_OFF
         });
     }
 
@@ -36,6 +44,21 @@ class AIOCRService {
         const result = await model.generateContent({
             contents: [{ role: 'user', parts }]
         });
+
+        const feedback = result.response.promptFeedback;
+        if (feedback?.blockReason) {
+            throw new Error(`Safety filter zablokował odpowiedź: ${feedback.blockReason}`);
+        }
+
+        const candidate = result.response.candidates?.[0];
+        if (!candidate) {
+            throw new Error('Brak kandydatów w odpowiedzi Gemini (safety filter lub błąd API)');
+        }
+
+        if (candidate.finishReason && candidate.finishReason !== 'STOP' && candidate.finishReason !== 'MAX_TOKENS') {
+            throw new Error(`Odpowiedź zakończona z powodu: ${candidate.finishReason}`);
+        }
+
         return result.response.text();
     }
 
