@@ -6,16 +6,14 @@ const logger = createBotLogger('EndersEcho');
 
 // Cennik Gemini 2.5 Flash Preview ($/1M tokenów)
 const PRICING = {
-    input:   0.15,
-    output:  0.60,
-    thought: 0.35,
+    input:  0.30,
+    output: 2.50,
 };
 
-function calcCost(promptTokens, outputTokens, thoughtTokens) {
+function calcCost(promptTokens, outputTokens) {
     return (
-        (promptTokens  / 1_000_000) * PRICING.input  +
-        (outputTokens  / 1_000_000) * PRICING.output +
-        (thoughtTokens / 1_000_000) * PRICING.thought
+        (promptTokens / 1_000_000) * PRICING.input +
+        (outputTokens / 1_000_000) * PRICING.output
     );
 }
 
@@ -32,7 +30,6 @@ function fmtK(val) {
     if (val >= 1_000)     return `${(val / 1_000).toFixed(0)}K`;
     return val.toString();
 }
-
 
 class TokenUsageService {
     constructor(config) {
@@ -54,34 +51,28 @@ class TokenUsageService {
         await fs.writeFile(this.dataFile, JSON.stringify(this.data, null, 2), 'utf8');
     }
 
-    async record(guildId, promptTokens, outputTokens, thoughtTokens = 0) {
+    async record(guildId, promptTokens, outputTokens) {
         const day = todayKey();
         if (!this.data.guilds[guildId]) this.data.guilds[guildId] = {};
         const g = this.data.guilds[guildId];
-        if (!g[day]) g[day] = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0, requests: 0 };
-        g[day].promptTokens  += promptTokens;
-        g[day].outputTokens  += outputTokens;
-        g[day].thoughtTokens += thoughtTokens;
-        g[day].requests      += 1;
+        if (!g[day]) g[day] = { promptTokens: 0, outputTokens: 0, requests: 0 };
+        g[day].promptTokens += promptTokens;
+        g[day].outputTokens += outputTokens;
+        g[day].requests     += 1;
         await this.save();
     }
 
     _sumDays(guildId, keys) {
         const g = this.data.guilds[guildId] || {};
-        let promptTokens = 0, outputTokens = 0, thoughtTokens = 0, requests = 0;
+        let promptTokens = 0, outputTokens = 0, requests = 0;
         for (const k of keys) {
             const d = g[k];
             if (!d) continue;
-            promptTokens  += d.promptTokens  || 0;
-            outputTokens  += d.outputTokens  || 0;
-            thoughtTokens += d.thoughtTokens || 0;
-            requests      += d.requests      || 0;
+            promptTokens += d.promptTokens || 0;
+            outputTokens += d.outputTokens || 0;
+            requests     += d.requests     || 0;
         }
-        return { promptTokens, outputTokens, thoughtTokens, requests, cost: calcCost(promptTokens, outputTokens, thoughtTokens) };
-    }
-
-    getDailyStats(guildId, dateKey = todayKey()) {
-        return this._sumDays(guildId, [dateKey]);
+        return { promptTokens, outputTokens, requests, cost: calcCost(promptTokens, outputTokens) };
     }
 
     getMonthlyStats(guildId, month = monthKey(todayKey())) {
@@ -90,18 +81,6 @@ class TokenUsageService {
         return this._sumDays(guildId, keys);
     }
 
-    getAllGuildsStats(dateKey, month) {
-        const result = {};
-        for (const guildId of Object.keys(this.data.guilds)) {
-            result[guildId] = {
-                daily:   this.getDailyStats(guildId, dateKey),
-                monthly: this.getMonthlyStats(guildId, month),
-            };
-        }
-        return result;
-    }
-
-    // Zwraca posortowane dostępne miesiące (zawsze zawiera bieżący)
     getAvailableMonths(guildFilter) {
         const months = new Set();
         months.add(monthKey(todayKey()));
@@ -119,7 +98,6 @@ class TokenUsageService {
         return [...months].sort();
     }
 
-    // Agreguje dane dzienne dla danego miesiąca i filtra serwera
     getMonthDailyTotals(guildFilter, month) {
         const [y, m] = month.split('-').map(Number);
         const daysInMonth = new Date(y, m, 0).getDate();
@@ -141,31 +119,30 @@ class TokenUsageService {
                 const key = `${month}-${String(d).padStart(2, '0')}`;
                 const v = g[key];
                 if (!v) continue;
-                const tokens = (v.promptTokens || 0) + (v.outputTokens || 0) + (v.thoughtTokens || 0);
-                daily[key].total    += tokens;
+                const p = v.promptTokens || 0;
+                const o = v.outputTokens || 0;
+                daily[key].total    += p + o;
                 daily[key].requests += v.requests || 0;
-                daily[key].cost     += calcCost(v.promptTokens || 0, v.outputTokens || 0, v.thoughtTokens || 0);
+                daily[key].cost     += calcCost(p, o);
             }
         }
 
         return { daily, daysInMonth };
     }
 
-    // Agreguje statystyki miesięczne dla danego filtra
     getMonthTotals(guildFilter, month) {
         const guildIds = guildFilter === 'all'
             ? (this.config?.guilds?.map(g => g.id) || Object.keys(this.data.guilds))
             : [guildFilter];
 
-        let promptTokens = 0, outputTokens = 0, thoughtTokens = 0, requests = 0;
+        let promptTokens = 0, outputTokens = 0, requests = 0;
         for (const guildId of guildIds) {
             const s = this.getMonthlyStats(guildId, month);
-            promptTokens  += s.promptTokens;
-            outputTokens  += s.outputTokens;
-            thoughtTokens += s.thoughtTokens;
-            requests      += s.requests;
+            promptTokens += s.promptTokens;
+            outputTokens += s.outputTokens;
+            requests     += s.requests;
         }
-        return { promptTokens, outputTokens, thoughtTokens, requests, cost: calcCost(promptTokens, outputTokens, thoughtTokens) };
+        return { promptTokens, outputTokens, requests, cost: calcCost(promptTokens, outputTokens) };
     }
 
     generateChartText(guildFilter, month) {
@@ -186,10 +163,9 @@ class TokenUsageService {
                 continue;
             }
 
-            const filled  = v.total > 0 ? Math.max(Math.round((v.total / maxVal) * BAR_WIDTH), 1) : 0;
-            const empty   = BAR_WIDTH - filled;
-            const bar     = '█'.repeat(filled) + '░'.repeat(empty);
-            const label   = v.total > 0 ? fmtK(v.total).padStart(6) : '   —  ';
+            const filled    = v.total > 0 ? Math.max(Math.round((v.total / maxVal) * BAR_WIDTH), 1) : 0;
+            const bar       = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
+            const label     = v.total > 0 ? fmtK(v.total).padStart(6) : '    — ';
             const todayMark = key === today ? ' ◄' : '';
             lines.push(`${dayStr} ${bar} ${label}${todayMark}`);
         }
