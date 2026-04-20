@@ -171,7 +171,7 @@ ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 # AI OCR (opcjonalne)
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
-ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.0-flash
+ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash
 
 # Komenda /info (wymagane do działania /info)
 ENDERSECHO_INFO_USER_ID=discord_user_id

@@ -15,7 +15,7 @@ class AIOCRService {
 
         if (this.enabled) {
             this.genAI = new GoogleGenerativeAI(this.apiKey);
-            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.0-flash';
+            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash';
             logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);
         } else if (!this.apiKey) {
             logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_GOOGLE_AI_API_KEY');
@@ -143,20 +143,21 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 <ボス名>
 <スコア>
 <合計>`
-            : `Odczytaj zawartość zdjęcia. Poniżej napisu "Victory" znajduje się nazwa Bossa. Poniżej nazwy bossa znajduje się wynik (Best). Na ekranie jest też wartość "Total" - odczytaj ją również.
-WAŻNE - Możliwe jednostki wyniku (od najmniejszej do największej): K, M, B, T, Q, Qi, Sx
-UWAGA: Litera Q w jednostce może wyglądać podobnie do cyfry 0 - upewnij się że prawidłowo rozpoznajesz jednostkę.
-UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra. Jeśli widzisz coś jak "18540" bez litery - prawdopodobnie ostatni znak to litera Q, nie cyfra 0.
-⚠️ KRYTYCZNA ZASADA ODCZYTU WYNIKU:
-Odczytaj wynik DOKŁADNIE tak jak jest napisany na ekranie.
-NIE DODAWAJ separatorów (przecinków ani kropek) które NIE SĄ wyraźnie widoczne na obrazie.
-NIGDY nie interpretuj cyfr jako "tysięcy" i nie dodawaj przecinków.
-NIGDY nie dodawaj dodatkowych cyfr których nie ma na ekranie.
-Zwróć szczególną uwagę na OSTATNI ZNAK wyniku - to jest jednostka (litera), nie cyfra.
-Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i napisz w następującym formacie:
+            : `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
+1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
+2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
+3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
+WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx
+UWAGA: Litera Q może wyglądać jak cyfra 0 — rozróżniaj je uważnie.
+UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra.
+⚠️ KRYTYCZNA ZASADA:
+Odczytaj wartości DOKŁADNIE tak jak są na ekranie.
+NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
+NIE DODAWAJ cyfr których nie ma na ekranie.
+Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 <nazwa bossa>
-<wynik>
-<total>`;
+<wynik Best z jednostką>
+<wynik Total z jednostką>`;
 
         return await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
@@ -169,7 +170,9 @@ Odczytaj nazwę bossa, dokładny wynik (Best) wraz z jednostką, oraz Total i na
 
         const invalidKeywords = [
             'niepoprawny screen', 'przesłano niepoprawny', 'trzeba przesłać screen',
-            'nie wykryłem', 'nie wykryto', 'brak victory', 'nie znalazłem', 'nie można odczytać'
+            'nie wykryłem', 'nie wykryto', 'brak victory', 'nie znalazłem', 'nie można odczytać',
+            'nie mogę odczytać', 'nie mogę', 'przepraszam', 'nie ma napisu', 'nie widzę',
+            'cannot read', 'unable to read', 'i cannot', 'i\'m unable', 'no text'
         ];
         if (invalidKeywords.some(kw => lowerResponse.includes(kw))) {
             return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
@@ -350,6 +353,7 @@ KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego sł
 
         const response = responseText.trim().toUpperCase();
         log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
+        if (!response || !response.includes('OK')) return false;
         return !response.includes('NOK');
     }
 }
