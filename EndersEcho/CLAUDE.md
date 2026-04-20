@@ -38,7 +38,8 @@
      - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
-   - **Komenda /test (wszyscy, tradycyjny + opcjonalny AI OCR):** Używa `analyzeVictoryImage()` lub tradycyjnego OCR:
+   - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, tradycyjny + opcjonalny AI OCR):** Używa `analyzeVictoryImage()` lub tradycyjnego OCR:
+     - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik, którego ID znajduje się w `ENDERSECHO_BLOCK_OCR_USER_IDS`
      - Gdy AI OCR włączony: sprawdzenie Victory + autentyczności + ekstrakcja; fallback na tradycyjny OCR przy błędzie API
      - Gdy AI OCR wyłączony: tradycyjny Tesseract OCR
      - Po udanej analizie: pełny flow jak `/update` — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM

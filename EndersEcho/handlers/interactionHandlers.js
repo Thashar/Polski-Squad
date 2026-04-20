@@ -152,6 +152,7 @@ class InteractionHandler {
                     .setName('test')
                     .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
                     .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                     .addAttachmentOption(option =>
                         option.setName('obraz')
                             .setDescription('Screenshot of the boss result screen')
@@ -701,6 +702,12 @@ class InteractionHandler {
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
+
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
 
         if (this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
