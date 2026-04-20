@@ -108,7 +108,13 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`
+
+**Komenda /tokens** — statystyki zużycia tokenów AI (admin):
+- Wyświetla dzienny i miesięczny koszt w $ per serwer oraz sumy łączne
+- Dane zbierane tylko przy `/update` (AI OCR) i zapisywane w `data/token_usage.json`
+- Podział na: tokeny wejściowe (In), wyjściowe (Out) i myślenia (Think)
+- Cennik: `services/tokenUsageService.js` → stałe `PRICING` (In $0.15, Out $0.60, Think $0.35 / 1M tokenów)
 
 **Komenda /limit** — dzienny limit użyć /update i /test (`usageLimitService.js`):
 - Widoczna tylko dla administratorów, wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
