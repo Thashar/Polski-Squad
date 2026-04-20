@@ -6,8 +6,8 @@ const logger = createBotLogger('EndersEcho');
 
 // Cennik Gemini 2.5 Flash Preview ($/1M tokenów)
 const PRICING = {
-    input:  0.30,
-    output: 2.50,
+    input:  0.40,
+    output: 0.40,
 };
 
 function calcCost(promptTokens, outputTokens) {
