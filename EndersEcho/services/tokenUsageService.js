@@ -20,12 +20,19 @@ function calcCost(promptTokens, outputTokens, thoughtTokens) {
 }
 
 function todayKey() {
-    return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    return new Date().toISOString().slice(0, 10);
 }
 
 function monthKey(dateKey) {
-    return dateKey.slice(0, 7); // YYYY-MM
+    return dateKey.slice(0, 7);
 }
+
+function fmtK(val) {
+    if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(1)}M`;
+    if (val >= 1_000)     return `${(val / 1_000).toFixed(0)}K`;
+    return val.toString();
+}
+
 
 class TokenUsageService {
     constructor(config) {
@@ -92,6 +99,102 @@ class TokenUsageService {
             };
         }
         return result;
+    }
+
+    // Zwraca posortowane dostępne miesiące (zawsze zawiera bieżący)
+    getAvailableMonths(guildFilter) {
+        const months = new Set();
+        months.add(monthKey(todayKey()));
+
+        const guildIds = guildFilter === 'all'
+            ? Object.keys(this.data.guilds)
+            : [guildFilter];
+
+        for (const guildId of guildIds) {
+            for (const key of Object.keys(this.data.guilds[guildId] || {})) {
+                months.add(key.slice(0, 7));
+            }
+        }
+
+        return [...months].sort();
+    }
+
+    // Agreguje dane dzienne dla danego miesiąca i filtra serwera
+    getMonthDailyTotals(guildFilter, month) {
+        const [y, m] = month.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const today = todayKey();
+
+        const guildIds = guildFilter === 'all'
+            ? Object.keys(this.data.guilds)
+            : [guildFilter];
+
+        const daily = {};
+        for (let d = 1; d <= daysInMonth; d++) {
+            const key = `${month}-${String(d).padStart(2, '0')}`;
+            daily[key] = { total: 0, requests: 0, cost: 0, isFuture: key > today };
+        }
+
+        for (const guildId of guildIds) {
+            const g = this.data.guilds[guildId] || {};
+            for (let d = 1; d <= daysInMonth; d++) {
+                const key = `${month}-${String(d).padStart(2, '0')}`;
+                const v = g[key];
+                if (!v) continue;
+                const tokens = (v.promptTokens || 0) + (v.outputTokens || 0) + (v.thoughtTokens || 0);
+                daily[key].total    += tokens;
+                daily[key].requests += v.requests || 0;
+                daily[key].cost     += calcCost(v.promptTokens || 0, v.outputTokens || 0, v.thoughtTokens || 0);
+            }
+        }
+
+        return { daily, daysInMonth };
+    }
+
+    // Agreguje statystyki miesięczne dla danego filtra
+    getMonthTotals(guildFilter, month) {
+        const guildIds = guildFilter === 'all'
+            ? (this.config?.guilds?.map(g => g.id) || Object.keys(this.data.guilds))
+            : [guildFilter];
+
+        let promptTokens = 0, outputTokens = 0, thoughtTokens = 0, requests = 0;
+        for (const guildId of guildIds) {
+            const s = this.getMonthlyStats(guildId, month);
+            promptTokens  += s.promptTokens;
+            outputTokens  += s.outputTokens;
+            thoughtTokens += s.thoughtTokens;
+            requests      += s.requests;
+        }
+        return { promptTokens, outputTokens, thoughtTokens, requests, cost: calcCost(promptTokens, outputTokens, thoughtTokens) };
+    }
+
+    generateChartText(guildFilter, month) {
+        const { daily, daysInMonth } = this.getMonthDailyTotals(guildFilter, month);
+        const today = todayKey();
+        const BAR_WIDTH = 16;
+
+        const maxVal = Math.max(...Object.values(daily).map(v => v.total), 1);
+
+        const lines = [];
+        for (let d = 1; d <= daysInMonth; d++) {
+            const key = `${month}-${String(d).padStart(2, '0')}`;
+            const v = daily[key];
+            const dayStr = String(d).padStart(2, '0');
+
+            if (v.isFuture) {
+                lines.push(`${dayStr} ${'░'.repeat(BAR_WIDTH)}   —`);
+                continue;
+            }
+
+            const filled  = v.total > 0 ? Math.max(Math.round((v.total / maxVal) * BAR_WIDTH), 1) : 0;
+            const empty   = BAR_WIDTH - filled;
+            const bar     = '█'.repeat(filled) + '░'.repeat(empty);
+            const label   = v.total > 0 ? fmtK(v.total).padStart(6) : '   —  ';
+            const todayMark = key === today ? ' ◄' : '';
+            lines.push(`${dayStr} ${bar} ${label}${todayMark}`);
+        }
+
+        return '```\n' + lines.join('\n') + '\n```';
     }
 }
 
