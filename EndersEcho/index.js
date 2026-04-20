@@ -1,10 +1,14 @@
-// OTel SDK MUSI startować jako pierwszy — inicjalizacja wczesna, przed
-// załadowaniem Discord.js / Google SDK, żeby instrumentacja działała od startu.
+const { Client, GatewayIntentBits } = require('discord.js');
+const config = require('./config/config');
+
+// Telemetry init ma się wykonać po require('./config/config'), bo dopiero ten
+// require woła dotenv.config() i wrzuca LANGFUSE_* do process.env. Tracery są
+// pobierane leniwie przy pierwszym spanie (z handlera interakcji), więc SDK
+// nie musi być zainicjowane wcześniej niż reszta modułów — nie używamy
+// auto-instrumentacji, która by tego wymagała.
 const telemetry = require('../utils/telemetry');
 telemetry.init('endersecho-bot');
 
-const { Client, GatewayIntentBits } = require('discord.js');
-const config = require('./config/config');
 const OCRService = require('./services/ocrService');
 const AIOCRService = require('./services/aiOcrService');
 const RankingService = require('./services/rankingService');
@@ -21,6 +25,7 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 
 const logger = createBotLogger('EndersEcho');
+const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
 
 const client = new Client({
     intents: [
@@ -32,7 +37,6 @@ const client = new Client({
 });
 
 const ocrService = new OCRService(config);
-const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
 const aiOcrService = new AIOCRService(config, llmAdapter);
 const rankingService = new RankingService(config);
 const guildLogger = new GuildLogger(config);
