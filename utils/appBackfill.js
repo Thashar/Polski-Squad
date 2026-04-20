@@ -311,23 +311,13 @@ async function collectCoreStock() {
     const file = path.join(STALKER_DATA, 'equipment_data.json');
     if (!(await fileExists(file))) return items;
 
-    // Legacy rekordy w equipment_data.json nie mają guildId (dopisywanie
-    // guildId do zapisu zostało dodane później). Stalker historycznie
-    // obsługiwał jedną gildię — używamy MUTEUSZ_GUILD_ID / KONTROLER_GUILD_ID
-    // jako fallback dla tych rekordów (obydwa wskazują ten sam serwer).
-    const legacyGuildId =
-        process.env.MUTEUSZ_GUILD_ID ||
-        process.env.KONTROLER_GUILD_ID ||
-        null;
-
     const data = await readJson(file, {});
     for (const [userId, record] of Object.entries(data)) {
         if (!record?.items || typeof record.items !== 'object') continue;
-        const guildId = record.guildId || legacyGuildId;
-        if (!guildId) continue;
+        if (!record.guildId) continue;
         items.push({
             discordId: userId,
-            guildId,
+            guildId: record.guildId,
             takenAt: record.updatedAt || new Date().toISOString(),
             items: record.items,
         });
