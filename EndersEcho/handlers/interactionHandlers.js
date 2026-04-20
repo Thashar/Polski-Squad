@@ -2368,9 +2368,8 @@ class InteractionHandler {
         const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
         const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
 
-        // Wykres
-        const chartBuffer  = await this.tokenUsageService.generateChartBuffer(guildFilter, month);
-        const attachment   = new AttachmentBuilder(chartBuffer, { name: 'chart.png' });
+        // Wykres tekstowy
+        const chartText = this.tokenUsageService.generateChartText(guildFilter, month);
 
         // Statystyki miesięczne
         const totals = this.tokenUsageService.getMonthTotals(guildFilter, month);
@@ -2391,7 +2390,7 @@ class InteractionHandler {
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
             .setTitle(`📊 Tokeny AI — ${monthLabel}`)
-            .setImage('attachment://chart.png')
+            .setDescription(chartText)
             .addFields(
                 { name: '📨 Zapytania', value: `\`${totals.requests}\``,                                                                 inline: true },
                 { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens + totals.thoughtTokens)}\``,        inline: true },
@@ -2447,7 +2446,7 @@ class InteractionHandler {
             components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
         }
 
-        return { embeds: [embed], files: [attachment], components };
+        return { embeds: [embed], components };
     }
 }
 
