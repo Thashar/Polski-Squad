@@ -2,10 +2,48 @@ const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBu
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { createBotOperations } = require('../../utils/operationRunner');
 const OcrBlockService = require('../services/ocrBlockService');
 
 const logger = createBotLogger('EndersEcho');
 const path = require('path');
+
+const OPERATIONS_TYPE = 'ocr.analyze';
+const botOps = createBotOperations({ botSlug: 'endersecho' });
+
+/**
+ * Mapuje gatewayError z runOperation na komunikat ephemeral dla usera.
+ * Wołane gdy `op.gatewayError` jest truthy (authorize odrzucił 4xx).
+ */
+function mapGatewayErrorMessage(gwError, msgs) {
+    switch (gwError.code) {
+        case 'QUOTA_EXCEEDED':
+            return formatMessage(msgs.dailyLimitExceeded, { limit: gwError.retryAfter || '' });
+        case 'RATE_LIMITED':
+            return `⏱️ Zbyt wiele żądań. Spróbuj ponownie${gwError.retryAfter ? ` za ${gwError.retryAfter}s` : ''}.`;
+        case 'OPERATION_NOT_ENTITLED':
+            return `🔒 Operacja nie jest dostępna dla tego serwera.`;
+        case 'VALIDATION_FAILED':
+        case 'GATEWAY_UNAVAILABLE':
+            return msgs.updateError;
+        default:
+            return `❌ ${gwError.message || 'Żądanie odrzucone przez gateway.'}`;
+    }
+}
+
+/**
+ * Buduje usage payload do `/record` z `aiResult.tokenUsage` zwracanego przez
+ * `aiOcrService`. Zwraca null gdy brak danych (np. AI OCR wyłączony).
+ */
+function buildGeminiUsage(aiResult) {
+    if (!aiResult?.tokenUsage) return null;
+    const model = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
+    return {
+        provider:     `gemini/${model}`,
+        inputTokens:  aiResult.tokenUsage.promptTokens,
+        outputTokens: aiResult.tokenUsage.outputTokens,
+    };
+}
 
 class InteractionHandler {
     constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService) {
@@ -368,7 +406,27 @@ class InteractionHandler {
 
             gl.info(`🤖 [/update] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
-            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
+            // ── Operations Gateway (authorize + root span + record) ───────────
+            const op = await botOps.run({
+                type:  OPERATIONS_TYPE,
+                actor: { discordId: interaction.user.id },
+                scope: { guildId: interaction.guildId, channelId: interaction.channelId },
+                hints: { command: 'update' },
+            }, async (ctx) => {
+                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta);
+                const usage = buildGeminiUsage(ai);
+                if (ai.error === 'NOT_SIMILAR' || !ai.isValidVictory) {
+                    return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
+                }
+                return { result: ai, usage };
+            });
+
+            if (op.gatewayError) {
+                await interaction.editReply({ content: mapGatewayErrorMessage(op.gatewayError, msgs) });
+                return;
+            }
+            const aiResult = op.result;
+
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
             if (aiResult.tokenUsage && this.tokenUsageService) {
@@ -704,33 +762,59 @@ class InteractionHandler {
 
             // === AI OCR (jeśli włączony) ===
             if (this.aiOcrService.enabled) {
-                try {
-                    gl.info('🤖 Używam AI OCR do analizy obrazu...');
-                    const aiResult = await this.aiOcrService.analyzeVictoryImage(tempImagePath, gl);
+                gl.info('🤖 Używam AI OCR do analizy obrazu...');
 
-                    if (aiResult.isValidVictory) {
-                        bestScore = aiResult.score;
-                        bossName = aiResult.bossName;
-                        gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
-                    } else {
-                        gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
-                        await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-
-                        if (aiResult.error === 'FAKE_PHOTO') {
-                            await interaction.editReply(msgs.fakePhotoDetected);
-                            return;
+                // Operations Gateway (authorize + root span + record). Inner fn
+                // nigdy nie rzuca — łapiemy błąd providera i zwracamy envelope
+                // z PROVIDER_ERROR, żeby na zewnątrz móc spokojnie zrobić fallback.
+                const op = await botOps.run({
+                    type:  OPERATIONS_TYPE,
+                    actor: { discordId: interaction.user.id },
+                    scope: { guildId: interaction.guildId, channelId: interaction.channelId },
+                    hints: { command: 'test' },
+                }, async (ctx) => {
+                    try {
+                        const ai = await this.aiOcrService.analyzeVictoryImage(tempImagePath, gl, ctx.telemetryMeta);
+                        const usage = buildGeminiUsage(ai);
+                        if (!ai.isValidVictory) {
+                            return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
                         }
-
-                        await interaction.editReply(msgs.invalidScreenshot);
-                        return;
+                        return { result: ai, usage };
+                    } catch (err) {
+                        return { result: null, status: 'PROVIDER_ERROR', errorCode: err.providerCode || 'UNKNOWN' };
                     }
-                } catch (aiError) {
-                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR: ${aiError.message}`);
+                });
+
+                if (op.gatewayError) {
+                    await interaction.editReply({ content: mapGatewayErrorMessage(op.gatewayError, msgs) });
+                    return;
+                }
+
+                if (op.status === 'PROVIDER_ERROR' || !op.result) {
+                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR (code=${op.errorCode})`);
                     await interaction.editReply({ content: msgs.aiOcrUnavailable });
 
                     const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
                     if (!trad1) return;
                     ({ bestScore, bossName } = trad1);
+                } else if (op.status === 'REJECTED') {
+                    const aiResult = op.result;
+                    gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
+                    await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+
+                    if (aiResult.error === 'FAKE_PHOTO') {
+                        await interaction.editReply(msgs.fakePhotoDetected);
+                        return;
+                    }
+
+                    await interaction.editReply(msgs.invalidScreenshot);
+                    return;
+                } else {
+                    // COMPLETED
+                    const aiResult = op.result;
+                    bestScore = aiResult.score;
+                    bossName  = aiResult.bossName;
+                    gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
                 }
             } else {
                 // === Tradycyjny OCR ===

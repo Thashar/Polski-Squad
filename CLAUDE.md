@@ -722,6 +722,67 @@ Jednorazowy runner do zalewania web API historycznymi danymi z lokalnych JSON-ó
 
 ---
 
+### 7. Operations Metering Gateway + LLM Telemetry
+
+Każde wywołanie LLM z bota (OCR, chat, decyzja) przechodzi przez trzy warstwy:
+
+1. **Bot** — UX, walidacja wejścia, orkiestracja flow, zapis rezultatu lokalnie
+2. **API metering** — entitlement, throttling (quota per actor / server / clan), pricing (tokens × ratio), zapis `BotOperationEvent`. API nie dotyka obrazów ani promptów.
+3. **LLM telemetria** — OpenTelemetry span per wywołanie providera, konwencja OpenInference → Langfuse widzi je jako generations.
+
+Pliki (każdy ma pełny JSDoc z API, kontraktem i zachowaniami brzegowymi):
+- [utils/operationRunner.js](utils/operationRunner.js) — `createBotOperations({botSlug}).run(options, fn)` — to jest API z którego korzystają handlery botów, spina authorize + root span + record w jedno wywołanie
+- [utils/appOperations.js](utils/appOperations.js) — klient HTTP gatewaya (authorize / record), FAIL_OPEN, retry
+- [utils/telemetry.js](utils/telemetry.js) — OTel + `@langfuse/otel` SpanProcessor, helper `withOperationSpan`
+- [utils/llmAdapter.js](utils/llmAdapter.js) — wrapper providerów (Gemini, Anthropic, Grok, Perplexity), normalizacja `usage`, spany z konwencją OpenInference
+
+**Zmienne środowiskowe** (dwa niezależne przełączniki — każdy no-op przy braku):
+
+```env
+# Gateway (ta sama para co w appSync)
+APP_API_URL=https://api.polski-squad.example
+BOT_API_KEY=<secret>
+
+# Langfuse
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne
+```
+
+#### Wzorzec użycia w handlerze
+
+```javascript
+const { createBotOperations } = require('../../utils/operationRunner');
+const botOps = createBotOperations({ botSlug: 'endersecho' });
+
+const op = await botOps.run({
+    type:  'ocr.analyze',   // unikalny per bot; bot identyfikowany przez Bearer token
+    actor: { discordId: interaction.user.id },
+    scope: { guildId: interaction.guildId, channelId: interaction.channelId },
+    hints: { command: 'test' },
+}, async (ctx) => {
+    const ai = await this.aiService.analyze(file, ctx.telemetryMeta);
+    return { result: ai, usage: buildUsage(ai) };
+});
+
+if (op.gatewayError) return interaction.editReply(mapGatewayError(op.gatewayError));
+// op.result, op.status → dalej w logice bota
+```
+
+Bot nie używa `appOperations` ani `telemetry` bezpośrednio. Pełny kontrakt `botOps.run` i `ctx` — w JSDoc [operationRunner.js](utils/operationRunner.js).
+
+#### Dodanie nowego bota
+
+1. `<Bot>/index.js` — `require('../utils/telemetry').init('<bot>-bot')` jako pierwszy require, `telemetry.shutdown()` w SIGINT.
+2. `<Bot>/services/<aiService>.js` — konstruktor przyjmuje `llmAdapter` przez DI, wywołania providerów przez `adapter.generate({...})`.
+3. Jeśli provider nie ma jeszcze drivera w [llmAdapter.js](utils/llmAdapter.js) — dopisz (wzorzec: `callGemini`, normalizacja do `{content, inputTokens, outputTokens}`).
+4. W handlerze: `createBotOperations({botSlug})` singleton, potem `botOps.run(...)`.
+5. Po stronie API: wpis `BotOperation(botId, type, pricing, defaultQuotas)`, `OPERATION_EXECUTE` w `Bot.scopes`, `ServerBot` dla każdego tenanta.
+
+Szczegóły bot-specyficzne: [EndersEcho/CLAUDE.md](EndersEcho/CLAUDE.md).
+
+---
+
 ## Szczegóły Botów
 
 **Każdy bot ma własną szczegółową dokumentację:**

@@ -1,3 +1,8 @@
+// OTel SDK MUSI startować jako pierwszy — inicjalizacja wczesna, przed
+// załadowaniem Discord.js / Google SDK, żeby instrumentacja działała od startu.
+const telemetry = require('../utils/telemetry');
+telemetry.init('endersecho-bot');
+
 const { Client, GatewayIntentBits } = require('discord.js');
 const config = require('./config/config');
 const OCRService = require('./services/ocrService');
@@ -13,6 +18,7 @@ const UsageLimitService = require('./services/usageLimitService');
 const { TokenUsageService } = require('./services/tokenUsageService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { createLlmAdapter } = require('../utils/llmAdapter');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -26,7 +32,8 @@ const client = new Client({
 });
 
 const ocrService = new OCRService(config);
-const aiOcrService = new AIOCRService(config);
+const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
+const aiOcrService = new AIOCRService(config, llmAdapter);
 const rankingService = new RankingService(config);
 const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
@@ -123,6 +130,12 @@ async function stopBot() {
         }
     } catch (error) {
         logger.error('Błąd podczas zatrzymywania bota EndersEcho:', error);
+    }
+    // OTel flush — trace buffer musi wyjść zanim proces się zamknie.
+    try {
+        await telemetry.shutdown();
+    } catch (e) {
+        logger.warn('OTel shutdown error: ' + (e.message || e));
     }
 }
 

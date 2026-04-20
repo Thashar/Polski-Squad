@@ -1,6 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
-const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
+const { HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 
 const SAFETY_SETTINGS_OFF = [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -8,67 +7,89 @@ const SAFETY_SETTINGS_OFF = [
     { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
     { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
 ];
+
+/**
+ * Wersje promptów — emitowane jako `llm.prompt.name` + `llm.prompt.version`
+ * na span generation. Pozwala w Langfuse filtrować/grupować po konkretnej
+ * wersji promptu i porównywać z różnymi modelami (A/B testing).
+ *
+ * Zasada: po każdej zmianie treści promptu BUMPUJ version ('v1' → 'v2').
+ * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
+ */
+const PROMPT_VERSIONS = {
+    'victory-check-eng':  'v1',
+    'victory-check-jpn':  'v1',
+    'authenticity-check': 'v1',
+    'extract-data-eng':   'v1',
+    'extract-data-jpn':   'v1',
+    'compare-template':   'v1',
+};
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
 class AIOCRService {
-    constructor(config) {
+    /**
+     * @param {Object} config
+     * @param {{ generate: Function }} llmAdapter — wspólny wrapper z utils/llmAdapter.js
+     */
+    constructor(config, llmAdapter) {
         this.config = config;
+        this.adapter = llmAdapter;
 
         this.apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
-        this.enabled = !!this.apiKey && config.ocr.useAI === true;
+        this.enabled = !!this.apiKey && config.ocr.useAI === true && !!llmAdapter;
+        this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
 
         if (this.enabled) {
-            this.genAI = new GoogleGenerativeAI(this.apiKey);
-            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
             logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);
         } else if (!this.apiKey) {
             logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_GOOGLE_AI_API_KEY');
+        } else if (!llmAdapter) {
+            logger.warn('⚠️ AI OCR wyłączony - brak llmAdapter (DI) w konstruktorze');
         } else {
             logger.info('ℹ️ AI OCR wyłączony - USE_ENDERSECHO_AI_OCR=false');
         }
     }
 
-    _getModel(maxOutputTokens) {
-        return this.genAI.getGenerativeModel({
-            model: this.modelName,
-            generationConfig: { maxOutputTokens },
-            safetySettings: SAFETY_SETTINGS_OFF
+    /**
+     * Wywołanie Gemini przez wspólny adapter. Adapter otwiera OpenTelemetry span
+     * (rozpoznawany przez Langfuse jako LLM generation) wewnątrz aktywnego
+     * kontekstu — jeśli handler opakował flow w `withOperationSpan`, ten call
+     * zostanie dzieckiem root spana operacji.
+     *
+     * Zachowuje poprzedni kształt odpowiedzi (text, promptTokens, outputTokens,
+     * thoughtTokens) + dodaje pola telemetryczne (durationMs, traceId, provider).
+     */
+    async _generateContent(parts, maxOutputTokens, meta = {}) {
+        const result = await this.adapter.generate({
+            provider: 'gemini',
+            model:    this.modelName,
+            parts,
+            maxOutputTokens,
+            safetySettings: SAFETY_SETTINGS_OFF,
+            meta,
         });
-    }
 
-    async _generateContent(parts, maxOutputTokens) {
-        const model = this._getModel(maxOutputTokens);
-        const result = await model.generateContent({
-            contents: [{ role: 'user', parts }]
-        });
-
-        const feedback = result.response.promptFeedback;
-        if (feedback?.blockReason) {
-            throw new Error(`Safety filter zablokował odpowiedź: ${feedback.blockReason}`);
-        }
-
-        const candidate = result.response.candidates?.[0];
-        if (!candidate) {
-            throw new Error('Brak kandydatów w odpowiedzi Gemini (safety filter lub błąd API)');
-        }
-
-        if (candidate.finishReason && candidate.finishReason !== 'STOP' && candidate.finishReason !== 'MAX_TOKENS') {
-            throw new Error(`Odpowiedź zakończona z powodu: ${candidate.finishReason}`);
-        }
-
-        const usage = result.response.usageMetadata || {};
         return {
-            text:          result.response.text(),
-            promptTokens:  usage.promptTokenCount       || 0,
-            outputTokens:  usage.candidatesTokenCount   || 0,
-            thoughtTokens: usage.thoughtsTokenCount     || 0,
+            text:          result.content,
+            promptTokens:  result.usage.inputTokens,
+            outputTokens:  result.usage.outputTokens,
+            thoughtTokens: result.usage.thoughtTokens,
+            durationMs:    result.durationMs,
+            traceId:       result.traceId,
+            provider:      result.provider,
+            model:         result.model,
         };
     }
 
-    async analyzeVictoryImage(imagePath, log = logger) {
+    /**
+     * @param {string} imagePath
+     * @param {object} log         — bot-per-guild logger
+     * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
+     */
+    async analyzeVictoryImage(imagePath, log = logger, telemetryMeta = {}) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -82,7 +103,7 @@ class AIOCRService {
             for (const lang of ['eng', 'jpn']) {
                 const label = lang === 'eng' ? 'ang' : 'jpn';
 
-                const { victoryFound, usage: u1 } = await this._checkVictory(base64Image, mediaType, lang);
+                const { victoryFound, usage: u1 } = await this._checkVictory(base64Image, mediaType, lang, telemetryMeta);
                 tokenUsage.promptTokens  += u1.promptTokens;
                 tokenUsage.outputTokens  += u1.outputTokens;
                 tokenUsage.thoughtTokens += u1.thoughtTokens;
@@ -93,7 +114,7 @@ class AIOCRService {
                 }
 
                 if (!fakeCheckDone) {
-                    const { isAuthentic, usage: u2 } = await this._checkAuthentic(base64Image, mediaType);
+                    const { isAuthentic, usage: u2 } = await this._checkAuthentic(base64Image, mediaType, telemetryMeta);
                     tokenUsage.promptTokens  += u2.promptTokens;
                     tokenUsage.outputTokens  += u2.outputTokens;
                     tokenUsage.thoughtTokens += u2.thoughtTokens;
@@ -104,7 +125,7 @@ class AIOCRService {
                     }
                 }
 
-                const { text, usage: u3 } = await this._extractData(base64Image, mediaType, lang);
+                const { text, usage: u3 } = await this._extractData(base64Image, mediaType, lang, telemetryMeta);
                 tokenUsage.promptTokens  += u3.promptTokens;
                 tokenUsage.outputTokens  += u3.outputTokens;
                 tokenUsage.thoughtTokens += u3.thoughtTokens;
@@ -128,20 +149,26 @@ class AIOCRService {
         }
     }
 
-    async _checkVictory(base64Image, mediaType, lang) {
+    async _checkVictory(base64Image, mediaType, lang, telemetryMeta) {
         const prompt = lang === 'jpn'
             ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
             : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
 
+        const promptName = `victory-check-${lang}`;
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
-        ], 50);
+        ], 50, {
+            ...telemetryMeta,
+            step: promptName,
+            promptName,
+            promptVersion: PROMPT_VERSIONS[promptName],
+        });
 
         return { victoryFound: !res.text.trim().toLowerCase().includes('nie znaleziono'), usage: res };
     }
 
-    async _checkAuthentic(base64Image, mediaType) {
+    async _checkAuthentic(base64Image, mediaType, telemetryMeta) {
         const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
 DOKŁADNĄ ANALIZĘ LICZB
 Sprawdzenie KAŻDEGO piksela w cyfrach
@@ -164,12 +191,17 @@ Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
-        ], 10);
+        ], 10, {
+            ...telemetryMeta,
+            step: 'authenticity-check',
+            promptName: 'authenticity-check',
+            promptVersion: PROMPT_VERSIONS['authenticity-check'],
+        });
 
         return { isAuthentic: !res.text.trim().toUpperCase().includes('NOK'), usage: res };
     }
 
-    async _extractData(base64Image, mediaType, lang) {
+    async _extractData(base64Image, mediaType, lang, telemetryMeta) {
         const prompt = lang === 'jpn'
             ? `この画像の内容を読み取ってください。「勝利！」の下にボス名があります。ボス名の下にスコア（最高記録）があります。画面には「合計」の値もあります。それも読み取ってください。
 重要 — スコアの単位（小さい順）: K, M, B, T, Q, Qi, Sx
@@ -201,11 +233,18 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 <wynik Best z jednostką>
 <wynik Total z jednostką>`;
 
-        return await this._generateContent([
+        const promptName = `extract-data-${lang}`;
+        const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
-        ], 500);
-        // zwraca { text, promptTokens, outputTokens, thoughtTokens }
+        ], 500, {
+            ...telemetryMeta,
+            step: promptName,
+            promptName,
+            promptVersion: PROMPT_VERSIONS[promptName],
+        });
+
+        return { text: res.text, usage: res, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
     }
 
     parseAIResponse(responseText, log = logger) {
@@ -341,7 +380,12 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         return score;
     }
 
-    async analyzeTestImage(imagePath, log = logger) {
+    /**
+     * @param {string} imagePath
+     * @param {object} log         — bot-per-guild logger
+     * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
+     */
+    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -358,7 +402,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const mediaType = 'image/png';
 
             log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
-            const { isSimilar, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log);
+            const { isSimilar, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
@@ -370,7 +414,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
             log.info('[AI Test] Zdjęcie podobne do wzorca → wyciągam dane...');
 
-            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng');
+            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
@@ -391,7 +435,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
     }
 
-    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger) {
+    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
         const prompt = `Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć. Jeśli oba przedstawiają podobny ekran wyników z podobnymi elementami wizualnymi — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ekran wyników tej samej gry — odpowiedz "NOK".
 
 KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
@@ -400,7 +444,12 @@ KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego sł
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
             { inlineData: { data: uploadedBase64, mimeType: mediaType } },
             { text: prompt }
-        ], 10);
+        ], 10, {
+            ...telemetryMeta,
+            step: 'compare-template',
+            promptName: 'compare-template',
+            promptVersion: PROMPT_VERSIONS['compare-template'],
+        });
 
         const response = res.text.trim().toUpperCase();
         log.info(`[AI Test] Odpowiedź porównania: "${response}"`);

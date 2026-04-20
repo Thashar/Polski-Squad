@@ -200,7 +200,50 @@ ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example
 BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Operations Metering Gateway — używa tej samej pary APP_API_URL + BOT_API_KEY co sync.
+# Operation type: ocr.analyze (szczegóły w głównym CLAUDE.md → sekcja 7)
+
+# Langfuse — LLM tracing (opcjonalne, niezależne od gateway-a)
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxx
+LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 ```
+
+## Operations Gateway + LLM Telemetry
+
+Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko to co specyficzne dla EndersEcho.
+
+**Operation type:** `ocr.analyze` — jeden typ dla `/test` i `/update`, różnicowane przez `hints.command`. Unikalny w ramach `BotOperation` per bot (nie musi nieść prefiksu `endersecho` — bot jest identyfikowany przez Bearer token).
+
+### Punkty wpięcia w kodzie
+
+| Plik | Rola |
+|---|---|
+| [index.js:1-4](index.js#L1-L4) | `telemetry.init('endersecho-bot')` jest pierwszym requirem w pliku (przed Discord.js i Gemini SDK) |
+| [index.js:32-33](index.js#L32-L33) | `createLlmAdapter` przekazywany przez DI do `AIOCRService` |
+| [services/aiOcrService.js:20-46](services/aiOcrService.js#L20-L46) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
+| [services/aiOcrService.js:50-72](services/aiOcrService.js#L50-L72) | `_generateContent` używa `adapter.generate({provider:'gemini', ...})` |
+| [handlers/interactionHandlers.js:11-50](handlers/interactionHandlers.js#L11-L50) | `botOps` singleton + helpery `mapGatewayErrorMessage`, `buildGeminiUsage` |
+| [handlers/interactionHandlers.js:371](handlers/interactionHandlers.js#L371), [:709](handlers/interactionHandlers.js#L709) | `botOps.run()` w `/update` i `/test` |
+
+### Specyfika bota
+
+- **`/test` z fallbackiem na Tesseract.** Inner fn łapie throw Gemini i zwraca envelope `{status:'PROVIDER_ERROR'}` zamiast rzucić. Poza runnerem `if (op.status === 'PROVIDER_ERROR')` uruchamia tradycyjny OCR. `/update` fallbacku nie ma — padnięcie Gemini oznacza błąd dla usera.
+- **`usageLimitService`** — lokalny dzienny limit per user (`data/usage_limits.json`), działa równolegle do quota w API.
+- **`PROMPT_VERSIONS`** w [services/aiOcrService.js:15-24](services/aiOcrService.js#L15-L24) — 6 wpisów: `victory-check-eng`, `victory-check-jpn`, `authenticity-check`, `extract-data-eng`, `extract-data-jpn`, `compare-template`. Po zmianie treści promptu bump wersji (`'v1'` → `'v2'`) — stare trace zostają w Langfuse do porównania.
+- **Model Gemini** dla wszystkich promptów ten sam: z `ENDERSECHO_GOOGLE_AI_MODEL` (default: `gemini-2.5-flash-preview-05-20`).
+
+### A/B testing
+
+Atrybuty na spanach generation: `llm.model.name`, `llm.prompt.name`, `llm.prompt.version`, `llm.step`, plus `user.id`, `guild.id`, `operation.type` na root spanie.
+
+Przykłady zapytań:
+- Porównanie modeli dla ekstrakcji: filter `llm.prompt.name="extract-data-eng"`, group by `llm.model.name`
+- Porównanie wersji promptu anty-fake: filter `llm.prompt.name="authenticity-check"`, group by `llm.prompt.version`, metryka `% status='REJECTED'`
+- Historia konkretnego usera: filter `user.id=<discordId>` → failed generations → prompt + response
+
+Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get-started) — zestaw referencyjnych screenów puszczany przez różne warianty.
 
 ## Najlepsze Praktyki
 
