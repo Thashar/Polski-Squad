@@ -166,8 +166,9 @@ class TokenUsageService {
             const filled    = v.total > 0 ? Math.max(Math.round((v.total / maxVal) * BAR_WIDTH), 1) : 0;
             const bar       = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
             const label     = v.total > 0 ? fmtK(v.total).padStart(6) : '    — ';
+            const cost      = v.total > 0 ? ` ($${v.cost.toFixed(2)})` : '';
             const todayMark = key === today ? ' ◄' : '';
-            lines.push(`${dayStr} ${bar} ${label}${todayMark}`);
+            lines.push(`${dayStr} ${bar} ${label}${cost}${todayMark}`);
         }
 
         return '```\n' + lines.join('\n') + '\n```';
