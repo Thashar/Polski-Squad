@@ -188,6 +188,11 @@ class InteractionHandler {
                 return;
             }
 
+            if (interaction.commandName === 'tokens') {
+                await this.handleTokensCommand(interaction);
+                return;
+            }
+
             if (interaction.commandName === 'test') {
                 await this.handleTestCommand(interaction);
                 return;
@@ -213,7 +218,6 @@ class InteractionHandler {
                 case 'notifications':      await this.handleNotificationsCommand(interaction);    break;
                 case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
                 case 'remove-role-ranking':await this.handleRemoveRoleRankingCommand(interaction);break;
-                case 'tokens':             await this.handleTokensCommand(interaction);            break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -1097,6 +1101,12 @@ class InteractionHandler {
             }
             if (customId.startsWith('notif_page_')) {
                 await this._handleNotifPageSelect(interaction, customId);
+                return;
+            }
+
+            // === Przyciski /tokens ===
+            if (customId.startsWith('tk_')) {
+                await this._handleTokensButton(interaction, customId);
                 return;
             }
 
@@ -2296,85 +2306,151 @@ class InteractionHandler {
     }
 
     async handleTokensCommand(interaction) {
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
-        const { PRICING, calcCost } = require('../services/tokenUsageService');
+        const month = new Date().toISOString().slice(0, 7);
+        const reply = await this._buildTokensEmbed(interaction, month, 'all');
+        await interaction.editReply(reply);
+    }
 
-        const today     = new Date().toISOString().slice(0, 10);
-        const thisMonth = today.slice(0, 7);
+    async _handleTokensButton(interaction, customId) {
+        // Formy customId:
+        // tk_p_{YYYYMM}_{guildFilter}_{userId}  — poprzedni miesiąc
+        // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc
+        // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer
+        // tk_a_{YYYYMM}_{userId}                — wszystkie serwery
+        const parts = customId.split('_');
+        const action    = parts[1];
+        const monthRaw  = parts[2]; // YYYYMM
+        const month     = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
-        const allStats = this.tokenUsageService.getAllGuildsStats(today, thisMonth);
+        let userId, guildFilter;
+        if (action === 'a') {
+            userId      = parts[3];
+            guildFilter = 'all';
+        } else {
+            userId      = parts[4];
+            guildFilter = parts[3];
+        }
 
+        if (userId !== interaction.user.id) {
+            await interaction.reply({ content: 'Tylko osoba która użyła komendy może klikać te przyciski.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+
+        let targetMonth = month;
+        if (action === 'p' || action === 'n') {
+            const available = this.tokenUsageService.getAvailableMonths(guildFilter);
+            const idx = available.indexOf(month);
+            if (action === 'p' && idx > 0)                    targetMonth = available[idx - 1];
+            if (action === 'n' && idx < available.length - 1) targetMonth = available[idx + 1];
+        }
+
+        const reply = await this._buildTokensEmbed(interaction, targetMonth, guildFilter);
+        await interaction.editReply(reply);
+    }
+
+    async _buildTokensEmbed(interaction, month, guildFilter) {
+        const { PRICING } = require('../services/tokenUsageService');
+
+        const [y, m] = month.split('-').map(Number);
+        const monthStr = `${y}${String(m).padStart(2, '0')}`;
+        const userId   = interaction.user.id;
+
+        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+
+        // Wykres
+        const chartBuffer  = await this.tokenUsageService.generateChartBuffer(guildFilter, month);
+        const attachment   = new AttachmentBuilder(chartBuffer, { name: 'chart.png' });
+
+        // Statystyki miesięczne
+        const totals = this.tokenUsageService.getMonthTotals(guildFilter, month);
+        const fmtTok = (n) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+        const fmtCost = (c) => `$${c.toFixed(5)}`;
+
+        // Nazwy serwerów z cache
         const guildNames = {};
-        for (const guildConfig of this.config.guilds) {
-            try {
-                const g = await interaction.client.guilds.fetch(guildConfig.id);
-                guildNames[guildConfig.id] = g.name;
-            } catch {
-                guildNames[guildConfig.id] = guildConfig.id;
-            }
+        for (const gc of this.config.guilds) {
+            const g = interaction.client.guilds.cache.get(gc.id);
+            guildNames[gc.id] = g?.name || gc.id;
         }
 
-        const fmt = (n) => n.toLocaleString('pl-PL');
-        const fmtCost = (c) => `$${c.toFixed(6)}`;
-
-        const serverLines = [];
-        let totalDaily = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0, requests: 0, cost: 0 };
-        let totalMonthly = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0, requests: 0, cost: 0 };
-
-        for (const [guildId, stats] of Object.entries(allStats)) {
-            const name = guildNames[guildId] || guildId;
-            const d = stats.daily;
-            const m = stats.monthly;
-
-            totalDaily.promptTokens  += d.promptTokens;
-            totalDaily.outputTokens  += d.outputTokens;
-            totalDaily.thoughtTokens += d.thoughtTokens;
-            totalDaily.requests      += d.requests;
-            totalDaily.cost          += d.cost;
-            totalMonthly.promptTokens  += m.promptTokens;
-            totalMonthly.outputTokens  += m.outputTokens;
-            totalMonthly.thoughtTokens += m.thoughtTokens;
-            totalMonthly.requests      += m.requests;
-            totalMonthly.cost          += m.cost;
-
-            serverLines.push(
-                `**${name}**\n` +
-                `› Dziś: \`${d.requests}\` req • \`${fmt(d.promptTokens + d.outputTokens + d.thoughtTokens)}\` tok • **${fmtCost(d.cost)}**\n` +
-                `› Miesiąc (${thisMonth}): \`${m.requests}\` req • \`${fmt(m.promptTokens + m.outputTokens + m.thoughtTokens)}\` tok • **${fmtCost(m.cost)}**`
-            );
-        }
-
-        if (serverLines.length === 0) {
-            serverLines.push('*Brak danych — brak użycia AI OCR.*');
-        }
+        const footerText = guildFilter === 'all'
+            ? 'Wszystkie serwery'
+            : (guildNames[guildFilter] || guildFilter);
 
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
-            .setTitle('📊 Statystyki tokenów AI (Google Gemini)')
-            .setDescription(serverLines.join('\n\n'))
+            .setTitle(`📊 Tokeny AI — ${monthLabel}`)
+            .setImage('attachment://chart.png')
             .addFields(
-                {
-                    name: `📅 Suma dziś (${today})`,
-                    value: `Req: \`${totalDaily.requests}\` • In: \`${fmt(totalDaily.promptTokens)}\` • Out: \`${fmt(totalDaily.outputTokens)}\` • Think: \`${fmt(totalDaily.thoughtTokens)}\` • **${fmtCost(totalDaily.cost)}**`,
-                    inline: false
-                },
-                {
-                    name: `📆 Suma miesiąc (${thisMonth})`,
-                    value: `Req: \`${totalMonthly.requests}\` • In: \`${fmt(totalMonthly.promptTokens)}\` • Out: \`${fmt(totalMonthly.outputTokens)}\` • Think: \`${fmt(totalMonthly.thoughtTokens)}\` • **${fmtCost(totalMonthly.cost)}**`,
-                    inline: false
-                },
-                {
-                    name: '💰 Cennik (Gemini 2.5 Flash Preview)',
-                    value: `In: $${PRICING.input}/1M • Out: $${PRICING.output}/1M • Think: $${PRICING.thought}/1M`,
-                    inline: false
-                }
+                { name: '📨 Zapytania', value: `\`${totals.requests}\``,                                                                 inline: true },
+                { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens + totals.thoughtTokens)}\``,        inline: true },
+                { name: '💰 Koszt',     value: `**${fmtCost(totals.cost)}**`,                                                            inline: true },
+                { name: 'Szczegóły',   value: `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\` • Think: \`${fmtTok(totals.thoughtTokens)}\`\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M • Think $${PRICING.thought}/1M`, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: 'Dane z /update • tylko AI OCR' });
+            .setFooter({ text: `${footerText} • dane z /update` });
 
-        await interaction.editReply({ embeds: [embed] });
+        // Nawigacja miesiącami
+        const available = this.tokenUsageService.getAvailableMonths(guildFilter);
+        const idx       = available.indexOf(month);
+        const hasPrev   = idx > 0;
+        const hasNext   = idx < available.length - 1;
+
+        const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
+        const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
+
+        const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
+                .setLabel('◀')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(!hasPrev),
+            new ButtonBuilder()
+                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
+                .setLabel(monthLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
+                .setLabel('▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(!hasNext),
+        );
+
+        // Przyciski serwerów
+        const guildButtons = this.config.guilds.map(gc =>
+            new ButtonBuilder()
+                .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
+                .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
+                .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        );
+        guildButtons.push(
+            new ButtonBuilder()
+                .setCustomId(`tk_a_${monthStr}_${userId}`)
+                .setLabel('🌐 Wszystkie')
+                .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+        );
+
+        const components = [navRow];
+        for (let i = 0; i < guildButtons.length; i += 5) {
+            components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
+        }
+
+        return { embeds: [embed], files: [attachment], components };
     }
 }
+
+module.exports = InteractionHandler;
 
 module.exports = InteractionHandler;
