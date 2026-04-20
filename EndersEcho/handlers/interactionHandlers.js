@@ -8,7 +8,7 @@ const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -19,6 +19,7 @@ class InteractionHandler {
         this.userBlockService = userBlockService;
         this.roleRankingConfigService = roleRankingConfigService;
         this.usageLimitService = usageLimitService;
+        this.tokenUsageService = tokenUsageService;
         this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
@@ -147,6 +148,12 @@ class InteractionHandler {
                     .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
                     .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
                     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+                new SlashCommandBuilder()
+                    .setName('tokens')
+                    .setDescription('Show AI token usage and cost statistics (admins only)')
+                    .setDescriptionLocalizations(pl('Wyświetl statystyki zużycia tokenów AI i kosztów (tylko dla adminów)'))
+                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
             ];
 
             try {
@@ -206,6 +213,7 @@ class InteractionHandler {
                 case 'notifications':      await this.handleNotificationsCommand(interaction);    break;
                 case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
                 case 'remove-role-ranking':await this.handleRemoveRoleRankingCommand(interaction);break;
+                case 'tokens':             await this.handleTokensCommand(interaction);            break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -358,6 +366,11 @@ class InteractionHandler {
 
             const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl);
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
+
+            if (aiResult.tokenUsage && this.tokenUsageService) {
+                const { promptTokens, outputTokens, thoughtTokens } = aiResult.tokenUsage;
+                this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, thoughtTokens).catch(() => {});
+            }
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
@@ -2280,6 +2293,87 @@ class InteractionHandler {
             content: enabled ? msgs.ocrDebugOn : msgs.ocrDebugOff,
             flags: ['Ephemeral']
         });
+    }
+
+    async handleTokensCommand(interaction) {
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        const { PRICING, calcCost } = require('../services/tokenUsageService');
+
+        const today     = new Date().toISOString().slice(0, 10);
+        const thisMonth = today.slice(0, 7);
+
+        const allStats = this.tokenUsageService.getAllGuildsStats(today, thisMonth);
+
+        const guildNames = {};
+        for (const guildConfig of this.config.guilds) {
+            try {
+                const g = await interaction.client.guilds.fetch(guildConfig.id);
+                guildNames[guildConfig.id] = g.name;
+            } catch {
+                guildNames[guildConfig.id] = guildConfig.id;
+            }
+        }
+
+        const fmt = (n) => n.toLocaleString('pl-PL');
+        const fmtCost = (c) => `$${c.toFixed(6)}`;
+
+        const serverLines = [];
+        let totalDaily = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0, requests: 0, cost: 0 };
+        let totalMonthly = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0, requests: 0, cost: 0 };
+
+        for (const [guildId, stats] of Object.entries(allStats)) {
+            const name = guildNames[guildId] || guildId;
+            const d = stats.daily;
+            const m = stats.monthly;
+
+            totalDaily.promptTokens  += d.promptTokens;
+            totalDaily.outputTokens  += d.outputTokens;
+            totalDaily.thoughtTokens += d.thoughtTokens;
+            totalDaily.requests      += d.requests;
+            totalDaily.cost          += d.cost;
+            totalMonthly.promptTokens  += m.promptTokens;
+            totalMonthly.outputTokens  += m.outputTokens;
+            totalMonthly.thoughtTokens += m.thoughtTokens;
+            totalMonthly.requests      += m.requests;
+            totalMonthly.cost          += m.cost;
+
+            serverLines.push(
+                `**${name}**\n` +
+                `› Dziś: \`${d.requests}\` req • \`${fmt(d.promptTokens + d.outputTokens + d.thoughtTokens)}\` tok • **${fmtCost(d.cost)}**\n` +
+                `› Miesiąc (${thisMonth}): \`${m.requests}\` req • \`${fmt(m.promptTokens + m.outputTokens + m.thoughtTokens)}\` tok • **${fmtCost(m.cost)}**`
+            );
+        }
+
+        if (serverLines.length === 0) {
+            serverLines.push('*Brak danych — brak użycia AI OCR.*');
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x4285F4)
+            .setTitle('📊 Statystyki tokenów AI (Google Gemini)')
+            .setDescription(serverLines.join('\n\n'))
+            .addFields(
+                {
+                    name: `📅 Suma dziś (${today})`,
+                    value: `Req: \`${totalDaily.requests}\` • In: \`${fmt(totalDaily.promptTokens)}\` • Out: \`${fmt(totalDaily.outputTokens)}\` • Think: \`${fmt(totalDaily.thoughtTokens)}\` • **${fmtCost(totalDaily.cost)}**`,
+                    inline: false
+                },
+                {
+                    name: `📆 Suma miesiąc (${thisMonth})`,
+                    value: `Req: \`${totalMonthly.requests}\` • In: \`${fmt(totalMonthly.promptTokens)}\` • Out: \`${fmt(totalMonthly.outputTokens)}\` • Think: \`${fmt(totalMonthly.thoughtTokens)}\` • **${fmtCost(totalMonthly.cost)}**`,
+                    inline: false
+                },
+                {
+                    name: '💰 Cennik (Gemini 2.5 Flash Preview)',
+                    value: `In: $${PRICING.input}/1M • Out: $${PRICING.output}/1M • Think: $${PRICING.thought}/1M`,
+                    inline: false
+                }
+            )
+            .setTimestamp()
+            .setFooter({ text: 'Dane z /update • tylko AI OCR' });
+
+        await interaction.editReply({ embeds: [embed] });
     }
 }
 

@@ -59,11 +59,19 @@ class AIOCRService {
             throw new Error(`Odpowiedź zakończona z powodu: ${candidate.finishReason}`);
         }
 
-        return result.response.text();
+        const usage = result.response.usageMetadata || {};
+        return {
+            text:          result.response.text(),
+            promptTokens:  usage.promptTokenCount       || 0,
+            outputTokens:  usage.candidatesTokenCount   || 0,
+            thoughtTokens: usage.thoughtsTokenCount     || 0,
+        };
     }
 
     async analyzeVictoryImage(imagePath, log = logger) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
+
+        const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
 
         try {
             const pngBuffer = await sharp(imagePath).png().toBuffer();
@@ -74,34 +82,45 @@ class AIOCRService {
             for (const lang of ['eng', 'jpn']) {
                 const label = lang === 'eng' ? 'ang' : 'jpn';
 
-                const victoryFound = await this._checkVictory(base64Image, mediaType, lang);
+                const { victoryFound, usage: u1 } = await this._checkVictory(base64Image, mediaType, lang);
+                tokenUsage.promptTokens  += u1.promptTokens;
+                tokenUsage.outputTokens  += u1.outputTokens;
+                tokenUsage.thoughtTokens += u1.thoughtTokens;
+
                 if (!victoryFound) {
                     log.info(`[AI OCR] ${label}: ✗Victory → próbuję ${lang === 'eng' ? 'japoński' : 'koniec'}`);
                     continue;
                 }
 
                 if (!fakeCheckDone) {
-                    const isAuthentic = await this._checkAuthentic(base64Image, mediaType);
+                    const { isAuthentic, usage: u2 } = await this._checkAuthentic(base64Image, mediaType);
+                    tokenUsage.promptTokens  += u2.promptTokens;
+                    tokenUsage.outputTokens  += u2.outputTokens;
+                    tokenUsage.thoughtTokens += u2.thoughtTokens;
                     fakeCheckDone = true;
                     if (!isAuthentic) {
                         log.warn(`[AI OCR] ${label}: ✓Victory ✗autentyczne → FAKE_PHOTO`);
-                        return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+                        return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO', tokenUsage };
                     }
                 }
 
-                const extractResponse = await this._extractData(base64Image, mediaType, lang);
-                const result = this.parseAIResponse(extractResponse, log);
+                const { text, usage: u3 } = await this._extractData(base64Image, mediaType, lang);
+                tokenUsage.promptTokens  += u3.promptTokens;
+                tokenUsage.outputTokens  += u3.outputTokens;
+                tokenUsage.thoughtTokens += u3.thoughtTokens;
+
+                const result = this.parseAIResponse(text, log);
 
                 if (result.isValidVictory) {
                     log.info(`✅ [AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
-                    return result;
+                    return { ...result, tokenUsage };
                 }
 
                 log.warn(`[AI OCR] ${label}: ✓Victory ✓autentyczne ✗dane → ${lang === 'eng' ? 'próbuję japoński' : 'INVALID_SCREENSHOT'}`);
             }
 
             log.warn(`[AI OCR] Brak wyniku po wszystkich językach`);
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT', tokenUsage };
 
         } catch (error) {
             log.error(`[AI OCR] Błąd analizy obrazu: ${error.message}`);
@@ -114,12 +133,12 @@ class AIOCRService {
             ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
             : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
 
-        const responseText = await this._generateContent([
+        const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
         ], 50);
 
-        return !responseText.trim().toLowerCase().includes('nie znaleziono');
+        return { victoryFound: !res.text.trim().toLowerCase().includes('nie znaleziono'), usage: res };
     }
 
     async _checkAuthentic(base64Image, mediaType) {
@@ -142,12 +161,12 @@ INSTRUKCJA WYKONANIA:
 Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK".
 Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
 
-        const responseText = await this._generateContent([
+        const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
         ], 10);
 
-        return !responseText.trim().toUpperCase().includes('NOK');
+        return { isAuthentic: !res.text.trim().toUpperCase().includes('NOK'), usage: res };
     }
 
     async _extractData(base64Image, mediaType, lang) {
@@ -186,6 +205,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
         ], 500);
+        // zwraca { text, promptTokens, outputTokens, thoughtTokens }
     }
 
     parseAIResponse(responseText, log = logger) {
@@ -324,6 +344,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     async analyzeTestImage(imagePath, log = logger) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
+        const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
         const wzorPath = path.join(__dirname, '../files/Wzór.jpg');
 
         try {
@@ -337,17 +358,24 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const mediaType = 'image/png';
 
             log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
-            const isSimilar = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log);
+            const { isSimilar, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log);
+            tokenUsage.promptTokens  += u1.promptTokens;
+            tokenUsage.outputTokens  += u1.outputTokens;
+            tokenUsage.thoughtTokens += u1.thoughtTokens;
 
             if (!isSimilar) {
                 log.warn('[AI Test] Zdjęcie niepodobne do wzorca');
-                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR' };
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', tokenUsage };
             }
 
             log.info('[AI Test] Zdjęcie podobne do wzorca → wyciągam dane...');
 
-            const extractResponse = await this._extractData(uploadedBase64, mediaType, 'eng');
-            const result = this.parseAIResponse(extractResponse, log);
+            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng');
+            tokenUsage.promptTokens  += extractRes.promptTokens;
+            tokenUsage.outputTokens  += extractRes.outputTokens;
+            tokenUsage.thoughtTokens += extractRes.thoughtTokens;
+
+            const result = this.parseAIResponse(extractRes.text, log);
 
             if (result.isValidVictory) {
                 log.info(`[AI Test] Boss="${result.bossName}" score="${result.score}"`);
@@ -355,7 +383,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
                 log.warn(`[AI Test] Nie udało się wyciągnąć danych: ${result.error}`);
             }
 
-            return result;
+            return { ...result, tokenUsage };
 
         } catch (error) {
             log.error(`[AI Test] Błąd analizy obrazu: ${error.message}`);
@@ -368,16 +396,16 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
 KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
 
-        const responseText = await this._generateContent([
+        const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
             { inlineData: { data: uploadedBase64, mimeType: mediaType } },
             { text: prompt }
         ], 10);
 
-        const response = responseText.trim().toUpperCase();
+        const response = res.text.trim().toUpperCase();
         log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
-        if (!response || !response.includes('OK')) return false;
-        return !response.includes('NOK');
+        const isSimilar = !!(response && response.includes('OK') && !response.includes('NOK'));
+        return { isSimilar, usage: res };
     }
 }
 
