@@ -867,7 +867,7 @@ ENDERSECHO_ALLOWED_CHANNEL_ID=channel_id
 # AI OCR (opcjonalne)
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
-ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash
+ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 
 # ===== KONTROLER BOT =====
 KONTROLER_TOKEN=bot_token_here

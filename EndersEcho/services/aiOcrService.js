@@ -22,7 +22,7 @@ class AIOCRService {
 
         if (this.enabled) {
             this.genAI = new GoogleGenerativeAI(this.apiKey);
-            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash';
+            this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
             logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);
         } else if (!this.apiKey) {
             logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_GOOGLE_AI_API_KEY');
