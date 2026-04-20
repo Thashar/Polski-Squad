@@ -372,8 +372,8 @@ class InteractionHandler {
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
             if (aiResult.tokenUsage && this.tokenUsageService) {
-                const { promptTokens, outputTokens, thoughtTokens } = aiResult.tokenUsage;
-                this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, thoughtTokens).catch(() => {});
+                const { promptTokens, outputTokens } = aiResult.tokenUsage;
+                this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens).catch(() => {});
             }
 
             if (aiResult.error === 'NOT_SIMILAR') {
@@ -2306,16 +2306,19 @@ class InteractionHandler {
     }
 
     async handleTokensCommand(interaction) {
-        const allowedIds = this.config.blockOcrUserIds;
-        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+        const isSuperUser = this.config.blockOcrUserIds.includes(interaction.user.id);
+        const isAdmin     = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+
+        if (!isSuperUser && !isAdmin) {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
             return;
         }
 
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
-        const month = new Date().toISOString().slice(0, 7);
-        const reply = await this._buildTokensEmbed(interaction, month, 'all');
+        const month       = new Date().toISOString().slice(0, 7);
+        const guildFilter = isSuperUser ? 'all' : interaction.guildId;
+        const reply       = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser);
         await interaction.editReply(reply);
     }
 
@@ -2325,10 +2328,10 @@ class InteractionHandler {
         // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc
         // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer
         // tk_a_{YYYYMM}_{userId}                — wszystkie serwery
-        const parts = customId.split('_');
-        const action    = parts[1];
-        const monthRaw  = parts[2]; // YYYYMM
-        const month     = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
+        const parts    = customId.split('_');
+        const action   = parts[1];
+        const monthRaw = parts[2];
+        const month    = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
         let userId, guildFilter;
         if (action === 'a') {
@@ -2344,21 +2347,28 @@ class InteractionHandler {
             return;
         }
 
+        const isSuperUser = this.config.blockOcrUserIds.includes(interaction.user.id);
+        const isAdmin     = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        if (!isSuperUser && !isAdmin) return;
+
+        // Zwykły admin widzi tylko swój serwer — zignoruj filter z customId
+        const effectiveFilter = isSuperUser ? guildFilter : interaction.guildId;
+
         await interaction.deferUpdate();
 
         let targetMonth = month;
         if (action === 'p' || action === 'n') {
-            const available = this.tokenUsageService.getAvailableMonths(guildFilter);
+            const available = this.tokenUsageService.getAvailableMonths(effectiveFilter);
             const idx = available.indexOf(month);
             if (action === 'p' && idx > 0)                    targetMonth = available[idx - 1];
             if (action === 'n' && idx < available.length - 1) targetMonth = available[idx + 1];
         }
 
-        const reply = await this._buildTokensEmbed(interaction, targetMonth, guildFilter);
+        const reply = await this._buildTokensEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
         await interaction.editReply(reply);
     }
 
-    async _buildTokensEmbed(interaction, month, guildFilter) {
+    async _buildTokensEmbed(interaction, month, guildFilter, isSuperUser = false) {
         const { PRICING } = require('../services/tokenUsageService');
 
         const [y, m] = month.split('-').map(Number);
@@ -2392,10 +2402,10 @@ class InteractionHandler {
             .setTitle(`📊 Tokeny AI — ${monthLabel}`)
             .setDescription(chartText)
             .addFields(
-                { name: '📨 Zapytania', value: `\`${totals.requests}\``,                                                                 inline: true },
-                { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens + totals.thoughtTokens)}\``,        inline: true },
-                { name: '💰 Koszt',     value: `**${fmtCost(totals.cost)}**`,                                                            inline: true },
-                { name: 'Szczegóły',   value: `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\` • Think: \`${fmtTok(totals.thoughtTokens)}\`\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M • Think $${PRICING.thought}/1M`, inline: false }
+                { name: '📨 Zapytania', value: `\`${totals.requests}\``,                                              inline: true },
+                { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens)}\``,            inline: true },
+                { name: '💰 Koszt',     value: `**${fmtCost(totals.cost)}**`,                                         inline: true },
+                { name: 'Szczegóły',   value: `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\`\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false }
             )
             .setTimestamp()
             .setFooter({ text: `${footerText} • dane z /update` });
@@ -2427,23 +2437,25 @@ class InteractionHandler {
                 .setDisabled(!hasNext),
         );
 
-        // Przyciski serwerów
-        const guildButtons = this.config.guilds.map(gc =>
-            new ButtonBuilder()
-                .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
-                .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
-                .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        );
-        guildButtons.push(
-            new ButtonBuilder()
-                .setCustomId(`tk_a_${monthStr}_${userId}`)
-                .setLabel('🌐 Wszystkie')
-                .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-        );
-
         const components = [navRow];
-        for (let i = 0; i < guildButtons.length; i += 5) {
-            components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
+
+        // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds)
+        if (isSuperUser) {
+            const guildButtons = this.config.guilds.map(gc =>
+                new ButtonBuilder()
+                    .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
+                    .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
+                    .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+            guildButtons.push(
+                new ButtonBuilder()
+                    .setCustomId(`tk_a_${monthStr}_${userId}`)
+                    .setLabel('🌐 Wszystkie')
+                    .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+            for (let i = 0; i < guildButtons.length; i += 5) {
+                components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
+            }
         }
 
         return { embeds: [embed], components };
