@@ -436,7 +436,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć. Jeśli oba przedstawiają podobny ekran wyników z podobnymi elementami wizualnymi — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ekran wyników tej samej gry — odpowiedz "NOK".
+        const prompt = `Porównujesz w tej chwili zdjęcia, jest to test który ma na celu sprawdzenie, czy jedno zdjęcie pasuje do wzorca czyli drugiego zdjęcia. Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć, kolory i położenie tekstu. Oba zdjęcia powinny przedstawiać podobny ekran wyników, gdzie na środku jest jeden duży wynik, a poniżej mniejsze. Mogą się różnić językiem tekstu. 
+
+Jeżeli uznasz, że przesłane zdjęcia są podobne — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ten sam ekran wyników — odpowiedz "NOK".
 
 KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
 
