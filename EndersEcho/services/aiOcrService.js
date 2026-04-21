@@ -440,6 +440,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
 Jeżeli uznasz, że przesłane zdjęcia są podobne — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ten sam ekran wyników — odpowiedz "NOK".
 
+KRYTYCZNA ZASADA: Żeby zdjęcie było podobne nie może zawierać typowej tabeli wyników. Musi zawierać jeden wynik większą czcionką od pozostałych tekstów. 
+
 KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
 
         const res = await this._generateContent([
