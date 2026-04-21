@@ -436,13 +436,34 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Porównujesz w tej chwili zdjęcia, jest to test który ma na celu sprawdzenie, czy jedno zdjęcie pasuje do wzorca czyli drugiego zdjęcia. Oba zdjęcia powinny być screenami z ekranem wyników tej samej gry mobilnej. Porównaj elementy wizualne obu zdjęć, kolory i położenie tekstu. Oba zdjęcia powinny przedstawiać podobny ekran wyników, gdzie na środku jest jeden duży wynik, a poniżej mniejsze. Mogą się różnić językiem tekstu. 
+        const prompt = `Otrzymasz dwa zrzuty ekranu tego samego ekranu gry/aplikacji.
+Twoim zadaniem jest określenie, czy są one wizualnie identyczne,
+ignorując wszelkie różnice w języku lub wyświetlanym tekście/liczbach.
 
-Jeżeli uznasz, że przesłane zdjęcia są podobne — odpowiedz "OK". Jeśli zdjęcia wyraźnie się różnią lub drugie zdjęcie nie wygląda jak ten sam ekran wyników — odpowiedz "NOK".
+Dokładnie porównaj następujące elementy:
 
-KRYTYCZNA ZASADA: Żeby zdjęcie było podobne nie może zawierać typowej tabeli wyników. Musi zawierać jeden wynik większą czcionką od pozostałych tekstów. 
+**Układ i struktura:**
+- Ogólny układ ekranu i rozmieszczenie elementów interfejsu
+- Rozmiar i proporcje wszystkich widocznych komponentów
+- Liczba i rozmieszczenie przycisków, ikon i paneli
 
-KRYTYCZNA ZASADA: Twoja odpowiedź musi składać się WYŁĄCZNIE z jednego słowa: "OK" lub "NOK". Żadnych innych słów, żadnych wyjaśnień, żadnych znaków interpunkcyjnych. Tylko "OK" lub "NOK".`;
+**Projekt wizualny:**
+- Kolory tła, gradienty i wzory
+- Schemat kolorów wszystkich elementów UI (przyciski, bannery, ramki)
+- Ikony i symbole (kształt, kolor, styl)
+- Elementy dekoracyjne, obramowania i efekty wizualne
+
+**Celowo ignoruj:**
+- Treść tekstową (etykiety, tytuły, opisy)
+- Wyświetlane liczby i wartości
+- Język jakichkolwiek napisów
+
+**ZASADA ODPOWIEDZI — BEZWZGLĘDNIE OBOWIĄZKOWA:**
+- Odpowiedz WYŁĄCZNIE jednym słowem
+- Jeśli zdjęcia są wizualnie podobne/identyczne → napisz: OK
+- Jeśli zdjęcia różnią się wizualnie → napisz: NOK
+- Nie wolno Ci napisać nic więcej — żadnych wyjaśnień,
+  żadnych komentarzy, żadnych dodatkowych słów`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
