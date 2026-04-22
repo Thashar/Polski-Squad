@@ -436,36 +436,43 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Otrzymasz dwa zrzuty ekranu. Porównaj je PIKSEL PO PIKSELU pod 
+        const prompt = `Otrzymasz dwa zrzuty ekranu. Porównaj je szczegółowo pod 
 względem wizualnym, ignorując wyłącznie język i treść tekstową.
 
 **KROK 1 — Zidentyfikuj typ ekranu:**
-Określ, jaki ekran/widok przedstawia każde zdjęcie z osobna
-(np. ekran wyników, ekran walki, ekran nagród, menu, tabela itp.)
+Określ ogólny typ ekranu na każdym zdjęciu
+(np. ekran wyników Victory, ekran walki, tabela wyników, menu itp.)
 Jeśli oba zdjęcia przedstawiają INNY TYP EKRANU → od razu: NOK
 
-**KROK 2 — Porównaj strukturę (tylko jeśli ten sam typ ekranu):**
-- Liczba i układ wszystkich paneli, okien, ramek
-- Liczba wierszy i kolumn (np. w tabelach, listach)
-- Liczba i rozmieszczenie przycisków oraz ikon
-- Obecność lub brak konkretnych sekcji UI
+**KROK 2 — Porównaj strukturę layoutu:**
+- Obecność i kolejność głównych sekcji UI (nagłówek, treść, przyciski)
+- Ogólny układ paneli i okien (nie ich dokładny rozmiar)
+- Obecność lub brak kluczowych elementów interfejsu
+
+IGNORUJ przy strukturze:
+- Różnice w rozdzielczości lub skali ekranu
+- Różną liczbę powtarzających się elementów tego samego typu
+  (np. ikony nagród, wiersze tabeli, gwiazdki rankingu)
+- Drobne przesunięcia wynikające z różnych proporcji ekranu
 
 **KROK 3 — Porównaj wygląd wizualny:**
 - Kolory tła, gradienty, wzory
 - Kolory i kształty przycisków, ramek, banerów
-- Ikony i symbole (kształt, kolor, styl — NIE etykieta)
+- Styl ikon i symboli (kształt, kolor — NIE ich liczba ani etykieta)
 - Efekty wizualne, obramowania, dekoracje
 
 **Celowo ignoruj:**
 - Treść tekstową (tytuły, opisy, etykiety)
 - Wyświetlane liczby i wartości
 - Język jakichkolwiek napisów
+- Różnice w rozdzielczości, skali lub proporcjach ekranu
+- Różną liczbę powtarzających się elementów tego samego rodzaju
 
 **ZASADA ODPOWIEDZI — BEZWZGLĘDNIE OBOWIĄZKOWA:**
 - Odpowiedz WYŁĄCZNIE jednym słowem
-- Zdjęcia wizualnie identyczne (ten sam typ ekranu + ten sam układ) → OK
-- Zdjęcia różnią się wizualnie LUB pokazują inny typ ekranu → NOK
-- Żadnych wyjaśnień, komentarzy ani dodatkowych słów.`;
+- Ten sam typ ekranu + ten sam ogólny układ UI → OK
+- Inny typ ekranu LUB fundamentalnie inny układ UI → NOK
+- Żadnych wyjaśnień, komentarzy ani dodatkowych słów`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
