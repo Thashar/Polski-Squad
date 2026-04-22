@@ -436,34 +436,36 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Otrzymasz dwa zrzuty ekranu tego samego ekranu gry/aplikacji.
-Twoim zadaniem jest określenie, czy są one wizualnie identyczne,
-ignorując wszelkie różnice w języku lub wyświetlanym tekście/liczbach.
+        const prompt = `Otrzymasz dwa zrzuty ekranu. Porównaj je PIKSEL PO PIKSELU pod 
+względem wizualnym, ignorując wyłącznie język i treść tekstową.
 
-Dokładnie porównaj następujące elementy:
+**KROK 1 — Zidentyfikuj typ ekranu:**
+Określ, jaki ekran/widok przedstawia każde zdjęcie z osobna
+(np. ekran wyników, ekran walki, ekran nagród, menu, tabela itp.)
+Jeśli oba zdjęcia przedstawiają INNY TYP EKRANU → od razu: NOK
 
-**Układ i struktura:**
-- Ogólny układ ekranu i rozmieszczenie elementów interfejsu
-- Rozmiar i proporcje wszystkich widocznych komponentów
-- Liczba i rozmieszczenie przycisków, ikon i paneli
+**KROK 2 — Porównaj strukturę (tylko jeśli ten sam typ ekranu):**
+- Liczba i układ wszystkich paneli, okien, ramek
+- Liczba wierszy i kolumn (np. w tabelach, listach)
+- Liczba i rozmieszczenie przycisków oraz ikon
+- Obecność lub brak konkretnych sekcji UI
 
-**Projekt wizualny:**
-- Kolory tła, gradienty i wzory
-- Schemat kolorów wszystkich elementów UI (przyciski, bannery, ramki)
-- Ikony i symbole (kształt, kolor, styl)
-- Elementy dekoracyjne, obramowania i efekty wizualne
+**KROK 3 — Porównaj wygląd wizualny:**
+- Kolory tła, gradienty, wzory
+- Kolory i kształty przycisków, ramek, banerów
+- Ikony i symbole (kształt, kolor, styl — NIE etykieta)
+- Efekty wizualne, obramowania, dekoracje
 
 **Celowo ignoruj:**
-- Treść tekstową (etykiety, tytuły, opisy)
+- Treść tekstową (tytuły, opisy, etykiety)
 - Wyświetlane liczby i wartości
 - Język jakichkolwiek napisów
 
 **ZASADA ODPOWIEDZI — BEZWZGLĘDNIE OBOWIĄZKOWA:**
 - Odpowiedz WYŁĄCZNIE jednym słowem
-- Jeśli zdjęcia są wizualnie podobne/identyczne → napisz: OK
-- Jeśli zdjęcia różnią się wizualnie → napisz: NOK
-- Nie wolno Ci napisać nic więcej — żadnych wyjaśnień,
-  żadnych komentarzy, żadnych dodatkowych słów`;
+- Zdjęcia wizualnie identyczne (ten sam typ ekranu + ten sam układ) → OK
+- Zdjęcia różnią się wizualnie LUB pokazują inny typ ekranu → NOK
+- Żadnych wyjaśnień, komentarzy ani dodatkowych słów.`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
