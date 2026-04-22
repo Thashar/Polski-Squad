@@ -26,7 +26,7 @@ const { NodeSDK } = require('@opentelemetry/sdk-node');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
 const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 const { trace, SpanStatusCode } = require('@opentelemetry/api');
-const { LangfuseSpanProcessor } = require('@langfuse/otel');
+const { LangfuseSpanProcessor, isDefaultExportSpan } = require('@langfuse/otel');
 const { createBotLogger } = require('./consoleLogger');
 
 const logger = createBotLogger('Telemetry');
@@ -58,6 +58,11 @@ function init(serviceName = 'polski-squad-bots') {
         publicKey,
         secretKey,
         ...(baseUrl ? { baseUrl } : {}),
+        shouldExportSpan: ({ otelSpan }) => {
+            if (isDefaultExportSpan(otelSpan)) return true;
+            const attrs = otelSpan.attributes || {};
+            return 'openinference.span.kind' in attrs || 'bot.slug' in attrs;
+        },
     });
 
     sdk = new NodeSDK({
