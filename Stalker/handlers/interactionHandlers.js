@@ -2,7 +2,6 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { sync: appSync } = require('../../utils/appSync');
 const fs = require('fs').promises;
 
 const logger = createBotLogger('Stalker');
@@ -12212,7 +12211,7 @@ async function handleEquipmentSave(interaction, sharedState) {
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
         await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
 
-        appSync.coreStock({
+        sharedState.appSync.coreStock({
             discordId: userId,
             guildId: interaction.guildId,
             takenAt: scannedAt,

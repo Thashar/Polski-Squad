@@ -628,8 +628,20 @@ Współdzielony HTTP client do wypychania zapisów botów do Polski Squad web AP
 
 - **Bezpośrednio w serwisie** — po każdym udanym `await fs.writeFile(...)` / `this.saveXxx(...)` wołamy `appSync.<resource>(...)`. Brak monkey-patchingu, brak DI przez konstruktor, brak wiringu w `index.js`.
 - **Fire-and-forget** — pushy są asynchroniczne z retry 3× (backoff 2s/4s/6s). Błędy są logowane, ale **nigdy nie blokują ani nie przerywają** głównej logiki bota. Lokalne JSON pozostają źródłem prawdy.
-- **Disabled mode** — gdy brak `APP_API_URL` lub `BOT_API_KEY`, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
+- **Disabled mode** — gdy brak `APP_API_URL` lub klucza, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
 - **Target routing (production default, ad-hoc override)** — domyślny eksport (`sync`, `syncBatch`) jest związany z `APP_API_URL` / `BOT_API_KEY` z env i kieruje ruch hot-path'owy na produkcję. W env trzymamy TYLKO produkcyjny URL + token — ten sam token działa dla staging/produkcji, więc osobnych env-ów nie potrzebujemy. Konsumenci, którzy muszą dosterować na inne środowisko (obecnie tylko `/appsync-backfill`), przekazują URL ręcznie i używają factory `createAppSync({ apiUrl, apiKey })`, który zwraca niezależny klient z tą samą parą URL/key. Hot-path bot sync ZAWSZE idzie na production.
+- **Per-bot API key override (jawny)** — bot może mieć dedykowany klucz (np. `ENDERSECHO_API_KEY`) zamiast wspólnego `BOT_API_KEY`. **Bot jawnie czyta swój env w `config/config.js` i przekazuje wartość do shared utili**:
+  ```js
+  // EndersEcho/config/config.js
+  appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,
+
+  // EndersEcho/services/rankingService.js
+  const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
+
+  // EndersEcho/handlers/interactionHandlers.js
+  const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
+  ```
+  Shared util (`createAppSync`, `createAppOperations`) NIE rozwiązuje nazw envów dynamicznie — nie ma magii typu `process.env[<SLUG>_API_KEY]`. Powód: `ENDERSECHO_API_KEY` musi być greppowalny, typo w slugu nie może po cichu spaść na default, a zmiana nazwy envu musi mieć jedno oczywiste miejsce do edycji (config.js danego bota).
 
 #### API (9 typowanych wrapperów)
 
@@ -686,9 +698,15 @@ async function saveCXResult(userId, score) {
 # Ten sam BOT_API_KEY działa dla staging i produkcji, więc osobnych env-ów nie potrzebujemy.
 APP_API_URL=https://api.polski-squad.example   # trailing slash i końcowe /api są strippowane automatycznie
 BOT_API_KEY=<min. 32-znakowy sekret, identyczny z BOT_API_KEY w API>
+
+# Opcjonalne per-bot overrides — wygrywają nad BOT_API_KEY dla danego bota.
+# Czytane JAWNIE w {Bot}/config/config.js i przekazywane przez createAppSync
+# / createBotOperations jako apiKey. Brak wpisu → bot używa BOT_API_KEY.
+ENDERSECHO_API_KEY=<dedykowany klucz EndersEcho, jeśli API go wydaje osobno>
+# STALKER_API_KEY, KONTROLER_API_KEY, ... — dopisz gdy potrzebne.
 ```
 
-Staging-push z backfillu: przekaż `api_url:https://staging-api.polski-squad.example` jako parametr slasha `/appsync-backfill` — nadpisuje tylko URL, token leci z env.
+Staging-push z backfillu: przekaż `api_url:https://staging-api.polski-squad.example` jako parametr slasha `/appsync-backfill` — nadpisuje tylko URL, token leci z `BOT_API_KEY`. Backfill zawsze używa współdzielonego `BOT_API_KEY` niezależnie od filtra `bot` — sync endpointy są bot-agnostyczne (tożsamość w payloadzie, nie w tokenie). Per-bot klucze (`ENDERSECHO_API_KEY` itp.) są używane tylko w hot-pathu (operations gateway), który przez backfill nie przechodzi.
 
 #### Obecne pokrycie
 
@@ -742,6 +760,9 @@ Pliki (każdy ma pełny JSDoc z API, kontraktem i zachowaniami brzegowymi):
 # Gateway (ta sama para co w appSync)
 APP_API_URL=https://api.polski-squad.example
 BOT_API_KEY=<secret>
+# Per-bot override (opcjonalne) — bot czyta własny env JAWNIE w config.js
+# i przekazuje jako `apiKey` do createBotOperations. Przykład:
+ENDERSECHO_API_KEY=<dedykowany klucz dla EndersEcho, jeśli używany>
 
 # Langfuse
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxx

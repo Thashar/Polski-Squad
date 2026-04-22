@@ -1,15 +1,15 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { sync: appSync } = require('../../utils/appSync');
 
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 
 class RankingService {
-    constructor(config) {
+    constructor(config, appSync) {
         this.config = config;
+        this.appSync = appSync;
         this.activeRankings = new Map();
         // Kolejka operacji per-guild — zapobiega race condition przy równoczesnych /update
         this._writeQueues = new Map();
@@ -181,7 +181,7 @@ class RankingService {
                 for (const player of players) {
                     const score = Number(player.scoreValue);
                     if (!Number.isFinite(score) || score < 0) continue;
-                    appSync.endersEchoSnapshot({
+                    this.appSync.endersEchoSnapshot({
                         discordId: player.userId,
                         snapshotDate,
                         rank: player.rank,

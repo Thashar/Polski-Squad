@@ -219,7 +219,7 @@
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
 - Max 30 pozycji w rankingu (z informacją o liczbie pozostałych)
 
-**Sync do Web API (opcjonalny)** - `../utils/appSync.js` (współdzielony helper bot-wide): HTTP client wypychający zapisy do Polski Squad web API (`polski-squad/app`). Dostępny dla **każdego bota** — wystarczy `require('../../utils/appSync')` z dowolnego serwisu. W Stalkerze integracja jest wbudowana bezpośrednio w serwisy (brak monkey-patchingu):
+**Sync do Web API (opcjonalny)** - `../utils/appSync.js` (współdzielony helper bot-wide): HTTP client wypychający zapisy do Polski Squad web API (`polski-squad/app`). W Stalkerze `appSync` budowany w `index.js` przez `createAppSync()` i wstrzykiwany przez konstruktory do `DatabaseService`, `ReminderService`, `GaryCombatIngestionService` oraz przez `sharedState` do handlerów. Integracja wywoływana bezpośrednio w serwisach:
 - `databaseService.updatePlayerIndex()` → `POST /api/bot/player-identity` + `/nick-observation`
 - `databaseService.savePhase1Result()` / `savePhase2Result()` / `savePhase2Results()` → `POST /api/bot/phase-result` (per gracz, idempotent po `guildId+discordId+phase+year+weekNumber`)
 - `databaseService.addPunishmentPoints()` / `removePunishmentPoints()` / `cleanupWeeklyPoints()` → `POST /api/bot/punishment-event` (deterministyczne `eventId` — bezpieczne powtórki)

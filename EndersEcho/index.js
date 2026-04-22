@@ -23,9 +23,13 @@ const { TokenUsageService } = require('./services/tokenUsageService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
+const { createAppSync } = require('../utils/appSync');
+const { createBotOperations } = require('../utils/operationRunner');
 
 const logger = createBotLogger('EndersEcho');
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
+const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
+const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
 
 const client = new Client({
     intents: [
@@ -38,7 +42,7 @@ const client = new Client({
 
 const ocrService = new OCRService(config);
 const aiOcrService = new AIOCRService(config, llmAdapter);
-const rankingService = new RankingService(config);
+const rankingService = new RankingService(config, appSync);
 const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
@@ -47,7 +51,7 @@ const userBlockService = new UserBlockService(config);
 const roleRankingConfigService = new RoleRankingConfigService(config);
 const usageLimitService = new UsageLimitService(config);
 const tokenUsageService = new TokenUsageService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps);
 
 /**
  * Inicjalizuje bota EndersEcho

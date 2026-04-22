@@ -48,14 +48,18 @@
  *   }
  */
 
-const appOperations = require('./appOperations');
+const defaultAppOperations = require('./appOperations');
+const { createAppOperations } = defaultAppOperations;
 const { withOperationSpan } = require('./telemetry');
 
 /**
  * Podstawowa funkcja. Zwykle nie wołasz tego bezpośrednio — użyj
  * createBotOperations({botSlug}).run(...) żeby nie powtarzać botSlug.
+ *
+ * `ops` pozwala wstrzyknąć klient `appOperations` związany z konkretnym botem
+ * (per-bot API key). Bez argumentu używa domyślnego klienta z env (BOT_API_KEY).
  */
-async function runOperation(options, fn) {
+async function runOperation(options, fn, ops = defaultAppOperations) {
     const {
         type,
         botSlug,
@@ -74,7 +78,7 @@ async function runOperation(options, fn) {
     const effectiveSpanName = spanName || `${botSlug}.${type.split('.').pop()}`;
 
     // ── 1. AUTHORIZE (preflight gate) ────────────────────────────────────
-    const auth = await appOperations.authorize({
+    const auth = await ops.authorize({
         type, actor, scope, hints, tracerName,
     });
 
@@ -158,7 +162,7 @@ async function runOperation(options, fn) {
     } finally {
         // RECORD zawsze — nawet gdy inner fn rzucił. Fire-and-forget w środku.
         if (auth.authorizationId) {
-            appOperations.record({
+            ops.record({
                 authorizationId: auth.authorizationId,
                 status:          recordStatus,
                 usage:           usage ? {
@@ -194,13 +198,16 @@ function isEnvelope(v) {
  *
  *   const botOps = createBotOperations({ botSlug: 'endersecho' });
  *   await botOps.run({type, actor, scope, hints}, async (ctx) => {...});
+ *
+ * @param {{ botSlug: string, apiKey?: string, apiUrl?: string }} opts
  */
-function createBotOperations({ botSlug }) {
+function createBotOperations({ botSlug, apiKey, apiUrl }) {
     if (!botSlug) throw new Error('createBotOperations: wymagane botSlug');
+    const ops = createAppOperations({ apiKey, apiUrl });
     return {
         botSlug,
         run(options, fn) {
-            return runOperation({ botSlug, ...options }, fn);
+            return runOperation({ botSlug, ...options }, fn, ops);
         },
     };
 }

@@ -3384,9 +3384,6 @@ class InteractionHandler {
         const apiUrlOpt = interaction.options.getString('api_url');
         const dryRun = interaction.options.getBoolean('dry_run') ?? false;
 
-        // Domyślnie leci na produkcję (APP_API_URL z env). Parametr api_url
-        // nadpisuje tylko URL — token bota (BOT_API_KEY) jest ten sam dla
-        // wszystkich środowisk i zawsze pochodzi z env.
         const apiUrl = apiUrlOpt ? apiUrlOpt.trim().replace(/\/+$/, '') : (process.env.APP_API_URL || null);
         const apiKey = process.env.BOT_API_KEY || null;
         const missingEnv = [];

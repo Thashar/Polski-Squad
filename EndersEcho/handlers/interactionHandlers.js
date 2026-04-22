@@ -2,14 +2,12 @@ const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBu
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { createBotOperations } = require('../../utils/operationRunner');
 const OcrBlockService = require('../services/ocrBlockService');
 
 const logger = createBotLogger('EndersEcho');
 const path = require('path');
 
 const OPERATIONS_TYPE = 'ocr.analyze';
-const botOps = createBotOperations({ botSlug: 'endersecho' });
 
 /**
  * Mapuje gatewayError z runOperation na komunikat ephemeral dla usera.
@@ -46,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -58,6 +56,7 @@ class InteractionHandler {
         this.roleRankingConfigService = roleRankingConfigService;
         this.usageLimitService = usageLimitService;
         this.tokenUsageService = tokenUsageService;
+        this.botOps = botOps;
         this.ocrBlockService = new OcrBlockService(config);
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
@@ -408,7 +407,7 @@ class InteractionHandler {
             gl.info(`🤖 [/update] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
 
             // ── Operations Gateway (authorize + root span + record) ───────────
-            const op = await botOps.run({
+            const op = await this.botOps.run({
                 type:  OPERATIONS_TYPE,
                 actor: { discordId: interaction.user.id },
                 scope: { guildId: interaction.guildId, channelId: interaction.channelId },
@@ -774,7 +773,7 @@ class InteractionHandler {
                 // Operations Gateway (authorize + root span + record). Inner fn
                 // nigdy nie rzuca — łapiemy błąd providera i zwracamy envelope
                 // z PROVIDER_ERROR, żeby na zewnątrz móc spokojnie zrobić fallback.
-                const op = await botOps.run({
+                const op = await this.botOps.run({
                     type:  OPERATIONS_TYPE,
                     actor: { discordId: interaction.user.id },
                     scope: { guildId: interaction.guildId, channelId: interaction.channelId },

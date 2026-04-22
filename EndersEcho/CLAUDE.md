@@ -202,7 +202,14 @@ ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 APP_API_URL=https://api.polski-squad.example
 BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# Operations Metering Gateway — używa tej samej pary APP_API_URL + BOT_API_KEY co sync.
+# Per-bot override (opcjonalne) — wygrywa nad BOT_API_KEY dla EndersEcho.
+# Używane przez rankingService (createAppSync({ botSlug: 'endersecho' })) oraz
+# handlery OCR (createBotOperations({ botSlug: 'endersecho' })). Brak wpisu →
+# EndersEcho spada na BOT_API_KEY. Szczegóły: główny CLAUDE.md → sekcja 6.
+ENDERSECHO_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Operations Metering Gateway — używa tej samej pary APP_API_URL + klucz co sync
+# (ENDERSECHO_API_KEY z fallbackiem na BOT_API_KEY).
 # Operation type: ocr.analyze (szczegóły w głównym CLAUDE.md → sekcja 7)
 
 # Langfuse — LLM tracing (opcjonalne, niezależne od gateway-a)
@@ -221,12 +228,11 @@ Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko
 
 | Plik | Rola |
 |---|---|
-| [index.js:1-4](index.js#L1-L4) | `telemetry.init('endersecho-bot')` jest pierwszym requirem w pliku (przed Discord.js i Gemini SDK) |
-| [index.js:32-33](index.js#L32-L33) | `createLlmAdapter` przekazywany przez DI do `AIOCRService` |
-| [services/aiOcrService.js:20-46](services/aiOcrService.js#L20-L46) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
-| [services/aiOcrService.js:50-72](services/aiOcrService.js#L50-L72) | `_generateContent` używa `adapter.generate({provider:'gemini', ...})` |
-| [handlers/interactionHandlers.js:11-50](handlers/interactionHandlers.js#L11-L50) | `botOps` singleton + helpery `mapGatewayErrorMessage`, `buildGeminiUsage` |
-| [handlers/interactionHandlers.js:371](handlers/interactionHandlers.js#L371), [:709](handlers/interactionHandlers.js#L709) | `botOps.run()` w `/update` i `/test` |
+| [index.js](index.js) | `telemetry.init('endersecho-bot')` jest pierwszym requirem w pliku (przed Discord.js i Gemini SDK) |
+| [index.js](index.js) | `createLlmAdapter`, `createAppSync({ apiKey: config.appApiKey }).sync`, `createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey })` budowane w launcherze i wstrzykiwane przez konstruktory (DI) do `AIOCRService`, `RankingService`, `InteractionHandler` |
+| [services/aiOcrService.js](services/aiOcrService.js) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
+| [services/rankingService.js](services/rankingService.js) | `appSync` wstrzykiwany przez konstruktor, używany jako `this.appSync.endersEchoSnapshot(...)` |
+| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (ostatni arg); wołania `this.botOps.run(...)` w `/update` i `/test` |
 
 ### Specyfika bota
 

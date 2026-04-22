@@ -88,6 +88,7 @@ module.exports = {
     blockOcrUserIds: (process.env.ENDERSECHO_BLOCK_OCR_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
     invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
+    appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,
 
     // Lista skonfigurowanych serwerów
     guilds,

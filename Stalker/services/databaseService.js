@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeParse } = require('../../utils/safeJSON');
-const { sync: appSync, eventId, isoWeekStartUTC } = require('../../utils/appSync');
+const { eventId, isoWeekStartUTC } = require('../../utils/appSync');
 
 const logger = createBotLogger('Stalker');
 const path = require('path');
@@ -16,8 +16,9 @@ function classifyPunishmentReason(reason, defaultKind = 'MANUAL') {
 }
 
 class DatabaseService {
-    constructor(config) {
+    constructor(config, appSync) {
         this.config = config;
+        this.appSync = appSync;
         this.punishmentsFile = config.database.punishments;
         this.weeklyRemovalFile = config.database.weeklyRemoval;
 
@@ -226,13 +227,13 @@ class DatabaseService {
 
         await this.savePlayerIndex(guildId, index);
 
-        appSync.playerIdentity({
+        this.appSync.playerIdentity({
             discordId: userId,
             guildId,
             currentNick: displayName,
             lastSeenAt: timestamp,
         });
-        appSync.nickObservation({
+        this.appSync.nickObservation({
             discordId: userId,
             nick: displayName,
             observedAt: timestamp,
@@ -485,7 +486,7 @@ class DatabaseService {
 
         const occurredAt = new Date().toISOString();
         const { kind, note } = classifyPunishmentReason(reason, 'BOSS_FAIL');
-        appSync.punishmentEvent({
+        this.appSync.punishmentEvent({
             id: eventId('punish', guildId, userId, occurredAt, points, reason),
             guildId,
             discordId: userId,
@@ -537,7 +538,7 @@ class DatabaseService {
         await this.savePunishments(punishments);
 
         const occurredAt = new Date().toISOString();
-        appSync.punishmentEvent({
+        this.appSync.punishmentEvent({
             id: eventId('unpunish', guildId, userId, occurredAt, points),
             guildId,
             discordId: userId,
@@ -635,7 +636,7 @@ class DatabaseService {
 
         const occurredAt = now.toISOString();
         for (const { guildId, userId, delta } of cleanedEvents) {
-            appSync.punishmentEvent({
+            this.appSync.punishmentEvent({
                 id: eventId('weekly_reset', guildId, userId, occurredAt, delta),
                 guildId,
                 discordId: userId,
@@ -787,7 +788,7 @@ class DatabaseService {
         // Wewnętrznie pushuje też playerIdentity + nickObservation do web API.
         await this.updatePlayerIndex(guildId, userId, displayName, weekData.updatedAt);
 
-        appSync.phaseResult({
+        this.appSync.phaseResult({
             guildId,
             discordId: userId,
             phase: 'PHASE_1',
@@ -1102,7 +1103,7 @@ class DatabaseService {
 
         for (const player of summaryPlayers || []) {
             const rounds = roundScoresMap.get(player.userId) || {};
-            appSync.phaseResult({
+            this.appSync.phaseResult({
                 guildId,
                 discordId: player.userId,
                 phase: 'PHASE_2',
@@ -1118,13 +1119,13 @@ class DatabaseService {
                 recordedAt: now,
                 recordedBy: createdBy || null,
             });
-            appSync.playerIdentity({
+            this.appSync.playerIdentity({
                 discordId: player.userId,
                 guildId,
                 currentNick: player.displayName,
                 lastSeenAt: now,
             });
-            appSync.nickObservation({
+            this.appSync.nickObservation({
                 discordId: player.userId,
                 nick: player.displayName,
                 observedAt: now,
@@ -1176,7 +1177,7 @@ class DatabaseService {
         await this.savePhase2Data(data);
         logger.info(`[PHASE2] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan})`);
 
-        appSync.phaseResult({
+        this.appSync.phaseResult({
             guildId,
             discordId: userId,
             phase: 'PHASE_2',
@@ -1189,13 +1190,13 @@ class DatabaseService {
             recordedAt: now,
             recordedBy: null,
         });
-        appSync.playerIdentity({
+        this.appSync.playerIdentity({
             discordId: userId,
             guildId,
             currentNick: displayName,
             lastSeenAt: now,
         });
-        appSync.nickObservation({
+        this.appSync.nickObservation({
             discordId: userId,
             nick: displayName,
             observedAt: now,

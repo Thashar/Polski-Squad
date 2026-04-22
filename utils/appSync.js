@@ -22,10 +22,9 @@
  *   BOT_API_KEY — shared secret; must match the API's env var.
  *   When either is missing, all calls silently no-op (keeps dev/test easy).
  *
- *   Default export (`sync`, `syncBatch`, `pushSync`, `isEnabled`) uses the
- *   env vars above — production target by convention. For ad-hoc routing
- *   (np. backfill do staging), użyj `createAppSync({ apiUrl, apiKey })`,
- *   który zwraca niezależny zestaw wrapperów z własną konfiguracją URL/key.
+ *   Default export (`sync`, `syncBatch`, `pushSync`, `isEnabled`) używa env —
+ *   produkcyjny target z BOT_API_KEY. Per-bot override: bot przekazuje
+ *   `createAppSync({ apiKey: config.<something> })` jawnie.
  */
 
 const crypto = require('crypto');
@@ -44,7 +43,7 @@ async function sleep(ms) {
 /**
  * Buduje zestaw klientów (`sync`, `syncBatch`, `pushSync`, `isEnabled`)
  * związany z konkretną parą (apiUrl, apiKey). Bez argumentów czyta
- * `APP_API_URL` / `BOT_API_KEY` z env (produkcyjny default).
+ * `APP_API_URL` / `BOT_API_KEY` z env.
  *
  * @param {{ apiUrl?: string, apiKey?: string }} [overrides]
  */

@@ -21,8 +21,10 @@ const BroadcastMessageService = require('./services/broadcastMessageService');
 const AIChatService = require('./services/aiChatService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
+const { createAppSync } = require('../utils/appSync');
 
 const logger = createBotLogger('Stalker');
+const { sync: appSync } = createAppSync();
 
 // Cooldown kalkulatora - raz na godzinę per kanał (persistencja w pliku)
 const calculatorCooldownsFile = path.join(__dirname, 'data', 'calculator_cooldowns.json');
@@ -78,10 +80,10 @@ const client = new Client({
     ]
 });
 
-const databaseService = new DatabaseService(config);
+const databaseService = new DatabaseService(config, appSync);
 const ocrService = new OCRService(config);
 const punishmentService = new PunishmentService(config, databaseService);
-const reminderService = new ReminderService(config);
+const reminderService = new ReminderService(config, appSync);
 const reminderUsageService = new ReminderUsageService(config);
 const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
@@ -102,7 +104,7 @@ const aiChatService = new AIChatService(
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 const GaryCombatIngestionService = require('./services/garyCombatIngestionService');
-const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger);
+const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger, appSync);
 const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 
@@ -122,6 +124,7 @@ client.databaseService = databaseService;
 const sharedState = {
     client,
     config,
+    appSync,
     databaseService,
     ocrService,
     punishmentService,

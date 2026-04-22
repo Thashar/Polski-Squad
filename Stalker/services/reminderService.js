@@ -6,12 +6,13 @@ const https = require('https');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { sync: appSync, eventId } = require('../../utils/appSync');
+const { eventId } = require('../../utils/appSync');
 
 const logger = createBotLogger('Stalker');
 class ReminderService {
-    constructor(config) {
+    constructor(config, appSync) {
         this.config = config;
+        this.appSync = appSync;
         this.activeSessions = new Map(); // sessionId → session
         this.activeReminderDMs = new Map(); // userId → { roleId, guildId, confirmationChannelId, sentAt }
         this.tempDir = './Stalker/temp';
@@ -113,7 +114,7 @@ class ReminderService {
                                 await this.saveActiveReminderDMs();
 
                                 const occurredAt = new Date(sentAt).toISOString();
-                                appSync.reminderEvent({
+                                this.appSync.reminderEvent({
                                     id: eventId('reminder_sent', member.id, guild.id, roleId, occurredAt),
                                     guildId: guild.id,
                                     discordId: member.id,
@@ -1020,7 +1021,7 @@ class ReminderService {
 
             if (dmData) {
                 const occurredAt = new Date().toISOString();
-                appSync.reminderEvent({
+                this.appSync.reminderEvent({
                     id: eventId('reminder_confirmed', userId, dmData.guildId || '', occurredAt),
                     guildId: dmData.guildId || 'unknown',
                     discordId: userId,

@@ -1,6 +1,6 @@
 const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { sync: appSync, eventId } = require('../../utils/appSync');
+const { eventId } = require('../../utils/appSync');
 const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
@@ -9,7 +9,7 @@ const path = require('path');
 const logger = createBotLogger('Kontroler');
 
 class MessageHandler {
-    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null, votingService = null) {
+    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null, votingService = null, appSync) {
         this.config = config;
         this.ocrService = ocrService;
         this.analysisService = analysisService;
@@ -17,6 +17,7 @@ class MessageHandler {
         this.messageService = messageService;
         this.lotteryService = lotteryService;
         this.votingService = votingService;
+        this.appSync = appSync;
         this.lotterySchedules = new Map(); // Mapa zaplanowanych zadań cron dla każdego kanału
         this.lotteryMessageIds = new Map(); // Mapa ID wiadomości o loterii dla każdego kanału
         this.lotteryMessageIdsFile = path.join(__dirname, '../data/lottery_message_ids.json');
@@ -364,7 +365,7 @@ class MessageHandler {
                 await fs.writeFile(cxHistoryPath, JSON.stringify(cxHistory, null, 2), 'utf8');
                 logger.info(`💾 Zapisano wynik CX gracza ${member.displayName}: ${result.score} pkt`);
 
-                appSync.cxEntry({
+                this.appSync.cxEntry({
                     id: eventId('cx', guild.id, userId, completedAt, result.score),
                     discordId: userId,
                     guildId: guild.id,

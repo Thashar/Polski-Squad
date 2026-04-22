@@ -15,8 +15,10 @@ const VotingService = require('./services/votingService');
 const MessageHandler = require('./handlers/messageHandlers');
 const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { createAppSync } = require('../utils/appSync');
 
 const logger = createBotLogger('Kontroler');
+const { sync: appSync } = createAppSync();
 
 const client = new Client({
     intents: [
@@ -50,7 +52,8 @@ async function initializeServices() {
         roleService,
         messageService,
         lotteryService,
-        votingService
+        votingService,
+        appSync
     );
 
 }

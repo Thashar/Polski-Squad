@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { sync: appSync, isoWeekStartUTC } = require('../../utils/appSync');
+const { isoWeekStartUTC } = require('../../utils/appSync');
 
 const WEEKLY_DIR      = path.join(__dirname, '../../shared_data/lme_weekly');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
@@ -18,11 +18,12 @@ const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.js
  * 3. Komendy /player-status i /player-compare czytają z lokalnej bazy po userId.
  */
 class GaryCombatIngestionService {
-    constructor(client, config, databaseService, logger) {
+    constructor(client, config, databaseService, logger, appSync) {
         this.client = client;
         this.config = config;
         this.databaseService = databaseService;
         this.logger = logger;
+        this.appSync = appSync;
     }
 
     /** Usuwa prefiks klanowy z nicku z gry (np. "PLㅣPuddi" → "Puddi", "PL|Pushok" → "Pushok") */
@@ -319,7 +320,7 @@ class GaryCombatIngestionService {
             for (const [userId, info] of Object.entries(localData.players || {})) {
                 for (const week of info.weeks || []) {
                     if (!week.weekNumber || !week.year) continue;
-                    appSync.combatWeekly({
+                    this.appSync.combatWeekly({
                         discordId: userId,
                         year: week.year,
                         weekNumber: week.weekNumber,
