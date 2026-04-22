@@ -38,12 +38,17 @@
      - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
-   - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, tradycyjny + opcjonalny AI OCR):** Używa `analyzeVictoryImage()` lub tradycyjnego OCR:
-     - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik, którego ID znajduje się w `ENDERSECHO_BLOCK_OCR_USER_IDS`
-     - Gdy AI OCR włączony: sprawdzenie Victory + autentyczności + ekstrakcja; fallback na tradycyjny OCR przy błędzie API
-     - Gdy AI OCR wyłączony: tradycyjny Tesseract OCR
-     - Po udanej analizie: pełny flow jak `/update` — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
-     - NIE wymaga AI OCR; respektuje blokadę użytkownika i globalny blok OCR (`ocrBlockService.isBlocked('test')`)
+   - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, wymaga AI OCR):** Tryb testowy `/update` — współdzieli pełną implementację przez `_runUpdateFlow(interaction, { dryRun: true, commandName: 'test', ocrBlockKey: 'test' })`:
+     - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
+     - Identyczny przepływ jak `/update` (te same walidacje, ten sam `analyzeTestImage()` z weryfikacją wzorca, ten sam prompt) **z wyjątkiem** kroków dry-run:
+       - Wynik (rekord i brak rekordu) wyświetlany jako **ephemeral** w `editReply` — bez publicznego `followUp`
+       - **Brak zapisu do rankingu** (`ranking_{guildId}.json`) — `isNewRecord` obliczany porównaniem z aktualnym stanem bez `updateUserRanking()`
+       - **Brak aktualizacji ról TOP** (`roleService.updateTopRoles`)
+       - **Brak powiadomień Global Top 3** na inne serwery
+       - **Brak powiadomień DM** do subskrybentów
+       - **Brak `logScoreUpdate`** (log rekordu do webhooka)
+     - Nadal działa: `logCommandUsage('test')`, `usageLimitService` (zlicza dzienny limit), `tokenUsageService` (rejestruje koszty AI), `_sendInvalidScreenReport` dla NOT_SIMILAR/FAKE_PHOTO, Operations Gateway z `hints.command='test'`
+     - Respektuje `isAllowedChannel`, blokadę użytkownika (`userBlockService`) oraz globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
    - **Per-serwer:** Osobny plik `data/ranking_{guildId}.json` dla każdego serwera
@@ -232,11 +237,11 @@ Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko
 | [index.js](index.js) | `createLlmAdapter`, `createAppSync({ apiKey: config.appApiKey }).sync`, `createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey })` budowane w launcherze i wstrzykiwane przez konstruktory (DI) do `AIOCRService`, `RankingService`, `InteractionHandler` |
 | [services/aiOcrService.js](services/aiOcrService.js) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
 | [services/rankingService.js](services/rankingService.js) | `appSync` wstrzykiwany przez konstruktor, używany jako `this.appSync.endersEchoSnapshot(...)` |
-| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (ostatni arg); wołania `this.botOps.run(...)` w `/update` i `/test` |
+| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (ostatni arg); wspólne ciało `/update` i `/test` to `_runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey })` — `dryRun:true` wyłącza zapis do rankingu, role TOP, powiadomienia Global Top 3 i DM |
 
 ### Specyfika bota
 
-- **`/test` z fallbackiem na Tesseract.** Inner fn łapie throw Gemini i zwraca envelope `{status:'PROVIDER_ERROR'}` zamiast rzucić. Poza runnerem `if (op.status === 'PROVIDER_ERROR')` uruchamia tradycyjny OCR. `/update` fallbacku nie ma — padnięcie Gemini oznacza błąd dla usera.
+- **`/test` jako dry-run `/update`.** Oba handlery delegują do `_runUpdateFlow`; różnice wyłącznie w `dryRun` (ephemeral output, brak zapisu/ról/powiadomień), `commandName` (→ `hints.command`, logi, klucz blokady OCR) i uprawnieniach wejściowych (`/test` wymaga wpisu w `ENDERSECHO_BLOCK_OCR_USER_IDS`). Ten sam prompt wzorca (`compare-template`), ten sam `analyzeTestImage()`, ten sam Operations Gateway, ten sam `tokenUsageService` i `usageLimitService`. Padnięcie Gemini w obu komendach = błąd dla usera (brak fallbacku na Tesseract).
 - **`usageLimitService`** — lokalny dzienny limit per user (`data/usage_limits.json`), działa równolegle do quota w API.
 - **`PROMPT_VERSIONS`** w [services/aiOcrService.js:15-24](services/aiOcrService.js#L15-L24) — 6 wpisów: `victory-check-eng`, `victory-check-jpn`, `authenticity-check`, `extract-data-eng`, `extract-data-jpn`, `compare-template`. Po zmianie treści promptu bump wersji (`'v1'` → `'v2'`) — stare trace zostają w Langfuse do porównania.
 - **Model Gemini** dla wszystkich promptów ten sam: z `ENDERSECHO_GOOGLE_AI_MODEL` (default: `gemini-2.5-flash-preview-05-20`).

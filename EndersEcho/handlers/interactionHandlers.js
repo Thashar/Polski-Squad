@@ -231,11 +231,6 @@ class InteractionHandler {
                 return;
             }
 
-            if (interaction.commandName === 'test') {
-                await this.handleTestCommand(interaction);
-                return;
-            }
-
             if (interaction.commandName === 'unblock') {
                 await this.handleUnblockCommand(interaction);
                 return;
@@ -252,6 +247,7 @@ class InteractionHandler {
             switch (interaction.commandName) {
                 case 'ranking':            await this.handleRankingCommand(interaction);          break;
                 case 'update':             await this.handleUpdateCommand(interaction);           break;
+                case 'test':               await this.handleTestCommand(interaction);             break;
                 case 'remove':             await this.handleRemoveCommand(interaction);           break;
                 case 'notifications':      await this.handleNotificationsCommand(interaction);    break;
                 case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
@@ -335,11 +331,47 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /update
+     * Obsługuje komendę /update — pełny flow z zapisem do rankingu,
+     * publicznym ogłoszeniem i aktualizacją ról.
      * @param {CommandInteraction} interaction
      */
     async handleUpdateCommand(interaction) {
-        await this.logService.logCommandUsage('update', interaction);
+        await this._runUpdateFlow(interaction, {
+            dryRun:       false,
+            commandName:  'update',
+            ocrBlockKey:  'update',
+        });
+    }
+
+    /**
+     * Obsługuje komendę /test — działa identycznie jak /update, ale wynik
+     * wyświetla jako ephemeral, nie zapisuje do rankingu, nie aktualizuje ról
+     * i nie wysyła powiadomień na inne serwery. Służy do testowania flow /update.
+     * @param {CommandInteraction} interaction
+     */
+    async handleTestCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+
+        const allowedIds = this.config.blockOcrUserIds;
+        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await this._runUpdateFlow(interaction, {
+            dryRun:       true,
+            commandName:  'test',
+            ocrBlockKey:  'test',
+        });
+    }
+
+    /**
+     * Wspólny flow dla /update i /test.
+     * @param {CommandInteraction} interaction
+     * @param {{ dryRun: boolean, commandName: 'update'|'test', ocrBlockKey: 'update'|'test' }} opts
+     */
+    async _runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey }) {
+        await this.logService.logCommandUsage(commandName, interaction);
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
@@ -379,7 +411,7 @@ class InteractionHandler {
         }
 
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
-        if (this.ocrBlockService.isBlocked('update') && !isOcrAuthorized) {
+        if (this.ocrBlockService.isBlocked(ocrBlockKey) && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
@@ -404,14 +436,14 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            gl.info(`🤖 [/update] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}`);
+            gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}${dryRun ? ' (tryb testowy)' : ''}`);
 
             // ── Operations Gateway (authorize + root span + record) ───────────
             const op = await this.botOps.run({
                 type:  OPERATIONS_TYPE,
                 actor: { discordId: interaction.user.id },
                 scope: { guildId: interaction.guildId, channelId: interaction.channelId },
-                hints: { command: 'update' },
+                hints: { command: commandName },
             }, async (ctx) => {
                 const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta);
                 const usage = buildGeminiUsage(ai);
@@ -455,21 +487,35 @@ class InteractionHandler {
 
             const bestScore = aiResult.score;
             const bossName = aiResult.bossName;
-            gl.success(`✅ [/update] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
+            gl.success(`✅ [/${commandName}] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
 
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
 
-            const prevGlobalRanking = await this.rankingService.getGlobalRanking();
+            const prevGlobalRanking = dryRun ? null : await this.rankingService.getGlobalRanking();
 
-            const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
-                guildId, userId, userName, bestScore, bossName
-            );
+            let isNewRecord;
+            let currentScore;
+            if (dryRun) {
+                // Tryb testowy: porównanie bez zapisu do rankingu.
+                const ranking = await this.rankingService.loadRanking(guildId);
+                currentScore = ranking[userId] || null;
+                const newScoreValue = this.rankingService.parseScoreValue(bestScore);
+                if (!currentScore) {
+                    isNewRecord = true;
+                } else {
+                    const currentScoreValue = this.rankingService.parseScoreValue(currentScore.score);
+                    isNewRecord = newScoreValue > currentScoreValue;
+                }
+            } else {
+                ({ isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
+                    guildId, userId, userName, bestScore, bossName
+                ));
+                await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
+            }
 
-            await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
-
-            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
+            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}${dryRun ? ' (tryb testowy)' : ''}`);
 
             if (!isNewRecord) {
                 try {
@@ -540,14 +586,25 @@ class InteractionHandler {
             );
 
             try {
-                await interaction.editReply({ content: msgs.newRecordConfirmed });
+                if (dryRun) {
+                    // Tryb testowy: wynik wyświetlany wyłącznie ephemeral,
+                    // brak publicznego followUp, brak aktualizacji ról,
+                    // brak powiadomień na inne serwery i brak DM.
+                    await interaction.editReply({
+                        embeds: [publicEmbed],
+                        files: [imageAttachment]
+                    });
+                    gl.info('✅ Wysłano ephemeral podgląd nowego rekordu (tryb testowy)');
+                } else {
+                    await interaction.editReply({ content: msgs.newRecordConfirmed });
 
-                await interaction.followUp({
-                    embeds: [publicEmbed],
-                    files: [imageAttachment]
-                });
+                    await interaction.followUp({
+                        embeds: [publicEmbed],
+                        files: [imageAttachment]
+                    });
 
-                gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
+                    gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
+                }
             } catch (newRecordError) {
                 gl.error(`❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie: ${newRecordError.message}`);
                 try {
@@ -561,6 +618,12 @@ class InteractionHandler {
                 } catch (fallbackError) {
                     gl.error(`❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu: ${fallbackError.message}`);
                 }
+            }
+
+            if (dryRun) {
+                // W trybie testowym pomijamy aktualizację ról TOP,
+                // powiadomienia Global Top 3 oraz DM subskrybentów.
+                return;
             }
 
             // Aktualizacja ról TOP po nowym rekordzie
@@ -678,379 +741,7 @@ class InteractionHandler {
             }
 
         } catch (error) {
-            await this.logService.logOCRError(error, 'handleUpdateCommand', interaction.guildId);
-
-            try {
-                await interaction.editReply(msgs.updateError);
-            } catch (replyError) {
-                gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
-            }
-        } finally {
-            if (tempImagePath) {
-                await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
-            }
-        }
-    }
-
-    /**
-     * Obsługuje komendę /test — weryfikuje zdjęcie wzorcem, zapisuje dane jak /update
-     * @param {CommandInteraction} interaction
-     */
-    async handleTestCommand(interaction) {
-        await this.logService.logCommandUsage('test', interaction);
-        const gl = this.logService._gl(interaction.guildId);
-
-        const msgs = this.msgs(interaction.guildId);
-
-        const allowedIds = this.config.blockOcrUserIds;
-        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
-            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
-            return;
-        }
-
-        if (this.userBlockService.isBlocked(interaction.user.id)) {
-            await interaction.reply({
-                content: msgs.userBlocked,
-                flags: ['Ephemeral']
-            });
-            return;
-        }
-
-        const attachment = interaction.options.getAttachment('obraz');
-
-        const isImage = this.config.images.supportedExtensions.some(ext =>
-            attachment.name.toLowerCase().endsWith(ext)
-        );
-
-        if (!isImage) {
-            await interaction.reply({ content: msgs.updateNotImage, flags: ['Ephemeral'] });
-            return;
-        }
-
-        if (attachment.size > this.config.images.maxSize) {
-            const maxSizeMB = Math.round(this.config.images.maxSize / (1024 * 1024));
-            const fileSizeMB = Math.round(attachment.size / (1024 * 1024) * 100) / 100;
-            await interaction.reply({
-                content: formatMessage(msgs.updateFileTooLarge, { maxMB: maxSizeMB, fileMB: fileSizeMB }),
-                flags: ['Ephemeral']
-            });
-            return;
-        }
-
-        const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
-        if (this.ocrBlockService.isBlocked('test') && !isOcrAuthorized) {
-            await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
-            return;
-        }
-
-        const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
-        if (!limitCheck.allowed) {
-            await interaction.reply({
-                content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }),
-                flags: ['Ephemeral']
-            });
-            return;
-        }
-
-        await interaction.deferReply({ flags: ['Ephemeral'] });
-        await interaction.editReply({ content: msgs.updateProcessing });
-
-        let tempImagePath = null;
-
-        try {
-            await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
-
-            tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
-            await downloadFile(attachment.url, tempImagePath);
-
-            let bestScore = null;
-            let bossName = null;
-
-            // === AI OCR (jeśli włączony) ===
-            if (this.aiOcrService.enabled) {
-                gl.info('🤖 Używam AI OCR do analizy obrazu...');
-
-                // Operations Gateway (authorize + root span + record). Inner fn
-                // nigdy nie rzuca — łapiemy błąd providera i zwracamy envelope
-                // z PROVIDER_ERROR, żeby na zewnątrz móc spokojnie zrobić fallback.
-                const op = await this.botOps.run({
-                    type:  OPERATIONS_TYPE,
-                    actor: { discordId: interaction.user.id },
-                    scope: { guildId: interaction.guildId, channelId: interaction.channelId },
-                    hints: { command: 'test' },
-                }, async (ctx) => {
-                    try {
-                        const ai = await this.aiOcrService.analyzeVictoryImage(tempImagePath, gl, ctx.telemetryMeta);
-                        const usage = buildGeminiUsage(ai);
-                        if (!ai.isValidVictory) {
-                            return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
-                        }
-                        return { result: ai, usage };
-                    } catch (err) {
-                        return { result: null, status: 'PROVIDER_ERROR', errorCode: err.providerCode || 'UNKNOWN' };
-                    }
-                });
-
-                if (op.gatewayError) {
-                    await interaction.editReply({ content: mapGatewayErrorMessage(op.gatewayError, msgs) });
-                    return;
-                }
-
-                if (op.status === 'PROVIDER_ERROR' || !op.result) {
-                    gl.error(`❌ AI OCR błąd, przechodzę na tradycyjny OCR (code=${op.errorCode})`);
-                    await interaction.editReply({ content: msgs.aiOcrUnavailable });
-
-                    const trad1 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                    if (!trad1) return;
-                    ({ bestScore, bossName } = trad1);
-                } else if (op.status === 'REJECTED') {
-                    const aiResult = op.result;
-                    gl.warn(`⚠️ AI OCR nie rozpoznał poprawnego screenu: ${aiResult.error}`);
-                    await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
-
-                    if (aiResult.error === 'FAKE_PHOTO') {
-                        await interaction.editReply(msgs.fakePhotoDetected);
-                        return;
-                    }
-
-                    await interaction.editReply(msgs.invalidScreenshot);
-                    return;
-                } else {
-                    // COMPLETED
-                    const aiResult = op.result;
-                    bestScore = aiResult.score;
-                    bossName  = aiResult.bossName;
-                    gl.success(`✅ AI OCR: wynik="${bestScore}", boss="${bossName}"`);
-                }
-            } else {
-                // === Tradycyjny OCR ===
-                gl.info('🔍 Używam tradycyjnego OCR...');
-
-                const trad2 = await this._runTraditionalOCR(tempImagePath, interaction, msgs, gl);
-                if (!trad2) return;
-                ({ bestScore, bossName } = trad2);
-            }
-
-            const guildId = interaction.guildId;
-            const userId = interaction.user.id;
-            const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-
-            const prevGlobalRanking = await this.rankingService.getGlobalRanking();
-
-            const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
-                guildId, userId, userName, bestScore, bossName
-            );
-
-            await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
-
-            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}`);
-
-            if (!isNewRecord) {
-                try {
-                    const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-                    const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
-
-                    const fsSync = require('fs');
-                    const fileStats = fsSync.statSync(tempImagePath);
-                    gl.info(`📁 Plik do załączenia - rozmiar: ${(fileStats.size / (1024 * 1024)).toFixed(2)}MB`);
-
-                    const imageAttachment = new AttachmentBuilder(tempImagePath, {
-                        name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
-                    });
-
-                    const resultEmbed = this.rankingService.createResultEmbed(
-                        userName, bestScore, currentScore.score, imageAttachment.name, bossName, msgs
-                    );
-
-                    try {
-                        await interaction.editReply({ embeds: [resultEmbed] });
-                        await interaction.followUp({
-                            content: msgs.rankingImageCaption,
-                            files: [imageAttachment],
-                            flags: ['Ephemeral']
-                        });
-                        gl.info('✅ Wysłano embed z wynikiem (brak rekordu)');
-                    } catch (editReplyError) {
-                        gl.error(`❌ Błąd podczas wysyłania embed (brak rekordu): ${editReplyError.message}`);
-                        try {
-                            await interaction.editReply({
-                                content: formatMessage(msgs.noRecordFallback, {
-                                    username: userName,
-                                    score: bestScore,
-                                    current: currentScore.score
-                                })
-                            });
-                        } catch (fallbackError) {
-                            gl.error(`❌ Nie można wysłać fallback odpowiedzi: ${fallbackError.message}`);
-                        }
-                    }
-
-                    return;
-                } catch (noRecordError) {
-                    throw noRecordError;
-                }
-            }
-
-            // Nowy rekord — publiczne ogłoszenie
-            const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
-            const imageAttachment = new AttachmentBuilder(tempImagePath, {
-                name: `rekord_${safeUserName}_${Date.now()}.${fileExtension}`
-            });
-
-            const guildConfig = this.config.getGuildConfig(interaction.guildId);
-            const rolePositions = await this._computeRolePositions(guildId, userId, interaction.guild, interaction.member?.roles?.cache);
-            const publicEmbed = await this.rankingService.createRecordEmbed(
-                userName,
-                bestScore,
-                interaction.user.displayAvatarURL(),
-                imageAttachment.name,
-                currentScore ? currentScore.score : null,
-                userId,
-                interaction.guildId,
-                msgs,
-                interaction.guild,
-                guildConfig?.topRoles || null,
-                currentScore ? currentScore.timestamp : null,
-                rolePositions
-            );
-
-            try {
-                await interaction.editReply({ content: msgs.newRecordConfirmed });
-
-                await interaction.followUp({
-                    embeds: [publicEmbed],
-                    files: [imageAttachment]
-                });
-
-                gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
-            } catch (newRecordError) {
-                gl.error(`❌ Błąd podczas wysyłania odpowiedzi o nowym rekordzie: ${newRecordError.message}`);
-                try {
-                    await interaction.editReply({
-                        content: formatMessage(msgs.newRecordFallback, {
-                            username: userName,
-                            score: bestScore,
-                            previous: currentScore ? currentScore.score : '—'
-                        })
-                    });
-                } catch (fallbackError) {
-                    gl.error(`❌ Nie można wysłać fallback odpowiedzi dla nowego rekordu: ${fallbackError.message}`);
-                }
-            }
-
-            // Aktualizacja ról TOP po nowym rekordzie
-            try {
-                const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
-                await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
-                await this.logService.logMessage('success', 'Role TOP zostały zaktualizowane po nowym rekordzie', interaction);
-            } catch (roleError) {
-                await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
-            }
-
-            // Powiadomienie o zmianie w Global Top 3
-            try {
-                const newGlobalRanking = await this.rankingService.getGlobalRanking();
-                const newGlobalUserIndex = newGlobalRanking.findIndex(p => p.userId === userId);
-                const newGlobalPosition = newGlobalUserIndex !== -1 ? newGlobalUserIndex + 1 : null;
-                const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
-                const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
-
-                gl.info(`🌐 Global Top 3 check: userId=${userId}, prevPos=${prevGlobalPosition ?? 'brak'}, newPos=${newGlobalPosition ?? 'brak'}`);
-
-                if (newGlobalPosition && newGlobalPosition <= 3) {
-                    const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
-                    const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
-                    const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
-                    const positionChanged = prevGlobalPosition !== newGlobalPosition;
-
-                    gl.info(`🌐 W Top 3: globalScoreChanged=${globalScoreChanged}, positionChanged=${positionChanged} (${prevGlobalPosition ?? 'brak'} → ${newGlobalPosition})`);
-
-                    if (globalScoreChanged && positionChanged) {
-                        const sourceGuildName = interaction.guild.name;
-                        const notifAvatarUrl = interaction.user.displayAvatarURL();
-
-                        gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${this.config.guilds.length} serwerów`);
-
-                        for (const guildCfg of this.config.guilds) {
-                            try {
-                                let channel;
-                                try {
-                                    channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
-                                } catch (fetchErr) {
-                                    gl.warn(`⚠️ Nie można pobrać kanału ${guildCfg.allowedChannelId} dla serwera ${guildCfg.id}: ${fetchErr.message}`);
-                                    continue;
-                                }
-                                if (!channel) {
-                                    gl.warn(`⚠️ Kanał ${guildCfg.allowedChannelId} nie istnieje`);
-                                    continue;
-                                }
-
-                                const guildMsgs = this.msgs(guildCfg.id);
-                                const isSourceGuild = guildCfg.id === interaction.guildId;
-
-                                let notifImageRef = null;
-                                let notifFiles;
-                                if (!isSourceGuild) {
-                                    const notifAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
-                                    notifImageRef = `attachment://${notifAttachment.name}`;
-                                    notifFiles = [notifAttachment];
-                                }
-
-                                const globalEmbed = this.rankingService.createGlobalTop3Embed(
-                                    userName,
-                                    bestScore,
-                                    currentScore ? currentScore.score : null,
-                                    notifAvatarUrl,
-                                    newGlobalPosition,
-                                    prevGlobalPosition,
-                                    sourceGuildName,
-                                    guildMsgs,
-                                    currentScore ? currentScore.timestamp : null,
-                                    notifImageRef
-                                );
-
-                                const sendPayload = { embeds: [globalEmbed] };
-                                if (notifFiles) sendPayload.files = notifFiles;
-                                await channel.send(sendPayload);
-                                gl.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez zdjęcia — serwer macierzysty)' : ' (ze zdjęciem)'}`);
-                            } catch (notifError) {
-                                gl.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
-                            }
-                        }
-                    } else {
-                        gl.info('Warunki Global Top 3 nie spełnione — nie wysyłam powiadomień');
-                    }
-                } else {
-                    gl.info(`🌐 Gracz poza Top 3 (pos=${newGlobalPosition ?? 'brak'}) — nie wysyłam powiadomień`);
-                }
-            } catch (globalCheckError) {
-                gl.error(`❌ Błąd sprawdzania/wysyłania Global Top 3: ${globalCheckError.message}`);
-            }
-
-            // DM powiadomienia dla subskrybentów
-            try {
-                const subscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
-                if (subscribers.length > 0) {
-                    gl.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
-                    for (const subscriberId of subscribers) {
-                        try {
-                            const subscriberUser = await interaction.client.users.fetch(subscriberId);
-                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
-                            const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
-                            await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
-                            gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
-                        } catch (dmError) {
-                            gl.warn(`⚠️ Nie można wysłać DM do ${subscriberId}: ${dmError.message}`);
-                        }
-                    }
-                }
-            } catch (dmCheckError) {
-                gl.error(`❌ Błąd wysyłania DM powiadomień: ${dmCheckError.message}`);
-            }
-
-        } catch (error) {
-            await this.logService.logOCRError(error, 'handleTestCommand', interaction.guildId);
+            await this.logService.logOCRError(error, `handle${commandName.charAt(0).toUpperCase() + commandName.slice(1)}Command`, interaction.guildId);
 
             try {
                 await interaction.editReply(msgs.updateError);
@@ -2273,26 +1964,6 @@ class InteractionHandler {
             logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} przez ${userNick}`);
             await interaction.reply({ content: formatMessage(msgs.ocrBlockEnabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
         }
-    }
-
-    async _runTraditionalOCR(tempImagePath, interaction, msgs, gl) {
-        const hasRequiredWords = await this.ocrService.checkRequiredWords(tempImagePath, gl);
-        if (!hasRequiredWords) {
-            await this._sendInvalidScreenReport(interaction, tempImagePath, 'NO_REQUIRED_WORDS', gl);
-            await interaction.editReply(msgs.updateNoRequiredWords);
-            return null;
-        }
-
-        const extractedText = await this.ocrService.extractTextFromImage(tempImagePath, gl);
-        const bestScore = this.ocrService.extractScoreAfterBest(extractedText, gl);
-
-        if (!bestScore || bestScore.trim() === '') {
-            await interaction.editReply(msgs.updateNoScore);
-            return null;
-        }
-
-        const bossName = this.ocrService.extractBossName(extractedText, gl);
-        return { bestScore, bossName };
     }
 
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
