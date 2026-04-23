@@ -246,7 +246,7 @@ class RankingService {
      */
     getScoreUnit(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|[KMBTQ])?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|SX|[KMBTQ])?$/);
         return match && match[2] ? match[2] : '';
     }
 
@@ -267,7 +267,7 @@ class RankingService {
             Math.floor(unitImprovement).toString() :
             parseFloat(unitImprovement.toFixed(2)).toString();
 
-        const displayUnit = targetUnit === 'QI' ? 'Qi' : targetUnit;
+        const displayUnit = targetUnit === 'QI' ? 'Qi' : targetUnit === 'SX' ? 'Sx' : targetUnit;
         return `+${formattedValue}${displayUnit}`;
     }
 
