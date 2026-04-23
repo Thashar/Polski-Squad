@@ -436,24 +436,26 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Otrzymasz dwa zrzuty ekranu z gry. Oceń czy pokazują ten sam 
-typ ekranu, ignorując tekst, liczby i język.
+        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie 
+pasuje DO TEGO WZORCA.
 
-**Sprawdź kolejno — jeśli któryś warunek nie jest spełniony → NOK:**
+KROK 0 — Przed porównaniem:
+Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach 
+na język angielski. Dopiero na przetłumaczonej wersji wykonaj 
+poniższe sprawdzenie.
 
-1. Czy ŻADEN z ekranów nie zawiera ikony X (zamknięcia okna) 
-   w rogu centralnego panelu? Obecność X = popup/dialog = NOK
+WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
+- pełnoekranowe tło z gameplayem
+- centralny panel BEZ ikony X ani przycisku zamknięcia
+- kolorowy baner na górze panelu (zaokrąglony, bez paska tytułowego)
+- pod banerem: nazwa postaci
+- w centrum panelu: JEDNA duża ikona z liczbą
+- poniżej: dwie linie statystyk (Best / Total)
+- na dole panelu: rząd małych okrągłych ikon
+- pod panelem: jeden żółty przycisk
 
-2. Czy oba ekrany mają w centrum JEDNĄ dużą ikonę z wartością,
-   a NIE tabelę z wieloma wierszami danych?
-
-3. Czy oba ekrany mają kolorowy baner nagłówkowy BEZ paska tytułowego
-   z innym kolorem tła?
-
-4. Czy styl wizualny (kolory, kształty, tło) jest podobny?
-
-**Ignoruj:** tekst, liczby, język, rozdzielczość, skalę,
-różną liczbę powtarzających się elementów tego samego rodzaju.
+Jeśli drugie zdjęcie ma DOKŁADNIE tę strukturę → OK
+Jeśli cokolwiek się różni strukturalnie → NOK
 
 Odpowiedz WYŁĄCZNIE: OK lub NOK. Zero innych słów.
 
