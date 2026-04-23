@@ -439,21 +439,18 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const prompt = `Otrzymasz dwa zrzuty ekranu z gry. Oceń czy pokazują ten sam 
 typ ekranu, ignorując tekst, liczby i język.
 
-**Sprawdź kolejno:**
+**Sprawdź kolejno — jeśli któryś warunek nie jest spełniony → NOK:**
 
-1. Czy oba ekrany mają identyczny układ sekcji (góra → środek → dół)?
-   Np. czy oba mają: kolorowy baner nagłówkowy + pojedyncza duża 
-   ikona z wartością + dwa rzędy statystyk + rząd małych ikon + 
-   przycisk na dole — TAK/NIE dla każdego ekranu osobno,
-   jeśli się nie zgadza → NOK
+1. Czy ŻADEN z ekranów nie zawiera ikony X (zamknięcia okna) 
+   w rogu centralnego panelu? Obecność X = popup/dialog = NOK
 
-2. Czy oba ekrany mają te same typy elementów UI?
-   (baner vs okno dialogowe, pojedyncza wartość vs tabela z wierszami,
-   rząd ikon vs lista z przyciskami)
-   Jeśli typ elementów się różni → NOK
+2. Czy oba ekrany mają w centrum JEDNĄ dużą ikonę z wartością,
+   a NIE tabelę z wieloma wierszami danych?
 
-3. Czy styl wizualny (kolory, kształty, tło) jest podobny?
-   Jeśli NIE → NOK
+3. Czy oba ekrany mają kolorowy baner nagłówkowy BEZ paska tytułowego
+   z innym kolorem tła?
+
+4. Czy styl wizualny (kolory, kształty, tło) jest podobny?
 
 **Ignoruj:** tekst, liczby, język, rozdzielczość, skalę,
 różną liczbę powtarzających się elementów tego samego rodzaju.
