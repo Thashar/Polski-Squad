@@ -436,43 +436,32 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Otrzymasz dwa zrzuty ekranu. Porównaj je szczegółowo pod 
-względem wizualnym, ignorując wyłącznie język i treść tekstową.
+        const prompt = `Otrzymasz dwa zrzuty ekranu z gry. Oceń czy pokazują ten sam 
+typ ekranu, ignorując tekst, liczby i język.
 
-**KROK 1 — Zidentyfikuj typ ekranu:**
-Określ ogólny typ ekranu na każdym zdjęciu
-(np. ekran wyników Victory, ekran walki, tabela wyników, menu itp.)
-Jeśli oba zdjęcia przedstawiają INNY TYP EKRANU → od razu: NOK
+**Sprawdź kolejno:**
 
-**KROK 2 — Porównaj strukturę layoutu:**
-- Obecność i kolejność głównych sekcji UI (nagłówek, treść, przyciski)
-- Ogólny układ paneli i okien (nie ich dokładny rozmiar)
-- Obecność lub brak kluczowych elementów interfejsu
+1. Czy oba ekrany mają identyczny układ sekcji (góra → środek → dół)?
+   Np. czy oba mają: kolorowy baner nagłówkowy + pojedyncza duża 
+   ikona z wartością + dwa rzędy statystyk + rząd małych ikon + 
+   przycisk na dole — TAK/NIE dla każdego ekranu osobno,
+   jeśli się nie zgadza → NOK
 
-IGNORUJ przy strukturze:
-- Różnice w rozdzielczości lub skali ekranu
-- Różną liczbę powtarzających się elementów tego samego typu
-  (np. ikony nagród, wiersze tabeli, gwiazdki rankingu)
-- Drobne przesunięcia wynikające z różnych proporcji ekranu
+2. Czy oba ekrany mają te same typy elementów UI?
+   (baner vs okno dialogowe, pojedyncza wartość vs tabela z wierszami,
+   rząd ikon vs lista z przyciskami)
+   Jeśli typ elementów się różni → NOK
 
-**KROK 3 — Porównaj wygląd wizualny:**
-- Kolory tła, gradienty, wzory
-- Kolory i kształty przycisków, ramek, banerów
-- Styl ikon i symboli (kształt, kolor — NIE ich liczba ani etykieta)
-- Efekty wizualne, obramowania, dekoracje
+3. Czy styl wizualny (kolory, kształty, tło) jest podobny?
+   Jeśli NIE → NOK
 
-**Celowo ignoruj:**
-- Treść tekstową (tytuły, opisy, etykiety)
-- Wyświetlane liczby i wartości
-- Język jakichkolwiek napisów
-- Różnice w rozdzielczości, skali lub proporcjach ekranu
-- Różną liczbę powtarzających się elementów tego samego rodzaju
+**Ignoruj:** tekst, liczby, język, rozdzielczość, skalę,
+różną liczbę powtarzających się elementów tego samego rodzaju.
+
+Odpowiedz WYŁĄCZNIE: OK lub NOK. Zero innych słów.
 
 **ZASADA ODPOWIEDZI — BEZWZGLĘDNIE OBOWIĄZKOWA:**
-- Odpowiedz WYŁĄCZNIE jednym słowem
-- Ten sam typ ekranu + ten sam ogólny układ UI → OK
-- Inny typ ekranu LUB fundamentalnie inny układ UI → NOK
-- Żadnych wyjaśnień, komentarzy ani dodatkowych słów`;
+- Odpowiedz WYŁĄCZNIE jednym słowem`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
