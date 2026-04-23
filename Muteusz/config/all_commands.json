@@ -581,9 +581,9 @@
           "requiredPermission": "administrator"
         },
         {
-          "name": "/notifications",
-          "description": "Zarządza powiadomieniami DM o nowych rekordach graczy",
-          "usage": "/notifications",
+          "name": "/subscribe",
+          "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
+          "usage": "/subscribe",
           "requiredPermission": "public"
         },
         {

@@ -121,7 +121,7 @@ class InteractionHandler {
                             .setRequired(true)),
 
                 new SlashCommandBuilder()
-                    .setName('notifications')
+                    .setName('subscribe')
                     .setDescription('Manage record break notifications for players')
                     .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
 
@@ -249,7 +249,7 @@ class InteractionHandler {
                 case 'update':             await this.handleUpdateCommand(interaction);           break;
                 case 'test':               await this.handleTestCommand(interaction);             break;
                 case 'remove':             await this.handleRemoveCommand(interaction);           break;
-                case 'notifications':      await this.handleNotificationsCommand(interaction);    break;
+                case 'subscribe':          await this.handleNotificationsCommand(interaction);    break;
                 case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
                 case 'remove-role-ranking':await this.handleRemoveRoleRankingCommand(interaction);break;
             }
@@ -591,7 +591,7 @@ class InteractionHandler {
                 try {
                     recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
                     if (recordSubscribers.length > 0) {
-                        publicEmbed.addFields({ name: '​', value: formatMessage(msgs.recordFollowerCount, { count: recordSubscribers.length }) });
+                        publicEmbed.addFields({ name: msgs.recordFollowerLabel, value: formatMessage(msgs.recordFollowerCount, { count: recordSubscribers.length }) });
                     }
                 } catch (subErr) {
                     gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);

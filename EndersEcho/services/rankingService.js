@@ -852,7 +852,11 @@ class RankingService {
         // Wyczyść pola z publicznego embeda (np. liczba obserwujących) — DM ma własne
         dmEmbed.setFields([]);
 
-        // Porównanie z wynikiem subskrybenta
+        // Pole 1 (duży nagłówek): aktualny wynik subskrybenta
+        const field1Value = subscriberScore || '—';
+        dmEmbed.addFields({ name: msgs.notifDmField1Name, value: field1Value });
+
+        // Pole 2: porównanie z wynikiem subskrybenta
         let comparisonText;
         if (subscriberScore) {
             const subscriberScoreValue = this.parseScoreValue(subscriberScore);
@@ -862,14 +866,13 @@ class RankingService {
                 comparisonText = formatMessage(msgs.notifDmBeatYourRecord, { diff: `+${this.formatScore(diff)}` });
             } else if (diff < 0) {
                 comparisonText = formatMessage(msgs.notifDmMissingToRecord, { diff: this.formatScore(Math.abs(diff)) });
+            } else {
+                comparisonText = '🎯 Wyniki równe!';
             }
         } else {
             comparisonText = msgs.notifDmNoSubscriberRecord;
         }
-
-        if (comparisonText) {
-            dmEmbed.addFields({ name: '​', value: comparisonText });
-        }
+        dmEmbed.addFields({ name: msgs.notifDmField2Name, value: comparisonText });
 
         return dmEmbed;
     }

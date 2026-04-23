@@ -74,7 +74,8 @@ const pol = {
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
-    recordFollowerCount: '👁️ Obserwujących: {count}',
+    recordFollowerLabel: '🔔 SUBSKRYPCJE (/subscribe):',
+    recordFollowerCount: '{count}',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -109,7 +110,7 @@ const pol = {
     globalTop3EnteredTop3: 'wejście do Top 3',
     globalTop3PositionImproved: 'awans z #{prevPos}',
 
-    // /notifications
+    // /subscribe
     notifDescription: '🔔 Zarządzaj powiadomieniami o nowych rekordach graczy.',
     notifSetButton: '🔔 Ustaw powiadomienie',
     notifRemoveButton: '🔕 Usuń powiadomienie',
@@ -130,8 +131,10 @@ const pol = {
     notifRemoveNone: '📭 Nie masz żadnych ustawionych powiadomień.',
     notifDmFooter: '👁️ Obserwujesz tego gracza — powiadomienie subskrypcyjne',
     notifDmBrokeRecord: 'pobił swój rekord!',
-    notifDmBeatYourRecord: '✅ Pobił Twój rekord o {diff}',
-    notifDmMissingToRecord: '📊 Brakuje {diff} do Twojego rekordu',
+    notifDmField1Name: '## 📊 Twój aktualny wynik:',
+    notifDmField2Name: 'Porównanie do Twoich wyników:',
+    notifDmBeatYourRecord: '🚨 Pobił Twój rekord o {diff}',
+    notifDmMissingToRecord: '✅ Brakuje {diff} do Twojego rekordu',
     notifDmNoSubscriberRecord: '📊 Nie masz jeszcze wyniku na tym serwerze',
 
     // /block-ocr
@@ -269,7 +272,8 @@ const eng = {
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
-    recordFollowerCount: '👁️ Followers: {count}',
+    recordFollowerLabel: '🔔 SUBSCRIPTIONS (/subscribe):',
+    recordFollowerCount: '{count}',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',
@@ -304,7 +308,7 @@ const eng = {
     globalTop3EnteredTop3: 'entered Top 3',
     globalTop3PositionImproved: 'promoted from #{prevPos}',
 
-    // /notifications
+    // /subscribe
     notifDescription: '🔔 Manage notifications for player record breaks.',
     notifSetButton: '🔔 Set notification',
     notifRemoveButton: '🔕 Remove notification',
@@ -325,8 +329,10 @@ const eng = {
     notifRemoveNone: '📭 You have no notifications set.',
     notifDmFooter: '👁️ You are following this player — subscription notification',
     notifDmBrokeRecord: 'broke their record!',
-    notifDmBeatYourRecord: '✅ Beat your record by {diff}',
-    notifDmMissingToRecord: '📊 {diff} away from your record',
+    notifDmField1Name: '## 📊 Your current score:',
+    notifDmField2Name: 'Comparison to your score:',
+    notifDmBeatYourRecord: '🚨 Beat your record by {diff}',
+    notifDmMissingToRecord: '✅ {diff} away from your record',
     notifDmNoSubscriberRecord: '📊 You have no score on this server yet',
 
     // /block-ocr

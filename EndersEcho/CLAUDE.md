@@ -97,7 +97,7 @@
    - Wymaga `GatewayIntentBits.GuildMembers` (Privileged) włączonego w Discord Developer Portal
 
 5. **System Powiadomień DM** - `notificationService.js` + `interactionHandlers.js`:
-   - `/notifications` → ephemeral z przyciskami: `[🔔 Ustaw powiadomienie]` i `[🔕 Usuń powiadomienie]`
+   - `/subscribe` → ephemeral z przyciskami: `[🔔 Ustaw powiadomienie]` i `[🔕 Usuń powiadomienie]`
    - **Subskrypcja:** użytkownik wybiera serwer → gracza z rankingu → potwierdza → subskrypcja zapisana w `data/notifications.json`
    - **Wysyłanie DM:** po każdym nowym rekordzie bot szuka subskrybentów danego gracza i wysyła im DM z kopią embeda rekordu + zdjęciem + stopką `notifDmFooter`
    - `createDmNotifEmbed(recordEmbed, messages)` — klonuje embed rekordu i dodaje stopkę w `rankingService.js`
@@ -114,7 +114,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/notifications`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`
 
 **Komenda /tokens** — statystyki zużycia tokenów AI (admin):
 - Wyświetla dzienny i miesięczny koszt w $ per serwer oraz sumy łączne
