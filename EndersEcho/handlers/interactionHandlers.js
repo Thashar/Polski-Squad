@@ -724,11 +724,21 @@ class InteractionHandler {
                 const subscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
                 if (subscribers.length > 0) {
                     gl.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
+                    const guildRanking = await this.rankingService.loadRanking(guildId);
+                    const trackedAvatarUrl = interaction.user.displayAvatarURL();
                     for (const subscriberId of subscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
                             const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
-                            const dmEmbed = this.rankingService.createDmNotifEmbed(publicEmbed, this.msgs(interaction.guildId));
+                            const subscriberScore = guildRanking[subscriberId]?.score || null;
+                            const dmEmbed = this.rankingService.createDmNotifEmbed(
+                                publicEmbed,
+                                userName,
+                                trackedAvatarUrl,
+                                bestScore,
+                                subscriberScore,
+                                this.msgs(interaction.guildId)
+                            );
                             await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {

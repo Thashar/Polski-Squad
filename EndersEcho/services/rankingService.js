@@ -821,17 +821,53 @@ class RankingService {
     }
 
     /**
-     * Tworzy embed DM powiadomienia — kopia embeda rekordu z dodatkową informacją w stopce.
+     * Tworzy embed DM powiadomienia dla subskrybenta.
      * @param {EmbedBuilder} recordEmbed
+     * @param {string} trackedUsername
+     * @param {string} trackedAvatarUrl
+     * @param {string} bestScore
+     * @param {string|null} subscriberScore
      * @param {Object} messages
      * @returns {EmbedBuilder}
      */
-    createDmNotifEmbed(recordEmbed, messages) {
+    createDmNotifEmbed(recordEmbed, trackedUsername, trackedAvatarUrl, bestScore, subscriberScore, messages) {
         const msgs = messages || this.config.messages;
-        // Clone the embed data and add footer
         const data = recordEmbed.toJSON();
         const dmEmbed = new EmbedBuilder(data);
-        dmEmbed.setFooter({ text: msgs.notifDmFooter });
+
+        // Zastąp tytuł authorem: ikonka gracza + "pobił swój rekord!"
+        dmEmbed.setTitle(null);
+        dmEmbed.setAuthor({
+            name: `${trackedUsername} ${msgs.notifDmBrokeRecord}`,
+            iconURL: trackedAvatarUrl
+        });
+
+        // Usuń pierwszą linię opisu ("## {username} pobił swój rekord!" + pusta linia)
+        if (data.description) {
+            const lines = data.description.split('\n');
+            const trimmedLines = lines.length > 1 && lines[1] === '' ? lines.slice(2) : lines.slice(1);
+            dmEmbed.setDescription(trimmedLines.join('\n') || null);
+        }
+
+        // Porównanie z wynikiem subskrybenta
+        let comparisonText;
+        if (subscriberScore) {
+            const subscriberScoreValue = this.parseScoreValue(subscriberScore);
+            const newScoreValue = this.parseScoreValue(bestScore);
+            const diff = newScoreValue - subscriberScoreValue;
+            if (diff > 0) {
+                comparisonText = formatMessage(msgs.notifDmBeatYourRecord, { diff: `+${this.formatScore(diff)}` });
+            } else if (diff < 0) {
+                comparisonText = formatMessage(msgs.notifDmMissingToRecord, { diff: this.formatScore(Math.abs(diff)) });
+            }
+        } else {
+            comparisonText = msgs.notifDmNoSubscriberRecord;
+        }
+
+        if (comparisonText) {
+            dmEmbed.addFields({ name: '​', value: comparisonText });
+        }
+
         return dmEmbed;
     }
 

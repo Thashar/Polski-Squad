@@ -128,6 +128,10 @@ const pol = {
     notifRemoveSuccess: '✅ Usunięto powiadomienie dla **{username}** z serwera **{guild}**.',
     notifRemoveNone: '📭 Nie masz żadnych ustawionych powiadomień.',
     notifDmFooter: '👁️ Obserwujesz tego gracza — powiadomienie subskrypcyjne',
+    notifDmBrokeRecord: 'pobił swój rekord!',
+    notifDmBeatYourRecord: '✅ Pobił Twój rekord o {diff}',
+    notifDmMissingToRecord: '📊 Brakuje {diff} do Twojego rekordu',
+    notifDmNoSubscriberRecord: '📊 Nie masz jeszcze wyniku na tym serwerze',
 
     // /block-ocr
     ocrBlocked: '🚫 **Analiza zdjęć jest tymczasowo zablokowana.**\nZostaniesz powiadomiony gdy zostanie wznowiona.',
@@ -318,6 +322,10 @@ const eng = {
     notifRemoveSuccess: '✅ Removed notification for **{username}** from server **{guild}**.',
     notifRemoveNone: '📭 You have no notifications set.',
     notifDmFooter: '👁️ You are following this player — subscription notification',
+    notifDmBrokeRecord: 'broke their record!',
+    notifDmBeatYourRecord: '✅ Beat your record by {diff}',
+    notifDmMissingToRecord: '📊 {diff} away from your record',
+    notifDmNoSubscriberRecord: '📊 You have no score on this server yet',
 
     // /block-ocr
     ocrBlocked: '🚫 **Screenshot analysis is temporarily blocked.**\nYou will be notified when it resumes.',
