@@ -585,6 +585,19 @@ class InteractionHandler {
                 rolePositions
             );
 
+            // Pobierz subskrybentów i dodaj liczbę obserwujących do embeda
+            let recordSubscribers = [];
+            if (!dryRun) {
+                try {
+                    recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
+                    if (recordSubscribers.length > 0) {
+                        publicEmbed.addFields({ name: '​', value: formatMessage(msgs.recordFollowerCount, { count: recordSubscribers.length }) });
+                    }
+                } catch (subErr) {
+                    gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
+                }
+            }
+
             try {
                 if (dryRun) {
                     // Tryb testowy: wynik wyświetlany wyłącznie ephemeral,
@@ -719,14 +732,13 @@ class InteractionHandler {
                 gl.error(`❌ Błąd sprawdzania/wysyłania Global Top 3: ${globalCheckError.message}`);
             }
 
-            // DM powiadomienia dla subskrybentów
+            // DM powiadomienia dla subskrybentów (lista pobrana wcześniej przy liczeniu obserwujących)
             try {
-                const subscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
-                if (subscribers.length > 0) {
-                    gl.info(`📨 Wysyłam DM powiadomienia do ${subscribers.length} subskrybentów`);
+                if (recordSubscribers.length > 0) {
+                    gl.info(`📨 Wysyłam DM powiadomienia do ${recordSubscribers.length} subskrybentów`);
                     const guildRanking = await this.rankingService.loadRanking(guildId);
                     const trackedAvatarUrl = interaction.user.displayAvatarURL();
-                    for (const subscriberId of subscribers) {
+                    for (const subscriberId of recordSubscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
                             const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });

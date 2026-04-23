@@ -74,6 +74,7 @@ const pol = {
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
+    recordFollowerCount: '👁️ Obserwujących: {count}',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -268,6 +269,7 @@ const eng = {
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
+    recordFollowerCount: '👁️ Followers: {count}',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',

@@ -849,6 +849,9 @@ class RankingService {
             dmEmbed.setDescription(trimmedLines.join('\n') || null);
         }
 
+        // Wyczyść pola z publicznego embeda (np. liczba obserwujących) — DM ma własne
+        dmEmbed.setFields([]);
+
         // Porównanie z wynikiem subskrybenta
         let comparisonText;
         if (subscriberScore) {
