@@ -114,7 +114,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/configure`
 
 **Komenda /tokens** — statystyki zużycia tokenów AI (admin):
 - Wyświetla dzienny i miesięczny koszt w $ per serwer oraz sumy łączne
@@ -130,6 +130,35 @@
 - Persistencja: `data/usage_limits.json` (`{ limit, dailyUsage: { "userId_YYYY-MM-DD": count } }`)
 - Stare wpisy usage automatycznie czyszczone przy każdym zapisie (tylko dzisiaj zostaje)
 
+**Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
+- 6-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
+- **Krok 1:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
+- **Krok 2:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
+- **Krok 3:** Język (pol/eng) — wszystkie komunikaty i opisy komend
+- **Krok 4:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
+- **Krok 5:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
+- **Krok 6:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
+- Czerwony przycisk **Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
+- Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komedy przekazywane dla nowego języka
+- Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
+- Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
+- Bot po raz pierwszy dodany do serwera (`guildCreate`): automatyczna rejestracja komend + domyślny wpis (unconfigured, OCR zablokowane) + welcome message
+
+**Komenda /ocr-on-off** — per-guild włącz/wyłącz komendy OCR (head admin tylko, dowolny kanał):
+- Parametry: `action` (enable/disable), `target` (update/test/both), `guild` (autocomplete)
+- Autocomplete `guild`: pobiera `getAllConfiguredGuildIds()` z `GuildConfigService`, filtruje po nazwie/ID
+- Stan per-guild w `guild_configs.json` poprzez `OcrBlockService` (`ocrBlockService.block/unblock(guildId, commands[])`)
+- Po odblokowanie → ogłoszenie do `allowedChannelId` serwera
+- Migracja: stary globalny `ocr_blocked.json` → per-guild przy pierwszym starcie
+
+**System raportów odrzuconych screenów** (per-guild + global):
+- Raport w języku serwera źródłowego (`config.getMessages(guildId)`) — klucze `reportTitle`, `reportField*`, `reportReason*`
+- Raport wysyłany do GLOBAL channel (`ENDERSECHO_INVALID_REPORT_CHANNEL_ID`) oraz opcjonalnie do per-guild kanału
+- Footer globalnego raportu: `uid:{userId}|gid:{guildId}`
+- Footer per-guild raportu: `ref:{globalMsgId}|uid:{userId}|gid:{guildId}`
+- Gdy admin klika przycisk na per-guild embeddzie → globalny raport aktualizowany (pole akcji + usunięcie przycisków)
+- Metody pomocnicze: `_parseReportFooter(text)` i `_updateGlobalReportMsg(client, globalMsgId, guildId, action, admin, extra)`
+
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
 - **Zablokuj** otwiera modal z polem czasu (np. `1h`, `7d`, `30m` — puste = permanentnie)
@@ -137,16 +166,29 @@
 - `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania
 - Persistencja przeżywa restart bota
 
+**GuildConfigService** — `services/guildConfigService.js`:
+- Przechowuje konfigurację per-guild w `data/guild_configs.json`
+- `load(envGuilds)`: importuje serwery z `.env` (configured, importedFromEnv), migruje `ocr_blocked.json`
+- `saveConfig(guildId, data)`: merge z istniejącą konfiguracją, serialized write queue
+- `getOcrBlocked/setOcrBlocked`: per-guild stan blokady OCR
+- `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTop3Notifications)
+
+**Uprawnienia komend** (po nowym routingu):
+- Bez konfiguracji (zawsze): `/configure`, `/info`, `/ocr-on-off`, `/limit`, `/tokens`, `/unblock`
+- Wymaga konfiguracji, dowolny kanał: `/test`, `/remove`, `/add-role-ranking`, `/remove-role-ranking`
+- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
+
 **Struktura danych:**
 ```
 EndersEcho/data/
 ├── ranking_{guildId1}.json   # Ranking serwera 1
 ├── ranking_{guildId2}.json   # Ranking serwera 2
 ├── notifications.json        # Subskrypcje powiadomień DM
+├── guild_configs.json        # Per-guild konfiguracja (nowy plik)
 └── ...
 ```
 
-**Rejestracja komend:** Komendy slash są rejestrowane dla każdego serwera z `config.guilds`.
+**Rejestracja komend:** Komendy slash rejestrowane per-serwer przez `registerSlashCommands()` (start) i `registerCommandsForGuild()` (guildCreate / po /configure).
 
 ---
 
@@ -198,9 +240,9 @@ ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 # Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
 ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
 
-# Użytkownicy uprawnieni do /block-ocr (ID rozdzielone przecinkami)
-# Komenda blokuje/odblokowuje /update i/lub /test (opcja target: update/test/both); przy odblokowaniu wysyła embed do wszystkich kanałów
-# Stan persystowany w data/ocr_blocked.json
+# Użytkownicy uprawnieni do /ocr-on-off (ID rozdzielone przecinkami)
+# Komenda włącza/wyłącza /update i/lub /test per-guild (parametry: action, target, guild z autocomplete)
+# Stan per-guild persystowany w data/guild_configs.json (ocrBlocked[])
 ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)

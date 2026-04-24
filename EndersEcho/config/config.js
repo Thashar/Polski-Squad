@@ -75,11 +75,15 @@ function parseGuildsConfig() {
 const guilds = parseGuildsConfig();
 
 if (guilds.length === 0) {
-    logger.error('❌ Brak konfiguracji serwerów. Ustaw ENDERSECHO_GUILD_1_ID i ENDERSECHO_GUILD_1_CHANNEL w pliku .env');
-    process.exit(1);
+    logger.warn('⚠️ Brak serwerów w .env — bot będzie działał tylko przez guild_configs.json (nowe serwery z /configure)');
 }
 
-logger.info(`📋 Załadowano konfigurację dla ${guilds.length} serwer(ów)`);
+if (guilds.length > 0) {
+    logger.info(`📋 Załadowano ${guilds.length} serwer(ów) z .env`);
+}
+
+// Referencja do guildConfigService — ustawiana przez index.js po inicjalizacji
+let _guildConfigService = null;
 
 module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
@@ -90,31 +94,80 @@ module.exports = {
     invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
     appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,
 
-    // Lista skonfigurowanych serwerów
+    // Lista serwerów z .env (fallback gdy guildConfigService niedostępny)
     guilds,
 
     /**
-     * Zwraca konfigurację serwera po guildId lub null
+     * Wstrzykuje referencję do GuildConfigService po jego inicjalizacji.
+     * Wywoływane z index.js po guildConfigService.load().
+     * @param {GuildConfigService} svc
+     */
+    setGuildConfigService(svc) {
+        _guildConfigService = svc;
+    },
+
+    /**
+     * Zwraca wszystkie skonfigurowane serwery (JSON + .env fallback).
+     * JSON ma priorytet — .env serwery trafiają do JSON przy imporcie.
+     * @returns {Array}
+     */
+    getAllGuilds() {
+        if (_guildConfigService) {
+            return _guildConfigService.getAllConfiguredGuilds();
+        }
+        return guilds;
+    },
+
+    /**
+     * Zwraca konfigurację serwera po guildId.
+     * Priorytet: guildConfigService (JSON) → .env guilds.
      * @param {string} guildId
+     * @returns {Object|null}
      */
     getGuildConfig(guildId) {
+        if (_guildConfigService) {
+            const dynCfg = _guildConfigService.getConfig(guildId);
+            if (dynCfg && dynCfg.configured) {
+                return {
+                    id: guildId,
+                    allowedChannelId: dynCfg.allowedChannelId,
+                    invalidReportChannelId: dynCfg.invalidReportChannelId || null,
+                    lang: dynCfg.lang || 'eng',
+                    tag: dynCfg.tag || null,
+                    icon: dynCfg.icon || null,
+                    topRoles: dynCfg.topRoles || null,
+                    globalTop3Notifications: dynCfg.globalTop3Notifications !== false,
+                };
+            }
+        }
         return guilds.find(g => g.id === guildId) || null;
     },
 
     /**
      * Zwraca zestaw komunikatów dla danego serwera (pol lub eng).
-     * Fallback: pol.
+     * Priorytet: JSON lang → .env lang → eng (default dla nowych serwerów).
      * @param {string} guildId
      * @returns {Object}
      */
     getMessages(guildId) {
-        const guildConfig = guilds.find(g => g.id === guildId);
-        const lang = guildConfig?.lang || 'pol';
-        return allMessages[lang] || allMessages['pol'];
+        let lang = 'eng';
+        if (_guildConfigService) {
+            const dynCfg = _guildConfigService.getConfig(guildId);
+            if (dynCfg?.lang) {
+                lang = dynCfg.lang;
+            } else {
+                const envGuild = guilds.find(g => g.id === guildId);
+                if (envGuild?.lang) lang = envGuild.lang;
+            }
+        } else {
+            const guildConfig = guilds.find(g => g.id === guildId);
+            lang = guildConfig?.lang || 'pol';
+        }
+        return allMessages[lang] || allMessages['eng'];
     },
 
-    // Domyślne wiadomości (pol) — do użytku wewnętrznego / fallback
-    messages: allMessages['pol'],
+    // Domyślne wiadomości (eng) — fallback dla nowych/nieznanym serwerów
+    messages: allMessages['eng'],
 
     // Konfiguracja rankingu
     ranking: {

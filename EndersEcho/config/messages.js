@@ -196,6 +196,44 @@ const pol = {
     // /info
     infoPreview: '**Podgląd** — wiadomość zostanie wysłana na **{count}** serwer(ów):',
     infoSessionExpired: 'Sesja wygasła. Użyj `/info` ponownie.',
+
+    // Brak konfiguracji
+    notConfigured: '⚙️ EndersEcho nie jest jeszcze skonfigurowany na tym serwerze. Administrator musi użyć **/configure**.',
+
+    // Embed odrzuconego screena
+    reportTitle: '⚠️ Odrzucony screen',
+    reportFieldNick: 'Nick na serwerze',
+    reportFieldServer: 'Serwer',
+    reportFieldTime: 'Czas',
+    reportFieldReason: 'Powód odrzucenia',
+    reportFieldAiDetails: '🔍 Szczegóły AI',
+    reportReasonFakePhoto: '🔴 Wykryto podrobione / edytowane zdjęcie',
+    reportReasonInvalidScreenshot: '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
+    reportReasonNoRequiredWords: '🟡 Brak wymaganych słów Best/Total',
+    reportReasonNotSimilar: '🟡 Zdjęcie nie pasuje do wzorca (komenda /update)',
+    reportReasonInvalidScoreFormat: '🟠 Odczytany wynik nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx)',
+    reportBtnApprove: 'Zatwierdź',
+    reportBtnBlock: 'Zablokuj użytkownika',
+    reportBtnAnalyze: 'Analizuj',
+    reportActionField: 'Akcja wykonana na serwerze {serverName}',
+    reportActionBy: 'Kto',
+    reportActionWhat: 'Akcja',
+    reportActionWhen: 'Kiedy',
+    reportActionApproved: 'Zatwierdzono',
+    reportActionBlocked: 'Zablokowano ({duration})',
+    reportActionAnalyzed: 'Uruchomiono Analizuj',
+
+    // /ocr-on-off per-guild
+    ocrBlockPerGuildEnabled: '🔒 Komendy **{commands}** wyłączone na serwerze **{serverName}**.',
+    ocrBlockPerGuildDisabled: '🔓 Komendy **{commands}** włączone na serwerze **{serverName}**.',
+    ocrGuildNotFound: '❌ Serwer nie znaleziony lub nie skonfigurowany.',
+
+    // /configure — wspólne
+    configureNotAdmin: '❌ Wymagane uprawnienie **Administrator** do konfiguracji bota.',
+    configureSaved: '✅ Konfiguracja została zapisana! Bot jest teraz aktywny na tym serwerze.\n\n⚠️ Komendy `/update` i `/test` są domyślnie **wyłączone**. Head admin musi użyć `/ocr-on-off` aby je włączyć.',
+    configureCancelled: '❌ Konfiguracja anulowana. Poprzednie ustawienia pozostają bez zmian.',
+    configureTagTooLong: '❌ Tag może mieć maksymalnie 4 znaki.',
+    configureTagEmpty: '❌ Tag nie może być pusty.',
 };
 
 const eng = {
@@ -396,6 +434,44 @@ const eng = {
     // /info
     infoPreview: '**Preview** — message will be sent to **{count}** server(s):',
     infoSessionExpired: 'Session expired. Use `/info` again.',
+
+    // Not configured
+    notConfigured: '⚙️ EndersEcho is not configured yet on this server. An administrator must run **/configure**.',
+
+    // Rejected screenshot embed
+    reportTitle: '⚠️ Rejected Screenshot',
+    reportFieldNick: 'Server Nickname',
+    reportFieldServer: 'Server',
+    reportFieldTime: 'Time',
+    reportFieldReason: 'Rejection Reason',
+    reportFieldAiDetails: '🔍 AI Details',
+    reportReasonFakePhoto: '🔴 Fake or edited photo detected',
+    reportReasonInvalidScreenshot: '🟡 Victory screen not found (EN/JP)',
+    reportReasonNoRequiredWords: '🟡 Required words Best/Total not found',
+    reportReasonNotSimilar: '🟡 Image does not match the template (/update)',
+    reportReasonInvalidScoreFormat: '🟠 Extracted score has no valid unit (K/M/B/T/Q/Qi/Sx)',
+    reportBtnApprove: 'Approve',
+    reportBtnBlock: 'Block User',
+    reportBtnAnalyze: 'Analyze',
+    reportActionField: 'Action taken on server {serverName}',
+    reportActionBy: 'By',
+    reportActionWhat: 'Action',
+    reportActionWhen: 'When',
+    reportActionApproved: 'Approved',
+    reportActionBlocked: 'Blocked ({duration})',
+    reportActionAnalyzed: 'Analyze triggered',
+
+    // /ocr-on-off per-guild
+    ocrBlockPerGuildEnabled: '🔒 Commands **{commands}** disabled on server **{serverName}**.',
+    ocrBlockPerGuildDisabled: '🔓 Commands **{commands}** enabled on server **{serverName}**.',
+    ocrGuildNotFound: '❌ Server not found or not configured.',
+
+    // /configure — common
+    configureNotAdmin: '❌ **Administrator** permission required to configure the bot.',
+    configureSaved: '✅ Configuration saved! The bot is now active on this server.\n\n⚠️ Commands `/update` and `/test` are **disabled** by default. A head admin must use `/ocr-on-off` to enable them.',
+    configureCancelled: '❌ Configuration cancelled. Previous settings remain unchanged.',
+    configureTagTooLong: '❌ The tag can have a maximum of 4 characters.',
+    configureTagEmpty: '❌ The tag cannot be empty.',
 };
 
 module.exports = { pol, eng };

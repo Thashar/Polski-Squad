@@ -93,7 +93,7 @@ class RankingService {
     async getGlobalRanking() {
         const bestPerPlayer = new Map();
 
-        for (const guild of this.config.guilds) {
+        for (const guild of this.config.getAllGuilds()) {
             const ranking = await this.loadRanking(guild.id);
             for (const [userId, data] of Object.entries(ranking)) {
                 const existing = bestPerPlayer.get(userId);
@@ -122,7 +122,7 @@ class RankingService {
             // potrzebne do obliczenia globalnego rankingu i rankingów per-serwer.
             const perGuildData = new Map(); // guildId -> { userId: data }
             const bestPerPlayer = new Map(); // userId -> best data
-            for (const guild of this.config.guilds) {
+            for (const guild of this.config.getAllGuilds()) {
                 const ranking = await this.loadRanking(guild.id);
                 perGuildData.set(guild.id, ranking);
                 for (const [userId, data] of Object.entries(ranking)) {
@@ -325,7 +325,7 @@ class RankingService {
                 const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
                 let serverSuffix = '';
                 if (isGlobal) {
-                    const guildTag = this.config.guilds.find(g => g.id === player.sourceGuildId)?.tag;
+                    const guildTag = this.config.getAllGuilds().find(g => g.id === player.sourceGuildId)?.tag;
                     serverSuffix = guildTag ? ` • ${guildTag}` : '';
                 }
 
@@ -349,7 +349,7 @@ class RankingService {
         const title = options.titleOverride || (isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle);
 
         // Pole statystyk
-        const serverCount = this.config.guilds.length;
+        const serverCount = this.config.getAllGuilds().length;
         const statsLines = [
             ...(isGlobal ? [formatMessage(msgs.rankingServersCount, { count: serverCount })] : []),
             formatMessage(msgs.rankingPlayersCount, { count: players.length })
@@ -497,7 +497,7 @@ class RankingService {
         const msgs = messages || this.config.messages;
         const buttons = [];
 
-        for (const guildConfig of this.config.guilds) {
+        for (const guildConfig of this.config.getAllGuilds()) {
             const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Server ${guildConfig.id}`;
             const label = guildName.length > 20 ? guildName.substring(0, 20) + '…' : guildName;
 
