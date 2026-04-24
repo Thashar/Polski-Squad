@@ -496,18 +496,34 @@ class InteractionHandler {
         }
 
         const key = this._wizardKey(interaction.user.id, interaction.guildId);
-        // Jeśli już istnieje sesja — użyj jej, inaczej zainicjuj pustą
+        // Jeśli już istnieje sesja — użyj jej; inaczej pre-wypełnij z istniejącej konfiguracji lub pusta
         if (!this._configWizard.has(key)) {
-            this._configWizard.set(key, {
-                allowedChannelId: null,
-                invalidReportChannelId: null,
-                reportChannelSkipped: false,
-                tag: null,
-                lang: null,
-                topRoles: null,
-                rolesSkipped: false,
-                globalTop3Notifications: null,
-            });
+            const existing = this.guildConfigService?.getConfig(interaction.guildId);
+            if (existing?.configured) {
+                this._configWizard.set(key, {
+                    allowedChannelId: existing.allowedChannelId || null,
+                    invalidReportChannelId: existing.invalidReportChannelId || null,
+                    reportChannelSkipped: !existing.invalidReportChannelId,
+                    tag: existing.tag !== undefined ? existing.tag : null,
+                    lang: existing.lang || null,
+                    topRoles: existing.topRoles || null,
+                    rolesSkipped: !existing.topRoles,
+                    globalTop3Notifications: existing.globalTop3Notifications !== undefined
+                        ? existing.globalTop3Notifications
+                        : true,
+                });
+            } else {
+                this._configWizard.set(key, {
+                    allowedChannelId: null,
+                    invalidReportChannelId: null,
+                    reportChannelSkipped: false,
+                    tag: null,
+                    lang: null,
+                    topRoles: null,
+                    rolesSkipped: false,
+                    globalTop3Notifications: null,
+                });
+            }
         }
 
         const state = this._configWizard.get(key);
