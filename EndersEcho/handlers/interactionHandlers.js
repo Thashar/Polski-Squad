@@ -2818,7 +2818,7 @@ class InteractionHandler {
 
             if (!aiResult.isValidVictory || !aiResult.score) {
                 await interaction.editReply({
-                    content: `❌ Analizowano przez **${adminName}** — nie udało się odczytać danych: ${aiResult.error || 'nieznany błąd'}`,
+                    content: formatMessage(msgs.analyzeResultFail, { adminName, error: aiResult.error || msgs.analyzeResultUnknown }),
                     embeds: interaction.message.embeds,
                     attachments: [],
                     components: [],
@@ -2878,7 +2878,12 @@ class InteractionHandler {
             }
 
             await interaction.editReply({
-                content: `✅ Analizowano przez **${adminName}** — Boss: **${aiResult.bossName || 'nieznany'}** | Wynik: **${aiResult.score}** | ${isNewRecord ? '🏆 Nowy rekord!' : 'Nie pobito rekordu'}`,
+                content: formatMessage(msgs.analyzeResultSuccess, {
+                    adminName,
+                    bossName: aiResult.bossName || msgs.analyzeResultUnknown,
+                    score: aiResult.score,
+                    result: isNewRecord ? msgs.analyzeResultNewRecord : msgs.analyzeResultNoRecord,
+                }),
                 embeds: interaction.message.embeds,
                 attachments: [],
                 components: [],

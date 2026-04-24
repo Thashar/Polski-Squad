@@ -225,6 +225,11 @@ const pol = {
     reportActionApproved: 'Zatwierdzono',
     reportActionBlocked: 'Zablokowano ({duration})',
     reportActionAnalyzed: 'Uruchomiono Analizuj',
+    analyzeResultFail: '❌ Analizowano przez **{adminName}** — nie udało się odczytać danych: {error}',
+    analyzeResultSuccess: '✅ Analizowano przez **{adminName}** — Boss: **{bossName}** | Wynik: **{score}** | {result}',
+    analyzeResultNewRecord: '🏆 Nowy rekord!',
+    analyzeResultNoRecord: 'Nie pobito rekordu',
+    analyzeResultUnknown: 'nieznany',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Komendy **{commands}** wyłączone na serwerze **{serverName}**.',
@@ -466,6 +471,11 @@ const eng = {
     reportActionApproved: 'Approved',
     reportActionBlocked: 'Blocked ({duration})',
     reportActionAnalyzed: 'Analyze triggered',
+    analyzeResultFail: '❌ Analyzed by **{adminName}** — failed to read data: {error}',
+    analyzeResultSuccess: '✅ Analyzed by **{adminName}** — Boss: **{bossName}** | Score: **{score}** | {result}',
+    analyzeResultNewRecord: '🏆 New record!',
+    analyzeResultNoRecord: 'No record broken',
+    analyzeResultUnknown: 'unknown',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Commands **{commands}** disabled on server **{serverName}**.',
