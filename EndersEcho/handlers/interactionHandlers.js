@@ -434,7 +434,7 @@ class InteractionHandler {
         const btn = (n, labelPol, labelEng) => new ButtonBuilder()
             .setCustomId(`cfg_step_${n}`)
             .setLabel((done[n] ? '✅ ' : '🔘 ') + t(labelPol, labelEng))
-            .setStyle(done[n] ? ButtonStyle.Success : ButtonStyle.Secondary);
+            .setStyle(ButtonStyle.Secondary);
 
         const rows = [
             new ActionRowBuilder().addComponents(
@@ -458,8 +458,8 @@ class InteractionHandler {
             rows.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('cfg_accept')
-                    .setLabel(t('✅  Zaakceptuj konfigurację!', '✅  Accept Configuration!'))
-                    .setStyle(ButtonStyle.Danger),
+                    .setLabel(t('🔒  Zaakceptuj konfigurację!', '🔒  Accept Configuration!'))
+                    .setStyle(ButtonStyle.Success),
                 cancelBtn
             ));
         } else {
