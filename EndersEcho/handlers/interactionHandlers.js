@@ -715,7 +715,8 @@ class InteractionHandler {
                                     sourceGuildName,
                                     guildMsgs,
                                     currentScore ? currentScore.timestamp : null,
-                                    notifImageRef
+                                    notifImageRef,
+                                    newGlobalRanking.slice(0, 3)
                                 );
 
                                 const sendPayload = { embeds: [globalEmbed] };

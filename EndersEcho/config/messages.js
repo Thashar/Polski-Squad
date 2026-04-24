@@ -109,6 +109,7 @@ const pol = {
     globalTop3GlobalPosition: '🌐 Pozycja globalna',
     globalTop3EnteredTop3: 'wejście do Top 3',
     globalTop3PositionImproved: 'awans z #{prevPos}',
+    globalTop3PodiumLabel: '🏅 Aktualne podium',
 
     // /subscribe
     notifDescription: '🔔 Zarządzaj powiadomieniami o nowych rekordach graczy.',
@@ -309,6 +310,7 @@ const eng = {
     globalTop3GlobalPosition: '🌐 Global Position',
     globalTop3EnteredTop3: 'entered Top 3',
     globalTop3PositionImproved: 'promoted from #{prevPos}',
+    globalTop3PodiumLabel: '🏅 Current podium',
 
     // /subscribe
     notifDescription: '🔔 Manage notifications for player record breaks.',

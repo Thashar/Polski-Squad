@@ -767,7 +767,7 @@ class RankingService {
      * @param {string|null} previousTimestamp
      * @returns {EmbedBuilder}
      */
-    createGlobalTop3Embed(userName, bestScore, previousScore, userAvatarUrl, globalPosition, prevGlobalPosition, sourceGuildName, messages, previousTimestamp, attachmentName = null) {
+    createGlobalTop3Embed(userName, bestScore, previousScore, userAvatarUrl, globalPosition, prevGlobalPosition, sourceGuildName, messages, previousTimestamp, attachmentName = null, top3Players = []) {
         const msgs = messages || this.config.messages;
 
         const medal = this.getPositionMedal(globalPosition);
@@ -811,13 +811,25 @@ class RankingService {
             : `**${msgs.recordDateLabel}:** ${dateStr}`;
         descLines.push(dateLine);
 
-        return new EmbedBuilder()
+        const podiumMedals = ['🥇', '🥈', '🥉'];
+        const podiumLines = top3Players.slice(0, 3).map((p, i) => {
+            const medal = podiumMedals[i];
+            return `${medal} **${p.username}** • ${p.score}`;
+        });
+
+        const embed = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle(msgs.globalTop3Title)
             .setDescription(descLines.join('\n'))
             .setThumbnail(userAvatarUrl)
             .setImage(attachmentName || null)
             .setTimestamp();
+
+        if (podiumLines.length > 0) {
+            embed.addFields({ name: msgs.globalTop3PodiumLabel, value: podiumLines.join('\n'), inline: false });
+        }
+
+        return embed;
     }
 
     /**
