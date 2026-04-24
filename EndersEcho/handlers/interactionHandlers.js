@@ -2371,14 +2371,23 @@ class InteractionHandler {
             .setMaxLength(256);
         if (prefill.title) titleInput.setValue(prefill.title);
 
-        const descInput = new TextInputBuilder()
-            .setCustomId('embedDescription')
-            .setLabel('Opis')
+        const descPolInput = new TextInputBuilder()
+            .setCustomId('embedDescriptionPol')
+            .setLabel('Opis (serwery polskie)')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Treść wiadomości...')
+            .setPlaceholder('Treść wiadomości po polsku...')
             .setRequired(true)
             .setMaxLength(4000);
-        if (prefill.description) descInput.setValue(prefill.description);
+        if (prefill.descriptionPol) descPolInput.setValue(prefill.descriptionPol);
+
+        const descEngInput = new TextInputBuilder()
+            .setCustomId('embedDescriptionEng')
+            .setLabel('Description (English servers)')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Message content in English...')
+            .setRequired(true)
+            .setMaxLength(4000);
+        if (prefill.descriptionEng) descEngInput.setValue(prefill.descriptionEng);
 
         const iconInput = new TextInputBuilder()
             .setCustomId('embedIcon')
@@ -2401,7 +2410,8 @@ class InteractionHandler {
             .setTitle('Nowa wiadomość informacyjna')
             .addComponents(
                 new ActionRowBuilder().addComponents(titleInput),
-                new ActionRowBuilder().addComponents(descInput),
+                new ActionRowBuilder().addComponents(descPolInput),
+                new ActionRowBuilder().addComponents(descEngInput),
                 new ActionRowBuilder().addComponents(iconInput),
                 new ActionRowBuilder().addComponents(imageInput)
             );
@@ -2409,12 +2419,14 @@ class InteractionHandler {
 
     /**
      * Buduje czerwony embed na podstawie danych sesji.
-     * @param {{ title?: string, description: string, icon?: string, image?: string }} data
+     * @param {{ title?: string, descriptionPol: string, descriptionEng: string, icon?: string, image?: string }} data
+     * @param {User} user
+     * @param {string} description - konkretna treść do wstawienia (pol lub eng)
      */
-    _buildInfoEmbed(data, user) {
+    _buildInfoEmbed(data, user, description) {
         const embed = new EmbedBuilder()
             .setColor(0xFF0000)
-            .setDescription(data.description)
+            .setDescription(description)
             .setAuthor({ name: user.displayName, iconURL: user.displayAvatarURL() });
         if (data.title) embed.setTitle(data.title);
         if (data.icon) embed.setThumbnail(data.icon);
@@ -2446,14 +2458,16 @@ class InteractionHandler {
         }
 
         const title = interaction.fields.getTextInputValue('embedTitle').trim() || null;
-        const description = interaction.fields.getTextInputValue('embedDescription').trim();
+        const descriptionPol = interaction.fields.getTextInputValue('embedDescriptionPol').trim();
+        const descriptionEng = interaction.fields.getTextInputValue('embedDescriptionEng').trim();
         const icon = interaction.fields.getTextInputValue('embedIcon').trim() || null;
         const image = interaction.fields.getTextInputValue('embedImage').trim() || null;
 
-        const data = { title, description, icon, image, user: interaction.user };
+        const data = { title, descriptionPol, descriptionEng, icon, image, user: interaction.user };
         this._infoSessions.set(interaction.user.id, data);
 
-        const embed = this._buildInfoEmbed(data, interaction.user);
+        const embedPol = this._buildInfoEmbed(data, interaction.user, descriptionPol);
+        const embedEng = this._buildInfoEmbed(data, interaction.user, descriptionEng);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('info_send').setLabel('Wyślij').setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('info_edit').setLabel('Edytuj').setStyle(ButtonStyle.Secondary),
@@ -2461,8 +2475,8 @@ class InteractionHandler {
         );
 
         await interaction.reply({
-            content: formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length }),
-            embeds: [embed],
+            content: `${formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length })}\n🇵🇱 **Podgląd PL** (powyżej) • 🇬🇧 **Podgląd ENG** (poniżej)`,
+            embeds: [embedPol, embedEng],
             components: [row],
             flags: ['Ephemeral']
         });
@@ -2480,7 +2494,6 @@ class InteractionHandler {
         }
 
         await interaction.deferUpdate();
-        const embed = this._buildInfoEmbed(data, data.user);
         let sent = 0;
         let failed = 0;
 
@@ -2488,6 +2501,8 @@ class InteractionHandler {
             try {
                 const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                 if (!channel) { failed++; continue; }
+                const description = guildCfg.lang === 'pol' ? data.descriptionPol : data.descriptionEng;
+                const embed = this._buildInfoEmbed(data, data.user, description);
                 await channel.send({ embeds: [embed] });
                 sent++;
             } catch (err) {
