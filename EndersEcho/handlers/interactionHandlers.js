@@ -2010,7 +2010,11 @@ class InteractionHandler {
 
         const attachment = interaction.message.attachments.first();
         if (!attachment) {
-            await interaction.followUp({ content: '❌ Brak zdjęcia w wiadomości.', flags: ['Ephemeral'] });
+            await interaction.editReply({
+                content: '❌ Brak zdjęcia w wiadomości.',
+                embeds: interaction.message.embeds,
+                components: [],
+            });
             return;
         }
 
@@ -2100,7 +2104,11 @@ class InteractionHandler {
             });
         } catch (err) {
             logger.error(`❌ Błąd ee_analyze: ${err.message}`);
-            await interaction.followUp({ content: `❌ Błąd analizy: ${err.message}`, flags: ['Ephemeral'] });
+            await interaction.editReply({
+                content: `❌ Błąd analizy: ${err.message}`,
+                embeds: interaction.message.embeds,
+                components: [],
+            }).catch(() => {});
         } finally {
             await fs.unlink(tempPath).catch(() => {});
         }
