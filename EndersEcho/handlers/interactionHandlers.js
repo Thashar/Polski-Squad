@@ -595,7 +595,7 @@ class InteractionHandler {
                 try {
                     recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
                     if (recordSubscribers.length > 0) {
-                        publicEmbed.addFields({ name: msgs.recordFollowerLabel, value: formatMessage(msgs.recordFollowerCount, { count: recordSubscribers.length }) });
+                        publicEmbed.addFields({ name: `${msgs.recordFollowerLabel} ${recordSubscribers.length}`, value: '​' });
                     }
                 } catch (subErr) {
                     gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
