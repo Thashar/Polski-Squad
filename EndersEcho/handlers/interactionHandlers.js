@@ -230,7 +230,12 @@ class InteractionHandler {
             for (const id of this.guildConfigService.getAllConfiguredGuildIds()) guildIds.add(id);
         }
 
+        const skipped = [];
         for (const guildId of guildIds) {
+            if (!client.guilds.cache.has(guildId)) {
+                skipped.push(guildId);
+                continue;
+            }
             const cfg = this.config.getGuildConfig(guildId) || { lang: 'eng' };
             const commands = this._buildCommands(cfg.lang || 'eng');
             try {
@@ -242,6 +247,9 @@ class InteractionHandler {
             } catch (error) {
                 logger.error(`Błąd rejestracji slash commands dla serwera ${guildId}:`, error);
             }
+        }
+        if (skipped.length > 0) {
+            logger.info(`ℹ️ Pominięto rejestrację komend dla ${skipped.length} serwer(ów) nieobecnych w cache (bot usunięty)`);
         }
     }
 
