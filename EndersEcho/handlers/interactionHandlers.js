@@ -1,8 +1,7 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
-const OcrBlockService = require('../services/ocrBlockService');
 
 const logger = createBotLogger('EndersEcho');
 const path = require('path');
@@ -44,7 +43,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -57,9 +56,12 @@ class InteractionHandler {
         this.usageLimitService = usageLimitService;
         this.tokenUsageService = tokenUsageService;
         this.botOps = botOps;
-        this.ocrBlockService = new OcrBlockService(config);
+        this.guildConfigService = guildConfigService;
+        this.ocrBlockService = ocrBlockService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
+        // Stan wizarda /configure (userId_guildId -> { step data })
+        this._configWizard = new Map();
     }
 
     /**
@@ -86,123 +88,176 @@ class InteractionHandler {
      * Rejestruje komendy slash dla wszystkich skonfigurowanych serwerów
      * @param {Client} client
      */
+    /**
+     * Buduje listę komend slash dla danego serwera (lub języka)
+     */
+    _buildCommands(lang) {
+        const isPol = lang === 'pol';
+        const pl = (text) => isPol ? { pl: text } : {};
+
+        return [
+            new SlashCommandBuilder()
+                .setName('ranking')
+                .setDescription('Display the player ranking (choose server or global)')
+                .setDescriptionLocalizations(pl('Wyświetl ranking graczy (wybierz serwer lub globalny)')),
+
+            new SlashCommandBuilder()
+                .setName('update')
+                .setDescription('Add a new Ender\'s Echo score for analysis')
+                .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
+                .addAttachmentOption(option =>
+                    option.setName('obraz')
+                        .setDescription('Screenshot of the boss result screen')
+                        .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
+                        .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('remove')
+                .setDescription('Remove a player from the ranking (admins only)')
+                .setDescriptionLocalizations(pl('Usuń gracza z rankingu (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addUserOption(option =>
+                    option.setName('user')
+                        .setDescription('User to remove from the ranking')
+                        .setDescriptionLocalizations(pl('Użytkownik do usunięcia z rankingu'))
+                        .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('subscribe')
+                .setDescription('Manage record break notifications for players')
+                .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
+
+            new SlashCommandBuilder()
+                .setName('info')
+                .setDescription('Send an info message to all servers (selected users only)')
+                .setDescriptionLocalizations(pl('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('ocr-on-off')
+                .setDescription('Enable / disable /update and/or /test on a specific server (head admin only)')
+                .setDescriptionLocalizations(pl('Włącz / wyłącz /update i/lub /test na wybranym serwerze (tylko head admin)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addStringOption(option =>
+                    option.setName('action')
+                        .setDescription('Enable or disable the command')
+                        .setDescriptionLocalizations(pl('Włącz lub wyłącz komendę'))
+                        .setRequired(true)
+                        .addChoices(
+                            { name: '🔓 Enable', value: 'enable' },
+                            { name: '🔒 Disable', value: 'disable' }
+                        ))
+                .addStringOption(option =>
+                    option.setName('target')
+                        .setDescription('Which command (default: both)')
+                        .setDescriptionLocalizations(pl('Która komenda (domyślnie: obie)'))
+                        .setRequired(false)
+                        .addChoices(
+                            { name: '/update', value: 'update' },
+                            { name: '/test', value: 'test' },
+                            { name: 'Both / Obie', value: 'both' }
+                        ))
+                .addStringOption(option =>
+                    option.setName('guild')
+                        .setDescription('Server to apply the change to (autocomplete)')
+                        .setDescriptionLocalizations(pl('Serwer na którym zmienić ustawienie (autocomplete)'))
+                        .setRequired(true)
+                        .setAutocomplete(true)),
+
+            new SlashCommandBuilder()
+                .setName('test')
+                .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
+                .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addAttachmentOption(option =>
+                    option.setName('obraz')
+                        .setDescription('Screenshot of the boss result screen')
+                        .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
+                        .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('unblock')
+                .setDescription('View blocked users and unblock them (admins only)')
+                .setDescriptionLocalizations(pl('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('add-role-ranking')
+                .setDescription('Add a ranking for role holders (admins only)')
+                .setDescriptionLocalizations(pl('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addRoleOption(option =>
+                    option.setName('rola')
+                        .setDescription('Role for which you want to create a ranking')
+                        .setDescriptionLocalizations(pl('Rola, dla której chcesz utworzyć ranking'))
+                        .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('remove-role-ranking')
+                .setDescription('Remove a role ranking (admins only)')
+                .setDescriptionLocalizations(pl('Usuwa ranking roli (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('limit')
+                .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
+                .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('tokens')
+                .setDescription('Show AI token usage and cost statistics (admins only)')
+                .setDescriptionLocalizations(pl('Wyświetl statystyki zużycia tokenów AI i kosztów (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('configure')
+                .setDescription('Configure EndersEcho for this server (admins only)')
+                .setDescriptionLocalizations(pl('Skonfiguruj EndersEcho na tym serwerze (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+        ];
+    }
+
     async registerSlashCommands(client) {
         const rest = new REST().setToken(this.config.token);
+        const allGuilds = this.config.getAllGuilds();
 
-        for (const guildConfig of this.config.guilds) {
-            const isPol = guildConfig.lang === 'pol';
-            const pl = (text) => isPol ? { pl: text } : {};
+        // Zbierz unikalne serwery (configured + unconfigured które bot zna)
+        const guildIds = new Set(allGuilds.map(g => g.id));
+        if (this.guildConfigService) {
+            for (const id of this.guildConfigService.getAllConfiguredGuildIds()) guildIds.add(id);
+        }
 
-            const commands = [
-                new SlashCommandBuilder()
-                    .setName('ranking')
-                    .setDescription('Display the player ranking (choose server or global)')
-                    .setDescriptionLocalizations(pl('Wyświetl ranking graczy (wybierz serwer lub globalny)')),
-
-                new SlashCommandBuilder()
-                    .setName('update')
-                    .setDescription('Add a new Ender\'s Echo score for analysis')
-                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
-                    .addAttachmentOption(option =>
-                        option.setName('obraz')
-                            .setDescription('Screenshot of the boss result screen')
-                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
-                            .setRequired(true)),
-
-                new SlashCommandBuilder()
-                    .setName('remove')
-                    .setDescription('Remove a player from the ranking (admins only)')
-                    .setDescriptionLocalizations(pl('Usuń gracza z rankingu (tylko dla adminów)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                    .addUserOption(option =>
-                        option.setName('user')
-                            .setDescription('User to remove from the ranking')
-                            .setDescriptionLocalizations(pl('Użytkownik do usunięcia z rankingu'))
-                            .setRequired(true)),
-
-                new SlashCommandBuilder()
-                    .setName('subscribe')
-                    .setDescription('Manage record break notifications for players')
-                    .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
-
-                new SlashCommandBuilder()
-                    .setName('info')
-                    .setDescription('Send an info message to all servers (selected users only)')
-                    .setDescriptionLocalizations(pl('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-                new SlashCommandBuilder()
-                    .setName('ocr-on-off')
-                    .setDescription('Block / unblock /update and/or /test on all servers (selected users only)')
-                    .setDescriptionLocalizations(pl('Zablokuj / odblokuj /update i/lub /test na wszystkich serwerach (tylko dla wybranych)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                    .addStringOption(option =>
-                        option.setName('target')
-                            .setDescription('Which command to block/unblock (default: both)')
-                            .setDescriptionLocalizations(pl('Którą komendę zablokować/odblokować (domyślnie: obie)'))
-                            .setRequired(false)
-                            .addChoices(
-                                { name: '/update', value: 'update' },
-                                { name: '/test', value: 'test' },
-                                { name: 'Obie komendy', value: 'both' }
-                            )),
-
-                new SlashCommandBuilder()
-                    .setName('test')
-                    .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
-                    .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                    .addAttachmentOption(option =>
-                        option.setName('obraz')
-                            .setDescription('Screenshot of the boss result screen')
-                            .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
-                            .setRequired(true)),
-
-                new SlashCommandBuilder()
-                    .setName('unblock')
-                    .setDescription('View blocked users and unblock them (admins only)')
-                    .setDescriptionLocalizations(pl('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-                new SlashCommandBuilder()
-                    .setName('add-role-ranking')
-                    .setDescription('Add a ranking for role holders (admins only)')
-                    .setDescriptionLocalizations(pl('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                    .addRoleOption(option =>
-                        option.setName('rola')
-                            .setDescription('Role for which you want to create a ranking')
-                            .setDescriptionLocalizations(pl('Rola, dla której chcesz utworzyć ranking'))
-                            .setRequired(true)),
-
-                new SlashCommandBuilder()
-                    .setName('remove-role-ranking')
-                    .setDescription('Remove a role ranking (admins only)')
-                    .setDescriptionLocalizations(pl('Usuwa ranking roli (tylko dla adminów)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-                new SlashCommandBuilder()
-                    .setName('limit')
-                    .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
-                    .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-                new SlashCommandBuilder()
-                    .setName('tokens')
-                    .setDescription('Show AI token usage and cost statistics (admins only)')
-                    .setDescriptionLocalizations(pl('Wyświetl statystyki zużycia tokenów AI i kosztów (tylko dla adminów)'))
-                    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-            ];
-
+        for (const guildId of guildIds) {
+            const cfg = this.config.getGuildConfig(guildId) || { lang: 'eng' };
+            const commands = this._buildCommands(cfg.lang || 'eng');
             try {
                 await rest.put(
-                    Routes.applicationGuildCommands(this.config.clientId, guildConfig.id),
+                    Routes.applicationGuildCommands(this.config.clientId, guildId),
                     { body: commands }
                 );
-                logger.info(`✅ Zarejestrowano komendy dla serwera ${guildConfig.id} (${guildConfig.lang})`);
+                logger.info(`✅ Zarejestrowano komendy dla serwera ${guildId} (${cfg.lang || 'eng'})`);
             } catch (error) {
-                logger.error(`Błąd rejestracji slash commands dla serwera ${guildConfig.id}:`, error);
+                logger.error(`Błąd rejestracji slash commands dla serwera ${guildId}:`, error);
             }
+        }
+    }
+
+    /**
+     * Rejestruje komendy slash dla pojedynczego serwera (używane przez guildCreate)
+     */
+    async registerCommandsForGuild(client, guildId) {
+        const rest = new REST().setToken(this.config.token);
+        const cfg = this.config.getGuildConfig(guildId) || { lang: 'eng' };
+        const commands = this._buildCommands(cfg.lang || 'eng');
+        try {
+            await rest.put(
+                Routes.applicationGuildCommands(this.config.clientId, guildId),
+                { body: commands }
+            );
+            logger.info(`✅ Zarejestrowano komendy dla nowego serwera ${guildId}`);
+        } catch (error) {
+            logger.error(`Błąd rejestracji komend dla serwera ${guildId}:`, error);
         }
     }
 
@@ -211,8 +266,19 @@ class InteractionHandler {
      * @param {Interaction} interaction
      */
     async handleInteraction(interaction) {
+        if (interaction.isAutocomplete()) {
+            await this._handleAutocomplete(interaction);
+            return;
+        }
+
         if (interaction.isChatInputCommand()) {
-            // /info i /ocr-on-off działają z dowolnego kanału — obsługujemy przed sprawdzeniem kanału
+            const guildId = interaction.guildId;
+
+            // Komendy działające bez konfiguracji (head admin / admin)
+            if (interaction.commandName === 'configure') {
+                await this.handleConfigureCommand(interaction);
+                return;
+            }
             if (interaction.commandName === 'info') {
                 await this.handleInfoCommand(interaction);
                 return;
@@ -225,38 +291,59 @@ class InteractionHandler {
                 await this.handleLimitCommand(interaction);
                 return;
             }
-
             if (interaction.commandName === 'tokens') {
                 await this.handleTokensCommand(interaction);
                 return;
             }
-
             if (interaction.commandName === 'unblock') {
                 await this.handleUnblockCommand(interaction);
                 return;
             }
 
-            if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
+            // Komendy admin — dowolny kanał, ale wymagają konfiguracji serwera
+            if (interaction.commandName === 'test') {
+                if (!this._checkConfigured(interaction)) return;
+                await this.handleTestCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'remove') {
+                if (!this._checkConfigured(interaction)) return;
+                await this.handleRemoveCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'add-role-ranking') {
+                if (!this._checkConfigured(interaction)) return;
+                await this.handleAddRoleRankingCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'remove-role-ranking') {
+                if (!this._checkConfigured(interaction)) return;
+                await this.handleRemoveRoleRankingCommand(interaction);
+                return;
+            }
+
+            // Pozostałe komendy — wymagają konfiguracji i dozwolonego kanału
+            if (!this._checkConfigured(interaction)) return;
+
+            if (!this.isAllowedChannel(interaction.channel.id, guildId)) {
                 await interaction.reply({
-                    content: this.msgs(interaction.guildId).channelNotAllowed,
+                    content: this.msgs(guildId).channelNotAllowed,
                     flags: ['Ephemeral']
                 });
                 return;
             }
 
             switch (interaction.commandName) {
-                case 'ranking':            await this.handleRankingCommand(interaction);          break;
-                case 'update':             await this.handleUpdateCommand(interaction);           break;
-                case 'test':               await this.handleTestCommand(interaction);             break;
-                case 'remove':             await this.handleRemoveCommand(interaction);           break;
-                case 'subscribe':          await this.handleNotificationsCommand(interaction);    break;
-                case 'add-role-ranking':   await this.handleAddRoleRankingCommand(interaction);   break;
-                case 'remove-role-ranking':await this.handleRemoveRoleRankingCommand(interaction);break;
+                case 'ranking':   await this.handleRankingCommand(interaction);        break;
+                case 'update':    await this.handleUpdateCommand(interaction);         break;
+                case 'subscribe': await this.handleNotificationsCommand(interaction);  break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
         } else if (interaction.isStringSelectMenu()) {
             await this.handleSelectMenuInteraction(interaction);
+        } else if (interaction.isChannelSelectMenu()) {
+            await this._handleChannelSelectMenu(interaction);
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'info_modal') {
                 await this._handleInfoModalSubmit(interaction);
@@ -270,6 +357,505 @@ class InteractionHandler {
                 await this._handleLimitModal(interaction);
                 return;
             }
+            if (interaction.customId === 'cfg_tag_modal') {
+                await this._handleConfigureTagModal(interaction);
+                return;
+            }
+            if (interaction.customId === 'cfg_roles_modal') {
+                await this._handleConfigureRolesModal(interaction);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Sprawdza czy serwer jest skonfigurowany, jeśli nie — odpowiada ephemeral i zwraca false
+     */
+    _checkConfigured(interaction) {
+        if (!this.guildConfigService || this.guildConfigService.isConfigured(interaction.guildId)) return true;
+        const msgs = this.msgs(interaction.guildId);
+        interaction.reply({ content: msgs.notConfigured, flags: ['Ephemeral'] }).catch(() => {});
+        return false;
+    }
+
+    /**
+     * Obsługuje autocomplete (np. /ocr-on-off guild)
+     */
+    async _handleAutocomplete(interaction) {
+        if (interaction.commandName === 'ocr-on-off' && interaction.options.getFocused(true).name === 'guild') {
+            const focused = interaction.options.getFocused().toLowerCase();
+            const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const choices = [];
+            for (const guildId of configuredIds) {
+                const discordGuild = interaction.client.guilds.cache.get(guildId);
+                const name = discordGuild?.name || guildId;
+                if (name.toLowerCase().includes(focused) || guildId.includes(focused)) {
+                    choices.push({ name: `${name} (${guildId})`, value: guildId });
+                }
+            }
+            await interaction.respond(choices.slice(0, 25)).catch(() => {});
+        }
+    }
+
+    // =====================================================================
+    // /configure — wizard konfiguracji serwera
+    // =====================================================================
+
+    /** Klucz dla Map stanu wizarda */
+    _wizardKey(userId, guildId) { return `${userId}_${guildId}`; }
+
+    /** Buduje embed dashboardu z aktualnymi krokami wizarda */
+    _buildWizardDashboard(state, guildId) {
+        const msgs = this.msgs(guildId);
+        const isPol = this.config.getMessages(guildId) === this.config.getMessages(guildId) &&
+            (this.config.getGuildConfig(guildId)?.lang === 'pol' || state.lang === 'pol');
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        const done = {
+            1: !!state.allowedChannelId,
+            2: state.tag !== null && state.tag !== undefined,
+            3: !!state.lang,
+            4: state.topRoles !== null || state.rolesSkipped,
+            5: state.globalTop3Notifications !== null,
+            6: state.invalidReportChannelId !== null || state.reportChannelSkipped,
+        };
+        const allDone = Object.values(done).every(Boolean);
+
+        const btn = (n, labelPol, labelEng) => new ButtonBuilder()
+            .setCustomId(`cfg_step_${n}`)
+            .setLabel((done[n] ? '✅ ' : '🔘 ') + t(labelPol, labelEng))
+            .setStyle(done[n] ? ButtonStyle.Success : ButtonStyle.Secondary);
+
+        const rows = [
+            new ActionRowBuilder().addComponents(
+                btn(1, '1. Kanał bota', '1. Bot Channel'),
+                btn(2, '2. Tag serwera', '2. Server Tag'),
+                btn(3, '3. Język', '3. Language'),
+            ),
+            new ActionRowBuilder().addComponents(
+                btn(4, '4. Role TOP (opcjonalne)', '4. TOP Roles (optional)'),
+                btn(5, '5. Powiadomienia Global TOP3', '5. Global TOP3 Notifications'),
+                btn(6, '6. Kanał raportów (opcjonalne)', '6. Report Channel (optional)'),
+            ),
+        ];
+
+        if (allDone) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('cfg_accept')
+                    .setLabel(t('🔴  Zaakceptuj konfigurację!', '🔴  Accept Configuration!'))
+                    .setStyle(ButtonStyle.Danger)
+            ));
+        }
+
+        const summaryLines = [
+            done[1] ? `📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
+            done[2] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
+            done[3] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
+            done[4] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
+            done[5] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
+            done[6] ? `⚠️ ${t('Kanał raportów:', 'Report Channel:')} ${state.reportChannelSkipped ? t('Pominięty', 'Skipped') : `<#${state.invalidReportChannelId}>`}` : null,
+        ].filter(Boolean);
+
+        const embed = new EmbedBuilder()
+            .setColor(allDone ? 0x57F287 : 0x5865F2)
+            .setTitle(t('⚙️ Konfiguracja EndersEcho', '⚙️ EndersEcho Configuration'))
+            .setDescription(
+                t(
+                    'Uzupełnij wszystkie kroki poniżej, aby aktywować bota na tym serwerze.\nKlikaj przyciski aby konfigurować poszczególne elementy.',
+                    'Complete all steps below to activate EndersEcho on this server.\nClick each button to configure that step.'
+                ) + '\n\n' +
+                t(
+                    '📋 **Przegląd kroków:**\n' +
+                    '1️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
+                    '2️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
+                    '3️⃣  **Język** — interfejs po polsku lub angielsku\n' +
+                    '4️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
+                    '5️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
+                    '6️⃣  **Kanał raportów** *(opcjonalne)* — gdzie trafiają alerty o odrzuconych screenach\n\n' +
+                    '⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Head admin musi użyć `/ocr-on-off`.',
+                    '📋 **Steps overview:**\n' +
+                    '1️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
+                    '2️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
+                    '3️⃣  **Language** — Polish or English interface\n' +
+                    '4️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
+                    '5️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
+                    '6️⃣  **Report Channel** *(optional)* — where rejected screenshot alerts appear\n\n' +
+                    '⚠️ After activation `/update` and `/test` will be **disabled** by default. A head admin must use `/ocr-on-off` to enable them.'
+                ) + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
+            );
+
+        return { embed, rows, allDone };
+    }
+
+    async handleConfigureCommand(interaction) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        // Jeśli już istnieje sesja — użyj jej, inaczej zainicjuj pustą
+        if (!this._configWizard.has(key)) {
+            this._configWizard.set(key, {
+                allowedChannelId: null,
+                invalidReportChannelId: null,
+                reportChannelSkipped: false,
+                tag: null,
+                lang: null,
+                topRoles: null,
+                rolesSkipped: false,
+                globalTop3Notifications: null,
+            });
+        }
+
+        const state = this._configWizard.get(key);
+        const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+        await interaction.reply({ embeds: [embed], components: rows, flags: ['Ephemeral'] });
+    }
+
+    /** Buduje embed kroku konfiguracji (step 1–6) i aktualizuje wiadomość */
+    async _showConfigureStep(interaction, step) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) {
+            await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] });
+            return;
+        }
+
+        const guildId = interaction.guildId;
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
+
+        if (step === 1) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('📡 Krok 1 — Kanał bota', '📡 Step 1 — Bot Channel'))
+                .setDescription(
+                    t(
+                        'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
+                        '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n\n' +
+                        'Komendy adminów (`/remove`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/test`) działają z **dowolnego** kanału.',
+                        'Choose the channel where users can run EndersEcho commands.\n\n' +
+                        '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n\n' +
+                        'Admin commands (`/remove`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/test`) work from **any** channel.'
+                    )
+                );
+            const channelSelect = new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_channel_select')
+                .setPlaceholder(t('Wybierz kanał tekstowy...', 'Choose a text channel...'))
+                .setChannelTypes(ChannelType.GuildText);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
+
+        } else if (step === 2) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🏷️ Krok 2 — Tag serwera', '🏷️ Step 2 — Server Tag'))
+                .setDescription(
+                    t(
+                        'Tag to krótki identyfikator (1–4 znaki) wyświetlany obok wyników Twojego serwera w globalnym rankingu.\n\nTag może być tekstem lub emoji.\nPrzykłady: 🇵🇱  ☆  Ӂ  US  PS  EU',
+                        'The tag is a short identifier (1–4 characters) shown next to your server\'s players in the global ranking.\n\nThe tag can be text or an emoji.\nExamples: 🇵🇱  ☆  Ӂ  US  PS  EU'
+                    )
+                );
+            const tagBtn = new ButtonBuilder().setCustomId('cfg_tag_open').setLabel(t('Wprowadź tag', 'Enter Tag')).setStyle(ButtonStyle.Primary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(tagBtn, backBtn)] });
+
+        } else if (step === 3) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle('🌐 Step 3 — Language / Język')
+                .setDescription('Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.\n\nWybierz język interfejsu dla tego serwera.');
+            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel('🇵🇱 Polish').setStyle(ButtonStyle.Primary);
+            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel('🇬🇧 English').setStyle(ButtonStyle.Primary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(polBtn, engBtn, backBtn)] });
+
+        } else if (step === 4) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🏆 Krok 4 — Role TOP (opcjonalne)', '🏆 Step 4 — TOP Roles (optional)'))
+                .setDescription(
+                    t(
+                        'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w TOP30 serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
+                        '**Jak to działa:**\nKażdy raz gdy wynik gracza zostanie zaktualizowany, bot automatycznie przelicza ranking serwera i przypisuje role. Nie wymaga ręcznej pracy.\nGracze, którzy wypadną z danego poziomu, tracą rolę i mogą otrzymać niższą.\n\n' +
+                        '**Poziomy ról:**\n🥇 TOP 1 — Najlepszy gracz serwera\n🥈 TOP 2 — Drugie miejsce\n🥉 TOP 3 — Trzecie miejsce\n⭐ TOP 4–10 — Silni gracze\n🎯 TOP 11–30 — Aktywni gracze\n\nMożesz pominąć ten krok i skonfigurować role później przez `/configure`.',
+                        'You can assign special Discord roles to players based on their position in your server\'s TOP30 ranking. This highlights your most active players.\n\n' +
+                        '**How it works:**\nEvery time a player\'s score is updated, the bot automatically recalculates the server ranking and reassigns roles in real time. No manual work needed.\nPlayers who drop out of a tier lose the role and may receive a lower one.\n\n' +
+                        '**Role tiers:**\n🥇 TOP 1 — Best player on the server\n🥈 TOP 2 — Second place\n🥉 TOP 3 — Third place\n⭐ TOP 4–10 — Strong performers\n🎯 TOP 11–30 — Active players\n\nYou can skip this step and configure roles later by running `/configure` again.'
+                    )
+                );
+            const configRolesBtn = new ButtonBuilder().setCustomId('cfg_roles_open').setLabel(t('Skonfiguruj role', 'Configure Roles')).setStyle(ButtonStyle.Primary);
+            const skipBtn = new ButtonBuilder().setCustomId('cfg_roles_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(configRolesBtn, skipBtn, backBtn)] });
+
+        } else if (step === 5) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🌐 Krok 5 — Powiadomienia Global TOP3', '🌐 Step 5 — Global TOP3 Notifications'))
+                .setDescription(
+                    t(
+                        'Gdy jakikolwiek gracz z dowolnego serwera EndersEcho wbije nowy rekord i wejdzie do globalnego TOP3, bot może wysłać ogłoszenie na Twój kanał bota.\n\nOgłoszenie zawiera: kto wchodzi do TOP3, wynik i poprawę, z jakiego serwera pochodzi oraz aktualne podium globalnego TOP3.\n\nCzy chcesz otrzymywać te ogłoszenia?',
+                        'When any player across all EndersEcho servers submits a new best score and enters the global TOP3 ranking, the bot can post an announcement in your Bot Channel.\n\nThe announcement includes: who entered TOP3, their score, which server they\'re from, and the current global TOP3 podium.\n\nWould you like to receive these announcements?'
+                    )
+                );
+            const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('✅ Tak, włącz', '✅ Yes, enable')).setStyle(ButtonStyle.Success);
+            const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('❌ Nie', '❌ No')).setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(yesBtn, noBtn, backBtn)] });
+
+        } else if (step === 6) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('⚠️ Krok 6 — Kanał raportów (opcjonalne)', '⚠️ Step 6 — Report Channel (optional)'))
+                .setDescription(
+                    t(
+                        'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nMożesz ustawić dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.\n\nGdy ktoś kliknie przycisk pod raportem, globalny kanał adminów zostanie zaktualizowany z informacją o podjętej akcji.\n\n**Uwaga:** Raporty zawsze trafiają też do globalnego kanału adminów. Ten krok jest opcjonalny.',
+                        'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nYou can set a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.\n\nWhen your team takes action on a report, the global admin channel will also be updated with details of the action taken.\n\n**Note:** All reports are always sent to the global admin channel as well. This step is optional.'
+                    )
+                );
+            const channelSelect = new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_report_channel_select')
+                .setPlaceholder(t('Wybierz kanał raportów...', 'Choose a report channel...'))
+                .setChannelTypes(ChannelType.GuildText);
+            const skipBtn = new ButtonBuilder().setCustomId('cfg_report_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(skipBtn, backBtn)] });
+        }
+    }
+
+    async _handleChannelSelectMenu(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] }); return; }
+
+        if (interaction.customId === 'cfg_channel_select') {
+            state.allowedChannelId = interaction.values[0];
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+        } else if (interaction.customId === 'cfg_report_channel_select') {
+            state.invalidReportChannelId = interaction.values[0];
+            state.reportChannelSkipped = false;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+        }
+    }
+
+    async _handleConfigureTagModal(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.reply({ content: '⚠️ Session expired. Run `/configure` again.', flags: ['Ephemeral'] }); return; }
+
+        const tag = interaction.fields.getTextInputValue('cfg_tag_input').trim();
+        const isPol = state.lang === 'pol';
+        const msgs = this.msgs(interaction.guildId);
+
+        if (!tag) {
+            await interaction.reply({ content: msgs.configureTagEmpty, flags: ['Ephemeral'] }); return;
+        }
+        // Policz widoczne znaki (emoji flagowe = 1 display char)
+        const visLen = [...new Intl.Segmenter().segment(tag)].length;
+        if (visLen > 4) {
+            await interaction.reply({ content: msgs.configureTagTooLong, flags: ['Ephemeral'] }); return;
+        }
+        state.tag = tag;
+        this._configWizard.set(key, state);
+        const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+        await interaction.update({ embeds: [embed], components: rows });
+    }
+
+    async _handleConfigureRolesModal(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.reply({ content: '⚠️ Session expired.', flags: ['Ephemeral'] }); return; }
+
+        const topRoles = {};
+        const fields = ['top1', 'top2', 'top3', 'top4to10', 'top11to30'];
+        for (const f of fields) {
+            try {
+                const val = interaction.fields.getTextInputValue(`cfg_role_${f}`).trim();
+                if (val && /^\d+$/.test(val)) topRoles[f] = val;
+            } catch { /* pole opcjonalne */ }
+        }
+        state.topRoles = Object.keys(topRoles).length > 0 ? topRoles : null;
+        state.rolesSkipped = false;
+        this._configWizard.set(key, state);
+        const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+        await interaction.update({ embeds: [embed], components: rows });
+    }
+
+    async _handleConfigureButton(interaction, customId) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+
+        if (!state) {
+            await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] });
+            return;
+        }
+
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        // Przejście do kroku N
+        if (customId.startsWith('cfg_step_')) {
+            const step = parseInt(customId.replace('cfg_step_', ''), 10);
+            await this._showConfigureStep(interaction, step);
+            return;
+        }
+
+        // Powrót do dashboardu
+        if (customId === 'cfg_back') {
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Otwórz modal tagu
+        if (customId === 'cfg_tag_open') {
+            const existingTag = state.tag || '';
+            const modal = new ModalBuilder()
+                .setCustomId('cfg_tag_modal')
+                .setTitle(t('🏷️ Tag serwera', '🏷️ Server Tag'))
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('cfg_tag_input')
+                            .setLabel(t('Tag (1–4 znaki lub emoji)', 'Tag (1–4 chars or emoji)'))
+                            .setStyle(TextInputStyle.Short)
+                            .setRequired(true)
+                            .setPlaceholder('np. PS  🇵🇱  ☆  EU')
+                            .setMaxLength(8)
+                            .setValue(existingTag)
+                    )
+                );
+            await interaction.showModal(modal);
+            return;
+        }
+
+        // Wybór języka
+        if (customId === 'cfg_lang_pol') {
+            state.lang = 'pol';
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+        if (customId === 'cfg_lang_eng') {
+            state.lang = 'eng';
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Otwórz modal ról TOP
+        if (customId === 'cfg_roles_open') {
+            const existing = state.topRoles || {};
+            const modal = new ModalBuilder()
+                .setCustomId('cfg_roles_modal')
+                .setTitle(t('🏆 Role TOP — ID ról', '🏆 TOP Roles — Role IDs'))
+                .addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cfg_role_top1')
+                            .setLabel(t('🥇 TOP 1 — ID roli (opcjonalnie)', '🥇 TOP 1 — Role ID (optional)'))
+                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top1 || '')
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cfg_role_top2')
+                            .setLabel(t('🥈 TOP 2 — ID roli (opcjonalnie)', '🥈 TOP 2 — Role ID (optional)'))
+                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top2 || '')
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cfg_role_top3')
+                            .setLabel(t('🥉 TOP 3 — ID roli (opcjonalnie)', '🥉 TOP 3 — Role ID (optional)'))
+                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top3 || '')
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cfg_role_top4to10')
+                            .setLabel(t('⭐ TOP 4–10 — ID roli (opcjonalnie)', '⭐ TOP 4–10 — Role ID (optional)'))
+                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top4to10 || '')
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cfg_role_top11to30')
+                            .setLabel(t('🎯 TOP 11–30 — ID roli (opcjonalnie)', '🎯 TOP 11–30 — Role ID (optional)'))
+                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top11to30 || '')
+                    )
+                );
+            await interaction.showModal(modal);
+            return;
+        }
+
+        // Pomiń role
+        if (customId === 'cfg_roles_skip') {
+            state.topRoles = null;
+            state.rolesSkipped = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Powiadomienia Global TOP3
+        if (customId === 'cfg_notif_yes') {
+            state.globalTop3Notifications = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+        if (customId === 'cfg_notif_no') {
+            state.globalTop3Notifications = false;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Pomiń kanał raportów
+        if (customId === 'cfg_report_skip') {
+            state.invalidReportChannelId = null;
+            state.reportChannelSkipped = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Zapisz konfigurację
+        if (customId === 'cfg_accept') {
+            const msgs = this.msgs(interaction.guildId);
+            const existingConfig = this.guildConfigService.getConfig(interaction.guildId);
+            const wasAlreadyConfigured = existingConfig?.configured === true;
+
+            const newData = {
+                configured: true,
+                allowedChannelId: state.allowedChannelId,
+                invalidReportChannelId: state.invalidReportChannelId || null,
+                lang: state.lang,
+                tag: state.tag || null,
+                topRoles: state.topRoles || null,
+                globalTop3Notifications: state.globalTop3Notifications !== false,
+            };
+            // Nowy serwer domyślnie ma zablokowane OCR komendy
+            if (!wasAlreadyConfigured) {
+                newData.ocrBlocked = ['update', 'test'];
+            }
+
+            await this.guildConfigService.saveConfig(interaction.guildId, newData);
+            this._configWizard.delete(key);
+
+            // Re-register commands with new language
+            try {
+                await this.registerCommandsForGuild(interaction.client, interaction.guildId);
+            } catch (regErr) {
+                logger.warn(`⚠️ Nie można ponownie zarejestrować komend po konfiguracji: ${regErr.message}`);
+            }
+
+            const finalMsgs = this.config.getMessages(interaction.guildId);
+            await interaction.update({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor(0x57F287)
+                        .setTitle(t('✅ Konfiguracja zapisana!', '✅ Configuration saved!'))
+                        .setDescription(finalMsgs.configureSaved)
+                ],
+                components: []
+            });
+            return;
         }
     }
 
@@ -674,9 +1260,10 @@ class InteractionHandler {
                         const sourceGuildName = interaction.guild.name;
                         const notifAvatarUrl = interaction.user.displayAvatarURL();
 
-                        gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${this.config.guilds.length} serwerów`);
+                        const allNotifGuilds = this.config.getAllGuilds().filter(g => g.globalTop3Notifications !== false);
+                        gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${allNotifGuilds.length} serwerów`);
 
-                        for (const guildCfg of this.config.guilds) {
+                        for (const guildCfg of allNotifGuilds) {
                             try {
                                 // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
                                 let channel;
@@ -841,11 +1428,16 @@ class InteractionHandler {
                     await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
+                const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
+                const adminName = interaction.member?.displayName || interaction.user.username;
                 await interaction.update({
                     content: interaction.message.content,
                     embeds: interaction.message.embeds,
                     components: []
                 });
+                if (footerInfo.globalMsgId) {
+                    await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, footerInfo.guildId, 'approved', adminName);
+                }
                 return;
             }
 
@@ -858,8 +1450,11 @@ class InteractionHandler {
                 const parts = customId.split('_');
                 const targetUserId = parts[2];
                 const targetGuildId = parts[3];
+                // Encode global message ID from footer for later update
+                const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
+                const globalMsgId = footerInfo.globalMsgId || 'none';
                 const modal = new ModalBuilder()
-                    .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}`)
+                    .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}_${globalMsgId}`)
                     .setTitle(msgs.blockUserModalTitle)
                     .addComponents(
                         new ActionRowBuilder().addComponents(
@@ -937,6 +1532,16 @@ class InteractionHandler {
             // === Przycisk powrotu do wyboru ===
             if (customId === 'ranking_back') {
                 await this._handleRankingBack(interaction);
+                return;
+            }
+
+            // === Przyciski wizarda /configure ===
+            if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
+                customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
+                customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
+                customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
+                customId === 'cfg_report_skip' || customId === 'cfg_accept') {
+                await this._handleConfigureButton(interaction, customId);
                 return;
             }
 
@@ -1407,7 +2012,7 @@ class InteractionHandler {
     async _handleNotifSet(interaction) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
-        const options = this.config.guilds.map(g => {
+        const options = this.config.getAllGuilds().map(g => {
             const guildName = interaction.client.guilds.cache.get(g.id)?.name || g.id;
             return new StringSelectMenuOptionBuilder()
                 .setValue(g.id)
@@ -1772,7 +2377,7 @@ class InteractionHandler {
         );
 
         await interaction.reply({
-            content: formatMessage(msgs.infoPreview, { count: this.config.guilds.length }),
+            content: formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length }),
             embeds: [embed],
             components: [row],
             flags: ['Ephemeral']
@@ -1795,7 +2400,7 @@ class InteractionHandler {
         let sent = 0;
         let failed = 0;
 
-        for (const guildCfg of this.config.guilds) {
+        for (const guildCfg of this.config.getAllGuilds()) {
             try {
                 const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                 if (!channel) { failed++; continue; }
@@ -1834,6 +2439,7 @@ class InteractionHandler {
         const parts = interaction.customId.split('_');
         const targetUserId = parts[3];
         const targetGuildId = parts[4];
+        const globalMsgId = (parts[5] && parts[5] !== 'none') ? parts[5] : null;
         const durationStr = interaction.fields.getTextInputValue('duration').trim();
 
         let targetGuild;
@@ -1873,6 +2479,13 @@ class InteractionHandler {
         });
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
+
+        if (globalMsgId) {
+            const durationLabel = blockedUntil
+                ? new Date(blockedUntil).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+                : '∞';
+            await this._updateGlobalReportMsg(interaction.client, globalMsgId, targetGuildId, 'blocked', adminName, durationLabel);
+        }
     }
 
     async handleUnblockCommand(interaction) {
@@ -1974,26 +2587,101 @@ class InteractionHandler {
             return;
         }
 
-        const userNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        const action = interaction.options.getString('action'); // 'enable' | 'disable'
         const target = interaction.options.getString('target') || 'both';
+        const targetGuildId = interaction.options.getString('guild');
+
+        if (!targetGuildId) {
+            await interaction.reply({ content: msgs.ocrGuildNotFound, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const guildConfig = this.config.getGuildConfig(targetGuildId);
+        if (!guildConfig) {
+            await interaction.reply({ content: msgs.ocrGuildNotFound, flags: ['Ephemeral'] });
+            return;
+        }
+
         const targetCommands = target === 'both' ? ['update', 'test'] : [target];
-
-        const currentlyBlocked = this.ocrBlockService.getBlockedCommands();
-        const allTargetBlocked = targetCommands.every(cmd => currentlyBlocked.includes(cmd));
-
         const cmdLabel = targetCommands.map(c => `\`/${c}\``).join(', ');
+        const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
 
-        if (allTargetBlocked) {
-            // Odblokowanie
-            await this.ocrBlockService.unblock(interaction.user.id, userNick, targetCommands);
-            logger.info(`🔓 OCR odblokowany dla ${cmdLabel} przez ${userNick}`);
-
-            await interaction.reply({ content: formatMessage(msgs.ocrBlockDisabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
+        if (action === 'enable') {
+            await this.ocrBlockService.unblock(targetGuildId, targetCommands);
+            logger.info(`🔓 OCR odblokowany dla ${cmdLabel} na serwerze ${serverName}`);
+            await interaction.reply({
+                content: formatMessage(msgs.ocrBlockPerGuildDisabled, { commands: cmdLabel, serverName }),
+                flags: ['Ephemeral']
+            });
+            // Ogłoszenie na kanale serwera
+            if (guildConfig.allowedChannelId) {
+                const ch = await interaction.client.channels.fetch(guildConfig.allowedChannelId).catch(() => null);
+                if (ch) {
+                    const guildMsgs = this.config.getMessages(targetGuildId);
+                    await ch.send({ content: formatMessage(guildMsgs.ocrBlockPerGuildDisabled, { commands: cmdLabel, serverName }) }).catch(() => {});
+                }
+            }
         } else {
-            // Zablokowanie
-            await this.ocrBlockService.block(interaction.user.id, userNick, targetCommands);
-            logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} przez ${userNick}`);
-            await interaction.reply({ content: formatMessage(msgs.ocrBlockEnabled, { commands: cmdLabel }), flags: ['Ephemeral'] });
+            await this.ocrBlockService.block(targetGuildId, targetCommands);
+            logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} na serwerze ${serverName}`);
+            await interaction.reply({
+                content: formatMessage(msgs.ocrBlockPerGuildEnabled, { commands: cmdLabel, serverName }),
+                flags: ['Ephemeral']
+            });
+        }
+    }
+
+    /** Parsuje footer embeda raportu — zwraca { globalMsgId, userId, guildId } */
+    _parseReportFooter(footerText) {
+        const result = {};
+        for (const part of (footerText || '').split('|')) {
+            if (part.startsWith('ref:')) result.globalMsgId = part.slice(4);
+            else if (part.startsWith('uid:')) result.userId = part.slice(4);
+            else if (part.startsWith('gid:')) result.guildId = part.slice(4);
+        }
+        return result;
+    }
+
+    /** Aktualizuje globalny kanał raportu — dodaje pole akcji, usuwa przyciski */
+    async _updateGlobalReportMsg(client, globalMsgId, sourceGuildId, actionType, adminName, extraInfo = '') {
+        if (!this.config.invalidReportChannelId || !globalMsgId) return;
+        try {
+            const globalChannel = await client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
+            if (!globalChannel) return;
+            const globalMsg = await globalChannel.messages.fetch(globalMsgId).catch(() => null);
+            if (!globalMsg) return;
+
+            const msgs = this.config.getMessages(sourceGuildId);
+            const serverName = client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
+            const now = new Date().toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
+
+            let actionLabel;
+            switch (actionType) {
+                case 'approved': actionLabel = msgs.reportActionApproved; break;
+                case 'blocked': actionLabel = formatMessage(msgs.reportActionBlocked, { duration: extraInfo }); break;
+                case 'analyzed': actionLabel = msgs.reportActionAnalyzed; break;
+                default: actionLabel = actionType;
+            }
+
+            const updatedEmbeds = globalMsg.embeds.map(e => {
+                const builder = EmbedBuilder.from(e);
+                builder.addFields(
+                    { name: formatMessage(msgs.reportActionField, { serverName }), value: '​', inline: false },
+                    { name: msgs.reportActionBy, value: adminName, inline: true },
+                    { name: msgs.reportActionWhat, value: actionLabel, inline: true },
+                    { name: msgs.reportActionWhen, value: now, inline: true },
+                );
+                return builder;
+            });
+
+            await globalMsg.edit({ embeds: updatedEmbeds, components: [] });
+        } catch (err) {
+            logger.warn(`⚠️ Nie można zaktualizować globalnego raportu ${globalMsgId}: ${err.message}`);
         }
     }
 
@@ -2003,6 +2691,8 @@ class InteractionHandler {
             await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
+
+        const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
 
         await interaction.deferUpdate();
 
@@ -2104,6 +2794,9 @@ class InteractionHandler {
                 embeds: interaction.message.embeds,
                 components: [],
             });
+            if (footerInfo.globalMsgId) {
+                await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, footerInfo.guildId || targetGuildId, 'analyzed', adminName);
+            }
         } catch (err) {
             logger.error(`❌ Błąd ee_analyze: ${err.message}`);
             await interaction.editReply({
@@ -2117,14 +2810,16 @@ class InteractionHandler {
     }
 
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
-        if (!this.config.invalidReportChannelId) return;
-        try {
-            const channel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
-            if (!channel) return;
+        const hasGlobal = !!this.config.invalidReportChannelId;
+        const guildCfg = this.config.getGuildConfig(interaction.guildId);
+        const perGuildChannelId = guildCfg?.invalidReportChannelId || null;
+        if (!hasGlobal && !perGuildChannelId) return;
 
+        try {
+            const msgs = this.config.getMessages(interaction.guildId);
             const serverNick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             const discordUsername = interaction.user.username;
-            const serverName = interaction.guild?.name || 'Nieznany serwer';
+            const serverName = interaction.guild?.name || 'Unknown server';
             const now = new Date();
             const timestamp = now.toLocaleString('pl-PL', {
                 timeZone: 'Europe/Warsaw',
@@ -2133,63 +2828,94 @@ class InteractionHandler {
                 hour12: false
             });
 
-            const reasonLabels = {
-                'FAKE_PHOTO': '🔴 Wykryto podrobione / edytowane zdjęcie',
-                'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
-                'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
-                'NOT_SIMILAR': '🟡 Zdjęcie nie pasuje do wzorca (komenda /update)',
-                'INVALID_SCORE_FORMAT': '🟠 Odczytany wynik nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx)',
+            const reasonMap = {
+                'FAKE_PHOTO': msgs.reportReasonFakePhoto,
+                'INVALID_SCREENSHOT': msgs.reportReasonInvalidScreenshot,
+                'NO_REQUIRED_WORDS': msgs.reportReasonNoRequiredWords,
+                'NOT_SIMILAR': msgs.reportReasonNotSimilar,
+                'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
             };
-            const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
+            const reasonText = reasonMap[reason] || `🟠 ${reason}`;
             const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
 
             const ext = path.extname(imagePath) || '.png';
             const fileName = `rejected_${Date.now()}${ext}`;
-            const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
 
-            const fields = [
-                { name: 'Nick na serwerze', value: serverNick, inline: true },
-                { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
-                { name: 'Serwer', value: serverName, inline: true },
-                { name: 'Czas', value: timestamp, inline: true },
-                { name: 'Powód odrzucenia', value: reasonText, inline: false },
-            ];
-            if (rejectionReason) {
-                fields.push({ name: '🔍 Szczegóły AI', value: rejectionReason, inline: false });
-            }
+            const buildEmbed = (footerText) => {
+                const fields = [
+                    { name: msgs.reportFieldNick, value: serverNick, inline: true },
+                    { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
+                    { name: msgs.reportFieldServer, value: serverName, inline: true },
+                    { name: msgs.reportFieldTime, value: timestamp, inline: true },
+                    { name: msgs.reportFieldReason, value: reasonText, inline: false },
+                ];
+                if (rejectionReason) {
+                    fields.push({ name: msgs.reportFieldAiDetails, value: rejectionReason, inline: false });
+                }
+                return new EmbedBuilder()
+                    .setColor(color)
+                    .setTitle(msgs.reportTitle)
+                    .addFields(...fields)
+                    .setImage(`attachment://${fileName}`)
+                    .setFooter({ text: footerText });
+            };
 
-            const embed = new EmbedBuilder()
-                .setColor(color)
-                .setTitle('⚠️ Odrzucony screen')
-                .addFields(...fields)
-                .setImage(`attachment://${fileName}`)
-                .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
-
-            const blockBtn = new ButtonBuilder()
-                .setCustomId(`ee_block_${interaction.user.id}_${interaction.guildId}`)
-                .setLabel('Zablokuj użytkownika')
-                .setEmoji('🔒')
-                .setStyle(ButtonStyle.Danger);
-
-            let reportRow;
-            if (reason === 'NOT_SIMILAR') {
-                const analyzeBtn = new ButtonBuilder()
-                    .setCustomId(`ee_analyze_${interaction.user.id}_${interaction.guildId}`)
-                    .setLabel('Analizuj')
-                    .setEmoji('🔍')
-                    .setStyle(ButtonStyle.Primary);
-                reportRow = new ActionRowBuilder().addComponents(analyzeBtn, blockBtn);
-            } else {
+            const buildButtons = () => {
+                const blockBtn = new ButtonBuilder()
+                    .setCustomId(`ee_block_${interaction.user.id}_${interaction.guildId}`)
+                    .setLabel(msgs.reportBtnBlock)
+                    .setEmoji('🔒')
+                    .setStyle(ButtonStyle.Danger);
+                if (reason === 'NOT_SIMILAR') {
+                    const analyzeBtn = new ButtonBuilder()
+                        .setCustomId(`ee_analyze_${interaction.user.id}_${interaction.guildId}`)
+                        .setLabel(msgs.reportBtnAnalyze)
+                        .setEmoji('🔍')
+                        .setStyle(ButtonStyle.Primary);
+                    return new ActionRowBuilder().addComponents(analyzeBtn, blockBtn);
+                }
                 const approveBtn = new ButtonBuilder()
                     .setCustomId(`ee_approve_${interaction.user.id}`)
-                    .setLabel('Zatwierdź')
+                    .setLabel(msgs.reportBtnApprove)
                     .setEmoji('✅')
                     .setStyle(ButtonStyle.Secondary);
-                reportRow = new ActionRowBuilder().addComponents(approveBtn, blockBtn);
+                return new ActionRowBuilder().addComponents(approveBtn, blockBtn);
+            };
+
+            // Wyślij do globalnego kanału
+            let globalMsgId = null;
+            if (hasGlobal) {
+                try {
+                    const globalChannel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
+                    if (globalChannel) {
+                        const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
+                        const globalEmbed = buildEmbed(`uid:${interaction.user.id}|gid:${interaction.guildId}`);
+                        const sent = await globalChannel.send({ embeds: [globalEmbed], files: [fileAttachment], components: [buildButtons()] });
+                        globalMsgId = sent.id;
+                        gl.info(`🛑 📋 Wysłano raport (${reason}) do globalnego kanału dla ${serverNick}`);
+                    }
+                } catch (err) {
+                    gl.warn(`⚠️ Nie można wysłać raportu do globalnego kanału: ${err.message}`);
+                }
             }
 
-            await channel.send({ embeds: [embed], files: [fileAttachment], components: [reportRow] });
-            gl.info(`🛑 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
+            // Wyślij do per-guild kanału (jeśli skonfigurowany)
+            if (perGuildChannelId) {
+                try {
+                    const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
+                    if (guildChannel) {
+                        const fileAttachment2 = new AttachmentBuilder(imagePath, { name: fileName });
+                        const footerText = globalMsgId
+                            ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}`
+                            : `uid:${interaction.user.id}|gid:${interaction.guildId}`;
+                        const guildEmbed = buildEmbed(footerText);
+                        await guildChannel.send({ embeds: [guildEmbed], files: [fileAttachment2], components: [buildButtons()] });
+                        gl.info(`🛑 📋 Wysłano raport (${reason}) do per-guild kanału serwera ${interaction.guildId}`);
+                    }
+                } catch (err) {
+                    gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału: ${err.message}`);
+                }
+            }
         } catch (err) {
             gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
         }
@@ -2313,7 +3039,7 @@ class InteractionHandler {
 
         // Nazwy serwerów z cache
         const guildNames = {};
-        for (const gc of this.config.guilds) {
+        for (const gc of this.config.getAllGuilds()) {
             const g = interaction.client.guilds.cache.get(gc.id);
             guildNames[gc.id] = g?.name || gc.id;
         }
@@ -2366,7 +3092,7 @@ class InteractionHandler {
 
         // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds)
         if (isSuperUser) {
-            const guildButtons = this.config.guilds.map(gc =>
+            const guildButtons = this.config.getAllGuilds().map(gc =>
                 new ButtonBuilder()
                     .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
                     .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))

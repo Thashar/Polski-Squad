@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits } = require('discord.js');
 const config = require('./config/config');
+const GuildConfigService = require('./services/guildConfigService');
 
 // Telemetry init ma się wykonać po require('./config/config'), bo dopiero ten
 // require woła dotenv.config() i wrzuca LANGFUSE_* do process.env. Tracery są
@@ -31,6 +32,8 @@ const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'enders
 const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
 const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
 
+const guildConfigService = new GuildConfigService(config.ranking.dataDir);
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -48,17 +51,22 @@ const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
 const notificationService = new NotificationService(config);
 const userBlockService = new UserBlockService(config);
+const ocrBlockService = new (require('./services/ocrBlockService'))(guildConfigService);
 const roleRankingConfigService = new RoleRankingConfigService(config);
 const usageLimitService = new UsageLimitService(config);
 const tokenUsageService = new TokenUsageService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService);
 
 /**
  * Inicjalizuje bota EndersEcho
  */
 async function initializeBot() {
     try {
-        const guildCount = config.guilds.length;
+        // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
+        await guildConfigService.load(config.guilds);
+        config.setGuildConfigService(guildConfigService);
+
+        const guildCount = config.getAllGuilds().length;
         logger.success(`✅ EndersEcho gotowy - ranking z OCR, TOP role, ${guildCount} serwer(ów)`);
 
         // Inicjalizuj OCR service
@@ -107,6 +115,30 @@ client.on('interactionCreate', async (interaction) => {
         } catch (replyError) {
             logger.error('Nie można odpowiedzieć na interakcję (prawdopodobnie timeout):', replyError.message);
         }
+    }
+});
+
+client.on('guildCreate', async (guild) => {
+    try {
+        logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);
+        // Utwórz domyślny wpis (unconfigured, OCR zablokowane)
+        const existing = guildConfigService.getConfig(guild.id);
+        if (!existing) {
+            await guildConfigService.saveConfig(guild.id, {
+                configured: false,
+                ocrBlocked: ['update', 'test'],
+            });
+        }
+        // Zarejestruj komendy slash na nowym serwerze
+        await interactionHandler.registerCommandsForGuild(client, guild.id);
+        // Powiadomienie powitalne
+        if (guild.systemChannel) {
+            await guild.systemChannel.send(
+                '⚙️ **EndersEcho** has been added to your server!\nAn administrator must run **/configure** to set up the bot before it can be used.'
+            ).catch(() => {});
+        }
+    } catch (err) {
+        logger.error(`Błąd przy dodawaniu do serwera ${guild.id}: ${err.message}`);
     }
 });
 
