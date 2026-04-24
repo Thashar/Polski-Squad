@@ -1527,7 +1527,7 @@ class InteractionHandler {
 
             if (customId.startsWith('ee_block_')) {
                 const msgs = this.msgs(interaction.guildId);
-                if (!interaction.member.permissions.has('Administrator')) {
+                if (!interaction.member.permissions.has('Administrator') && !interaction.member.permissions.has('ModerateMembers')) {
                     await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
@@ -2771,7 +2771,7 @@ class InteractionHandler {
 
     async _handleAnalyzeButton(interaction, customId) {
         const msgs = this.msgs(interaction.guildId);
-        if (!interaction.member.permissions.has('Administrator')) {
+        if (!interaction.member.permissions.has('Administrator') && !interaction.member.permissions.has('ModerateMembers')) {
             await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
