@@ -2979,7 +2979,19 @@ class InteractionHandler {
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do per-guild kanału serwera ${interaction.guildId}`);
                     }
                 } catch (err) {
-                    gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału: ${err.message}`);
+                    if (err.code === 50013) {
+                        try {
+                            const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
+                            const me = guildChannel.guild?.members?.me;
+                            const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
+                            const missing = me ? needed.filter(p => !guildChannel.permissionsFor(me).has(p)) : [];
+                            gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (brak uprawnień): ${missing.length ? missing.join(', ') : 'nieznane'}`);
+                        } catch {
+                            gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (Missing Permissions, nie udało się sprawdzić których)`);
+                        }
+                    } else {
+                        gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału: ${err.message}`);
+                    }
                 }
             }
         } catch (err) {
