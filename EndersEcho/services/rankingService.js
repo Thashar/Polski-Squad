@@ -90,10 +90,11 @@ class RankingService {
      * Buduje globalny ranking — najlepszy wynik gracza ze wszystkich serwerów.
      * @returns {Promise<Array>}
      */
-    async getGlobalRanking() {
+    async getGlobalRanking(activeGuildIds = null) {
         const bestPerPlayer = new Map();
 
         for (const guild of this.config.getAllGuilds()) {
+            if (activeGuildIds && !activeGuildIds.has(guild.id)) continue;
             const ranking = await this.loadRanking(guild.id);
             for (const [userId, data] of Object.entries(ranking)) {
                 const existing = bestPerPlayer.get(userId);
@@ -498,6 +499,7 @@ class RankingService {
         const buttons = [];
 
         for (const guildConfig of this.config.getAllGuilds()) {
+            if (!client.guilds.cache.has(guildConfig.id)) continue;
             const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Server ${guildConfig.id}`;
             const label = guildName.length > 20 ? guildName.substring(0, 20) + '…' : guildName;
 

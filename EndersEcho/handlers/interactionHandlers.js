@@ -1699,7 +1699,7 @@ class InteractionHandler {
             let rankMsgs = msgs; // komunikaty do użycia w embeddzie
 
             if (customId === 'ranking_select_global') {
-                players = await this.rankingService.getGlobalRanking();
+                players = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
                 mode = 'global';
                 // Dla globalnego używamy języka bieżącego serwera
             } else {
@@ -1722,7 +1722,7 @@ class InteractionHandler {
             let callerStats = null;
             try {
                 const callerUserId = interaction.user.id;
-                const globalRanking = await this.rankingService.getGlobalRanking();
+                const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
                 const globalIdx = globalRanking.findIndex(p => p.userId === callerUserId);
                 const serverPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 const serverIdx = serverPlayers.findIndex(p => p.userId === callerUserId);
