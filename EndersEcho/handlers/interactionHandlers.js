@@ -2979,15 +2979,22 @@ class InteractionHandler {
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do per-guild kanału serwera ${interaction.guildId}`);
                     }
                 } catch (err) {
-                    if (err.code === 50013) {
+                    if (err.code === 50013 || err.code === 50001) {
                         try {
-                            const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
-                            const me = guildChannel.guild?.members?.me;
-                            const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles'];
-                            const missing = me ? needed.filter(p => !guildChannel.permissionsFor(me).has(p)) : [];
-                            gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (brak uprawnień): ${missing.length ? missing.join(', ') : 'nieznane'}`);
-                        } catch {
-                            gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (Missing Permissions, nie udało się sprawdzić których)`);
+                            const guild = await interaction.client.guilds.fetch(interaction.guildId);
+                            const me = await guild.members.fetchMe();
+                            const ch = guild.channels.cache.get(perGuildChannelId)
+                                || await guild.channels.fetch(perGuildChannelId).catch(() => null);
+                            if (ch && me) {
+                                const perms = ch.permissionsFor(me);
+                                const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles', 'ReadMessageHistory'];
+                                const missing = needed.filter(p => !perms.has(p));
+                                gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code} ${err.message}). Brakujące uprawnienia: ${missing.length ? missing.join(', ') : 'wszystkie OK — inny powód'}`);
+                            } else {
+                                gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code}): nie udało się pobrać kanału/membera`);
+                            }
+                        } catch (diagErr) {
+                            gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code} ${err.message}): diagnostyka nieudana — ${diagErr.message}`);
                         }
                     } else {
                         gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału: ${err.message}`);
