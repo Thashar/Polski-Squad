@@ -132,7 +132,7 @@ class TokenUsageService {
 
     getMonthTotals(guildFilter, month) {
         const guildIds = guildFilter === 'all'
-            ? (this.config?.guilds?.map(g => g.id) || Object.keys(this.data.guilds))
+            ? Object.keys(this.data.guilds)
             : [guildFilter];
 
         let promptTokens = 0, outputTokens = 0, requests = 0;

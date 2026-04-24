@@ -3206,12 +3206,14 @@ class InteractionHandler {
 
         // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds)
         if (isSuperUser) {
-            const guildButtons = this.config.getAllGuilds().map(gc =>
-                new ButtonBuilder()
-                    .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
-                    .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
-                    .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            );
+            const guildButtons = this.config.getAllGuilds()
+                .filter(gc => interaction.client.guilds.cache.has(gc.id))
+                .map(gc =>
+                    new ButtonBuilder()
+                        .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
+                        .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
+                        .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                );
             guildButtons.push(
                 new ButtonBuilder()
                     .setCustomId(`tk_a_${monthStr}_${userId}`)
