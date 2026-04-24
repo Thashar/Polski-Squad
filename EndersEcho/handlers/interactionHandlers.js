@@ -2771,6 +2771,7 @@ class InteractionHandler {
             await interaction.editReply({
                 content: '❌ Brak zdjęcia w raporcie.',
                 embeds: interaction.message.embeds,
+                attachments: [],
                 components: [],
             });
             return;
@@ -2800,6 +2801,7 @@ class InteractionHandler {
                 await interaction.editReply({
                     content: `❌ Analizowano przez **${adminName}** — nie udało się odczytać danych: ${aiResult.error || 'nieznany błąd'}`,
                     embeds: interaction.message.embeds,
+                    attachments: [],
                     components: [],
                 });
                 return;
@@ -2858,6 +2860,7 @@ class InteractionHandler {
             await interaction.editReply({
                 content: `✅ Analizowano przez **${adminName}** — Boss: **${aiResult.bossName || 'nieznany'}** | Wynik: **${aiResult.score}** | ${isNewRecord ? '🏆 Nowy rekord!' : 'Nie pobito rekordu'}`,
                 embeds: interaction.message.embeds,
+                attachments: [],
                 components: [],
             });
             if (footerInfo.globalMsgId) {
@@ -2868,6 +2871,7 @@ class InteractionHandler {
             await interaction.editReply({
                 content: `❌ Błąd analizy: ${err.message}`,
                 embeds: interaction.message.embeds,
+                attachments: [],
                 components: [],
             }).catch(() => {});
         } finally {
