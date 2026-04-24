@@ -839,9 +839,8 @@ class InteractionHandler {
                     await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                const adminName = interaction.member?.displayName || interaction.user.username;
                 await interaction.update({
-                    content: formatMessage(msgs.approveSuccess, { adminName }),
+                    content: interaction.message.content,
                     embeds: interaction.message.embeds,
                     components: []
                 });
