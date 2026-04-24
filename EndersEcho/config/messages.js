@@ -230,7 +230,7 @@ const pol = {
 
     // /configure — wspólne
     configureNotAdmin: '❌ Wymagane uprawnienie **Administrator** do konfiguracji bota.',
-    configureSaved: '✅ Konfiguracja została zapisana! Bot jest teraz aktywny na tym serwerze.\n\n⚠️ Komendy `/update` i `/test` są domyślnie **wyłączone**. Skontaktuj się z https://discord.com/users/398983446812295168 w celu odblokowania komend do analizy.',
+    configureSaved: '✅ Konfiguracja została zapisana! Bot jest teraz aktywny na tym serwerze.\n\n⚠️ Komendy `/update` i `/test` są domyślnie **wyłączone**. Skontaktuj się z @Thashar w celu odblokowania komend do analizy.',
     configureCancelled: '❌ Konfiguracja anulowana. Poprzednie ustawienia pozostają bez zmian.',
     configureTagTooLong: '❌ Tag może mieć maksymalnie 4 znaki.',
     configureTagEmpty: '❌ Tag nie może być pusty.',
@@ -468,7 +468,7 @@ const eng = {
 
     // /configure — common
     configureNotAdmin: '❌ **Administrator** permission required to configure the bot.',
-    configureSaved: '✅ Configuration saved! The bot is now active on this server.\n\n⚠️ Commands `/update` and `/test` are **disabled** by default. Contact https://discord.com/users/398983446812295168 to unlock the analysis commands.',
+    configureSaved: '✅ Configuration saved! The bot is now active on this server.\n\n⚠️ Commands `/update` and `/test` are **disabled** by default. Contact @Thashar to unlock the analysis commands.',
     configureCancelled: '❌ Configuration cancelled. Previous settings remain unchanged.',
     configureTagTooLong: '❌ The tag can have a maximum of 4 characters.',
     configureTagEmpty: '❌ The tag cannot be empty.',
