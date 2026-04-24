@@ -190,6 +190,8 @@ EndersEcho/data/
 
 **Rejestracja komend:** Komendy slash rejestrowane per-serwer przez `registerSlashCommands()` (start) i `registerCommandsForGuild()` (guildCreate / po /configure).
 
+**Sync identity → Polski Squad admin API** — wpięcie `guildCreate`, `guildDelete`, `guildMemberAdd`, `guildMemberUpdate` w [index.js](index.js), po jednym listenerze na event, każdy fire-and-forget przez `appSync.guildJoined/guildLeft/memberSeen`. Uniwersalny kontrakt (projekcja, endpointy, intenty, polityka błędów) opisany w głównym [CLAUDE.md § 6](../CLAUDE.md). EndersEcho-specyfika: `guildCreate` ma **dwa** listenery — onboarding (default guild config, rejestracja komend, welcome message) i osobno appSync push. Wymaga `GatewayIntentBits.GuildMembers` (już włączony w [index.js:42](index.js#L42)).
+
 ---
 
 ## Zmienne Środowiskowe

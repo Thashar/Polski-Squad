@@ -121,7 +121,6 @@ client.on('interactionCreate', async (interaction) => {
 client.on('guildCreate', async (guild) => {
     try {
         logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);
-        // Utwórz domyślny wpis (unconfigured, OCR zablokowane)
         const existing = guildConfigService.getConfig(guild.id);
         if (!existing) {
             await guildConfigService.saveConfig(guild.id, {
@@ -129,9 +128,7 @@ client.on('guildCreate', async (guild) => {
                 ocrBlocked: ['update', 'test'],
             });
         }
-        // Zarejestruj komendy slash na nowym serwerze
         await interactionHandler.registerCommandsForGuild(client, guild.id);
-        // Powiadomienie powitalne
         if (guild.systemChannel) {
             await guild.systemChannel.send(
                 '⚙️ **EndersEcho** has been added to your server!\nAn administrator must run **/configure** to set up the bot before it can be used.'
@@ -139,6 +136,62 @@ client.on('guildCreate', async (guild) => {
         }
     } catch (err) {
         logger.error(`Błąd przy dodawaniu do serwera ${guild.id}: ${err.message}`);
+    }
+});
+
+function projectGuildMember(member) {
+    const username = member?.user?.username;
+    if (!username) return null;
+
+    const globalName = member.user.globalName?.trim() ? member.user.globalName : null;
+    const nickname = member.nickname?.trim() ? member.nickname : null;
+
+    return {
+        guildId: member.guild.id,
+        discordId: member.user.id,
+        username,
+        globalName,
+        nickname,
+        avatarHash: member.user.avatar ?? null,
+        roleIds: member.roles.cache.map(r => r.id),
+        joinedAt: member.joinedAt?.toISOString() ?? new Date().toISOString(),
+    };
+}
+
+client.on('guildCreate', async (guild) => {
+    try {
+        await appSync.guildJoined({ guildId: guild.id, guildName: guild.name });
+    } catch (err) {
+        logger.error(`Błąd guildJoined (guildId=${guild.id}):`, err);
+    }
+});
+
+client.on('guildDelete', async (guild) => {
+    if (guild.available === false) return;
+    try {
+        await appSync.guildLeft({ guildId: guild.id });
+    } catch (err) {
+        logger.error(`Błąd guildLeft (guildId=${guild.id}):`, err);
+    }
+});
+
+client.on('guildMemberAdd', async (member) => {
+    try {
+        const payload = projectGuildMember(member);
+        if (!payload) return;
+        await appSync.memberSeen(payload);
+    } catch (err) {
+        logger.error(`Błąd memberSeen add (guildId=${member?.guild?.id}, discordId=${member?.user?.id}):`, err);
+    }
+});
+
+client.on('guildMemberUpdate', async (_oldMember, newMember) => {
+    try {
+        const payload = projectGuildMember(newMember);
+        if (!payload) return;
+        await appSync.memberSeen(payload);
+    } catch (err) {
+        logger.error(`Błąd memberSeen update (guildId=${newMember?.guild?.id}, discordId=${newMember?.user?.id}):`, err);
     }
 });
 

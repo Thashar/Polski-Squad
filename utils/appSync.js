@@ -116,6 +116,9 @@ function createAppSync(overrides = {}) {
         combatWeekly: (data) => pushSync('/combat-weekly', data),
         cxEntry: (data) => pushSync('/cx-entry', data),
         endersEchoSnapshot: (data) => pushSync('/endersecho-snapshot', data),
+        guildJoined: (data) => pushSync('/guild/joined', data),
+        guildLeft: (data) => pushSync('/guild/left', data),
+        memberSeen: (data) => pushSync('/guild/member-seen', data),
     };
 
     const syncBatch = {

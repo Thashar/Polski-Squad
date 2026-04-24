@@ -643,7 +643,7 @@ Współdzielony HTTP client do wypychania zapisów botów do Polski Squad web AP
   ```
   Shared util (`createAppSync`, `createAppOperations`) NIE rozwiązuje nazw envów dynamicznie — nie ma magii typu `process.env[<SLUG>_API_KEY]`. Powód: `ENDERSECHO_API_KEY` musi być greppowalny, typo w slugu nie może po cichu spaść na default, a zmiana nazwy envu musi mieć jedno oczywiste miejsce do edycji (config.js danego bota).
 
-#### API (9 typowanych wrapperów)
+#### API (12 typowanych wrapperów)
 
 ```javascript
 const { sync: appSync, eventId, isoWeekStartUTC } = require('../../utils/appSync');
@@ -657,6 +657,13 @@ appSync.phaseResult({ guildId, discordId, phase /* 'PHASE_1'|'PHASE_2' */, year,
 appSync.combatWeekly({ discordId, year, weekNumber /* 1-53 */, weekStartsAt, rc, tc, attack /* string lub number - API zamieni na string */ });
 appSync.coreStock({ discordId, guildId, takenAt, items /* { [coreType]: number } */ });
 appSync.endersEchoSnapshot({ discordId, snapshotDate, rank /* >=1 */, scoreNumeric /* String(int) */, totalPlayers });
+
+// Bot guild lifecycle + identity projection (upsertowe po stronie API):
+appSync.guildJoined({ guildId, guildName /* 1..100 */ });        // on guildCreate
+appSync.guildLeft({ guildId });                                  // on guildDelete (skip gdy guild.available===false)
+appSync.memberSeen({ guildId, discordId, username, globalName, nickname, avatarHash, roleIds, joinedAt });
+// memberSeen: puste stringi MUSZĄ być zwinięte do null (API traktuje "" jako realną wartość).
+// Brak username → pomiń POST całkowicie.
 
 // Event logi (wymagają deterministycznego `id` — użyj eventId(...)):
 appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind /* 'BOSS_FAIL'|'MANUAL'|'WEEKLY_RESET'|'MANUAL_REMOVAL'|'OTHER' */, reasonNote, occurredAt, issuedBy });
@@ -718,6 +725,96 @@ Staging-push z backfillu: przekaż `api_url:https://staging-api.polski-squad.exa
 | **Stalker** | `handlers/interactionHandlers` (`handleEquipmentSave`) | `core-stock` |
 | **Kontroler** | `handlers/messageHandlers` (po OCR CX) | `cx-entry` |
 | **EndersEcho** | `services/rankingService` (`saveSharedRanking`) | `endersecho-snapshot` |
+| **EndersEcho** | `index.js` (gateway handlery: `guildCreate`, `guildDelete`, `guildMemberAdd`, `guildMemberUpdate`) | `guild/joined`, `guild/left`, `guild/member-seen` |
+
+#### Sync identity → admin API (guild lifecycle + member projection)
+
+Uniwersalny schemat dla każdego bota, który powinien wypychać stan obecności instalacji i tożsamości członków do Polski Squad web API. Pozwala admin panelowi utrzymać `ServerBot` oraz projekcję `Player.{username, displayName, displayNick, avatarUrl}` w zgodzie z rzeczywistością Discorda bez czekania na godzinowy REST reconcile.
+
+Wszystkie pushy idą przez shared [utils/appSync.js](utils/appSync.js) (`sync.guildJoined`, `sync.guildLeft`, `sync.memberSeen`) — ta sama para `APP_API_URL` + `BOT_API_KEY` (z per-bot override, np. `ENDERSECHO_API_KEY`) co pozostały bot sync. Brak kluczy → cicho no-op (dev/test).
+
+Wymaga `GatewayIntentBits.Guilds` + `GatewayIntentBits.GuildMembers` (privileged — włącz w Discord Developer Portal).
+
+| Event gateway | Endpoint | Payload | Kiedy |
+|---|---|---|---|
+| `guildCreate` | `POST /api/bot/guild/joined` | `{ guildId, guildName /* 1..100 */ }` | Bot dodany do serwera **oraz** każdy reconnect gatewaya (darmowy reconciliation pass — API idempotentne po `discordGuildId`). |
+| `guildDelete` | `POST /api/bot/guild/left` | `{ guildId }` | Bot wykopany/zbanowany/gildia skasowana. **Pomijane gdy `guild.available === false`** (przejściowa awaria Discorda, nie realne wyjście). Real-time sygnał dla API żeby soft-disable `ServerBot`. |
+| `guildMemberAdd` + `guildMemberUpdate` | `POST /api/bot/guild/member-seen` | (patrz niżej) | Write-through projekcja tożsamości. Każdy update = full refresh, API nie oczekuje diffu. |
+
+**Projekcja członka (`memberSeen`)** — byte-for-byte parity z siostrzanym botem SYSTEM:
+
+```javascript
+function projectGuildMember(member) {
+    const username = member?.user?.username;
+    if (!username) return null;  // brak username → pomiń POST całkowicie (bez placeholderów)
+
+    const globalName = member.user.globalName?.trim() ? member.user.globalName : null;
+    const nickname = member.nickname?.trim() ? member.nickname : null;
+
+    return {
+        guildId: member.guild.id,
+        discordId: member.user.id,
+        username,
+        globalName,
+        nickname,
+        avatarHash: member.user.avatar ?? null,   // raw hash, nie URL
+        roleIds: member.roles.cache.map(r => r.id),
+        joinedAt: member.joinedAt?.toISOString() ?? new Date().toISOString(),
+    };
+}
+```
+
+Wszystkie pola są **wymagane** w wire schemacie — brak wartości = `null` (nie pomijanie klucza). **Puste stringi MUSZĄ być zwinięte do `null`** — API traktuje `""` jako realną wartość.
+
+**NIE wysyłamy:** `guildMemberRemove`, `roleCreate/Update/Delete` ani żadnych innych eventów — brak endpointów po stronie API. Zakres jest ściśle ograniczony: obecność instalacji (joined/left) + tożsamość członka (seen). Nie włączaj `MessageContent`/`Presence` intentów jeśli nie są potrzebne gdzie indziej.
+
+**Polityka błędów:** każdy handler owinięty w try/catch z logiem `{ err, guildId, discordId? }`, nigdy nie rethrow — zły POST nie może crashować sharda. `appSync` ma retry 3× z backoffem 2s/4s/6s na 5xx/network; 4xx = log + koniec. Nieudany POST to self-healing — następny event (reconnect, kolejny update, godzinowy REST reconcile po stronie API) zbiegnie się ponownie.
+
+**Wzorzec wpięcia w `{Bot}/index.js`:**
+
+```javascript
+const { createAppSync } = require('../utils/appSync');
+const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
+
+client.on('guildCreate', async (guild) => {
+    try {
+        await appSync.guildJoined({ guildId: guild.id, guildName: guild.name });
+    } catch (err) {
+        logger.error(`Błąd guildJoined (guildId=${guild.id}):`, err);
+    }
+});
+
+client.on('guildDelete', async (guild) => {
+    if (guild.available === false) return;
+    try {
+        await appSync.guildLeft({ guildId: guild.id });
+    } catch (err) {
+        logger.error(`Błąd guildLeft (guildId=${guild.id}):`, err);
+    }
+});
+
+client.on('guildMemberAdd', async (member) => {
+    try {
+        const payload = projectGuildMember(member);
+        if (!payload) return;
+        await appSync.memberSeen(payload);
+    } catch (err) {
+        logger.error(`Błąd memberSeen add (guildId=${member?.guild?.id}, discordId=${member?.user?.id}):`, err);
+    }
+});
+
+client.on('guildMemberUpdate', async (_oldMember, newMember) => {
+    try {
+        const payload = projectGuildMember(newMember);
+        if (!payload) return;
+        await appSync.memberSeen(payload);
+    } catch (err) {
+        logger.error(`Błąd memberSeen update (guildId=${newMember?.guild?.id}, discordId=${newMember?.user?.id}):`, err);
+    }
+});
+```
+
+Jeśli bot ma już swój `guildCreate` handler (np. onboarding gildii) — dodaj **osobny** listener na `guildCreate` dla appSync, nie splataj z istniejącą logiką. Discord.js wspiera wielu nasłuchujących na ten sam event; każdy ma własny try/catch i nie blokują się nawzajem.
 
 #### One-time backfill — `utils/appBackfill.js`
 
