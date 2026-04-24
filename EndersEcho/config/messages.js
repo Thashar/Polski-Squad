@@ -75,7 +75,7 @@ const pol = {
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
-    recordFollowerLabel: '🔔 SUBSKRYPCJE `/subscribe`:',
+    recordFollowerLabel: '🔔 SUBSKRYPCJE:',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -132,7 +132,7 @@ const pol = {
     notifRemoveNone: '📭 Nie masz żadnych ustawionych powiadomień.',
     notifDmFooter: '👁️ Obserwujesz tego gracza — powiadomienie subskrypcyjne',
     notifDmBrokeRecord: 'pobił swój rekord!',
-    notifDmField1Name: '## 📊 Twój aktualny wynik:',
+    notifDmField1Name: '📊 Twój aktualny wynik:',
     notifDmField2Name: 'Porównanie do Twoich wyników:',
     notifDmBeatYourRecord: '🚨 Pobił Twój rekord o {diff}',
     notifDmMissingToRecord: '✅ Brakuje {diff} do Twojego rekordu',
@@ -322,7 +322,7 @@ const eng = {
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
-    recordFollowerLabel: '🔔 SUBSCRIPTIONS `/subscribe`:',
+    recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',
@@ -379,7 +379,7 @@ const eng = {
     notifRemoveNone: '📭 You have no notifications set.',
     notifDmFooter: '👁️ You are following this player — subscription notification',
     notifDmBrokeRecord: 'broke their record!',
-    notifDmField1Name: '## 📊 Your current score:',
+    notifDmField1Name: '📊 Your current score:',
     notifDmField2Name: 'Comparison to your score:',
     notifDmBeatYourRecord: '🚨 Beat your record by {diff}',
     notifDmMissingToRecord: '✅ {diff} away from your record',

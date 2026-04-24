@@ -695,7 +695,6 @@ class RankingService {
         const medal = this.getPositionMedal(currentPosition);
 
         // Buduj opis z wszystkimi danymi
-        const dateStr = new Date().toLocaleDateString(msgs.recordDateLocale || 'pl-PL');
         let descLines = [];
         descLines.push(formatMessage(msgs.recordDescription, { username: userName }));
         descLines.push('');
@@ -723,10 +722,9 @@ class RankingService {
         }
 
         const timeSince = this.formatTimeSince(previousTimestamp);
-        const dateLine = timeSince
-            ? `**${msgs.recordDateLabel}:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
-            : `**${msgs.recordDateLabel}:** ${dateStr}`;
-        descLines.push(dateLine);
+        if (timeSince) {
+            descLines.push(`*(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`);
+        }
 
         const description = descLines.join('\n');
 
@@ -808,17 +806,17 @@ class RankingService {
         descLines.push(`**${msgs.globalTop3GlobalPosition}:** ${medal} #${globalPosition}${positionNote}`);
         descLines.push(`**${msgs.globalTop3Server}:** ${sourceGuildName}`);
 
-        const dateStr = new Date().toLocaleDateString(msgs.recordDateLocale || 'pl-PL');
         const timeSince = this.formatTimeSince(previousTimestamp);
-        const dateLine = timeSince
-            ? `**${msgs.recordDateLabel}:** ${dateStr}  *(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`
-            : `**${msgs.recordDateLabel}:** ${dateStr}`;
-        descLines.push(dateLine);
+        if (timeSince) {
+            descLines.push(`*(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`);
+        }
 
         const podiumMedals = ['🥇', '🥈', '🥉'];
+        const guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag || null]));
         const podiumLines = top3Players.slice(0, 3).map((p, i) => {
-            const medal = podiumMedals[i];
-            return `${medal} **${p.username}** • ${p.score}`;
+            const m = podiumMedals[i];
+            const tag = guildTagMap.get(p.sourceGuildId);
+            return tag ? `${m} **${p.username}** - ${p.score} - ${tag}` : `${m} **${p.username}** - ${p.score}`;
         });
 
         const embed = new EmbedBuilder()
