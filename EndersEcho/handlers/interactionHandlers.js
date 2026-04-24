@@ -2826,11 +2826,12 @@ class InteractionHandler {
                     const guildMsgs = this.config.getMessages(targetGuildId);
                     const targetUser = await interaction.client.users.fetch(targetUserId);
                     const rolePositions = [];
+                    const analyzedFileName = `analyzed_${Date.now()}.png`;
                     const publicEmbed = await this.rankingService.createRecordEmbed(
                         userName,
                         aiResult.score,
                         targetUser.displayAvatarURL(),
-                        `analyzed_${Date.now()}.png`,
+                        analyzedFileName,
                         isNewRecord && currentScore ? currentScore.score : null,
                         targetUserId,
                         targetGuildId,
@@ -2840,7 +2841,7 @@ class InteractionHandler {
                         isNewRecord && currentScore ? currentScore.timestamp : null,
                         rolePositions
                     );
-                    const announcementAttachment = new AttachmentBuilder(tempPath, { name: `analyzed_${Date.now()}.png` });
+                    const announcementAttachment = new AttachmentBuilder(tempPath, { name: analyzedFileName });
                     await guildChannel.send({ embeds: [publicEmbed], files: [announcementAttachment] });
 
                     // Aktualizuj role TOP
