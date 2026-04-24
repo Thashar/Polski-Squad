@@ -350,7 +350,9 @@ class RankingService {
         const title = options.titleOverride || (isGlobal ? msgs.rankingGlobalTitle : msgs.rankingTitle);
 
         // Pole statystyk
-        const serverCount = this.config.getAllGuilds().length;
+        const serverCount = isGlobal
+            ? this.config.getAllGuilds().filter(g => client?.guilds?.cache?.has(g.id)).length
+            : 0;
         const statsLines = [
             ...(isGlobal ? [formatMessage(msgs.rankingServersCount, { count: serverCount })] : []),
             formatMessage(msgs.rankingPlayersCount, { count: players.length })
@@ -386,7 +388,7 @@ class RankingService {
         }
 
         // Pole statystyk ogólnych (drugie)
-        embed.addFields({ name: msgs.rankingStats, value: statsLines.join('\n'), inline: false });
+        embed.addFields({ name: isGlobal ? msgs.rankingStatsGlobal : msgs.rankingStats, value: statsLines.join('\n'), inline: false });
 
         embed
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })

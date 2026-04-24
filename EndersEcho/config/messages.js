@@ -18,6 +18,7 @@ const pol = {
     // Ranking — embed
     rankingTitle: '🏆 Ranking Graczy',
     rankingStats: 'Statystyki',
+    rankingStatsGlobal: 'Statystyki globalne',
     rankingPlayersCount: '👥 Liczba graczy: {count}',
     rankingServersCount: '🌍 Serwery: {count}',
     rankingHighestScore: '🏆 Najwyższy wynik: {score}',
@@ -264,6 +265,7 @@ const eng = {
     // Ranking — embed
     rankingTitle: '🏆 Player Ranking',
     rankingStats: 'Statistics',
+    rankingStatsGlobal: 'Global statistics',
     rankingPlayersCount: '👥 Players: {count}',
     rankingServersCount: '🌍 Servers: {count}',
     rankingHighestScore: '🏆 Highest score: {score}',
