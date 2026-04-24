@@ -1092,6 +1092,11 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
         await interaction.editReply({ content: msgs.updateProcessing });
 
+        // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR
+        if (!dryRun && this.updateCooldownService) {
+            await this.updateCooldownService.setCooldown(interaction.user.id);
+        }
+
         let tempImagePath = null;
 
         try {
@@ -1181,10 +1186,6 @@ class InteractionHandler {
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
-                // Ustaw cooldown po udanym zapisie wyniku (tylko /update, nie /test)
-                if (this.updateCooldownService) {
-                    await this.updateCooldownService.setCooldown(userId);
-                }
             }
 
             gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}${dryRun ? ' (tryb testowy)' : ''}`);
