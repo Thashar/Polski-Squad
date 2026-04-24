@@ -74,7 +74,7 @@ const pol = {
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
-    recordFollowerLabel: '🔔 SUBSKRYPCJE (/subscribe):',
+    recordFollowerLabel: '🔔 SUBSKRYPCJE `/subscribe`:',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -274,7 +274,7 @@ const eng = {
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
-    recordFollowerLabel: '🔔 SUBSCRIPTIONS (/subscribe):',
+    recordFollowerLabel: '🔔 SUBSCRIPTIONS `/subscribe`:',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',
