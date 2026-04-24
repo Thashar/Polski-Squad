@@ -2763,9 +2763,13 @@ class InteractionHandler {
                 return builder;
             });
 
-            await globalMsg.edit({ embeds: updatedEmbeds, components: [] });
+            await globalMsg.edit({
+                embeds: updatedEmbeds,
+                components: [],
+                attachments: [...globalMsg.attachments.values()],
+            });
         } catch (err) {
-            logger.warn(`⚠️ Nie można zaktualizować globalnego raportu ${globalMsgId}: ${err.message}`);
+            logger.error(`❌ Nie można zaktualizować globalnego raportu ${globalMsgId}: ${err.message}`);
         }
     }
 
@@ -2820,7 +2824,6 @@ class InteractionHandler {
                 await interaction.editReply({
                     content: formatMessage(msgs.analyzeResultFail, { adminName, error: aiResult.error || msgs.analyzeResultUnknown }),
                     embeds: interaction.message.embeds,
-                    attachments: [],
                     components: [],
                 });
                 return;
@@ -2885,7 +2888,6 @@ class InteractionHandler {
                     result: isNewRecord ? msgs.analyzeResultNewRecord : msgs.analyzeResultNoRecord,
                 }),
                 embeds: interaction.message.embeds,
-                attachments: [],
                 components: [],
             });
             if (footerInfo.globalMsgId) {
@@ -2896,7 +2898,6 @@ class InteractionHandler {
             await interaction.editReply({
                 content: `❌ Błąd analizy: ${err.message}`,
                 embeds: interaction.message.embeds,
-                attachments: [],
                 components: [],
             }).catch(() => {});
         } finally {
