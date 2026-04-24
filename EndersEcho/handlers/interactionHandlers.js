@@ -451,7 +451,7 @@ class InteractionHandler {
                 new ButtonBuilder()
                     .setCustomId('cfg_accept')
                     .setLabel(t('✅  Zaakceptuj konfigurację!', '✅  Accept Configuration!'))
-                    .setStyle(ButtonStyle.Success),
+                    .setStyle(ButtonStyle.Danger),
                 cancelBtn
             ));
         } else {
