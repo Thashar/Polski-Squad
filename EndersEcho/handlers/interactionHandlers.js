@@ -475,24 +475,32 @@ class InteractionHandler {
                     'Uzupełnij wszystkie kroki poniżej, aby aktywować bota na tym serwerze.\nKlikaj przyciski aby konfigurować poszczególne elementy.',
                     'Complete all steps below to activate EndersEcho on this server.\nClick each button to configure that step.'
                 ) + '\n\n' +
-                t(
-                    '📋 **Przegląd kroków:**\n' +
-                    '1️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
-                    '2️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
-                    '3️⃣  **Język** — interfejs po polsku lub angielsku\n' +
-                    '4️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
-                    '5️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
-                    '6️⃣  **Kanał raportów** *(opcjonalne)* — gdzie trafiają alerty o odrzuconych screenach\n\n' +
-                    '⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Skontaktuj się z @Thashar w celu odblokowania komend do analizy.',
-                    '📋 **Steps overview:**\n' +
-                    '1️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
-                    '2️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
-                    '3️⃣  **Language** — Polish or English interface\n' +
-                    '4️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
-                    '5️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
-                    '6️⃣  **Report Channel** *(optional)* — where rejected screenshot alerts appear\n\n' +
-                    '⚠️ After activation `/update` and `/test` will be **disabled** by default. Contact @Thashar to unlock the analysis commands.'
-                ) + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
+                (() => {
+                    const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
+                    const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
+                    const bothEnabled = !updateBlocked && !testBlocked;
+                    const ocrStatusLine = bothEnabled
+                        ? t('✅ Komendy `/update` i `/test` są **włączone** i można z nich korzystać.', '✅ Commands `/update` and `/test` are **enabled** and ready to use.')
+                        : t('⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Skontaktuj się z @Thashar w celu odblokowania komend do analizy.', '⚠️ After activation `/update` and `/test` will be **disabled** by default. Contact @Thashar to unlock the analysis commands.');
+                    return t(
+                        '📋 **Przegląd kroków:**\n' +
+                        '1️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
+                        '2️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
+                        '3️⃣  **Język** — interfejs po polsku lub angielsku\n' +
+                        '4️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
+                        '5️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
+                        '6️⃣  **Kanał raportów** *(opcjonalne)* — gdzie trafiają alerty o odrzuconych screenach\n\n' +
+                        ocrStatusLine,
+                        '📋 **Steps overview:**\n' +
+                        '1️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
+                        '2️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
+                        '3️⃣  **Language** — Polish or English interface\n' +
+                        '4️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
+                        '5️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
+                        '6️⃣  **Report Channel** *(optional)* — where rejected screenshot alerts appear\n\n' +
+                        ocrStatusLine
+                    );
+                })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
             );
 
         return { embed, rows, allDone };
