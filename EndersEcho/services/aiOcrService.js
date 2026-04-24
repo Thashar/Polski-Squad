@@ -228,6 +228,8 @@ UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY c
 Odczytaj wartości DOKŁADNIE tak jak są na ekranie.
 NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
 NIE DODAWAJ cyfr których nie ma na ekranie.
+NIE WYMYŚLAJ liczb jeśli ich nie ma.
+ZAKAZ HALUCYNACJI!
 Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 <nazwa bossa>
 <wynik Best z jednostką>
