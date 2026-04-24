@@ -398,7 +398,8 @@ class InteractionHandler {
             const choices = [];
             for (const guildId of configuredIds) {
                 const discordGuild = interaction.client.guilds.cache.get(guildId);
-                const name = discordGuild?.name || guildId;
+                if (!discordGuild) continue;
+                const name = discordGuild.name;
                 if (name.toLowerCase().includes(focused) || guildId.includes(focused)) {
                     choices.push({ name: `${name} (${guildId})`, value: guildId });
                 }
