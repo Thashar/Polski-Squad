@@ -473,7 +473,7 @@ class InteractionHandler {
                     '4️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
                     '5️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
                     '6️⃣  **Kanał raportów** *(opcjonalne)* — gdzie trafiają alerty o odrzuconych screenach\n\n' +
-                    '⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Head admin musi użyć `/ocr-on-off`.',
+                    '⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Skontaktuj się z @Thashar w celu odblokowania komend do analizy.',
                     '📋 **Steps overview:**\n' +
                     '1️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
                     '2️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
@@ -481,7 +481,7 @@ class InteractionHandler {
                     '4️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
                     '5️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
                     '6️⃣  **Report Channel** *(optional)* — where rejected screenshot alerts appear\n\n' +
-                    '⚠️ After activation `/update` and `/test` will be **disabled** by default. A head admin must use `/ocr-on-off` to enable them.'
+                    '⚠️ After activation `/update` and `/test` will be **disabled** by default. Contact @Thashar to unlock the analysis commands.'
                 ) + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
             );
 
