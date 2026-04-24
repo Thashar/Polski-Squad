@@ -21,6 +21,7 @@ const UserBlockService = require('./services/userBlockService');
 const RoleRankingConfigService = require('./services/roleRankingConfigService');
 const UsageLimitService = require('./services/usageLimitService');
 const { TokenUsageService } = require('./services/tokenUsageService');
+const { UpdateCooldownService } = require('./services/updateCooldownService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -55,7 +56,8 @@ const ocrBlockService = new (require('./services/ocrBlockService'))(guildConfigS
 const roleRankingConfigService = new RoleRankingConfigService(config);
 const usageLimitService = new UsageLimitService(config);
 const tokenUsageService = new TokenUsageService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService);
+const updateCooldownService = new UpdateCooldownService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -72,9 +74,10 @@ async function initializeBot() {
         // Inicjalizuj OCR service
         await ocrService.initialize();
 
-        // Wczytaj limit dzienny i historię tokenów
+        // Wczytaj limit dzienny, historię tokenów i cooldowny /update
         await usageLimitService.load();
         await tokenUsageService.load();
+        await updateCooldownService.load();
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);

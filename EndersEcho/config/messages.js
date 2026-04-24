@@ -158,6 +158,9 @@ const pol = {
     // Dzienny limit
     dailyLimitExceeded: '❌ Osiągnąłeś dzienny limit **{limit}** użyć komend /update i /test. Spróbuj jutro.',
 
+    // Cooldown /update
+    updateCooldown: '⏱️ Musisz poczekać jeszcze **{time}** przed ponownym użyciem `/update`.',
+
     // /test — wymagania i weryfikacja
     testAiOcrRequired: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).',
     testNotSimilarTitle: '❌ Zdjęcie nie pasuje do wzorca',
@@ -395,6 +398,9 @@ const eng = {
 
     // Daily limit
     dailyLimitExceeded: '❌ You have reached the daily limit of **{limit}** uses of /update and /test. Try again tomorrow.',
+
+    // Update cooldown
+    updateCooldown: '⏱️ You must wait **{time}** more before using `/update` again.',
 
     // /test — requirements and verification
     testAiOcrRequired: '❌ The `/test` command requires AI OCR to be enabled (`USE_ENDERSECHO_AI_OCR=true`).',

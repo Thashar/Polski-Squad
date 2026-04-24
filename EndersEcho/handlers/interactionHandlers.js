@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
+const { formatCooldownTime } = require('../services/updateCooldownService');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -43,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -58,6 +59,7 @@ class InteractionHandler {
         this.botOps = botOps;
         this.guildConfigService = guildConfigService;
         this.ocrBlockService = ocrBlockService;
+        this.updateCooldownService = updateCooldownService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
         // Stan wizarda /configure (userId_guildId -> { step data })
@@ -439,13 +441,21 @@ class InteractionHandler {
             ),
         ];
 
+        const cancelBtn = new ButtonBuilder()
+            .setCustomId('cfg_cancel')
+            .setLabel(t('Anuluj', 'Cancel'))
+            .setStyle(ButtonStyle.Secondary);
+
         if (allDone) {
             rows.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('cfg_accept')
-                    .setLabel(t('🔴  Zaakceptuj konfigurację!', '🔴  Accept Configuration!'))
-                    .setStyle(ButtonStyle.Danger)
+                    .setLabel(t('✅  Zaakceptuj konfigurację!', '✅  Accept Configuration!'))
+                    .setStyle(ButtonStyle.Success),
+                cancelBtn
             ));
+        } else {
+            rows.push(new ActionRowBuilder().addComponents(cancelBtn));
         }
 
         const summaryLines = [
@@ -578,10 +588,15 @@ class InteractionHandler {
 
         } else if (step === 3) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle('🌐 Step 3 — Language / Język')
-                .setDescription('Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.\n\nWybierz język interfejsu dla tego serwera.');
-            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel('🇵🇱 Polish').setStyle(ButtonStyle.Primary);
-            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel('🇬🇧 English').setStyle(ButtonStyle.Primary);
+                .setTitle(t('🌐 Krok 3 — Język', '🌐 Step 3 — Language'))
+                .setDescription(
+                    t(
+                        'Wybierz język interfejsu dla tego serwera.\nWszystkie wiadomości bota, powiadomienia i opisy komend będą wyświetlane w wybranym języku.',
+                        'Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.'
+                    )
+                );
+            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel(t('🇵🇱 Polski', '🇵🇱 Polish')).setStyle(ButtonStyle.Primary);
+            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel(t('🇬🇧 Angielski', '🇬🇧 English')).setStyle(ButtonStyle.Primary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(polBtn, engBtn, backBtn)] });
 
         } else if (step === 4) {
@@ -619,8 +634,8 @@ class InteractionHandler {
                 .setTitle(t('⚠️ Krok 6 — Kanał raportów (opcjonalne)', '⚠️ Step 6 — Report Channel (optional)'))
                 .setDescription(
                     t(
-                        'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nMożesz ustawić dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.\n\nGdy ktoś kliknie przycisk pod raportem, globalny kanał adminów zostanie zaktualizowany z informacją o podjętej akcji.\n\n**Uwaga:** Raporty zawsze trafiają też do globalnego kanału adminów. Ten krok jest opcjonalny.',
-                        'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nYou can set a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.\n\nWhen your team takes action on a report, the global admin channel will also be updated with details of the action taken.\n\n**Note:** All reports are always sent to the global admin channel as well. This step is optional.'
+                        'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nMożesz ustawić dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.',
+                        'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nYou can set a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.'
                     )
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
@@ -831,6 +846,24 @@ class InteractionHandler {
             return;
         }
 
+        // Anuluj konfigurację
+        if (customId === 'cfg_cancel') {
+            this._configWizard.delete(key);
+            await interaction.update({
+                embeds: [
+                    new EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setTitle(t('❌ Konfiguracja anulowana', '❌ Configuration cancelled'))
+                        .setDescription(t(
+                            'Konfiguracja została anulowana. Poprzednie ustawienia pozostają bez zmian.\nAby rozpocząć ponownie, użyj komendy `/configure`.',
+                            'Configuration has been cancelled. Previous settings remain unchanged.\nTo start again, run `/configure`.'
+                        ))
+                ],
+                components: []
+            });
+            return;
+        }
+
         // Zapisz konfigurację
         if (customId === 'cfg_accept') {
             const msgs = this.msgs(interaction.guildId);
@@ -1018,6 +1051,18 @@ class InteractionHandler {
             return;
         }
 
+        // Cooldown /update (nie dotyczy /test)
+        if (!dryRun && this.updateCooldownService) {
+            const remainingMs = this.updateCooldownService.getRemainingMs(interaction.user.id);
+            if (remainingMs !== null) {
+                await interaction.reply({
+                    content: formatMessage(msgs.updateCooldown, { time: formatCooldownTime(remainingMs) }),
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
+        }
+
         const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
         if (!limitCheck.allowed) {
             await interaction.reply({
@@ -1119,6 +1164,10 @@ class InteractionHandler {
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
+                // Ustaw cooldown po udanym zapisie wyniku (tylko /update, nie /test)
+                if (this.updateCooldownService) {
+                    await this.updateCooldownService.setCooldown(userId);
+                }
             }
 
             gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}${dryRun ? ' (tryb testowy)' : ''}`);
@@ -1556,7 +1605,7 @@ class InteractionHandler {
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
                 customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
-                customId === 'cfg_report_skip' || customId === 'cfg_accept') {
+                customId === 'cfg_report_skip' || customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 await this._handleConfigureButton(interaction, customId);
                 return;
             }
@@ -2716,10 +2765,11 @@ class InteractionHandler {
         const targetUserId = parts[2];
         const targetGuildId = parts[3];
 
-        const attachment = interaction.message.attachments.first();
-        if (!attachment) {
+        // Obraz jest w polu embed.image — Discord zwraca już pełny CDN URL po wysłaniu
+        const imageUrl = interaction.message.embeds[0]?.image?.url;
+        if (!imageUrl) {
             await interaction.editReply({
-                content: '❌ Brak zdjęcia w wiadomości.',
+                content: '❌ Brak zdjęcia w raporcie.',
                 embeds: interaction.message.embeds,
                 components: [],
             });
@@ -2729,7 +2779,7 @@ class InteractionHandler {
         const tempPath = path.join(this.config.ocr.tempDir, `analyze_${Date.now()}.png`);
         try {
             await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
-            const imgBuffer = await downloadBuffer(attachment.url);
+            const imgBuffer = await downloadBuffer(imageUrl);
             await fs.writeFile(tempPath, imgBuffer);
 
             const aiResult = await this.aiOcrService.extractImageData(tempPath, logger, {

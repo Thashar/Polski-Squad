@@ -38,6 +38,7 @@
      - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
+     - **Cooldown 5 min** po udanym zapisie wyniku — sprawdzany przez `updateCooldownService`; informuje gracza ile czasu pozostało (w języku serwera); persystowany w `data/update_cooldowns.json` (przeżywa restart)
    - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, wymaga AI OCR):** Tryb testowy `/update` — współdzieli pełną implementację przez `_runUpdateFlow(interaction, { dryRun: true, commandName: 'test', ocrBlockKey: 'test' })`:
      - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
      - Identyczny przepływ jak `/update` (te same walidacje, ten sam `analyzeTestImage()` z weryfikacją wzorca, ten sam prompt) **z wyjątkiem** kroków dry-run:
@@ -134,12 +135,13 @@
 - 6-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 2:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
-- **Krok 3:** Język (pol/eng) — wszystkie komunikaty i opisy komend
+- **Krok 3:** Język (pol/eng) — wszystkie komunikaty i opisy komend; tłumaczony na pol gdy `state.lang === 'pol'`
 - **Krok 4:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
 - **Krok 5:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 6:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
-- Czerwony przycisk **Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
-- Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komedy przekazywane dla nowego języka
+- Zielony przycisk **✅ Zaakceptuj konfigurację!** (ButtonStyle.Success) pojawia się gdy wszystkie kroki ukończone
+- Szary przycisk **Anuluj** widoczny od początku — czyści `_configWizard` i zamyka dashboard
+- Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
 - Bot po raz pierwszy dodany do serwera (`guildCreate`): automatyczna rejestracja komend + domyślny wpis (unconfigured, OCR zablokowane) + welcome message
@@ -157,6 +159,7 @@
 - Footer globalnego raportu: `uid:{userId}|gid:{guildId}`
 - Footer per-guild raportu: `ref:{globalMsgId}|uid:{userId}|gid:{guildId}`
 - Gdy admin klika przycisk na per-guild embeddzie → globalny raport aktualizowany (pole akcji + usunięcie przycisków)
+- Przycisk **Analizuj** (`ee_analyze_`) dostępny dla raportu `NOT_SIMILAR` — pobiera obraz z `embed.image.url` (CDN URL), nie z `message.attachments`; uruchamia pełny flow OCR i zapisuje wynik dla docelowego użytkownika
 - Metody pomocnicze: `_parseReportFooter(text)` i `_updateGlobalReportMsg(client, globalMsgId, guildId, action, admin, extra)`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
@@ -184,7 +187,8 @@ EndersEcho/data/
 ├── ranking_{guildId1}.json   # Ranking serwera 1
 ├── ranking_{guildId2}.json   # Ranking serwera 2
 ├── notifications.json        # Subskrypcje powiadomień DM
-├── guild_configs.json        # Per-guild konfiguracja (nowy plik)
+├── guild_configs.json        # Per-guild konfiguracja
+├── update_cooldowns.json     # Cooldowny /update (userId → expiresAt timestamp ms)
 └── ...
 ```
 
