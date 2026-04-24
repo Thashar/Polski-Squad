@@ -148,6 +148,12 @@ class InteractionHandler {
                             { name: '🔒 Disable', value: 'disable' }
                         ))
                 .addStringOption(option =>
+                    option.setName('guild')
+                        .setDescription('Server to apply the change to (autocomplete)')
+                        .setDescriptionLocalizations(pl('Serwer na którym zmienić ustawienie (autocomplete)'))
+                        .setRequired(true)
+                        .setAutocomplete(true))
+                .addStringOption(option =>
                     option.setName('target')
                         .setDescription('Which command (default: both)')
                         .setDescriptionLocalizations(pl('Która komenda (domyślnie: obie)'))
@@ -156,13 +162,7 @@ class InteractionHandler {
                             { name: '/update', value: 'update' },
                             { name: '/test', value: 'test' },
                             { name: 'Both / Obie', value: 'both' }
-                        ))
-                .addStringOption(option =>
-                    option.setName('guild')
-                        .setDescription('Server to apply the change to (autocomplete)')
-                        .setDescriptionLocalizations(pl('Serwer na którym zmienić ustawienie (autocomplete)'))
-                        .setRequired(true)
-                        .setAutocomplete(true)),
+                        )),
 
             new SlashCommandBuilder()
                 .setName('test')
