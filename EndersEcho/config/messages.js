@@ -162,6 +162,8 @@ const pol = {
     testAiOcrRequired: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).',
     testNotSimilarTitle: '❌ Zdjęcie nie pasuje do wzorca',
     testNotSimilarDescription: 'AI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa.',
+    testNotSimilarReasonLabel: '🔍 Powód odrzucenia',
+    analyzeBtn: 'Analizuj',
 
     // Rankingi ról
     roleRankingServerError: '❌ Nie można pobrać danych serwera.',
@@ -360,6 +362,8 @@ const eng = {
     testAiOcrRequired: '❌ The `/test` command requires AI OCR to be enabled (`USE_ENDERSECHO_AI_OCR=true`).',
     testNotSimilarTitle: '❌ Screenshot does not match the template',
     testNotSimilarDescription: 'The AI determined that the submitted screenshot does not show a boss result screen.',
+    testNotSimilarReasonLabel: '🔍 Rejection reason',
+    analyzeBtn: 'Analyze',
 
     // Role rankings
     roleRankingServerError: '❌ Unable to fetch server data.',

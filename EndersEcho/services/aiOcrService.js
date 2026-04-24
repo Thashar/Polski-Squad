@@ -22,7 +22,7 @@ const PROMPT_VERSIONS = {
     'authenticity-check': 'v1',
     'extract-data-eng':   'v1',
     'extract-data-jpn':   'v1',
-    'compare-template':   'v1',
+    'compare-template':   'v2',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -402,14 +402,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const mediaType = 'image/png';
 
             log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
-            const { isSimilar, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta);
+            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
 
             if (!isSimilar) {
-                log.warn('[AI Test] Zdjęcie niepodobne do wzorca');
-                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', tokenUsage };
+                log.warn(`[AI Test] Zdjęcie niepodobne do wzorca: ${rejectionReason || 'brak powodu'}`);
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
 
             log.info('[AI Test] Zdjęcie podobne do wzorca → wyciągam dane...');
@@ -436,12 +436,12 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
-        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie 
+        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
 
 KROK 0 — Przed porównaniem:
-Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach 
-na język angielski. Dopiero na przetłumaczonej wersji wykonaj 
+Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
+na język angielski. Dopiero na przetłumaczonej wersji wykonaj
 poniższe sprawdzenie.
 
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
@@ -454,29 +454,72 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - na dole panelu: rząd małych okrągłych ikon
 - pod panelem: jeden żółty przycisk
 
-Jeśli drugie zdjęcie ma DOKŁADNIE tę strukturę → OK
-Jeśli cokolwiek się różni strukturalnie → NOK
+Format odpowiedzi:
+- Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
+- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <krótki powód po polsku, max 15 słów>
 
-Odpowiedz WYŁĄCZNIE: OK lub NOK. Zero innych słów.
+Przykłady prawidłowych odpowiedzi:
+OK
+NOK: Brak ekranu wyników bossa, widoczny ekran menu głównego
+NOK: Panel posiada ikonę zamknięcia (X)
+NOK: Brak żółtego przycisku pod panelem
 
-**ZASADA ODPOWIEDZI — BEZWZGLĘDNIE OBOWIĄZKOWA:**
-- Odpowiedz WYŁĄCZNIE jednym słowem`;
+**ZASADA BEZWZGLĘDNA: Odpowiedz TYLKO w formacie OK lub NOK: <powód>. Zero innych słów.**`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
             { inlineData: { data: uploadedBase64, mimeType: mediaType } },
             { text: prompt }
-        ], 10, {
+        ], 50, {
             ...telemetryMeta,
             step: 'compare-template',
             promptName: 'compare-template',
             promptVersion: PROMPT_VERSIONS['compare-template'],
         });
 
-        const response = res.text.trim().toUpperCase();
+        const response = res.text.trim();
+        const upper = response.toUpperCase();
         log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
-        const isSimilar = !!(response && response.includes('OK') && !response.includes('NOK'));
-        return { isSimilar, usage: res };
+        const isSimilar = upper.startsWith('OK') && !upper.startsWith('NOK');
+        let rejectionReason = null;
+        if (!isSimilar) {
+            const colonIdx = response.indexOf(':');
+            if (colonIdx !== -1) {
+                rejectionReason = response.substring(colonIdx + 1).trim();
+            }
+        }
+        return { isSimilar, rejectionReason, usage: res };
+    }
+
+    /**
+     * Uruchamia tylko krok ekstrakcji danych (bez porównania z wzorcem).
+     * Używane przez przycisk "Analizuj" w kanale raportów.
+     */
+    async extractImageData(imagePath, log = logger, telemetryMeta = {}) {
+        if (!this.enabled) throw new Error('AI OCR nie jest włączony');
+        const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
+        try {
+            const uploadedBuffer = await sharp(imagePath).png().toBuffer();
+            const uploadedBase64 = uploadedBuffer.toString('base64');
+            const mediaType = 'image/png';
+
+            log.info('[AI Analyze] Wyciągam dane ze zdjęcia (bez sprawdzania wzorca)...');
+            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
+            tokenUsage.promptTokens  += extractRes.promptTokens;
+            tokenUsage.outputTokens  += extractRes.outputTokens;
+            tokenUsage.thoughtTokens += (extractRes.thoughtTokens || 0);
+
+            const result = this.parseAIResponse(extractRes.text, log);
+            if (result.isValidVictory) {
+                log.info(`[AI Analyze] Boss="${result.bossName}" score="${result.score}"`);
+            } else {
+                log.warn(`[AI Analyze] Nie udało się wyciągnąć danych: ${result.error}`);
+            }
+            return { ...result, tokenUsage };
+        } catch (error) {
+            log.error(`[AI Analyze] Błąd analizy: ${error.message}`);
+            throw error;
+        }
     }
 }
 

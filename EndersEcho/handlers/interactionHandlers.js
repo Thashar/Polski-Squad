@@ -467,13 +467,16 @@ class InteractionHandler {
             }
 
             if (aiResult.error === 'NOT_SIMILAR') {
-                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl);
+                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
+                const notSimilarDesc = aiResult.rejectionReason
+                    ? `${msgs.testNotSimilarDescription}\n\n**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
+                    : msgs.testNotSimilarDescription;
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()
                         .setColor(0xFF0000)
                         .setTitle(msgs.testNotSimilarTitle)
-                        .setDescription(msgs.testNotSimilarDescription)
+                        .setDescription(notSimilarDesc)
                         .setTimestamp()]
                 });
                 return;
@@ -868,6 +871,11 @@ class InteractionHandler {
                         )
                     );
                 await interaction.showModal(modal);
+                return;
+            }
+
+            if (customId.startsWith('ee_analyze_')) {
+                await this._handleAnalyzeButton(interaction, customId);
                 return;
             }
 
@@ -1988,7 +1996,118 @@ class InteractionHandler {
         }
     }
 
-    async _sendInvalidScreenReport(interaction, imagePath, reason, gl) {
+    async _handleAnalyzeButton(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+
+        const parts = customId.split('_');
+        const targetUserId = parts[2];
+        const targetGuildId = parts[3];
+
+        const attachment = interaction.message.attachments.first();
+        if (!attachment) {
+            await interaction.followUp({ content: '❌ Brak zdjęcia w wiadomości.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const tempPath = path.join(this.config.ocr.tempDir, `analyze_${Date.now()}.png`);
+        try {
+            await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
+            const imgBuffer = await downloadBuffer(attachment.url);
+            await fs.writeFile(tempPath, imgBuffer);
+
+            const aiResult = await this.aiOcrService.extractImageData(tempPath, logger, {
+                guildId: targetGuildId,
+                actorDiscordId: targetUserId,
+                operationType: OPERATIONS_TYPE,
+            });
+
+            // Nalicz tokeny dla serwera pierwotnego użytkownika
+            if (aiResult.tokenUsage) {
+                const { promptTokens, outputTokens } = aiResult.tokenUsage;
+                this.tokenUsageService.record(targetGuildId, promptTokens, outputTokens).catch(() => {});
+            }
+
+            const adminName = interaction.member?.displayName || interaction.user.username;
+
+            if (!aiResult.isValidVictory || !aiResult.score) {
+                await interaction.editReply({
+                    content: `❌ Analizowano przez **${adminName}** — nie udało się odczytać danych: ${aiResult.error || 'nieznany błąd'}`,
+                    embeds: interaction.message.embeds,
+                    components: [],
+                });
+                return;
+            }
+
+            // Pobierz nick z embeda raportu
+            const embedFields = interaction.message.embeds[0]?.fields || [];
+            const nickField = embedFields.find(f => f.name === 'Nick na serwerze');
+            const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
+
+            // Zapisz rekord
+            const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
+                targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
+            );
+            await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
+
+            // Ogłoś w kanale serwera
+            try {
+                const guildConfig = this.config.getGuildConfig(targetGuildId);
+                if (guildConfig?.allowedChannelId) {
+                    const guildChannel = await interaction.client.channels.fetch(guildConfig.allowedChannelId);
+                    const guildMsgs = this.config.getMessages(targetGuildId);
+                    const targetUser = await interaction.client.users.fetch(targetUserId);
+                    const rolePositions = [];
+                    const publicEmbed = await this.rankingService.createRecordEmbed(
+                        userName,
+                        aiResult.score,
+                        targetUser.displayAvatarURL(),
+                        `analyzed_${Date.now()}.png`,
+                        isNewRecord && currentScore ? currentScore.score : null,
+                        targetUserId,
+                        targetGuildId,
+                        guildMsgs,
+                        null,
+                        null,
+                        isNewRecord && currentScore ? currentScore.timestamp : null,
+                        rolePositions
+                    );
+                    const announcementAttachment = new AttachmentBuilder(tempPath, { name: `analyzed_${Date.now()}.png` });
+                    await guildChannel.send({ embeds: [publicEmbed], files: [announcementAttachment] });
+
+                    // Aktualizuj role TOP
+                    if (isNewRecord) {
+                        const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
+                        await this.roleService.updateTopRoles(
+                            await interaction.client.guilds.fetch(targetGuildId),
+                            updatedPlayers,
+                            guildConfig?.topRoles || null
+                        ).catch(() => {});
+                    }
+                }
+            } catch (announceErr) {
+                logger.warn(`⚠️ Nie można wysłać ogłoszenia po analizie: ${announceErr.message}`);
+            }
+
+            await interaction.editReply({
+                content: `✅ Analizowano przez **${adminName}** — Boss: **${aiResult.bossName || 'nieznany'}** | Wynik: **${aiResult.score}** | ${isNewRecord ? '🏆 Nowy rekord!' : 'Nie pobito rekordu'}`,
+                embeds: interaction.message.embeds,
+                components: [],
+            });
+        } catch (err) {
+            logger.error(`❌ Błąd ee_analyze: ${err.message}`);
+            await interaction.followUp({ content: `❌ Błąd analizy: ${err.message}`, flags: ['Ephemeral'] });
+        } finally {
+            await fs.unlink(tempPath).catch(() => {});
+        }
+    }
+
+    async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
         if (!this.config.invalidReportChannelId) return;
         try {
             const channel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
@@ -2009,7 +2128,7 @@ class InteractionHandler {
                 'FAKE_PHOTO': '🔴 Wykryto podrobione / edytowane zdjęcie',
                 'INVALID_SCREENSHOT': '🟡 Nie znaleziono ekranu Victory (ang. i jap.)',
                 'NO_REQUIRED_WORDS': '🟡 Brak wymaganych słów Best/Total',
-                'NOT_SIMILAR': '🟡 Zdjęcie nie pasuje do wzorca (komenda /test)',
+                'NOT_SIMILAR': '🟡 Zdjęcie nie pasuje do wzorca (komenda /update)',
                 'INVALID_SCORE_FORMAT': '🟠 Odczytany wynik nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx)',
             };
             const reasonText = reasonLabels[reason] || `🟠 ${reason}`;
@@ -2019,24 +2138,23 @@ class InteractionHandler {
             const fileName = `rejected_${Date.now()}${ext}`;
             const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
 
+            const fields = [
+                { name: 'Nick na serwerze', value: serverNick, inline: true },
+                { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
+                { name: 'Serwer', value: serverName, inline: true },
+                { name: 'Czas', value: timestamp, inline: true },
+                { name: 'Powód odrzucenia', value: reasonText, inline: false },
+            ];
+            if (rejectionReason) {
+                fields.push({ name: '🔍 Szczegóły AI', value: rejectionReason, inline: false });
+            }
+
             const embed = new EmbedBuilder()
                 .setColor(color)
                 .setTitle('⚠️ Odrzucony screen')
-                .addFields(
-                    { name: 'Nick na serwerze', value: serverNick, inline: true },
-                    { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
-                    { name: 'Serwer', value: serverName, inline: true },
-                    { name: 'Czas', value: timestamp, inline: true },
-                    { name: 'Powód odrzucenia', value: reasonText, inline: false }
-                )
+                .addFields(...fields)
                 .setImage(`attachment://${fileName}`)
                 .setFooter({ text: `ID użytkownika: ${interaction.user.id}` });
-
-            const approveBtn = new ButtonBuilder()
-                .setCustomId(`ee_approve_${interaction.user.id}`)
-                .setLabel('Zatwierdź')
-                .setEmoji('✅')
-                .setStyle(ButtonStyle.Secondary);
 
             const blockBtn = new ButtonBuilder()
                 .setCustomId(`ee_block_${interaction.user.id}_${interaction.guildId}`)
@@ -2044,7 +2162,22 @@ class InteractionHandler {
                 .setEmoji('🔒')
                 .setStyle(ButtonStyle.Danger);
 
-            const reportRow = new ActionRowBuilder().addComponents(approveBtn, blockBtn);
+            let reportRow;
+            if (reason === 'NOT_SIMILAR') {
+                const analyzeBtn = new ButtonBuilder()
+                    .setCustomId(`ee_analyze_${interaction.user.id}_${interaction.guildId}`)
+                    .setLabel('Analizuj')
+                    .setEmoji('🔍')
+                    .setStyle(ButtonStyle.Primary);
+                reportRow = new ActionRowBuilder().addComponents(analyzeBtn, blockBtn);
+            } else {
+                const approveBtn = new ButtonBuilder()
+                    .setCustomId(`ee_approve_${interaction.user.id}`)
+                    .setLabel('Zatwierdź')
+                    .setEmoji('✅')
+                    .setStyle(ButtonStyle.Secondary);
+                reportRow = new ActionRowBuilder().addComponents(approveBtn, blockBtn);
+            }
 
             await channel.send({ embeds: [embed], files: [fileAttachment], components: [reportRow] });
             gl.info(`🛑 📋 Wysłano raport o odrzuconym screenie (${reason}) dla ${serverNick}`);
