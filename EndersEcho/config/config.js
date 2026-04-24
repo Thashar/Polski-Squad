@@ -74,10 +74,6 @@ function parseGuildsConfig() {
 
 const guilds = parseGuildsConfig();
 
-if (guilds.length === 0) {
-    logger.warn('⚠️ Brak serwerów w .env — bot będzie działał tylko przez guild_configs.json (nowe serwery z /configure)');
-}
-
 if (guilds.length > 0) {
     logger.info(`📋 Załadowano ${guilds.length} serwer(ów) z .env`);
 }
