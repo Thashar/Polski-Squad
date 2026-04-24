@@ -445,7 +445,8 @@ class InteractionHandler {
                 scope: { guildId: interaction.guildId, channelId: interaction.channelId },
                 hints: { command: commandName },
             }, async (ctx) => {
-                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta);
+                const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta, guildLang);
                 const usage = buildGeminiUsage(ai);
                 if (ai.error === 'NOT_SIMILAR' || !ai.isValidVictory) {
                     return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
@@ -469,8 +470,8 @@ class InteractionHandler {
             if (aiResult.error === 'NOT_SIMILAR') {
                 await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 const notSimilarDesc = aiResult.rejectionReason
-                    ? `${msgs.testNotSimilarDescription}\n\n**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
-                    : msgs.testNotSimilarDescription;
+                    ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
+                    : null;
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()

@@ -22,7 +22,7 @@ const PROMPT_VERSIONS = {
     'authenticity-check': 'v1',
     'extract-data-eng':   'v1',
     'extract-data-jpn':   'v1',
-    'compare-template':   'v2',
+    'compare-template':   'v3',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -385,7 +385,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
      * @param {object} log         — bot-per-guild logger
      * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
      */
-    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}) {
+    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol') {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -402,7 +402,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const mediaType = 'image/png';
 
             log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
-            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta);
+            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
@@ -435,7 +435,20 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
     }
 
-    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta) {
+    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta, lang = 'pol') {
+        const isEng = lang === 'eng';
+        const reasonLang = isEng ? 'English' : 'Polish';
+        const exampleReasons = isEng
+            ? [
+                'NOK: No boss results screen, main menu visible',
+                'NOK: Panel has a close button (X)',
+                'NOK: No yellow button below the panel',
+              ]
+            : [
+                'NOK: Brak ekranu wyników bossa, widoczny ekran menu głównego',
+                'NOK: Panel posiada ikonę zamknięcia (X)',
+                'NOK: Brak żółtego przycisku pod panelem',
+              ];
         const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
 
@@ -456,13 +469,11 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 
 Format odpowiedzi:
 - Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
-- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <krótki powód po polsku, max 15 słów>
+- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
 
 Przykłady prawidłowych odpowiedzi:
 OK
-NOK: Brak ekranu wyników bossa, widoczny ekran menu głównego
-NOK: Panel posiada ikonę zamknięcia (X)
-NOK: Brak żółtego przycisku pod panelem
+${exampleReasons.join('\n')}
 
 **ZASADA BEZWZGLĘDNA: Odpowiedz TYLKO w formacie OK lub NOK: <powód>. Zero innych słów.**`;
 
