@@ -139,8 +139,9 @@ class ReminderUsageService {
 
         // Logika limitów:
         // - Więcej niż 6h (>360 min) - za wcześnie, blokada
-        // - Między 1h a 6h (60-360 min) - można wysłać PIERWSZE przypomnienie (ostatnie 6h)
-        // - Mniej niż 1h (0-60 min) - można wysłać DRUGIE przypomnienie (ostatnia 1h)
+        // - Między 2h a 6h (120-360 min) - można wysłać PIERWSZE przypomnienie
+        // - Między 1h a 2h (60-120 min) - można wysłać DRUGIE przypomnienie
+        // - Mniej niż 1h (0-60 min) - tylko catch-up dla pierwszego, drugie zablokowane
         // - Po deadline (<0 min) - blokada
 
         if (minutesToDeadline < 0) {
@@ -169,12 +170,12 @@ class ReminderUsageService {
             };
         }
 
-        if (minutesToDeadline >= 60 && minutesToDeadline < 360) {
-            // Między 1h a 6h - można wysłać PIERWSZE przypomnienie
+        if (minutesToDeadline >= 120 && minutesToDeadline < 360) {
+            // Między 2h a 6h - można wysłać PIERWSZE przypomnienie
             if (usageCount === 0) {
                 return {
                     canSend: true,
-                    reason: '✅ Pierwsze przypomnienie (ostatnie 6h przed deadline)',
+                    reason: '✅ Pierwsze przypomnienie (6h-2h przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
@@ -184,7 +185,7 @@ class ReminderUsageService {
                 const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **ostatniej godzinie** przed deadline (16:50-17:50).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **oknie 1h-2h przed deadline** (15:50-16:50).`,
                     minutesToDeadline
                 };
             } else {
@@ -204,8 +205,41 @@ class ReminderUsageService {
             }
         }
 
+        if (minutesToDeadline >= 60 && minutesToDeadline < 120) {
+            // Między 1h a 2h - można wysłać DRUGIE przypomnienie
+            if (usageCount === 0) {
+                return {
+                    canSend: true,
+                    reason: '✅ Pierwsze przypomnienie (okno 1h-2h przed deadline)',
+                    minutesToDeadline,
+                    reminderNumber: 1
+                };
+            } else if (usageCount === 1) {
+                return {
+                    canSend: true,
+                    reason: '✅ Drugie przypomnienie (okno 1h-2h przed deadline)',
+                    minutesToDeadline,
+                    reminderNumber: 2
+                };
+            } else {
+                // Już wysłano oba przypomnienia
+                const firstUsage = todayUsage[0];
+                const secondUsage = todayUsage[1];
+                const sender1 = firstUsage.sentBy ? ` - <@${firstUsage.sentBy}>` : '';
+                const sender2 = secondUsage.sentBy ? ` - <@${secondUsage.sentBy}>` : '';
+                return {
+                    canSend: false,
+                    reason: `❌ Klan wykorzystał już oba dzienne przypomnienia:\n\n` +
+                           `**1.** ${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender1} (${firstUsage.minutesToDeadline} min do deadline)\n` +
+                           `**2.** ${new Date(secondUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}${sender2} (${secondUsage.minutesToDeadline} min do deadline)\n\n` +
+                           `Każdy klan może użyć komendy /remind maksymalnie **2 razy dziennie**.`,
+                    minutesToDeadline
+                };
+            }
+        }
+
         if (minutesToDeadline >= 0 && minutesToDeadline < 60) {
-            // Mniej niż 1h - można wysłać DRUGIE przypomnienie
+            // Ostatnia godzina - catch-up dla pierwszego, drugie zablokowane (okno 15:50-16:50 minęło)
             if (usageCount === 0) {
                 return {
                     canSend: true,
@@ -214,11 +248,12 @@ class ReminderUsageService {
                     reminderNumber: 1
                 };
             } else if (usageCount === 1) {
+                const firstUsage = todayUsage[0];
+                const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
-                    canSend: true,
-                    reason: '✅ Drugie przypomnienie (ostatnia godzina przed deadline)',
-                    minutesToDeadline,
-                    reminderNumber: 2
+                    canSend: false,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\n❌ Okno na drugie przypomnienie (15:50-16:50) już minęło.`,
+                    minutesToDeadline
                 };
             } else {
                 // Już wysłano oba przypomnienia
