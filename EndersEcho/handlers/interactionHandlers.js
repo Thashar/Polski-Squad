@@ -932,6 +932,7 @@ class InteractionHandler {
                         const configEmbed = new EmbedBuilder()
                             .setColor(0x5865F2)
                             .setTitle(`⚙️ Serwer w pełni skonfigurowany${wasAlreadyConfigured ? ' (rekonfiguracja)' : ''}`)
+                            .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
                             .addFields(
                                 { name: 'Serwer', value: `${interaction.guild.name} (\`${interaction.guildId}\`)` },
                                 { name: 'Administrator', value: `${interaction.user.tag} (\`${interaction.user.id}\`)` },
