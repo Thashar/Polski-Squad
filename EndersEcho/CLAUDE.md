@@ -147,7 +147,9 @@
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
-- Bot po raz pierwszy dodany do serwera (`guildCreate`): automatyczna rejestracja komend + domyślny wpis (unconfigured, OCR zablokowane) + welcome message
+- Bot po raz pierwszy dodany do serwera (`guildCreate`): automatyczna rejestracja komend + domyślny wpis (unconfigured, OCR zablokowane) + welcome message + powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (zielony embed z nazwą i liczbą członków)
+- Bot usunięty z serwera (`guildDelete`): powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (czerwony embed z nazwą serwera)
+- Serwer w pełni skonfigurowany (`/configure` → Zaakceptuj): powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (niebieski embed z nazwą serwera, adminem, kanałem, językiem, tagiem, rolami TOP, kanałem raportów; oznaczony jako rekonfiguracja jeśli serwer był już skonfigurowany)
 
 **Komenda /ocr-on-off** — per-guild włącz/wyłącz komendy OCR (head admin tylko, dowolny kanał):
 - Parametry: `action` (enable/disable), `target` (update/test/both), `guild` (autocomplete)

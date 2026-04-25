@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const config = require('./config/config');
 const GuildConfigService = require('./services/guildConfigService');
 
@@ -137,10 +137,30 @@ client.on('guildCreate', async (guild) => {
                 '⚙️ **EndersEcho** has been added to your server!\nAn administrator must run **/configure** to set up the bot before it can be used.'
             ).catch(() => {});
         }
+        await sendAdminNotification(client, new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('🆕 Bot dodany do serwera')
+            .addFields(
+                { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` },
+                { name: 'Członkowie', value: `${guild.memberCount}` }
+            )
+            .setTimestamp()
+        );
     } catch (err) {
         logger.error(`Błąd przy dodawaniu do serwera ${guild.id}: ${err.message}`);
     }
 });
+
+async function sendAdminNotification(discordClient, embed) {
+    const channelId = config.invalidReportChannelId;
+    if (!channelId) return;
+    try {
+        const channel = await discordClient.channels.fetch(channelId);
+        if (channel) await channel.send({ embeds: [embed] });
+    } catch (err) {
+        logger.error(`Błąd wysyłania powiadomienia admin (channelId=${channelId}):`, err.message);
+    }
+}
 
 function projectGuildMember(member) {
     const username = member?.user?.username;
@@ -176,6 +196,14 @@ client.on('guildDelete', async (guild) => {
     } catch (err) {
         logger.error(`Błąd guildLeft (guildId=${guild.id}):`, err);
     }
+    await sendAdminNotification(client, new EmbedBuilder()
+        .setColor(0xED4245)
+        .setTitle('🚪 Bot usunięty z serwera')
+        .addFields(
+            { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` }
+        )
+        .setTimestamp()
+    );
 });
 
 client.on('guildMemberAdd', async (member) => {
