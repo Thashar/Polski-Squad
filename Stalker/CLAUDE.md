@@ -48,6 +48,7 @@
 - Format: `✅ NickName • 14:27` - pokazuje kiedy użytkownik potwierdził (oba przypomnienia w jednym embedzie)
 - Struktura: `tracking.reminders[]` - tablica z obu przypomnieniami (reminderNumber, sentAt, users)
 - Aktualizacja przez usunięcie i ponowne wysłanie embeda (świeża pozycja na dole czatu)
+- **`handleConfirmReminderButton` używa `deferUpdate()` natychmiast** - przed wszystkimi operacjami sieciowymi/I/O, potem `editReply()` / `followUp()`. Zapobiega wygasaniu interakcji Discord (limit 3s) gdy fetch guild lub I/O pliku trwa dłużej.
 
 **Mapowanie Nicków** - System automatycznego mapowania użytkowników po zmianie nicku Discord:
 - `databaseService.js`: Indeks graczy `player_index.json` (userId → latestNick + allNicks)
