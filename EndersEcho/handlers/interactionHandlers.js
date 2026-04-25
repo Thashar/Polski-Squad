@@ -922,6 +922,32 @@ class InteractionHandler {
                 ],
                 components: []
             });
+
+            // Powiadomienie na kanał raportów o w pełni skonfigurowanym serwerze
+            const reportChannelId = this.config.invalidReportChannelId;
+            if (reportChannelId) {
+                try {
+                    const reportChannel = await interaction.client.channels.fetch(reportChannelId);
+                    if (reportChannel) {
+                        const configEmbed = new EmbedBuilder()
+                            .setColor(0x5865F2)
+                            .setTitle(`⚙️ Serwer w pełni skonfigurowany${wasAlreadyConfigured ? ' (rekonfiguracja)' : ''}`)
+                            .addFields(
+                                { name: 'Serwer', value: `${interaction.guild.name} (\`${interaction.guildId}\`)` },
+                                { name: 'Administrator', value: `${interaction.user.tag} (\`${interaction.user.id}\`)` },
+                                { name: 'Kanał bota', value: `<#${newData.allowedChannelId}>` },
+                                { name: 'Język', value: newData.lang || 'pol' },
+                                { name: 'Tag', value: newData.tag || '—' },
+                                { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
+                                { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' }
+                            )
+                            .setTimestamp();
+                        await reportChannel.send({ embeds: [configEmbed] });
+                    }
+                } catch (err) {
+                    logger.error(`Błąd wysyłania powiadomienia cfg_accept (guildId=${interaction.guildId}):`, err.message);
+                }
+            }
             return;
         }
     }
