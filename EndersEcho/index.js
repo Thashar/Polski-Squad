@@ -140,6 +140,7 @@ client.on('guildCreate', async (guild) => {
         await sendAdminNotification(client, new EmbedBuilder()
             .setColor(0x57F287)
             .setTitle('🆕 Bot dodany do serwera')
+            .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
             .addFields(
                 { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` },
                 { name: 'Członkowie', value: `${guild.memberCount}` }
@@ -199,6 +200,7 @@ client.on('guildDelete', async (guild) => {
     await sendAdminNotification(client, new EmbedBuilder()
         .setColor(0xED4245)
         .setTitle('🚪 Bot usunięty z serwera')
+        .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
         .addFields(
             { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` }
         )
