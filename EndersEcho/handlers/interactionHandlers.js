@@ -423,12 +423,12 @@ class InteractionHandler {
         const t = (pol, eng) => isPol ? pol : eng;
 
         const done = {
-            1: !!state.allowedChannelId,
-            2: state.tag !== null && state.tag !== undefined,
-            3: !!state.lang,
-            4: state.topRoles !== null || state.rolesSkipped,
-            5: state.globalTop3Notifications !== null,
-            6: state.invalidReportChannelId !== null || state.reportChannelSkipped,
+            1: !!state.lang,
+            2: !!state.allowedChannelId,
+            3: !!state.invalidReportChannelId,
+            4: state.tag !== null && state.tag !== undefined,
+            5: state.topRoles !== null || state.rolesSkipped,
+            6: state.globalTop3Notifications !== null,
         };
         const allDone = Object.values(done).every(Boolean);
 
@@ -439,14 +439,14 @@ class InteractionHandler {
 
         const rows = [
             new ActionRowBuilder().addComponents(
-                btn(1, '1. Kanał bota', '1. Bot Channel'),
-                btn(2, '2. Tag serwera', '2. Server Tag'),
-                btn(3, '3. Język', '3. Language'),
+                btn(1, '1. Język', '1. Language'),
+                btn(2, '2. Kanał bota', '2. Bot Channel'),
+                btn(3, '3. Kanał raportów', '3. Report Channel'),
             ),
             new ActionRowBuilder().addComponents(
-                btn(4, '4. Role TOP (opcjonalne)', '4. TOP Roles (optional)'),
-                btn(5, '5. Powiadomienia Global TOP3', '5. Global TOP3 Notifications'),
-                btn(6, '6. Kanał raportów (opcjonalne)', '6. Report Channel (optional)'),
+                btn(4, '4. Tag serwera', '4. Server Tag'),
+                btn(5, '5. Role TOP (opcjonalne)', '5. TOP Roles (optional)'),
+                btn(6, '6. Powiadomienia Global TOP3', '6. Global TOP3 Notifications'),
             ),
         ];
 
@@ -468,12 +468,12 @@ class InteractionHandler {
         }
 
         const summaryLines = [
-            done[1] ? `📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
-            done[2] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
-            done[3] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
-            done[4] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
-            done[5] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
-            done[6] ? `⚠️ ${t('Kanał raportów:', 'Report Channel:')} ${state.reportChannelSkipped ? t('Pominięty', 'Skipped') : `<#${state.invalidReportChannelId}>`}` : null,
+            done[1] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
+            done[2] ? `📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
+            done[3] ? `⚠️ ${t('Kanał raportów:', 'Report Channel:')} <#${state.invalidReportChannelId}>` : null,
+            done[4] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
+            done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
+            done[6] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -494,20 +494,20 @@ class InteractionHandler {
                         : '⚠️ After activation `/update` and `/test` will be **disabled** by default. Contact @Thashar to unlock the analysis commands.';
                     return t(
                         '📋 **Przegląd kroków:**\n' +
-                        '1️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
-                        '2️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
-                        '3️⃣  **Język** — interfejs po polsku lub angielsku\n' +
-                        '4️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
-                        '5️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
-                        '6️⃣  **Kanał raportów** *(opcjonalne)* — gdzie trafiają alerty o odrzuconych screenach\n\n' +
+                        '1️⃣  **Język** — interfejs po polsku lub angielsku\n' +
+                        '2️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
+                        '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
+                        '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
+                        '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
+                        '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n\n' +
                         polOcrLine,
                         '📋 **Steps overview:**\n' +
-                        '1️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
-                        '2️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
-                        '3️⃣  **Language** — Polish or English interface\n' +
-                        '4️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
-                        '5️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
-                        '6️⃣  **Report Channel** *(optional)* — where rejected screenshot alerts appear\n\n' +
+                        '1️⃣  **Language** — Polish or English interface\n' +
+                        '2️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
+                        '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
+                        '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
+                        '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
+                        '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n\n' +
                         engOcrLine
                     );
                 })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
@@ -531,7 +531,6 @@ class InteractionHandler {
                 this._configWizard.set(key, {
                     allowedChannelId: existing.allowedChannelId || null,
                     invalidReportChannelId: existing.invalidReportChannelId || null,
-                    reportChannelSkipped: !existing.invalidReportChannelId,
                     tag: existing.tag !== undefined ? existing.tag : null,
                     lang: existing.lang || null,
                     topRoles: existing.topRoles || null,
@@ -544,7 +543,6 @@ class InteractionHandler {
                 this._configWizard.set(key, {
                     allowedChannelId: null,
                     invalidReportChannelId: null,
-                    reportChannelSkipped: false,
                     tag: null,
                     lang: null,
                     topRoles: null,
@@ -575,7 +573,20 @@ class InteractionHandler {
 
         if (step === 1) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('📡 Krok 1 — Kanał bota', '📡 Step 1 — Bot Channel'))
+                .setTitle(t('🌐 Krok 1 — Język', '🌐 Step 1 — Language'))
+                .setDescription(
+                    t(
+                        'Wybierz język interfejsu dla tego serwera.\nWszystkie wiadomości bota, powiadomienia i opisy komend będą wyświetlane w wybranym języku.',
+                        'Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.'
+                    )
+                );
+            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel(t('🇵🇱 Polski', '🇵🇱 Polish')).setStyle(ButtonStyle.Primary);
+            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel(t('🇬🇧 Angielski', '🇬🇧 English')).setStyle(ButtonStyle.Primary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(polBtn, engBtn, backBtn)] });
+
+        } else if (step === 2) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('📡 Krok 2 — Kanał bota', '📡 Step 2 — Bot Channel'))
                 .setDescription(
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
@@ -592,9 +603,24 @@ class InteractionHandler {
                 .setChannelTypes(ChannelType.GuildText);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
 
-        } else if (step === 2) {
+        } else if (step === 3) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🏷️ Krok 2 — Tag serwera', '🏷️ Step 2 — Server Tag'))
+                .setTitle(t('⚠️ Krok 3 — Kanał raportów', '⚠️ Step 3 — Report Channel'))
+                .setDescription(
+                    t(
+                        'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nUstaw dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.',
+                        'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nSet a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.'
+                    )
+                );
+            const channelSelect = new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_report_channel_select')
+                .setPlaceholder(t('Wybierz kanał raportów...', 'Choose a report channel...'))
+                .setChannelTypes(ChannelType.GuildText);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
+
+        } else if (step === 4) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🏷️ Krok 4 — Tag serwera', '🏷️ Step 4 — Server Tag'))
                 .setDescription(
                     t(
                         'Tag to krótki identyfikator (1–4 znaki) wyświetlany obok wyników Twojego serwera w globalnym rankingu.\n\nTag może być tekstem lub emoji.\nPrzykłady: 🇵🇱  ☆  Ӂ  US  PS  EU',
@@ -604,22 +630,9 @@ class InteractionHandler {
             const tagBtn = new ButtonBuilder().setCustomId('cfg_tag_open').setLabel(t('Wprowadź tag', 'Enter Tag')).setStyle(ButtonStyle.Primary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(tagBtn, backBtn)] });
 
-        } else if (step === 3) {
+        } else if (step === 5) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🌐 Krok 3 — Język', '🌐 Step 3 — Language'))
-                .setDescription(
-                    t(
-                        'Wybierz język interfejsu dla tego serwera.\nWszystkie wiadomości bota, powiadomienia i opisy komend będą wyświetlane w wybranym języku.',
-                        'Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.'
-                    )
-                );
-            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel(t('🇵🇱 Polski', '🇵🇱 Polish')).setStyle(ButtonStyle.Primary);
-            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel(t('🇬🇧 Angielski', '🇬🇧 English')).setStyle(ButtonStyle.Primary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(polBtn, engBtn, backBtn)] });
-
-        } else if (step === 4) {
-            const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🏆 Krok 4 — Role TOP (opcjonalne)', '🏆 Step 4 — TOP Roles (optional)'))
+                .setTitle(t('🏆 Krok 5 — Role TOP (opcjonalne)', '🏆 Step 5 — TOP Roles (optional)'))
                 .setDescription(
                     t(
                         'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w TOP30 serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
@@ -634,9 +647,9 @@ class InteractionHandler {
             const skipBtn = new ButtonBuilder().setCustomId('cfg_roles_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(configRolesBtn, skipBtn, backBtn)] });
 
-        } else if (step === 5) {
+        } else if (step === 6) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🌐 Krok 5 — Powiadomienia Global TOP3', '🌐 Step 5 — Global TOP3 Notifications'))
+                .setTitle(t('🌐 Krok 6 — Powiadomienia Global TOP3', '🌐 Step 6 — Global TOP3 Notifications'))
                 .setDescription(
                     t(
                         'Gdy jakikolwiek gracz z dowolnego serwera EndersEcho wbije nowy rekord i wejdzie do globalnego TOP3, bot może wysłać ogłoszenie na Twój kanał bota.\n\nOgłoszenie zawiera: kto wchodzi do TOP3, wynik i poprawę, z jakiego serwera pochodzi oraz aktualne podium globalnego TOP3.\n\nCzy chcesz otrzymywać te ogłoszenia?',
@@ -646,22 +659,6 @@ class InteractionHandler {
             const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('✅ Tak, włącz', '✅ Yes, enable')).setStyle(ButtonStyle.Success);
             const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('❌ Nie', '❌ No')).setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(yesBtn, noBtn, backBtn)] });
-
-        } else if (step === 6) {
-            const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('⚠️ Krok 6 — Kanał raportów (opcjonalne)', '⚠️ Step 6 — Report Channel (optional)'))
-                .setDescription(
-                    t(
-                        'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nMożesz ustawić dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.',
-                        'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nYou can set a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.'
-                    )
-                );
-            const channelSelect = new ChannelSelectMenuBuilder()
-                .setCustomId('cfg_report_channel_select')
-                .setPlaceholder(t('Wybierz kanał raportów...', 'Choose a report channel...'))
-                .setChannelTypes(ChannelType.GuildText);
-            const skipBtn = new ButtonBuilder().setCustomId('cfg_report_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(skipBtn, backBtn)] });
         }
     }
 
@@ -676,8 +673,18 @@ class InteractionHandler {
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
         } else if (interaction.customId === 'cfg_report_channel_select') {
-            state.invalidReportChannelId = interaction.values[0];
-            state.reportChannelSkipped = false;
+            const selectedId = interaction.values[0];
+            if (selectedId === state.allowedChannelId) {
+                const isPol = state.lang === 'pol';
+                await interaction.reply({
+                    content: isPol
+                        ? '❌ Kanał raportów nie może być tym samym kanałem co kanał bota. Wybierz inny kanał.'
+                        : '❌ The report channel cannot be the same as the bot channel. Please choose a different channel.',
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
+            state.invalidReportChannelId = selectedId;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -848,16 +855,6 @@ class InteractionHandler {
         }
         if (customId === 'cfg_notif_no') {
             state.globalTop3Notifications = false;
-            this._configWizard.set(key, state);
-            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
-            await interaction.update({ embeds: [embed], components: rows });
-            return;
-        }
-
-        // Pomiń kanał raportów
-        if (customId === 'cfg_report_skip') {
-            state.invalidReportChannelId = null;
-            state.reportChannelSkipped = true;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -1651,7 +1648,7 @@ class InteractionHandler {
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
                 customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
-                customId === 'cfg_report_skip' || customId === 'cfg_accept' || customId === 'cfg_cancel') {
+                customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 await this._handleConfigureButton(interaction, customId);
                 return;
             }
