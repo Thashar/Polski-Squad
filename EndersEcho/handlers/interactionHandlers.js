@@ -673,7 +673,18 @@ class InteractionHandler {
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
         } else if (interaction.customId === 'cfg_report_channel_select') {
-            state.invalidReportChannelId = interaction.values[0];
+            const selectedId = interaction.values[0];
+            if (selectedId === state.allowedChannelId) {
+                const isPol = state.lang === 'pol';
+                await interaction.reply({
+                    content: isPol
+                        ? '❌ Kanał raportów nie może być tym samym kanałem co kanał bota. Wybierz inny kanał.'
+                        : '❌ The report channel cannot be the same as the bot channel. Please choose a different channel.',
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
+            state.invalidReportChannelId = selectedId;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
