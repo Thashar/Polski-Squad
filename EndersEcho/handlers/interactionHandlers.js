@@ -674,8 +674,17 @@ class InteractionHandler {
             await interaction.update({ embeds: [embed], components: rows });
         } else if (interaction.customId === 'cfg_report_channel_select') {
             const selectedId = interaction.values[0];
+            const isPol = state.lang === 'pol';
+            if (!state.allowedChannelId) {
+                await interaction.reply({
+                    content: isPol
+                        ? '❌ Najpierw wybierz kanał bota (krok 2), a dopiero potem kanał raportów.'
+                        : '❌ Please set the bot channel first (step 2) before choosing the report channel.',
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
             if (selectedId === state.allowedChannelId) {
-                const isPol = state.lang === 'pol';
                 await interaction.reply({
                     content: isPol
                         ? '❌ Kanał raportów nie może być tym samym kanałem co kanał bota. Wybierz inny kanał.'
