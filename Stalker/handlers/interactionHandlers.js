@@ -11372,6 +11372,10 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         logger.info(`[CONFIRM_REMINDER] 📝 Parsowanie customId: userId=${userId}, roleId=${roleId}, guildId=${guildId || 'BRAK (stary format)'}`);
 
+        // Odłóż aktualizację natychmiast — operacje sieciowe i I/O poniżej mogą
+        // przekroczyć 3-sekundowy limit odpowiedzi Discord i powodować wygaśnięcie interakcji.
+        await interaction.deferUpdate();
+
         // Pobierz guild
         let guild = interaction.guild; // W kanale guild jest dostępny
 
@@ -11404,7 +11408,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         if (!guild) {
             logger.error(`[CONFIRM_REMINDER] ❌ Nie znaleziono serwera (guildId: ${guildId || 'BRAK'})`);
-            await interaction.reply({
+            await interaction.followUp({
                 content: '❌ Błąd - nie znaleziono serwera.',
                 flags: MessageFlags.Ephemeral
             });
@@ -11422,19 +11426,10 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         // Jeśli już po deadline dzisiaj
         if (polandTime >= deadline) {
-            // Zaktualizuj wiadomość - usuń przycisk i dodaj informację o wygaśnięciu
-            try {
-                await interaction.update({
-                    content: interaction.message.content + '\n\n⏰ **Czas na potwierdzenie minął!**',
-                    components: []
-                });
-            } catch (updateError) {
-                // Jeśli nie można zaktualizować wiadomości, wyślij odpowiedź ephemeral
-                await interaction.reply({
-                    content: `⏰ **Za późno by potwierdzić odbiór!**\n\nPotwierdzenia można wysyłać tylko do godziny **${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}**.\n\nDeadline już minął - potwierdzenie nie zostało zapisane.`,
-                    flags: MessageFlags.Ephemeral
-                });
-            }
+            await interaction.editReply({
+                content: interaction.message.content + '\n\n⏰ **Czas na potwierdzenie minął!**',
+                components: []
+            });
             logger.info(`⏰ ${interaction.user.tag} próbował potwierdzić po deadline (${polandTime.toLocaleTimeString('pl-PL')})`);
             return;
         }
@@ -11482,19 +11477,10 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         // Sprawdź czy użytkownik już potwierdził w tej sesji
         if (confirmations.sessions[sessionKey]?.confirmedUsers?.includes(userId)) {
-            // Zaktualizuj wiadomość - usuń przycisk jeśli jeszcze istnieje
-            try {
-                await interaction.update({
-                    content: interaction.message.content + '\n\n✅ **Odbiór już został potwierdzony!**',
-                    components: []
-                });
-            } catch (updateError) {
-                // Jeśli nie można zaktualizować wiadomości, wyślij odpowiedź ephemeral
-                await interaction.reply({
-                    content: '✅ Już potwierdziłeś odbiór tego przypomnienia!',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
+            await interaction.editReply({
+                content: interaction.message.content + '\n\n✅ **Odbiór już został potwierdzony!**',
+                components: []
+            });
             logger.info(`⚠️ ${interaction.user.tag} próbował potwierdzić ponownie (już potwierdził)`);
             return;
         }
@@ -11504,7 +11490,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         if (!confirmationChannelId) {
             logger.error(`❌ Brak kanału potwierdzenia dla roli: ${roleId}`);
-            await interaction.reply({
+            await interaction.followUp({
                 content: '❌ Błąd konfiguracji - brak kanału potwierdzenia.',
                 flags: MessageFlags.Ephemeral
             });
@@ -11516,7 +11502,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
 
         if (!confirmationChannel) {
             logger.error(`❌ Nie znaleziono kanału potwierdzenia: ${confirmationChannelId}`);
-            await interaction.reply({
+            await interaction.followUp({
                 content: '❌ Błąd - nie znaleziono kanału potwierdzenia.',
                 flags: MessageFlags.Ephemeral
             });
@@ -11592,7 +11578,7 @@ async function handleConfirmReminderButton(interaction, sharedState) {
         }
 
         // Zaktualizuj wiadomość DM - usuń przycisk i pokaż potwierdzenie
-        await interaction.update({
+        await interaction.editReply({
             content: interaction.message.content + '\n\n✅ **Odbiór potwierdzony!**',
             components: []
         });
@@ -11602,17 +11588,10 @@ async function handleConfirmReminderButton(interaction, sharedState) {
     } catch (error) {
         logger.error('[CONFIRM_REMINDER] ❌ Błąd obsługi potwierdzenia:', error);
         try {
-            if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({
-                    content: '❌ Wystąpił błąd podczas potwierdzania odbioru.',
-                    flags: MessageFlags.Ephemeral
-                });
-            } else {
-                await interaction.reply({
-                    content: '❌ Wystąpił błąd podczas potwierdzania odbioru.',
-                    flags: MessageFlags.Ephemeral
-                });
-            }
+            await interaction.followUp({
+                content: '❌ Wystąpił błąd podczas potwierdzania odbioru.',
+                flags: MessageFlags.Ephemeral
+            });
         } catch (replyError) {
             logger.error('[CONFIRM_REMINDER] ❌ Nie udało się wysłać odpowiedzi:', replyError);
         }
