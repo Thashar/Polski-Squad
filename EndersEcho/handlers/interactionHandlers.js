@@ -3043,8 +3043,8 @@ class InteractionHandler {
                 }
             }
 
-            // Wyślij do per-guild kanału (jeśli skonfigurowany)
-            if (perGuildChannelId) {
+            // Wyślij do per-guild kanału (jeśli skonfigurowany i różny od globalnego)
+            if (perGuildChannelId && perGuildChannelId !== this.config.invalidReportChannelId) {
                 try {
                     const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
                     if (guildChannel) {
