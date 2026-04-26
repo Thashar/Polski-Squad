@@ -20,8 +20,8 @@ class RoleConflictService {
             secondary: ['1194249987677229186', '1196805078162616480', '1210265548584132648', '1262793135860355254']
         };
         
-        // Czas opóźnienia sprawdzania konfliktów (1 sekunda - tylko na wypadek szybkich zmian)
-        this.conflictCheckDelay = 1 * 1000;
+        // Czas opóźnienia sprawdzania konfliktów (5 sekund - daje czas na seryjne zmiany ról np. z Rekrutera)
+        this.conflictCheckDelay = 5 * 1000;
         
         // Ścieżka do pliku z aktywnymi timerami
         this.timersFilePath = path.join(__dirname, '../data/role_conflict_timers.json');
