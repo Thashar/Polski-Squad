@@ -1139,7 +1139,8 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${interaction.user.username}${dryRun ? ' (tryb testowy)' : ''}`);
+            const displayNameForLog = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+            gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${displayNameForLog}${dryRun ? ' (tryb testowy)' : ''}`);
 
             // ── Operations Gateway (authorize + root span + record) ───────────
             const op = await this.botOps.run({
@@ -1171,6 +1172,7 @@ class InteractionHandler {
             }
 
             if (aiResult.error === 'NOT_SIMILAR') {
+                gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
                 await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 const notSimilarDesc = aiResult.rejectionReason
                     ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
@@ -1187,6 +1189,7 @@ class InteractionHandler {
             }
 
             if (!aiResult.isValidVictory) {
+                gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
                 await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
@@ -1194,7 +1197,7 @@ class InteractionHandler {
 
             const bestScore = aiResult.score;
             const bossName = aiResult.bossName;
-            gl.success(`✅ [/${commandName}] AI OCR: wynik="${bestScore}", boss="${bossName}"`);
+            gl.success(`✅ [/${commandName}] AI OCR: wynik="${bestScore}", boss="${bossName}"${aiResult.total ? `, total="${aiResult.total}"` : ''}`);
 
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
@@ -1221,8 +1224,6 @@ class InteractionHandler {
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
             }
-
-            gl.info(`🎯 Przygotowuję odpowiedź dla użytkownika - isNewRecord: ${isNewRecord}${dryRun ? ' (tryb testowy)' : ''}`);
 
             if (!isNewRecord) {
                 try {
@@ -1350,7 +1351,7 @@ class InteractionHandler {
             try {
                 const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
-                await this.logService.logMessage('success', 'Role TOP zostały zaktualizowane po nowym rekordzie', interaction);
+                gl.success(`✅ [${userName}] Role TOP zaktualizowane po nowym rekordzie`);
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
             }
@@ -1363,15 +1364,11 @@ class InteractionHandler {
                 const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
                 const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
 
-                gl.info(`🌐 Global Top 3 check: userId=${userId}, prevPos=${prevGlobalPosition ?? 'brak'}, newPos=${newGlobalPosition ?? 'brak'}`);
-
                 if (newGlobalPosition && newGlobalPosition <= 3) {
                     const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
                     const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
                     const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
                     const positionChanged = prevGlobalPosition !== newGlobalPosition;
-
-                    gl.info(`🌐 W Top 3: globalScoreChanged=${globalScoreChanged}, positionChanged=${positionChanged} (${prevGlobalPosition ?? 'brak'} → ${newGlobalPosition})`);
 
                     if (globalScoreChanged && positionChanged) {
                         const sourceGuildName = interaction.guild.name;
@@ -1380,7 +1377,7 @@ class InteractionHandler {
                         const allNotifGuilds = this.config.getAllGuilds()
                             .filter(g => g.globalTop3Notifications !== false)
                             .filter(g => interaction.client.guilds.cache.has(g.id));
-                        gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${allNotifGuilds.length} serwerów`);
+                        gl.info(`🌐 Global Top 3: ${prevGlobalPosition ?? 'brak'}→${newGlobalPosition} — wysyłam do ${allNotifGuilds.length} serwerów`);
 
                         for (const guildCfg of allNotifGuilds) {
                             try {
@@ -1434,10 +1431,10 @@ class InteractionHandler {
                             }
                         }
                     } else {
-                        gl.info(`🌐 Warunki nie spełnione — nie wysyłam powiadomień`);
+                        gl.info(`🌐 Global Top 3: pos=${newGlobalPosition} (bez zmian) — warunki nie spełnione`);
                     }
                 } else {
-                    gl.info(`🌐 Gracz poza Top 3 (pos=${newGlobalPosition ?? 'brak'}) — nie wysyłam powiadomień`);
+                    gl.info(`🌐 Global Top 3: pos=${newGlobalPosition ?? 'brak'} — nie wysyłam powiadomień`);
                 }
             } catch (globalCheckError) {
                 gl.error(`❌ Błąd sprawdzania/wysyłania Global Top 3: ${globalCheckError.message}`);

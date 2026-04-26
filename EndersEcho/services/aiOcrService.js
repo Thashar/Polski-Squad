@@ -275,7 +275,6 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         let total = null;
         if (lines.length >= 3) {
             total = this.normalizeScore(lines[2].replace(/^total[:\s]*/i, '').trim(), log);
-            if (total) log.info(`✅ [AI OCR] Total: "${total}"`);
         }
 
         score = this.normalizeScore(score, log);
@@ -403,18 +402,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const wzorBase64 = wzorBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            log.info('[AI Test] Porównuję zdjęcie z wzorcem...');
             const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
 
             if (!isSimilar) {
-                log.warn(`[AI Test] Zdjęcie niepodobne do wzorca: ${rejectionReason || 'brak powodu'}`);
                 return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
-
-            log.info('[AI Test] Zdjęcie podobne do wzorca → wyciągam dane...');
 
             const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
@@ -422,12 +417,6 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
 
             const result = this.parseAIResponse(extractRes.text, log);
-
-            if (result.isValidVictory) {
-                log.info(`[AI Test] Boss="${result.bossName}" score="${result.score}"`);
-            } else {
-                log.warn(`[AI Test] Nie udało się wyciągnąć danych: ${result.error}`);
-            }
 
             return { ...result, tokenUsage };
 
@@ -492,7 +481,7 @@ ${exampleReasons.join('\n')}
 
         const response = res.text.trim();
         const upper = response.toUpperCase();
-        log.info(`[AI Test] Odpowiedź porównania: "${response}"`);
+        log.info(`[AI Test] Test wzorca: "${response}"`);
         const isSimilar = upper.startsWith('OK') && !upper.startsWith('NOK');
         let rejectionReason = null;
         if (!isSimilar) {
