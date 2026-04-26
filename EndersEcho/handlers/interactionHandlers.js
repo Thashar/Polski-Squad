@@ -2772,55 +2772,60 @@ class InteractionHandler {
             if (part.startsWith('ref:')) result.globalMsgId = part.slice(4);
             else if (part.startsWith('uid:')) result.userId = part.slice(4);
             else if (part.startsWith('gid:')) result.guildId = part.slice(4);
+            else if (part.startsWith('pgc:')) result.perGuildChannelId = part.slice(4);
+            else if (part.startsWith('pgm:')) result.perGuildMsgId = part.slice(4);
         }
         return result;
     }
 
-    /** Aktualizuje globalny kanał raportu — dodaje pole akcji, usuwa przyciski */
-    async _updateGlobalReportMsg(client, globalMsgId, sourceGuildId, actionType, adminName, extraInfo = '') {
-        if (!this.config.invalidReportChannelId || !globalMsgId) return;
-        try {
-            const globalChannel = await client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
-            if (!globalChannel) return;
-            const globalMsg = await globalChannel.messages.fetch(globalMsgId).catch(() => null);
-            if (!globalMsg) return;
+    /** Buduje pola akcji do dodania do embeda raportu */
+    _buildActionEmbeds(embeds, msgs, serverName, actionType, adminName, extraInfo = '') {
+        const now = new Date().toLocaleString('pl-PL', {
+            timeZone: 'Europe/Warsaw',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false
+        });
+        let actionLabel;
+        switch (actionType) {
+            case 'approved': actionLabel = msgs.reportActionApproved; break;
+            case 'blocked': actionLabel = formatMessage(msgs.reportActionBlocked, { duration: extraInfo }); break;
+            case 'analyzed': actionLabel = extraInfo || msgs.reportActionAnalyzed; break;
+            default: actionLabel = actionType;
+        }
+        return embeds.map(e => {
+            const builder = EmbedBuilder.from(e);
+            builder.addFields(
+                { name: formatMessage(msgs.reportActionField, { serverName }), value: '​', inline: false },
+                { name: msgs.reportActionBy, value: adminName, inline: true },
+                { name: msgs.reportActionWhat, value: actionLabel, inline: true },
+                { name: msgs.reportActionWhen, value: now, inline: true },
+            );
+            return builder;
+        });
+    }
 
+    /** Aktualizuje dowolną wiadomość raportu — dodaje pole akcji, usuwa przyciski */
+    async _applyActionToAnyReport(client, channelId, msgId, sourceGuildId, actionType, adminName, extraInfo = '') {
+        if (!channelId || !msgId) return;
+        try {
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) return;
+            const msg = await channel.messages.fetch(msgId).catch(() => null);
+            if (!msg) return;
             const msgs = this.config.getMessages(sourceGuildId);
             const serverName = client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
-            const now = new Date().toLocaleString('pl-PL', {
-                timeZone: 'Europe/Warsaw',
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', second: '2-digit',
-                hour12: false
-            });
-
-            let actionLabel;
-            switch (actionType) {
-                case 'approved': actionLabel = msgs.reportActionApproved; break;
-                case 'blocked': actionLabel = formatMessage(msgs.reportActionBlocked, { duration: extraInfo }); break;
-                case 'analyzed': actionLabel = msgs.reportActionAnalyzed; break;
-                default: actionLabel = actionType;
-            }
-
-            const updatedEmbeds = globalMsg.embeds.map(e => {
-                const builder = EmbedBuilder.from(e);
-                builder.addFields(
-                    { name: formatMessage(msgs.reportActionField, { serverName }), value: '​', inline: false },
-                    { name: msgs.reportActionBy, value: adminName, inline: true },
-                    { name: msgs.reportActionWhat, value: actionLabel, inline: true },
-                    { name: msgs.reportActionWhen, value: now, inline: true },
-                );
-                return builder;
-            });
-
-            await globalMsg.edit({
-                embeds: updatedEmbeds,
-                components: [],
-                attachments: [...globalMsg.attachments.values()],
-            });
+            const updatedEmbeds = this._buildActionEmbeds(msg.embeds, msgs, serverName, actionType, adminName, extraInfo);
+            await msg.edit({ embeds: updatedEmbeds, components: [], attachments: [...msg.attachments.values()] });
         } catch (err) {
-            logger.error(`❌ Nie można zaktualizować globalnego raportu ${globalMsgId}: ${err.message}`);
+            logger.error(`❌ Nie można zaktualizować raportu ${msgId}: ${err.message}`);
         }
+    }
+
+    /** Aktualizuje globalny kanał raportu — deleguje do _applyActionToAnyReport */
+    async _updateGlobalReportMsg(client, globalMsgId, sourceGuildId, actionType, adminName, extraInfo = '') {
+        if (!this.config.invalidReportChannelId || !globalMsgId) return;
+        await this._applyActionToAnyReport(client, this.config.invalidReportChannelId, globalMsgId, sourceGuildId, actionType, adminName, extraInfo);
     }
 
     async _handleAnalyzeButton(interaction, customId) {
@@ -2850,6 +2855,32 @@ class InteractionHandler {
             return;
         }
 
+        const targetMsgs = this.config.getMessages(targetGuildId);
+        const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+        const adminName = interaction.member?.displayName || interaction.user.username;
+
+        const applyToCurrentMsg = async (extraInfo) => {
+            const updatedEmbeds = this._buildActionEmbeds(
+                interaction.message.embeds, targetMsgs, serverName, 'analyzed', adminName, extraInfo
+            );
+            await interaction.editReply({
+                embeds: updatedEmbeds,
+                components: [],
+                attachments: [...interaction.message.attachments.values()],
+            });
+        };
+
+        const applyToOtherMsg = async (extraInfo) => {
+            const sourceGuildId = footerInfo.guildId || targetGuildId;
+            if (footerInfo.globalMsgId) {
+                // Kliknięto na per-guild → zaktualizuj globalny
+                await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, sourceGuildId, 'analyzed', adminName, extraInfo);
+            } else if (footerInfo.perGuildChannelId && footerInfo.perGuildMsgId) {
+                // Kliknięto na globalny → zaktualizuj per-guild
+                await this._applyActionToAnyReport(interaction.client, footerInfo.perGuildChannelId, footerInfo.perGuildMsgId, sourceGuildId, 'analyzed', adminName, extraInfo);
+            }
+        };
+
         const tempPath = path.join(this.config.ocr.tempDir, `analyze_${Date.now()}.png`);
         try {
             await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
@@ -2862,87 +2893,52 @@ class InteractionHandler {
                 operationType: OPERATIONS_TYPE,
             });
 
-            // Nalicz tokeny dla serwera pierwotnego użytkownika
             if (aiResult.tokenUsage) {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
                 this.tokenUsageService.record(targetGuildId, promptTokens, outputTokens).catch(() => {});
             }
 
-            const adminName = interaction.member?.displayName || interaction.user.username;
-
             if (!aiResult.isValidVictory || !aiResult.score) {
-                await interaction.editReply({
-                    content: formatMessage(msgs.analyzeResultFail, { adminName, error: aiResult.error || msgs.analyzeResultUnknown }),
-                    embeds: interaction.message.embeds,
-                    components: [],
-                });
+                const extraInfo = formatMessage(targetMsgs.analyzeResultFail, { adminName, error: aiResult.error || targetMsgs.analyzeResultUnknown });
+                await applyToCurrentMsg(extraInfo);
+                await applyToOtherMsg(extraInfo);
                 return;
             }
 
-            // Pobierz nick z embeda raportu
+            // Pobierz nick z embeda raportu (pole może być w języku serwera)
             const embedFields = interaction.message.embeds[0]?.fields || [];
-            const nickField = embedFields.find(f => f.name === 'Nick na serwerze');
+            const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
             const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
 
-            // Zapisz rekord
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
 
-            // Ogłoś w kanale serwera
-            try {
-                const guildConfig = this.config.getGuildConfig(targetGuildId);
-                if (guildConfig?.allowedChannelId) {
-                    const guildChannel = await interaction.client.channels.fetch(guildConfig.allowedChannelId);
-                    const guildMsgs = this.config.getMessages(targetGuildId);
-                    const targetUser = await interaction.client.users.fetch(targetUserId);
-                    const rolePositions = [];
-                    const analyzedFileName = `analyzed_${Date.now()}.png`;
-                    const publicEmbed = await this.rankingService.createRecordEmbed(
-                        userName,
-                        aiResult.score,
-                        targetUser.displayAvatarURL(),
-                        analyzedFileName,
-                        isNewRecord && currentScore ? currentScore.score : null,
-                        targetUserId,
-                        targetGuildId,
-                        guildMsgs,
-                        null,
-                        null,
-                        isNewRecord && currentScore ? currentScore.timestamp : null,
-                        rolePositions
-                    );
-                    const announcementAttachment = new AttachmentBuilder(tempPath, { name: analyzedFileName });
-                    await guildChannel.send({ embeds: [publicEmbed], files: [announcementAttachment] });
-
-                    // Aktualizuj role TOP
-                    if (isNewRecord) {
-                        const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
-                        await this.roleService.updateTopRoles(
-                            await interaction.client.guilds.fetch(targetGuildId),
-                            updatedPlayers,
-                            guildConfig?.topRoles || null
-                        ).catch(() => {});
-                    }
+            // Aktualizuj role TOP jeśli nowy rekord
+            if (isNewRecord) {
+                try {
+                    const guildConfig = this.config.getGuildConfig(targetGuildId);
+                    const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
+                    await this.roleService.updateTopRoles(
+                        await interaction.client.guilds.fetch(targetGuildId),
+                        updatedPlayers,
+                        guildConfig?.topRoles || null
+                    ).catch(() => {});
+                } catch (roleErr) {
+                    logger.warn(`⚠️ Błąd aktualizacji ról po analizie: ${roleErr.message}`);
                 }
-            } catch (announceErr) {
-                logger.warn(`⚠️ Nie można wysłać ogłoszenia po analizie: ${announceErr.message}`);
             }
 
-            await interaction.editReply({
-                content: formatMessage(msgs.analyzeResultSuccess, {
-                    adminName,
-                    bossName: aiResult.bossName || msgs.analyzeResultUnknown,
-                    score: aiResult.score,
-                    result: isNewRecord ? msgs.analyzeResultNewRecord : msgs.analyzeResultNoRecord,
-                }),
-                embeds: interaction.message.embeds,
-                components: [],
+            const extraInfo = formatMessage(targetMsgs.analyzeResultSuccess, {
+                adminName,
+                bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
+                score: aiResult.score,
+                result: isNewRecord ? targetMsgs.analyzeResultNewRecord : targetMsgs.analyzeResultNoRecord,
             });
-            if (footerInfo.globalMsgId) {
-                await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, footerInfo.guildId || targetGuildId, 'analyzed', adminName);
-            }
+            await applyToCurrentMsg(extraInfo);
+            await applyToOtherMsg(extraInfo);
+
         } catch (err) {
             logger.error(`❌ Błąd ee_analyze: ${err.message}`);
             await interaction.editReply({
@@ -3030,14 +3026,15 @@ class InteractionHandler {
 
             // Wyślij do globalnego kanału
             let globalMsgId = null;
+            let sentGlobalMsg = null;
             if (hasGlobal) {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
                     if (globalChannel) {
                         const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
                         const globalEmbed = buildEmbed(`uid:${interaction.user.id}|gid:${interaction.guildId}`);
-                        const sent = await globalChannel.send({ embeds: [globalEmbed], files: [fileAttachment], components: [buildButtons()] });
-                        globalMsgId = sent.id;
+                        sentGlobalMsg = await globalChannel.send({ embeds: [globalEmbed], files: [fileAttachment], components: [buildButtons()] });
+                        globalMsgId = sentGlobalMsg.id;
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do globalnego kanału dla ${serverNick}`);
                     }
                 } catch (err) {
@@ -3055,7 +3052,22 @@ class InteractionHandler {
                             ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}`
                             : `uid:${interaction.user.id}|gid:${interaction.guildId}`;
                         const guildEmbed = buildEmbed(footerText);
-                        await guildChannel.send({ embeds: [guildEmbed], files: [fileAttachment2], components: [buildButtons()] });
+                        const sentPerGuild = await guildChannel.send({ embeds: [guildEmbed], files: [fileAttachment2], components: [buildButtons()] });
+                        // Zapisz referencję do per-guild wiadomości w footerze globalnego embeda
+                        // żeby Analyze kliknięty na global mógł zaktualizować też per-guild
+                        if (sentGlobalMsg) {
+                            const updatedGlobalEmbeds = sentGlobalMsg.embeds.map(e => {
+                                const b = EmbedBuilder.from(e);
+                                const cur = e.footer?.text || '';
+                                b.setFooter({ text: `${cur}|pgc:${perGuildChannelId}|pgm:${sentPerGuild.id}` });
+                                return b;
+                            });
+                            sentGlobalMsg.edit({
+                                embeds: updatedGlobalEmbeds,
+                                attachments: [...sentGlobalMsg.attachments.values()],
+                                components: [...sentGlobalMsg.components],
+                            }).catch(e => gl.warn(`⚠️ Nie można zaktualizować footera globalnego raportu: ${e.message}`));
+                        }
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do per-guild kanału serwera ${interaction.guildId}`);
                     }
                 } catch (err) {
