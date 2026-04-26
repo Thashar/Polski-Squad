@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const fs = require('fs').promises;
@@ -184,23 +184,6 @@ class InteractionHandler {
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
-                .setName('add-role-ranking')
-                .setDescription('Add a ranking for role holders (admins only)')
-                .setDescriptionLocalizations(pl('Dodaje ranking dla posiadaczy wybranej roli (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addRoleOption(option =>
-                    option.setName('rola')
-                        .setDescription('Role for which you want to create a ranking')
-                        .setDescriptionLocalizations(pl('Rola, dla której chcesz utworzyć ranking'))
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('remove-role-ranking')
-                .setDescription('Remove a role ranking (admins only)')
-                .setDescriptionLocalizations(pl('Usuwa ranking roli (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
                 .setName('limit')
                 .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
                 .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
@@ -321,17 +304,6 @@ class InteractionHandler {
                 await this.handleRemoveCommand(interaction);
                 return;
             }
-            if (interaction.commandName === 'add-role-ranking') {
-                if (!this._checkConfigured(interaction)) return;
-                await this.handleAddRoleRankingCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'remove-role-ranking') {
-                if (!this._checkConfigured(interaction)) return;
-                await this.handleRemoveRoleRankingCommand(interaction);
-                return;
-            }
-
             // Pozostałe komendy — wymagają konfiguracji i dozwolonego kanału
             if (!this._checkConfigured(interaction)) return;
 
@@ -351,6 +323,8 @@ class InteractionHandler {
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
         } else if (interaction.isStringSelectMenu()) {
+            await this.handleSelectMenuInteraction(interaction);
+        } else if (interaction.isRoleSelectMenu()) {
             await this.handleSelectMenuInteraction(interaction);
         } else if (interaction.isChannelSelectMenu()) {
             await this._handleChannelSelectMenu(interaction);
@@ -429,6 +403,7 @@ class InteractionHandler {
             4: state.tag !== null && state.tag !== undefined,
             5: state.topRoles !== null || state.rolesSkipped,
             6: state.globalTop3Notifications !== null,
+            7: state.roleRankingsDone === true,
         };
         const allDone = Object.values(done).every(Boolean);
 
@@ -447,6 +422,7 @@ class InteractionHandler {
                 btn(4, '4. Tag serwera', '4. Server Tag'),
                 btn(5, '5. Role TOP (opcjonalne)', '5. TOP Roles (optional)'),
                 btn(6, '6. Powiadomienia Global TOP3', '6. Global TOP3 Notifications'),
+                btn(7, '7. Ranking roli (opcjonalne)', '7. Role Rankings (optional)'),
             ),
         ];
 
@@ -474,6 +450,7 @@ class InteractionHandler {
             done[4] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
             done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
             done[6] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
+            done[7] ? `🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')}` : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -499,7 +476,8 @@ class InteractionHandler {
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
-                        '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n\n' +
+                        '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
+                        '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n\n' +
                         polOcrLine,
                         '📋 **Steps overview:**\n' +
                         '1️⃣  **Language** — Polish or English interface\n' +
@@ -507,7 +485,8 @@ class InteractionHandler {
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
-                        '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n\n' +
+                        '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
+                        '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n\n' +
                         engOcrLine
                     );
                 })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
@@ -538,6 +517,7 @@ class InteractionHandler {
                     globalTop3Notifications: existing.globalTop3Notifications !== undefined
                         ? existing.globalTop3Notifications
                         : true,
+                    roleRankingsDone: true,
                 });
             } else {
                 this._configWizard.set(key, {
@@ -548,6 +528,7 @@ class InteractionHandler {
                     topRoles: null,
                     rolesSkipped: false,
                     globalTop3Notifications: null,
+                    roleRankingsDone: false,
                 });
             }
         }
@@ -591,10 +572,10 @@ class InteractionHandler {
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
                         '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n\n' +
-                        'Komendy adminów (`/remove`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/test`) działają z **dowolnego** kanału.',
+                        'Komendy adminów (`/remove`, `/unblock`, `/tokens`, `/test`, `/configure`) działają z **dowolnego** kanału.',
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
                         '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n\n' +
-                        'Admin commands (`/remove`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/test`) work from **any** channel.'
+                        'Admin commands (`/remove`, `/unblock`, `/tokens`, `/test`, `/configure`) work from **any** channel.'
                     )
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
@@ -659,6 +640,34 @@ class InteractionHandler {
             const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('✅ Tak, włącz', '✅ Yes, enable')).setStyle(ButtonStyle.Success);
             const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('❌ Nie', '❌ No')).setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(yesBtn, noBtn, backBtn)] });
+
+        } else if (step === 7) {
+            const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+            const list = existing.length > 0
+                ? '\n\n**' + t('Aktualne rankingi:', 'Current rankings:') + '**\n' + existing.map(r => `• <@&${r.roleId}> — ${r.roleName}`).join('\n')
+                : '';
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🏅 Krok 7 — Ranking roli (opcjonalne)', '🏅 Step 7 — Role Rankings (optional)'))
+                .setDescription(
+                    t(
+                        'Możesz tworzyć osobne rankingi dla posiadaczy wybranych ról Discord. Przydatne gdy na serwerze są różne grupy klanowe lub rangowe z własną rywalizacją.\n\nMax 10 rankingów ról. Ranking roli to osobny `/ranking` widoczny dla graczy z daną rolą.\n\nMożesz pominąć ten krok i skonfigurować rankingi ról później przez `/configure`.',
+                        'You can create separate rankings for holders of specific Discord roles. Useful when your server has clan or rank groups competing independently.\n\nMax 10 role rankings. A role ranking is a separate `/ranking` visible to players with that role.\n\nYou can skip this step and configure role rankings later by running `/configure`.'
+                    ) + list
+                );
+            const addBtn = new ButtonBuilder()
+                .setCustomId('cfg_role_ranking_add')
+                .setLabel(t('Dodaj ranking roli', 'Add Role Ranking'))
+                .setStyle(ButtonStyle.Primary);
+            const removeBtn = new ButtonBuilder()
+                .setCustomId('cfg_role_ranking_remove')
+                .setLabel(t('Usuń ranking roli', 'Remove Role Ranking'))
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(existing.length === 0);
+            const skipBtn = new ButtonBuilder()
+                .setCustomId('cfg_role_ranking_skip')
+                .setLabel(t('Gotowe / Pomiń', 'Done / Skip'))
+                .setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(addBtn, removeBtn, skipBtn, backBtn)] });
         }
     }
 
@@ -864,6 +873,58 @@ class InteractionHandler {
         }
         if (customId === 'cfg_notif_no') {
             state.globalTop3Notifications = false;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Krok 7 — pokaż RoleSelectMenu do dodania rankingu roli
+        if (customId === 'cfg_role_ranking_add') {
+            const roleSelect = new RoleSelectMenuBuilder()
+                .setCustomId('cfg_role_ranking_add_select')
+                .setPlaceholder(t('Wybierz rolę...', 'Select a role...'));
+            const backToStep7 = new ButtonBuilder()
+                .setCustomId('cfg_step_7')
+                .setLabel(t('← Powrót', '← Back'))
+                .setStyle(ButtonStyle.Secondary);
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0x5865F2)
+                    .setTitle(t('➕ Dodaj ranking roli', '➕ Add Role Ranking'))
+                    .setDescription(t('Wybierz rolę Discord, dla której chcesz utworzyć osobny ranking.', 'Select the Discord role for which you want to create a separate ranking.'))],
+                components: [new ActionRowBuilder().addComponents(roleSelect), new ActionRowBuilder().addComponents(backToStep7)]
+            });
+            return;
+        }
+
+        // Krok 7 — pokaż StringSelectMenu do usunięcia rankingu roli
+        if (customId === 'cfg_role_ranking_remove') {
+            const existing = await this.roleRankingConfigService.loadRoleRankings(interaction.guildId);
+            if (existing.length === 0) {
+                await this._showConfigureStep(interaction, 7);
+                return;
+            }
+            const options = existing.map(r => ({ label: r.roleName.substring(0, 100), value: r.roleId }));
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('cfg_role_ranking_remove_select')
+                .setPlaceholder(t('Wybierz ranking roli do usunięcia...', 'Select role ranking to remove...'))
+                .addOptions(options);
+            const backToStep7 = new ButtonBuilder()
+                .setCustomId('cfg_step_7')
+                .setLabel(t('← Powrót', '← Back'))
+                .setStyle(ButtonStyle.Secondary);
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0x5865F2)
+                    .setTitle(t('🗑️ Usuń ranking roli', '🗑️ Remove Role Ranking'))
+                    .setDescription(t('Wybierz ranking roli do usunięcia.', 'Select the role ranking to remove.'))],
+                components: [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backToStep7)]
+            });
+            return;
+        }
+
+        // Krok 7 — pomiń / gotowe
+        if (customId === 'cfg_role_ranking_skip') {
+            state.roleRankingsDone = true;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -1667,6 +1728,7 @@ class InteractionHandler {
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
                 customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
+                customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 await this._handleConfigureButton(interaction, customId);
                 return;
@@ -1978,79 +2040,58 @@ class InteractionHandler {
         }
     }
 
-    /**
-     * Obsługuje komendę /add-role-ranking
-     */
-    async handleAddRoleRankingCommand(interaction) {
-        const msgs = this.msgs(interaction.guildId);
-        if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
+    /** Obsługuje wybór roli do dodania rankingu w /configure krok 7 */
+    async _handleCfgRoleRankingAddSelect(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) {
+            await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] });
             return;
         }
-        await interaction.deferReply({ flags: ['Ephemeral'] });
-
         const guildId = interaction.guildId;
-        const role = interaction.options.getRole('rola');
+        const roleId = interaction.values[0];
+        const role = interaction.guild.roles.cache.get(roleId);
+        const roleName = role?.name || roleId;
         const MAX = 10;
 
         const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        const msgs = this.msgs(guildId);
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
 
         if (existing.length >= MAX) {
-            await interaction.editReply({ content: formatMessage(msgs.roleRankingLimitReached, { max: MAX }) });
+            const errEmbed = new EmbedBuilder().setColor(0xFF0000)
+                .setDescription(`❌ ${formatMessage(msgs.roleRankingLimitReached, { max: MAX })}`);
+            const backBtn = new ButtonBuilder().setCustomId('cfg_step_7').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [errEmbed], components: [new ActionRowBuilder().addComponents(backBtn)] });
             return;
         }
 
-        const result = await this.roleRankingConfigService.addRoleRanking(guildId, role.id, role.name);
+        const result = await this.roleRankingConfigService.addRoleRanking(guildId, roleId, roleName);
 
         if (!result.ok) {
-            const msg = result.reason === 'limit'
+            const errMsg = result.reason === 'limit'
                 ? formatMessage(msgs.roleRankingLimitReached, { max: MAX })
-                : `⚠️ Ranking dla roli **${role.name}** już istnieje.`;
-            await interaction.editReply({ content: msg });
+                : t(`⚠️ Ranking dla roli **${roleName}** już istnieje.`, `⚠️ A ranking for role **${roleName}** already exists.`);
+            const errEmbed = new EmbedBuilder().setColor(0xFF0000).setDescription(errMsg);
+            const backBtn = new ButtonBuilder().setCustomId('cfg_step_7').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
+            await interaction.update({ embeds: [errEmbed], components: [new ActionRowBuilder().addComponents(backBtn)] });
             return;
         }
 
-        await interaction.editReply({
-            content: formatMessage(msgs.roleRankingAdded, { roleName: role.name })
-        });
+        state.roleRankingsDone = true;
+        this._configWizard.set(key, state);
+        await this._showConfigureStep(interaction, 7);
     }
 
-    /**
-     * Obsługuje komendę /remove-role-ranking
-     */
-    async handleRemoveRoleRankingCommand(interaction) {
-        const msgs = this.msgs(interaction.guildId);
-        if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({ content: msgs.noPermissionAdmin, flags: ['Ephemeral'] });
+    /** Obsługuje wybór roli do usunięcia rankingu w /configure krok 7 */
+    async _handleCfgRoleRankingRemoveSelect(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) {
+            await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] });
             return;
         }
-        await interaction.deferReply({ flags: ['Ephemeral'] });
-
-        const guildId = interaction.guildId;
-        const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
-
-        if (existing.length === 0) {
-            await interaction.editReply({ content: msgs.roleRankingNoRankings });
-            return;
-        }
-
-        const options = existing.map(r => ({ label: r.roleName.substring(0, 100), value: r.roleId }));
-
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('ee_remove_role_select')
-            .setPlaceholder('Wybierz ranking roli do usunięcia...')
-            .addOptions(options);
-
-        await interaction.editReply({
-            content: '🗑️ Wybierz ranking roli do usunięcia:',
-            components: [new ActionRowBuilder().addComponents(select)]
-        });
-    }
-
-    /**
-     * Obsługuje wybór roli w /remove-role-ranking
-     */
-    async _handleRemoveRoleSelect(interaction) {
         const roleId = interaction.values[0];
         const guildId = interaction.guildId;
 
@@ -2058,14 +2099,8 @@ class InteractionHandler {
         const roleCfg = existing.find(r => r.roleId === roleId);
         const roleName = roleCfg?.roleName || roleId;
 
-        const removed = await this.roleRankingConfigService.removeRoleRanking(guildId, roleId);
-
-        await interaction.update({
-            content: removed
-                ? `✅ Usunięto ranking roli **${roleName}**.`
-                : `⚠️ Ranking roli **${roleName}** nie istnieje.`,
-            components: []
-        });
+        await this.roleRankingConfigService.removeRoleRanking(guildId, roleId);
+        await this._showConfigureStep(interaction, 7);
     }
 
     /**
@@ -2111,8 +2146,13 @@ class InteractionHandler {
                 return;
             }
 
-            if (customId === 'ee_remove_role_select') {
-                await this._handleRemoveRoleSelect(interaction);
+            if (customId === 'cfg_role_ranking_add_select') {
+                await this._handleCfgRoleRankingAddSelect(interaction);
+                return;
+            }
+
+            if (customId === 'cfg_role_ranking_remove_select') {
+                await this._handleCfgRoleRankingRemoveSelect(interaction);
                 return;
             }
 
