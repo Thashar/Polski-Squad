@@ -3330,13 +3330,18 @@ class InteractionHandler {
         const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
         const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
 
-        // Wiersz 1: ◀ | ▶ | 🌐 Wszystkie (tylko superUser) | Miesiąc (na końcu)
+        // Wiersz 1: ◀ | Miesiąc | ▶ | 🌐 Wszystkie (tylko superUser)
         const row1Buttons = [
             new ButtonBuilder()
                 .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('◀')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
+            new ButtonBuilder()
+                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
+                .setLabel(monthLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(true),
             new ButtonBuilder()
                 .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('▶')
@@ -3352,14 +3357,6 @@ class InteractionHandler {
                     .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
             );
         }
-
-        row1Buttons.push(
-            new ButtonBuilder()
-                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
-                .setLabel(monthLabel)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(true)
-        );
 
         const navRow = new ActionRowBuilder().addComponents(...row1Buttons);
         const components = [navRow];
