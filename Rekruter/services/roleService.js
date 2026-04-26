@@ -32,7 +32,7 @@ async function assignClanRole(member, attack, user, config, client) {
         }
         targetChannelId = config.channels.welcome;
     } else {
-        await delay(1000);
+        await delay(100);
 
         if (attack >= 1500000) {
             logger.info(`[CLAN_ASSIGN] Przypisano rolę rekrutacyjną Main (atak: ${attack})`);
