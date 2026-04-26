@@ -1377,7 +1377,9 @@ class InteractionHandler {
                         const sourceGuildName = interaction.guild.name;
                         const notifAvatarUrl = interaction.user.displayAvatarURL();
 
-                        const allNotifGuilds = this.config.getAllGuilds().filter(g => g.globalTop3Notifications !== false);
+                        const allNotifGuilds = this.config.getAllGuilds()
+                            .filter(g => g.globalTop3Notifications !== false)
+                            .filter(g => interaction.client.guilds.cache.has(g.id));
                         gl.info(`🌐 Wysyłam powiadomienia Global Top 3 do ${allNotifGuilds.length} serwerów`);
 
                         for (const guildCfg of allNotifGuilds) {
