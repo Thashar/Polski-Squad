@@ -231,6 +231,7 @@ const pol = {
     analyzeResultNewRecord: '🏆 Nowy rekord!',
     analyzeResultNoRecord: 'Nie pobito rekordu',
     analyzeResultUnknown: 'nieznany',
+    analyzeManualAnnouncement: '<@{userId}> Twój wynik został zweryfikowany manualnie przez administratora **{adminName}**.',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Komendy **{commands}** wyłączone na serwerze **{serverName}**.',
@@ -478,6 +479,7 @@ const eng = {
     analyzeResultNewRecord: '🏆 New record!',
     analyzeResultNoRecord: 'No record broken',
     analyzeResultUnknown: 'unknown',
+    analyzeManualAnnouncement: '<@{userId}> Your score was manually verified by administrator **{adminName}**.',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Commands **{commands}** disabled on server **{serverName}**.',

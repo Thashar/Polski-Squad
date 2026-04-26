@@ -2964,6 +2964,54 @@ class InteractionHandler {
                 }
             }
 
+            // Ogłoszenie publiczne na kanale serwera z pingiem do autora screena
+            const guildCfgAnnounce = this.config.getGuildConfig(targetGuildId);
+            const announcementChannelId = guildCfgAnnounce?.allowedChannelId;
+            if (announcementChannelId) {
+                try {
+                    const announcementChannel = await interaction.client.channels.fetch(announcementChannelId).catch(() => null);
+                    if (announcementChannel) {
+                        const userAvatarUrl = await interaction.client.users.fetch(targetUserId)
+                            .then(u => u.displayAvatarURL()).catch(() => null);
+                        const targetGuildObj = interaction.client.guilds.cache.get(targetGuildId)
+                            || await interaction.client.guilds.fetch(targetGuildId).catch(() => null);
+
+                        const ext = path.extname(tempPath) || '.png';
+                        const announceName = `analyze_wynik_${Date.now()}${ext}`;
+                        const fileAttachment = new AttachmentBuilder(tempPath, { name: announceName });
+
+                        let resultEmbed;
+                        if (isNewRecord) {
+                            resultEmbed = await this.rankingService.createRecordEmbed(
+                                userName, aiResult.score, userAvatarUrl, announceName,
+                                currentScore?.score ?? null, targetUserId, targetGuildId,
+                                targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
+                                currentScore?.timestamp ?? null, []
+                            );
+                        } else {
+                            resultEmbed = this.rankingService.createResultEmbed(
+                                userName, aiResult.score, currentScore?.score ?? null,
+                                announceName, aiResult.bossName, targetMsgs
+                            );
+                        }
+
+                        const announcementContent = formatMessage(targetMsgs.analyzeManualAnnouncement, {
+                            userId: targetUserId,
+                            adminName,
+                        });
+
+                        await announcementChannel.send({
+                            content: announcementContent,
+                            embeds: [resultEmbed],
+                            files: [fileAttachment],
+                        });
+                        gl.info(`✅ [Analizuj] Ogłoszenie wysłane na kanał ${announcementChannelId}`);
+                    }
+                } catch (annErr) {
+                    gl.error(`❌ [Analizuj] Błąd wysyłania ogłoszenia: ${annErr.message}`);
+                }
+            }
+
             const extraInfo = formatMessage(targetMsgs.analyzeResultSuccess, {
                 adminName,
                 bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
