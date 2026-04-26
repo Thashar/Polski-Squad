@@ -90,9 +90,8 @@
    - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)
 
 6. **Rankingi Ról** - `roleRankingConfigService.js` + `interactionHandlers.js`:
-   - `/add-role-ranking` (admin) → select menu z rolami serwera → dodaje ranking roli, max **10 ról** per serwer
-   - `/remove-role-ranking` (admin) → select menu z aktualnymi rankingami ról → usuwa wybrany
-   - Konfiguracja persystowana w `data/role_rankings_{guildId}.json` (`[{ roleId, roleName, addedAt }]`)
+   - Zarządzanie przez `/configure` krok 7 (admin) → przyciski: "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"
+   - Max **10 ról** per serwer; konfiguracja persystowana w `data/role_rankings_{guildId}.json` (`[{ roleId, roleName, addedAt }]`)
    - Po wybraniu serwera w `/ranking` → pod paginacją pojawiają się przyciski `[NazwaRoli]` (max 2 wiersze po 5)
    - Kliknięcie przycisku roli → ranking filtrowany do graczy aktualnie posiadających tę rolę
    - Filtrowanie: batch-fetch tylko graczy z rankingu (nie całego serwera) → `guild.members.fetch({ user: [...ids] })`
@@ -118,7 +117,7 @@
    - **Anuluj** → czyści sesję
    - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/add-role-ranking`, `/remove-role-ranking`, `/tokens`, `/configure`
+**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/tokens`, `/configure`
 
 **Komenda /tokens** — statystyki zużycia tokenów AI (admin):
 - Wyświetla dzienny i miesięczny koszt w $ per serwer oraz sumy łączne
@@ -135,13 +134,14 @@
 - Stare wpisy usage automatycznie czyszczone przy każdym zapisie (tylko dzisiaj zostaje)
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
-- 6-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
+- 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 2:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
 - **Krok 3:** Język (pol/eng) — wszystkie komunikaty i opisy komend; tłumaczony na pol gdy `state.lang === 'pol'`
 - **Krok 4:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
 - **Krok 5:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 6:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
+- **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** (ButtonStyle.Success) pojawia się gdy wszystkie kroki ukończone
 - Szary przycisk **Anuluj** widoczny od początku — czyści `_configWizard` i zamyka dashboard
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
@@ -183,7 +183,7 @@
 
 **Uprawnienia komend** (po nowym routingu):
 - Bez konfiguracji (zawsze): `/configure`, `/info`, `/ocr-on-off`, `/limit`, `/tokens`, `/unblock`
-- Wymaga konfiguracji, dowolny kanał: `/test`, `/remove`, `/add-role-ranking`, `/remove-role-ranking`
+- Wymaga konfiguracji, dowolny kanał: `/test`, `/remove`
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
 
 **Struktura danych:**
