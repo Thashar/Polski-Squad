@@ -3237,6 +3237,7 @@ class InteractionHandler {
         // Formy customId:
         // tk_p_{YYYYMM}_{guildFilter}_{userId}  — poprzedni miesiąc
         // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc
+        // tk_m_{YYYYMM}_{guildFilter}_{userId}  — breakdown miesięczny per serwer (tylko superUser)
         // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer
         // tk_a_{YYYYMM}_{userId}                — wszystkie serwery
         const parts    = customId.split('_');
@@ -3262,10 +3263,18 @@ class InteractionHandler {
         const isAdmin     = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isSuperUser && !isAdmin) return;
 
+        if (action === 'm' && !isSuperUser) return;
+
         // Zwykły admin widzi tylko swój serwer — zignoruj filter z customId
         const effectiveFilter = isSuperUser ? guildFilter : interaction.guildId;
 
         await interaction.deferUpdate();
+
+        if (action === 'm') {
+            const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
+            await interaction.editReply(reply);
+            return;
+        }
 
         let targetMonth = month;
         if (action === 'p' || action === 'n') {
@@ -3338,10 +3347,10 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
-                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
+                .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
                 .setLabel(monthLabel)
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(true),
+                .setDisabled(!isSuperUser),
             new ButtonBuilder()
                 .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('▶')
@@ -3378,8 +3387,65 @@ class InteractionHandler {
 
         return { embeds: [embed], components };
     }
-}
 
-module.exports = InteractionHandler;
+    async _buildTokensMonthBreakdown(interaction, month, isSuperUser) {
+        const { PRICING } = require('../services/tokenUsageService');
+        const [y, m] = month.split('-').map(Number);
+        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+        const monthStr   = `${y}${String(m).padStart(2, '0')}`;
+        const userId     = interaction.user.id;
+
+        const fmtCost = (c) => `$${c.toFixed(5)}`;
+
+        const allGuilds = this.config.getAllGuilds();
+        const lines = [];
+        let totalCost = 0;
+
+        for (const gc of allGuilds) {
+            const stats = this.tokenUsageService.getMonthlyStats(gc.id, month);
+            const cost  = stats.cost;
+            totalCost  += cost;
+            const name  = (interaction.client.guilds.cache.get(gc.id)?.name || gc.id).slice(0, 24);
+            lines.push(`**${name}** — ${fmtCost(cost)} (${stats.requests} req)`);
+        }
+
+        lines.push('');
+        lines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x4285F4)
+            .setTitle(`📊 Koszty miesięczne — ${monthLabel}`)
+            .setDescription(lines.join('\n'))
+            .addFields({ name: 'Cennik', value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
+            .setTimestamp()
+            .setFooter({ text: 'Dane z /update' });
+
+        // Przycisk powrotu do widoku głównego (dla aktualnego filtra = all)
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`tk_p_${monthStr}_all_${userId}`)
+                .setLabel('◀')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(`tk_m_${monthStr}_all_${userId}`)
+                .setLabel(monthLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(false),
+            new ButtonBuilder()
+                .setCustomId(`tk_n_${monthStr}_all_${userId}`)
+                .setLabel('▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(`tk_a_${monthStr}_${userId}`)
+                .setLabel('🌐 Wszystkie')
+                .setStyle(ButtonStyle.Secondary),
+        );
+
+        return { embeds: [embed], components: [backRow] };
+    }
+}
 
 module.exports = InteractionHandler;
