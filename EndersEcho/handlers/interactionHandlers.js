@@ -1549,13 +1549,20 @@ class InteractionHandler {
                 }
                 const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
                 const adminName = interaction.member?.displayName || interaction.user.username;
-                await interaction.update({
-                    content: interaction.message.content,
-                    embeds: interaction.message.embeds,
-                    components: []
+                const sourceGuildId = footerInfo.guildId || interaction.guildId;
+                const targetMsgs = this.config.getMessages(sourceGuildId);
+                const serverName = interaction.client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
+                await interaction.deferUpdate();
+                const updatedEmbeds = this._buildActionEmbeds(interaction.message.embeds, targetMsgs, serverName, 'approved', adminName);
+                await interaction.editReply({
+                    embeds: updatedEmbeds,
+                    components: [],
+                    attachments: [...interaction.message.attachments.values()],
                 });
                 if (footerInfo.globalMsgId) {
-                    await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, footerInfo.guildId, 'approved', adminName);
+                    await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, sourceGuildId, 'approved', adminName);
+                } else if (footerInfo.perGuildChannelId && footerInfo.perGuildMsgId) {
+                    await this._applyActionToAnyReport(interaction.client, footerInfo.perGuildChannelId, footerInfo.perGuildMsgId, sourceGuildId, 'approved', adminName);
                 }
                 return;
             }
@@ -1569,11 +1576,15 @@ class InteractionHandler {
                 const parts = customId.split('_');
                 const targetUserId = parts[2];
                 const targetGuildId = parts[3];
-                // Encode global message ID from footer for later update
                 const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
-                const globalMsgId = footerInfo.globalMsgId || 'none';
+                // Encode cross-update ref mutually: either global msgId or per-guild channel+msg
+                const otherRef = footerInfo.globalMsgId
+                    ? `g_${footerInfo.globalMsgId}`
+                    : (footerInfo.perGuildChannelId && footerInfo.perGuildMsgId
+                        ? `p_${footerInfo.perGuildChannelId}_${footerInfo.perGuildMsgId}`
+                        : 'none');
                 const modal = new ModalBuilder()
-                    .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}_${globalMsgId}`)
+                    .setCustomId(`ee_block_modal_${targetUserId}_${targetGuildId}_${otherRef}`)
                     .setTitle(msgs.blockUserModalTitle)
                     .addComponents(
                         new ActionRowBuilder().addComponents(
@@ -2571,9 +2582,21 @@ class InteractionHandler {
 
     async _handleBlockUserModal(interaction) {
         const parts = interaction.customId.split('_');
+        // Format: ee_block_modal_{targetUserId}_{targetGuildId}_{otherRefType}[_{ref1}[_{ref2}]]
+        // otherRefType: 'g' (global msgId in ref1), 'p' (per-guild channelId+msgId in ref1+ref2), 'none'
         const targetUserId = parts[3];
         const targetGuildId = parts[4];
-        const globalMsgId = (parts[5] && parts[5] !== 'none') ? parts[5] : null;
+        const otherRefType = parts[5];
+        let crossUpdateGlobalMsgId = null;
+        let crossUpdatePerGuildChannelId = null;
+        let crossUpdatePerGuildMsgId = null;
+        if (otherRefType === 'g') {
+            crossUpdateGlobalMsgId = parts[6];
+        } else if (otherRefType === 'p') {
+            crossUpdatePerGuildChannelId = parts[6];
+            crossUpdatePerGuildMsgId = parts[7];
+        }
+
         const durationStr = interaction.fields.getTextInputValue('duration').trim();
 
         let targetGuild;
@@ -2600,25 +2623,27 @@ class InteractionHandler {
             targetUserId, targetUsername, targetGuildId, guildName, durationStr
         );
 
-        const timeLabel = blockedUntil
-            ? `do <t:${Math.floor(blockedUntil / 1000)}:F>`
-            : '**permanentnie**';
+        const durationLabel = blockedUntil
+            ? new Date(blockedUntil).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+            : '∞';
 
         const adminName = interaction.member?.displayName || interaction.user.username;
+        const targetMsgs = this.config.getMessages(targetGuildId);
+        const serverName = guildName;
 
+        const updatedEmbeds = this._buildActionEmbeds(interaction.message.embeds, targetMsgs, serverName, 'blocked', adminName, durationLabel);
         await interaction.update({
-            content: `🔒 Użytkownik **${targetUsername}** zablokowany ${timeLabel} przez **${adminName}**`,
-            embeds: interaction.message.embeds,
-            components: []
+            embeds: updatedEmbeds,
+            components: [],
+            attachments: [...interaction.message.attachments.values()],
         });
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
 
-        if (globalMsgId) {
-            const durationLabel = blockedUntil
-                ? new Date(blockedUntil).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
-                : '∞';
-            await this._updateGlobalReportMsg(interaction.client, globalMsgId, targetGuildId, 'blocked', adminName, durationLabel);
+        if (crossUpdateGlobalMsgId) {
+            await this._updateGlobalReportMsg(interaction.client, crossUpdateGlobalMsgId, targetGuildId, 'blocked', adminName, durationLabel);
+        } else if (crossUpdatePerGuildChannelId && crossUpdatePerGuildMsgId) {
+            await this._applyActionToAnyReport(interaction.client, crossUpdatePerGuildChannelId, crossUpdatePerGuildMsgId, targetGuildId, 'blocked', adminName, durationLabel);
         }
     }
 
@@ -2881,13 +2906,16 @@ class InteractionHandler {
             }
         };
 
+        const gl = this.logService._gl(targetGuildId);
         const tempPath = path.join(this.config.ocr.tempDir, `analyze_${Date.now()}.png`);
         try {
             await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
             const imgBuffer = await downloadBuffer(imageUrl);
             await fs.writeFile(tempPath, imgBuffer);
 
-            const aiResult = await this.aiOcrService.extractImageData(tempPath, logger, {
+            gl.info(`🔍 [Analizuj] ${adminName} uruchamia analizę OCR dla użytkownika ${targetUserId} (serwer: ${serverName})`);
+
+            const aiResult = await this.aiOcrService.extractImageData(tempPath, gl, {
                 guildId: targetGuildId,
                 actorDiscordId: targetUserId,
                 operationType: OPERATIONS_TYPE,
@@ -2896,14 +2924,18 @@ class InteractionHandler {
             if (aiResult.tokenUsage) {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
                 this.tokenUsageService.record(targetGuildId, promptTokens, outputTokens).catch(() => {});
+                gl.info(`🪙 Tokeny AI: input=${promptTokens}, output=${outputTokens}`);
             }
 
             if (!aiResult.isValidVictory || !aiResult.score) {
+                gl.warn(`⚠️ [Analizuj] Wynik OCR nieprawidłowy — isValidVictory=${aiResult.isValidVictory}, score=${aiResult.score}, error=${aiResult.error}`);
                 const extraInfo = formatMessage(targetMsgs.analyzeResultFail, { adminName, error: aiResult.error || targetMsgs.analyzeResultUnknown });
                 await applyToCurrentMsg(extraInfo);
                 await applyToOtherMsg(extraInfo);
                 return;
             }
+
+            gl.success(`✅ [Analizuj] AI OCR: wynik="${aiResult.score}", boss="${aiResult.bossName}"`);
 
             // Pobierz nick z embeda raportu (pole może być w języku serwera)
             const embedFields = interaction.message.embeds[0]?.fields || [];
@@ -2914,6 +2946,7 @@ class InteractionHandler {
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
+            gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
 
             // Aktualizuj role TOP jeśli nowy rekord
             if (isNewRecord) {
@@ -2924,9 +2957,10 @@ class InteractionHandler {
                         await interaction.client.guilds.fetch(targetGuildId),
                         updatedPlayers,
                         guildConfig?.topRoles || null
-                    ).catch(() => {});
+                    );
+                    gl.success('✅ [Analizuj] Role TOP zaktualizowane po nowym rekordzie');
                 } catch (roleErr) {
-                    logger.warn(`⚠️ Błąd aktualizacji ról po analizie: ${roleErr.message}`);
+                    gl.error(`❌ [Analizuj] Błąd aktualizacji ról TOP: ${roleErr.message}`);
                 }
             }
 
@@ -2938,9 +2972,10 @@ class InteractionHandler {
             });
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);
+            gl.info(`✅ [Analizuj] Embedy zaktualizowane — analiza zakończona`);
 
         } catch (err) {
-            logger.error(`❌ Błąd ee_analyze: ${err.message}`);
+            gl.error(`❌ [Analizuj] Błąd ee_analyze: ${err.message}`);
             await interaction.editReply({
                 content: `❌ Błąd analizy: ${err.message}`,
                 embeds: interaction.message.embeds,
