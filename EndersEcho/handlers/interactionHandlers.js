@@ -3330,27 +3330,41 @@ class InteractionHandler {
         const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
         const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
 
-        const navRow = new ActionRowBuilder().addComponents(
+        // Wiersz 1: ◀ | ▶ | 🌐 Wszystkie (tylko superUser) | Miesiąc (na końcu)
+        const row1Buttons = [
             new ButtonBuilder()
                 .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('◀')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
-                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
-                .setLabel(monthLabel)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(true),
-            new ButtonBuilder()
                 .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('▶')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasNext),
+        ];
+
+        if (isSuperUser) {
+            row1Buttons.push(
+                new ButtonBuilder()
+                    .setCustomId(`tk_a_${monthStr}_${userId}`)
+                    .setLabel('🌐 Wszystkie')
+                    .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+        }
+
+        row1Buttons.push(
+            new ButtonBuilder()
+                .setCustomId(`tk_c_${monthStr}_${guildFilter}_${userId}`)
+                .setLabel(monthLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(true)
         );
 
+        const navRow = new ActionRowBuilder().addComponents(...row1Buttons);
         const components = [navRow];
 
-        // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds)
+        // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds), bez Wszystkie
         if (isSuperUser) {
             const guildButtons = this.config.getAllGuilds()
                 .filter(gc => interaction.client.guilds.cache.has(gc.id))
@@ -3360,12 +3374,6 @@ class InteractionHandler {
                         .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
                         .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 );
-            guildButtons.push(
-                new ButtonBuilder()
-                    .setCustomId(`tk_a_${monthStr}_${userId}`)
-                    .setLabel('🌐 Wszystkie')
-                    .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            );
             for (let i = 0; i < guildButtons.length; i += 5) {
                 components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
             }
