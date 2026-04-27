@@ -82,6 +82,11 @@ async function initializeBot() {
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
 
+        // Zapisz nazwy serwerów do guild_configs.json (fallback gdy bot wyjdzie z serwera)
+        for (const [guildId, guild] of client.guilds.cache) {
+            await guildConfigService.saveConfig(guildId, { guildName: guild.name }).catch(() => {});
+        }
+
         // Eksportuj aktualny globalny ranking do shared_data przy starcie.
         // syncToApi: false — ranking się nie zmienił od ostatniego zapisu, nie ma
         // sensu spamować Web API tym samym snapshotem przy każdym restarcie.
@@ -125,12 +130,10 @@ client.on('guildCreate', async (guild) => {
     try {
         logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);
         const existing = guildConfigService.getConfig(guild.id);
-        if (!existing) {
-            await guildConfigService.saveConfig(guild.id, {
-                configured: false,
-                ocrBlocked: ['update', 'test'],
-            });
-        }
+        await guildConfigService.saveConfig(guild.id, {
+            ...(!existing ? { configured: false, ocrBlocked: ['update', 'test'] } : {}),
+            guildName: guild.name,
+        });
         await interactionHandler.registerCommandsForGuild(client, guild.id);
         if (guild.systemChannel) {
             await guild.systemChannel.send(
