@@ -41,6 +41,11 @@ async function exportClanThresholds(guild, databaseService, config) {
         const thresholds = {};
 
         for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+            // Klan 0 jest zawsze dostępny od 0 pkt — nie obliczamy jego progu
+            if (clanKey === '0') {
+                thresholds[clanKey] = 0;
+                continue;
+            }
             const scores = [];
             for (const [memberId, member] of members) {
                 if (member.roles.cache.has(roleId)) {
