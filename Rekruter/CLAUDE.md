@@ -1,12 +1,18 @@
 ### 🎯 Rekruter Bot
 
-**Funkcjonalność:** Wieloetapowa rekrutacja z OCR → Kwalifikacja klanów: <100K=brak, 100K-599K=Clan0, 600K-799K=Clan1, 800K-1.19M=Clan2, 1.2M+=Main
+**Funkcjonalność:** Wieloetapowa rekrutacja z OCR → Kwalifikacja klanów dynamiczna: próg = minimalny maxScore najsłabszego gracza w danym klanie (z danych Stalkera). Dane w `shared_data/clan_thresholds.json`, aktualizowane przez Stalkera po każdym `/faza1` i przy starcie. Brak danych → Clan0.
 **Flow rekrutacji (ścieżka "Szukam klanu"):**
 1. Klik "Szukam klanu" → `step: waiting_core_stock` → prośba o zdjęcie Core Stock
 2. Skan Core Stock przez AI → `coreStock = {item: qty}` → `step: waiting_lunar_level`
 3. Wpisanie poziomu LME → `step: waiting_lunar_points`
-4. Wpisanie punktów I fazy → `step: waiting_image`
-5. Zdjęcie postaci (OCR) → kwalifikacja do klanu → embed powitalny
+4. Wpisanie punktów I fazy (0–9999) → `step: waiting_image`
+5. Zdjęcie postaci (OCR) → `lunarPoints` porównane z progami klanów → kwalifikacja → embed powitalny
+
+**Kwalifikacja klanów (dynamiczna):**
+- `services/stalkerThresholdsService.js` - czyta `shared_data/clan_thresholds.json`, cache 5 min
+- Porównanie: `lunarPoints >= thresholds[clanKey]` od Main w dół → najwyższy pasujący klan
+- Progi: `thresholds['main']`, `thresholds['2']`, `thresholds['1']` (klucze jak w Stalker targetRoles)
+- Brak pliku lub brak wpisu dla guildId → Clan0 z ostrzeżeniem w logu
 
 **OCR - Dwa tryby (zdjęcie postaci):**
 1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
