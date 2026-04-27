@@ -3398,16 +3398,21 @@ class InteractionHandler {
 
         const fmtCost = (c) => `$${c.toFixed(5)}`;
 
-        const allGuilds = this.config.getAllGuilds();
+        // Iteruj po wszystkich guildach które kiedykolwiek miały dane tokenów
+        const tokenGuildIds = Object.keys(this.tokenUsageService.data.guilds);
         const lines = [];
         let totalCost = 0;
 
-        for (const gc of allGuilds) {
-            const stats = this.tokenUsageService.getMonthlyStats(gc.id, month);
+        for (const guildId of tokenGuildIds) {
+            const stats = this.tokenUsageService.getMonthlyStats(guildId, month);
             const cost  = stats.cost;
             totalCost  += cost;
-            const name  = (interaction.client.guilds.cache.get(gc.id)?.name || gc.id).slice(0, 24);
-            lines.push(`**${name}** — ${fmtCost(cost)} (${stats.requests} req)`);
+            // Kolejność: aktywny cache → zapisana nazwa w config → ID serwera
+            const liveName    = interaction.client.guilds.cache.get(guildId)?.name;
+            const storedName  = this.guildConfigService.getConfig(guildId)?.guildName;
+            const name        = (liveName || storedName || guildId).slice(0, 24);
+            const leftMarker  = liveName ? '' : ' *(opuścił)*';
+            lines.push(`**${name}**${leftMarker} — ${fmtCost(cost)} (${stats.requests} req)`);
         }
 
         lines.push('');
