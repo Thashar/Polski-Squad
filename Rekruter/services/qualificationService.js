@@ -11,15 +11,16 @@ const logger = createBotLogger('Rekruter');
 /* -------------------------------------------------------------------------- */
 async function sendPendingQualification(userId, data, state) {
   try {
-    const { member, attack, user, config, client } = data;
+    const { member, lunarPoints, user, config, client, guildId } = data;
     const { assignClanRole } = require('./roleService');
 
     const targetChannelId = await assignClanRole(
       member,
-      attack,
+      lunarPoints,
       user,
       config,
-      client
+      client,
+      guildId
     );
 
     if (targetChannelId) {

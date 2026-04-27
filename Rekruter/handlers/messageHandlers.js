@@ -227,7 +227,7 @@ async function handleLunarPointsInput(msg, state, config) {
   const pts = parseInt(msg.content, 10);
   await safeDeleteMessage(msg);
 
-  if (isNaN(pts) || pts < 0 || pts > 5000) {
+  if (isNaN(pts) || pts < 0 || pts > 9999) {
     await updateUserEphemeralReply(
       msg.author.id,
       config.messages.invalidLunarPoints,
@@ -374,11 +374,12 @@ async function handleImageInput(msg, state, config, client) {
   /* ---------------- ścieżka „szukam klanu” -------------- */
   if (stats.characterAttack) {
     const pq = {
-      member: msg.member,
-      attack: stats.characterAttack,
-      user:   msg.author,
+      member:      msg.member,
+      lunarPoints: info.lunarPoints ?? null,
+      user:        msg.author,
       config,
-      client
+      client,
+      guildId:     msg.guild?.id ?? null
     };
 
     if (stats.playerNick && stats.playerNick !== 'Nieznany') {

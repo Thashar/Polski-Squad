@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBui
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const { exportClanThresholds } = require('../services/clanThresholdsExportService');
 const fs = require('fs').promises;
 
 const logger = createBotLogger('Stalker');
@@ -3985,6 +3986,10 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         await phaseService.cleanupSessionFiles(session.sessionId);
 
         logger.info(`[PHASE1] ✅ Dane zapisane dla tygodnia ${weekInfo.weekNumber}/${weekInfo.year}`);
+
+        // Zaktualizuj progi rekrutacyjne dla Rekrutera (fire-and-forget)
+        exportClanThresholds(interaction.guild, sharedState.databaseService, sharedState.config)
+            .catch(err => logger.error('[THRESHOLDS] Błąd aktualizacji progów:', err.message));
 
         // Wyślij powiadomienie na kanał ostrzeżeń
         try {

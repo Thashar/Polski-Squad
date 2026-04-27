@@ -25,7 +25,7 @@
    - Format: `{ userId: { items: {...}, updatedAt: ISO_string } }`
    - Dane widoczne w `/player-status` w sekcji "### 🎒 EKWIPUNEK (Core Stock)"
    - Dane tymczasowe (pending) przechowywane w `client._equipmentPending` Map (wygasają po 5 min)
-6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2)
+6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2). Po każdym zatwierdzeniu `/faza1` (i przy starcie bota) wywołuje `clanThresholdsExportService.exportClanThresholds()` → zapisuje `shared_data/clan_thresholds.json` z minimalnym maxScore per klan, używanym przez Rekrutera do dynamicznej kwalifikacji.
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.vercel.app, cooldown 1h per kanał (persistencja w `data/calculator_cooldowns.json`)

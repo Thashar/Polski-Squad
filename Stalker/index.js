@@ -19,6 +19,7 @@ const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
 const BroadcastMessageService = require('./services/broadcastMessageService');
 const AIChatService = require('./services/aiChatService');
+const { exportClanThresholds } = require('./services/clanThresholdsExportService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 const { createAppSync } = require('../utils/appSync');
@@ -148,6 +149,13 @@ client.once(Events.ClientReady, async () => {
 
     // Inicjalizacja serwisów
     await databaseService.initializeDatabase();
+
+    // Eksportuj progi rekrutacyjne dla Rekrutera (fire-and-forget dla każdej gildii)
+    for (const guild of client.guilds.cache.values()) {
+        exportClanThresholds(guild, databaseService, config)
+            .catch(err => logger.error(`[THRESHOLDS] Błąd eksportu progów przy starcie (${guild.name}):`, err.message));
+    }
+
     await ocrService.initializeOCR();
     ocrService.setClient(client); // Ustaw klienta dla systemu kolejkowania OCR
     await messageCleanupService.init();
