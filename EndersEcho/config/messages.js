@@ -184,13 +184,18 @@ const pol = {
     // Zatwierdzenie screena
     approveSuccess: '✅ Zatwierdzone przez **{adminName}**',
 
-    // Modal /limit
-    limitModalTitle: 'Dzienny limit użyć /update i /test',
-    limitModalLabel: 'Liczba prób dziennie (puste = brak limitu)',
+    // Modal /limit (Ustaw limity)
+    limitModalTitle: 'Ustaw limity /update i /test',
+    limitModalLabel: 'Limit dzienny (puste = brak limitu)',
     limitModalPlaceholder: 'np. 3',
+    limitCooldownLabel: 'Cooldown po użyciu (np. 5m, 1h, 1h30m — puste = brak)',
+    limitCooldownPlaceholder: 'np. 5m',
     limitRemoved: '✅ Dzienny limit użyć został **usunięty** — brak ograniczeń.',
     limitInvalidValue: '❌ Podaj dodatnią liczbę całkowitą lub zostaw pole puste (brak limitu).',
     limitSet: '✅ Dzienny limit ustawiony na **{limit}** użycie(ia) komend /update i /test na użytkownika.',
+    limitCooldownSet: '✅ Cooldown ustawiony na **{cooldown}**.',
+    limitCooldownRemoved: '✅ Cooldown usunięty — brak ograniczenia czasu między użyciami.',
+    limitCooldownInvalid: '❌ Nieprawidłowy format cooldownu. Użyj np. `5m`, `1h`, `1h30m`.',
 
     // Modal blokady użytkownika
     blockUserModalTitle: 'Zablokuj użytkownika',
@@ -432,13 +437,18 @@ const eng = {
     // Screen approval
     approveSuccess: '✅ Approved by **{adminName}**',
 
-    // /limit modal
-    limitModalTitle: 'Daily /update and /test usage limit',
-    limitModalLabel: 'Number of daily attempts (empty = no limit)',
+    // /limit modal (Set limits)
+    limitModalTitle: 'Set /update and /test limits',
+    limitModalLabel: 'Daily limit (empty = no limit)',
     limitModalPlaceholder: 'e.g. 3',
+    limitCooldownLabel: 'Cooldown after use (e.g. 5m, 1h, 1h30m — empty = none)',
+    limitCooldownPlaceholder: 'e.g. 5m',
     limitRemoved: '✅ Daily usage limit has been **removed** — no restrictions.',
     limitInvalidValue: '❌ Enter a positive integer or leave the field empty (no limit).',
     limitSet: '✅ Daily limit set to **{limit}** use(s) of /update and /test per user.',
+    limitCooldownSet: '✅ Cooldown set to **{cooldown}**.',
+    limitCooldownRemoved: '✅ Cooldown removed — no time limit between uses.',
+    limitCooldownInvalid: '❌ Invalid cooldown format. Use e.g. `5m`, `1h`, `1h30m`.',
 
     // User block modal
     blockUserModalTitle: 'Block user',
