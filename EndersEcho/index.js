@@ -30,7 +30,7 @@ const { createBotOperations } = require('../utils/operationRunner');
 
 const logger = createBotLogger('EndersEcho');
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
-const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
+const { sync: appSync, isEnabled: appSyncEnabled } = createAppSync({ apiKey: config.appApiKey });
 const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
 
 const guildConfigService = new GuildConfigService(config.ranking.dataDir);
@@ -185,12 +185,46 @@ function projectGuildMember(member) {
     };
 }
 
-client.on('guildCreate', async (guild) => {
+async function bootstrapGuildSync(guild) {
+    if (!appSyncEnabled()) return;
+
     try {
         await appSync.guildJoined({ guildId: guild.id, guildName: guild.name });
+
+        let fetched;
+        try {
+            fetched = await guild.members.fetch();
+        } catch (err) {
+            logger.warn(`members.fetch() fail (gid=${guild.id}): ${err.message}`);
+            return;
+        }
+
+        const members = [];
+        for (const member of fetched.values()) {
+            const projected = projectGuildMember(member);
+            if (!projected) continue;
+            const { guildId: _omit, ...item } = projected;
+            members.push(item);
+        }
+        if (members.length === 0) return;
+
+        const CHUNK = 1000;
+        let totalCount = 0;
+        for (let i = 0; i < members.length; i += CHUNK) {
+            const chunk = members.slice(i, i + CHUNK);
+            const res = await appSync.membersBulkSeen({ guildId: guild.id, members: chunk });
+            if (res && typeof res === 'object' && typeof res.count === 'number') {
+                totalCount += res.count;
+            }
+        }
+        logger.info(`appSync bootstrap ${guild.name} (${guild.id}): wysłano ${members.length}, API potwierdziło count=${totalCount}`);
     } catch (err) {
-        logger.error(`Błąd guildJoined (guildId=${guild.id}):`, err);
+        logger.error(`Błąd bootstrap appSync (guildId=${guild.id}): ${err.message}`);
     }
+}
+
+client.on('guildCreate', async (guild) => {
+    await bootstrapGuildSync(guild);
 });
 
 client.on('guildDelete', async (guild) => {

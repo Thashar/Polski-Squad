@@ -119,6 +119,7 @@ function createAppSync(overrides = {}) {
         guildJoined: (data) => pushSync('/guild/joined', data),
         guildLeft: (data) => pushSync('/guild/left', data),
         memberSeen: (data) => pushSync('/guild/member-seen', data),
+        membersBulkSeen: (data) => pushSync('/guild/members-bulk-seen', data),
     };
 
     const syncBatch = {

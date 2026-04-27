@@ -662,8 +662,10 @@ appSync.endersEchoSnapshot({ discordId, snapshotDate, rank /* >=1 */, scoreNumer
 appSync.guildJoined({ guildId, guildName /* 1..100 */ });        // on guildCreate
 appSync.guildLeft({ guildId });                                  // on guildDelete (skip gdy guild.available===false)
 appSync.memberSeen({ guildId, discordId, username, globalName, nickname, avatarHash, roleIds, joinedAt });
+appSync.membersBulkSeen({ guildId, members /* 1..5000, item BEZ guildId */ }); // bulk-hydrate roster po guildCreate
 // memberSeen: puste stringi MUSZĄ być zwinięte do null (API traktuje "" jako realną wartość).
 // Brak username → pomiń POST całkowicie.
+// membersBulkSeen: response { ok, count }; rekomendacja chunk 1000; guildId NA POZIOMIE PAYLOADU, items go nie powtarzają.
 
 // Event logi (wymagają deterministycznego `id` — użyj eventId(...)):
 appSync.punishmentEvent({ id: eventId('punish', guildId, userId, ...), guildId, discordId, delta, reasonKind /* 'BOSS_FAIL'|'MANUAL'|'WEEKLY_RESET'|'MANUAL_REMOVAL'|'OTHER' */, reasonNote, occurredAt, issuedBy });
@@ -725,21 +727,21 @@ Staging-push z backfillu: przekaż `api_url:https://staging-api.polski-squad.exa
 | **Stalker** | `handlers/interactionHandlers` (`handleEquipmentSave`) | `core-stock` |
 | **Kontroler** | `handlers/messageHandlers` (po OCR CX) | `cx-entry` |
 | **EndersEcho** | `services/rankingService` (`saveSharedRanking`) | `endersecho-snapshot` |
-| **EndersEcho** | `index.js` (gateway handlery: `guildCreate`, `guildDelete`, `guildMemberAdd`, `guildMemberUpdate`) | `guild/joined`, `guild/left`, `guild/member-seen` |
+| **EndersEcho** | `index.js` (gateway handlery: `guildCreate`, `guildDelete`, `guildMemberAdd`, `guildMemberUpdate`) | `guild/joined`, `guild/left`, `guild/member-seen`, `guild/members-bulk-seen` |
 
 #### Sync identity → admin API (guild lifecycle + member projection)
 
 Uniwersalny schemat dla każdego bota, który powinien wypychać stan obecności instalacji i tożsamości członków do Polski Squad web API. Pozwala admin panelowi utrzymać `ServerBot` oraz projekcję `Player.{username, displayName, displayNick, avatarUrl}` w zgodzie z rzeczywistością Discorda bez czekania na godzinowy REST reconcile.
 
-Wszystkie pushy idą przez shared [utils/appSync.js](utils/appSync.js) (`sync.guildJoined`, `sync.guildLeft`, `sync.memberSeen`) — ta sama para `APP_API_URL` + `BOT_API_KEY` (z per-bot override, np. `ENDERSECHO_API_KEY`) co pozostały bot sync. Brak kluczy → cicho no-op (dev/test).
+Wszystkie pushy idą przez shared [utils/appSync.js](utils/appSync.js) (`sync.guildJoined`, `sync.guildLeft`, `sync.memberSeen`, `sync.membersBulkSeen`) — ta sama para `APP_API_URL` + `BOT_API_KEY` (z per-bot override, np. `ENDERSECHO_API_KEY`) co pozostały bot sync. Brak kluczy → cicho no-op (dev/test).
 
 Wymaga `GatewayIntentBits.Guilds` + `GatewayIntentBits.GuildMembers` (privileged — włącz w Discord Developer Portal).
 
 | Event gateway | Endpoint | Payload | Kiedy |
 |---|---|---|---|
-| `guildCreate` | `POST /api/bot/guild/joined` | `{ guildId, guildName /* 1..100 */ }` | Bot dodany do serwera **oraz** każdy reconnect gatewaya (darmowy reconciliation pass — API idempotentne po `discordGuildId`). |
+| `guildCreate` | `POST /api/bot/guild/joined` + `POST /api/bot/guild/members-bulk-seen` | `{ guildId, guildName }` + `{ guildId, members[] }` (item bez `guildId`) | Bot dodany do serwera **oraz** każdy reconnect gatewaya (darmowy reconciliation pass — API idempotentne po `discordGuildId`). Po `guildJoined` woła `members.fetch()` i pushuje pełny roster przez `membersBulkSeen` (chunk 1000, max 5000/req). Best-effort — `members.fetch()` w try/catch, fail nie zabija handlera. **Bez tego cold start zostawia roster nietknięty** — `guildMemberAdd` nie pal-uje retroaktywnie. |
 | `guildDelete` | `POST /api/bot/guild/left` | `{ guildId }` | Bot wykopany/zbanowany/gildia skasowana. **Pomijane gdy `guild.available === false`** (przejściowa awaria Discorda, nie realne wyjście). Real-time sygnał dla API żeby soft-disable `ServerBot`. |
-| `guildMemberAdd` + `guildMemberUpdate` | `POST /api/bot/guild/member-seen` | (patrz niżej) | Write-through projekcja tożsamości. Każdy update = full refresh, API nie oczekuje diffu. |
+| `guildMemberAdd` + `guildMemberUpdate` | `POST /api/bot/guild/member-seen` | (patrz niżej) | Write-through projekcja tożsamości delty (po cold start). Każdy update = full refresh, API nie oczekuje diffu. |
 
 **Projekcja członka (`memberSeen`)** — byte-for-byte parity z siostrzanym botem SYSTEM:
 
@@ -774,14 +776,47 @@ Wszystkie pola są **wymagane** w wire schemacie — brak wartości = `null` (ni
 
 ```javascript
 const { createAppSync } = require('../utils/appSync');
-const { sync: appSync } = createAppSync({ apiKey: config.appApiKey });
+const { sync: appSync, isEnabled: appSyncEnabled } = createAppSync({ apiKey: config.appApiKey });
 
-client.on('guildCreate', async (guild) => {
+async function bootstrapGuildSync(guild) {
+    if (!appSyncEnabled()) return;
     try {
         await appSync.guildJoined({ guildId: guild.id, guildName: guild.name });
+
+        let fetched;
+        try {
+            fetched = await guild.members.fetch();
+        } catch (err) {
+            logger.warn(`members.fetch() fail (gid=${guild.id}): ${err.message}`);
+            return; // best-effort, kolejny reconnect odświeży
+        }
+
+        const members = [];
+        for (const member of fetched.values()) {
+            const projected = projectGuildMember(member);
+            if (!projected) continue;
+            const { guildId: _omit, ...item } = projected; // guildId leci na poziomie payloadu
+            members.push(item);
+        }
+        if (members.length === 0) return;
+
+        const CHUNK = 1000; // API max 5000, rekomendacja 1000
+        let totalCount = 0;
+        for (let i = 0; i < members.length; i += CHUNK) {
+            const chunk = members.slice(i, i + CHUNK);
+            const res = await appSync.membersBulkSeen({ guildId: guild.id, members: chunk });
+            if (res && typeof res === 'object' && typeof res.count === 'number') {
+                totalCount += res.count;
+            }
+        }
+        logger.info(`appSync bootstrap ${guild.name}: wysłano ${members.length}, count=${totalCount}`);
     } catch (err) {
-        logger.error(`Błąd guildJoined (guildId=${guild.id}):`, err);
+        logger.error(`Błąd bootstrap appSync (guildId=${guild.id}): ${err.message}`);
     }
+}
+
+client.on('guildCreate', async (guild) => {
+    await bootstrapGuildSync(guild);
 });
 
 client.on('guildDelete', async (guild) => {
