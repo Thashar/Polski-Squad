@@ -131,33 +131,42 @@
    - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
-6. **Panel Admina (info/ocr/limit/remove/unblock/tokens)** — dostępne przez `/configure` → `⚙️ Panel Admina`:
-   - **Wyślij Info (head admin):** użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS` → modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM) trzyma dane między modalem a przyciskami
-   - **OCR on/off (head admin):** `ENDERSECHO_BLOCK_OCR_USER_IDS` → select serwera → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
-   - **Limit (head admin):** `ENDERSECHO_BLOCK_OCR_USER_IDS` → modal → globalny dzienny limit per user per UTC dzień. Persistencja: `data/usage_limits.json`
-   - **Usuń gracza (admin):** Administrator → select gracza z rankingu → potwierdzenie → usunięcie + aktualizacja ról TOP
-   - **Odblokuj (admin):** Administrator → select zablokowanego → odblokowanie. Persistencja: `data/user_blocks.json`
-   - **Tokeny AI (admin/head admin):** Administrator lub `ENDERSECHO_BLOCK_OCR_USER_IDS` → embed ze statystykami. Admin = tylko swój serwer, Head Admin = wszystkie serwery + breakdown
+6. **Panel Admina** — dostępny przez `/configure` → `⚙️ Panel Admina`:
+   - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP
+   - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`
+   - **Zużycie tokenów (admin/head admin):** embed ze statystykami AI per serwer. Admin = swój serwer, Head Admin = wszystkie + breakdown
+   - **AI OCR on/off (head admin):** modal wyszukiwania nazwy serwera → jeśli 1 wynik: bezpośrednio toggle, jeśli wiele: lista → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
+   - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
+   - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
 
 **Komendy slash:** `/configure`, `/ranking`, `/subscribe`, `/test`, `/update`
 
 **Panel Admina** — dostępny przez `/configure` → przycisk `⚙️ Panel Admina` (ostatni rząd):
 - Dostęp: każdy admin Discord (Administrator) który może otworzyć `/configure`
-- Tryb Admin: `🗑️ Usuń gracza`, `🔓 Odblokuj`, `📊 Tokeny AI`
-- Tryb Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`): wszystko z Admin + `📢 Wyślij Info`, `🔄 OCR on/off`, `📏 Limit`
-- Panel zastępuje widok konfiguracji (edit wiadomości), zawsze możliwy powrót do wizarda przez `◀️ Wróć do konfiguracji`
+- **Układ rzędów (Tryb Admin):**
+  - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
+  - Rząd 2: `📊 Zużycie tokenów`
+  - Rząd 3: `◀️ Wróć do konfiguracji`
+- **Układ rzędów (Tryb Head Admin):**
+  - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
+  - Rząd 2: `📊 Zużycie tokenów`, `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
+  - Rząd 3: `📢 Wyślij Info`
+  - Rząd 4: `◀️ Wróć do konfiguracji`
+- Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
 
-**🗑️ Usuń gracza** (Admin):
-- StringSelectMenu z listą do 25 graczy z rankingu serwera
+**🗑️ Usuń gracza z rankingu** (Admin):
+- Modal wyszukiwania → fragment nicku → przefiltrowana lista (StringSelectMenu, max 25)
 - Krok potwierdzenia przed usunięciem → aktualizacja ról TOP
+- "Szukaj ponownie" → otwiera nowy modal wyszukiwania
 
-**🔓 Odblokuj** (Admin):
-- StringSelectMenu z listą zablokowanych użytkowników (czas pozostały + serwer)
-- Select: `panel_unblock_select`
+**🔓 Odblokuj gracza** (Admin):
+- Jeśli brak zablokowanych → informacja od razu (update panelu)
+- Jeśli są zablokowani → modal wyszukiwania → fragment nicku → przefiltrowana lista
+- `panel_unblock_select` — StringSelectMenu z wynikami
 
-**📊 Tokeny AI** (Admin/Head Admin):
+**📊 Zużycie tokenów** (Admin/Head Admin):
 - Embed ze statystykami dzienny/miesięczny koszt AI per serwer
 - Admin widzi tylko swój serwer; Head Admin widzi wszystkie + breakdown
 - Nawigacja `tk_*` zachowuje przycisk `◀️ Powrót do panelu`
@@ -169,15 +178,18 @@
 - Wysyła na `allowedChannelId` każdego serwera w odpowiednim języku
 - Dostęp: `ENDERSECHO_BLOCK_OCR_USER_IDS` (ta sama zmienna co Head Admin)
 
-**🔄 OCR on/off** (Head Admin):
-- StringSelectMenu z serwerami (ikona 🔒/🔓 + stan update/test)
+**🔄 AI OCR on/off** (Head Admin):
+- Modal wyszukiwania nazwy serwera → jeśli 1 trafienie: od razu toggle screen; jeśli wiele: lista StringSelectMenu
 - Po wyborze serwera: przyciski włącz/wyłącz dla `/update`, `/test`, obu
 - Ogłoszenie na kanał bota serwera po odblokowaniu
 
-**📏 Limit** (Head Admin):
-- Modal z polem „Liczba prób dziennie" (puste = brak limitu)
-- Limit globalny per-użytkownik per-dzień (UTC), wspólny dla /update i /test
-- Persistencja: `data/usage_limits.json`
+**⚙️ Ustaw limity** (Head Admin):
+- Modal z **2 polami**:
+  1. Limit dzienny (liczba, puste = brak limitu) — `data/usage_limits.json`
+  2. Cooldown po użyciu (format: `5m`, `1h`, `1h30m`, puste = brak cooldownu) — `data/update_cooldowns.json`
+- Cooldown parsowany przez `_parseCooldownDuration(raw)` → `XhXm` → ms
+- Domyślny cooldown (przed pierwszym ustawieniem): 5m
+- `formatCooldownDuration(ms)` — wyświetla bieżący cooldown jako `Xh Xm` w polu modal
 
 **CustomIDs Panelu Admina:**
 | CustomId | Opis |
@@ -185,17 +197,20 @@
 | `cfg_admin_panel` | Otwórz panel (z configure dashboard) |
 | `panel_back` | Wróć do panelu (z dowolnej operacji) |
 | `panel_back_configure` | Wróć do wizarda /configure |
-| `panel_remove` | Pokaż listę graczy do usunięcia |
-| `panel_remove_select` | StringSelectMenu — wybór gracza |
+| `panel_remove` | Otwórz modal wyszukiwania gracza |
+| `panel_remove_search_modal` | Modal wyszukiwania (pole `remove_query`) |
+| `panel_remove_select` | StringSelectMenu — wybór gracza z wyników |
 | `panel_remove_confirm_{userId}` | Potwierdzenie usunięcia |
-| `panel_unblock` | Pokaż listę zablokowanych |
+| `panel_unblock` | Jeśli brak zablokowanych: info; inaczej modal wyszukiwania |
+| `panel_unblock_search_modal` | Modal wyszukiwania (pole `unblock_query`) |
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
 | `panel_info` | Otwórz modal /info (head admin) |
-| `panel_ocr` | Pokaż listę serwerów OCR (head admin) |
-| `panel_ocr_guild_select` | StringSelectMenu — wybór serwera |
+| `panel_ocr` | Otwórz modal wyszukiwania serwera OCR (head admin) |
+| `panel_ocr_search_modal` | Modal wyszukiwania (pole `ocr_query`) |
+| `panel_ocr_guild_select` | StringSelectMenu — wybór serwera (wiele wyników) |
 | `panel_ocr_{en\|dis}_{update\|test\|both}_{guildId}` | Wykonaj OCR toggle |
-| `panel_limit` | Otwórz modal limitu (head admin) |
+| `panel_limit` | Otwórz modal limitów — 2 pola (head admin) |
 
 **Komenda /configure** — wizard konfiguracji serwera + Panel Admina (admin, dowolny kanał):
 - 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku

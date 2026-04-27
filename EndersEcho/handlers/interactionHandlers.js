@@ -250,6 +250,18 @@ class InteractionHandler {
                 await this._handleLimitModal(interaction);
                 return;
             }
+            if (interaction.customId === 'panel_remove_search_modal') {
+                await this._handlePanelRemoveSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'panel_unblock_search_modal') {
+                await this._handlePanelUnblockSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'panel_ocr_search_modal') {
+                await this._handlePanelOcrSearch(interaction);
+                return;
+            }
             if (interaction.customId === 'cfg_tag_modal') {
                 await this._handleConfigureTagModal(interaction);
                 return;
@@ -961,22 +973,34 @@ class InteractionHandler {
                     : t('Dostęp do podstawowych operacji administracyjnych.', 'Access to basic administrative operations.'))
             );
 
-        const adminRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj', '🔓 Unblock')).setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Tokeny AI', '📊 AI Tokens')).setStyle(ButtonStyle.Secondary),
+        // Rząd 1: operacje gracza (wszyscy admini)
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
         );
 
+        // Rząd 2: narzędzia (tokeny dla wszystkich, OCR+Limity tylko Head Admin)
+        const row2Components = [
+            new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
+        ];
+        if (isHeadAdmin) {
+            row2Components.push(
+                new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR on/off', '🔄 AI OCR on/off')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_limit').setLabel(t('⚙️ Ustaw limity', '⚙️ Set Limits')).setStyle(ButtonStyle.Primary),
+            );
+        }
+        const row2 = new ActionRowBuilder().addComponents(...row2Components);
+
+        // Rząd (3 lub 4): wróć do konfiguracji
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
         );
 
-        const components = [adminRow];
+        const components = [row1, row2];
         if (isHeadAdmin) {
+            // Rząd 3: Head Admin only — Wyślij Info
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_ocr').setLabel('🔄 OCR on/off').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_limit').setLabel('📏 Limit').setStyle(ButtonStyle.Primary),
             ));
         }
         components.push(backRow);
@@ -990,38 +1014,75 @@ class InteractionHandler {
     }
 
     async _handlePanelRemove(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_remove_search_modal')
+            .setTitle(t('Usuń gracza z rankingu', 'Remove Player from Ranking'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('remove_query')
+                .setLabel(t('Fragment nicku gracza', 'Part of the player\'s nick'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Kowalski', 'e.g. Kowalski'))
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelRemoveSearch(interaction) {
         const guildId = interaction.guildId;
         const t = this._panelT(guildId);
+        const query = interaction.fields.getTextInputValue('remove_query').trim().toLowerCase();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             const players = await this.rankingService.getSortedPlayers(guildId);
-            if (players.length === 0) {
-                await interaction.update({
-                    embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setDescription(t('Ranking jest pusty — brak graczy do usunięcia.', 'Ranking is empty — no players to remove.'))],
+            const filtered = players.filter(p =>
+                (p.username || p.userId).toLowerCase().includes(query)
+            );
+            if (filtered.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444)
+                        .setTitle(t('🗑️ Nie znaleziono gracza', '🗑️ Player Not Found'))
+                        .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
             }
-            const options = players.slice(0, 25).map((p, i) => ({
-                label: `#${i + 1} ${(p.username || p.userId).slice(0, 80)}`,
-                description: `${t('Wynik', 'Score')}: ${p.score}`,
-                value: p.userId,
-            }));
-            await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setDescription(t('Wybierz gracza, którego chcesz usunąć z rankingu tego serwera.', 'Select the player you want to remove from this server\'s ranking.'))],
+            const options = filtered.slice(0, 25).map(p => {
+                const rank = players.indexOf(p) + 1;
+                return {
+                    label: `#${rank} ${(p.username || p.userId).slice(0, 80)}`,
+                    description: `${t('Wynik', 'Score')}: ${p.score}`,
+                    value: p.userId,
+                };
+            });
+            const subtitle = filtered.length > 25
+                ? t(`Znaleziono ${filtered.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${filtered.length} — showing 25. Narrow your search.`)
+                : t(`Znaleziono ${filtered.length} gracz(y).`, `Found ${filtered.length} player(s).`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🗑️ Wybierz gracza', '🗑️ Select Player'))
+                    .setDescription(subtitle)],
                 components: [
                     new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder().setCustomId('panel_remove_select').setPlaceholder(t('Wybierz gracza do usunięcia...', 'Select a player to remove...')).addOptions(options)
+                        new StringSelectMenuBuilder().setCustomId('panel_remove_select')
+                            .setPlaceholder(t('Wybierz gracza do usunięcia...', 'Select a player to remove...'))
+                            .addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelRemove (guildId=${guildId}):`, err);
-            await interaction.update({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
+            logger.error(`Błąd _handlePanelRemoveSearch (guildId=${guildId}):`, err);
+            await interaction.editReply({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
         }
     }
 
@@ -1080,14 +1141,50 @@ class InteractionHandler {
         const blocked = this.userBlockService.getBlockedUsers();
         if (blocked.length === 0) {
             await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('🔓 Odblokuj użytkownika', '🔓 Unblock User')).setDescription(msgs.unblockNoBlocked)],
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setDescription(msgs.unblockNoBlocked)],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
         }
-        const options = blocked.slice(0, 25).map(entry => {
+        const modal = new ModalBuilder()
+            .setCustomId('panel_unblock_search_modal')
+            .setTitle(t('Odblokuj gracza', 'Unblock Player'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('unblock_query')
+                .setLabel(t('Fragment nicku gracza', 'Part of the player\'s nick'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Kowalski', 'e.g. Kowalski'))
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelUnblockSearch(interaction) {
+        const guildId = interaction.guildId;
+        const msgs = this.msgs(guildId);
+        const t = this._panelT(guildId);
+        const query = interaction.fields.getTextInputValue('unblock_query').trim().toLowerCase();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const blocked = this.userBlockService.getBlockedUsers();
+        const filtered = blocked.filter(e => e.username.toLowerCase().includes(query));
+        if (filtered.length === 0) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🔓 Nie znaleziono', '🔓 Not Found'))
+                    .setDescription(t(`Brak zablokowanego gracza z nickiem zawierającym "**${query}**".`, `No blocked player with nick containing "**${query}**".`))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                )]
+            });
+            return;
+        }
+        const options = filtered.slice(0, 25).map(entry => {
             const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
             return {
                 label: entry.username.slice(0, 100),
@@ -1095,20 +1192,28 @@ class InteractionHandler {
                 value: entry.userId
             };
         });
-        await interaction.update({
+        const subtitle = filtered.length > 25
+            ? t(`Znaleziono ${filtered.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${filtered.length} — showing 25. Narrow your search.`)
+            : t(`Znaleziono ${filtered.length} gracz(y).`, `Found ${filtered.length} player(s).`);
+        await interaction.editReply({
             embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(msgs.unblockTitle)
-                .setDescription(blocked.slice(0, 25).map((entry, i) => {
-                    const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
-                    return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
-                }).join('\n'))
-                .setFooter({ text: t(`Łącznie: ${blocked.length} zablokowanych`, `Total: ${blocked.length} blocked`) })
+                .setDescription(
+                    subtitle + '\n\n' +
+                    filtered.slice(0, 25).map((entry, i) => {
+                        const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+                        return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
+                    }).join('\n')
+                )
                 .setTimestamp()],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('panel_unblock_select').setPlaceholder(t('Wybierz użytkownika do odblokowania', 'Select a user to unblock')).addOptions(options)
+                    new StringSelectMenuBuilder().setCustomId('panel_unblock_select')
+                        .setPlaceholder(t('Wybierz gracza do odblokowania', 'Select a player to unblock'))
+                        .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                 )
             ]
         });
@@ -1131,37 +1236,101 @@ class InteractionHandler {
 
     async _handlePanelOcr(interaction) {
         const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_ocr_search_modal')
+            .setTitle(t('AI OCR on/off — wybierz serwer', 'AI OCR on/off — Select Server'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('ocr_query')
+                .setLabel(t('Fragment nazwy serwera', 'Part of the server name'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Polski Squad', 'e.g. Polski Squad'))
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelOcrSearch(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const query = interaction.fields.getTextInputValue('ocr_query').trim().toLowerCase();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
         const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
-        const options = [];
+        const matches = [];
         for (const guildId of configuredIds) {
             const guild = interaction.client.guilds.cache.get(guildId);
             if (!guild) continue;
+            if (!guild.name.toLowerCase().includes(query)) continue;
             const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
             const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
-            const statusIcon = updateBlocked || testBlocked ? '🔒' : '🔓';
-            options.push({
-                label: `${statusIcon} ${guild.name}`.slice(0, 100),
-                description: `update: ${updateBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')} | test: ${testBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')}`,
-                value: guildId,
-            });
+            matches.push({ guildId, guildName: guild.name, updateBlocked, testBlocked });
         }
-        if (options.length === 0) {
-            await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🔄 OCR on/off').setDescription(t('Brak skonfigurowanych serwerów widocznych w cache bota.', 'No configured servers visible in the bot\'s cache.'))],
+        if (matches.length === 0) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🔄 Nie znaleziono serwera', '🔄 Server Not Found'))
+                    .setDescription(t(`Brak skonfigurowanego serwera z nazwą zawierającą "**${query}**".`, `No configured server with name containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                 )]
             });
             return;
         }
-        await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0xFF6B35).setTitle(t('🔄 OCR on/off — wybierz serwer', '🔄 OCR on/off — Select Server')).setDescription(t('Wybierz serwer, na którym chcesz zmienić ustawienia OCR.', 'Select a server to change OCR settings.'))],
+        if (matches.length === 1) {
+            // Bezpośrednio pokaż ustawienia OCR dla jedynego trafienia
+            const { guildId, guildName, updateBlocked, testBlocked } = matches[0];
+            const gid = guildId;
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                    .setTitle(`🔄 OCR on/off — ${guildName}`)
+                    .setDescription(
+                        `${t('Stan', 'Status')} /update: ${updateBlocked ? `🔒 ${t('wyłączone', 'disabled')}` : `🔓 ${t('włączone', 'enabled')}`}\n` +
+                        `${t('Stan', 'Status')} /test: ${testBlocked ? `🔒 ${t('wyłączone', 'disabled')}` : `🔓 ${t('włączone', 'enabled')}`}\n\n` +
+                        t('Wybierz akcję:', 'Select action:')
+                    )],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel(t('🔓 Włącz /update', '🔓 Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel(t('🔓 Włącz /test', '🔓 Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel(t('🔓 Włącz oba', '🔓 Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel(t('🔒 Wyłącz /update', '🔒 Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel(t('🔒 Wyłącz /test', '🔒 Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )
+                ]
+            });
+            return;
+        }
+        // Wiele wyników — pokaż listę do wyboru
+        const options = matches.slice(0, 25).map(({ guildId, guildName, updateBlocked, testBlocked }) => {
+            const statusIcon = updateBlocked || testBlocked ? '🔒' : '🔓';
+            return {
+                label: `${statusIcon} ${guildName}`.slice(0, 100),
+                description: `update: ${updateBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')} | test: ${testBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')}`,
+                value: guildId,
+            };
+        });
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                .setTitle(t('🔄 AI OCR on/off — wybierz serwer', '🔄 AI OCR on/off — Select Server'))
+                .setDescription(t(`Znaleziono ${matches.length} serwerów — wybierz serwer.`, `Found ${matches.length} servers — select a server.`))],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('panel_ocr_guild_select').setPlaceholder(t('Wybierz serwer...', 'Select a server...')).addOptions(options.slice(0, 25))
+                    new StringSelectMenuBuilder().setCustomId('panel_ocr_guild_select')
+                        .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                        .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                 )
             ]
         });
@@ -2017,12 +2186,22 @@ class InteractionHandler {
                 }
                 const msgs = this.msgs(interaction.guildId);
                 const currentLimit = this.usageLimitService.getLimit();
+                const currentCooldownMs = this.updateCooldownService.getCooldownDuration();
+                const { formatCooldownDuration } = require('../services/updateCooldownService');
+                const currentCooldownStr = currentCooldownMs ? formatCooldownDuration(currentCooldownMs) : '';
                 const modal = new ModalBuilder().setCustomId('limit_modal').setTitle(msgs.limitModalTitle);
-                modal.addComponents(new ActionRowBuilder().addComponents(
-                    new TextInputBuilder().setCustomId('limit_value').setLabel(msgs.limitModalLabel)
-                        .setStyle(TextInputStyle.Short).setPlaceholder(msgs.limitModalPlaceholder)
-                        .setValue(currentLimit !== null ? String(currentLimit) : '').setRequired(false)
-                ));
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('limit_value').setLabel(msgs.limitModalLabel)
+                            .setStyle(TextInputStyle.Short).setPlaceholder(msgs.limitModalPlaceholder)
+                            .setValue(currentLimit !== null ? String(currentLimit) : '').setRequired(false)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder().setCustomId('cooldown_value').setLabel(msgs.limitCooldownLabel)
+                            .setStyle(TextInputStyle.Short).setPlaceholder(msgs.limitCooldownPlaceholder)
+                            .setValue(currentCooldownStr).setRequired(false)
+                    )
+                );
                 await interaction.showModal(modal);
                 return;
             }
@@ -3069,42 +3248,83 @@ class InteractionHandler {
         }
 
         const currentLimit = this.usageLimitService.getLimit();
-        const currentText = currentLimit !== null ? String(currentLimit) : '';
+        const currentCooldownMs = this.updateCooldownService.getCooldownDuration();
+        const { formatCooldownDuration } = require('../services/updateCooldownService');
+        const currentCooldownStr = currentCooldownMs ? formatCooldownDuration(currentCooldownMs) : '';
 
         const modal = new ModalBuilder()
             .setCustomId('limit_modal')
             .setTitle(msgs.limitModalTitle);
 
-        const limitInput = new TextInputBuilder()
-            .setCustomId('limit_value')
-            .setLabel(msgs.limitModalLabel)
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder(msgs.limitModalPlaceholder)
-            .setValue(currentText)
-            .setRequired(false);
-
-        modal.addComponents(new ActionRowBuilder().addComponents(limitInput));
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('limit_value')
+                    .setLabel(msgs.limitModalLabel)
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder(msgs.limitModalPlaceholder)
+                    .setValue(currentLimit !== null ? String(currentLimit) : '')
+                    .setRequired(false)
+            ),
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('cooldown_value')
+                    .setLabel(msgs.limitCooldownLabel)
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder(msgs.limitCooldownPlaceholder)
+                    .setValue(currentCooldownStr)
+                    .setRequired(false)
+            )
+        );
         await interaction.showModal(modal);
     }
 
     async _handleLimitModal(interaction) {
         const msgs = this.msgs(interaction.guildId);
-        const raw = interaction.fields.getTextInputValue('limit_value').trim();
+        const rawUsage = interaction.fields.getTextInputValue('limit_value').trim();
+        const rawCooldown = (interaction.fields.getTextInputValue('cooldown_value') || '').trim();
+        const results = [];
 
-        if (raw === '') {
+        // Dzienny limit użyć
+        if (rawUsage === '') {
             await this.usageLimitService.setLimit(null);
-            await interaction.reply({ content: msgs.limitRemoved, flags: ['Ephemeral'] });
-            return;
+            results.push(msgs.limitRemoved);
+        } else {
+            const parsed = parseInt(rawUsage, 10);
+            if (isNaN(parsed) || parsed < 1) {
+                await interaction.reply({ content: msgs.limitInvalidValue, flags: ['Ephemeral'] });
+                return;
+            }
+            await this.usageLimitService.setLimit(parsed);
+            results.push(formatMessage(msgs.limitSet, { limit: parsed }));
         }
 
-        const parsed = parseInt(raw, 10);
-        if (isNaN(parsed) || parsed < 1) {
-            await interaction.reply({ content: msgs.limitInvalidValue, flags: ['Ephemeral'] });
-            return;
+        // Cooldown
+        if (rawCooldown === '') {
+            await this.updateCooldownService.setCooldownDuration(null);
+            results.push(msgs.limitCooldownRemoved);
+        } else {
+            const ms = this._parseCooldownDuration(rawCooldown);
+            if (!ms) {
+                await interaction.reply({ content: msgs.limitCooldownInvalid, flags: ['Ephemeral'] });
+                return;
+            }
+            await this.updateCooldownService.setCooldownDuration(ms);
+            results.push(formatMessage(msgs.limitCooldownSet, { cooldown: rawCooldown }));
         }
 
-        await this.usageLimitService.setLimit(parsed);
-        await interaction.reply({ content: formatMessage(msgs.limitSet, { limit: parsed }), flags: ['Ephemeral'] });
+        await interaction.reply({ content: results.join('\n'), flags: ['Ephemeral'] });
+    }
+
+    _parseCooldownDuration(raw) {
+        if (!raw || !raw.trim()) return null;
+        const str = raw.trim().toLowerCase().replace(/\s+/g, '');
+        const match = str.match(/^(?:(\d+)h)?(?:(\d+)m)?$/);
+        if (!match || (!match[1] && !match[2])) return null;
+        const h = parseInt(match[1] || '0', 10);
+        const m = parseInt(match[2] || '0', 10);
+        const ms = (h * 3600 + m * 60) * 1000;
+        return ms > 0 ? ms : null;
     }
 
     async handleBlockOcrCommand(interaction) {
