@@ -392,8 +392,7 @@ class InteractionHandler {
     /** Buduje embed dashboardu z aktualnymi krokami wizarda */
     _buildWizardDashboard(state, guildId) {
         const msgs = this.msgs(guildId);
-        const isPol = this.config.getMessages(guildId) === this.config.getMessages(guildId) &&
-            (this.config.getGuildConfig(guildId)?.lang === 'pol' || state.lang === 'pol');
+        const isPol = state.lang ? state.lang === 'pol' : (this.config.getGuildConfig(guildId)?.lang !== 'eng');
         const t = (pol, eng) => isPol ? pol : eng;
 
         const done = {
