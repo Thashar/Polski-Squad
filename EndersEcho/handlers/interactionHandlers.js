@@ -114,57 +114,9 @@ class InteractionHandler {
                         .setRequired(true)),
 
             new SlashCommandBuilder()
-                .setName('remove')
-                .setDescription('Remove a player from the ranking (admins only)')
-                .setDescriptionLocalizations(pl('Usuń gracza z rankingu (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addUserOption(option =>
-                    option.setName('user')
-                        .setDescription('User to remove from the ranking')
-                        .setDescriptionLocalizations(pl('Użytkownik do usunięcia z rankingu'))
-                        .setRequired(true)),
-
-            new SlashCommandBuilder()
                 .setName('subscribe')
                 .setDescription('Manage record break notifications for players')
                 .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
-
-            new SlashCommandBuilder()
-                .setName('info')
-                .setDescription('Send an info message to all servers (selected users only)')
-                .setDescriptionLocalizations(pl('Wyślij wiadomość informacyjną na wszystkie serwery (tylko dla wybranych)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('ocr-on-off')
-                .setDescription('Enable / disable /update and/or /test on a specific server (head admin only)')
-                .setDescriptionLocalizations(pl('Włącz / wyłącz /update i/lub /test na wybranym serwerze (tylko head admin)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-                .addStringOption(option =>
-                    option.setName('action')
-                        .setDescription('Enable or disable the command')
-                        .setDescriptionLocalizations(pl('Włącz lub wyłącz komendę'))
-                        .setRequired(true)
-                        .addChoices(
-                            { name: '🔓 Enable', value: 'enable' },
-                            { name: '🔒 Disable', value: 'disable' }
-                        ))
-                .addStringOption(option =>
-                    option.setName('guild')
-                        .setDescription('Server to apply the change to (autocomplete)')
-                        .setDescriptionLocalizations(pl('Serwer na którym zmienić ustawienie (autocomplete)'))
-                        .setRequired(true)
-                        .setAutocomplete(true))
-                .addStringOption(option =>
-                    option.setName('target')
-                        .setDescription('Which command (default: both)')
-                        .setDescriptionLocalizations(pl('Która komenda (domyślnie: obie)'))
-                        .setRequired(false)
-                        .addChoices(
-                            { name: '/update', value: 'update' },
-                            { name: '/test', value: 'test' },
-                            { name: 'Both / Obie', value: 'both' }
-                        )),
 
             new SlashCommandBuilder()
                 .setName('test')
@@ -176,24 +128,6 @@ class InteractionHandler {
                         .setDescription('Screenshot of the boss result screen')
                         .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                         .setRequired(true)),
-
-            new SlashCommandBuilder()
-                .setName('unblock')
-                .setDescription('View blocked users and unblock them (admins only)')
-                .setDescriptionLocalizations(pl('Wyświetla zablokowanych użytkowników i umożliwia ich odblokowanie (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('limit')
-                .setDescription('Set daily usage limit for /update and /test per user (selected users only)')
-                .setDescriptionLocalizations(pl('Ustaw dzienny limit użyć /update i /test na użytkownika (tylko dla wybranych)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-            new SlashCommandBuilder()
-                .setName('tokens')
-                .setDescription('Show AI token usage and cost statistics (admins only)')
-                .setDescriptionLocalizations(pl('Wyświetl statystyki zużycia tokenów AI i kosztów (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
                 .setName('configure')
@@ -272,36 +206,11 @@ class InteractionHandler {
                 await this.handleConfigureCommand(interaction);
                 return;
             }
-            if (interaction.commandName === 'info') {
-                await this.handleInfoCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'ocr-on-off') {
-                await this.handleBlockOcrCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'limit') {
-                await this.handleLimitCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'tokens') {
-                await this.handleTokensCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'unblock') {
-                await this.handleUnblockCommand(interaction);
-                return;
-            }
 
             // Komendy admin — dowolny kanał, ale wymagają konfiguracji serwera
             if (interaction.commandName === 'test') {
                 if (!this._checkConfigured(interaction)) return;
                 await this.handleTestCommand(interaction);
-                return;
-            }
-            if (interaction.commandName === 'remove') {
-                if (!this._checkConfigured(interaction)) return;
-                await this.handleRemoveCommand(interaction);
                 return;
             }
             // Pozostałe komendy — wymagają konfiguracji i dozwolonego kanału
@@ -442,6 +351,13 @@ class InteractionHandler {
             rows.push(new ActionRowBuilder().addComponents(cancelBtn));
         }
 
+        rows.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('cfg_admin_panel')
+                .setLabel(t('⚙️ Panel Admina', '⚙️ Admin Panel'))
+                .setStyle(ButtonStyle.Secondary)
+        ));
+
         const summaryLines = [
             done[1] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
             done[2] ? `📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
@@ -571,10 +487,10 @@ class InteractionHandler {
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
                         '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n\n' +
-                        'Komendy adminów (`/remove`, `/unblock`, `/tokens`, `/test`, `/configure`) działają z **dowolnego** kanału.',
+                        'Komendy adminów są dostępne przez **Panel Admina** w `/configure` z dowolnego kanału.',
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
                         '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n\n' +
-                        'Admin commands (`/remove`, `/unblock`, `/tokens`, `/test`, `/configure`) work from **any** channel.'
+                        'Admin commands are available through the **Admin Panel** in `/configure` from any channel.'
                     )
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
@@ -1017,6 +933,304 @@ class InteractionHandler {
             }
             return;
         }
+    }
+
+    // =====================================================================
+    // Panel Admina — dostępny z /configure → przycisk cfg_admin_panel
+    // =====================================================================
+
+    _isHeadAdmin(userId) {
+        return this.config.blockOcrUserIds.includes(userId);
+    }
+
+    _buildAdminPanel(interaction) {
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const embed = new EmbedBuilder()
+            .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
+            .setTitle('⚙️ Panel Administracyjny')
+            .setDescription(
+                `**Tryb: ${isHeadAdmin ? 'Head Admin' : 'Admin'}**\n\n` +
+                (isHeadAdmin
+                    ? 'Pełny dostęp do wszystkich operacji administracyjnych.'
+                    : 'Dostęp do podstawowych operacji administracyjnych.')
+            );
+
+        const adminRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_remove').setLabel('🗑️ Usuń gracza').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unblock').setLabel('🔓 Odblokuj').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_tokens').setLabel('📊 Tokeny AI').setStyle(ButtonStyle.Secondary),
+        );
+
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_back_configure').setLabel('◀️ Wróć do konfiguracji').setStyle(ButtonStyle.Secondary),
+        );
+
+        const components = [adminRow];
+        if (isHeadAdmin) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_info').setLabel('📢 Wyślij Info').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_ocr').setLabel('🔄 OCR on/off').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_limit').setLabel('📏 Limit').setStyle(ButtonStyle.Primary),
+            ));
+        }
+        components.push(backRow);
+
+        return { embed, components };
+    }
+
+    async _handleAdminPanelOpen(interaction) {
+        const { embed, components } = this._buildAdminPanel(interaction);
+        await interaction.update({ embeds: [embed], components });
+    }
+
+    async _handlePanelRemove(interaction) {
+        const guildId = interaction.guildId;
+        try {
+            const players = await this.rankingService.getSortedPlayers(guildId);
+            if (players.length === 0) {
+                await interaction.update({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Usuń gracza').setDescription('Ranking jest pusty — brak graczy do usunięcia.')],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    )]
+                });
+                return;
+            }
+            const options = players.slice(0, 25).map((p, i) => ({
+                label: `#${i + 1} ${(p.username || p.userId).slice(0, 80)}`,
+                description: `Wynik: ${p.score}`,
+                value: p.userId,
+            }));
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Usuń gracza z rankingu').setDescription('Wybierz gracza, którego chcesz usunąć z rankingu tego serwera.')],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('panel_remove_select').setPlaceholder('Wybierz gracza do usunięcia...').addOptions(options)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    )
+                ]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemove (guildId=${guildId}):`, err);
+            await interaction.update({ content: '❌ Błąd wczytywania rankingu.', embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelRemoveSelect(interaction) {
+        const targetUserId = interaction.values[0];
+        const guildId = interaction.guildId;
+        const players = await this.rankingService.getSortedPlayers(guildId);
+        const player = players.find(p => p.userId === targetUserId);
+        const displayName = player?.username || targetUserId;
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Potwierdzenie usunięcia').setDescription(`Czy na pewno chcesz usunąć **${displayName}** z rankingu?\n\nTej operacji nie można cofnąć.`)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}`).setLabel('✅ Usuń').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Anuluj').setStyle(ButtonStyle.Secondary),
+            )]
+        });
+    }
+
+    async _handlePanelRemoveConfirm(interaction, targetUserId) {
+        const guildId = interaction.guildId;
+        await interaction.deferUpdate();
+        try {
+            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, guildId);
+            if (!wasRemoved) {
+                const { embed, components } = this._buildAdminPanel(interaction);
+                embed.setDescription('⚠️ Gracz nie znajduje się w rankingu.\n\n' + (embed.data.description || ''));
+                await interaction.editReply({ embeds: [embed], components });
+                return;
+            }
+            try {
+                const guildConfig = this.config.getGuildConfig(guildId);
+                const updatedPlayers = await this.rankingService.getSortedPlayers(guildId);
+                await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
+                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu przez panel admina`, interaction);
+            } catch (roleError) {
+                logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
+            }
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('✅ Gracz usunięty').setDescription(`Gracz <@${targetUserId}> został usunięty z rankingu.`)],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemoveConfirm (guildId=${guildId}, userId=${targetUserId}):`, err);
+            await interaction.editReply({ content: '❌ Błąd usuwania gracza.', embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelUnblock(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        const blocked = this.userBlockService.getBlockedUsers();
+        if (blocked.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('🔓 Odblokuj użytkownika').setDescription(msgs.unblockNoBlocked)],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )]
+            });
+            return;
+        }
+        const options = blocked.slice(0, 25).map(entry => {
+            const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+            return {
+                label: entry.username.slice(0, 100),
+                description: `${entry.guildName} | Pozostało: ${timeLabel}`.slice(0, 100),
+                value: entry.userId
+            };
+        });
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(msgs.unblockTitle)
+                .setDescription(blocked.slice(0, 25).map((entry, i) => {
+                    const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+                    return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
+                }).join('\n'))
+                .setFooter({ text: `Łącznie: ${blocked.length} zablokowanych` })
+                .setTimestamp()],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('panel_unblock_select').setPlaceholder('Wybierz użytkownika do odblokowania').addOptions(options)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )
+            ]
+        });
+    }
+
+    async _handlePanelTokens(interaction) {
+        await interaction.deferUpdate();
+        const month = new Date().toISOString().slice(0, 7);
+        const isSuperUser = this._isHeadAdmin(interaction.user.id);
+        const guildFilter = isSuperUser ? 'all' : interaction.guildId;
+        const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser);
+        if (reply.components.length < 5) {
+            reply.components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+            ));
+        }
+        await interaction.editReply(reply);
+    }
+
+    async _handlePanelOcr(interaction) {
+        const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+        const options = [];
+        for (const guildId of configuredIds) {
+            const guild = interaction.client.guilds.cache.get(guildId);
+            if (!guild) continue;
+            const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
+            const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
+            const statusIcon = updateBlocked || testBlocked ? '🔒' : '🔓';
+            options.push({
+                label: `${statusIcon} ${guild.name}`.slice(0, 100),
+                description: `update: ${updateBlocked ? 'wyłączone' : 'włączone'} | test: ${testBlocked ? 'wyłączone' : 'włączone'}`,
+                value: guildId,
+            });
+        }
+        if (options.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🔄 OCR on/off').setDescription('Brak skonfigurowanych serwerów widocznych w cache bota.')],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )]
+            });
+            return;
+        }
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF6B35).setTitle('🔄 OCR on/off — wybierz serwer').setDescription('Wybierz serwer, na którym chcesz zmienić ustawienia OCR.')],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('panel_ocr_guild_select').setPlaceholder('Wybierz serwer...').addOptions(options.slice(0, 25))
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )
+            ]
+        });
+    }
+
+    async _handlePanelOcrGuildSelect(interaction) {
+        const targetGuildId = interaction.values[0];
+        const guild = interaction.client.guilds.cache.get(targetGuildId);
+        const guildName = guild?.name || targetGuildId;
+        const updateBlocked = this.ocrBlockService.isBlocked(targetGuildId, 'update');
+        const testBlocked = this.ocrBlockService.isBlocked(targetGuildId, 'test');
+        const gid = targetGuildId;
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                .setTitle(`🔄 OCR on/off — ${guildName}`)
+                .setDescription(
+                    `Stan /update: ${updateBlocked ? '🔒 wyłączone' : '🔓 włączone'}\n` +
+                    `Stan /test: ${testBlocked ? '🔒 wyłączone' : '🔓 włączone'}\n\n` +
+                    'Wybierz akcję:'
+                )],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel('🔓 Włącz /update').setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel('🔓 Włącz /test').setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel('🔓 Włącz oba').setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel('🔒 Wyłącz /update').setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel('🔒 Wyłącz /test').setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel('🔒 Wyłącz oba').setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )
+            ]
+        });
+    }
+
+    async _handlePanelOcrAction(interaction, customId) {
+        // panel_ocr_{en|dis}_{update|test|both}_{guildId}
+        const parts = customId.split('_');
+        const action = parts[2];       // 'en' lub 'dis'
+        const target = parts[3];       // 'update', 'test', 'both'
+        const targetGuildId = parts.slice(4).join('_');
+        const targetCommands = target === 'both' ? ['update', 'test'] : [target];
+        const cmdLabel = targetCommands.map(c => `\`/${c}\``).join(', ');
+        const guildConfig = this.config.getGuildConfig(targetGuildId);
+        const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+        if (!guildConfig) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('❌ Błąd').setDescription('Serwer nie jest skonfigurowany.')],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                )]
+            });
+            return;
+        }
+        await interaction.deferUpdate();
+        if (action === 'en') {
+            await this.ocrBlockService.unblock(targetGuildId, targetCommands);
+            logger.info(`🔓 OCR odblokowany dla ${cmdLabel} na serwerze ${serverName} (panel)`);
+            if (guildConfig.allowedChannelId) {
+                const ch = await interaction.client.channels.fetch(guildConfig.allowedChannelId).catch(() => null);
+                if (ch) {
+                    const guildMsgs = this.config.getMessages(targetGuildId);
+                    await ch.send({ content: formatMessage(guildMsgs.ocrBlockPerGuildDisabled, { commands: cmdLabel, serverName }) }).catch(() => {});
+                }
+            }
+        } else {
+            await this.ocrBlockService.block(targetGuildId, targetCommands);
+            logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} na serwerze ${serverName} (panel)`);
+        }
+        const actionLabel = action === 'en' ? '🔓 Odblokowano' : '🔒 Zablokowano';
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setColor(action === 'en' ? 0x57F287 : 0xFF4444)
+                .setTitle(`${actionLabel} OCR`)
+                .setDescription(`${cmdLabel} na serwerze **${serverName}** — ${action === 'en' ? 'włączone' : 'wyłączone'}.`)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+            )]
+        });
     }
 
     /**
@@ -1722,6 +1936,81 @@ class InteractionHandler {
                 return;
             }
 
+            // === Przyciski Panelu Admina ===
+            if (customId === 'cfg_admin_panel' || customId === 'panel_back') {
+                await this._handleAdminPanelOpen(interaction);
+                return;
+            }
+            if (customId === 'panel_back_configure') {
+                const key = this._wizardKey(interaction.user.id, interaction.guildId);
+                const state = this._configWizard.get(key);
+                if (!state) {
+                    await interaction.update({ content: '⚠️ Sesja konfiguracji wygasła. Użyj komendy `/configure` ponownie.', embeds: [], components: [] });
+                    return;
+                }
+                const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+                await interaction.update({ embeds: [embed], components: rows });
+                return;
+            }
+            if (customId === 'panel_remove') {
+                await this._handlePanelRemove(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_remove_confirm_')) {
+                const targetUserId = customId.replace('panel_remove_confirm_', '');
+                await this._handlePanelRemoveConfirm(interaction, targetUserId);
+                return;
+            }
+            if (customId === 'panel_unblock') {
+                await this._handlePanelUnblock(interaction);
+                return;
+            }
+            if (customId === 'panel_tokens') {
+                await this._handlePanelTokens(interaction);
+                return;
+            }
+            if (customId === 'panel_info') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const prefill = this._infoSessions.get(interaction.user.id) || {};
+                await interaction.showModal(this._buildInfoModal(prefill));
+                return;
+            }
+            if (customId === 'panel_ocr') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelOcr(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_ocr_en_') || customId.startsWith('panel_ocr_dis_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelOcrAction(interaction, customId);
+                return;
+            }
+            if (customId === 'panel_limit') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const msgs = this.msgs(interaction.guildId);
+                const currentLimit = this.usageLimitService.getLimit();
+                const modal = new ModalBuilder().setCustomId('limit_modal').setTitle(msgs.limitModalTitle);
+                modal.addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder().setCustomId('limit_value').setLabel(msgs.limitModalLabel)
+                        .setStyle(TextInputStyle.Short).setPlaceholder(msgs.limitModalPlaceholder)
+                        .setValue(currentLimit !== null ? String(currentLimit) : '').setRequired(false)
+                ));
+                await interaction.showModal(modal);
+                return;
+            }
+
             // === Przyciski wizarda /configure ===
             if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
@@ -2127,6 +2416,33 @@ class InteractionHandler {
         try {
             const customId = interaction.customId;
 
+            if (customId === 'panel_remove_select') {
+                await this._handlePanelRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_unblock_select') {
+                const msgs = this.msgs(interaction.guildId);
+                const targetUserId = interaction.values[0];
+                const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
+                const success = await this.userBlockService.unblockUser(targetUserId);
+                const username = entry?.username || targetUserId;
+                await interaction.update({
+                    embeds: [new EmbedBuilder().setColor(success ? 0x57F287 : 0xFF4444)
+                        .setTitle(success ? '✅ Odblokowano' : '⚠️ Nie znaleziono')
+                        .setDescription(success ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound)],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                    )]
+                });
+                return;
+            }
+
+            if (customId === 'panel_ocr_guild_select') {
+                await this._handlePanelOcrGuildSelect(interaction);
+                return;
+            }
+
             if (customId === 'ee_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
@@ -2520,7 +2836,7 @@ class InteractionHandler {
      * Obsługuje komendę /info — sprawdza userId, pokazuje modal.
      */
     async handleInfoCommand(interaction) {
-        if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
+        if (!this.config.blockOcrUserIds.includes(interaction.user.id)) {
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
@@ -2534,7 +2850,7 @@ class InteractionHandler {
      */
     async _handleInfoModalSubmit(interaction) {
         const msgs = this.msgs(interaction.guildId);
-        if (!this.config.infoUserId || interaction.user.id !== this.config.infoUserId) {
+        if (!this.config.blockOcrUserIds.includes(interaction.user.id)) {
             await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
@@ -3308,6 +3624,11 @@ class InteractionHandler {
 
         if (action === 'm') {
             const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
+            if (reply.components.length < 5) {
+                reply.components.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                ));
+            }
             await interaction.editReply(reply);
             return;
         }
@@ -3321,6 +3642,11 @@ class InteractionHandler {
         }
 
         const reply = await this._buildTokensEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
+        if (reply.components.length < 5) {
+            reply.components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+            ));
+        }
         await interaction.editReply(reply);
     }
 
