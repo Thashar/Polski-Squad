@@ -943,32 +943,38 @@ class InteractionHandler {
         return this.config.blockOcrUserIds.includes(userId);
     }
 
+    _panelT(guildId) {
+        const isPol = (this.config.getGuildConfig(guildId)?.lang || 'pol') !== 'eng';
+        return (pol, eng) => isPol ? pol : eng;
+    }
+
     _buildAdminPanel(interaction) {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const t = this._panelT(interaction.guildId);
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
-            .setTitle('⚙️ Panel Administracyjny')
+            .setTitle(t('⚙️ Panel Administracyjny', '⚙️ Admin Panel'))
             .setDescription(
-                `**Tryb: ${isHeadAdmin ? 'Head Admin' : 'Admin'}**\n\n` +
+                `**${t('Tryb', 'Mode')}: ${isHeadAdmin ? 'Head Admin' : 'Admin'}**\n\n` +
                 (isHeadAdmin
-                    ? 'Pełny dostęp do wszystkich operacji administracyjnych.'
-                    : 'Dostęp do podstawowych operacji administracyjnych.')
+                    ? t('Pełny dostęp do wszystkich operacji administracyjnych.', 'Full access to all administrative operations.')
+                    : t('Dostęp do podstawowych operacji administracyjnych.', 'Access to basic administrative operations.'))
             );
 
         const adminRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_remove').setLabel('🗑️ Usuń gracza').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_unblock').setLabel('🔓 Odblokuj').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('panel_tokens').setLabel('📊 Tokeny AI').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj', '🔓 Unblock')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Tokeny AI', '📊 AI Tokens')).setStyle(ButtonStyle.Secondary),
         );
 
         const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_back_configure').setLabel('◀️ Wróć do konfiguracji').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
         );
 
         const components = [adminRow];
         if (isHeadAdmin) {
             components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_info').setLabel('📢 Wyślij Info').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_ocr').setLabel('🔄 OCR on/off').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_limit').setLabel('📏 Limit').setStyle(ButtonStyle.Primary),
             ));
@@ -985,62 +991,65 @@ class InteractionHandler {
 
     async _handlePanelRemove(interaction) {
         const guildId = interaction.guildId;
+        const t = this._panelT(guildId);
         try {
             const players = await this.rankingService.getSortedPlayers(guildId);
             if (players.length === 0) {
                 await interaction.update({
-                    embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Usuń gracza').setDescription('Ranking jest pusty — brak graczy do usunięcia.')],
+                    embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setDescription(t('Ranking jest pusty — brak graczy do usunięcia.', 'Ranking is empty — no players to remove.'))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
                 return;
             }
             const options = players.slice(0, 25).map((p, i) => ({
                 label: `#${i + 1} ${(p.username || p.userId).slice(0, 80)}`,
-                description: `Wynik: ${p.score}`,
+                description: `${t('Wynik', 'Score')}: ${p.score}`,
                 value: p.userId,
             }));
             await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Usuń gracza z rankingu').setDescription('Wybierz gracza, którego chcesz usunąć z rankingu tego serwera.')],
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setDescription(t('Wybierz gracza, którego chcesz usunąć z rankingu tego serwera.', 'Select the player you want to remove from this server\'s ranking.'))],
                 components: [
                     new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder().setCustomId('panel_remove_select').setPlaceholder('Wybierz gracza do usunięcia...').addOptions(options)
+                        new StringSelectMenuBuilder().setCustomId('panel_remove_select').setPlaceholder(t('Wybierz gracza do usunięcia...', 'Select a player to remove...')).addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                     )
                 ]
             });
         } catch (err) {
             logger.error(`Błąd _handlePanelRemove (guildId=${guildId}):`, err);
-            await interaction.update({ content: '❌ Błąd wczytywania rankingu.', embeds: [], components: [] });
+            await interaction.update({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
         }
     }
 
     async _handlePanelRemoveSelect(interaction) {
         const targetUserId = interaction.values[0];
         const guildId = interaction.guildId;
+        const t = this._panelT(guildId);
         const players = await this.rankingService.getSortedPlayers(guildId);
         const player = players.find(p => p.userId === targetUserId);
         const displayName = player?.username || targetUserId;
         await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🗑️ Potwierdzenie usunięcia').setDescription(`Czy na pewno chcesz usunąć **${displayName}** z rankingu?\n\nTej operacji nie można cofnąć.`)],
+            embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Potwierdzenie usunięcia', '🗑️ Confirm Removal')).setDescription(t(`Czy na pewno chcesz usunąć **${displayName}** z rankingu?\n\nTej operacji nie można cofnąć.`, `Are you sure you want to remove **${displayName}** from the ranking?\n\nThis action cannot be undone.`))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}`).setLabel('✅ Usuń').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Anuluj').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
 
     async _handlePanelRemoveConfirm(interaction, targetUserId) {
         const guildId = interaction.guildId;
+        const t = this._panelT(guildId);
         await interaction.deferUpdate();
         try {
             const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, guildId);
             if (!wasRemoved) {
                 const { embed, components } = this._buildAdminPanel(interaction);
-                embed.setDescription('⚠️ Gracz nie znajduje się w rankingu.\n\n' + (embed.data.description || ''));
+                embed.setDescription(t('⚠️ Gracz nie znajduje się w rankingu.\n\n', '⚠️ Player not found in ranking.\n\n') + (embed.data.description || ''));
                 await interaction.editReply({ embeds: [embed], components });
                 return;
             }
@@ -1053,25 +1062,27 @@ class InteractionHandler {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('✅ Gracz usunięty').setDescription(`Gracz <@${targetUserId}> został usunięty z rankingu.`)],
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('✅ Gracz usunięty', '✅ Player Removed')).setDescription(t(`Gracz <@${targetUserId}> został usunięty z rankingu.`, `Player <@${targetUserId}> has been removed from the ranking.`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
             });
         } catch (err) {
             logger.error(`Błąd _handlePanelRemoveConfirm (guildId=${guildId}, userId=${targetUserId}):`, err);
-            await interaction.editReply({ content: '❌ Błąd usuwania gracza.', embeds: [], components: [] });
+            await interaction.editReply({ content: t('❌ Błąd usuwania gracza.', '❌ Error removing player.'), embeds: [], components: [] });
         }
     }
 
     async _handlePanelUnblock(interaction) {
-        const msgs = this.msgs(interaction.guildId);
+        const guildId = interaction.guildId;
+        const msgs = this.msgs(guildId);
+        const t = this._panelT(guildId);
         const blocked = this.userBlockService.getBlockedUsers();
         if (blocked.length === 0) {
             await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle('🔓 Odblokuj użytkownika').setDescription(msgs.unblockNoBlocked)],
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('🔓 Odblokuj użytkownika', '🔓 Unblock User')).setDescription(msgs.unblockNoBlocked)],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
@@ -1080,7 +1091,7 @@ class InteractionHandler {
             const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
             return {
                 label: entry.username.slice(0, 100),
-                description: `${entry.guildName} | Pozostało: ${timeLabel}`.slice(0, 100),
+                description: `${entry.guildName} | ${t('Pozostało', 'Remaining')}: ${timeLabel}`.slice(0, 100),
                 value: entry.userId
             };
         });
@@ -1090,14 +1101,14 @@ class InteractionHandler {
                     const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
                     return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
                 }).join('\n'))
-                .setFooter({ text: `Łącznie: ${blocked.length} zablokowanych` })
+                .setFooter({ text: t(`Łącznie: ${blocked.length} zablokowanych`, `Total: ${blocked.length} blocked`) })
                 .setTimestamp()],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('panel_unblock_select').setPlaceholder('Wybierz użytkownika do odblokowania').addOptions(options)
+                    new StringSelectMenuBuilder().setCustomId('panel_unblock_select').setPlaceholder(t('Wybierz użytkownika do odblokowania', 'Select a user to unblock')).addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )
             ]
         });
@@ -1108,16 +1119,18 @@ class InteractionHandler {
         const month = new Date().toISOString().slice(0, 7);
         const isSuperUser = this._isHeadAdmin(interaction.user.id);
         const guildFilter = isSuperUser ? 'all' : interaction.guildId;
+        const t = this._panelT(interaction.guildId);
         const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser);
         if (reply.components.length < 5) {
             reply.components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
             ));
         }
         await interaction.editReply(reply);
     }
 
     async _handlePanelOcr(interaction) {
+        const t = this._panelT(interaction.guildId);
         const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
         const options = [];
         for (const guildId of configuredIds) {
@@ -1128,33 +1141,34 @@ class InteractionHandler {
             const statusIcon = updateBlocked || testBlocked ? '🔒' : '🔓';
             options.push({
                 label: `${statusIcon} ${guild.name}`.slice(0, 100),
-                description: `update: ${updateBlocked ? 'wyłączone' : 'włączone'} | test: ${testBlocked ? 'wyłączone' : 'włączone'}`,
+                description: `update: ${updateBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')} | test: ${testBlocked ? t('wyłączone', 'disabled') : t('włączone', 'enabled')}`,
                 value: guildId,
             });
         }
         if (options.length === 0) {
             await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🔄 OCR on/off').setDescription('Brak skonfigurowanych serwerów widocznych w cache bota.')],
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('🔄 OCR on/off').setDescription(t('Brak skonfigurowanych serwerów widocznych w cache bota.', 'No configured servers visible in the bot\'s cache.'))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
         }
         await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0xFF6B35).setTitle('🔄 OCR on/off — wybierz serwer').setDescription('Wybierz serwer, na którym chcesz zmienić ustawienia OCR.')],
+            embeds: [new EmbedBuilder().setColor(0xFF6B35).setTitle(t('🔄 OCR on/off — wybierz serwer', '🔄 OCR on/off — Select Server')).setDescription(t('Wybierz serwer, na którym chcesz zmienić ustawienia OCR.', 'Select a server to change OCR settings.'))],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('panel_ocr_guild_select').setPlaceholder('Wybierz serwer...').addOptions(options.slice(0, 25))
+                    new StringSelectMenuBuilder().setCustomId('panel_ocr_guild_select').setPlaceholder(t('Wybierz serwer...', 'Select a server...')).addOptions(options.slice(0, 25))
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )
             ]
         });
     }
 
     async _handlePanelOcrGuildSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
         const targetGuildId = interaction.values[0];
         const guild = interaction.client.guilds.cache.get(targetGuildId);
         const guildName = guild?.name || targetGuildId;
@@ -1165,23 +1179,23 @@ class InteractionHandler {
             embeds: [new EmbedBuilder().setColor(0xFF6B35)
                 .setTitle(`🔄 OCR on/off — ${guildName}`)
                 .setDescription(
-                    `Stan /update: ${updateBlocked ? '🔒 wyłączone' : '🔓 włączone'}\n` +
-                    `Stan /test: ${testBlocked ? '🔒 wyłączone' : '🔓 włączone'}\n\n` +
-                    'Wybierz akcję:'
+                    `${t('Stan', 'Status')} /update: ${updateBlocked ? `🔒 ${t('wyłączone', 'disabled')}` : `🔓 ${t('włączone', 'enabled')}`}\n` +
+                    `${t('Stan', 'Status')} /test: ${testBlocked ? `🔒 ${t('wyłączone', 'disabled')}` : `🔓 ${t('włączone', 'enabled')}`}\n\n` +
+                    t('Wybierz akcję:', 'Select action:')
                 )],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel('🔓 Włącz /update').setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel('🔓 Włącz /test').setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel('🔓 Włącz oba').setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel(t('🔓 Włącz /update', '🔓 Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel(t('🔓 Włącz /test', '🔓 Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel(t('🔓 Włącz oba', '🔓 Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel('🔒 Wyłącz /update').setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel('🔒 Wyłącz /test').setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel('🔒 Wyłącz oba').setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel(t('🔒 Wyłącz /update', '🔒 Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel(t('🔒 Wyłącz /test', '🔒 Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )
             ]
         });
@@ -1189,6 +1203,7 @@ class InteractionHandler {
 
     async _handlePanelOcrAction(interaction, customId) {
         // panel_ocr_{en|dis}_{update|test|both}_{guildId}
+        const t = this._panelT(interaction.guildId);
         const parts = customId.split('_');
         const action = parts[2];       // 'en' lub 'dis'
         const target = parts[3];       // 'update', 'test', 'both'
@@ -1199,9 +1214,9 @@ class InteractionHandler {
         const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
         if (!guildConfig) {
             await interaction.update({
-                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('❌ Błąd').setDescription('Serwer nie jest skonfigurowany.')],
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('❌ Błąd', '❌ Error')).setDescription(t('Serwer nie jest skonfigurowany.', 'Server is not configured.'))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
@@ -1221,14 +1236,14 @@ class InteractionHandler {
             await this.ocrBlockService.block(targetGuildId, targetCommands);
             logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} na serwerze ${serverName} (panel)`);
         }
-        const actionLabel = action === 'en' ? '🔓 Odblokowano' : '🔒 Zablokowano';
+        const actionLabel = action === 'en' ? t('🔓 Odblokowano', '🔓 Unblocked') : t('🔒 Zablokowano', '🔒 Blocked');
         await interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setColor(action === 'en' ? 0x57F287 : 0xFF4444)
                 .setTitle(`${actionLabel} OCR`)
-                .setDescription(`${cmdLabel} na serwerze **${serverName}** — ${action === 'en' ? 'włączone' : 'wyłączone'}.`)],
+                .setDescription(`${cmdLabel} ${t('na serwerze', 'on server')} **${serverName}** — ${action === 'en' ? t('włączone', 'enabled') : t('wyłączone', 'disabled')}.`)],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
             )]
         });
     }
@@ -1945,7 +1960,8 @@ class InteractionHandler {
                 const key = this._wizardKey(interaction.user.id, interaction.guildId);
                 const state = this._configWizard.get(key);
                 if (!state) {
-                    await interaction.update({ content: '⚠️ Sesja konfiguracji wygasła. Użyj komendy `/configure` ponownie.', embeds: [], components: [] });
+                    const t = this._panelT(interaction.guildId);
+                    await interaction.update({ content: t('⚠️ Sesja konfiguracji wygasła. Użyj komendy `/configure` ponownie.', '⚠️ Configuration session expired. Use `/configure` again.'), embeds: [], components: [] });
                     return;
                 }
                 const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
@@ -2423,16 +2439,17 @@ class InteractionHandler {
 
             if (customId === 'panel_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
+                const t = this._panelT(interaction.guildId);
                 const targetUserId = interaction.values[0];
                 const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
                 const success = await this.userBlockService.unblockUser(targetUserId);
                 const username = entry?.username || targetUserId;
                 await interaction.update({
                     embeds: [new EmbedBuilder().setColor(success ? 0x57F287 : 0xFF4444)
-                        .setTitle(success ? '✅ Odblokowano' : '⚠️ Nie znaleziono')
+                        .setTitle(success ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
                         .setDescription(success ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound)],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
                 return;
@@ -3619,6 +3636,7 @@ class InteractionHandler {
 
         // Zwykły admin widzi tylko swój serwer — zignoruj filter z customId
         const effectiveFilter = isSuperUser ? guildFilter : interaction.guildId;
+        const tTok = this._panelT(interaction.guildId);
 
         await interaction.deferUpdate();
 
@@ -3626,7 +3644,7 @@ class InteractionHandler {
             const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                 ));
             }
             await interaction.editReply(reply);
@@ -3644,7 +3662,7 @@ class InteractionHandler {
         const reply = await this._buildTokensEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
         if (reply.components.length < 5) {
             reply.components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel('◀️ Powrót do panelu').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
             ));
         }
         await interaction.editReply(reply);
