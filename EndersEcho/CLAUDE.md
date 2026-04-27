@@ -1,6 +1,11 @@
 ### 🏆 EndersEcho Bot
 
-**⚠️ ZASADA DWUJĘZYCZNOŚCI KOMEND (KRYTYCZNE):**
+**⚠️ ZASADA DWUJĘZYCZNOŚCI (KRYTYCZNE) — DOTYCZY WSZYSTKICH ELEMENTÓW UI:**
+- Bot obsługuje dwa języki: `pol` i `eng` — konfigurowane per serwer przez `/configure`
+- **KAŻDY nowy element UI** (komendy slash, embedy, przyciski, select menu, modale, komunikaty) MUSI mieć obie wersje językowe
+- Brak którejkolwiek wersji językowej to **błąd implementacyjny**
+
+**Komendy slash:**
 - Każda komenda slash MUSI mieć opis angielski (`.setDescription()`) ORAZ polskie tłumaczenie przez helper `pl()`
 - Komendy rejestrowane są **osobno per serwer** — serwery `eng` nie dostają `pl` lokalizacji, serwery `pol` dostają
 - Helper `pl` tworzony jest wewnątrz pętli po serwerach: `const pl = (text) => isPol ? { pl: text } : {};`
@@ -19,6 +24,25 @@
               .setDescriptionLocalizations(pl('Polski opis opcji'))
               .setRequired(true))
   ```
+
+**Panel Admina i dynamiczne UI (przyciski, embedy, select menu):**
+- Używaj helpera `_panelT(guildId)` zwracającego funkcję `t(pol, eng)` na podstawie języka serwera
+- Każda widoczna dla użytkownika wartość tekstowa MUSI używać `t('PL', 'EN')`
+- Wzorzec obowiązkowy dla każdej nowej operacji w panelu:
+  ```javascript
+  async _handlePanelNowaOperacja(interaction) {
+      const t = this._panelT(interaction.guildId);
+      await interaction.update({
+          embeds: [new EmbedBuilder().setTitle(t('Tytuł PL', 'Title EN')).setDescription(t('Opis PL', 'Description EN'))],
+          components: [new ActionRowBuilder().addComponents(
+              new ButtonBuilder().setLabel(t('Etykieta PL', 'Label EN'))
+          )]
+      });
+  }
+  ```
+
+**Komunikaty systemowe** (`messages.js`):
+- Nowe klucze MUSZĄ być dodane do obu sekcji: `pol` i `eng`
 
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:
