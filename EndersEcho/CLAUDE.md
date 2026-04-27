@@ -107,56 +107,86 @@
    - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
-6. **Komenda /info** — wysyłanie wiadomości informacyjnej na wszystkie serwery (`interactionHandlers.js`):
-   - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`)
-   - Wykonać może tylko użytkownik o ID z `ENDERSECHO_INFO_USER_ID` w .env
-   - `/info` → modal z 4 polami: Tytuł (opcjonalnie), Opis (wymagany), Ikona URL (opcjonalnie), Obraz URL (opcjonalnie)
-   - Po wypełnieniu → ephemeral podgląd z czerwonym embedem + 3 przyciski: **Wyślij**, **Edytuj**, **Anuluj**
-   - **Wyślij** → wysyła embed na `allowedChannelId` każdego serwera z `config.guilds`, raportuje wynik
-   - **Edytuj** → pokazuje modal ponownie z wypełnionymi danymi z sesji
-   - **Anuluj** → czyści sesję
-   - Dane między modalem a przyciskami przechowywane w `_infoSessions` Map (RAM, per userId)
+6. **Panel Admina (info/ocr/limit/remove/unblock/tokens)** — dostępne przez `/configure` → `⚙️ Panel Admina`:
+   - **Wyślij Info (head admin):** użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS` → modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM) trzyma dane między modalem a przyciskami
+   - **OCR on/off (head admin):** `ENDERSECHO_BLOCK_OCR_USER_IDS` → select serwera → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
+   - **Limit (head admin):** `ENDERSECHO_BLOCK_OCR_USER_IDS` → modal → globalny dzienny limit per user per UTC dzień. Persistencja: `data/usage_limits.json`
+   - **Usuń gracza (admin):** Administrator → select gracza z rankingu → potwierdzenie → usunięcie + aktualizacja ról TOP
+   - **Odblokuj (admin):** Administrator → select zablokowanego → odblokowanie. Persistencja: `data/user_blocks.json`
+   - **Tokeny AI (admin/head admin):** Administrator lub `ENDERSECHO_BLOCK_OCR_USER_IDS` → embed ze statystykami. Admin = tylko swój serwer, Head Admin = wszystkie serwery + breakdown
 
-**Komendy:** `/update`, `/ranking`, `/remove`, `/subscribe`, `/info`, `/ocr-on-off`, `/limit`, `/test`, `/unblock`, `/tokens`, `/configure`
+**Komendy slash:** `/configure`, `/ranking`, `/subscribe`, `/test`, `/update`
 
-**Komenda /tokens** — statystyki zużycia tokenów AI (admin):
-- Wyświetla dzienny i miesięczny koszt w $ per serwer oraz sumy łączne
-- Dane zbierane tylko przy `/update` (AI OCR) i zapisywane w `data/token_usage.json`
-- Podział na: tokeny wejściowe (In), wyjściowe (Out) i myślenia (Think)
-- Cennik: `services/tokenUsageService.js` → stałe `PRICING` (In $0.15, Out $0.60, Think $0.35 / 1M tokenów)
+**Panel Admina** — dostępny przez `/configure` → przycisk `⚙️ Panel Admina` (ostatni rząd):
+- Dostęp: każdy admin Discord (Administrator) który może otworzyć `/configure`
+- Tryb Admin: `🗑️ Usuń gracza`, `🔓 Odblokuj`, `📊 Tokeny AI`
+- Tryb Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`): wszystko z Admin + `📢 Wyślij Info`, `🔄 OCR on/off`, `📏 Limit`
+- Panel zastępuje widok konfiguracji (edit wiadomości), zawsze możliwy powrót do wizarda przez `◀️ Wróć do konfiguracji`
 
-**Komenda /limit** — dzienny limit użyć /update i /test (`usageLimitService.js`):
-- Widoczna tylko dla administratorów, wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
-- `/limit` → modal z polem „Liczba prób dziennie" (puste = brak limitu)
+**Operacje w Panelu Admina:**
+
+**🗑️ Usuń gracza** (Admin):
+- StringSelectMenu z listą do 25 graczy z rankingu serwera
+- Krok potwierdzenia przed usunięciem → aktualizacja ról TOP
+
+**🔓 Odblokuj** (Admin):
+- StringSelectMenu z listą zablokowanych użytkowników (czas pozostały + serwer)
+- Select: `panel_unblock_select`
+
+**📊 Tokeny AI** (Admin/Head Admin):
+- Embed ze statystykami dzienny/miesięczny koszt AI per serwer
+- Admin widzi tylko swój serwer; Head Admin widzi wszystkie + breakdown
+- Nawigacja `tk_*` zachowuje przycisk `◀️ Powrót do panelu`
+- Dane z `data/token_usage.json`, cennik: In $0.15, Out $0.60, Think $0.35 / 1M tokenów
+
+**📢 Wyślij Info** (Head Admin):
+- Otwiera modal z 4 polami: Tytuł, Opis PL, Opis ENG, Ikona URL, Obraz URL
+- Podgląd embeda + przyciski Wyślij / Edytuj / Anuluj
+- Wysyła na `allowedChannelId` każdego serwera w odpowiednim języku
+- Dostęp: `ENDERSECHO_BLOCK_OCR_USER_IDS` (ta sama zmienna co Head Admin)
+
+**🔄 OCR on/off** (Head Admin):
+- StringSelectMenu z serwerami (ikona 🔒/🔓 + stan update/test)
+- Po wyborze serwera: przyciski włącz/wyłącz dla `/update`, `/test`, obu
+- Ogłoszenie na kanał bota serwera po odblokowaniu
+
+**📏 Limit** (Head Admin):
+- Modal z polem „Liczba prób dziennie" (puste = brak limitu)
 - Limit globalny per-użytkownik per-dzień (UTC), wspólny dla /update i /test
-- Po przekroczeniu → ephemeral z informacją i prośbą o próbę jutro
-- Persistencja: `data/usage_limits.json` (`{ limit, dailyUsage: { "userId_YYYY-MM-DD": count } }`)
-- Stare wpisy usage automatycznie czyszczone przy każdym zapisie (tylko dzisiaj zostaje)
+- Persistencja: `data/usage_limits.json`
 
-**Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
+**CustomIDs Panelu Admina:**
+| CustomId | Opis |
+|---|---|
+| `cfg_admin_panel` | Otwórz panel (z configure dashboard) |
+| `panel_back` | Wróć do panelu (z dowolnej operacji) |
+| `panel_back_configure` | Wróć do wizarda /configure |
+| `panel_remove` | Pokaż listę graczy do usunięcia |
+| `panel_remove_select` | StringSelectMenu — wybór gracza |
+| `panel_remove_confirm_{userId}` | Potwierdzenie usunięcia |
+| `panel_unblock` | Pokaż listę zablokowanych |
+| `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
+| `panel_tokens` | Pokaż statystyki tokenów |
+| `panel_info` | Otwórz modal /info (head admin) |
+| `panel_ocr` | Pokaż listę serwerów OCR (head admin) |
+| `panel_ocr_guild_select` | StringSelectMenu — wybór serwera |
+| `panel_ocr_{en\|dis}_{update\|test\|both}_{guildId}` | Wykonaj OCR toggle |
+| `panel_limit` | Otwórz modal limitu (head admin) |
+
+**Komenda /configure** — wizard konfiguracji serwera + Panel Admina (admin, dowolny kanał):
 - 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
-- **Krok 1:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
-- **Krok 2:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
-- **Krok 3:** Język (pol/eng) — wszystkie komunikaty i opisy komend; tłumaczony na pol gdy `state.lang === 'pol'`
-- **Krok 4:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
-- **Krok 5:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
-- **Krok 6:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
+- **Krok 1:** Język (pol/eng) — wszystkie komunikaty i opisy komend
+- **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
+- **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
+- **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
+- **Krok 5:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
+- **Krok 6:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
-- Zielony przycisk **✅ Zaakceptuj konfigurację!** (ButtonStyle.Success) pojawia się gdy wszystkie kroki ukończone
-- Szary przycisk **Anuluj** widoczny od początku — czyści `_configWizard` i zamyka dashboard
+- Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
+- **Ostatni rząd:** `⚙️ Panel Admina` — dostęp do operacji administracyjnych (patrz sekcja Panel Admina)
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
-- Bot po raz pierwszy dodany do serwera (`guildCreate`): automatyczna rejestracja komend + domyślny wpis (unconfigured, OCR zablokowane) + welcome message + powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (zielony embed z nazwą i liczbą członków)
-- Bot usunięty z serwera (`guildDelete`): powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (czerwony embed z nazwą serwera)
-- Serwer w pełni skonfigurowany (`/configure` → Zaakceptuj): powiadomienie na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` (niebieski embed z nazwą serwera, adminem, kanałem, językiem, tagiem, rolami TOP, kanałem raportów; oznaczony jako rekonfiguracja jeśli serwer był już skonfigurowany)
-
-**Komenda /ocr-on-off** — per-guild włącz/wyłącz komendy OCR (head admin tylko, dowolny kanał):
-- Parametry: `action` (enable/disable), `target` (update/test/both), `guild` (autocomplete)
-- Autocomplete `guild`: pobiera `getAllConfiguredGuildIds()` z `GuildConfigService`, filtruje po nazwie/ID
-- Stan per-guild w `guild_configs.json` poprzez `OcrBlockService` (`ocrBlockService.block/unblock(guildId, commands[])`)
-- Po odblokowanie → ogłoszenie do `allowedChannelId` serwera
-- Migracja: stary globalny `ocr_blocked.json` → per-guild przy pierwszym starcie
 
 **System raportów odrzuconych screenów** (per-guild + global):
 - Raport w języku serwera źródłowego (`config.getMessages(guildId)`) — klucze `reportTitle`, `reportField*`, `reportReason*`
@@ -181,10 +211,12 @@
 - `getOcrBlocked/setOcrBlocked`: per-guild stan blokady OCR
 - `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTop3Notifications)
 
-**Uprawnienia komend** (po nowym routingu):
-- Bez konfiguracji (zawsze): `/configure`, `/info`, `/ocr-on-off`, `/limit`, `/tokens`, `/unblock`
-- Wymaga konfiguracji, dowolny kanał: `/test`, `/remove`
+**Uprawnienia komend:**
+- Bez konfiguracji (zawsze): `/configure` (+ Panel Admina)
+- Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
+- Panel Admina (tryb Admin): Administrator Discord → usuń gracza, odblokuj, tokeny
+- Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
 **Struktura danych:**
 ```
@@ -237,9 +269,6 @@ ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
-
-# Komenda /info (wymagane do działania /info)
-ENDERSECHO_INFO_USER_ID=discord_user_id
 
 # Dedykowany kanał logów EndersEcho (opcjonalne — jeśli ustawiony, logi NIE trafiają do głównego webhooka)
 # Każdy serwer pojawia się z własnym avatarem (ENDERSECHO_GUILD_N_ICON) i nazwą (TAG)

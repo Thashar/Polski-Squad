@@ -575,21 +575,9 @@
       "description": "Bot do rankingu wyników bossów z automatycznym przypisywaniem ról TOP",
       "commands": [
         {
-          "name": "/info",
-          "description": "Wysyła wiadomość informacyjną na wszystkie serwery (tylko dla wybranych użytkowników)",
-          "usage": "/info",
-          "requiredPermission": "administrator"
-        },
-        {
-          "name": "/subscribe",
-          "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
-          "usage": "/subscribe",
-          "requiredPermission": "public"
-        },
-        {
-          "name": "/ocr-on-off",
-          "description": "Blokuje / odblokowuje komendę /update na wszystkich serwerach",
-          "usage": "/ocr-on-off",
+          "name": "/configure",
+          "description": "Konfiguruje EndersEcho na serwerze. Zawiera Panel Admina z operacjami: usuń gracza, odblokuj, tokeny AI, wyślij info (head admin), OCR on/off (head admin), limit dzienny (head admin).",
+          "usage": "/configure → przyciski kroków 1-7 + ⚙️ Panel Admina",
           "requiredPermission": "administrator"
         },
         {
@@ -599,21 +587,15 @@
           "requiredPermission": "public"
         },
         {
-          "name": "/remove",
-          "description": "Usuwa gracza z rankingu",
-          "usage": "/remove użytkownik:@user",
-          "requiredPermission": "administrator"
+          "name": "/subscribe",
+          "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
+          "usage": "/subscribe",
+          "requiredPermission": "public"
         },
         {
           "name": "/test",
-          "description": "Testuje analizę screenshota przez AI — porównuje z wzorcem i wyciąga dane (boss + wynik) bez zapisu. Pokazuje ephemeral podgląd czy byłby to nowy rekord.",
+          "description": "Testuje analizę screenshota przez AI — porównuje z wzorcem i wyciąga dane (boss + wynik) bez zapisu. Pokazuje ephemeral podgląd czy byłby to nowy rekord. Tylko dla administratorów z ENDERSECHO_BLOCK_OCR_USER_IDS.",
           "usage": "/test obraz:[screenshot do przetestowania]",
-          "requiredPermission": "administrator"
-        },
-        {
-          "name": "/unblock",
-          "description": "Wyświetla listę zablokowanych użytkowników (posortowaną od najkrótszej kary do permanentnych) i umożliwia ich odblokowanie.",
-          "usage": "/unblock",
           "requiredPermission": "administrator"
         },
         {
