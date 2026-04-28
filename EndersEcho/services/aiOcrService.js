@@ -449,10 +449,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
 
-KROK 0 - Przed krokiem 1:
-Sprawdź czy u dołu zdjęcia nie ma białych tekstów lub znaków wodnych sugerujących wygenerowanie zdjęcia przez AI. 
-
-KROK 1 — Przed porównaniem:
+KROK 0 — Przed porównaniem:
 Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
 na język angielski. Dopiero na przetłumaczonej wersji wykonaj
 poniższe sprawdzenie.
@@ -460,11 +457,11 @@ poniższe sprawdzenie.
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - pełnoekranowe tło z gameplayem
 - centralny panel BEZ ikony X ani przycisku zamknięcia
-- kolorowy baner na górze panelu (zaokrąglony, bez paska tytułowego)
-- pod banerem: nazwa postaci
+- kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
+- pod banerem: nazwa własna Bossa
 - w centrum panelu: JEDNA duża ikona z liczbą
 - poniżej: dwie linie statystyk (Best / Total)
-- na dole panelu: rząd małych okrągłych ikon
+- na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
 - pod panelem: jeden żółty przycisk
 
 Format odpowiedzi:
