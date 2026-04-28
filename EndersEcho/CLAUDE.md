@@ -151,7 +151,7 @@
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`
   - Rząd 2: `📊 Zużycie tokenów`, `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
-  - Rząd 3: `📢 Wyślij Info`
+  - Rząd 3: `📢 Wyślij Info`, `🧪 Dodaj/usuń testera`
   - Rząd 4: `◀️ Wróć do konfiguracji`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
@@ -198,6 +198,13 @@
 - Domyślny cooldown (przed pierwszym ustawieniem): 5m
 - `formatCooldownDuration(ms)` — wyświetla bieżący cooldown jako `Xh Xm` w polu modal
 
+**🧪 Dodaj/usuń testera** (Head Admin):
+- Wyświetla listę aktualnych testerów + przyciski `➕ Dodaj` i `➖ Usuń`
+- **Dodaj:** modal z polem ID użytkownika Discord (17-20 cyfr) → zapis do `data/testers.json`
+- **Usuń:** StringSelectMenu z listą testerów (max 25) → usunięcie z pliku
+- Testerzy mogą używać `/test` bez ograniczeń (jak użytkownicy z `ENDERSECHO_BLOCK_OCR_USER_IDS`)
+- Persistencja przeżywa restart bota
+
 **CustomIDs Panelu Admina:**
 | CustomId | Opis |
 |---|---|
@@ -213,6 +220,11 @@
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
 | `panel_info` | Otwórz modal /info (head admin) |
+| `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
+| `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
+| `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
+| `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
+| `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
 | `panel_ocr` | Otwórz modal wyszukiwania serwera OCR (head admin) |
 | `panel_ocr_search_modal` | Modal wyszukiwania (pole `ocr_query`) |
 | `panel_ocr_guild_select` | StringSelectMenu — wybór serwera (wiele wyników) |
