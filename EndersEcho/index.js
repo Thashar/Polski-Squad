@@ -18,6 +18,7 @@ const GuildLogger = require('./services/guildLogger');
 const RoleService = require('./services/roleService');
 const NotificationService = require('./services/notificationService');
 const UserBlockService = require('./services/userBlockService');
+const TesterService = require('./services/testerService');
 const RoleRankingConfigService = require('./services/roleRankingConfigService');
 const UsageLimitService = require('./services/usageLimitService');
 const { TokenUsageService } = require('./services/tokenUsageService');
@@ -52,12 +53,13 @@ const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
 const notificationService = new NotificationService(config);
 const userBlockService = new UserBlockService(config);
+const testerService = new TesterService(config);
 const ocrBlockService = new (require('./services/ocrBlockService'))(guildConfigService);
 const roleRankingConfigService = new RoleRankingConfigService(config);
 const usageLimitService = new UsageLimitService(config);
 const tokenUsageService = new TokenUsageService(config);
 const updateCooldownService = new UpdateCooldownService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService);
 
 /**
  * Inicjalizuje bota EndersEcho

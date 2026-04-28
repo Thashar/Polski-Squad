@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -60,6 +60,7 @@ class InteractionHandler {
         this.guildConfigService = guildConfigService;
         this.ocrBlockService = ocrBlockService;
         this.updateCooldownService = updateCooldownService;
+        this.testerService = testerService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         this._infoSessions = new Map();
         // Stan wizarda /configure (userId_guildId -> { step data })
@@ -120,8 +121,8 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('test')
-                .setDescription('Submit a new Ender\'s Echo score (EN/JP screenshots)')
-                .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo (screeny EN/JP)'))
+                .setDescription('Add a new Ender\'s Echo score for analysis (Test OCR)')
+                .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy (Test OCR)'))
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addAttachmentOption(option =>
                     option.setName('obraz')
@@ -260,6 +261,14 @@ class InteractionHandler {
             }
             if (interaction.customId === 'panel_ocr_search_modal') {
                 await this._handlePanelOcrSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'panel_tester_add_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterAddModal(interaction);
                 return;
             }
             if (interaction.customId === 'panel_block_search_modal') {
@@ -1024,9 +1033,10 @@ class InteractionHandler {
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3: Head Admin only — Wyślij Info
+            // Rząd 3: Head Admin only — Wyślij Info + Testerzy
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Dodaj/usuń testera', '🧪 Add/Remove Tester')).setStyle(ButtonStyle.Primary),
             ));
         }
         components.push(backRow);
@@ -1724,8 +1734,9 @@ class InteractionHandler {
     async handleTestCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
 
-        const allowedIds = this.config.blockOcrUserIds;
-        if (!allowedIds.length || !allowedIds.includes(interaction.user.id)) {
+        const isAllowed = this.config.blockOcrUserIds.includes(interaction.user.id)
+            || (this.testerService && this.testerService.isTester(interaction.user.id));
+        if (!isAllowed) {
             await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
             return;
         }
@@ -2417,6 +2428,38 @@ class InteractionHandler {
                 }
                 const prefill = this._infoSessions.get(interaction.user.id) || {};
                 await interaction.showModal(this._buildInfoModal(prefill));
+                return;
+            }
+            if (customId === 'panel_tester') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTester(interaction);
+                return;
+            }
+            if (customId === 'panel_tester_add') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterAdd(interaction);
+                return;
+            }
+            if (customId === 'panel_tester_remove') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterRemove(interaction);
+                return;
+            }
+            if (customId === 'panel_tester_remove_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterRemoveSelect(interaction);
                 return;
             }
             if (customId === 'panel_ocr') {
@@ -4339,6 +4382,100 @@ class InteractionHandler {
         );
 
         return { embeds: [embed], components: [backRow] };
+    }
+
+    async _handlePanelTester(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const testers = this.testerService ? this.testerService.getTesters() : [];
+        const desc = testers.length > 0
+            ? testers.map((t2, i) => `${i + 1}. <@${t2.userId}>`).join('\n')
+            : t('Brak testerów.', 'No testers.');
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(t('🧪 Testerzy OCR', '🧪 OCR Testers'))
+            .setDescription(desc);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_tester_add').setLabel(t('➕ Dodaj', '➕ Add')).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('panel_tester_remove').setLabel(t('➖ Usuń', '➖ Remove')).setStyle(ButtonStyle.Danger).setDisabled(testers.length === 0),
+            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Wróć do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [row] });
+    }
+
+    async _handlePanelTesterAdd(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_tester_add_modal')
+            .setTitle(t('Dodaj testera', 'Add Tester'));
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('tester_user_id')
+                    .setLabel(t('ID użytkownika Discord', 'Discord User ID'))
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder('123456789012345678')
+                    .setRequired(true)
+            )
+        );
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelTesterAddModal(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const userId = interaction.fields.getTextInputValue('tester_user_id').trim();
+        if (!/^\d{17,20}$/.test(userId)) {
+            await interaction.reply({ content: t('❌ Nieprawidłowe ID użytkownika.', '❌ Invalid user ID.'), flags: ['Ephemeral'] });
+            return;
+        }
+        const added = await this.testerService.addTester(userId, interaction.user.id);
+        if (!added) {
+            await interaction.reply({ content: t(`⚠️ Użytkownik <@${userId}> jest już testerem.`, `⚠️ User <@${userId}> is already a tester.`), flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.reply({ content: t(`✅ Dodano <@${userId}> jako testera OCR.`, `✅ Added <@${userId}> as OCR tester.`), flags: ['Ephemeral'] });
+    }
+
+    async _handlePanelTesterRemove(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const testers = this.testerService ? this.testerService.getTesters() : [];
+        if (testers.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF8C00).setDescription(t('Brak testerów do usunięcia.', 'No testers to remove.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_tester').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                )],
+            });
+            return;
+        }
+        const options = testers.slice(0, 25).map(te => ({
+            label: te.userId,
+            value: te.userId,
+            description: t(`Dodany: ${new Date(te.addedAt).toLocaleDateString('pl-PL')}`, `Added: ${new Date(te.addedAt).toLocaleDateString('en-US')}`),
+        }));
+        const row = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId('panel_tester_remove_select')
+                .setPlaceholder(t('Wybierz testera do usunięcia', 'Select tester to remove'))
+                .addOptions(options)
+        );
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_tester').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+        );
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(t('🧪 Usuń testera', '🧪 Remove Tester'))],
+            components: [row, backRow],
+        });
+    }
+
+    async _handlePanelTesterRemoveSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const userId = interaction.values[0];
+        const removed = await this.testerService.removeTester(userId);
+        if (!removed) {
+            await interaction.reply({ content: t('❌ Nie znaleziono testera.', '❌ Tester not found.'), flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.reply({ content: t(`✅ Usunięto <@${userId}> z listy testerów OCR.`, `✅ Removed <@${userId}> from OCR testers.`), flags: ['Ephemeral'] });
     }
 }
 
