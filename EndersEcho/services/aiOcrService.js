@@ -458,7 +458,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
 
-KROK 0 — Przed porównaniem: Przetłumacz mentalnie wszystkie napisy na obydwu
+KROK 0 — Przed porównaniem: Odczytaj wszystkie napisy na zdjęciu, czy to w kolorze białym, szarym, zielonym. Przetłumacz mentalnie je wszystkie na obydwu
 zdjęciach na język angielski. Dopiero na przetłumaczonej wersji wykonaj poniższe
 sprawdzenie.
 
