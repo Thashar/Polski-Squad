@@ -135,6 +135,12 @@ class InteractionHandler {
                 .setDescription('Configure EndersEcho for this server (admins only)')
                 .setDescriptionLocalizations(pl('Skonfiguruj EndersEcho na tym serwerze (tylko dla adminów)'))
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('manage')
+                .setDescription('Open EndersEcho admin panel (admins only)')
+                .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (tylko dla adminów)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
     }
 
@@ -205,6 +211,10 @@ class InteractionHandler {
             // Komendy działające bez konfiguracji (head admin / admin)
             if (interaction.commandName === 'configure') {
                 await this.handleConfigureCommand(interaction);
+                return;
+            }
+            if (interaction.commandName === 'manage') {
+                await this.handleManageCommand(interaction);
                 return;
             }
 
@@ -490,6 +500,16 @@ class InteractionHandler {
         const state = this._configWizard.get(key);
         const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
         await interaction.reply({ embeds: [embed], components: rows, flags: ['Ephemeral'] });
+    }
+
+    async handleManageCommand(interaction) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
+            return;
+        }
+        const { embed, components } = this._buildAdminPanel(interaction);
+        await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
     }
 
     /** Buduje embed kroku konfiguracji (step 1–6) i aktualizuje wiadomość */
@@ -1026,11 +1046,6 @@ class InteractionHandler {
         }
         const row2 = new ActionRowBuilder().addComponents(...row2Components);
 
-        // Rząd (2 lub 3): wróć do konfiguracji
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
-        );
-
         const components = [row1, row2];
         if (isHeadAdmin) {
             // Rząd 3: Head Admin only — Wyślij Info + Testerzy
@@ -1039,7 +1054,13 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Dodaj/usuń testera', '🧪 Add/Remove Tester')).setStyle(ButtonStyle.Primary),
             ));
         }
-        components.push(backRow);
+        // Przycisk "Wróć do konfiguracji" tylko gdy istnieje aktywna sesja wizarda /configure
+        const hasConfigureSession = this._configWizard.has(this._wizardKey(interaction.user.id, interaction.guildId));
+        if (hasConfigureSession) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
+            ));
+        }
 
         return { embed, components };
     }

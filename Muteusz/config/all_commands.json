@@ -576,8 +576,14 @@
       "commands": [
         {
           "name": "/configure",
-          "description": "Konfiguruje EndersEcho na serwerze. Zawiera Panel Admina z operacjami: usuń gracza, odblokuj, tokeny AI, wyślij info (head admin), OCR on/off (head admin), limit dzienny (head admin).",
+          "description": "Konfiguruje EndersEcho na serwerze (wizard 7 kroków: język, kanał, tag, role TOP, powiadomienia, rankingi ról). Zawiera przycisk ⚙️ Panel Admina.",
           "usage": "/configure → przyciski kroków 1-7 + ⚙️ Panel Admina",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/manage",
+          "description": "Otwiera bezpośrednio Panel Administracyjny EndersEcho. Operacje: usuń gracza z rankingu, odblokuj gracza, tokeny AI, zablokuj gracza (head admin), OCR on/off (head admin), ustaw limity (head admin), wyślij info (head admin), testerzy (head admin).",
+          "usage": "/manage",
           "requiredPermission": "administrator"
         },
         {

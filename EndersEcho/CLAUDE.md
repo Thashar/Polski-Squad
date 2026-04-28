@@ -140,10 +140,10 @@
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
 
-**Komendy slash:** `/configure`, `/ranking`, `/subscribe`, `/test`, `/update`
+**Komendy slash:** `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
-**Panel Admina** — dostępny przez `/configure` → przycisk `⚙️ Panel Admina` (ostatni rząd):
-- Dostęp: każdy admin Discord (Administrator) który może otworzyć `/configure`
+**Panel Admina** — dostępny przez `/manage` (bezpośrednio) lub przez `/configure` → przycisk `⚙️ Panel Admina` (ostatni rząd):
+- Dostęp: każdy admin Discord (Administrator)
 - **Układ rzędów (Tryb Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
   - Rząd 2: `📊 Zużycie tokenów`
@@ -210,7 +210,7 @@
 |---|---|
 | `cfg_admin_panel` | Otwórz panel (z configure dashboard) |
 | `panel_back` | Wróć do panelu (z dowolnej operacji) |
-| `panel_back_configure` | Wróć do wizarda /configure |
+| `panel_back_configure` | Wróć do wizarda /configure (pokazywany tylko gdy sesja wizarda aktywna) |
 | `panel_remove` | Otwórz modal wyszukiwania gracza |
 | `panel_remove_search_modal` | Modal wyszukiwania (pole `remove_query`) |
 | `panel_remove_select` | StringSelectMenu — wybór gracza z wyników |
@@ -276,7 +276,7 @@
 - `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTop3Notifications)
 
 **Uprawnienia komend:**
-- Bez konfiguracji (zawsze): `/configure` (+ Panel Admina)
+- Bez konfiguracji (zawsze): `/configure` (wizard), `/manage` (bezpośredni panel admina)
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
 - Panel Admina (tryb Admin): Administrator Discord → usuń gracza, odblokuj, tokeny
