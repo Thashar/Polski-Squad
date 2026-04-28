@@ -455,15 +455,19 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
                 'NOK: Panel posiada ikonę zamknięcia (X)',
                 'NOK: Brak żółtego przycisku pod panelem',
               ];
-        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
-pasuje DO TEGO WZORCA.
+        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie pasuje DO TEGO WZORCA.
 
-KROK 0 — Przed porównaniem:
-Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
-na język angielski. Dopiero na przetłumaczonej wersji wykonaj
-poniższe sprawdzenie.
+KROK 0 — OCR i przygotowanie:
+- Wykonaj dokładną analizę OCR obu obrazów.
+- Odczytaj absolutnie cały tekst:
+  - najpierw główne okno/panel (np. 'Victory' lub jego odpowiednik),
+  - następnie tło (obszar przyciemniony / overlay) — uwzględnij wszystkie napisy, liczby i nazwy własne, nawet słabo widoczne.
+- Przetłumacz mentalnie wszystkie wykryte teksty na język angielski.
+- Dopiero na tej podstawie wykonaj porównanie.
 
+KROK 1 — Porównanie struktury (KLUCZOWE):
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
+- wartości odczytane w overlayu pokrywają się z wartościami w panelu pod Victory
 - pełnoekranowe tło z gameplayem
 - centralny panel BEZ ikony X ani przycisku zamknięcia
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
@@ -473,9 +477,13 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
 - pod panelem: jeden żółty przycisk
 
+KROK 2 — Walidacja tekstu (uzupełniające):
+- Sprawdź, czy teksty (po tłumaczeniu) są logicznie zgodne ze strukturą wzorca.
+- Uwzględnij także teksty z tła — jeśli wskazują na inny ekran/system, traktuj to jako różnicę.
+
 Format odpowiedzi:
 - Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
-- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
+- Jeśli cokolwiek się różni strukturalnie lub kontekstowo → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 5 words>
 
 Przykłady prawidłowych odpowiedzi:
 OK
