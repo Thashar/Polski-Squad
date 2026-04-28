@@ -2248,7 +2248,6 @@ class InteractionHandler {
                 await interaction.editReply({
                     embeds: updatedEmbeds,
                     components: [],
-                    attachments: [...interaction.message.attachments.values()],
                 });
                 if (footerInfo.globalMsgId) {
                     await this._updateGlobalReportMsg(interaction.client, footerInfo.globalMsgId, sourceGuildId, 'approved', adminName);
@@ -3475,7 +3474,6 @@ class InteractionHandler {
         await interaction.update({
             embeds: updatedEmbeds,
             components: [],
-            attachments: [...interaction.message.attachments.values()],
         });
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
@@ -3722,7 +3720,7 @@ class InteractionHandler {
             const msgs = this.config.getMessages(sourceGuildId);
             const serverName = client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
             const updatedEmbeds = this._buildActionEmbeds(msg.embeds, msgs, serverName, actionType, adminName, extraInfo);
-            await msg.edit({ embeds: updatedEmbeds, components: [], attachments: [...msg.attachments.values()] });
+            await msg.edit({ embeds: updatedEmbeds, components: [] });
         } catch (err) {
             logger.error(`❌ Nie można zaktualizować raportu ${msgId}: ${err.message}`);
         }
@@ -3772,7 +3770,6 @@ class InteractionHandler {
             await interaction.editReply({
                 embeds: updatedEmbeds,
                 components: [],
-                attachments: [...interaction.message.attachments.values()],
             });
         };
 
@@ -3940,6 +3937,7 @@ class InteractionHandler {
                 'NO_REQUIRED_WORDS': msgs.reportReasonNoRequiredWords,
                 'NOT_SIMILAR': msgs.reportReasonNotSimilar,
                 'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
+                'BEST_EXCEEDS_TOTAL': msgs.reportReasonBestExceedsTotal,
             };
             const reasonText = reasonMap[reason] || `🟠 ${reason}`;
             const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
@@ -4028,7 +4026,6 @@ class InteractionHandler {
                             });
                             sentGlobalMsg.edit({
                                 embeds: updatedGlobalEmbeds,
-                                attachments: [...sentGlobalMsg.attachments.values()],
                                 components: [...sentGlobalMsg.components],
                             }).catch(e => gl.warn(`⚠️ Nie można zaktualizować footera globalnego raportu: ${e.message}`));
                         }
