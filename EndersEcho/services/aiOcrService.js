@@ -467,7 +467,7 @@ KROK 0 — OCR i przygotowanie:
 
 KROK 1 — Porównanie struktury (KLUCZOWE):
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
-- wartości odczytane w overlayu pokrywają się z wartościami w panelu pod Victory
+- wartości odczytane w overlayu występują jeszcze gdzieś na zdjęciu
 - pełnoekranowe tło z gameplayem
 - centralny panel BEZ ikony X ani przycisku zamknięcia
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
