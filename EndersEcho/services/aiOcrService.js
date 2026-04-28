@@ -275,9 +275,15 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         let total = null;
         if (lines.length >= 3) {
             total = this.normalizeScore(lines[2].replace(/^total[:\s]*/i, '').trim(), log);
+            if (total === null) {
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+            }
         }
 
         score = this.normalizeScore(score, log);
+        if (score === null) {
+            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+        }
         if (score && total) {
             const corrected = this.validateScoreAgainstTotal(score, total, log);
             if (corrected === null) {
@@ -346,7 +352,10 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             }
             if (decimalPart) {
                 const maxDec = integerPart.length === 1 ? 2 : 1;
-                if (decimalPart.length > maxDec) decimalPart = decimalPart.substring(0, maxDec);
+                if (decimalPart.length > maxDec) {
+                    log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo miejsc po przecinku (${decimalPart.length} > ${maxDec}) — odrzucam jako podróbkę`);
+                    return null;
+                }
             }
         }
 
