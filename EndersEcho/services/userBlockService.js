@@ -50,7 +50,7 @@ class UserBlockService {
         return true;
     }
 
-    async blockUser(userId, username, guildId, guildName, durationStr) {
+    async blockUser(userId, username, guildId, guildName, durationStr, blockedByHeadAdmin = false) {
         const blockedUntil = this.parseDuration(durationStr);
         this._blocks[userId] = {
             userId,
@@ -58,17 +58,26 @@ class UserBlockService {
             guildId,
             guildName,
             blockedAt: new Date().toISOString(),
-            blockedUntil
+            blockedUntil,
+            blockedByHeadAdmin: !!blockedByHeadAdmin,
         };
         await this._save();
         return blockedUntil;
     }
 
-    async unblockUser(userId) {
+    // Zwraca false jeśli blokada pochodzi od Head Admina i caller nie jest Head Adminem
+    async unblockUser(userId, callerIsHeadAdmin = false) {
         if (!this._blocks[userId]) return false;
+        if (this._blocks[userId].blockedByHeadAdmin && !callerIsHeadAdmin) {
+            return 'head_admin_only';
+        }
         delete this._blocks[userId];
         await this._save();
         return true;
+    }
+
+    isBlockedByHeadAdmin(userId) {
+        return !!this._blocks[userId]?.blockedByHeadAdmin;
     }
 
     getBlockedUsers() {
