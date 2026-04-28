@@ -19,7 +19,7 @@ const SAFETY_SETTINGS_OFF = [
 const PROMPT_VERSIONS = {
     'victory-check-eng':  'v1',
     'victory-check-jpn':  'v1',
-    'authenticity-check': 'v1',
+    'authenticity-check': 'v2',
     'extract-data-eng':   'v1',
     'extract-data-jpn':   'v1',
     'compare-template':   'v3',
@@ -169,36 +169,54 @@ class AIOCRService {
     }
 
     async _checkAuthentic(base64Image, mediaType, telemetryMeta) {
-        const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
-DOKŁADNĄ ANALIZĘ LICZB
-Sprawdzenie KAŻDEGO piksela w cyfrach
-Analiza spójności czcionkiWE WSZYSTKICH ZNAKACH
-SZCZEGÓLNA UWAGA na cyfry po przecinku
-Porównanie WSZYSTKICH znaków z oficjalnym interfejsem gry
-KLUCZOWE KRYTERIA WERYFIKACJI
-Czy KAŻDY piksel jest 100% zgodny z oryginalnym interfejsem
-Czy liczby wyglądają IDEALNIE symetrycznie
-Czy po przecinku nie ma JAKICHKOLWIEK oznak edycji
-METODOLOGIA SPRAWDZENIA
-Porównaj KAŻDY element z wzorcem oryginalnego interfejsu
-Zwróć uwagę na NAJMNIEJSZE rozbieżności
-Sprawdź KAŻDĄ literę i cyfrę pod kątem zgodności
-Sprawdz czy dostało coś dopisane odręcznie.
-INSTRUKCJA WYKONANIA:
-Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK".
-Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
+        const prompt = `Determine if this image is a REAL mobile game screenshot or a FAKE (AI-generated or photo-edited).
+
+A genuine mobile game screenshot has these properties:
+— Pixel-perfect, razor-sharp text with clean edges everywhere — no blur, no glow, no softness
+— UI elements (buttons, borders, icons) are geometrically exact: perfectly straight lines, precise symmetry
+— Flat, engine-rendered colors and gradients — NOT painterly, photographic or hand-drawn
+— All text and numbers rendered in a single uniform style throughout the entire screen
+
+EXAMINE THESE THREE AREAS:
+
+[AREA 1 — SCORE NUMBERS: "Best" and "Total" values]
+This is where cheaters make edits. Check each digit individually:
+• Do ALL digits in "Best" have the exact same font weight, sharpness and pixel density?
+• Do ALL digits in "Total" look identical in rendering quality to the "Best" digits?
+• Does ANY single digit appear subtly brighter, softer, blurrier or a different shade than the digits next to it?
+• Does the unit suffix (K / M / B / T / Q / Qi / Sx) match the exact rendering style of the digits?
+• Is there any halo, glow or shadow artifact around any individual digit that is not present around others?
+
+[AREA 2 — AI GENERATION SIGNALS]
+These artifacts appear in images created by Midjourney, DALL-E, Stable Diffusion, Gemini Image etc.:
+• Text or numbers with soft/glowing/blurred edges (real UI text is always hard-edged)
+• UI background that looks photographic, painted, or has organic texture instead of flat game graphics
+• Buttons, banners or borders with slightly curved or irregular edges instead of perfect geometry
+• "Noise", "grain" or texture visible around text or at UI element edges
+• Any element that looks "illustrated" or "artistic" rather than rendered by a game engine
+
+[AREA 3 — PHOTO EDITING SIGNALS]
+These artifacts appear in screenshots edited with Photoshop, GIMP, etc.:
+• Any region of the image that is noticeably sharper or blurrier than surrounding areas
+• A digit or group of digits where the JPEG compression block pattern differs from adjacent digits
+• Color fringing or a subtle "halo" effect around specific numbers suggesting they were pasted in
+• Inconsistent pixel density between the score area and other text on the screen
+
+RESPOND WITH EXACTLY ONE OF (no other words, no explanation):
+OK
+NOK: <reason in Polish, max 5 words>`;
 
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
-        ], 10, {
+        ], 20, {
             ...telemetryMeta,
             step: 'authenticity-check',
             promptName: 'authenticity-check',
             promptVersion: PROMPT_VERSIONS['authenticity-check'],
         });
 
-        return { isAuthentic: !res.text.trim().toUpperCase().includes('NOK'), usage: res };
+        return { isAuthentic: !res.text.trim().toUpperCase().startsWith('NOK'), usage: res };
     }
 
     async _extractData(base64Image, mediaType, lang, telemetryMeta) {
@@ -425,6 +443,17 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             if (!isSimilar) {
                 return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
+
+            const { isAuthentic, usage: u2 } = await this._checkAuthentic(uploadedBase64, mediaType, telemetryMeta);
+            tokenUsage.promptTokens  += u2.promptTokens;
+            tokenUsage.outputTokens  += u2.outputTokens;
+            tokenUsage.thoughtTokens += u2.thoughtTokens;
+
+            if (!isAuthentic) {
+                log.warn(`[AI Test] Autentyczność: ✗ → FAKE_PHOTO`);
+                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO', tokenUsage };
+            }
+            log.info(`[AI Test] Autentyczność: ✓`);
 
             const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
