@@ -471,7 +471,7 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
   - w centrum panelu: JEDNA duża ikona z liczbą
   - poniżej: dwie linie statystyk (Best / Total)
   - pod liniami statystyk: szary tekst z wynikiem Bossa
-  - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
+  - na dole panelu: rząd różnych małych szarych ikon
   - pod panelem: jeden żółty przycisk
 
 Format odpowiedzi:
