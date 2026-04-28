@@ -458,28 +458,30 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
 
-KROK 0 — Przed porównaniem:
-Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
-na język angielski. Dopiero na przetłumaczonej wersji wykonaj
-poniższe sprawdzenie.
+KROK 0 — Przed porównaniem: Przetłumacz mentalnie wszystkie napisy na obydwu
+zdjęciach na język angielski. Dopiero na przetłumaczonej wersji wykonaj poniższe
+sprawdzenie.
 
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
-- pełnoekranowe tło z gameplayem
-- centralny panel BEZ ikony X ani przycisku zamknięcia
-- kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
-- pod banerem: nazwa własna Bossa
-- w centrum panelu: JEDNA duża ikona z liczbą
-- poniżej: dwie linie statystyk (Best / Total)
-- na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
-- pod panelem: jeden żółty przycisk
+
+  - pełnoekranowe tło z gameplayem
+  - centralny panel BEZ ikony X ani przycisku zamknięcia
+  - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
+  - pod banerem: nazwa własna Bossa
+  - w centrum panelu: JEDNA duża ikona z liczbą
+  - poniżej: dwie linie statystyk (Best / Total)
+  - pod liniami statystyk: szary tekst z wynikiem Bossa
+  - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
+  - pod panelem: jeden żółty przycisk
 
 Format odpowiedzi:
-- Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
-- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
 
-Przykłady prawidłowych odpowiedzi:
-OK
-${exampleReasons.join('\n')}
+  - Jeśli drugie zdjęcie pasuje do wzorca ORAZ szary tekst z wynikiem Bossa jest
+    identyczny na obu zdjęciach → odpowiedz TYLKO: OK
+  - Jeśli cokolwiek się różni strukturalnie LUB szary tekst z wynikiem Bossa
+    jest różny → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
+
+Przykłady prawidłowych odpowiedzi: OK ${exampleReasons.join('\n')}
 
 **ZASADA BEZWZGLĘDNA: Odpowiedz TYLKO w formacie OK lub NOK: <powód>. Zero innych słów.**`;
 
