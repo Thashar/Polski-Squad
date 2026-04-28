@@ -992,10 +992,18 @@ class InteractionHandler {
             );
 
         // Rząd 1: operacje gracza (wszyscy admini)
-        const row1 = new ActionRowBuilder().addComponents(
+        const row1Components = [
             new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+        ];
+        if (isHeadAdmin) {
+            row1Components.push(
+                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
+            );
+        }
+        row1Components.push(
             new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
         );
+        const row1 = new ActionRowBuilder().addComponents(...row1Components);
 
         // Rząd 2: narzędzia (tokeny dla wszystkich, OCR+Limity tylko Head Admin)
         const row2Components = [
@@ -1009,16 +1017,15 @@ class InteractionHandler {
         }
         const row2 = new ActionRowBuilder().addComponents(...row2Components);
 
-        // Rząd (3 lub 4): wróć do konfiguracji
+        // Rząd (2 lub 3): wróć do konfiguracji
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
         );
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3: Head Admin only — Zablokuj gracza + Wyślij Info
+            // Rząd 3: Head Admin only — Wyślij Info
             components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
             ));
         }
