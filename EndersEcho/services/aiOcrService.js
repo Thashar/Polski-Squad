@@ -22,7 +22,7 @@ const PROMPT_VERSIONS = {
     'authenticity-check': 'v1',
     'extract-data-eng':   'v1',
     'extract-data-jpn':   'v1',
-    'compare-template':   'v4',
+    'compare-template':   'v3',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -455,33 +455,33 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
                 'NOK: Panel posiada ikonę zamknięcia (X)',
                 'NOK: Brak żółtego przycisku pod panelem',
               ];
-        const prompt = `You have a reference screen. Check whether the second image matches THIS REFERENCE.
+        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
+pasuje DO TEGO WZORCA.
 
-STEP 0 — Before comparing: Read all text visible in both images (white, gray, green labels).
-Mentally translate everything to English. Then perform the check below on the translated version.
+KROK 0 — Przed porównaniem:
+Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
+na język angielski. Dopiero na przetłumaczonej wersji wykonaj
+poniższe sprawdzenie.
 
-THE REFERENCE (first image) has EXACTLY:
+WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
+- pełnoekranowe tło z gameplayem
+- centralny panel BEZ ikony X ani przycisku zamknięcia
+- kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
+- pod banerem: nazwa własna Bossa
+- w centrum panelu: JEDNA duża ikona z liczbą
+- poniżej: dwie linie statystyk (Best / Total)
+- na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
+- pod panelem: jeden żółty przycisk
 
-  - full-screen gameplay background
-  - a central panel with NO close (X) icon or close button
-  - a colored banner at the top of the panel (rounded, ribbon-like)
-  - below the banner: the Boss's proper name
-  - in the center of the panel: ONE large icon with a number
-  - below that: two stat lines (Best / Total)
-  - below the stat lines: gray text showing the Boss result
-  - at the bottom of the panel: a row of various small gray icons
-  - below the panel: one yellow button
+Format odpowiedzi:
+- Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
+- Jeśli cokolwiek się różni strukturalnie → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
 
-Response format:
+Przykłady prawidłowych odpowiedzi:
+OK
+${exampleReasons.join('\n')}
 
-  - If the second image matches the reference AND the gray Boss result text is
-    identical on both images → respond ONLY: OK
-  - If anything differs structurally OR the gray Boss result text is different
-    → respond ONLY: NOK: <short reason in ${reasonLang}, max 5 words>
-
-Valid response examples: OK ${exampleReasons.join('\n')}
-
-**ABSOLUTE RULE: Respond ONLY in the format OK or NOK: <reason>. Zero other words.**`;
+**ZASADA BEZWZGLĘDNA: Odpowiedz TYLKO w formacie OK lub NOK: <powód>. Zero innych słów.**`;
 
         const res = await this._generateContent([
             { inlineData: { data: wzorBase64, mimeType: mediaType } },
