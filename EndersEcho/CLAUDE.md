@@ -132,8 +132,9 @@
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
 6. **Panel Admina** — dostępny przez `/configure` → `⚙️ Panel Admina`:
-   - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP
-   - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`
+   - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP. Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
+   - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`. Jeśli blokada pochodzi od Head Admina (`blockedByHeadAdmin: true`) — zwykły Admin nie może odblokować.
+   - **Zablokuj gracza (head admin):** modal wyszukiwania nicku cross-server → lista graczy → potwierdzenie → modal czasu blokady. Blokada zapisywana z flagą `blockedByHeadAdmin: true`.
    - **Zużycie tokenów (admin/head admin):** embed ze statystykami AI per serwer. Admin = swój serwer, Head Admin = wszystkie + breakdown
    - **AI OCR on/off (head admin):** modal wyszukiwania nazwy serwera → jeśli 1 wynik: bezpośrednio toggle, jeśli wiele: lista → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
@@ -150,7 +151,7 @@
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
   - Rząd 2: `📊 Zużycie tokenów`, `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
-  - Rząd 3: `📢 Wyślij Info`
+  - Rząd 3: `🔒 Zablokuj gracza`, `📢 Wyślij Info`
   - Rząd 4: `◀️ Wróć do konfiguracji`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
@@ -165,6 +166,12 @@
 - Jeśli brak zablokowanych → informacja od razu (update panelu)
 - Jeśli są zablokowani → modal wyszukiwania → fragment nicku → przefiltrowana lista
 - `panel_unblock_select` — StringSelectMenu z wynikami
+- Jeśli gracz zablokowany przez Head Admina (`blockedByHeadAdmin: true`) → zwykły Admin widzi błąd ⛔, nie może odblokować
+
+**🔒 Zablokuj gracza** (Head Admin):
+- Modal wyszukiwania nicku cross-server (wszystkie skonfigurowane serwery)
+- Lista `panel_block_select` → potwierdzenie z opcją ustawienia czasu → modal czasu → blokada z flagą `blockedByHeadAdmin: true`
+- Zablokowanego przez Head Admina nie może odblokować zwykły Admin (ani przez panel, ani przez `/unblock`)
 
 **📊 Zużycie tokenów** (Admin/Head Admin):
 - Embed ze statystykami dzienny/miesięczny koszt AI per serwer
@@ -211,6 +218,11 @@
 | `panel_ocr_guild_select` | StringSelectMenu — wybór serwera (wiele wyników) |
 | `panel_ocr_{en\|dis}_{update\|test\|both}_{guildId}` | Wykonaj OCR toggle |
 | `panel_limit` | Otwórz modal limitów — 2 pola (head admin) |
+| `panel_block` | Otwórz modal wyszukiwania gracza do zablokowania (head admin) |
+| `panel_block_search_modal` | Modal wyszukiwania cross-server (pole `block_query`) |
+| `panel_block_select` | StringSelectMenu — wybór gracza do zablokowania |
+| `panel_block_time_{userId}_{guildId}` | Otwórz modal czasu blokady |
+| `panel_block_modal_{userId}_{guildId}` | Modal czasu blokady (pole `block_duration`) |
 
 **Komenda /configure** — wizard konfiguracji serwera + Panel Admina (admin, dowolny kanał):
 - 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
@@ -238,9 +250,10 @@
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
 - Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
-- **Zablokuj** otwiera modal z polem czasu (np. `1h`, `7d`, `30m` — puste = permanentnie)
+- **Zablokuj** otwiera modal z polem czasu (np. `1h`, `7d`, `30m` — puste = permanentnie); jeśli klikający jest Head Adminem, blokada zapisywana z flagą `blockedByHeadAdmin: true`
 - Zablokowany użytkownik przy próbie `/update` widzi komunikat o blokadzie i konieczności kontaktu z adminem
-- `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania
+- `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania; jeśli `blockedByHeadAdmin: true` — zwykły Admin nie może odblokować
+- Panel Admina → **🔒 Zablokuj gracza** (Head Admin) — cross-server wyszukiwanie + blokada z `blockedByHeadAdmin: true`
 - Persistencja przeżywa restart bota
 
 **GuildConfigService** — `services/guildConfigService.js`:
