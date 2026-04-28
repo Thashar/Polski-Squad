@@ -55,9 +55,10 @@
        - **KROK 3:** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
-   - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + ekstrakcja:
-     - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów)
-     - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów)
+   - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + autentyczność + ekstrakcja:
+     - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (~10 tokenów)
+     - **KROK 2:** Weryfikacja autentyczności — ten sam prompt co w regularnym flow (`_checkAuthentic`), wykrywa AI-generated i edytowane screeny (~20 tokenów). Wynik: OK → dalej, NOK → `FAKE_PHOTO`
+     - **KROK 3:** Ekstrakcja danych (boss + score) — (~500 tokenów)
      - Gdy screen niepodobny do wzorca → embed `testNotSimilarTitle/Description` (brak zapisu)
      - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
@@ -394,7 +395,7 @@ Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko
 
 - **`/test` jako dry-run `/update`.** Oba handlery delegują do `_runUpdateFlow`; różnice wyłącznie w `dryRun` (ephemeral output, brak zapisu/ról/powiadomień), `commandName` (→ `hints.command`, logi, klucz blokady OCR) i uprawnieniach wejściowych (`/test` wymaga wpisu w `ENDERSECHO_BLOCK_OCR_USER_IDS`). Ten sam prompt wzorca (`compare-template`), ten sam `analyzeTestImage()`, ten sam Operations Gateway, ten sam `tokenUsageService` i `usageLimitService`. Padnięcie Gemini w obu komendach = błąd dla usera (brak fallbacku na Tesseract).
 - **`usageLimitService`** — lokalny dzienny limit per user (`data/usage_limits.json`), działa równolegle do quota w API.
-- **`PROMPT_VERSIONS`** w [services/aiOcrService.js:15-24](services/aiOcrService.js#L15-L24) — 6 wpisów: `victory-check-eng` (v1), `victory-check-jpn` (v1), `authenticity-check` (v1), `extract-data-eng` (v1), `extract-data-jpn` (v1), `compare-template` (**v4** — prompt przetłumaczony na angielski). Po zmianie treści promptu bump wersji — stare trace zostają w Langfuse do porównania.
+- **`PROMPT_VERSIONS`** w [services/aiOcrService.js:15-24](services/aiOcrService.js#L15-L24) — 6 wpisów: `victory-check-eng` (v1), `victory-check-jpn` (v1), `authenticity-check` (**v2** — przepisany prompt z 3 obszarami: cyfry score, artefakty AI-generation, artefakty edycji), `extract-data-eng` (v1), `extract-data-jpn` (v1), `compare-template` (v3). Po zmianie treści promptu bump wersji — stare trace zostają w Langfuse do porównania.
 - **Model Gemini** dla wszystkich promptów ten sam: z `ENDERSECHO_GOOGLE_AI_MODEL` (default: `gemini-2.5-flash-preview-05-20`).
 
 ### A/B testing
