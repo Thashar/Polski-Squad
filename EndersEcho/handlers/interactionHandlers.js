@@ -2065,18 +2065,22 @@ class InteractionHandler {
                             .filter(g => interaction.client.guilds.cache.has(g.id));
                         gl.info(`🌐 Global Top 3: ${prevGlobalPosition ?? 'brak'}→${newGlobalPosition} — wysyłam do ${allNotifGuilds.length} serwerów`);
 
+                        const sentTo = [];
+                        const failedAt = [];
+
                         for (const guildCfg of allNotifGuilds) {
+                            const guildName = interaction.client.guilds.cache.get(guildCfg.id)?.name || guildCfg.id;
                             try {
                                 // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
                                 let channel;
                                 try {
                                     channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                                 } catch (fetchErr) {
-                                    gl.warn(`⚠️ Nie można pobrać kanału ${guildCfg.allowedChannelId} dla serwera ${guildCfg.id}: ${fetchErr.message}`);
+                                    failedAt.push(`${guildName} (${fetchErr.message})`);
                                     continue;
                                 }
                                 if (!channel) {
-                                    gl.warn(`⚠️ Kanał ${guildCfg.allowedChannelId} nie istnieje`);
+                                    failedAt.push(`${guildName} (brak kanału)`);
                                     continue;
                                 }
 
@@ -2111,11 +2115,15 @@ class InteractionHandler {
                                 const sendPayload = { embeds: [globalEmbed] };
                                 if (notifFiles) sendPayload.files = notifFiles;
                                 await channel.send(sendPayload);
-                                gl.info(`✅ Wysłano powiadomienie Global Top 3 do serwera ${guildCfg.id}${isSourceGuild ? ' (bez zdjęcia — serwer macierzysty)' : ' (ze zdjęciem)'}`);
+                                sentTo.push(guildName);
                             } catch (notifError) {
-                                gl.error(`❌ Błąd wysyłania powiadomienia Global Top 3 do serwera ${guildCfg.id}: ${notifError.message}`);
+                                failedAt.push(`${guildName} (${notifError.message})`);
                             }
                         }
+
+                        const sentPart = sentTo.length ? `✅ ${sentTo.join(', ')}` : '';
+                        const failPart = failedAt.length ? `❌ ${failedAt.join(', ')}` : '';
+                        gl.info(`🌐 Global Top 3 wysłano: ${[sentPart, failPart].filter(Boolean).join(' | ')}`);
                     } else {
                         gl.info(`🌐 Global Top 3: pos=${newGlobalPosition} (bez zmian) — warunki nie spełnione`);
                     }
