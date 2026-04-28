@@ -278,7 +278,13 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
 
         score = this.normalizeScore(score, log);
-        if (score && total) score = this.validateScoreAgainstTotal(score, total, log);
+        if (score && total) {
+            const corrected = this.validateScoreAgainstTotal(score, total, log);
+            if (corrected === null) {
+                return { bossName: null, score: null, total, confidence: 0, isValidVictory: false, error: 'BEST_EXCEEDS_TOTAL' };
+            }
+            score = corrected;
+        }
 
         const validScorePattern = /^\d+(?:\.\d+)?(K|M|B|T|Q|Qi|Sx)$/i;
         if (score && !validScorePattern.test(score)) {
@@ -377,8 +383,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             }
         }
 
-        log.warn(`[AI OCR] validateTotal: nie udało się skorygować "${score}"`);
-        return score;
+        log.warn(`[AI OCR] validateTotal: nie udało się skorygować "${score}" — odrzucam`);
+        return null;
     }
 
     /**
