@@ -262,6 +262,24 @@ class InteractionHandler {
                 await this._handlePanelOcrSearch(interaction);
                 return;
             }
+            if (interaction.customId === 'panel_block_search_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBlockSearch(interaction);
+                return;
+            }
+            if (interaction.customId.startsWith('panel_block_modal_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                // panel_block_modal_{userId}_{guildId}
+                const parts = interaction.customId.replace('panel_block_modal_', '').split('_');
+                await this._handlePanelBlockModal(interaction, parts[0], parts[1]);
+                return;
+            }
             if (interaction.customId === 'cfg_tag_modal') {
                 await this._handleConfigureTagModal(interaction);
                 return;
@@ -998,8 +1016,9 @@ class InteractionHandler {
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3: Head Admin only — Wyślij Info
+            // Rząd 3: Head Admin only — Zablokuj gracza + Wyślij Info
             components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
             ));
         }
@@ -1033,15 +1052,27 @@ class InteractionHandler {
 
     async _handlePanelRemoveSearch(interaction) {
         const guildId = interaction.guildId;
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(guildId);
         const query = interaction.fields.getTextInputValue('remove_query').trim().toLowerCase();
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const players = await this.rankingService.getSortedPlayers(guildId);
-            const filtered = players.filter(p =>
-                (p.username || p.userId).toLowerCase().includes(query)
-            );
-            if (filtered.length === 0) {
+            // Head Admin przeszukuje wszystkie serwery; Admin tylko swój
+            const searchGuildIds = isHeadAdmin
+                ? (this.guildConfigService?.getAllConfiguredGuildIds() || [guildId])
+                : [guildId];
+            const allMatches = [];
+            for (const sgid of searchGuildIds) {
+                const players = await this.rankingService.getSortedPlayers(sgid);
+                const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
+                for (let i = 0; i < players.length; i++) {
+                    const p = players[i];
+                    if ((p.username || p.userId).toLowerCase().includes(query)) {
+                        allMatches.push({ ...p, rank: i + 1, sgid, guildName });
+                    }
+                }
+            }
+            if (allMatches.length === 0) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0xFF4444)
                         .setTitle(t('🗑️ Nie znaleziono gracza', '🗑️ Player Not Found'))
@@ -1053,17 +1084,16 @@ class InteractionHandler {
                 });
                 return;
             }
-            const options = filtered.slice(0, 25).map(p => {
-                const rank = players.indexOf(p) + 1;
-                return {
-                    label: `#${rank} ${(p.username || p.userId).slice(0, 80)}`,
-                    description: `${t('Wynik', 'Score')}: ${p.score}`,
-                    value: p.userId,
-                };
-            });
-            const subtitle = filtered.length > 25
-                ? t(`Znaleziono ${filtered.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${filtered.length} — showing 25. Narrow your search.`)
-                : t(`Znaleziono ${filtered.length} gracz(y).`, `Found ${filtered.length} player(s).`);
+            const options = allMatches.slice(0, 25).map(p => ({
+                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                description: isHeadAdmin
+                    ? `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100)
+                    : `${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
+                value: `${p.userId}:${p.sgid}`,
+            }));
+            const subtitle = allMatches.length > 25
+                ? t(`Znaleziono ${allMatches.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${allMatches.length} — showing 25. Narrow your search.`)
+                : t(`Znaleziono ${allMatches.length} gracz(y).`, `Found ${allMatches.length} player(s).`);
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0xFF4444)
                     .setTitle(t('🗑️ Wybierz gracza', '🗑️ Select Player'))
@@ -1087,27 +1117,35 @@ class InteractionHandler {
     }
 
     async _handlePanelRemoveSelect(interaction) {
-        const targetUserId = interaction.values[0];
-        const guildId = interaction.guildId;
-        const t = this._panelT(guildId);
-        const players = await this.rankingService.getSortedPlayers(guildId);
+        const value = interaction.values[0]; // format: userId:guildId
+        const [targetUserId, targetGuildId] = value.split(':');
+        const t = this._panelT(interaction.guildId);
+        const players = await this.rankingService.getSortedPlayers(targetGuildId);
         const player = players.find(p => p.userId === targetUserId);
         const displayName = player?.username || targetUserId;
+        const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+        const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
         await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Potwierdzenie usunięcia', '🗑️ Confirm Removal')).setDescription(t(`Czy na pewno chcesz usunąć **${displayName}** z rankingu?\n\nTej operacji nie można cofnąć.`, `Are you sure you want to remove **${displayName}** from the ranking?\n\nThis action cannot be undone.`))],
+            embeds: [new EmbedBuilder().setColor(0xFF4444)
+                .setTitle(t('🗑️ Potwierdzenie usunięcia', '🗑️ Confirm Removal'))
+                .setDescription(t(
+                    `Czy na pewno chcesz usunąć **${displayName}**${serverNote} z rankingu?\n\nTej operacji nie można cofnąć.`,
+                    `Are you sure you want to remove **${displayName}**${serverNote} from the ranking?\n\nThis action cannot be undone.`
+                ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
 
-    async _handlePanelRemoveConfirm(interaction, targetUserId) {
-        const guildId = interaction.guildId;
-        const t = this._panelT(guildId);
+    async _handlePanelRemoveConfirm(interaction, rawValue) {
+        // rawValue: "userId:targetGuildId" (zawiera docelowy serwer, niekoniecznie bieżący)
+        const [targetUserId, targetGuildId] = rawValue.split(':');
+        const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
-            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, guildId);
+            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, targetGuildId);
             if (!wasRemoved) {
                 const { embed, components } = this._buildAdminPanel(interaction);
                 embed.setDescription(t('⚠️ Gracz nie znajduje się w rankingu.\n\n', '⚠️ Player not found in ranking.\n\n') + (embed.data.description || ''));
@@ -1115,21 +1153,28 @@ class InteractionHandler {
                 return;
             }
             try {
-                const guildConfig = this.config.getGuildConfig(guildId);
-                const updatedPlayers = await this.rankingService.getSortedPlayers(guildId);
-                await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
-                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu przez panel admina`, interaction);
+                const guildConfig = this.config.getGuildConfig(targetGuildId);
+                const targetGuild = interaction.client.guilds.cache.get(targetGuildId);
+                const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
+                if (targetGuild) {
+                    await this.roleService.updateTopRoles(targetGuild, updatedPlayers, guildConfig?.topRoles || null);
+                }
+                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu (serwer ${targetGuildId}) przez panel admina`, interaction);
             } catch (roleError) {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
+            const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+            const serverNote = guildName ? ` (${guildName})` : '';
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('✅ Gracz usunięty', '✅ Player Removed')).setDescription(t(`Gracz <@${targetUserId}> został usunięty z rankingu.`, `Player <@${targetUserId}> has been removed from the ranking.`))],
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle(t('✅ Gracz usunięty', '✅ Player Removed'))
+                    .setDescription(t(`Gracz <@${targetUserId}> został usunięty z rankingu${serverNote}.`, `Player <@${targetUserId}> has been removed from the ranking${serverNote}.`))],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelRemoveConfirm (guildId=${guildId}, userId=${targetUserId}):`, err);
+            logger.error(`Błąd _handlePanelRemoveConfirm (targetGuildId=${targetGuildId}, userId=${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd usuwania gracza.', '❌ Error removing player.'), embeds: [], components: [] });
         }
     }
@@ -1232,6 +1277,182 @@ class InteractionHandler {
             ));
         }
         await interaction.editReply(reply);
+    }
+
+    async _handlePanelBlock(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_block_search_modal')
+            .setTitle(t('Zablokuj gracza', 'Block Player'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('block_query')
+                .setLabel(t('Fragment nicku gracza', 'Part of the player\'s nick'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Kowalski', 'e.g. Kowalski'))
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelBlockSearch(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const query = interaction.fields.getTextInputValue('block_query').trim().toLowerCase();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const allMatches = [];
+            for (const sgid of configuredIds) {
+                const players = await this.rankingService.getSortedPlayers(sgid);
+                const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
+                for (let i = 0; i < players.length; i++) {
+                    const p = players[i];
+                    if ((p.username || p.userId).toLowerCase().includes(query)) {
+                        allMatches.push({ ...p, rank: i + 1, sgid, guildName });
+                    }
+                }
+            }
+            // Odfiltruj już zablokowanych
+            const alreadyBlocked = new Set(this.userBlockService.getBlockedUsers().map(e => e.userId));
+            const notBlocked = allMatches.filter(p => !alreadyBlocked.has(p.userId));
+            const alreadyBlockedMatches = allMatches.filter(p => alreadyBlocked.has(p.userId));
+
+            if (allMatches.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444)
+                        .setTitle(t('🔒 Nie znaleziono gracza', '🔒 Player Not Found'))
+                        .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+            if (notBlocked.length === 0) {
+                // Wszyscy znalezieni są już zablokowani
+                const list = alreadyBlockedMatches.slice(0, 10).map(p => `• **${p.username || p.userId}** — ${p.guildName}`).join('\n');
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                        .setTitle(t('🔒 Gracze już zablokowani', '🔒 Players Already Blocked'))
+                        .setDescription(t(`Wszyscy znalezieni gracze są już zablokowani:\n${list}`, `All found players are already blocked:\n${list}`))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+            const options = notBlocked.slice(0, 25).map(p => ({
+                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                description: `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
+                value: `${p.userId}:${p.sgid}`,
+            }));
+            let subtitle = notBlocked.length > 25
+                ? t(`Znaleziono ${notBlocked.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${notBlocked.length} — showing 25. Narrow your search.`)
+                : t(`Znaleziono ${notBlocked.length} gracz(y) do zablokowania.`, `Found ${notBlocked.length} player(s) to block.`);
+            if (alreadyBlockedMatches.length > 0) {
+                subtitle += '\n' + t(`(${alreadyBlockedMatches.length} już zablokowanych — pominięto)`, `(${alreadyBlockedMatches.length} already blocked — skipped)`);
+            }
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🔒 Wybierz gracza do zablokowania', '🔒 Select Player to Block'))
+                    .setDescription(subtitle)],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('panel_block_select')
+                            .setPlaceholder(t('Wybierz gracza...', 'Select a player...'))
+                            .addOptions(options)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )
+                ]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelBlockSearch (guildId=${interaction.guildId}):`, err);
+            await interaction.editReply({ content: t('❌ Błąd wyszukiwania gracza.', '❌ Error searching for player.'), embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelBlockSelect(interaction) {
+        const value = interaction.values[0]; // userId:guildId
+        const [targetUserId, targetGuildId] = value.split(':');
+        const t = this._panelT(interaction.guildId);
+        const players = await this.rankingService.getSortedPlayers(targetGuildId);
+        const player = players.find(p => p.userId === targetUserId);
+        const displayName = player?.username || targetUserId;
+        const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF4444)
+                .setTitle(t('🔒 Zablokuj gracza', '🔒 Block Player'))
+                .setDescription(t(
+                    `Gracz: **${displayName}**\nSerwer: **${guildName}**\n\nPodaj czas blokady w kolejnym oknie.\nFormat: \`30m\`, \`2h\`, \`7d\`, \`2w\` lub puste = permanentnie.`,
+                    `Player: **${displayName}**\nServer: **${guildName}**\n\nEnter the block duration in the next window.\nFormat: \`30m\`, \`2h\`, \`7d\`, \`2w\` or leave empty = permanent.`
+                ))],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`)
+                    .setLabel(t('⏱️ Ustaw czas blokady', '⏱️ Set Block Duration'))
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+            )]
+        });
+    }
+
+    async _handlePanelBlockTimeModal(interaction, targetUserId, targetGuildId) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId(`panel_block_modal_${targetUserId}_${targetGuildId}`)
+            .setTitle(t('Czas blokady', 'Block Duration'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('block_duration')
+                .setLabel(t('Czas blokady (30m, 2h, 7d, 2w — puste = permanentnie)', 'Duration (30m, 2h, 7d, 2w — empty = permanent)'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('Puste = permanentna blokada', 'Empty = permanent block'))
+                .setRequired(false)
+                .setMaxLength(10)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelBlockModal(interaction, targetUserId, targetGuildId) {
+        const t = this._panelT(interaction.guildId);
+        const durationStr = (interaction.fields.getTextInputValue('block_duration') || '').trim();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const players = await this.rankingService.getSortedPlayers(targetGuildId);
+            const player = players.find(p => p.userId === targetUserId);
+            const username = player?.username || targetUserId;
+            const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+            const blockedUntil = await this.userBlockService.blockUser(
+                targetUserId, username, targetGuildId, guildName, durationStr,
+                true // blockedByHeadAdmin
+            );
+            const timeLabel = blockedUntil
+                ? this.userBlockService.formatTimeRemaining(blockedUntil)
+                : t('∞ Permanentnie', '∞ Permanent');
+            logger.info(`🔒 Head Admin zablokował ${username} (${targetUserId}) na serwerze ${guildName} — ${timeLabel}`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle(t('✅ Gracz zablokowany', '✅ Player Blocked'))
+                    .setDescription(t(
+                        `Gracz **${username}** (${guildName}) został zablokowany.\nCzas: **${timeLabel}**`,
+                        `Player **${username}** (${guildName}) has been blocked.\nDuration: **${timeLabel}**`
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelBlockModal (userId=${targetUserId}):`, err);
+            await interaction.editReply({ content: t('❌ Błąd blokowania gracza.', '❌ Error blocking player.'), embeds: [], components: [] });
+        }
     }
 
     async _handlePanelOcr(interaction) {
@@ -2142,12 +2363,33 @@ class InteractionHandler {
                 return;
             }
             if (customId.startsWith('panel_remove_confirm_')) {
-                const targetUserId = customId.replace('panel_remove_confirm_', '');
-                await this._handlePanelRemoveConfirm(interaction, targetUserId);
+                const rawValue = customId.replace('panel_remove_confirm_', '');
+                await this._handlePanelRemoveConfirm(interaction, rawValue);
                 return;
             }
             if (customId === 'panel_unblock') {
                 await this._handlePanelUnblock(interaction);
+                return;
+            }
+            if (customId === 'panel_block') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBlock(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_block_time_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                // panel_block_time_{userId}_{guildId}
+                const parts = customId.replace('panel_block_time_', '').split('_');
+                // userId to 18 cyfr, guildId to 18 cyfr
+                const targetUserId = parts[0];
+                const targetGuildId = parts[1];
+                await this._handlePanelBlockTimeModal(interaction, targetUserId, targetGuildId);
                 return;
             }
             if (customId === 'panel_tokens') {
@@ -2619,18 +2861,43 @@ class InteractionHandler {
             if (customId === 'panel_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
                 const t = this._panelT(interaction.guildId);
+                const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
                 const targetUserId = interaction.values[0];
                 const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
-                const success = await this.userBlockService.unblockUser(targetUserId);
+                // Admin nie może odblokować gracza zablokowanego przez Head Admina
+                if (entry?.blockedByHeadAdmin && !isHeadAdmin) {
+                    await interaction.update({
+                        embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                            .setTitle(t('⛔ Brak uprawnień', '⛔ No Permission'))
+                            .setDescription(t(
+                                `**${entry.username}** został zablokowany przez Head Admina.\nTylko Head Admin może go odblokować.`,
+                                `**${entry.username}** was blocked by a Head Admin.\nOnly a Head Admin can unblock them.`
+                            ))],
+                        components: [new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                        )]
+                    });
+                    return;
+                }
+                const success = await this.userBlockService.unblockUser(targetUserId, isHeadAdmin);
                 const username = entry?.username || targetUserId;
                 await interaction.update({
-                    embeds: [new EmbedBuilder().setColor(success ? 0x57F287 : 0xFF4444)
-                        .setTitle(success ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
-                        .setDescription(success ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound)],
+                    embeds: [new EmbedBuilder().setColor(success === true ? 0x57F287 : 0xFF4444)
+                        .setTitle(success === true ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
+                        .setDescription(success === true ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound)],
                     components: [new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
+                return;
+            }
+
+            if (customId === 'panel_block_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBlockSelect(interaction);
                 return;
             }
 
@@ -2645,12 +2912,21 @@ class InteractionHandler {
                     await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
                     return;
                 }
+                const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
                 const targetUserId = interaction.values[0];
                 const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
-                const success = await this.userBlockService.unblockUser(targetUserId);
+                if (entry?.blockedByHeadAdmin && !isHeadAdmin) {
+                    await interaction.update({
+                        content: `⛔ **${entry.username}** został zablokowany przez Head Admina. Tylko Head Admin może go odblokować.`,
+                        embeds: [],
+                        components: []
+                    });
+                    return;
+                }
+                const success = await this.userBlockService.unblockUser(targetUserId, isHeadAdmin);
                 const username = entry?.username || targetUserId;
                 await interaction.update({
-                    content: success ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound,
+                    content: success === true ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound,
                     embeds: [],
                     components: []
                 });
@@ -3167,8 +3443,9 @@ class InteractionHandler {
 
         const guildName = targetGuild?.name || targetGuildId;
 
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const blockedUntil = await this.userBlockService.blockUser(
-            targetUserId, targetUsername, targetGuildId, guildName, durationStr
+            targetUserId, targetUsername, targetGuildId, guildName, durationStr, isHeadAdmin
         );
 
         const durationLabel = blockedUntil
