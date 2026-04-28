@@ -479,7 +479,7 @@ Format odpowiedzi:
   - Jeśli drugie zdjęcie pasuje do wzorca ORAZ szary tekst z wynikiem Bossa jest
     identyczny na obu zdjęciach → odpowiedz TYLKO: OK
   - Jeśli cokolwiek się różni strukturalnie LUB szary tekst z wynikiem Bossa
-    jest różny → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 15 words>
+    jest różny → odpowiedz TYLKO: NOK: <short reason in ${reasonLang}, max 5 words>
 
 Przykłady prawidłowych odpowiedzi: OK ${exampleReasons.join('\n')}
 
