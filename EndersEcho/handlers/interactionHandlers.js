@@ -1011,8 +1011,8 @@ class InteractionHandler {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
         const adminOptions = [
-            t('🗑️ **Usuń gracza z rankingu** — wyszukaj gracza i usuń go z rankingu serwera; automatycznie aktualizuje role TOP.',
-              '🗑️ **Remove Player from Ranking** — search for a player and remove them from the server ranking; automatically updates TOP roles.'),
+            t('🗑️ **Usuń gracza** — wyszukaj gracza i usuń go z rankingu serwera; automatycznie aktualizuje role TOP.',
+              '🗑️ **Remove Player** — search for a player and remove them from the server ranking; automatically updates TOP roles.'),
             t('🔓 **Odblokuj gracza** — odblokowuje gracza zablokowanego przez admina; nie można odblokować graczy zablokowanych przez Head Admina.',
               '🔓 **Unblock Player** — unblocks a player blocked by an admin; cannot unblock players blocked by the Head Admin.'),
             t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
@@ -1045,7 +1045,7 @@ class InteractionHandler {
 
         // Rząd 1: operacje gracza (wszyscy admini)
         const row1Components = [
-            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setStyle(ButtonStyle.Danger),
         ];
         if (isHeadAdmin) {
             row1Components.push(
@@ -1097,7 +1097,7 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const modal = new ModalBuilder()
             .setCustomId('panel_remove_search_modal')
-            .setTitle(t('Usuń gracza z rankingu', 'Remove Player from Ranking'));
+            .setTitle(t('Usuń gracza', 'Remove Player'));
         modal.addComponents(new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('remove_query')
