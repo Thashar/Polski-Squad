@@ -17,12 +17,8 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'victory-check-eng':  'v1',
-    'victory-check-jpn':  'v1',
-    'authenticity-check': 'v1',
-    'extract-data-eng':   'v1',
-    'extract-data-jpn':   'v1',
-    'compare-template':   'v3',
+    'extract-data-eng':  'v1',
+    'compare-template':  'v3',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -84,140 +80,8 @@ class AIOCRService {
         };
     }
 
-    /**
-     * @param {string} imagePath
-     * @param {object} log         — bot-per-guild logger
-     * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
-     */
-    async analyzeVictoryImage(imagePath, log = logger, telemetryMeta = {}) {
-        if (!this.enabled) throw new Error('AI OCR nie jest włączony');
-
-        const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
-
-        try {
-            const pngBuffer = await sharp(imagePath).png().toBuffer();
-            const base64Image = pngBuffer.toString('base64');
-            const mediaType = 'image/png';
-            let fakeCheckDone = false;
-
-            for (const lang of ['eng', 'jpn']) {
-                const label = lang === 'eng' ? 'ang' : 'jpn';
-
-                const { victoryFound, usage: u1 } = await this._checkVictory(base64Image, mediaType, lang, telemetryMeta);
-                tokenUsage.promptTokens  += u1.promptTokens;
-                tokenUsage.outputTokens  += u1.outputTokens;
-                tokenUsage.thoughtTokens += u1.thoughtTokens;
-
-                if (!victoryFound) {
-                    log.info(`[AI OCR] ${label}: ✗Victory → próbuję ${lang === 'eng' ? 'japoński' : 'koniec'}`);
-                    continue;
-                }
-
-                if (!fakeCheckDone) {
-                    const { isAuthentic, usage: u2 } = await this._checkAuthentic(base64Image, mediaType, telemetryMeta);
-                    tokenUsage.promptTokens  += u2.promptTokens;
-                    tokenUsage.outputTokens  += u2.outputTokens;
-                    tokenUsage.thoughtTokens += u2.thoughtTokens;
-                    fakeCheckDone = true;
-                    if (!isAuthentic) {
-                        log.warn(`[AI OCR] ${label}: ✓Victory ✗autentyczne → FAKE_PHOTO`);
-                        return { bossName: null, score: null, isValidVictory: false, error: 'FAKE_PHOTO', tokenUsage };
-                    }
-                }
-
-                const extractRes = await this._extractData(base64Image, mediaType, lang, telemetryMeta);
-                tokenUsage.promptTokens  += extractRes.promptTokens;
-                tokenUsage.outputTokens  += extractRes.outputTokens;
-                tokenUsage.thoughtTokens += extractRes.thoughtTokens;
-
-                const result = this.parseAIResponse(extractRes.text, log);
-
-                if (result.isValidVictory) {
-                    log.info(`✅ [AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
-                    return { ...result, tokenUsage };
-                }
-
-                log.warn(`[AI OCR] ${label}: ✓Victory ✓autentyczne ✗dane → ${lang === 'eng' ? 'próbuję japoński' : 'INVALID_SCREENSHOT'}`);
-            }
-
-            log.warn(`[AI OCR] Brak wyniku po wszystkich językach`);
-            return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCREENSHOT', tokenUsage };
-
-        } catch (error) {
-            log.error(`[AI OCR] Błąd analizy obrazu: ${error.message}`);
-            throw error;
-        }
-    }
-
-    async _checkVictory(base64Image, mediaType, lang, telemetryMeta) {
-        const prompt = lang === 'jpn'
-            ? `添付のスクリーンショットに「勝利」または「勝利！」というフレーズがあるか探してください。見つからない場合は、正確にこの3つの単語を書いてください：「Nie znalezionow frazy」、それ以外は何も書かないでください。見つかった場合は、「Znaleziono」という1つの単語だけ書いてください。`
-            : `Poszukaj na załączonym screenie czy występuje fraza "Victory". Jeżeli nie znajdziesz napisz dokładnie te trzy słowa: "Nie znalezionow frazy", nie pisz nic poza tym. Jeżeli znajdziesz napisz tylko jedno słowo: "Znaleziono", nie pisz nic poza tym.`;
-
-        const promptName = `victory-check-${lang}`;
-        const res = await this._generateContent([
-            { inlineData: { data: base64Image, mimeType: mediaType } },
-            { text: prompt }
-        ], 50, {
-            ...telemetryMeta,
-            step: promptName,
-            promptName,
-            promptVersion: PROMPT_VERSIONS[promptName],
-        });
-
-        return { victoryFound: !res.text.trim().toLowerCase().includes('nie znaleziono'), usage: res };
-    }
-
-    async _checkAuthentic(base64Image, mediaType, telemetryMeta) {
-        const prompt = `Przeprowadź ABSOLUTNIE DOKŁADNĄ weryfikację zdjęcia ze SZCZEGÓLNYM naciskiem na:
-DOKŁADNĄ ANALIZĘ LICZB
-Sprawdzenie KAŻDEGO piksela w cyfrach
-Analiza spójności czcionkiWE WSZYSTKICH ZNAKACH
-SZCZEGÓLNA UWAGA na cyfry po przecinku
-Porównanie WSZYSTKICH znaków z oficjalnym interfejsem gry
-KLUCZOWE KRYTERIA WERYFIKACJI
-Czy KAŻDY piksel jest 100% zgodny z oryginalnym interfejsem
-Czy liczby wyglądają IDEALNIE symetrycznie
-Czy po przecinku nie ma JAKICHKOLWIEK oznak edycji
-METODOLOGIA SPRAWDZENIA
-Porównaj KAŻDY element z wzorcem oryginalnego interfejsu
-Zwróć uwagę na NAJMNIEJSZE rozbieżności
-Sprawdź KAŻDĄ literę i cyfrę pod kątem zgodności
-Sprawdz czy dostało coś dopisane odręcznie.
-INSTRUKCJA WYKONANIA:
-Jeśli zauważysz JAKĄKOLWIEK ingerencję - napisz tylko jednym słowem "NOK".
-Jeśli ABSOLUTNIE WSZYSTKO jest oryginalne - napisz tylko jednym słowem "OK"`;
-
-        const res = await this._generateContent([
-            { inlineData: { data: base64Image, mimeType: mediaType } },
-            { text: prompt }
-        ], 10, {
-            ...telemetryMeta,
-            step: 'authenticity-check',
-            promptName: 'authenticity-check',
-            promptVersion: PROMPT_VERSIONS['authenticity-check'],
-        });
-
-        return { isAuthentic: !res.text.trim().toUpperCase().includes('NOK'), usage: res };
-    }
-
-    async _extractData(base64Image, mediaType, lang, telemetryMeta) {
-        const prompt = lang === 'jpn'
-            ? `この画像の内容を読み取ってください。「勝利！」の下にボス名があります。ボス名の下にスコア（最高記録）があります。画面には「合計」の値もあります。それも読み取ってください。
-重要 — スコアの単位（小さい順）: K, M, B, T, Q, Qi, Sx
-注意：単位の「Q」は数字の「0」に似て見えることがあります — 正確に識別してください。
-注意：スコアの最後の文字は常に単位（アルファベット）であり、数字ではありません。「18540」のように文字がない場合、最後の文字はおそらく「Q」であり「0」ではありません。
-⚠️ スコア読み取りの重要ルール：
-画面に表示されている通りに正確に読み取ってください。
-画像に明確に表示されていない区切り文字（カンマや小数点）を追加しないでください。
-数字を「千」単位として解釈してカンマを追加しないでください。
-画面にない数字を追加しないでください。
-スコアの最後の文字に特に注意してください — それは単位（アルファベット）であり、数字ではありません。
-ボス名、スコア（最高記録）と単位、合計の値を以下の形式で記載してください：
-<ボス名>
-<スコア>
-<合計>`
-            : `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
+    async _extractData(base64Image, mediaType, telemetryMeta) {
+        const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
 1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
 2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
 3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
@@ -235,15 +99,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 <wynik Best z jednostką>
 <wynik Total z jednostką>`;
 
-        const promptName = `extract-data-${lang}`;
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
             { text: prompt }
         ], 500, {
             ...telemetryMeta,
-            step: promptName,
-            promptName,
-            promptVersion: PROMPT_VERSIONS[promptName],
+            step: 'extract-data-eng',
+            promptName: 'extract-data-eng',
+            promptVersion: PROMPT_VERSIONS['extract-data-eng'],
         });
 
         return { text: res.text, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
@@ -392,9 +255,11 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     }
 
     /**
+     * Przepływ /update i /test: porównanie z wzorcem, potem ekstrakcja danych.
      * @param {string} imagePath
      * @param {object} log         — bot-per-guild logger
      * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
+     * @param {string} [lang]      — język serwera ('pol'|'eng'), wpływa na powód odrzucenia
      */
     async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol') {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
@@ -421,7 +286,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
                 return { bossName: null, score: null, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
 
-            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
+            const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
@@ -516,7 +381,7 @@ ${exampleReasons.join('\n')}
             const mediaType = 'image/png';
 
             log.info('[AI Analyze] Wyciągam dane ze zdjęcia (bez sprawdzania wzorca)...');
-            const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
+            const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
