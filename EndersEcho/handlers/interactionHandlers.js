@@ -4355,7 +4355,7 @@ class InteractionHandler {
         const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
 
         // Wykres tekstowy
-        const chartText = this.tokenUsageService.generateChartText(guildFilter, month);
+        const chartText = this.tokenUsageService.generateChartText(guildFilter, month, isSuperUser);
 
         // Statystyki miesięczne
         const totals = this.tokenUsageService.getMonthTotals(guildFilter, month);

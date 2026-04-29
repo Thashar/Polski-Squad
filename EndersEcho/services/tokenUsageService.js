@@ -184,7 +184,7 @@ class TokenUsageService {
         return { promptTokens, outputTokens, requests, cost: calcCost(promptTokens, outputTokens) };
     }
 
-    generateChartText(guildFilter, month) {
+    generateChartText(guildFilter, month, showCost = false) {
         const { daily, daysInMonth } = this.getMonthDailyTotals(guildFilter, month);
         const today = todayKey();
         const BAR_WIDTH = 16;
@@ -205,7 +205,7 @@ class TokenUsageService {
             const filled    = v.total > 0 ? Math.max(Math.round((v.total / maxVal) * BAR_WIDTH), 1) : 0;
             const bar       = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
             const label     = v.total > 0 ? fmtK(v.total).padStart(6) : '    — ';
-            const cost      = v.total > 0 ? ` ($${v.cost.toFixed(2)})` : '';
+            const cost      = showCost && v.total > 0 ? ` ($${v.cost.toFixed(2)})` : '';
             const todayMark = key === today ? ' ◄' : '';
             lines.push(`${dayStr} ${bar} ${label}${cost}${todayMark}`);
         }
