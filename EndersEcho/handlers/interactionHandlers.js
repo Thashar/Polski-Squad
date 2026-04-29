@@ -4378,7 +4378,7 @@ class InteractionHandler {
                     .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
-                    .setLabel('Zbiorczo')
+                    .setLabel('🗂️ Zbiorczo')
                     .setStyle(ButtonStyle.Secondary)
             );
         }
