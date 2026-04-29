@@ -1224,8 +1224,10 @@ class InteractionHandler {
         const guildId = interaction.guildId;
         const msgs = this.msgs(guildId);
         const t = this._panelT(guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const blocked = this.userBlockService.getBlockedUsers();
-        if (blocked.length === 0) {
+        const visibleBlocked = isHeadAdmin ? blocked : blocked.filter(e => e.guildId === guildId);
+        if (visibleBlocked.length === 0) {
             await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setDescription(msgs.unblockNoBlocked)],
                 components: [new ActionRowBuilder().addComponents(
@@ -1254,10 +1256,12 @@ class InteractionHandler {
         const guildId = interaction.guildId;
         const msgs = this.msgs(guildId);
         const t = this._panelT(guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const query = interaction.fields.getTextInputValue('unblock_query').trim().toLowerCase();
         await interaction.deferReply({ flags: ['Ephemeral'] });
         const blocked = this.userBlockService.getBlockedUsers();
-        const filtered = blocked.filter(e => e.username.toLowerCase().includes(query));
+        const scopedBlocked = isHeadAdmin ? blocked : blocked.filter(e => e.guildId === guildId);
+        const filtered = scopedBlocked.filter(e => e.username.toLowerCase().includes(query));
         if (filtered.length === 0) {
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0xFF4444)
@@ -2945,6 +2949,21 @@ class InteractionHandler {
                 const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
                 const targetUserId = interaction.values[0];
                 const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
+                // Admin może odblokować tylko graczy ze swojego serwera
+                if (!isHeadAdmin && entry?.guildId !== interaction.guildId) {
+                    await interaction.update({
+                        embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                            .setTitle(t('⛔ Brak uprawnień', '⛔ No Permission'))
+                            .setDescription(t(
+                                `**${entry?.username || targetUserId}** pochodzi z innego serwera.\nMożesz odblokować tylko graczy zablokowanych na tym serwerze.`,
+                                `**${entry?.username || targetUserId}** is from a different server.\nYou can only unblock players blocked on this server.`
+                            ))],
+                        components: [new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                        )]
+                    });
+                    return;
+                }
                 // Admin nie może odblokować gracza zablokowanego przez Head Admina
                 if (entry?.blockedByHeadAdmin && !isHeadAdmin) {
                     await interaction.update({
