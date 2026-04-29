@@ -1849,7 +1849,7 @@ class InteractionHandler {
         }
 
         await interaction.deferReply({ flags: ['Ephemeral'] });
-        await interaction.editReply({ content: msgs.updateProcessing });
+        await interaction.editReply({ content: msgs.updateDownloading });
 
         // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR
         if (!dryRun && this.updateCooldownService) {
@@ -1864,8 +1864,16 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
+            await interaction.editReply({ content: msgs.updateComparingTemplate });
+
             const displayNameForLog = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${displayNameForLog}${dryRun ? ' (tryb testowy)' : ''}`);
+
+            const onProgress = async (step) => {
+                if (step === 'extracting') {
+                    await interaction.editReply({ content: msgs.updateExtractingData });
+                }
+            };
 
             // ── Operations Gateway (authorize + root span + record) ───────────
             const op = await this.botOps.run({
@@ -1875,7 +1883,7 @@ class InteractionHandler {
                 hints: { command: commandName },
             }, async (ctx) => {
                 const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta, guildLang);
+                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta, guildLang, onProgress);
                 const usage = buildGeminiUsage(ai);
                 if (ai.error === 'NOT_SIMILAR' || !ai.isValidVictory) {
                     return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
@@ -1944,6 +1952,7 @@ class InteractionHandler {
                     isNewRecord = newScoreValue > currentScoreValue;
                 }
             } else {
+                await interaction.editReply({ content: msgs.updateSaving });
                 ({ isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                     guildId, userId, userName, bestScore, bossName
                 ));

@@ -34,8 +34,11 @@ const pol = {
     rankingPositionNew: 'Miejsce w rankingu: {pos} (nowy w rankingu)',
     rankingPositionPromotion: 'Miejsce w rankingu: {pos} (Awans o +{change})',
 
-    // /update — przetwarzanie
-    updateProcessing: '🔄 Analizuję obraz i wynik... To może chwilę potrwać.',
+    // /update — przetwarzanie (postęp krok po kroku)
+    updateDownloading: '📥 Pobieranie obrazu...',
+    updateComparingTemplate: '🔍 Analiza zgodności obrazu ze wzorcem...',
+    updateExtractingData: '✅ Analiza OK — odczytuję dane rekordu...',
+    updateSaving: '💾 Zapis danych...',
     updateNotImage: '❌ Załączony plik nie jest obrazem! Obsługiwane formaty: PNG, JPG, JPEG, GIF, BMP',
     updateFileTooLarge: '❌ Plik jest za duży! Maksymalny rozmiar: **{maxMB}MB**, twój plik: **{fileMB}MB**\n💡 **Tip:** Zmniejsz jakość obrazu lub użyj kompresji.',
     updateNoRequiredWords: '❌ Obraz nie zawiera odpowiedniego typu wyniku.\n💡 **Tip:** Upewnij się, że wysyłasz screen po zakończonym runie!',
@@ -288,8 +291,11 @@ const eng = {
     rankingPositionNew: 'Ranking position: {pos} (new entry)',
     rankingPositionPromotion: 'Ranking position: {pos} (promoted by +{change})',
 
-    // /update — processing
-    updateProcessing: '🔄 Analysing image and result... This may take a moment.',
+    // /update — processing (step by step progress)
+    updateDownloading: '📥 Downloading image...',
+    updateComparingTemplate: '🔍 Checking image against template...',
+    updateExtractingData: '✅ Match confirmed — reading record data...',
+    updateSaving: '💾 Saving data...',
     updateNotImage: '❌ The attached file is not an image! Supported formats: PNG, JPG, JPEG, GIF, BMP',
     updateFileTooLarge: '❌ File is too large! Maximum size: **{maxMB}MB**, your file: **{fileMB}MB**\n💡 **Tip:** Reduce image quality or use compression.',
     updateNoRequiredWords: '❌ The image does not contain a valid result screen.\n💡 **Tip:** Make sure you are submitting a screenshot from a completed run!',

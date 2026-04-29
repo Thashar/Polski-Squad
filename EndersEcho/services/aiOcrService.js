@@ -261,7 +261,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
      * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
      * @param {string} [lang]      — język serwera ('pol'|'eng'), wpływa na powód odrzucenia
      */
-    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol') {
+    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol', onProgress = null) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -285,6 +285,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             if (!isSimilar) {
                 return { bossName: null, score: null, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
+
+            if (onProgress) await onProgress('extracting');
 
             const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
