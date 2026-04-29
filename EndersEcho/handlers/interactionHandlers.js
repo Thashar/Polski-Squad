@@ -4453,7 +4453,7 @@ class InteractionHandler {
                 .setCustomId(`tk_m_${monthStr}_all_${userId}`)
                 .setLabel(monthLabel)
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(false),
+                .setDisabled(true),
             new ButtonBuilder()
                 .setCustomId(`tk_n_${monthStr}_all_${userId}`)
                 .setLabel('▶')
