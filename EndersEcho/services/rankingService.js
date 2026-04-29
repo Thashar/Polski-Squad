@@ -931,6 +931,7 @@ class RankingService {
                     bossName: bossName || this.config.messages.unknownBossLabel
                 };
                 await this.saveRanking(guildId, ranking);
+                await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
             }
 
             return { isNewRecord, ranking, currentScore };
@@ -966,6 +967,23 @@ class RankingService {
 
     updateActiveRanking(messageId, rankingData) {
         this.activeRankings.set(messageId, rankingData);
+    }
+
+    /**
+     * Po nowym rekordzie na `currentGuildId` usuwa gorsze wyniki tego gracza z pozostałych serwerów.
+     */
+    async _removeWeakerScoresFromOtherGuilds(userId, newScoreValue, currentGuildId) {
+        const otherGuilds = this.config.getAllGuilds().filter(g => g.id !== currentGuildId);
+        for (const guild of otherGuilds) {
+            await this._enqueue(guild.id, async () => {
+                const ranking = await this.loadRanking(guild.id);
+                if (ranking[userId] && ranking[userId].scoreValue < newScoreValue) {
+                    logger.info(`🗑️ Usunięto gorszy wynik gracza ${userId} z serwera ${guild.id} (pobity przez rekord na ${currentGuildId})`);
+                    delete ranking[userId];
+                    await this.saveRanking(guild.id, ranking);
+                }
+            });
+        }
     }
 
     /**
