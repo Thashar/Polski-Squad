@@ -33,6 +33,15 @@ const logger = createBotLogger('EndersEcho');
 
 let statusInterval = null;
 
+const STATUS_POOL = [
+    { type: ActivityType.Watching,  text: n => `${n}'s results 🏆` },
+    { type: ActivityType.Watching,  text: n => `${n}'s score 📊` },
+    { type: ActivityType.Watching,  text: n => `${n}'s progress 📈` },
+    { type: ActivityType.Watching,  text: n => `${n}'s stats 🔢` },
+    { type: ActivityType.Competing, text: n => `${n}'s ranking 🥇` },
+    { type: ActivityType.Playing,   text: n => `rankings — ${n} 🎯` },
+];
+
 async function _updateStatus() {
     try {
         const players = await rankingService.getGlobalRanking();
@@ -41,7 +50,8 @@ async function _updateStatus() {
         const guild = client.guilds.cache.get(player.sourceGuildId);
         const member = guild?.members.cache.get(player.userId);
         const displayName = member?.displayName || player.username;
-        client.user.setActivity(`${displayName}'s results`, { type: ActivityType.Watching });
+        const template = STATUS_POOL[Math.floor(Math.random() * STATUS_POOL.length)];
+        client.user.setActivity(template.text(displayName), { type: template.type });
     } catch { /* status to nice-to-have */ }
 }
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
