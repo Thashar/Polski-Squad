@@ -4210,28 +4210,30 @@ class InteractionHandler {
 
     async _handleTokensButton(interaction, customId) {
         // Formy customId:
-        // tk_p_{YYYYMM}_{guildFilter}_{userId}  — poprzedni miesiąc (wykres per dzień)
-        // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc (wykres per dzień)
-        // tk_m_{YYYYMM}_{guildFilter}_{userId}  — Zbiorczo: breakdown per serwer (tylko head admin)
-        // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer (wykres per dzień)
-        // tk_a_{YYYYMM}_{userId}                — wszystkie serwery (wykres per dzień)
-        // tk_u_{YYYYMM}_{guildFilter}_{userId}  — widok per user (miesiąc)
-        // tk_up_{YYYYMM}_{guildFilter}_{userId} — poprzedni miesiąc (widok per user)
-        // tk_un_{YYYYMM}_{guildFilter}_{userId} — następny miesiąc (widok per user)
-        // tk_ug_{YYYYMM}_{guildId}_{userId}     — konkretny serwer (widok per user)
-        // tk_ua_{YYYYMM}_{userId}               — wszystkie serwery (widok per user, tylko head admin)
+        // tk_p_{YYYYMM}_{guildFilter}_{userId}          — poprzedni miesiąc (wykres per dzień)
+        // tk_n_{YYYYMM}_{guildFilter}_{userId}          — następny miesiąc (wykres per dzień)
+        // tk_m_{YYYYMM}_{guildFilter}_{userId}          — Zbiorczo: breakdown per serwer (tylko head admin)
+        // tk_g_{YYYYMM}_{guildId}_{userId}              — konkretny serwer (wykres per dzień)
+        // tk_a_{YYYYMM}_{userId}                        — wszystkie serwery (wykres per dzień)
+        // tk_u_{YYYYMM}_{guildFilter}_{page}_{userId}   — widok per user (paginacja strzałkami)
         const parts    = customId.split('_');
         const action   = parts[1];
         const monthRaw = parts[2];
         const month    = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
-        let userId, guildFilter;
-        if (action === 'a' || action === 'ua') {
+        let userId, guildFilter, page;
+        if (action === 'a') {
             userId      = parts[3];
             guildFilter = 'all';
+            page        = 0;
+        } else if (action === 'u') {
+            guildFilter = parts[3];
+            page        = parseInt(parts[4]) || 0;
+            userId      = parts[5];
         } else {
             userId      = parts[4];
             guildFilter = parts[3];
+            page        = 0;
         }
 
         if (userId !== interaction.user.id) {
@@ -4243,7 +4245,7 @@ class InteractionHandler {
         const isAdmin     = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isSuperUser && !isAdmin) return;
 
-        if ((action === 'm' || action === 'ua') && !isSuperUser) return;
+        if (action === 'm' && !isSuperUser) return;
 
         // Zwykły admin widzi tylko swój serwer — zignoruj filter z customId
         const effectiveFilter = isSuperUser ? guildFilter : interaction.guildId;
@@ -4263,26 +4265,9 @@ class InteractionHandler {
             return;
         }
 
-        // Widok per user
-        if (action === 'u' || action === 'ug' || action === 'ua') {
-            const reply = await this._buildTokensUsersEmbed(interaction, month, effectiveFilter, isSuperUser);
-            if (reply.components.length < 5) {
-                reply.components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
-                ));
-            }
-            await interaction.editReply(reply);
-            return;
-        }
-
-        // Nawigacja miesięcy w widoku per user
-        if (action === 'up' || action === 'un') {
-            const available = this.tokenUsageService.getAvailableMonths(effectiveFilter);
-            const idx = available.indexOf(month);
-            let targetMonth = month;
-            if (action === 'up' && idx > 0)                    targetMonth = available[idx - 1];
-            if (action === 'un' && idx < available.length - 1) targetMonth = available[idx + 1];
-            const reply = await this._buildTokensUsersEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
+        // Widok per user (paginacja)
+        if (action === 'u') {
+            const reply = await this._buildTokensUsersEmbed(interaction, month, effectiveFilter, page, isSuperUser);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
@@ -4375,7 +4360,7 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
-                .setCustomId(`tk_u_${monthStr}_${guildFilter}_${userId}`)
+                .setCustomId(`tk_u_${monthStr}_${guildFilter}_0_${userId}`)
                 .setLabel(monthLabel)
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
@@ -4483,9 +4468,9 @@ class InteractionHandler {
         return { embeds: [embed], components: [backRow] };
     }
 
-    async _buildTokensUsersEmbed(interaction, month, guildFilter, isSuperUser) {
-        const { PRICING } = require('../services/tokenUsageService');
-        const [y, m] = month.split('-').map(Number);
+    async _buildTokensUsersEmbed(interaction, month, guildFilter, page, isSuperUser) {
+        const PAGE_SIZE  = 20;
+        const [y, m]     = month.split('-').map(Number);
         const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
         const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
         const monthStr   = `${y}${String(m).padStart(2, '0')}`;
@@ -4494,7 +4479,10 @@ class InteractionHandler {
         const fmtTok  = (n) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
         const fmtCost = (c) => `$${c.toFixed(5)}`;
 
-        const userStats = this.tokenUsageService.getUsersMonthlyStats(month, guildFilter);
+        const allStats   = this.tokenUsageService.getUsersMonthlyStats(month, guildFilter);
+        const totalPages = Math.max(1, Math.ceil(allStats.length / PAGE_SIZE));
+        const safePage   = Math.min(Math.max(page, 0), totalPages - 1);
+        const pageStats  = allStats.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
         const getNick = (uId) => {
             const guilds = guildFilter !== 'all'
@@ -4507,19 +4495,15 @@ class InteractionHandler {
             return `<@${uId}>`;
         };
 
-        const lines = userStats.map(u => {
+        const lines = pageStats.map((u, i) => {
+            const rank  = safePage * PAGE_SIZE + i + 1;
             const nick  = getNick(u.userId);
-            const parts = [
-                `**${nick}**`,
-                `${u.requests} analiz`,
-                `${fmtTok(u.promptTokens + u.outputTokens)} tok`,
-            ];
-            if (isSuperUser) parts.push(fmtCost(u.cost));
-            return parts.join(' — ');
+            const cols  = [`${rank}. **${nick}**`, `${u.requests} analiz`, `${fmtTok(u.promptTokens + u.outputTokens)} tok`];
+            if (isSuperUser) cols.push(fmtCost(u.cost));
+            return cols.join(' — ');
         });
 
-        let description = lines.length > 0 ? lines.join('\n') : 'Brak danych.';
-        if (description.length > 4096) description = description.slice(0, 4080) + '\n*(…)*';
+        const description = lines.length > 0 ? lines.join('\n') : 'Brak danych.';
 
         const guildNames = {};
         for (const gc of this.config.getAllGuilds()) {
@@ -4532,30 +4516,26 @@ class InteractionHandler {
             .setColor(0x57F287)
             .setTitle(`👥 Tokeny per user — ${monthLabel}`)
             .setDescription(description)
-            .setFooter({ text: `${footerText} • ${userStats.length} userów` })
+            .setFooter({ text: `${footerText} • str. ${safePage + 1}/${totalPages} • ${allStats.length} userów` })
             .setTimestamp();
 
-        // Nawigacja miesięcy
-        const available = this.tokenUsageService.getAvailableMonths(guildFilter);
-        const idx        = available.indexOf(month);
-        const hasPrev    = idx > 0;
-        const hasNext    = idx < available.length - 1;
-        const prevRaw    = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
-        const nextRaw    = hasNext ? available[idx + 1].replace('-', '') : monthStr;
-
-        // Przycisk "wróć do wykresu"
-        const chartCustomId = guildFilter === 'all'
+        const hasPrevPage = safePage > 0;
+        const hasNextPage = safePage < totalPages - 1;
+        const chartId     = guildFilter === 'all'
             ? `tk_a_${monthStr}_${userId}`
             : `tk_g_${monthStr}_${guildFilter}_${userId}`;
 
         const row1 = [
-            new ButtonBuilder().setCustomId(`tk_up_${prevRaw}_${guildFilter}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrev),
-            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${userId}`).setLabel(monthLabel).setStyle(ButtonStyle.Primary).setDisabled(true),
-            new ButtonBuilder().setCustomId(`tk_un_${nextRaw}_${guildFilter}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNext),
-            new ButtonBuilder().setCustomId(chartCustomId).setLabel('📊 Wykres').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
+            new ButtonBuilder().setCustomId(chartId).setLabel('📊 Wykres').setStyle(ButtonStyle.Secondary),
         ];
         if (isSuperUser) {
-            row1.push(new ButtonBuilder().setCustomId(`tk_ua_${monthStr}_${userId}`).setLabel('🌐 Wszystkie').setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
+            row1.push(new ButtonBuilder()
+                .setCustomId(`tk_u_${monthStr}_all_0_${userId}`)
+                .setLabel('🌐 Wszystkie')
+                .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
         }
 
         const components = [new ActionRowBuilder().addComponents(...row1)];
@@ -4564,7 +4544,7 @@ class InteractionHandler {
             const guildButtons = this.config.getAllGuilds()
                 .filter(gc => interaction.client.guilds.cache.has(gc.id))
                 .map(gc => new ButtonBuilder()
-                    .setCustomId(`tk_ug_${monthStr}_${gc.id}_${userId}`)
+                    .setCustomId(`tk_u_${monthStr}_${gc.id}_0_${userId}`)
                     .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
                     .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 );
