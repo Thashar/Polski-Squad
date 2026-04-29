@@ -214,6 +214,7 @@ class InteractionHandler {
                 return;
             }
             if (interaction.commandName === 'manage') {
+                if (!this._checkConfigured(interaction)) return;
                 await this.handleManageCommand(interaction);
                 return;
             }
@@ -442,7 +443,8 @@ class InteractionHandler {
                         '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
                         '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n\n' +
-                        polOcrLine,
+                        polOcrLine + '\n' +
+                        '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.',
                         '📋 **Steps overview:**\n' +
                         '1️⃣  **Language** — Polish or English interface\n' +
                         '2️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
@@ -451,7 +453,8 @@ class InteractionHandler {
                         '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
                         '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n\n' +
-                        engOcrLine
+                        engOcrLine + '\n' +
+                        '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.'
                     );
                 })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
             );
