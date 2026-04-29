@@ -208,6 +208,9 @@ class InteractionHandler {
         if (interaction.isChatInputCommand()) {
             const guildId = interaction.guildId;
 
+            // Log użycia każdej komendy slash
+            this.logService.logCommandUsage(interaction.commandName, interaction);
+
             // Komendy działające bez konfiguracji (head admin / admin)
             if (interaction.commandName === 'configure') {
                 await this.handleConfigureCommand(interaction);
@@ -2273,6 +2276,45 @@ class InteractionHandler {
         }
     }
 
+    _describePanelButton(customId) {
+        if (customId === 'panel_back' || customId === 'cfg_admin_panel') return 'Otwarto panel';
+        if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
+        if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
+        if (customId.startsWith('panel_remove_confirm_')) return 'Potwierdzenie usunięcia gracza';
+        if (customId === 'panel_unblock') return 'Odblokuj gracza';
+        if (customId === 'panel_block') return 'Zablokuj gracza';
+        if (customId.startsWith('panel_block_time_')) return 'Ustaw czas blokady gracza';
+        if (customId === 'panel_tokens') return 'Zużycie tokenów';
+        if (customId === 'panel_info') return 'Wyślij Info';
+        if (customId === 'panel_tester') return 'Lista testerów';
+        if (customId === 'panel_tester_add') return 'Dodaj testera';
+        if (customId === 'panel_tester_remove') return 'Usuń testera (otwórz listę)';
+        if (customId === 'panel_tester_remove_select') return 'Usuń testera (wybrano)';
+        if (customId === 'panel_ocr') return 'AI OCR on/off (szukaj serwera)';
+        if (customId.startsWith('panel_ocr_en_')) return `Włącz AI OCR: ${customId.replace('panel_ocr_en_', '')}`;
+        if (customId.startsWith('panel_ocr_dis_')) return `Wyłącz AI OCR: ${customId.replace('panel_ocr_dis_', '')}`;
+        if (customId === 'panel_limit') return 'Ustaw limity';
+        return `panel: ${customId}`;
+    }
+
+    _describeCfgButton(customId) {
+        if (customId === 'cfg_lang_pol') return 'Wybrano język: polski';
+        if (customId === 'cfg_lang_eng') return 'Wybrano język: angielski';
+        if (customId === 'cfg_back') return 'Cofnij krok';
+        if (customId === 'cfg_tag_open') return 'Ustaw tag serwera (modal)';
+        if (customId === 'cfg_roles_open') return 'Ustaw role TOP (modal)';
+        if (customId === 'cfg_roles_skip') return 'Pomiń role TOP';
+        if (customId === 'cfg_notif_yes') return 'Powiadomienia Global TOP3: TAK';
+        if (customId === 'cfg_notif_no') return 'Powiadomienia Global TOP3: NIE';
+        if (customId === 'cfg_role_ranking_add') return 'Dodaj ranking roli';
+        if (customId === 'cfg_role_ranking_remove') return 'Usuń ranking roli';
+        if (customId === 'cfg_role_ranking_skip') return 'Pomiń ranking roli';
+        if (customId === 'cfg_accept') return 'Zaakceptuj konfigurację';
+        if (customId === 'cfg_cancel') return 'Anuluj konfigurację';
+        if (customId.startsWith('cfg_step_')) return `Krok konfiguracji: ${customId.replace('cfg_step_', '')}`;
+        return `cfg: ${customId}`;
+    }
+
     /**
      * Obsługuje interakcje przycisków
      * @param {ButtonInteraction} interaction
@@ -2406,6 +2448,11 @@ class InteractionHandler {
             }
 
             // === Przyciski Panelu Admina ===
+            if (customId.startsWith('panel_') || customId === 'cfg_admin_panel') {
+                const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+                this.logService._gl(interaction.guildId).info(`[${nick}] /manage → ${this._describePanelButton(customId)}`);
+            }
+
             if (customId === 'cfg_admin_panel' || customId === 'panel_back') {
                 await this._handleAdminPanelOpen(interaction);
                 return;
@@ -2551,6 +2598,8 @@ class InteractionHandler {
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
+                const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+                this.logService._gl(interaction.guildId).info(`[${nick}] /configure → ${this._describeCfgButton(customId)}`);
                 await this._handleConfigureButton(interaction, customId);
                 return;
             }
