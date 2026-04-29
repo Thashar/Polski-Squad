@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
 const config = require('./config/config');
 const GuildConfigService = require('./services/guildConfigService');
 
@@ -30,6 +30,20 @@ const { createAppSync } = require('../utils/appSync');
 const { createBotOperations } = require('../utils/operationRunner');
 
 const logger = createBotLogger('EndersEcho');
+
+let statusInterval = null;
+
+async function _updateStatus() {
+    try {
+        const players = await rankingService.getGlobalRanking();
+        if (!players.length) return;
+        const player = players[Math.floor(Math.random() * players.length)];
+        const guild = client.guilds.cache.get(player.sourceGuildId);
+        const member = guild?.members.cache.get(player.userId);
+        const displayName = member?.displayName || player.username;
+        client.user.setActivity(`${displayName}'s results`, { type: ActivityType.Watching });
+    } catch { /* status to nice-to-have */ }
+}
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
 const { sync: appSync, isEnabled: appSyncEnabled } = createAppSync({ apiKey: config.appApiKey });
 const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
@@ -97,6 +111,10 @@ async function initializeBot() {
         } catch (e) {
             logger.warn('Nie można wyeksportować rankingu do shared_data przy starcie:', e.message);
         }
+
+        // Status rotacji — "Watching [nick]'s results" co 30 sekund
+        await _updateStatus();
+        statusInterval = setInterval(_updateStatus, 30_000);
 
     } catch (error) {
         logger.error('Błąd podczas inicjalizacji bota EndersEcho:', error);
@@ -288,6 +306,7 @@ async function startBot() {
  * Zatrzymuje bota EndersEcho
  */
 async function stopBot() {
+    if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     try {
         if (client.readyAt) {
             await client.destroy();
