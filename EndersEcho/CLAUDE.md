@@ -394,7 +394,7 @@ Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko
 
 - **`/test` jako dry-run `/update`.** Oba handlery delegują do `_runUpdateFlow`; różnice wyłącznie w `dryRun` (ephemeral output, brak zapisu/ról/powiadomień), `commandName` (→ `hints.command`, logi, klucz blokady OCR) i uprawnieniach wejściowych (`/test` wymaga wpisu w `ENDERSECHO_BLOCK_OCR_USER_IDS`). Ten sam prompt wzorca (`compare-template`), ten sam `analyzeTestImage()`, ten sam Operations Gateway, ten sam `tokenUsageService` i `usageLimitService`. Padnięcie Gemini w obu komendach = błąd dla usera (brak fallbacku na Tesseract).
 - **`usageLimitService`** — lokalny dzienny limit per user (`data/usage_limits.json`), działa równolegle do quota w API.
-- **`PROMPT_VERSIONS`** w [services/aiOcrService.js:15-24](services/aiOcrService.js#L15-L24) — 6 wpisów: `victory-check-eng`, `victory-check-jpn`, `authenticity-check`, `extract-data-eng`, `extract-data-jpn`, `compare-template`. Po zmianie treści promptu bump wersji (`'v1'` → `'v2'`) — stare trace zostają w Langfuse do porównania.
+- **`PROMPT_VERSIONS`** w [services/aiOcrService.js](services/aiOcrService.js) — 2 wpisy: `extract-data-eng`, `compare-template`. Po zmianie treści promptu bump wersji (`'v1'` → `'v2'`) — stare trace zostają w Langfuse do porównania.
 - **Model Gemini** dla wszystkich promptów ten sam: z `ENDERSECHO_GOOGLE_AI_MODEL` (default: `gemini-2.5-flash-preview-05-20`).
 
 ### A/B testing
@@ -403,7 +403,7 @@ Atrybuty na spanach generation: `llm.model.name`, `llm.prompt.name`, `llm.prompt
 
 Przykłady zapytań:
 - Porównanie modeli dla ekstrakcji: filter `llm.prompt.name="extract-data-eng"`, group by `llm.model.name`
-- Porównanie wersji promptu anty-fake: filter `llm.prompt.name="authenticity-check"`, group by `llm.prompt.version`, metryka `% status='REJECTED'`
+- Porównanie wersji promptu porównania wzorca: filter `llm.prompt.name="compare-template"`, group by `llm.prompt.version`, metryka `% status='NOT_SIMILAR'`
 - Historia konkretnego usera: filter `user.id=<discordId>` → failed generations → prompt + response
 
 Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get-started) — zestaw referencyjnych screenów puszczany przez różne warianty.
