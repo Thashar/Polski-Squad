@@ -38,13 +38,13 @@ class AIOCRService {
         this.config = config;
         this.adapter = llmAdapter;
 
-        this.apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
-        this.enabled = !!this.apiKey && config.ocr.useAI === true && !!llmAdapter;
+        const apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
+        this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
         this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
 
         if (this.enabled) {
             logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);
-        } else if (!this.apiKey) {
+        } else if (!apiKey) {
             logger.warn('⚠️ AI OCR wyłączony - brak ENDERSECHO_GOOGLE_AI_API_KEY');
         } else if (!llmAdapter) {
             logger.warn('⚠️ AI OCR wyłączony - brak llmAdapter (DI) w konstruktorze');
@@ -76,7 +76,7 @@ class AIOCRService {
             text:          result.content,
             promptTokens:  result.usage.inputTokens,
             outputTokens:  result.usage.outputTokens,
-            thoughtTokens: result.usage.thoughtTokens,
+            thoughtTokens: result.usage.thoughtTokens || 0,
             durationMs:    result.durationMs,
             traceId:       result.traceId,
             provider:      result.provider,
@@ -121,16 +121,16 @@ class AIOCRService {
                     fakeCheckDone = true;
                     if (!isAuthentic) {
                         log.warn(`[AI OCR] ${label}: ✓Victory ✗autentyczne → FAKE_PHOTO`);
-                        return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO', tokenUsage };
+                        return { bossName: null, score: null, isValidVictory: false, error: 'FAKE_PHOTO', tokenUsage };
                     }
                 }
 
-                const { text, usage: u3 } = await this._extractData(base64Image, mediaType, lang, telemetryMeta);
-                tokenUsage.promptTokens  += u3.promptTokens;
-                tokenUsage.outputTokens  += u3.outputTokens;
-                tokenUsage.thoughtTokens += u3.thoughtTokens;
+                const extractRes = await this._extractData(base64Image, mediaType, lang, telemetryMeta);
+                tokenUsage.promptTokens  += extractRes.promptTokens;
+                tokenUsage.outputTokens  += extractRes.outputTokens;
+                tokenUsage.thoughtTokens += extractRes.thoughtTokens;
 
-                const result = this.parseAIResponse(text, log);
+                const result = this.parseAIResponse(extractRes.text, log);
 
                 if (result.isValidVictory) {
                     log.info(`✅ [AI OCR] ${label}: ✓Victory ✓autentyczne → boss="${result.bossName}" score="${result.score}"`);
@@ -141,7 +141,7 @@ class AIOCRService {
             }
 
             log.warn(`[AI OCR] Brak wyniku po wszystkich językach`);
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT', tokenUsage };
+            return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCREENSHOT', tokenUsage };
 
         } catch (error) {
             log.error(`[AI OCR] Błąd analizy obrazu: ${error.message}`);
@@ -246,7 +246,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             promptVersion: PROMPT_VERSIONS[promptName],
         });
 
-        return { text: res.text, usage: res, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
+        return { text: res.text, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
     }
 
     parseAIResponse(responseText, log = logger) {
@@ -259,14 +259,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             'cannot read', 'unable to read', 'i cannot', 'i\'m unable', 'no text'
         ];
         if (invalidKeywords.some(kw => lowerResponse.includes(kw))) {
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
+            return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCREENSHOT' };
         }
 
         const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
         if (lines.length < 2) {
             log.warn(`[AI OCR] Odpowiedź za krótka (${lines.length} linii): "${responseText.trim()}"`);
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'PARSING_ERROR' };
+            return { bossName: null, score: null, isValidVictory: false, error: 'PARSING_ERROR' };
         }
 
         let bossName = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
@@ -276,18 +276,18 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         if (lines.length >= 3) {
             total = this.normalizeScore(lines[2].replace(/^total[:\s]*/i, '').trim(), log);
             if (total === null) {
-                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+                return { bossName: null, score: null, isValidVictory: false, error: 'FAKE_PHOTO' };
             }
         }
 
         score = this.normalizeScore(score, log);
         if (score === null) {
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'FAKE_PHOTO' };
+            return { bossName: null, score: null, isValidVictory: false, error: 'FAKE_PHOTO' };
         }
         if (score && total) {
             const corrected = this.validateScoreAgainstTotal(score, total, log);
             if (corrected === null) {
-                return { bossName: null, score: null, total, confidence: 0, isValidVictory: false, error: 'BEST_EXCEEDS_TOTAL' };
+                return { bossName: null, score: null, total, isValidVictory: false, error: 'BEST_EXCEEDS_TOTAL' };
             }
             score = corrected;
         }
@@ -295,7 +295,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const validScorePattern = /^\d+(?:\.\d+)?(K|M|B|T|Q|Qi|Sx)$/i;
         if (score && !validScorePattern.test(score)) {
             log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx) — odrzucam`);
-            return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
+            return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
         }
 
         const isValid = !!(bossName && score && score.length > 0);
@@ -303,14 +303,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             log.warn(`[AI OCR] Walidacja ✗ boss:"${bossName}" score:"${score}"`);
         }
 
-        let confidence = 0;
-        if (bossName) { confidence += 50; if (bossName.length >= 3) confidence += 10; }
-        if (score && score.length > 0) confidence += 40;
-
         return {
             bossName: isValid ? bossName : null,
             score:    isValid ? score    : null,
-            confidence: Math.min(confidence, 100),
             isValidVictory: isValid,
             error: isValid ? undefined : 'VALIDATION_FAILED'
         };
@@ -423,7 +418,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             tokenUsage.thoughtTokens += u1.thoughtTokens;
 
             if (!isSimilar) {
-                return { bossName: null, score: null, confidence: 0, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
+                return { bossName: null, score: null, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
             }
 
             const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
@@ -524,7 +519,7 @@ ${exampleReasons.join('\n')}
             const extractRes = await this._extractData(uploadedBase64, mediaType, 'eng', telemetryMeta);
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
-            tokenUsage.thoughtTokens += (extractRes.thoughtTokens || 0);
+            tokenUsage.thoughtTokens += extractRes.thoughtTokens;
 
             const result = this.parseAIResponse(extractRes.text, log);
             if (result.isValidVictory) {
