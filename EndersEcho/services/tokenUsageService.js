@@ -51,14 +51,26 @@ class TokenUsageService {
         await fs.writeFile(this.dataFile, JSON.stringify(this.data, null, 2), 'utf8');
     }
 
-    async record(guildId, promptTokens, outputTokens) {
+    async record(guildId, promptTokens, outputTokens, userId = null) {
         const day = todayKey();
+
         if (!this.data.guilds[guildId]) this.data.guilds[guildId] = {};
         const g = this.data.guilds[guildId];
         if (!g[day]) g[day] = { promptTokens: 0, outputTokens: 0, requests: 0 };
         g[day].promptTokens += promptTokens;
         g[day].outputTokens += outputTokens;
         g[day].requests     += 1;
+
+        if (userId) {
+            if (!this.data.users) this.data.users = {};
+            if (!this.data.users[userId]) this.data.users[userId] = {};
+            const u = this.data.users[userId];
+            if (!u[day]) u[day] = { promptTokens: 0, outputTokens: 0, requests: 0 };
+            u[day].promptTokens += promptTokens;
+            u[day].outputTokens += outputTokens;
+            u[day].requests     += 1;
+        }
+
         await this.save();
     }
 

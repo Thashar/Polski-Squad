@@ -1903,7 +1903,7 @@ class InteractionHandler {
 
             if (aiResult.tokenUsage && this.tokenUsageService) {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
-                this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens).catch(() => {});
+                this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, interaction.user.id).catch(() => {});
             }
 
             if (aiResult.error === 'NOT_SIMILAR') {
@@ -3898,7 +3898,7 @@ class InteractionHandler {
 
             if (aiResult.tokenUsage) {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
-                this.tokenUsageService.record(targetGuildId, promptTokens, outputTokens).catch(() => {});
+                this.tokenUsageService.record(targetGuildId, promptTokens, outputTokens, targetUserId).catch(() => {});
                 gl.info(`🪙 Tokeny AI: input=${promptTokens}, output=${outputTokens}`);
             }
 
