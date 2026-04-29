@@ -1708,8 +1708,6 @@ class InteractionHandler {
      * @param {CommandInteraction} interaction
      */
     async handleRankingCommand(interaction) {
-        await this.logService.logCommandUsage('ranking', interaction);
-
         const msgs = this.msgs(interaction.guildId);
 
         try {
@@ -1802,7 +1800,6 @@ class InteractionHandler {
      * @param {{ dryRun: boolean, commandName: 'update'|'test', ocrBlockKey: 'update'|'test' }} opts
      */
     async _runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey }) {
-        await this.logService.logCommandUsage(commandName, interaction);
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
