@@ -1010,14 +1010,37 @@ class InteractionHandler {
     _buildAdminPanel(interaction) {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
+        const adminOptions = [
+            t('🗑️ **Usuń gracza z rankingu** — wyszukaj gracza i usuń go z rankingu serwera; automatycznie aktualizuje role TOP.',
+              '🗑️ **Remove Player from Ranking** — search for a player and remove them from the server ranking; automatically updates TOP roles.'),
+            t('🔓 **Odblokuj gracza** — odblokowuje gracza zablokowanego przez admina; nie można odblokować graczy zablokowanych przez Head Admina.',
+              '🔓 **Unblock Player** — unblocks a player blocked by an admin; cannot unblock players blocked by the Head Admin.'),
+            t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
+              '📊 **Token Usage** — AI OCR usage statistics for your server (requests, tokens).'),
+        ];
+        const headAdminOptions = [
+            t('🔒 **Zablokuj gracza** — wyszukaj gracza cross-server i zablokuj mu dostęp do `/update`; tylko Head Admin może odblokować.',
+              '🔒 **Block Player** — search for a player cross-server and block their access to `/update`; only the Head Admin can unblock.'),
+            t('🔄 **AI OCR on/off** — włącz lub wyłącz OCR (`/update`, `/test`) per serwer.',
+              '🔄 **AI OCR on/off** — enable or disable OCR (`/update`, `/test`) per server.'),
+            t('⚙️ **Ustaw limity** — skonfiguruj cooldown po `/update` i dzienny limit użyć.',
+              '⚙️ **Set Limits** — configure cooldown after `/update` and daily usage limit.'),
+            t('📢 **Wyślij Info** — skomponuj wiadomość i wyślij ją na kanały wszystkich skonfigurowanych serwerów.',
+              '📢 **Send Info** — compose a message and send it to all configured servers\' channels.'),
+            t('🧪 **Dodaj/usuń testera** — zarządzaj listą testerów uprawnionych do `/test`.',
+              '🧪 **Add/Remove Tester** — manage the list of testers authorized to use `/test`.'),
+        ];
+
+        const optionLines = isHeadAdmin
+            ? [...adminOptions, ...headAdminOptions]
+            : adminOptions;
+
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
             .setTitle(t('⚙️ Panel Administracyjny', '⚙️ Admin Panel'))
             .setDescription(
                 `**${t('Tryb', 'Mode')}: ${isHeadAdmin ? 'Head Admin' : 'Admin'}**\n\n` +
-                (isHeadAdmin
-                    ? t('Pełny dostęp do wszystkich operacji administracyjnych.', 'Full access to all administrative operations.')
-                    : t('Dostęp do podstawowych operacji administracyjnych.', 'Access to basic administrative operations.'))
+                optionLines.join('\n\n')
             );
 
         // Rząd 1: operacje gracza (wszyscy admini)
