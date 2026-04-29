@@ -401,12 +401,6 @@ class InteractionHandler {
             rows.push(new ActionRowBuilder().addComponents(cancelBtn));
         }
 
-        rows.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('cfg_admin_panel')
-                .setLabel(t('⚙️ Panel Admina', '⚙️ Admin Panel'))
-                .setStyle(ButtonStyle.Secondary)
-        ));
 
         const summaryLines = [
             done[1] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
@@ -549,10 +543,10 @@ class InteractionHandler {
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
                         '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n\n' +
-                        'Komendy adminów są dostępne przez **Panel Admina** w `/configure` z dowolnego kanału.',
+                        'Komendy adminów są dostępne przez `/manage` z dowolnego kanału.',
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
                         '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n\n' +
-                        'Admin commands are available through the **Admin Panel** in `/configure` from any channel.'
+                        'Admin commands are available through `/manage` from any channel.'
                     )
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
@@ -998,7 +992,7 @@ class InteractionHandler {
     }
 
     // =====================================================================
-    // Panel Admina — dostępny z /configure → przycisk cfg_admin_panel
+    // Panel Admina — dostępny przez /manage
     // =====================================================================
 
     _isHeadAdmin(userId) {

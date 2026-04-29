@@ -131,7 +131,7 @@
    - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
-6. **Panel Admina** — dostępny przez `/configure` → `⚙️ Panel Admina`:
+6. **Panel Admina** — dostępny przez `/manage`:
    - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP. Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
    - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`. Jeśli blokada pochodzi od Head Admina (`blockedByHeadAdmin: true`) — zwykły Admin nie może odblokować.
    - **Zablokuj gracza (head admin):** modal wyszukiwania nicku cross-server → lista graczy → potwierdzenie → modal czasu blokady. Blokada zapisywana z flagą `blockedByHeadAdmin: true`.
@@ -142,7 +142,7 @@
 
 **Komendy slash:** `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
-**Panel Admina** — dostępny przez `/manage` (bezpośrednio) lub przez `/configure` → przycisk `⚙️ Panel Admina` (ostatni rząd):
+**Panel Admina** — dostępny przez `/manage`:
 - Dostęp: każdy admin Discord (Administrator)
 - **Układ rzędów (Tryb Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
@@ -208,7 +208,6 @@
 **CustomIDs Panelu Admina:**
 | CustomId | Opis |
 |---|---|
-| `cfg_admin_panel` | Otwórz panel (z configure dashboard) |
 | `panel_back` | Wróć do panelu (z dowolnej operacji) |
 | `panel_back_configure` | Wróć do wizarda /configure (pokazywany tylko gdy sesja wizarda aktywna) |
 | `panel_remove` | Otwórz modal wyszukiwania gracza |
@@ -236,7 +235,7 @@
 | `panel_block_time_{userId}_{guildId}` | Otwórz modal czasu blokady |
 | `panel_block_modal_{userId}_{guildId}` | Modal czasu blokady (pole `block_duration`) |
 
-**Komenda /configure** — wizard konfiguracji serwera + Panel Admina (admin, dowolny kanał):
+**Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Język (pol/eng) — wszystkie komunikaty i opisy komend
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
@@ -246,7 +245,7 @@
 - **Krok 6:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
-- **Ostatni rząd:** `⚙️ Panel Admina` — dostęp do operacji administracyjnych (patrz sekcja Panel Admina)
+- Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
