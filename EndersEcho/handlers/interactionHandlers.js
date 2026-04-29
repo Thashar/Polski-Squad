@@ -4527,7 +4527,7 @@ class InteractionHandler {
 
         const row1 = [
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
-            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
+            new ButtonBuilder().setCustomId(`tk_ui_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
             new ButtonBuilder().setCustomId(chartId).setLabel('📊 Wykres').setStyle(ButtonStyle.Secondary),
         ];
