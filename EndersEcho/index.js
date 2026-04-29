@@ -34,12 +34,12 @@ const logger = createBotLogger('EndersEcho');
 let statusInterval = null;
 
 const STATUS_POOL = [
-    { type: ActivityType.Watching,  text: n => `${n}'s results 🏆` },
-    { type: ActivityType.Watching,  text: n => `${n}'s score 📊` },
-    { type: ActivityType.Watching,  text: n => `${n}'s progress 📈` },
-    { type: ActivityType.Watching,  text: n => `${n}'s stats 🔢` },
-    { type: ActivityType.Competing, text: n => `${n}'s ranking 🥇` },
-    { type: ActivityType.Playing,   text: n => `rankings — ${n} 🎯` },
+    { type: ActivityType.Watching, text: n => `Watching ${n}'s results 🏆` },
+    { type: ActivityType.Watching, text: n => `Checking ${n}'s score 🔍` },
+    { type: ActivityType.Watching, text: n => `Comparing ${n}'s ranking 📊` },
+    { type: ActivityType.Watching, text: n => `Calculating ${n}'s stats 🧮` },
+    { type: ActivityType.Watching, text: n => `Reviewing ${n}'s progress 📈` },
+    { type: ActivityType.Watching, text: n => `Analyzing ${n}'s results 🎯` },
 ];
 
 async function _updateStatus() {
