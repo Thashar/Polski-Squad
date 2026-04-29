@@ -4210,18 +4210,23 @@ class InteractionHandler {
 
     async _handleTokensButton(interaction, customId) {
         // Formy customId:
-        // tk_p_{YYYYMM}_{guildFilter}_{userId}  — poprzedni miesiąc
-        // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc
-        // tk_m_{YYYYMM}_{guildFilter}_{userId}  — breakdown miesięczny per serwer (tylko superUser)
-        // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer
-        // tk_a_{YYYYMM}_{userId}                — wszystkie serwery
+        // tk_p_{YYYYMM}_{guildFilter}_{userId}  — poprzedni miesiąc (wykres per dzień)
+        // tk_n_{YYYYMM}_{guildFilter}_{userId}  — następny miesiąc (wykres per dzień)
+        // tk_m_{YYYYMM}_{guildFilter}_{userId}  — Zbiorczo: breakdown per serwer (tylko head admin)
+        // tk_g_{YYYYMM}_{guildId}_{userId}      — konkretny serwer (wykres per dzień)
+        // tk_a_{YYYYMM}_{userId}                — wszystkie serwery (wykres per dzień)
+        // tk_u_{YYYYMM}_{guildFilter}_{userId}  — widok per user (miesiąc)
+        // tk_up_{YYYYMM}_{guildFilter}_{userId} — poprzedni miesiąc (widok per user)
+        // tk_un_{YYYYMM}_{guildFilter}_{userId} — następny miesiąc (widok per user)
+        // tk_ug_{YYYYMM}_{guildId}_{userId}     — konkretny serwer (widok per user)
+        // tk_ua_{YYYYMM}_{userId}               — wszystkie serwery (widok per user, tylko head admin)
         const parts    = customId.split('_');
         const action   = parts[1];
         const monthRaw = parts[2];
         const month    = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
         let userId, guildFilter;
-        if (action === 'a') {
+        if (action === 'a' || action === 'ua') {
             userId      = parts[3];
             guildFilter = 'all';
         } else {
@@ -4238,7 +4243,7 @@ class InteractionHandler {
         const isAdmin     = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isSuperUser && !isAdmin) return;
 
-        if (action === 'm' && !isSuperUser) return;
+        if ((action === 'm' || action === 'ua') && !isSuperUser) return;
 
         // Zwykły admin widzi tylko swój serwer — zignoruj filter z customId
         const effectiveFilter = isSuperUser ? guildFilter : interaction.guildId;
@@ -4246,6 +4251,7 @@ class InteractionHandler {
 
         await interaction.deferUpdate();
 
+        // Widok Zbiorczo (breakdown per serwer)
         if (action === 'm') {
             const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
             if (reply.components.length < 5) {
@@ -4257,6 +4263,36 @@ class InteractionHandler {
             return;
         }
 
+        // Widok per user
+        if (action === 'u' || action === 'ug' || action === 'ua') {
+            const reply = await this._buildTokensUsersEmbed(interaction, month, effectiveFilter, isSuperUser);
+            if (reply.components.length < 5) {
+                reply.components.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                ));
+            }
+            await interaction.editReply(reply);
+            return;
+        }
+
+        // Nawigacja miesięcy w widoku per user
+        if (action === 'up' || action === 'un') {
+            const available = this.tokenUsageService.getAvailableMonths(effectiveFilter);
+            const idx = available.indexOf(month);
+            let targetMonth = month;
+            if (action === 'up' && idx > 0)                    targetMonth = available[idx - 1];
+            if (action === 'un' && idx < available.length - 1) targetMonth = available[idx + 1];
+            const reply = await this._buildTokensUsersEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
+            if (reply.components.length < 5) {
+                reply.components.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                ));
+            }
+            await interaction.editReply(reply);
+            return;
+        }
+
+        // Nawigacja miesięcy / serwer w widoku wykres per dzień
         let targetMonth = month;
         if (action === 'p' || action === 'n') {
             const available = this.tokenUsageService.getAvailableMonths(effectiveFilter);
@@ -4303,16 +4339,22 @@ class InteractionHandler {
             ? 'Wszystkie serwery'
             : (guildNames[guildFilter] || guildFilter);
 
+        const embedFields = [
+            { name: '📨 Zapytania', value: `\`${totals.requests}\``, inline: true },
+            { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens)}\``, inline: true },
+        ];
+        if (isSuperUser) {
+            embedFields.push({ name: '💰 Koszt', value: `**${fmtCost(totals.cost)}**`, inline: true });
+        }
+        const detailValue = `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\`` +
+            (isSuperUser ? `\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M` : '');
+        embedFields.push({ name: 'Szczegóły', value: detailValue, inline: false });
+
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
             .setTitle(`📊 Tokeny AI — ${monthLabel}`)
             .setDescription(chartText)
-            .addFields(
-                { name: '📨 Zapytania', value: `\`${totals.requests}\``,                                              inline: true },
-                { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens)}\``,            inline: true },
-                { name: '💰 Koszt',     value: `**${fmtCost(totals.cost)}**`,                                         inline: true },
-                { name: 'Szczegóły',   value: `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\`\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false }
-            )
+            .addFields(...embedFields)
             .setTimestamp()
             .setFooter({ text: `${footerText} • dane z /update` });
 
@@ -4325,7 +4367,7 @@ class InteractionHandler {
         const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
         const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
 
-        // Wiersz 1: ◀ | Miesiąc | ▶ | 🌐 Wszystkie (tylko superUser)
+        // Wiersz 1: ◀ | [Miesiąc → per user] | ▶ | 🌐 Wszystkie (superUser) | Zbiorczo (superUser)
         const row1Buttons = [
             new ButtonBuilder()
                 .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
@@ -4333,10 +4375,9 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
-                .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
+                .setCustomId(`tk_u_${monthStr}_${guildFilter}_${userId}`)
                 .setLabel(monthLabel)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(!isSuperUser),
+                .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
                 .setLabel('▶')
@@ -4349,7 +4390,11 @@ class InteractionHandler {
                 new ButtonBuilder()
                     .setCustomId(`tk_a_${monthStr}_${userId}`)
                     .setLabel('🌐 Wszystkie')
-                    .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
+                    .setLabel('Zbiorczo')
+                    .setStyle(ButtonStyle.Secondary)
             );
         }
 
@@ -4436,6 +4481,99 @@ class InteractionHandler {
         );
 
         return { embeds: [embed], components: [backRow] };
+    }
+
+    async _buildTokensUsersEmbed(interaction, month, guildFilter, isSuperUser) {
+        const { PRICING } = require('../services/tokenUsageService');
+        const [y, m] = month.split('-').map(Number);
+        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+        const monthStr   = `${y}${String(m).padStart(2, '0')}`;
+        const userId     = interaction.user.id;
+
+        const fmtTok  = (n) => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(2)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(1)}K` : String(n);
+        const fmtCost = (c) => `$${c.toFixed(5)}`;
+
+        const userStats = this.tokenUsageService.getUsersMonthlyStats(month, guildFilter);
+
+        const getNick = (uId) => {
+            const guilds = guildFilter !== 'all'
+                ? [interaction.client.guilds.cache.get(guildFilter)].filter(Boolean)
+                : this.config.getAllGuilds().map(gc => interaction.client.guilds.cache.get(gc.id)).filter(Boolean);
+            for (const g of guilds) {
+                const member = g.members.cache.get(uId);
+                if (member) return member.displayName;
+            }
+            return `<@${uId}>`;
+        };
+
+        const lines = userStats.map(u => {
+            const nick  = getNick(u.userId);
+            const parts = [
+                `**${nick}**`,
+                `${u.requests} analiz`,
+                `${fmtTok(u.promptTokens + u.outputTokens)} tok`,
+            ];
+            if (isSuperUser) parts.push(fmtCost(u.cost));
+            return parts.join(' — ');
+        });
+
+        let description = lines.length > 0 ? lines.join('\n') : 'Brak danych.';
+        if (description.length > 4096) description = description.slice(0, 4080) + '\n*(…)*';
+
+        const guildNames = {};
+        for (const gc of this.config.getAllGuilds()) {
+            const g = interaction.client.guilds.cache.get(gc.id);
+            guildNames[gc.id] = g?.name || gc.id;
+        }
+        const footerText = guildFilter === 'all' ? 'Wszystkie serwery' : (guildNames[guildFilter] || guildFilter);
+
+        const embed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle(`👥 Tokeny per user — ${monthLabel}`)
+            .setDescription(description)
+            .setFooter({ text: `${footerText} • ${userStats.length} userów` })
+            .setTimestamp();
+
+        // Nawigacja miesięcy
+        const available = this.tokenUsageService.getAvailableMonths(guildFilter);
+        const idx        = available.indexOf(month);
+        const hasPrev    = idx > 0;
+        const hasNext    = idx < available.length - 1;
+        const prevRaw    = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
+        const nextRaw    = hasNext ? available[idx + 1].replace('-', '') : monthStr;
+
+        // Przycisk "wróć do wykresu"
+        const chartCustomId = guildFilter === 'all'
+            ? `tk_a_${monthStr}_${userId}`
+            : `tk_g_${monthStr}_${guildFilter}_${userId}`;
+
+        const row1 = [
+            new ButtonBuilder().setCustomId(`tk_up_${prevRaw}_${guildFilter}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrev),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${userId}`).setLabel(monthLabel).setStyle(ButtonStyle.Primary).setDisabled(true),
+            new ButtonBuilder().setCustomId(`tk_un_${nextRaw}_${guildFilter}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNext),
+            new ButtonBuilder().setCustomId(chartCustomId).setLabel('📊 Wykres').setStyle(ButtonStyle.Secondary),
+        ];
+        if (isSuperUser) {
+            row1.push(new ButtonBuilder().setCustomId(`tk_ua_${monthStr}_${userId}`).setLabel('🌐 Wszystkie').setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
+        }
+
+        const components = [new ActionRowBuilder().addComponents(...row1)];
+
+        if (isSuperUser) {
+            const guildButtons = this.config.getAllGuilds()
+                .filter(gc => interaction.client.guilds.cache.has(gc.id))
+                .map(gc => new ButtonBuilder()
+                    .setCustomId(`tk_ug_${monthStr}_${gc.id}_${userId}`)
+                    .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
+                    .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                );
+            for (let i = 0; i < guildButtons.length; i += 5) {
+                components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
+            }
+        }
+
+        return { embeds: [embed], components };
     }
 
     async _handlePanelTester(interaction) {

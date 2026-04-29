@@ -61,10 +61,12 @@ class TokenUsageService {
         g[day].outputTokens += outputTokens;
         g[day].requests     += 1;
 
+        // Per-guild+user: users[guildId][userId][day]
         if (userId) {
             if (!this.data.users) this.data.users = {};
-            if (!this.data.users[userId]) this.data.users[userId] = {};
-            const u = this.data.users[userId];
+            if (!this.data.users[guildId]) this.data.users[guildId] = {};
+            if (!this.data.users[guildId][userId]) this.data.users[guildId][userId] = {};
+            const u = this.data.users[guildId][userId];
             if (!u[day]) u[day] = { promptTokens: 0, outputTokens: 0, requests: 0 };
             u[day].promptTokens += promptTokens;
             u[day].outputTokens += outputTokens;
@@ -72,6 +74,31 @@ class TokenUsageService {
         }
 
         await this.save();
+    }
+
+    getUsersMonthlyStats(month, guildFilter) {
+        const usersData = this.data.users || {};
+        const guildIds = guildFilter === 'all' ? Object.keys(usersData) : [guildFilter];
+        const byUser = new Map();
+
+        for (const gId of guildIds) {
+            for (const [uId, days] of Object.entries(usersData[gId] || {})) {
+                const keys = Object.keys(days).filter(k => k.startsWith(month));
+                if (!byUser.has(uId)) byUser.set(uId, { promptTokens: 0, outputTokens: 0, requests: 0 });
+                const acc = byUser.get(uId);
+                for (const k of keys) {
+                    const d = days[k];
+                    acc.promptTokens += d.promptTokens || 0;
+                    acc.outputTokens += d.outputTokens || 0;
+                    acc.requests     += d.requests     || 0;
+                }
+            }
+        }
+
+        return [...byUser.entries()]
+            .map(([userId, s]) => ({ userId, ...s, cost: calcCost(s.promptTokens, s.outputTokens) }))
+            .filter(u => u.requests > 0)
+            .sort((a, b) => b.requests - a.requests);
     }
 
     _sumDays(guildId, keys) {
