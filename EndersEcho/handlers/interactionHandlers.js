@@ -1045,7 +1045,7 @@ class InteractionHandler {
 
         // Rząd 1: operacje gracza (wszyscy admini)
         const row1Components = [
-            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza', '🗑️ Remove Player')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
         ];
         if (isHeadAdmin) {
             row1Components.push(
@@ -1097,7 +1097,7 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const modal = new ModalBuilder()
             .setCustomId('panel_remove_search_modal')
-            .setTitle(t('Usuń gracza', 'Remove Player'));
+            .setTitle(t('Usuń gracza z rankingu', 'Remove Player from Ranking'));
         modal.addComponents(new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('remove_query')
