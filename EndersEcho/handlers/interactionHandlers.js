@@ -1850,6 +1850,14 @@ class InteractionHandler {
 
         await interaction.deferReply({ flags: ['Ephemeral'] });
         await interaction.editReply({ content: msgs.updateDownloading });
+        let lastMsgAt = Date.now();
+
+        const editReplyStep = async (content) => {
+            const elapsed = Date.now() - lastMsgAt;
+            if (elapsed < 1000) await new Promise(r => setTimeout(r, 1000 - elapsed));
+            await interaction.editReply({ content });
+            lastMsgAt = Date.now();
+        };
 
         // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR
         if (!dryRun && this.updateCooldownService) {
@@ -1864,14 +1872,14 @@ class InteractionHandler {
             tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
             await downloadFile(attachment.url, tempImagePath);
 
-            await interaction.editReply({ content: msgs.updateComparingTemplate });
+            await editReplyStep(msgs.updateComparingTemplate);
 
             const displayNameForLog = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${displayNameForLog}${dryRun ? ' (tryb testowy)' : ''}`);
 
             const onProgress = async (step) => {
                 if (step === 'extracting') {
-                    await interaction.editReply({ content: msgs.updateExtractingData });
+                    await editReplyStep(msgs.updateExtractingData);
                 }
             };
 
@@ -1952,7 +1960,7 @@ class InteractionHandler {
                     isNewRecord = newScoreValue > currentScoreValue;
                 }
             } else {
-                await interaction.editReply({ content: msgs.updateSaving });
+                await editReplyStep(msgs.updateSaving);
                 ({ isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                     guildId, userId, userName, bestScore, bossName
                 ));
