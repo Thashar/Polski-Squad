@@ -12,8 +12,7 @@
      - Walidacja wyników: 0–999999 (obsługuje wyniki 5-cyfrowe i wyższe)
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto); przy częściowym usunięciu → `lifetime_points` zmniejszane o tę samą liczbę. `appSync.punishmentEvent` wysyła `lifetimeDelta` do web API — web app aktualizuje `lifetimePoints` na podstawie tej wartości. Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
-4. **Dekoder** - `decodeService.js`: `/decode` dla Survivor.io (LZMA decompress)
-5. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
+4. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
 13. **Skan Ekwipunku (Core Stock)** - Przycisk "🎒 Skanuj ekwipunek" na kanale `1491801320602992690`:
    - Dostępny dla wszystkich członków klanu (targetRoles)
    - Wchodzi do wspólnej kolejki OCR (1-minutowy timeout sesji)
@@ -210,7 +209,7 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/decode`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
 
 **Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
 - Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)
