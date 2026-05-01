@@ -1,4 +1,3 @@
-const fs = require('fs');
 const fsAsync = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -9,12 +8,13 @@ class UserBlockService {
     constructor(config) {
         this.filePath = path.join(config.ranking.dataDir, 'user_blocks.json');
         this._blocks = {};
-        this._loadSync();
+        // Ładowanie asynchroniczne — nie blokuje event loop przy starcie
+        this._loadPromise = this._load();
     }
 
-    _loadSync() {
+    async _load() {
         try {
-            const data = fs.readFileSync(this.filePath, 'utf8');
+            const data = await fsAsync.readFile(this.filePath, 'utf8');
             this._blocks = JSON.parse(data);
             const count = Object.keys(this._blocks).length;
             if (count > 0) {
@@ -39,7 +39,8 @@ class UserBlockService {
         return Date.now() + value * multipliers[match[2]];
     }
 
-    isBlocked(userId) {
+    async isBlocked(userId) {
+        await this._loadPromise;
         const entry = this._blocks[userId];
         if (!entry) return false;
         if (entry.blockedUntil !== null && Date.now() > entry.blockedUntil) {
@@ -51,6 +52,7 @@ class UserBlockService {
     }
 
     async blockUser(userId, username, guildId, guildName, durationStr, blockedByHeadAdmin = false) {
+        await this._loadPromise;
         const blockedUntil = this.parseDuration(durationStr);
         this._blocks[userId] = {
             userId,
@@ -67,6 +69,7 @@ class UserBlockService {
 
     // Zwraca false jeśli blokada pochodzi od Head Admina i caller nie jest Head Adminem
     async unblockUser(userId, callerIsHeadAdmin = false) {
+        await this._loadPromise;
         if (!this._blocks[userId]) return false;
         if (this._blocks[userId].blockedByHeadAdmin && !callerIsHeadAdmin) {
             return 'head_admin_only';
@@ -76,11 +79,13 @@ class UserBlockService {
         return true;
     }
 
-    isBlockedByHeadAdmin(userId) {
+    async isBlockedByHeadAdmin(userId) {
+        await this._loadPromise;
         return !!this._blocks[userId]?.blockedByHeadAdmin;
     }
 
-    getBlockedUsers() {
+    async getBlockedUsers() {
+        await this._loadPromise;
         const now = Date.now();
         for (const [userId, entry] of Object.entries(this._blocks)) {
             if (entry.blockedUntil !== null && now > entry.blockedUntil) {

@@ -129,15 +129,22 @@ class RoleService {
             return;
         }
 
-        // Usunięcia równolegle
+        // Usunięcia w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
         if (toRemove.length > 0) {
-            await Promise.allSettled(
-                toRemove.map(({ member, role }) =>
-                    member.roles.remove(role).catch(err =>
-                        logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, err.message)
+            const CHUNK = 10;
+            for (let i = 0; i < toRemove.length; i += CHUNK) {
+                const chunk = toRemove.slice(i, i + CHUNK);
+                await Promise.allSettled(
+                    chunk.map(({ member, role }) =>
+                        member.roles.remove(role).catch(err =>
+                            logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, err.message)
+                        )
                     )
-                )
-            );
+                );
+                if (i + CHUNK < toRemove.length) {
+                    await new Promise(r => setTimeout(r, 250));
+                }
+            }
         }
 
         // Dodania — batch fetch + równolegle
@@ -151,24 +158,32 @@ class RoleService {
                 logger.error('Błąd batch fetch members:', err.message);
             }
 
-            await Promise.allSettled(
-                toAdd.map(async ({ userId, role }) => {
-                    const member = members.get(userId);
-                    if (!member) {
-                        logger.warn(`⚠️ ${userId} nie jest na serwerze — usuwam z rankingu`);
-                        if (this.rankingService) {
-                            await this.rankingService.removePlayerFromRanking(userId, guild.id).catch(e =>
-                                logger.error(`Błąd usuwania z rankingu:`, e.message)
-                            );
-                            removedFromRanking.push(userId);
+            // Dodania w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
+            const CHUNK = 10;
+            for (let i = 0; i < toAdd.length; i += CHUNK) {
+                const chunk = toAdd.slice(i, i + CHUNK);
+                await Promise.allSettled(
+                    chunk.map(async ({ userId, role }) => {
+                        const member = members.get(userId);
+                        if (!member) {
+                            logger.warn(`⚠️ ${userId} nie jest na serwerze — usuwam z rankingu`);
+                            if (this.rankingService) {
+                                await this.rankingService.removePlayerFromRanking(userId, guild.id).catch(e =>
+                                    logger.error(`Błąd usuwania z rankingu:`, e.message)
+                                );
+                                removedFromRanking.push(userId);
+                            }
+                            return;
                         }
-                        return;
-                    }
-                    await member.roles.add(role).catch(err =>
-                        logger.error(`Błąd przyznawania roli ${role.name} użytkownikowi ${member.user.tag}:`, err.message)
-                    );
-                })
-            );
+                        await member.roles.add(role).catch(err =>
+                            logger.error(`Błąd przyznawania roli ${role.name} użytkownikowi ${member.user.tag}:`, err.message)
+                        );
+                    })
+                );
+                if (i + CHUNK < toAdd.length) {
+                    await new Promise(r => setTimeout(r, 250));
+                }
+            }
         }
 
         logger.info(`✅ Role TOP zaktualizowane — usunięto: ${toRemove.length}, dodano: ${toAdd.length}`);

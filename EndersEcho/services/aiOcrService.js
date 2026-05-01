@@ -58,26 +58,40 @@ class AIOCRService {
      * Zachowuje poprzedni kształt odpowiedzi (text, promptTokens, outputTokens,
      * thoughtTokens) + dodaje pola telemetryczne (durationMs, traceId, provider).
      */
-    async _generateContent(parts, maxOutputTokens, meta = {}) {
-        const result = await this.adapter.generate({
-            provider: 'gemini',
-            model:    this.modelName,
-            parts,
-            maxOutputTokens,
-            safetySettings: SAFETY_SETTINGS_OFF,
-            meta,
-        });
+    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3) {
+        let lastError;
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                const result = await this.adapter.generate({
+                    provider: 'gemini',
+                    model:    this.modelName,
+                    parts,
+                    maxOutputTokens,
+                    safetySettings: SAFETY_SETTINGS_OFF,
+                    meta,
+                });
 
-        return {
-            text:          result.content,
-            promptTokens:  result.usage.inputTokens,
-            outputTokens:  result.usage.outputTokens,
-            thoughtTokens: result.usage.thoughtTokens || 0,
-            durationMs:    result.durationMs,
-            traceId:       result.traceId,
-            provider:      result.provider,
-            model:         result.model,
-        };
+                return {
+                    text:          result.content,
+                    promptTokens:  result.usage.inputTokens,
+                    outputTokens:  result.usage.outputTokens,
+                    thoughtTokens: result.usage.thoughtTokens || 0,
+                    durationMs:    result.durationMs,
+                    traceId:       result.traceId,
+                    provider:      result.provider,
+                    model:         result.model,
+                };
+            } catch (err) {
+                lastError = err;
+                const status = err.status ?? err.statusCode ?? err.code;
+                const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
+                if (!isRetryable || attempt === retries - 1) throw err;
+                const delay = 1000 * Math.pow(2, attempt);
+                logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+        throw lastError;
     }
 
     async _extractData(base64Image, mediaType, telemetryMeta) {
