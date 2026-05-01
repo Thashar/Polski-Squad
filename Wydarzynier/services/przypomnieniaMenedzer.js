@@ -431,10 +431,17 @@ class PrzypomnieniaMenedzer {
         let nextTrigger;
         let newTriggerCount = (scheduled.triggerCount || 0) + 1;
 
+        const now = new Date();
+
         // Miesięczny (ten sam dzień miesiąca, ta sama godzina w Warsaw)
         if (scheduled.interval === 'msc') {
             const originalDay = scheduled.monthlyDay || getWarsawComponents(lastTrigger).day;
-            nextTrigger = addOneMonthWarsaw(lastTrigger, originalDay).toISOString();
+            let next = addOneMonthWarsaw(lastTrigger, originalDay);
+            while (next <= now) {
+                next = addOneMonthWarsaw(next, originalDay);
+                newTriggerCount++;
+            }
+            nextTrigger = next.toISOString();
         } else {
             let nextIntervalMs;
             // Specjalny wzorzec "ee": 3d x8, potem 4d, powtórz
@@ -448,7 +455,12 @@ class PrzypomnieniaMenedzer {
             } else {
                 nextIntervalMs = scheduled.intervalMs;
             }
-            nextTrigger = new Date(lastTrigger.getTime() + nextIntervalMs).toISOString();
+            let next = new Date(lastTrigger.getTime() + nextIntervalMs);
+            while (next <= now) {
+                next = new Date(next.getTime() + nextIntervalMs);
+                newTriggerCount++;
+            }
+            nextTrigger = next.toISOString();
         }
 
         return await this.updateScheduled(id, {
