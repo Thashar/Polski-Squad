@@ -223,7 +223,7 @@ class InteractionHandler {
         }
 
         // Handle LME member list pagination — public, no permission check needed
-        if (buttonId.startsWith('lme_prev::') || buttonId.startsWith('lme_next::') || buttonId.startsWith('lme_page::')) {
+        if (buttonId.startsWith('lme_') && buttonId.includes('::')) {
             await this.handleLmeMembersPageButton(interaction, buttonId);
             return;
         }
@@ -401,41 +401,9 @@ class InteractionHandler {
                         const scoreBuffer = await this.generateMultiClanHistoryChart(clansData);
                         if (scoreBuffer) {
                             await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'clans_history.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
                         }
                     } catch (chartErr) {
                         this.logger.warn('Could not generate multi-clan history chart:', chartErr.message);
-                    }
-
-                    // DMG and RC+TC charts from guild snapshots
-                    try {
-                        const allHistory = this.clanHistoryService.getAllGuildsHistory(sortedClans.map(g => g.guildId));
-                        if (allHistory.length > 0) {
-                            const fmtPower = (v) => {
-                                if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-                                if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-                                if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
-                                return String(v);
-                            };
-                            const dmgBuffer = await this.generateGuildMetricChart(
-                                allHistory, 'totalPower', 'Siła ataku klanów',
-                                { formatLabel: fmtPower, formatDot: fmtPower }
-                            );
-                            if (dmgBuffer) {
-                                await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'clans_power.png' })] });
-                                await new Promise(r => setTimeout(r, 500));
-                            }
-                            const rcBuffer = await this.generateGuildMetricChart(
-                                allHistory, 'totalRelicCores', 'RC+TC klanów',
-                                { formatLabel: v => String(v), formatDot: v => String(v) }
-                            );
-                            if (rcBuffer) {
-                                await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'clans_rc.png' })] });
-                                await new Promise(r => setTimeout(r, 500));
-                            }
-                        }
-                    } catch (chartErr) {
-                        this.logger.warn('Could not generate guild metric charts:', chartErr.message);
                     }
                 }
             }
@@ -678,28 +646,19 @@ class InteractionHandler {
     }
 
     createLunarMineNavButtons(guilds, currentPage, totalPages, paginationId) {
-        const isFirst = currentPage === 0;
-        const isLast = currentPage === totalPages - 1;
-        const prevName = !isFirst ? (guilds[currentPage - 1].title || 'Poprzedni').substring(0, 20) : '';
-        const nextName = !isLast ? (guilds[currentPage + 1].title || 'Następny').substring(0, 20) : '';
-
-        return new ActionRowBuilder().addComponents(
+        const buttons = guilds.map((guild, i) =>
             new ButtonBuilder()
-                .setCustomId(`lme_prev::${paginationId}`)
-                .setLabel(isFirst ? '◀ Poprzedni' : `◀ ${prevName}`)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(isFirst),
-            new ButtonBuilder()
-                .setCustomId(`lme_page::${paginationId}`)
-                .setLabel(`${currentPage + 1} / ${totalPages}`)
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
-            new ButtonBuilder()
-                .setCustomId(`lme_next::${paginationId}`)
-                .setLabel(isLast ? 'Następny ▶' : `${nextName} ▶`)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(isLast)
+                .setCustomId(i === currentPage ? `lme_page::${paginationId}` : `lme_go_${i}::${paginationId}`)
+                .setLabel((guild.title || `Klan ${i + 1}`).substring(0, 80))
+                .setStyle(i === currentPage ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(i === currentPage)
         );
+
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) {
+            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        }
+        return rows;
     }
 
     async sendCombinedMembersListPaginated(interaction, guilds) {
@@ -717,16 +676,15 @@ class InteractionHandler {
         });
 
         const embed = this.createLunarMineMembersPage(guilds, 0);
-        const buttons = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
+        const rows = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
 
-        await interaction.followUp({ embeds: [embed], components: [buttons] });
+        await interaction.followUp({ embeds: [embed], components: rows });
     }
 
     async handleLmeMembersPageButton(interaction, buttonId) {
         const sepIdx = buttonId.indexOf('::');
         const actionFull = buttonId.substring(0, sepIdx);
         const paginationId = buttonId.substring(sepIdx + 2);
-        const action = actionFull.replace('lme_', '');
 
         if (!paginationId || !this.paginationData.has(paginationId)) {
             await interaction.reply({ content: '❌ Dane paginacji wygasły. Użyj komendy ponownie.', ephemeral: true });
@@ -739,22 +697,32 @@ class InteractionHandler {
             return;
         }
 
-        if (action === 'page') {
+        // lme_page:: means the active clan button was clicked — ignore
+        if (actionFull === 'lme_page') {
             await interaction.deferUpdate();
             return;
         }
 
-        let newPage = pageData.currentPage;
-        if (action === 'prev' && newPage > 0) newPage--;
-        else if (action === 'next' && newPage < pageData.totalPages - 1) newPage++;
+        // lme_go_N:: — jump to clan at index N
+        const match = actionFull.match(/^lme_go_(\d+)$/);
+        if (!match) {
+            await interaction.deferUpdate();
+            return;
+        }
+
+        const newPage = parseInt(match[1]);
+        if (newPage < 0 || newPage >= pageData.totalPages) {
+            await interaction.deferUpdate();
+            return;
+        }
 
         pageData.currentPage = newPage;
         this.paginationData.set(paginationId, pageData);
 
         const newEmbed = this.createLunarMineMembersPage(pageData.guilds, newPage);
-        const newButtons = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
+        const newRows = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
 
-        await interaction.update({ embeds: [newEmbed], components: [newButtons] });
+        await interaction.update({ embeds: [newEmbed], components: newRows });
     }
 
     async sendGuildMembersList(interaction, guild) {
@@ -946,21 +914,21 @@ class InteractionHandler {
                         const charts = [
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'rank', 'Pozycja rankingowa klanów',
+                                    allHistory, 'rank', 'Clan Rankings',
                                     { invertY: true, formatLabel: v => `#${v}`, formatDot: v => `#${v}` }
                                 ),
                                 filename: 'clans_rank.png'
                             },
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'totalRelicCores', 'Total RC klanów',
+                                    allHistory, 'totalRelicCores', 'Clan Total RC+TC',
                                     { formatLabel: v => String(v), formatDot: v => String(v) }
                                 ),
                                 filename: 'clans_rc.png'
                             },
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'totalPower', 'Siła ataku klanów',
+                                    allHistory, 'totalPower', 'Clan Total Attack Power',
                                     { formatLabel: fmtPower, formatDot: fmtPower }
                                 ),
                                 filename: 'clans_power.png'
@@ -2049,8 +2017,8 @@ class InteractionHandler {
         const sharp = require('sharp');
         if (!historyData || historyData.length < 2) return null;
 
-        const W = 800, H = 260;
-        const M = { top: 42, right: 28, bottom: 44, left: 56 };
+        const W = 800, H = 270;
+        const M = { top: 54, right: 28, bottom: 44, left: 56 };
         const cW = W - M.left - M.right;
         const cH = H - M.top - M.bottom;
 
@@ -2123,8 +2091,9 @@ class InteractionHandler {
 
         const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${safeName}</text>
-  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Historia punktów klanu</text>
+  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Clan Score History</text>
+  <circle cx="${M.left + 5}" cy="36" r="5" fill="${lineColor}"/>
+  <text x="${M.left + 14}" y="40" font-family="Arial,sans-serif" font-size="11" fill="${lineColor}" font-weight="bold">${safeName}</text>
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
@@ -2219,10 +2188,8 @@ class InteractionHandler {
             const dotsSvg = pts.map(p => {
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
                 const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${p.delta}` : String(p.delta);
-                const scoreY = Math.max(M.top + 10, p.y - 6);
-                const deltaY = Math.max(M.top - 1, scoreY - 11);
-                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${color}" text-anchor="middle" opacity="0.85">${p.score}</text>` +
+                const deltaY = Math.max(M.top + 2, p.y - 8);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
                     (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
             }).join('\n    ');
 
@@ -2249,7 +2216,7 @@ class InteractionHandler {
 
         const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Historia punktów klanów</text>
+  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Clan Score History</text>
   ${legendSvg}
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
@@ -2378,12 +2345,10 @@ class InteractionHandler {
 
             const linePath = buildCatmullRom(pts);
             const dotsSvg = pts.map((p, pi) => {
-                const scoreY = p.y - labelOffsets[pi];
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
                 const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${fmtDot(p.delta)}` : fmtDot(p.delta);
-                const deltaY = Math.max(M.top - 1, scoreY - 11);
-                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${color}" text-anchor="middle" opacity="0.85">${fmtDot(p.v)}</text>` +
+                const deltaY = Math.max(M.top + 2, p.y - labelOffsets[pi]);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
                     (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
             }).join('\n    ');
 
@@ -2645,35 +2610,6 @@ class InteractionHandler {
                         const scoreBuffer = await this.generateMultiClanHistoryChart(rivalsWithScoreHistory);
                         if (scoreBuffer) {
                             await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'rivals_score_history.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-                    }
-
-                    // DMG and RC+TC charts — rivals clans that have guild snapshot history (PS guilds)
-                    const rivalGuildIds = allRivals.map(r => parseInt(r.guildId));
-                    const rivalsGuildHistory = this.clanHistoryService.getAllGuildsHistory(rivalGuildIds);
-
-                    if (rivalsGuildHistory.length > 0) {
-                        const fmtPower = (v) => {
-                            if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-                            if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-                            if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
-                            return String(v);
-                        };
-                        const dmgBuffer = await this.generateGuildMetricChart(
-                            rivalsGuildHistory, 'totalPower', 'Siła ataku rywali',
-                            { formatLabel: fmtPower, formatDot: fmtPower }
-                        );
-                        if (dmgBuffer) {
-                            await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'rivals_power.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-                        const rcBuffer = await this.generateGuildMetricChart(
-                            rivalsGuildHistory, 'totalRelicCores', 'RC+TC rywali',
-                            { formatLabel: v => String(v), formatDot: v => String(v) }
-                        );
-                        if (rcBuffer) {
-                            await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'rivals_rc.png' })] });
                         }
                     }
                 } catch (chartErr) {
