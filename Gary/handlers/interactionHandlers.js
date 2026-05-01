@@ -223,7 +223,7 @@ class InteractionHandler {
         }
 
         // Handle LME member list pagination — public, no permission check needed
-        if (buttonId.startsWith('lme_prev::') || buttonId.startsWith('lme_next::') || buttonId.startsWith('lme_page::')) {
+        if (buttonId.startsWith('lme_') && buttonId.includes('::')) {
             await this.handleLmeMembersPageButton(interaction, buttonId);
             return;
         }
@@ -678,28 +678,19 @@ class InteractionHandler {
     }
 
     createLunarMineNavButtons(guilds, currentPage, totalPages, paginationId) {
-        const isFirst = currentPage === 0;
-        const isLast = currentPage === totalPages - 1;
-        const prevName = !isFirst ? (guilds[currentPage - 1].title || 'Poprzedni').substring(0, 20) : '';
-        const nextName = !isLast ? (guilds[currentPage + 1].title || 'Następny').substring(0, 20) : '';
-
-        return new ActionRowBuilder().addComponents(
+        const buttons = guilds.map((guild, i) =>
             new ButtonBuilder()
-                .setCustomId(`lme_prev::${paginationId}`)
-                .setLabel(isFirst ? '◀ Poprzedni' : `◀ ${prevName}`)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(isFirst),
-            new ButtonBuilder()
-                .setCustomId(`lme_page::${paginationId}`)
-                .setLabel(`${currentPage + 1} / ${totalPages}`)
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
-            new ButtonBuilder()
-                .setCustomId(`lme_next::${paginationId}`)
-                .setLabel(isLast ? 'Następny ▶' : `${nextName} ▶`)
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(isLast)
+                .setCustomId(i === currentPage ? `lme_page::${paginationId}` : `lme_go_${i}::${paginationId}`)
+                .setLabel((guild.title || `Klan ${i + 1}`).substring(0, 80))
+                .setStyle(i === currentPage ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(i === currentPage)
         );
+
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) {
+            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        }
+        return rows;
     }
 
     async sendCombinedMembersListPaginated(interaction, guilds) {
@@ -717,16 +708,15 @@ class InteractionHandler {
         });
 
         const embed = this.createLunarMineMembersPage(guilds, 0);
-        const buttons = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
+        const rows = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
 
-        await interaction.followUp({ embeds: [embed], components: [buttons] });
+        await interaction.followUp({ embeds: [embed], components: rows });
     }
 
     async handleLmeMembersPageButton(interaction, buttonId) {
         const sepIdx = buttonId.indexOf('::');
         const actionFull = buttonId.substring(0, sepIdx);
         const paginationId = buttonId.substring(sepIdx + 2);
-        const action = actionFull.replace('lme_', '');
 
         if (!paginationId || !this.paginationData.has(paginationId)) {
             await interaction.reply({ content: '❌ Dane paginacji wygasły. Użyj komendy ponownie.', ephemeral: true });
@@ -739,22 +729,32 @@ class InteractionHandler {
             return;
         }
 
-        if (action === 'page') {
+        // lme_page:: means the active clan button was clicked — ignore
+        if (actionFull === 'lme_page') {
             await interaction.deferUpdate();
             return;
         }
 
-        let newPage = pageData.currentPage;
-        if (action === 'prev' && newPage > 0) newPage--;
-        else if (action === 'next' && newPage < pageData.totalPages - 1) newPage++;
+        // lme_go_N:: — jump to clan at index N
+        const match = actionFull.match(/^lme_go_(\d+)$/);
+        if (!match) {
+            await interaction.deferUpdate();
+            return;
+        }
+
+        const newPage = parseInt(match[1]);
+        if (newPage < 0 || newPage >= pageData.totalPages) {
+            await interaction.deferUpdate();
+            return;
+        }
 
         pageData.currentPage = newPage;
         this.paginationData.set(paginationId, pageData);
 
         const newEmbed = this.createLunarMineMembersPage(pageData.guilds, newPage);
-        const newButtons = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
+        const newRows = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
 
-        await interaction.update({ embeds: [newEmbed], components: [newButtons] });
+        await interaction.update({ embeds: [newEmbed], components: newRows });
     }
 
     async sendGuildMembersList(interaction, guild) {
