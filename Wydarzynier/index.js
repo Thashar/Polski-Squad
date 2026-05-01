@@ -5,7 +5,7 @@ const path = require('path');
 const config = require('./config/config');
 const { handleInteraction } = require('./handlers/interactionHandlers');
 const { handleReactionAdd, handleReactionRemove } = require('./handlers/reactionHandlers');
-const { handleMessageUpdate, handleMessageCreate } = require('./handlers/messageHandlers');
+const { handleMessageUpdate } = require('./handlers/messageHandlers');
 const LobbyService = require('./services/lobbyService');
 const TimerService = require('./services/timerService');
 const BazarService = require('./services/bazarService');
@@ -15,6 +15,7 @@ const TablicaMenedzer = require('./services/tablicaMenedzer');
 const EventMenedzer = require('./services/eventMenedzer');
 const ListaEventowMenedzer = require('./services/listaEventowMenedzer');
 const StrefaCzasowaManager = require('./services/strefaCzasowaManager');
+const { delay } = require('./utils/helpers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -35,12 +36,10 @@ const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
 const bazarService = new BazarService(config);
 
-// Serwisy systemu przypomnień i eventów
 const przypomnieniaMenedzer = new PrzypomnieniaMenedzer(config, logger);
 const strefaCzasowaManager = new StrefaCzasowaManager(logger);
 const eventMenedzer = new EventMenedzer(config, logger);
 
-// Te serwisy wymagają wcześniejszych serwisów, zainicjalizujemy je później
 let harmonogram = null;
 let tablicaMenedzer = null;
 let listaEventowMenedzer = null;
@@ -55,24 +54,8 @@ const sharedState = {
     client,
     config,
     logger,
-    userStates: new Map(), // Stan użytkowników dla interakcji z przypomnieniami
+    userStates: new Map(),
 };
-
-// Funkcje pomocnicze do dodania serwisów po inicjalizacji
-function setHarmonogram(h) {
-    harmonogram = h;
-    sharedState.harmonogram = h;
-}
-
-function setTablicaMenedzer(t) {
-    tablicaMenedzer = t;
-    sharedState.tablicaMenedzer = t;
-}
-
-function setListaEventowMenedzer(l) {
-    listaEventowMenedzer = l;
-    sharedState.listaEventowMenedzer = l;
-}
 
 const RELAY_FILE_3 = path.join(__dirname, 'data', 'message_relay.json');
 const MAX_RELAY_ENTRIES_3 = 200;
@@ -93,7 +76,7 @@ async function saveRelay3(dmMessageId, channelId, messageId) {
 async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
     if (robotUsers.length === 0) return;
     try {
-        const activationChannel = await client.channels.fetch('1486510519119773818');
+        const activationChannel = await client.channels.fetch(config.robot3ActivationChannel);
         const guild = activationChannel.guild;
 
         const buttons = [];
@@ -131,9 +114,7 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
                         b.customId === buttons[i].data.custom_id &&
                         b.label === buttons[i].data.label
                     );
-                if (same) {
-                    return;
-                }
+                if (same) return;
                 await existing.edit({ content, components: [row] });
                 logger.info('[ROBOT3] Zaktualizowano wiadomość aktywacji');
                 return;
@@ -152,48 +133,44 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
 }
 
 client.once(Events.ClientReady, async () => {
-  try {
-    logger.success('✅ Wydarzynier gotowy - lobby partii, bazar, przypomnienia, eventy');
+    try {
+        logger.success('✅ Wydarzynier gotowy - lobby partii, bazar, przypomnienia, eventy');
 
-    // Wczytaj lobby i timery z plików
-    await lobbyService.loadLobbies();
-    await timerService.restoreTimers(sharedState);
-    await bazarService.initialize(client);
+        await lobbyService.loadLobbies();
+        await timerService.restoreTimers(sharedState);
+        await bazarService.initialize(client);
 
-    // Inicjalizuj system przypomnień i eventów
-    await przypomnieniaMenedzer.initialize();
-    await strefaCzasowaManager.initialize();
-    await eventMenedzer.initialize();
+        await przypomnieniaMenedzer.initialize();
+        await strefaCzasowaManager.initialize();
+        await eventMenedzer.initialize();
 
-    // Utwórz serwisy zależne
-    tablicaMenedzer = new TablicaMenedzer(client, config, logger, przypomnieniaMenedzer, strefaCzasowaManager, eventMenedzer);
-    setTablicaMenedzer(tablicaMenedzer);
+        tablicaMenedzer = new TablicaMenedzer(client, config, logger, przypomnieniaMenedzer, strefaCzasowaManager, eventMenedzer);
+        sharedState.tablicaMenedzer = tablicaMenedzer;
 
-    listaEventowMenedzer = new ListaEventowMenedzer(client, config, logger, eventMenedzer);
-    setListaEventowMenedzer(listaEventowMenedzer);
+        listaEventowMenedzer = new ListaEventowMenedzer(client, config, logger, eventMenedzer);
+        sharedState.listaEventowMenedzer = listaEventowMenedzer;
 
-    harmonogram = new Harmonogram(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer, eventMenedzer, listaEventowMenedzer);
-    setHarmonogram(harmonogram);
+        harmonogram = new Harmonogram(client, config, logger, przypomnieniaMenedzer, tablicaMenedzer, eventMenedzer, listaEventowMenedzer);
+        sharedState.harmonogram = harmonogram;
 
-    // Inicjalizuj serwisy zależne
-    await tablicaMenedzer.initialize();
-    await listaEventowMenedzer.initialize();
-    harmonogram.initialize();
+        await tablicaMenedzer.initialize();
+        await listaEventowMenedzer.initialize();
+        harmonogram.initialize();
 
-    const { InteractionHandler } = require('./handlers/interactionHandlers');
-    const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
-    await interactionHandler.registerSlashCommands(client);
+        const { InteractionHandler } = require('./handlers/interactionHandlers');
+        const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
+        await interactionHandler.registerSlashCommands(client);
 
-    startRepositionSystem(sharedState);
+        startRepositionSystem(sharedState);
 
-    await updateActivationMessage(
-        client, config.robot3Users, 'Wydarzynier', 'robot_activate_wydarzynier_',
-        path.join(__dirname, 'data', 'robot_activation_msg.json')
-    );
+        await updateActivationMessage(
+            client, config.robot3Users, 'Wydarzynier', 'robot_activate_wydarzynier_',
+            path.join(__dirname, 'data', 'robot_activation_msg.json')
+        );
 
-  } catch (error) {
-    logger.error('❌ Błąd krytyczny podczas inicjalizacji Wydarzynier:', error);
-  }
+    } catch (error) {
+        logger.error('❌ Błąd krytyczny podczas inicjalizacji Wydarzynier:', error);
+    }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -202,8 +179,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
             const user = await client.users.fetch(userId);
             await user.send('System przekazywania wiadomości aktywny!');
-            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.tag}**`, ephemeral: true });
-            logger.info(`[ROBOT3] Aktywowano system dla ${user.tag}`);
+            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, ephemeral: true });
+            logger.info(`[ROBOT3] Aktywowano system dla ${user.username}`);
         } catch (error) {
             await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
             logger.error(`[ROBOT3] Błąd aktywacji: ${error.message}`);
@@ -214,16 +191,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await handleInteraction(interaction, sharedState);
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi interakcji:', error);
-        
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.', 
-                    ephemeral: true 
+                await interaction.reply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    ephemeral: true
                 });
             } else if (interaction.deferred) {
-                await interaction.editReply({ 
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.' 
+                await interaction.editReply({
+                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
                 });
             }
         } catch (replyError) {
@@ -248,13 +224,11 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
     }
 });
 
-// Obsługa nowych wiadomości (filtrowanie pingów w lobby)
 client.on(Events.MessageCreate, async (message) => {
     if (message.channel.type === ChannelType.DM && !message.author.bot) {
         if (config.robot3Users.length > 0 && config.robot3Users.includes(message.author.id)) {
             if (message.partial) await message.fetch();
 
-            // Odpowiedź na przekazaną wiadomość → odpowiedz w oryginalnym kanale
             if (message.reference?.messageId) {
                 const relay = await loadRelay3();
                 const original = relay[message.reference.messageId];
@@ -275,21 +249,19 @@ client.on(Events.MessageCreate, async (message) => {
                 }
             }
 
-            // Zwykły DM → przekaż na kanał
             try {
                 const forwardChannel = await client.channels.fetch(config.notificationForwardChannel);
                 if (forwardChannel) {
                     const attachmentUrls = [...message.attachments.values()].map(a => a.url);
                     const payload = {};
                     let msgContent = message.content || '';
-                    // Jeśli wiadomość zaczyna się od "@" i skonfigurowano rolę → dodaj ping do roli
                     if (msgContent.startsWith('@') && config.mentionRoleId) {
                         msgContent = `<@&${config.mentionRoleId}> ${msgContent.slice(1).trimStart()}`;
                     }
                     if (msgContent) payload.content = msgContent;
                     if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                     if (payload.content || payload.files) await forwardChannel.send(payload);
-                    logger.info(`[ROBOT3] Przekazano wiadomość od ${message.author.tag} na kanał`);
+                    logger.info(`[ROBOT3] Przekazano wiadomość od ${message.author.username} na kanał`);
                 }
             } catch (error) {
                 logger.error(`[ROBOT3] Błąd przekazywania wiadomości: ${error.message}`);
@@ -298,7 +270,6 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
-    // Ping bota w kanale → przekaż do DM robot userów (tylko z kanału notificationForwardChannel, ignoruj @everyone/@here)
     if (!message.author.bot && message.guild && config.robot3Users.length > 0 && message.channelId === config.notificationForwardChannel && message.mentions.has(client.user) && !message.mentions.everyone) {
         for (const userId of config.robot3Users) {
             try {
@@ -310,94 +281,69 @@ client.on(Events.MessageCreate, async (message) => {
                 if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                 const dmMsg = await user.send(payload);
                 await saveRelay3(dmMsg.id, message.channelId, message.id);
-                logger.info(`[ROBOT3] Przekazano ping od ${message.author.tag} do ${user.tag}`);
+                logger.info(`[ROBOT3] Przekazano ping od ${message.author.username} do ${user.username}`);
             } catch (err) {
                 logger.error(`[ROBOT3] Błąd przekazywania pinga do ${userId}: ${err.message}`);
             }
         }
     }
-
-    try {
-        await handleMessageCreate(message, sharedState);
-    } catch (error) {
-        logger.error('❌ Błąd podczas obsługi nowej wiadomości:', error);
-    }
 });
 
-// Obsługa dodawania członków do wątku
 client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, thread) => {
     try {
-        // Sprawdź czy to wątek lobby
         const lobby = sharedState.lobbyService.getLobbyByThreadId(thread.id);
         if (!lobby) return;
 
-        // Sprawdź nowo dodanych członków
         for (const member of addedMembers.values()) {
-            // Ignoruj bota
             if (member.user?.bot) continue;
-            
-            // Sprawdź czy użytkownik jest na liście zaakceptowanych graczy
+
             if (!lobby.players.includes(member.id)) {
                 try {
-                    // Sprawdź czy to administrator - jeśli tak, ignoruj jego obecność ale nie dodawaj do lobby
                     const guildMember = await thread.guild.members.fetch(member.id).catch(() => null);
                     if (guildMember && guildMember.permissions.has('Administrator')) {
                         logger.info(`🛡️ Administrator ${member.user?.username} wszedł do lobby - ignoruję jego obecność`);
-                        continue; // Nie usuwaj administratora, ale też nie dodawaj go do lobby
+                        continue;
                     }
-                    
-                    // Usuń nieupoważnionego członka
+
                     await thread.members.remove(member.id);
-                    
-                    // Wyślij wiadomość informacyjną (bez pingu żeby uniknąć pętli)
+
                     const warningMsg = await thread.send(
                         `⚠️ **${member.user?.username || 'Użytkownik'}** został usunięty z wątku - dołączenie możliwe tylko przez system akceptacji!`
                     );
-                    
-                    // Usuń wiadomość po 10 sekundach
-                    setTimeout(async () => {
-                        try {
-                            await warningMsg.delete();
-                        } catch (error) {
-                            // Ignoruj błędy usuwania
-                        }
-                    }, 10000);
-                    
+
+                    await delay(10000);
+                    try {
+                        await warningMsg.delete();
+                    } catch {
+                        // wiadomość już usunięta
+                    }
+
                 } catch (error) {
                     logger.error(`❌ Błąd podczas usuwania nieupoważnionego członka z wątku:`, error);
                 }
             }
         }
 
-        // Sprawdź usuniętych członków i zwolnij miejsca
         for (const member of removedMembers.values()) {
-            // Ignoruj bota
             if (member.user?.bot) continue;
-            
-            // Ignoruj administratorów - nie są częścią oficjalnego lobby
+
             const guildMember = await thread.guild.members.fetch(member.id).catch(() => null);
             if (guildMember && guildMember.permissions.has('Administrator')) {
                 logger.info(`🛡️ Administrator ${member.user?.username} opuścił lobby - ignoruję (nie był oficjalnie w lobby)`);
                 continue;
             }
-            
-            // Usuń z listy graczy jeśli był na liście
+
             const playerIndex = lobby.players.indexOf(member.id);
             if (playerIndex > -1) {
                 lobby.players.splice(playerIndex, 1);
-                
-                // Sprawdź czy lobby nie jest już pełne
+
                 if (lobby.isFull && lobby.players.length < sharedState.config.lobby.maxPlayers) {
                     lobby.isFull = false;
-                    
-                    // Wyślij informację o zwolnionym miejscu
                     await thread.send(`📢 Zwolniono miejsce w lobby! Dostępne miejsca: ${sharedState.config.lobby.maxPlayers - lobby.players.length}`);
                 }
-                
-                // Zapisz zmiany
+
                 await sharedState.lobbyService.saveLobbies();
 
-                // Aktualizuj wiadomość ogłoszeniową
                 try {
                     const channel = await sharedState.client.channels.fetch(sharedState.config.channels.party);
                     const announcementMessage = await channel.messages.fetch(lobby.announcementMessageId).catch(() => null);
@@ -409,12 +355,9 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                             sharedState.config.lobby.maxPlayers
                         );
 
-                        // Pobierz customId z aktualnego przycisku
                         const currentButton = announcementMessage.components[0]?.components[0];
                         const customId = currentButton?.customId || `join_lobby_${Date.now()}`;
 
-                        // Utwórz przycisk z odpowiednim stanem
-                        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
                         const joinButton = new ActionRowBuilder()
                             .addComponents(
                                 new ButtonBuilder()
@@ -422,7 +365,7 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                                     .setLabel('Dołącz do Party')
                                     .setEmoji(sharedState.config.emoji.ticket)
                                     .setStyle(ButtonStyle.Primary)
-                                    .setDisabled(lobby.isFull) // Wyłącz jeśli pełne
+                                    .setDisabled(lobby.isFull)
                             );
 
                         await announcementMessage.edit({
@@ -433,7 +376,6 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                 } catch (error) {
                     logger.error('❌ Błąd podczas aktualizacji wiadomości po wyjściu gracza:', error);
                 }
-                
             }
         }
     } catch (error) {
@@ -441,7 +383,6 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
     }
 });
 
-// Obsługa aktualizacji wiadomości (do monitorowania reakcji)
 client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     try {
         await handleMessageUpdate(oldMessage, newMessage, sharedState);
@@ -463,54 +404,36 @@ process.on('uncaughtException', error => {
     process.exit(1);
 });
 
-/**
- * Uruchamia system repozycjonowania ogłoszeń lobby co 5 minut
- * @param {Object} sharedState - Współdzielony stan aplikacji
- */
 function startRepositionSystem(sharedState) {
-    // Sprawdzaj co minutę czy są lobby do repozycjonowania
     setInterval(async () => {
         try {
             const lobbiesForRepositioning = sharedState.lobbyService.getLobbiesForRepositioning(
                 sharedState.config.lobby.repositionInterval
             );
-
             for (const lobby of lobbiesForRepositioning) {
                 await repositionLobbyAnnouncement(lobby, sharedState);
             }
         } catch (error) {
             logger.error('❌ Błąd podczas repozycjonowania lobby:', error);
         }
-    }, 60000); // Co minutę sprawdzaj
+    }, 60000);
 }
 
-/**
- * Repozycjonuje ogłoszenie lobby (usuwa stare i tworzy nowe na górze)
- * @param {Object} lobby - Dane lobby
- * @param {Object} sharedState - Współdzielony stan aplikacji
- */
 async function repositionLobbyAnnouncement(lobby, sharedState) {
     try {
         const channel = await sharedState.client.channels.fetch(sharedState.config.channels.party);
-        
-        // Sprawdź czy minęło dokładnie 5 minut od ostatniego repozycjonowania
+
         const now = Date.now();
         const timeSinceLastReposition = now - lobby.lastRepositionTime;
-        if (timeSinceLastReposition < sharedState.config.lobby.repositionInterval) {
-            return;
-        }
+        if (timeSinceLastReposition < sharedState.config.lobby.repositionInterval) return;
 
-        // Usuń stare ogłoszenie
         try {
             const oldMessage = await channel.messages.fetch(lobby.announcementMessageId);
             await oldMessage.delete();
-        } catch (deleteError) {
-            // Ignoruj błędy usuwania (wiadomość może już nie istnieć)
+        } catch {
+            // wiadomość już usunięta
         }
 
-        // Utwórz nowe ogłoszenie na górze
-        const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        
         const joinButton = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
@@ -522,18 +445,15 @@ async function repositionLobbyAnnouncement(lobby, sharedState) {
 
         const newMessage = await channel.send({
             content: sharedState.config.messages.partyAnnouncementReposition(
-                lobby.ownerDisplayName, 
-                lobby.players.length, 
+                lobby.ownerDisplayName,
+                lobby.players.length,
                 sharedState.config.lobby.maxPlayers
             ),
             components: [joinButton]
         });
 
-        // Zaktualizuj ID wiadomości w lobby
         lobby.announcementMessageId = newMessage.id;
         sharedState.lobbyService.updateRepositionTime(lobby.id);
-        
-        // Zapisz zmiany
         await sharedState.lobbyService.saveLobbies();
 
         logger.info(`🔄 Repozycjonowano ogłoszenie lobby ${lobby.id} właściciela ${lobby.ownerDisplayName}`);
@@ -543,51 +463,27 @@ async function repositionLobbyAnnouncement(lobby, sharedState) {
     }
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-    logger.info('Otrzymano SIGINT - zamykanie Wydarzyniera...');
-
-    // Zatrzymaj harmonogram i periodic updates
+async function shutdown(signal) {
+    logger.info(`Otrzymano ${signal} - zamykanie Wydarzyniera...`);
     if (harmonogram) harmonogram.stop();
     if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
-
-    // Zapisz dane
     await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
     await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
-
     await client.destroy();
     process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-    logger.info('Otrzymano SIGTERM - zamykanie Wydarzyniera...');
-
-    // Zatrzymaj harmonogram i periodic updates
-    if (harmonogram) harmonogram.stop();
-    if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
-
-    // Zapisz dane
-    await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
-    await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
-
-    await client.destroy();
-    process.exit(0);
-});
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 module.exports = {
     client,
-    start: () => {
-        return client.login(config.token);
-    },
+    start: () => client.login(config.token),
     stop: async () => {
-        // Zatrzymaj harmonogram i periodic updates
         if (harmonogram) harmonogram.stop();
         if (tablicaMenedzer) tablicaMenedzer.stopPeriodicUpdates();
-
-        // Zapisz dane
         await lobbyService.saveLobbies().catch(err => logger.error('Błąd podczas zapisywania lobbies:', err));
         await timerService.saveTimersToFile().catch(err => logger.error('Błąd podczas zapisywania timerów:', err));
-
         return client.destroy();
     }
 };

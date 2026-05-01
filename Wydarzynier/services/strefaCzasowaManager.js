@@ -4,9 +4,6 @@ class StrefaCzasowaManager {
         this.timezone = 'Europe/Warsaw';
     }
 
-    async initialize() {
-    }
-
     getGlobalTimezone() {
         return this.timezone;
     }
