@@ -20,6 +20,15 @@ if (missingVars.length > 0) {
  *         ENDERSECHO_GUILD_N_TOP1_ROLE, ...
  * Role TOP i język są opcjonalne (domyślnie lang=pol).
  */
+const DISCORD_ID_RE = /^\d{17,20}$/;
+
+function validateDiscordId(value, envVar) {
+    if (!DISCORD_ID_RE.test(value)) {
+        logger.error(`❌ Nieprawidłowe Discord ID w ${envVar}: "${value}" (oczekiwano 17-20 cyfr)`);
+        process.exit(1);
+    }
+}
+
 function parseGuildsConfig() {
     const guilds = [];
     let i = 1;
@@ -28,10 +37,14 @@ function parseGuildsConfig() {
         const guildId = process.env[`ENDERSECHO_GUILD_${i}_ID`];
         const channelId = process.env[`ENDERSECHO_GUILD_${i}_CHANNEL`];
 
+        validateDiscordId(guildId, `ENDERSECHO_GUILD_${i}_ID`);
+
         if (!channelId) {
             logger.error(`❌ Brak ENDERSECHO_GUILD_${i}_CHANNEL dla serwera ${guildId}`);
             process.exit(1);
         }
+
+        validateDiscordId(channelId, `ENDERSECHO_GUILD_${i}_CHANNEL`);
 
         // Język interfejsu — domyślnie pol
         const rawLang = (process.env[`ENDERSECHO_GUILD_${i}_LANG`] || 'pol').toLowerCase();

@@ -91,17 +91,27 @@ class RoleRankingConfigService {
         logger.info(`[RoleRanking] Fetchuję ${playerUserIds.length} graczy dla roli ${roleId} na serwerze ${guild.id}...`);
 
         const withRole = new Set();
-        // Discord pozwala batch do 100 ID w jednym żądaniu
+        // Discord pozwala batch do 100 ID w jednym żądaniu — fetche wykonywane równolegle
         const BATCH = 100;
+        const chunks = [];
         for (let i = 0; i < playerUserIds.length; i += BATCH) {
-            const chunk = playerUserIds.slice(i, i + BATCH);
-            try {
-                const membersMap = await guild.members.fetch({ user: chunk });
-                for (const [userId, member] of membersMap) {
+            chunks.push(playerUserIds.slice(i, i + BATCH));
+        }
+
+        const results = await Promise.allSettled(
+            chunks.map((chunk, idx) =>
+                guild.members.fetch({ user: chunk }).catch(err => {
+                    logger.warn(`[RoleRanking] Błąd batch-fetch (chunk ${idx + 1}): ${err.message}`);
+                    return new Map();
+                })
+            )
+        );
+
+        for (const result of results) {
+            if (result.status === 'fulfilled') {
+                for (const [userId, member] of result.value) {
                     if (member.roles.cache.has(roleId)) withRole.add(userId);
                 }
-            } catch (err) {
-                logger.warn(`[RoleRanking] Błąd batch-fetch (chunk ${i / BATCH + 1}): ${err.message}`);
             }
         }
 

@@ -15,11 +15,18 @@ class RankingService {
         this._writeQueues = new Map();
     }
 
-    // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy
+    // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
+    // Każda operacja ma timeout 30s — jeśli przekroczy, kolejka jest odblokowana.
     _enqueue(guildId, fn) {
         const prev = this._writeQueues.get(guildId) ?? Promise.resolve();
-        const next = prev.then(fn, fn);
-        this._writeQueues.set(guildId, next);
+        const next = prev.then(() => Promise.race([
+            fn(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout kolejki dla guildId=${guildId}`)), 30000)),
+        ]), () => Promise.race([
+            fn(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout kolejki dla guildId=${guildId}`)), 30000)),
+        ]));
+        this._writeQueues.set(guildId, next.catch(() => {}));
         return next;
     }
 
@@ -88,18 +95,23 @@ class RankingService {
 
     /**
      * Buduje globalny ranking — najlepszy wynik gracza ze wszystkich serwerów.
+     * Rankingi są wczytywane równolegle (Promise.all).
      * @returns {Promise<Array>}
      */
     async getGlobalRanking(activeGuildIds = null) {
-        const bestPerPlayer = new Map();
+        const guilds = this.config.getAllGuilds()
+            .filter(g => !activeGuildIds || activeGuildIds.has(g.id));
 
-        for (const guild of this.config.getAllGuilds()) {
-            if (activeGuildIds && !activeGuildIds.has(guild.id)) continue;
-            const ranking = await this.loadRanking(guild.id);
+        const rankings = await Promise.all(
+            guilds.map(g => this.loadRanking(g.id).then(r => ({ guildId: g.id, ranking: r })))
+        );
+
+        const bestPerPlayer = new Map();
+        for (const { guildId, ranking } of rankings) {
             for (const [userId, data] of Object.entries(ranking)) {
                 const existing = bestPerPlayer.get(userId);
                 if (!existing || data.scoreValue > existing.scoreValue) {
-                    bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guild.id });
+                    bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guildId });
                 }
             }
         }
@@ -119,17 +131,21 @@ class RankingService {
             const sharedDir = path.join(__dirname, '../../shared_data');
             await fs.mkdir(sharedDir, { recursive: true });
 
-            // Wczytaj wszystkie rankingi serwerów w jednym przebiegu —
+            // Wczytaj wszystkie rankingi serwerów równolegle —
             // potrzebne do obliczenia globalnego rankingu i rankingów per-serwer.
+            const allGuilds = this.config.getAllGuilds();
+            const loadedRankings = await Promise.all(
+                allGuilds.map(g => this.loadRanking(g.id).then(r => ({ guildId: g.id, ranking: r })))
+            );
+
             const perGuildData = new Map(); // guildId -> { userId: data }
             const bestPerPlayer = new Map(); // userId -> best data
-            for (const guild of this.config.getAllGuilds()) {
-                const ranking = await this.loadRanking(guild.id);
-                perGuildData.set(guild.id, ranking);
+            for (const { guildId, ranking } of loadedRankings) {
+                perGuildData.set(guildId, ranking);
                 for (const [userId, data] of Object.entries(ranking)) {
                     const existing = bestPerPlayer.get(userId);
                     if (!existing || data.scoreValue > existing.scoreValue) {
-                        bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guild.id });
+                        bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guildId });
                     }
                 }
             }

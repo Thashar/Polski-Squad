@@ -62,7 +62,9 @@ class InteractionHandler {
         this.updateCooldownService = updateCooldownService;
         this.testerService = testerService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
+        // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
+        this._infoSessionTimers = new Map();
         // Stan wizarda /configure (userId_guildId -> { step data })
         this._configWizard = new Map();
     }
@@ -1245,7 +1247,7 @@ class InteractionHandler {
         const msgs = this.msgs(guildId);
         const t = this._panelT(guildId);
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
-        const blocked = this.userBlockService.getBlockedUsers();
+        const blocked = await this.userBlockService.getBlockedUsers();
         const visibleBlocked = isHeadAdmin ? blocked : blocked.filter(e => e.guildId === guildId);
         if (visibleBlocked.length === 0) {
             await interaction.update({
@@ -1279,7 +1281,7 @@ class InteractionHandler {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const query = interaction.fields.getTextInputValue('unblock_query').trim().toLowerCase();
         await interaction.deferReply({ flags: ['Ephemeral'] });
-        const blocked = this.userBlockService.getBlockedUsers();
+        const blocked = await this.userBlockService.getBlockedUsers();
         const scopedBlocked = isHeadAdmin ? blocked : blocked.filter(e => e.guildId === guildId);
         const filtered = scopedBlocked.filter(e => e.username.toLowerCase().includes(query));
         if (filtered.length === 0) {
@@ -1380,7 +1382,7 @@ class InteractionHandler {
                 }
             }
             // Odfiltruj już zablokowanych
-            const alreadyBlocked = new Set(this.userBlockService.getBlockedUsers().map(e => e.userId));
+            const alreadyBlocked = new Set((await this.userBlockService.getBlockedUsers()).map(e => e.userId));
             const notBlocked = allMatches.filter(p => !alreadyBlocked.has(p.userId));
             const alreadyBlockedMatches = allMatches.filter(p => alreadyBlocked.has(p.userId));
 
@@ -1804,7 +1806,7 @@ class InteractionHandler {
 
         const msgs = this.msgs(interaction.guildId);
 
-        if (this.userBlockService.isBlocked(interaction.user.id)) {
+        if (await this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
                 content: msgs.userBlocked,
                 flags: ['Ephemeral']
@@ -3028,7 +3030,7 @@ class InteractionHandler {
                 const t = this._panelT(interaction.guildId);
                 const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
                 const targetUserId = interaction.values[0];
-                const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
+                const entry = (await this.userBlockService.getBlockedUsers()).find(e => e.userId === targetUserId);
                 // Admin może odblokować tylko graczy ze swojego serwera
                 if (!isHeadAdmin && entry?.guildId !== interaction.guildId) {
                     await interaction.update({
@@ -3094,7 +3096,7 @@ class InteractionHandler {
                 }
                 const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
                 const targetUserId = interaction.values[0];
-                const entry = this.userBlockService.getBlockedUsers().find(e => e.userId === targetUserId);
+                const entry = (await this.userBlockService.getBlockedUsers()).find(e => e.userId === targetUserId);
                 if (entry?.blockedByHeadAdmin && !isHeadAdmin) {
                     await interaction.update({
                         content: `⛔ **${entry.username}** został zablokowany przez Head Admina. Tylko Head Admin może go odblokować.`,
@@ -3500,6 +3502,24 @@ class InteractionHandler {
     /**
      * Obsługuje submit modala /info — zapisuje dane, pokazuje podgląd z przyciskami.
      */
+    _setInfoSession(userId, data) {
+        if (this._infoSessionTimers.has(userId)) clearTimeout(this._infoSessionTimers.get(userId));
+        this._infoSessions.set(userId, data);
+        const timer = setTimeout(() => {
+            this._infoSessions.delete(userId);
+            this._infoSessionTimers.delete(userId);
+        }, 15 * 60 * 1000);
+        this._infoSessionTimers.set(userId, timer);
+    }
+
+    _clearInfoSession(userId) {
+        if (this._infoSessionTimers.has(userId)) {
+            clearTimeout(this._infoSessionTimers.get(userId));
+            this._infoSessionTimers.delete(userId);
+        }
+        this._infoSessions.delete(userId);
+    }
+
     async _handleInfoModalSubmit(interaction) {
         const msgs = this.msgs(interaction.guildId);
         if (!this.config.blockOcrUserIds.includes(interaction.user.id)) {
@@ -3514,7 +3534,7 @@ class InteractionHandler {
         const image = interaction.fields.getTextInputValue('embedImage').trim() || null;
 
         const data = { title, descriptionPol, descriptionEng, icon, image, user: interaction.user };
-        this._infoSessions.set(interaction.user.id, data);
+        this._setInfoSession(interaction.user.id, data);
 
         const embedPol = this._buildInfoEmbed(data, interaction.user, descriptionPol);
         const embedEng = this._buildInfoEmbed(data, interaction.user, descriptionEng);
@@ -3561,7 +3581,7 @@ class InteractionHandler {
             }
         }
 
-        this._infoSessions.delete(interaction.user.id);
+        this._clearInfoSession(interaction.user.id);
         const summary = failed > 0
             ? `✅ Wysłano na **${sent}** serwer(ów). ❌ Błąd na **${failed}** serwer(ach).`
             : `✅ Wiadomość wysłana na **${sent}** serwer(ów).`;
@@ -3580,7 +3600,7 @@ class InteractionHandler {
      * Obsługuje przycisk "Anuluj" — czyści sesję.
      */
     async _handleInfoCancel(interaction) {
-        this._infoSessions.delete(interaction.user.id);
+        this._clearInfoSession(interaction.user.id);
         await interaction.update({ content: 'Anulowano.', embeds: [], components: [] });
     }
 
@@ -3658,7 +3678,7 @@ class InteractionHandler {
             return;
         }
 
-        const blocked = this.userBlockService.getBlockedUsers();
+        const blocked = await this.userBlockService.getBlockedUsers();
 
         if (blocked.length === 0) {
             await interaction.reply({ content: msgs.unblockNoBlocked, flags: ['Ephemeral'] });
