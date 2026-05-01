@@ -1,5 +1,7 @@
 const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } = require('discord.js');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel } = require('../utils/helpers');
 
 class InteractionHandler {
@@ -16,6 +18,8 @@ class InteractionHandler {
         this.paginationData = new Map();
         this.CORES_ICON = 'RC';
         this.FIXED_GUILDS = [10256, 12554, 20145];
+        this.LME_PAGINATION_FILE = path.join(__dirname, '..', 'data', 'lme_pagination.json');
+        this._loadLmePagination();
         
         // Define slash commands
         this.commands = [
@@ -667,13 +671,16 @@ class InteractionHandler {
         const paginationId = generatePaginationId();
         const totalPages = guilds.length;
 
+        const now = Date.now();
         this.paginationData.set(paginationId, {
             guilds,
             currentPage: 0,
             totalPages,
             type: 'lme_members',
-            expiresAt: Date.now() + (this.config.botSettings?.paginationTimeout || 3600000)
+            createdAt: now,
+            expiresAt: now + 7 * 24 * 60 * 60 * 1000
         });
+        this._saveLmePagination();
 
         const embed = this.createLunarMineMembersPage(guilds, 0);
         const rows = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
@@ -718,6 +725,7 @@ class InteractionHandler {
 
         pageData.currentPage = newPage;
         this.paginationData.set(paginationId, pageData);
+        this._saveLmePagination();
 
         const newEmbed = this.createLunarMineMembersPage(pageData.guilds, newPage);
         const newRows = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
@@ -1021,18 +1029,55 @@ class InteractionHandler {
         await channel.send({ embeds: [memberEmbed] });
     }
 
+    _loadLmePagination() {
+        try {
+            if (!fs.existsSync(this.LME_PAGINATION_FILE)) return;
+            const raw = fs.readFileSync(this.LME_PAGINATION_FILE, 'utf8');
+            const stored = JSON.parse(raw);
+            const now = Date.now();
+            let loaded = 0;
+            for (const [id, data] of Object.entries(stored)) {
+                if (data.expiresAt > now) {
+                    this.paginationData.set(id, data);
+                    loaded++;
+                }
+            }
+            if (loaded > 0) this.logger.info(`📂 Wczytano ${loaded} sesji paginacji LME z pliku`);
+        } catch (err) {
+            this.logger.warn('Nie udało się wczytać lme_pagination.json:', err.message);
+        }
+    }
+
+    async _saveLmePagination() {
+        try {
+            const dataDir = path.dirname(this.LME_PAGINATION_FILE);
+            if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+            const toSave = {};
+            for (const [id, data] of this.paginationData.entries()) {
+                if (data.type === 'lme_members') toSave[id] = data;
+            }
+            await fs.promises.writeFile(this.LME_PAGINATION_FILE, JSON.stringify(toSave, null, 2), 'utf8');
+        } catch (err) {
+            this.logger.warn('Nie udało się zapisać lme_pagination.json:', err.message);
+        }
+    }
+
     cleanup() {
         // Clean up pagination data
         const now = Date.now();
         let cleaned = 0;
-        
+
         for (const [id, data] of this.paginationData.entries()) {
             if (now - data.createdAt > (this.config.botSettings?.paginationTimeout || 600000)) {
                 this.paginationData.delete(id);
                 cleaned++;
             }
         }
-        
+
+        // Also purge expired LME entries from disk
+        const hasLme = [...this.paginationData.values()].some(d => d.type === 'lme_members');
+        if (cleaned > 0 || !hasLme) this._saveLmePagination();
+
         if (cleaned > 0) {
             this.logger.info(`🗑️ Cleaned up ${cleaned} old pagination data`);
         }
