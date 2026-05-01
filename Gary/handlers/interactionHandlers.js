@@ -222,6 +222,12 @@ class InteractionHandler {
             return;
         }
 
+        // Handle LME member list pagination — public, no permission check needed
+        if (buttonId.startsWith('lme_prev::') || buttonId.startsWith('lme_next::') || buttonId.startsWith('lme_page::')) {
+            await this.handleLmeMembersPageButton(interaction, buttonId);
+            return;
+        }
+
         if (!hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({
                 content: '❌ You do not have permission to use buttons!',
@@ -392,21 +398,50 @@ class InteractionHandler {
 
                 if (clansData.length > 0) {
                     try {
-                        const chartBuffer = await this.generateMultiClanHistoryChart(clansData);
-                        if (chartBuffer) {
-                            const attachment = new AttachmentBuilder(chartBuffer, { name: 'clans_history.png' });
-                            await interaction.followUp({ files: [attachment] });
+                        const scoreBuffer = await this.generateMultiClanHistoryChart(clansData);
+                        if (scoreBuffer) {
+                            await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'clans_history.png' })] });
+                            await new Promise(r => setTimeout(r, 500));
                         }
                     } catch (chartErr) {
                         this.logger.warn('Could not generate multi-clan history chart:', chartErr.message);
                     }
+
+                    // DMG and RC+TC charts from guild snapshots
+                    try {
+                        const allHistory = this.clanHistoryService.getAllGuildsHistory(sortedClans.map(g => g.guildId));
+                        if (allHistory.length > 0) {
+                            const fmtPower = (v) => {
+                                if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+                                if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+                                if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+                                return String(v);
+                            };
+                            const dmgBuffer = await this.generateGuildMetricChart(
+                                allHistory, 'totalPower', 'Siła ataku klanów',
+                                { formatLabel: fmtPower, formatDot: fmtPower }
+                            );
+                            if (dmgBuffer) {
+                                await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'clans_power.png' })] });
+                                await new Promise(r => setTimeout(r, 500));
+                            }
+                            const rcBuffer = await this.generateGuildMetricChart(
+                                allHistory, 'totalRelicCores', 'RC+TC klanów',
+                                { formatLabel: v => String(v), formatDot: v => String(v) }
+                            );
+                            if (rcBuffer) {
+                                await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'clans_rc.png' })] });
+                                await new Promise(r => setTimeout(r, 500));
+                            }
+                        }
+                    } catch (chartErr) {
+                        this.logger.warn('Could not generate guild metric charts:', chartErr.message);
+                    }
                 }
             }
 
-            for (const guild of sortedClans) {
-                await this.sendGuildMembersList(interaction, guild);
-                await new Promise(resolve => setTimeout(resolve, this.config.botSettings?.delayBetweenClans || 1500));
-            }
+            // Single paginated embed for all guilds' members (public navigation)
+            await this.sendCombinedMembersListPaginated(interaction, sortedClans);
 
             this.logger.info('Lunar Mine Expedition analysis completed successfully!');
             
@@ -615,6 +650,112 @@ class InteractionHandler {
         await interaction.editReply(statusMessage);
     }
 
+
+    createLunarMineMembersPage(guilds, currentPage) {
+        const guild = guilds[currentPage];
+        const clanName = this.config.guildNames?.[guild.guildId] || guild.title;
+        const sortedMembers = [...guild.members].sort((a, b) => b.attack - a.attack);
+
+        const chunks = [];
+        for (let i = 0; i < sortedMembers.length; i += 10) {
+            chunks.push(sortedMembers.slice(i, i + 10));
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x3498DB)
+            .setDescription(`# ${clanName}\nStrona ${currentPage + 1}/${guilds.length} • ${sortedMembers.length} graczy • Sortowane po sile ataku`)
+            .setFooter({ text: `Guild ID: ${guild.guildId}` })
+            .setTimestamp();
+
+        chunks.forEach(chunk => {
+            const memberText = chunk.map(m =>
+                `${m.rank}. **${m.name}** - ${formatNumber(m.attack, 2)} (${m.relicCores}+ ${this.CORES_ICON})`
+            ).join('\n');
+            embed.addFields({ name: '​', value: memberText || 'Brak danych', inline: false });
+        });
+
+        return embed;
+    }
+
+    createLunarMineNavButtons(guilds, currentPage, totalPages, paginationId) {
+        const isFirst = currentPage === 0;
+        const isLast = currentPage === totalPages - 1;
+        const prevName = !isFirst ? (guilds[currentPage - 1].title || 'Poprzedni').substring(0, 20) : '';
+        const nextName = !isLast ? (guilds[currentPage + 1].title || 'Następny').substring(0, 20) : '';
+
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`lme_prev::${paginationId}`)
+                .setLabel(isFirst ? '◀ Poprzedni' : `◀ ${prevName}`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(isFirst),
+            new ButtonBuilder()
+                .setCustomId(`lme_page::${paginationId}`)
+                .setLabel(`${currentPage + 1} / ${totalPages}`)
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true),
+            new ButtonBuilder()
+                .setCustomId(`lme_next::${paginationId}`)
+                .setLabel(isLast ? 'Następny ▶' : `${nextName} ▶`)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(isLast)
+        );
+    }
+
+    async sendCombinedMembersListPaginated(interaction, guilds) {
+        if (!guilds || guilds.length === 0) return;
+
+        const paginationId = generatePaginationId();
+        const totalPages = guilds.length;
+
+        this.paginationData.set(paginationId, {
+            guilds,
+            currentPage: 0,
+            totalPages,
+            type: 'lme_members',
+            expiresAt: Date.now() + (this.config.botSettings?.paginationTimeout || 3600000)
+        });
+
+        const embed = this.createLunarMineMembersPage(guilds, 0);
+        const buttons = this.createLunarMineNavButtons(guilds, 0, totalPages, paginationId);
+
+        await interaction.followUp({ embeds: [embed], components: [buttons] });
+    }
+
+    async handleLmeMembersPageButton(interaction, buttonId) {
+        const sepIdx = buttonId.indexOf('::');
+        const actionFull = buttonId.substring(0, sepIdx);
+        const paginationId = buttonId.substring(sepIdx + 2);
+        const action = actionFull.replace('lme_', '');
+
+        if (!paginationId || !this.paginationData.has(paginationId)) {
+            await interaction.reply({ content: '❌ Dane paginacji wygasły. Użyj komendy ponownie.', ephemeral: true });
+            return;
+        }
+
+        const pageData = this.paginationData.get(paginationId);
+        if (pageData.type !== 'lme_members') {
+            await interaction.reply({ content: '❌ Nieprawidłowy typ paginacji!', ephemeral: true });
+            return;
+        }
+
+        if (action === 'page') {
+            await interaction.deferUpdate();
+            return;
+        }
+
+        let newPage = pageData.currentPage;
+        if (action === 'prev' && newPage > 0) newPage--;
+        else if (action === 'next' && newPage < pageData.totalPages - 1) newPage++;
+
+        pageData.currentPage = newPage;
+        this.paginationData.set(paginationId, pageData);
+
+        const newEmbed = this.createLunarMineMembersPage(pageData.guilds, newPage);
+        const newButtons = this.createLunarMineNavButtons(pageData.guilds, newPage, pageData.totalPages, paginationId);
+
+        await interaction.update({ embeds: [newEmbed], components: [newButtons] });
+    }
 
     async sendGuildMembersList(interaction, guild) {
         if (!guild.members || guild.members.length === 0) return;
@@ -2021,8 +2162,8 @@ class InteractionHandler {
 
         if (allWeeks.length < 2) return null;
 
-        const W = 800, H = 290;
-        const M = { top: 54, right: 28, bottom: 44, left: 56 };
+        const W = 800, H = 310;
+        const M = { top: 68, right: 28, bottom: 44, left: 56 };
         const cW = W - M.left - M.right;
         const cH = H - M.top - M.bottom;
 
@@ -2062,21 +2203,28 @@ class InteractionHandler {
             `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
         ).join('\n    ');
 
-        // Draw each clan's line and dots
+        // Draw each clan's line and dots with delta labels
         const clansSvg = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
-            const pts = clan.history.map(d => {
+            const pts = clan.history.map((d, di) => {
                 const idx = allWeeks.findIndex(w => w.weekNumber === d.weekNumber && w.year === d.year);
                 if (idx < 0) return null;
-                return { x: toX(idx), y: toY(d.score) };
+                const delta = di > 0 ? d.score - clan.history[di - 1].score : null;
+                return { x: toX(idx), y: toY(d.score), score: d.score, delta };
             }).filter(Boolean);
 
             if (pts.length < 2) return '';
 
             const linePath = buildCatmullRom(pts);
-            const dotsSvg = pts.map(p =>
-                `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>`
-            ).join('\n    ');
+            const dotsSvg = pts.map(p => {
+                const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
+                const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${p.delta}` : String(p.delta);
+                const scoreY = Math.max(M.top + 10, p.y - 6);
+                const deltaY = Math.max(M.top - 1, scoreY - 11);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${color}" text-anchor="middle" opacity="0.85">${p.score}</text>` +
+                    (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
+            }).join('\n    ');
 
             return `<path d="${linePath}" stroke="${color}" stroke-width="2.5" fill="none"/>
     ${dotsSvg}`;
@@ -2086,13 +2234,12 @@ class InteractionHandler {
         const legendItems = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
             const safeName = clan.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            // Approximate text width: 6px per char
             return { color, label: safeName };
         });
 
         // Layout legend horizontally
         let legendX = M.left;
-        const legendY = 34;
+        const legendY = 44;
         const legendSvg = legendItems.map(item => {
             const circleSvg = `<circle cx="${legendX + 5}" cy="${legendY - 4}" r="5" fill="${item.color}"/>`;
             const textSvg = `<text x="${legendX + 14}" y="${legendY}" font-family="Arial,sans-serif" font-size="11" fill="${item.color}" font-weight="bold">${item.label}</text>`;
@@ -2147,8 +2294,8 @@ class InteractionHandler {
 
         if (allWeeks.length < 2) return null;
 
-        const W = 800, H = 290;
-        const M = { top: 54, right: 28, bottom: 44, left: 68 };
+        const W = 800, H = 310;
+        const M = { top: 68, right: 28, bottom: 44, left: 68 };
         const cW = W - M.left - M.right;
         const cH = H - M.top - M.bottom;
 
@@ -2199,13 +2346,21 @@ class InteractionHandler {
             `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
         ).join('\n    ');
 
-        // Each clan: line + dots + last-point label
+        // Each clan: line + dots + score label + delta label
         const clansSvg = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
+            const orderedHistory = [...clan.history].sort((a, b) =>
+                a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
+            );
             const pts = allWeeks.map((w, wi) => {
                 const entry = clan.history.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
                 if (!entry || entry[metricKey] == null) return null;
-                return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey] };
+                const hIdx = orderedHistory.findIndex(d => d.weekNumber === w.weekNumber && d.year === w.year);
+                const prevEntry = hIdx > 0 ? orderedHistory[hIdx - 1] : null;
+                const delta = (prevEntry && prevEntry[metricKey] != null)
+                    ? entry[metricKey] - prevEntry[metricKey]
+                    : null;
+                return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey], delta };
             }).filter(Boolean);
 
             if (pts.length < 2) return '';
@@ -2222,10 +2377,15 @@ class InteractionHandler {
             }
 
             const linePath = buildCatmullRom(pts);
-            const dotsSvg = pts.map((p, pi) =>
-                `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[pi]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${color}" text-anchor="middle" opacity="0.85">${fmtDot(p.v)}</text>`
-            ).join('\n    ');
+            const dotsSvg = pts.map((p, pi) => {
+                const scoreY = p.y - labelOffsets[pi];
+                const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
+                const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${fmtDot(p.delta)}` : fmtDot(p.delta);
+                const deltaY = Math.max(M.top - 1, scoreY - 11);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
+    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${color}" text-anchor="middle" opacity="0.85">${fmtDot(p.v)}</text>` +
+                    (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
+            }).join('\n    ');
 
             return `<path d="${linePath}" stroke="${color}" stroke-width="2.5" fill="none"/>
     ${dotsSvg}`;
@@ -2233,7 +2393,7 @@ class InteractionHandler {
 
         // Legend (clan names) — horizontal, top area
         let legendX = M.left;
-        const legendY = 36;
+        const legendY = 44;
         const legendSvg = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
             const safe = clan.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -2470,6 +2630,56 @@ class InteractionHandler {
                 embeds: [unlikelyEmbed],
                 components: unlikelyRows
             });
+
+            // Generate charts for rivals
+            if (this.clanHistoryService) {
+                try {
+                    // Score history chart — rivals clans that appear in TOP500 history
+                    const rivalsWithScoreHistory = allRivals.map(rival => ({
+                        name: rival.name,
+                        id: parseInt(rival.guildId),
+                        history: this.clanHistoryService.getClanHistory(parseInt(rival.guildId))
+                    })).filter(r => r.history.length >= 2).slice(0, 4);
+
+                    if (rivalsWithScoreHistory.length > 0) {
+                        const scoreBuffer = await this.generateMultiClanHistoryChart(rivalsWithScoreHistory);
+                        if (scoreBuffer) {
+                            await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'rivals_score_history.png' })] });
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                    }
+
+                    // DMG and RC+TC charts — rivals clans that have guild snapshot history (PS guilds)
+                    const rivalGuildIds = allRivals.map(r => parseInt(r.guildId));
+                    const rivalsGuildHistory = this.clanHistoryService.getAllGuildsHistory(rivalGuildIds);
+
+                    if (rivalsGuildHistory.length > 0) {
+                        const fmtPower = (v) => {
+                            if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+                            if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+                            if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+                            return String(v);
+                        };
+                        const dmgBuffer = await this.generateGuildMetricChart(
+                            rivalsGuildHistory, 'totalPower', 'Siła ataku rywali',
+                            { formatLabel: fmtPower, formatDot: fmtPower }
+                        );
+                        if (dmgBuffer) {
+                            await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'rivals_power.png' })] });
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+                        const rcBuffer = await this.generateGuildMetricChart(
+                            rivalsGuildHistory, 'totalRelicCores', 'RC+TC rywali',
+                            { formatLabel: v => String(v), formatDot: v => String(v) }
+                        );
+                        if (rcBuffer) {
+                            await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'rivals_rc.png' })] });
+                        }
+                    }
+                } catch (chartErr) {
+                    this.logger.warn('⚠️ Could not generate rivals charts:', chartErr.message);
+                }
+            }
 
             this.logger.info(`✅ Rivals data for Clan ID ${clanId} sent to ${interaction.user.tag}`);
 
