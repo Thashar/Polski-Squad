@@ -401,41 +401,9 @@ class InteractionHandler {
                         const scoreBuffer = await this.generateMultiClanHistoryChart(clansData);
                         if (scoreBuffer) {
                             await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'clans_history.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
                         }
                     } catch (chartErr) {
                         this.logger.warn('Could not generate multi-clan history chart:', chartErr.message);
-                    }
-
-                    // DMG and RC+TC charts from guild snapshots
-                    try {
-                        const allHistory = this.clanHistoryService.getAllGuildsHistory(sortedClans.map(g => g.guildId));
-                        if (allHistory.length > 0) {
-                            const fmtPower = (v) => {
-                                if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-                                if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-                                if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
-                                return String(v);
-                            };
-                            const dmgBuffer = await this.generateGuildMetricChart(
-                                allHistory, 'totalPower', 'Siła ataku klanów',
-                                { formatLabel: fmtPower, formatDot: fmtPower }
-                            );
-                            if (dmgBuffer) {
-                                await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'clans_power.png' })] });
-                                await new Promise(r => setTimeout(r, 500));
-                            }
-                            const rcBuffer = await this.generateGuildMetricChart(
-                                allHistory, 'totalRelicCores', 'RC+TC klanów',
-                                { formatLabel: v => String(v), formatDot: v => String(v) }
-                            );
-                            if (rcBuffer) {
-                                await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'clans_rc.png' })] });
-                                await new Promise(r => setTimeout(r, 500));
-                            }
-                        }
-                    } catch (chartErr) {
-                        this.logger.warn('Could not generate guild metric charts:', chartErr.message);
                     }
                 }
             }
@@ -946,21 +914,21 @@ class InteractionHandler {
                         const charts = [
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'rank', 'Pozycja rankingowa klanów',
+                                    allHistory, 'rank', 'Clan Rankings',
                                     { invertY: true, formatLabel: v => `#${v}`, formatDot: v => `#${v}` }
                                 ),
                                 filename: 'clans_rank.png'
                             },
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'totalRelicCores', 'Total RC klanów',
+                                    allHistory, 'totalRelicCores', 'Clan Total RC+TC',
                                     { formatLabel: v => String(v), formatDot: v => String(v) }
                                 ),
                                 filename: 'clans_rc.png'
                             },
                             {
                                 buffer: await this.generateGuildMetricChart(
-                                    allHistory, 'totalPower', 'Siła ataku klanów',
+                                    allHistory, 'totalPower', 'Clan Total Attack Power',
                                     { formatLabel: fmtPower, formatDot: fmtPower }
                                 ),
                                 filename: 'clans_power.png'
@@ -2049,8 +2017,8 @@ class InteractionHandler {
         const sharp = require('sharp');
         if (!historyData || historyData.length < 2) return null;
 
-        const W = 800, H = 260;
-        const M = { top: 42, right: 28, bottom: 44, left: 56 };
+        const W = 800, H = 270;
+        const M = { top: 54, right: 28, bottom: 44, left: 56 };
         const cW = W - M.left - M.right;
         const cH = H - M.top - M.bottom;
 
@@ -2123,8 +2091,9 @@ class InteractionHandler {
 
         const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="12" fill="#B5BAC1" font-weight="bold">${safeName}</text>
-  <text x="${W / 2}" y="26" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Historia punktów klanu</text>
+  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Clan Score History</text>
+  <circle cx="${M.left + 5}" cy="36" r="5" fill="${lineColor}"/>
+  <text x="${M.left + 14}" y="40" font-family="Arial,sans-serif" font-size="11" fill="${lineColor}" font-weight="bold">${safeName}</text>
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
@@ -2247,7 +2216,7 @@ class InteractionHandler {
 
         const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Historia punktów klanów</text>
+  <text x="${W / 2}" y="20" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Clan Score History</text>
   ${legendSvg}
   ${gridLines}
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
@@ -2641,35 +2610,6 @@ class InteractionHandler {
                         const scoreBuffer = await this.generateMultiClanHistoryChart(rivalsWithScoreHistory);
                         if (scoreBuffer) {
                             await interaction.followUp({ files: [new AttachmentBuilder(scoreBuffer, { name: 'rivals_score_history.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-                    }
-
-                    // DMG and RC+TC charts — rivals clans that have guild snapshot history (PS guilds)
-                    const rivalGuildIds = allRivals.map(r => parseInt(r.guildId));
-                    const rivalsGuildHistory = this.clanHistoryService.getAllGuildsHistory(rivalGuildIds);
-
-                    if (rivalsGuildHistory.length > 0) {
-                        const fmtPower = (v) => {
-                            if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
-                            if (v >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
-                            if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
-                            return String(v);
-                        };
-                        const dmgBuffer = await this.generateGuildMetricChart(
-                            rivalsGuildHistory, 'totalPower', 'Siła ataku rywali',
-                            { formatLabel: fmtPower, formatDot: fmtPower }
-                        );
-                        if (dmgBuffer) {
-                            await interaction.followUp({ files: [new AttachmentBuilder(dmgBuffer, { name: 'rivals_power.png' })] });
-                            await new Promise(r => setTimeout(r, 500));
-                        }
-                        const rcBuffer = await this.generateGuildMetricChart(
-                            rivalsGuildHistory, 'totalRelicCores', 'RC+TC rywali',
-                            { formatLabel: v => String(v), formatDot: v => String(v) }
-                        );
-                        if (rcBuffer) {
-                            await interaction.followUp({ files: [new AttachmentBuilder(rcBuffer, { name: 'rivals_rc.png' })] });
                         }
                     }
                 } catch (chartErr) {
