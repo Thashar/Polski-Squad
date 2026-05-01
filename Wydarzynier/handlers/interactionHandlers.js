@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { isAllowedChannel, delay } = require('../utils/helpers');
+const { delay } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
@@ -114,7 +114,7 @@ class InteractionHandler {
 
         if (commandName === 'party') {
             // Sprawdź czy komenda jest używana na właściwym kanale
-            if (!isAllowedChannel(channelId, this.config.channels.party)) {
+            if (channelId !== this.config.channels.party) {
                 await interaction.reply({
                     content: this.config.messages.channelOnly,
                     ephemeral: true
@@ -131,7 +131,7 @@ class InteractionHandler {
                 if (existingLobby) {
                     // Usuń stare lobby
                     await this.deleteLobby(existingLobby, sharedState);
-                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.tag} przed utworzeniem nowego`);
+                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.username} przed utworzeniem nowego`);
                 }
             }
 
@@ -906,7 +906,7 @@ class InteractionHandler {
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleEventNotificationsSubscribe(interaction, sharedState) {
-        logger.info(`🔔 Obsługa przycisku subskrypcji eventów: ${interaction.user.tag}`);
+        logger.info(`🔔 Obsługa przycisku subskrypcji eventów: ${interaction.user.username}`);
 
         try {
             await interaction.deferReply({ ephemeral: true });
@@ -915,7 +915,7 @@ class InteractionHandler {
             const member = await guild.members.fetch(user.id);
             const eventNotificationRoleId = '1297587256101699776';
 
-            logger.info(`Sprawdzam rolę ${eventNotificationRoleId} dla ${user.tag}`);
+            logger.info(`Sprawdzam rolę ${eventNotificationRoleId} dla ${user.username}`);
 
             // Sprawdź czy użytkownik ma już rolę
             const hasRole = member.roles.cache.has(eventNotificationRoleId);
@@ -923,14 +923,14 @@ class InteractionHandler {
             if (hasRole) {
                 // Usuń rolę
                 await member.roles.remove(eventNotificationRoleId);
-                logger.success(`✅ Usunięto rolę powiadomień eventów dla ${user.tag}`);
+                logger.success(`✅ Usunięto rolę powiadomień eventów dla ${user.username}`);
                 await interaction.editReply({
                     content: '🔕 Usunięto rolę powiadomień o eventach. Nie będziesz już otrzymywał powiadomień o eventach w grze.'
                 });
             } else {
                 // Dodaj rolę
                 await member.roles.add(eventNotificationRoleId);
-                logger.success(`✅ Dodano rolę powiadomień eventów dla ${user.tag}`);
+                logger.success(`✅ Dodano rolę powiadomień eventów dla ${user.username}`);
                 await interaction.editReply({
                     content: '🔔 Dodano rolę powiadomień o eventach! Będziesz otrzymywał powiadomienia o nadchodzących eventach w grze.'
                 });
@@ -1165,7 +1165,7 @@ class InteractionHandler {
                 components: [notificationButton]
             });
 
-            logger.info(`✅ Wysłano wiadomość party-access przez ${interaction.user.tag} na kanale ${interaction.channel.name}`);
+            logger.info(`✅ Wysłano wiadomość party-access przez ${interaction.user.username} na kanale ${interaction.channel.name}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi komendy /party-access:', error);
@@ -1266,7 +1266,7 @@ class InteractionHandler {
                 components: []
             });
 
-            logger.info(`⏰ Lobby ${lobbyId} zostało przedłużone o 15 minut przez ${interaction.user.tag}`);
+            logger.info(`⏰ Lobby ${lobbyId} zostało przedłużone o 15 minut przez ${interaction.user.username}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas przedłużania lobby:', error);
@@ -1335,7 +1335,7 @@ class InteractionHandler {
             // Usuń lobby
             await this.deleteLobby(lobby, sharedState);
 
-            logger.info(`🔒 Lobby ${lobbyId} zostało zamknięte przez właściciela ${interaction.user.tag}`);
+            logger.info(`🔒 Lobby ${lobbyId} zostało zamknięte przez właściciela ${interaction.user.username}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas zamykania lobby:', error);

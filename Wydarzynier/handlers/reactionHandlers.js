@@ -116,7 +116,7 @@ async function handlePinReaction(reaction, user, sharedState) {
         const pinResult = await sharedState.bazarService.pinMessage(channel, message);
         
         if (pinResult) {
-            logger.info(`📌 ${user.tag} przypięli wiadomość w kanale bazaru: ${channel.name}`);
+            logger.info(`📌 ${user.username} przypięli wiadomość w kanale bazaru: ${channel.name}`);
             
             // Usuń reakcję po przypięciu
             await reaction.users.remove(user.id);

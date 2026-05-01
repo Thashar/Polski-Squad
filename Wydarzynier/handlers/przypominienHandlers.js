@@ -378,7 +378,7 @@ async function handleButton(interaction, sharedState) {
     const { logger, userStates } = sharedState;
     const customId = interaction.customId;
 
-    logger.info(`Button: ${customId} by ${interaction.user.tag}`);
+    logger.info(`Button: ${customId} by ${interaction.user.username}`);
 
     // Board control panel buttons
     if (customId === 'board_new_reminder') {
@@ -651,7 +651,7 @@ async function handleSelectMenu(interaction, sharedState) {
     const { logger } = sharedState;
     const customId = interaction.customId;
 
-    logger.info(`Select Menu: ${customId} by ${interaction.user.tag}`);
+    logger.info(`Select Menu: ${customId} by ${interaction.user.username}`);
 
     // Type selection for /new-reminder
     if (customId === 'new_reminder_type_select') {
@@ -989,7 +989,7 @@ async function handleChannelSelectMenu(interaction, sharedState) {
     const { logger, userStates } = sharedState;
     const customId = interaction.customId;
 
-    logger.info(`Channel Select: ${customId} by ${interaction.user.tag}`);
+    logger.info(`Channel Select: ${customId} by ${interaction.user.username}`);
 
     if (customId.startsWith('set_reminder_channel_')) {
         const sessionId = customId.replace('set_reminder_channel_', '');
@@ -1076,7 +1076,7 @@ async function handleRoleSelectMenu(interaction, sharedState) {
     const { logger, userStates } = sharedState;
     const customId = interaction.customId;
 
-    logger.info(`Role Select: ${customId} by ${interaction.user.tag}`);
+    logger.info(`Role Select: ${customId} by ${interaction.user.username}`);
 
     if (customId.startsWith('set_reminder_roles_')) {
         await interaction.deferUpdate();
@@ -1105,7 +1105,7 @@ async function handleModalSubmit(interaction, sharedState) {
     const { przypomnieniaMenedzer, tablicaMenedzer, logger, userStates } = sharedState;
     const customId = interaction.customId;
 
-    logger.info(`Modal Submit: ${customId} by ${interaction.user.tag}`);
+    logger.info(`Modal Submit: ${customId} by ${interaction.user.username}`);
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -2508,7 +2508,7 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
 
         await interaction.reply({ content: content || undefined, embeds, ephemeral: true });
 
-        logger.info(`Podgląd przypomnienia ${scheduledId} przez ${interaction.user.tag}`);
+        logger.info(`Podgląd przypomnienia ${scheduledId} przez ${interaction.user.username}`);
     } catch (error) {
         logger.error('Error in handleBoardScheduledPreview:', error);
         await interaction.reply({ content: '❌ Błąd podczas generowania podglądu.', ephemeral: true });
@@ -2561,7 +2561,7 @@ async function handleBoardScheduledSend(interaction, sharedState) {
 
         await channel.send({ content, embeds });
 
-        logger.info(`Testowe wysłanie przypomnienia ${scheduledId} przez ${interaction.user.tag}`);
+        logger.info(`Testowe wysłanie przypomnienia ${scheduledId} przez ${interaction.user.username}`);
     } catch (error) {
         logger.error('Error in handleBoardScheduledSend:', error);
         await interaction.followUp({ content: '❌ Błąd podczas wysyłania przypomnienia.', ephemeral: true });
@@ -2751,7 +2751,7 @@ async function handlePutList(interaction, sharedState) {
         ephemeral: true
     });
 
-    logger.info(`Ustaw Listę initiated by ${interaction.user.tag}`);
+    logger.info(`Ustaw Listę initiated by ${interaction.user.username}`);
 }
 
 async function handleAddEvent(interaction, sharedState) {

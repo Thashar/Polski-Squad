@@ -27,32 +27,33 @@ module.exports = {
 
     // Przekazywanie wiadomości z priv na kanał (robot3)
     robot3Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
-    notificationForwardChannel: '1486848827997818900',
-    mentionRoleId: '1486506395057524887',
+    notificationForwardChannel: process.env.ROBOT3_FORWARD_CHANNEL || '1486848827997818900',
+    mentionRoleId: process.env.ROBOT3_MENTION_ROLE || '1486506395057524887',
+    robot3ActivationChannel: process.env.ROBOT3_ACTIVATION_CHANNEL || '1486510519119773818',
 
     // Kanały
     channels: {
-        party: '1201206524165496994' // Kanał gdzie można używać /party
+        party: process.env.WYDARZYNIER_PARTY_CHANNEL || '1201206524165496994'
     },
 
     // System Przypomnień i Eventów
     notificationsBoardChannelId: process.env.WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL,
     timezone: 'Europe/Warsaw',
-maxNotificationsPerUser: 50,
+    maxNotificationsPerUser: 50,
     maxTotalNotifications: 200,
-    
+
     // Role
     roles: {
-        partyNotifications: '1272573347946954833' // Rola powiadomień o party
+        partyNotifications: process.env.WYDARZYNIER_PARTY_NOTIFICATIONS_ROLE || '1272573347946954833'
     },
-    
+
     // Emoji
     emoji: {
         party: '<:I_Party:1400207104685510853>',
         ticket: '<:L_PartyTicket:1400207169194037410>',
         pin: '<:N_SSS:1275068676508356640>' // Emoji do przypinania w bazarze
     },
-    
+
     // Ustawienia lobby
     lobby: {
         maxPlayers: 7, // Założyciel + 6 osób
@@ -63,40 +64,40 @@ maxNotificationsPerUser: 50,
         repositionInterval: 5 * 60 * 1000, // 5 minut - interwał repozycjonowania ogłoszeń
         threadName: (username) => `🎉 ${username} - Party Lobby`
     },
-    
+
     // Wiadomości
     messages: {
-        lobbyCreated: (userId) => 
+        lobbyCreated: (userId) =>
             `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 15 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-add @użytkownik\` - dodaj gracza bezpośrednio do lobby\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
-        
-        partyAnnouncement: (displayName, currentPlayers, maxPlayers) => 
+
+        partyAnnouncement: (displayName, currentPlayers, maxPlayers) =>
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,
-        
-        partyAnnouncementReposition: (displayName, currentPlayers, maxPlayers) => 
+
+        partyAnnouncementReposition: (displayName, currentPlayers, maxPlayers) =>
             `# ${displayName} stworzył/a lobby i szuka osób do Party <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,
-        
-        joinRequest: (displayName) => 
+
+        joinRequest: (displayName) =>
             `${displayName} chce dołączyć do party. Czy chcesz na to pozwolić?`,
-        
-        playerAdded: (userId) => 
+
+        playerAdded: (userId) =>
             `<@${userId}> zostałeś/aś dodany/a do party!`,
-        
-        playerRejected: 
+
+        playerRejected:
             'Osoba zakładająca party nie wyraziła zgody na Twoje dołączenie. Spróbuj następnym razem!',
-        
-        lobbyFull: 
+
+        lobbyFull:
             '# Lobby zapełnione!\nMacie 15 minut, po tym czasie zostanie usunięte! Bawcie się dobrze <a:peepParty:1400241867421122730>\nJeżeli chcesz otrzymywać powiadomienia o kolejnych party kliknij przycisk poniżej.',
-        
-        lobbyWarning: (ownerId) => 
+
+        lobbyWarning: (ownerId) =>
             `⚠️ **Uwaga!** <@${ownerId}> Za 5 minut lobby zostanie zamknięte!`,
-        
-        lobbyFullEphemeral: 
+
+        lobbyFullEphemeral:
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',
-        
-        channelOnly: 
+
+        channelOnly:
             'Ta komenda może być używana tylko na wyznaczonym kanale!',
-        
-        ownerOnly: 
+
+        ownerOnly:
             'Tylko założyciel lobby może używać tych przycisków!'
     }
 };

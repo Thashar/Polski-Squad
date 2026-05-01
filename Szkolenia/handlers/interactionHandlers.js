@@ -1,10 +1,8 @@
-const { SlashCommandBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
+const { delay } = require('../utils/helpers');
 
 const logger = createBotLogger('Szkolenia');
-
-const { delay } = require('../utils/helpers');
 
 /**
  * Główna funkcja obsługi interakcji przycisków i modali
@@ -59,14 +57,13 @@ async function handleLockThread(interaction, state, config) {
 
     await reminderStorage.removeReminder(state.lastReminderMap, channel.id);
 
-    setTimeout(async () => {
-        try {
-            await channel.setLocked(true, 'Wątek zablokowany na żądanie właściciela');
-            await channel.setArchived(true, 'Wątek zablokowany na żądanie właściciela');
-        } catch (error) {
-            logger.error('Błąd podczas blokowania wątku:', error);
-        }
-    }, 2000);
+    await delay(2000);
+    try {
+        await channel.setLocked(true, 'Wątek zablokowany na żądanie właściciela');
+        await channel.setArchived(true, 'Wątek zablokowany na żądanie właściciela');
+    } catch (error) {
+        logger.error('Błąd podczas blokowania wątku:', error);
+    }
 }
 
 async function handleKeepOpen(interaction, state, config) {
@@ -84,12 +81,7 @@ async function handleKeepOpen(interaction, state, config) {
  * Rejestracja slash commandów
  */
 async function registerSlashCommands(client) {
-    try {
-        await client.application.commands.set([]);
-        logger.info('✅ Komendy slash zarejestrowane');
-    } catch (error) {
-        logger.error(`❌ Błąd rejestracji komend slash: ${error.message}`);
-    }
+    // Brak komend slash do zarejestrowania
 }
 
 module.exports = {

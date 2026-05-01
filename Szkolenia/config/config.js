@@ -29,7 +29,8 @@ module.exports = {
 
     // Kanały
     channels: {
-        training: process.env.SZKOLENIA_CHANNEL_ID
+        training: process.env.SZKOLENIA_CHANNEL_ID,
+        aiChat: process.env.SZKOLENIA_AI_CHAT_CHANNEL_ID || '1207041051831832586'
     },
 
     // Role administracyjne (dla AI Chat - brak limitów)
@@ -79,9 +80,6 @@ module.exports = {
     messages: {
         threadCreated: (userId, roleId, targetUserId) =>
             `<@${userId}> założył wątek z prośbą o <@&${roleId}>\n\n<@${targetUserId}> - to Twój wątek!\n\nWejdź na stronę: https://sio-tools.vercel.app/ \nWypełnij wszystko zgodnie ze swoimi statystykami konta w grze. \nNa końcu kliknij przycisk "EXPORT" na samej górze strony - skopiujesz do schowka unikatowy kod.\nUżyj w tym wątku komendy /decode oraz wklej kod, ze schowka.\n\nAlternatywnie:\n\n## Prześlij zdjęcia:\n\n**ITEMY**\n- zawartości całego plecaka 🎒 \n\n**EQ**\n- EQ postaci oraz itemów poniżej <:H_SSLance:1279199357194862683> <:I_VNeck:1209754519689502720> \n\n**TECH PARTY**\n- założonych Tech Partów <:J_EpicTechSelector:1402533245672886293> \n- poszczególnych Tech Partów oraz poziomu Resonans <a:EternalDurian:1271243234588364877> \n- wszystkich posiadanych Tech Partów <:J_LegandaryTechSelector:1402533631385141258>\n\n**COLLECTIBLES**\n-  czerwonych collectible <:J_CollRed:1402533014080065546> \n- żółtych collectible <:J_CollYellow:1402532951492657172> \n- ukończonych collection sets \n\n**PETY i XENO PETY**\n- posiadanych petów <:K_PetRex:1259960034054635562> \n- poziomów awaken wszystkich petów <:M_StarRed:1259958133963620484> \n- posiadanych xeno petów <:K_SPetCappy:1407637574427873361>\n- poziomy awaken wszystkich xeno petów <:M_StarRed:1259958133963620484> \n\n**POSTACIE**\n- zbiorowe wszystkich postaci <:G_SurvivorPanda:1209754434918154251> <:G_SurvivorMetalia:1260685301056278709> <:G_SurvivorJoey:1326511743555600451> \n- poziomów awaken wszystkich posiadanych postaci <:G_SurvivorTaloxa:1401318994425811065> \n- synergii postaci\n\n**TRYBY GRY**\n- progresu w Path of Trials (PoT)\n- progresu w Main Challange\n\nDodatkowo informację na temat **SUMY POSZCZEGÓLNYCH ITEMÓW** (trzeba cofnąć upgrade itemów, partów, petów i policzyć. <:II_AW:1402532745804124242> trzeba policzyć bez cofania)\n- <:II_AW:1402532745804124242> \n- <:II_Chip:1402532787059294229> \n- <:II_PetAW:1407383326830104658> \n- <:II_RC:1385139885924421653>`,
-        
-        threadExists: (targetUserId, userId, roleId) => 
-            `<@${targetUserId}> - to Twój wątek!\n<@${userId}> założył wątek, z prośbą o <@&${roleId}>\n<@${targetUserId}> wrzuć tu wszystko o co chcesz zapytać i poczekaj na odpowiedź.\nGdy już dowiesz się wszystkiego, dziękując możesz zamknąć ten wątek <:P_FrogMaszRacje:1341894087598669985>`,
         
         threadLocked: 'Wątek zostanie zablokowany. Dziękuję za skorzystanie z pomocy! 🐸💚',
         

@@ -10,8 +10,6 @@ const AIChatService = require('./services/aiChatService');
 
 const logger = createBotLogger('Szkolenia');
 
-const AI_CHAT_CHANNEL_ID = '1207041051831832586';
-
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -108,7 +106,7 @@ client.on(Events.MessageCreate, async (message) => {
         const isEveryoneMention = message.mentions.everyone;
 
         if (isBotMentioned && !message.author.bot && !isReplyToBot && !isEveryoneMention) {
-            const isAllowedChannel = message.channel.id === AI_CHAT_CHANNEL_ID;
+            const isAllowedChannel = message.channel.id === config.channels.aiChat;
             const isAdmin = aiChatService.isAdmin(message.member);
 
             if (!isAllowedChannel && !isAdmin) {
@@ -199,7 +197,7 @@ client.on(Events.MessageCreate, async (message) => {
 
         if (message.author.id !== threadOwnerId) return;
 
-        logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.tag}`);
+        logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.username}`);
 
         const messages = await message.channel.messages.fetch({ limit: 100 });
         const ownerMessagesCount = messages.filter(msg =>

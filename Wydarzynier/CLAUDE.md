@@ -40,10 +40,10 @@
 **Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot3):**
-- Użytkownicy z ID w `ROBOT3` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
+- Użytkownicy z ID w `ROBOT` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał z env `ROBOT3_FORWARD_CHANNEL`
 - Obsługuje tekst i załączniki
 - Wymaga intencji `DirectMessages` + partial `Channel`
-- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli `1486506395057524887`
+- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli z env `ROBOT3_MENTION_ROLE`
 
 ---
 
@@ -52,6 +52,13 @@
 ```env
 WYDARZYNIER_TOKEN=bot_token_here
 WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id  # Kanał z panelem kontrolnym przypomnień
+
+# Opcjonalne - z fallbackiem do wartości produkcyjnych
+WYDARZYNIER_PARTY_CHANNEL=channel_id               # Kanał /party
+WYDARZYNIER_PARTY_NOTIFICATIONS_ROLE=role_id       # Rola powiadomień o party
+ROBOT3_FORWARD_CHANNEL=channel_id                  # Kanał forward dla Robot3
+ROBOT3_MENTION_ROLE=role_id                        # Rola do pingu (@) dla Robot3
+ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywacji Robot3
 ```
 
 ## Najlepsze Praktyki
