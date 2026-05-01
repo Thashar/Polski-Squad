@@ -8788,8 +8788,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         addResult(lifePts2, lifePts1); // odwrócone: mniej kar = lepiej
 
         // Wczytaj ostatnie dane bojowe z Gary dla obu graczy (do wyświetlenia w polach i porównania)
-        const _cmpCombat1 = loadCombatHistory(userInfo1.userId);
-        const _cmpCombat2 = loadCombatHistory(userInfo2.userId);
+        const [_cmpCombat1, _cmpCombat2] = await Promise.all([
+            loadCombatHistory(userInfo1.userId),
+            loadCombatHistory(userInfo2.userId),
+        ]);
         const _cmpLast1 = _cmpCombat1.length > 0 ? _cmpCombat1[_cmpCombat1.length - 1] : null;
         const _cmpLast2 = _cmpCombat2.length > 0 ? _cmpCombat2[_cmpCombat2.length - 1] : null;
 
@@ -9678,7 +9680,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
 
         // Wczytaj dane bojowe z Gary (RC+<:II_TransmuteCore:1458440558602092647>TC, Atak) - potrzebne do sekcji STATYSTYKI
-        const _statCombatHistory = loadCombatHistory(userId);
+        const _statCombatHistory = await loadCombatHistory(userId);
         const _statLastCombat = _statCombatHistory.length > 0
             ? _statCombatHistory[_statCombatHistory.length - 1]
             : null;
@@ -9942,7 +9944,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
 
             // Wykresy RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
-            const combatHistory = loadCombatHistory(userId);
+            const combatHistory = await loadCombatHistory(userId);
             if (combatHistory.length >= 2) {
                 const [rcBuf, atkBuf] = await Promise.all([
                     generateCombatChart(combatHistory, latestNick, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
@@ -10729,7 +10731,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
         }
 
         // Wczytaj historię klanu z Gary snapshots (rank, RC+TC, atak)
-        const clanGuildHistory = loadClanGuildHistory(selectedClan, config);
+        const clanGuildHistory = await loadClanGuildHistory(selectedClan, config);
 
         if (clanGuildHistory.length >= 2) {
             try {
@@ -13407,13 +13409,13 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
  * @param {string} userId - Discord user ID gracza
  * @returns {Array<{weekNumber, year, attack, relicCores}>}
  */
-function loadCombatHistory(userId) {
-    const fs = require('fs');
+async function loadCombatHistory(userId) {
+    const fsAsync = require('fs').promises;
     const path = require('path');
     try {
         const filePath = path.join(__dirname, '../data/player_combat_discord.json');
-        if (!fs.existsSync(filePath)) return [];
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        const raw = await fsAsync.readFile(filePath, 'utf8');
+        const data = JSON.parse(raw);
         const entry = data?.players?.[userId];
         if (entry?.weeks?.length) return entry.weeks.slice(-20);
         return [];
@@ -13428,40 +13430,47 @@ function loadCombatHistory(userId) {
  * @param {Object} config - Konfiguracja z garyGuildIds
  * @returns {Array<{weekNumber, year, rank, relicCores, attack}>}
  */
-function loadClanGuildHistory(clanKey, config) {
-    const fs = require('fs');
+async function loadClanGuildHistory(clanKey, config) {
+    const fsAsync = require('fs').promises;
     const path = require('path');
     try {
         const guildsDir = path.join(__dirname, '../../shared_data/lme_guilds');
-        if (!fs.existsSync(guildsDir)) return [];
 
         const garyGuildId = config.garyGuildIds?.[clanKey];
         if (garyGuildId == null) return [];
 
-        const dirEntries = fs.readdirSync(guildsDir);
+        let dirEntries;
+        try {
+            dirEntries = await fsAsync.readdir(guildsDir);
+        } catch (_) {
+            return [];
+        }
+
         const weekFiles = dirEntries
             .filter(f => f.startsWith('week_') && f.endsWith('.json'))
             .sort();
 
-        const history = [];
-        for (const file of weekFiles) {
-            try {
-                const filePath = path.join(guildsDir, file);
-                const snapshot = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-                const guild = (snapshot.guilds || []).find(g => g.id === garyGuildId);
+        // Wczytaj pliki równolegle
+        const results = await Promise.allSettled(
+            weekFiles.map(file =>
+                fsAsync.readFile(path.join(guildsDir, file), 'utf8')
+                    .then(raw => JSON.parse(raw))
+            )
+        );
 
-                if (guild) {
-                    history.push({
-                        weekNumber: snapshot.weekNumber,
-                        year: snapshot.year,
-                        rank: guild.rank || null,
-                        relicCores: guild.totalRelicCores || 0,
-                        attack: guild.totalPower || 0
-                    });
-                }
-            } catch (_) {
-                // Pomiń uszkodzone pliki
-                continue;
+        const history = [];
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            const snapshot = result.value;
+            const guild = (snapshot.guilds || []).find(g => g.id === garyGuildId);
+            if (guild) {
+                history.push({
+                    weekNumber: snapshot.weekNumber,
+                    year: snapshot.year,
+                    rank: guild.rank || null,
+                    relicCores: guild.totalRelicCores || 0,
+                    attack: guild.totalPower || 0
+                });
             }
         }
 

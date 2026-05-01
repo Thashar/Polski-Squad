@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { isoWeekStartUTC } = require('../../utils/appSync');
@@ -143,12 +143,14 @@ class GaryCombatIngestionService {
     async ingest() {
         try {
             // Agreguj dane ze wszystkich plików weekly (shared_data/lme_weekly/week_YYYY_WW.json)
-            if (!fs.existsSync(WEEKLY_DIR)) {
+            const weeklyDirExists = await fs.access(WEEKLY_DIR).then(() => true).catch(() => false);
+            if (!weeklyDirExists) {
                 this.logger.info('📊 GaryCombatIngestion: brak katalogu shared_data/lme_weekly — uruchom /lme-snapshot w Gary');
                 return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
             }
 
-            const weekFiles = fs.readdirSync(WEEKLY_DIR)
+            const allEntries = await fs.readdir(WEEKLY_DIR);
+            const weekFiles = allEntries
                 .filter(f => f.startsWith('week_') && f.endsWith('.json'))
                 .sort(); // week_YYYY_WW — sortowanie leksykograficzne = chronologiczne
 
@@ -157,16 +159,22 @@ class GaryCombatIngestionService {
                 return { matched: 0, total: 0, unmatchedGary: [], clanMembersWithoutData: [] };
             }
 
+            // Wczytaj wszystkie pliki weekly równolegle
+            const weeklyResults = await Promise.allSettled(
+                weekFiles.map(file =>
+                    fs.readFile(path.join(WEEKLY_DIR, file), 'utf8')
+                        .then(raw => ({ file, data: JSON.parse(raw) }))
+                )
+            );
+
             // Zbuduj strukturę garyData agregując wszystkie tygodnie
             const garyData = { players: {} };
-            for (const file of weekFiles) {
-                let weekData;
-                try {
-                    weekData = JSON.parse(fs.readFileSync(path.join(WEEKLY_DIR, file), 'utf8'));
-                } catch (_) {
-                    this.logger.warn(`GaryCombatIngestion: pominięto uszkodzony plik ${file}`);
+            for (const result of weeklyResults) {
+                if (result.status === 'rejected') {
+                    this.logger.warn(`GaryCombatIngestion: pominięto uszkodzony plik (${result.reason?.message})`);
                     continue;
                 }
+                const weekData = result.value.data;
                 if (!weekData?.players || !weekData.weekNumber || !weekData.year) continue;
 
                 for (const [key, player] of Object.entries(weekData.players)) {
@@ -200,13 +208,12 @@ class GaryCombatIngestionService {
 
             // Wczytaj istniejące dane lokalne lub zacznij od zera
             let localData = { players: {}, lastUpdated: '' };
-            if (fs.existsSync(LOCAL_COMBAT_FILE)) {
-                try {
-                    localData = JSON.parse(fs.readFileSync(LOCAL_COMBAT_FILE, 'utf8'));
-                    if (!localData.players) localData.players = {};
-                } catch (_) {
-                    localData = { players: {} };
-                }
+            try {
+                const raw = await fs.readFile(LOCAL_COMBAT_FILE, 'utf8');
+                localData = JSON.parse(raw);
+                if (!localData.players) localData.players = {};
+            } catch (_) {
+                localData = { players: {}, lastUpdated: '' };
             }
 
             const playerNames = Object.keys(garyData.players);
@@ -310,9 +317,8 @@ class GaryCombatIngestionService {
 
             localData.lastUpdated = new Date().toISOString();
 
-            const dir = path.dirname(LOCAL_COMBAT_FILE);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
+            await fs.mkdir(path.dirname(LOCAL_COMBAT_FILE), { recursive: true });
+            await fs.writeFile(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
 
             // Po zapisie lokalnej bazy, mirroruj wszystkie (gracz × tydzień) do web API.
             // Endpoint jest idempotentny (natural key: discordId+year+weekNumber),

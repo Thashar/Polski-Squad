@@ -1,5 +1,90 @@
 const fs = require('fs').promises;
+const fsSync = require('fs');
+const https = require('https');
+const { URL } = require('url');
 const path = require('path');
+
+const ALLOWED_DISCORD_HOSTS = new Set([
+    'cdn.discordapp.com',
+    'media.discordapp.net',
+    'images-ext-1.discordapp.net',
+    'images-ext-2.discordapp.net',
+    'attachments.discord-activities.com',
+]);
+
+const MAX_DOWNLOAD_SIZE = 25 * 1024 * 1024; // 25 MB
+const DOWNLOAD_TIMEOUT_MS = 30_000; // 30 sekund
+
+function validateDiscordUrl(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch {
+        throw new Error(`Nieprawidłowy URL: ${rawUrl}`);
+    }
+    if (parsed.protocol !== 'https:') {
+        throw new Error(`Dozwolony wyłącznie protokół HTTPS`);
+    }
+    if (!ALLOWED_DISCORD_HOSTS.has(parsed.hostname)) {
+        throw new Error(`Host "${parsed.hostname}" nie jest dozwolony (tylko Discord CDN)`);
+    }
+    return parsed;
+}
+
+/**
+ * Pobiera obraz z Discord CDN na dysk.
+ * Wymusza HTTPS, whitelist hostów Discord, limit 25 MB i timeout 30s.
+ * @param {string} url - URL obrazu z Discord CDN
+ * @param {string} filepath - Ścieżka do zapisu pliku
+ * @returns {Promise<string>} - Ścieżka do zapisanego pliku
+ */
+async function downloadDiscordImage(url, filepath) {
+    validateDiscordUrl(url);
+
+    return new Promise((resolve, reject) => {
+        const fileStream = fsSync.createWriteStream(filepath);
+        let totalSize = 0;
+        let timedOut = false;
+
+        const req = https.get(url, (response) => {
+            response.on('data', (chunk) => {
+                totalSize += chunk.length;
+                if (totalSize > MAX_DOWNLOAD_SIZE) {
+                    timedOut = true;
+                    response.destroy();
+                    fileStream.close();
+                    reject(new Error(`Plik przekracza limit ${MAX_DOWNLOAD_SIZE / 1024 / 1024} MB`));
+                    return;
+                }
+                fileStream.write(chunk);
+            });
+
+            response.on('end', () => {
+                if (!timedOut) {
+                    fileStream.close();
+                    resolve(filepath);
+                }
+            });
+
+            response.on('error', (err) => {
+                fileStream.close();
+                reject(err);
+            });
+        });
+
+        req.setTimeout(DOWNLOAD_TIMEOUT_MS, () => {
+            timedOut = true;
+            req.destroy();
+            fileStream.close();
+            reject(new Error(`Timeout pobierania obrazu (${DOWNLOAD_TIMEOUT_MS / 1000}s)`));
+        });
+
+        req.on('error', (err) => {
+            fileStream.close();
+            reject(err);
+        });
+    });
+}
 
 /**
  * Opóźnienie wykonania (delay)
@@ -348,5 +433,6 @@ module.exports = {
     createInfoEmbed,
     hasRequiredPermissions,
     getWeekNumber,
-    cleanupOldFiles
+    cleanupOldFiles,
+    downloadDiscordImage,
 };
