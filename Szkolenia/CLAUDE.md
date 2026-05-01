@@ -21,7 +21,7 @@
 
 **Mention @Szkolenia** na kanale `1207041051831832586` (lub admin gdziekolwiek) → odpowiedź AI.
 - **Przełączanie providera:** `SZKOLENIA_AI_PROVIDER` w .env → `"anthropic"` (domyślny), `"grok"` lub `"perplexity"`
-- **Cooldown:** Anthropic 1 min, Grok/Perplexity 60 min (admini bez limitu)
+- **Cooldown:** Anthropic 1 min, Grok/Perplexity 1440 min (24h) (admini bez limitu)
 
 ### Provider: Anthropic (domyślny)
 - **Model:** Anthropic Claude (configurable via `SZKOLENIA_AI_CHAT_MODEL`)
@@ -40,7 +40,7 @@
 - **API:** `https://api.perplexity.ai/chat/completions` (Chat Completions z wbudowanym web search)
 - **Web Search:** Perplexity ma wbudowane przeszukiwanie internetu, filtr `search_recency_filter: 'month'`
 - **Prompt:** Identyczny jak Grok - kompendium wiedzy o Survivor.io z instrukcjami wyszukiwania
-- **Cooldown:** 5 minut per użytkownik (administratorzy bez limitu)
+- **Cooldown:** 1440 min (24h) per użytkownik (administratorzy bez limitu)
 
 ---
 
@@ -82,4 +82,4 @@ SZKOLENIA_PERPLEXITY_MODEL=sonar-pro
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
 - **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
 - **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON
-- **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 60 min (admini bez limitu).
+- **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 1440 min (24h) (admini bez limitu).
