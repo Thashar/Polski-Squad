@@ -2219,10 +2219,8 @@ class InteractionHandler {
             const dotsSvg = pts.map(p => {
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
                 const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${p.delta}` : String(p.delta);
-                const scoreY = Math.max(M.top + 10, p.y - 6);
-                const deltaY = Math.max(M.top - 1, scoreY - 11);
-                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${color}" text-anchor="middle" opacity="0.85">${p.score}</text>` +
+                const deltaY = Math.max(M.top + 2, p.y - 8);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
                     (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
             }).join('\n    ');
 
@@ -2378,12 +2376,10 @@ class InteractionHandler {
 
             const linePath = buildCatmullRom(pts);
             const dotsSvg = pts.map((p, pi) => {
-                const scoreY = p.y - labelOffsets[pi];
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
                 const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${fmtDot(p.delta)}` : fmtDot(p.delta);
-                const deltaY = Math.max(M.top - 1, scoreY - 11);
-                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>
-    <text x="${p.x.toFixed(1)}" y="${scoreY.toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${color}" text-anchor="middle" opacity="0.85">${fmtDot(p.v)}</text>` +
+                const deltaY = Math.max(M.top + 2, p.y - labelOffsets[pi]);
+                return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
                     (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
             }).join('\n    ');
 
