@@ -10,7 +10,7 @@ const logger = createBotLogger('Stalker');
 const confirmationData = new Map();
 
 async function handleInteraction(interaction, sharedState, config) {
-    const { client, databaseService, ocrService, punishmentService, reminderService, survivorService, phaseService } = sharedState;
+    const { client, databaseService, ocrService, punishmentService, reminderService, phaseService } = sharedState;
 
     try {
         if (interaction.isCommand()) {
@@ -75,10 +75,10 @@ async function handleInteraction(interaction, sharedState, config) {
 }
 
 async function handleSlashCommand(interaction, sharedState) {
-    const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, survivorService, phaseService } = sharedState;
+    const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, phaseService } = sharedState;
 
-    // Sprawdź uprawnienia dla wszystkich komend oprócz /decode, /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['decode', 'wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking'];
+    // Sprawdź uprawnienia dla wszystkich komend oprócz /wyniki, /progres, /player-status, /clan-status i /clan-progres
+    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -121,9 +121,6 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'ocr-debug':
             await handleOcrDebugCommand(interaction, config);
-            break;
-        case 'decode':
-            await handleDecodeCommand(interaction, sharedState);
             break;
         case 'faza1':
             await handlePhase1Command(interaction, sharedState);
@@ -676,7 +673,7 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
 }
 
 async function handleButton(interaction, sharedState) {
-    const { config, databaseService, punishmentService, survivorService, phaseService } = sharedState;
+    const { config, databaseService, punishmentService, phaseService } = sharedState;
 
     // ============ KALKULATOR EMBED - system dzielenia obliczeniami ============
     if (interaction.customId === 'kalkulator_request') {
@@ -726,147 +723,6 @@ async function handleButton(interaction, sharedState) {
             });
         } catch (error) {
             logger.error(`[BOROXONING] ❌ Błąd obsługi przycisku: ${error.message}`);
-        }
-        return;
-    }
-
-    // Obsługa przycisków paginacji buildów
-    if (interaction.customId === 'statystyki_page' || interaction.customId === 'ekwipunek_page' || interaction.customId === 'tech_party_page' || interaction.customId === 'survivor_page' || interaction.customId === 'legend_colls_page' || interaction.customId === 'epic_colls_page' || interaction.customId === 'custom_sets_page' || interaction.customId === 'pets_page') {
-        if (!sharedState.buildPagination) {
-            await interaction.reply({ content: '❌ Sesja paginacji wygasła.', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        const paginationData = sharedState.buildPagination.get(interaction.message.id);
-        if (!paginationData) {
-            await interaction.reply({ content: '❌ Nie znaleziono danych paginacji.', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        // Wszyscy użytkownicy mogą zmieniać strony
-
-        // Ustaw nową stronę na podstawie przycisku
-        let newPage = paginationData.currentPage;
-        if (interaction.customId === 'statystyki_page') {
-            newPage = 0;
-        } else if (interaction.customId === 'ekwipunek_page') {
-            newPage = 1;
-        } else if (interaction.customId === 'tech_party_page') {
-            newPage = 2;
-        } else if (interaction.customId === 'survivor_page') {
-            newPage = 3;
-        } else if (interaction.customId === 'legend_colls_page') {
-            newPage = 4;
-        } else if (interaction.customId === 'epic_colls_page') {
-            newPage = 5;
-        } else if (interaction.customId === 'custom_sets_page') {
-            newPage = 6;
-        } else if (interaction.customId === 'pets_page') {
-            newPage = 7;
-        }
-
-        // Aktualizuj dane paginacji
-        paginationData.currentPage = newPage;
-
-        // Odśwież timestamp - resetuj timer do 15 minut od teraz
-        const newTimestamp = Date.now();
-        paginationData.timestamp = newTimestamp;
-        const deleteAt = newTimestamp + (15 * 60 * 1000);
-
-        const navigationButtons = survivorService.createNavigationButtons(newPage);
-
-        // Zaktualizuj footer WSZYSTKICH embedów z nowym timestampem i oglądającym
-        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
-
-        // Oblicz dokładną godzinę usunięcia
-        const deleteTime = new Date(deleteAt);
-        const hours = deleteTime.getHours().toString().padStart(2, '0');
-        const minutes = deleteTime.getMinutes().toString().padStart(2, '0');
-        const timeString = `${hours}:${minutes}`;
-
-        // Zaktualizuj wszystkie embedy w paginacji
-        paginationData.embeds.forEach((embed, index) => {
-            const currentFooter = embed.data.footer?.text || '';
-            const pageName = currentFooter.split(' • ')[0];
-            const newFooterText = `${pageName} • Analiza zostanie usunięta o ${timeString} • Ogląda ${viewerDisplayName}`;
-            embed.setFooter({ text: newFooterText });
-        });
-
-        const currentEmbed = paginationData.embeds[newPage];
-
-        // Zaktualizuj zaplanowane usunięcie wiadomości
-        if (sharedState.messageCleanupService) {
-            await sharedState.messageCleanupService.removeScheduledMessage(interaction.message.id);
-            await sharedState.messageCleanupService.scheduleMessageDeletion(
-                interaction.message.id,
-                interaction.message.channelId,
-                deleteAt,
-                paginationData.userId
-            );
-        }
-
-        await interaction.update({
-            embeds: [currentEmbed],
-            components: navigationButtons
-        });
-        return;
-    }
-
-    // Obsługa przycisku "Usuń" dla embedów buildu
-    if (interaction.customId === 'delete_embed') {
-        // Po restarcie bota nie ma danych paginacji w RAM, ale wiadomość nadal istnieje
-        // Pozwól na usunięcie wiadomości jeśli użytkownik jest jej właścicielem (sprawdź przez embed footer lub inne metody)
-
-        let canDelete = false;
-        let userId = null;
-
-        // Sprawdź czy mamy dane paginacji w pamięci
-        if (sharedState.buildPagination && sharedState.buildPagination.has(interaction.message.id)) {
-            const paginationData = sharedState.buildPagination.get(interaction.message.id);
-            userId = paginationData.userId;
-            canDelete = interaction.user.id === userId;
-        } else {
-            // Po restarcie nie ma danych w RAM, ale sprawdź czy wiadomość jest w pliku zaplanowanych usunięć
-            const scheduledMessages = sharedState.messageCleanupService.scheduledMessages || [];
-            const scheduledMessage = scheduledMessages.find(msg => msg.messageId === interaction.message.id);
-
-            if (scheduledMessage) {
-                // Sprawdź czy użytkownik jest właścicielem (jeśli mamy zapisane userId)
-                if (scheduledMessage.userId && scheduledMessage.userId === interaction.user.id) {
-                    canDelete = true;
-                } else if (!scheduledMessage.userId) {
-                    // Dla starszych wiadomości bez userId, pozwól każdemu usunąć
-                    canDelete = true;
-                }
-            }
-        }
-
-        if (!canDelete) {
-            await interaction.reply({
-                content: '❌ Tylko właściciel embeda może go usunąć lub sesja paginacji wygasła.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        // Usuń embed i dane paginacji
-        try {
-            // Usuń zaplanowane automatyczne usuwanie z pliku
-            await sharedState.messageCleanupService.removeScheduledMessage(interaction.message.id);
-
-            // Usuń wiadomość
-            await interaction.message.delete();
-
-            // Usuń dane paginacji z pamięci
-            sharedState.buildPagination.delete(interaction.message.id);
-
-            logger.info(`🗑️ Embed buildu został usunięty przez ${interaction.user.tag}`);
-        } catch (error) {
-            logger.error(`❌ Błąd usuwania embeda: ${error.message}`);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas usuwania embeda.',
-                flags: MessageFlags.Ephemeral
-            });
         }
         return;
     }
@@ -2367,10 +2223,6 @@ async function registerSlashCommands(client) {
             ),
 
         new SlashCommandBuilder()
-            .setName('decode')
-            .setDescription('Dekoduj kod buildu Survivor.io i wyświetl dane o ekwipunku'),
-
-        new SlashCommandBuilder()
             .setName('faza1')
             .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 1'),
 
@@ -2913,49 +2765,6 @@ async function handleOcrDebugCommand(interaction, config) {
     });
 }
 
-async function handleDecodeCommand(interaction, sharedState) {
-    const { config, survivorService } = sharedState;
-
-    // Sprawdź czy kanał jest zablokowany dla komendy /decode
-    const currentChannelId = interaction.channelId;
-    const parentChannelId = interaction.channel?.parent?.id;
-
-    // Sprawdź czy to kanał dozwolony lub wątek w dozwolonym kanale
-    const isAllowedChannel = config.allowedDecodeChannels.includes(currentChannelId) ||
-                            config.allowedDecodeChannels.includes(parentChannelId);
-
-    // Administratorzy i moderatorzy mogą używać komendy wszędzie
-    const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
-
-    if (!isAllowedChannel && !isAdmin && !hasPunishRole) {
-        await interaction.reply({
-            content: '❌ Komenda `/decode` jest dostępna tylko na wybranych kanałach.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // Wyświetl modal z polem do wpisania kodu
-    const modal = new ModalBuilder()
-        .setCustomId('decode_modal')
-        .setTitle('Dekoduj build Survivor.io');
-
-    const codeInput = new TextInputBuilder()
-        .setCustomId('build_code')
-        .setLabel('Kod buildu')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Skopiuj tu kod otrzymany po kliknięciu "EXPORT" na stronie https://sio-tools.vercel.app/')
-        .setRequired(true)
-        .setMinLength(10)
-        .setMaxLength(4000);
-
-    const actionRow = new ActionRowBuilder().addComponents(codeInput);
-    modal.addComponents(actionRow);
-
-    await interaction.showModal(modal);
-}
-
 // =====================================================================
 //  KALKULATOR EMBED — system dzielenia mocą obliczeniową
 // =====================================================================
@@ -3307,10 +3116,7 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleKalkulatorReturnModalSubmit(interaction, sharedState);
         return;
     }
-    if (interaction.customId === 'decode_modal') {
-        await handleDecodeModalSubmit(interaction, sharedState);
-    // Modal wyniki_attachments_modal został usunięty - teraz używamy przesyłania plików bezpośrednio
-    } else if (interaction.customId.startsWith('modyfikuj_modal_')) {
+    if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
         await handleDodajModalSubmit(interaction, sharedState);
@@ -3458,81 +3264,6 @@ async function handlePhase1Command(interaction, sharedState) {
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
-        });
-    }
-}
-
-async function handleDecodeModalSubmit(interaction, sharedState) {
-    const { config, survivorService } = sharedState;
-
-    const code = interaction.fields.getTextInputValue('build_code');
-
-    if (!code || code.trim().length === 0) {
-        await interaction.reply({
-            content: '❌ Nie podano kodu do dekodowania.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    await interaction.deferReply();
-
-    try {
-        const buildData = survivorService.decodeBuild(code.trim());
-
-        if (!buildData.success) {
-            await interaction.editReply({
-                content: `❌ **Nie udało się zdekodować kodu**\n\n**Błąd:** ${buildData.error}\n**Kod:** \`${code}\``,
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        const userDisplayName = interaction.member?.displayName || interaction.user.username;
-        const viewerDisplayName = interaction.member?.displayName || interaction.user.username;
-        const embeds = await survivorService.createBuildEmbeds(buildData.data, userDisplayName, code, viewerDisplayName);
-        const navigationButtons = survivorService.createNavigationButtons(0);
-        const response = await interaction.editReply({
-            embeds: [embeds[0]], // Rozpocznij od pierwszej strony
-            components: navigationButtons
-        });
-
-        // Przechowuj dane dla paginacji
-        if (!sharedState.buildPagination) {
-            sharedState.buildPagination = new Map();
-        }
-
-        sharedState.buildPagination.set(response.id, {
-            embeds: embeds,
-            currentPage: 0,
-            userId: interaction.user.id,
-            timestamp: Date.now()
-        });
-
-        // Zaplanuj usunięcie wiadomości po 15 minutach (persist across restarts)
-        const deleteAt = Date.now() + (15 * 60 * 1000); // 15 minut
-        await sharedState.messageCleanupService.scheduleMessageDeletion(
-            response.id,
-            response.channelId,
-            deleteAt,
-            interaction.user.id // Zapisz właściciela
-        );
-
-        // Usuń dane paginacji po 15 minutach (tylko jeśli bot nie zostanie zrestartowany)
-        setTimeout(() => {
-            if (sharedState.buildPagination && sharedState.buildPagination.has(response.id)) {
-                sharedState.buildPagination.delete(response.id);
-            }
-        }, 15 * 60 * 1000);
-
-        logger.info(`✅ Pomyślnie zdekodowano build Survivor.io dla ${interaction.user.tag}`);
-
-    } catch (error) {
-        logger.error(`❌ Błąd dekodowania build Survivor.io: ${error.message}`);
-
-        await interaction.editReply({
-            content: `❌ **Wystąpił błąd podczas dekodowania**\n\n**Błąd:** ${error.message}\n**Kod:** \`${code}\``,
-            flags: MessageFlags.Ephemeral
         });
     }
 }

@@ -436,12 +436,6 @@
           "usage": "/msg tekst:[tekst wiadomości] (puste = usuń wszystkie)",
           "requiredPermission": "moderator"
         },
-        {
-          "name": "/decode",
-          "description": "Dekoduje link buildu z gry Survivor.io",
-          "usage": "/decode link:[https://... lub short code]",
-          "requiredPermission": "public"
-        }
       ]
     },
     {

@@ -14,7 +14,6 @@ const ReminderService = require('./services/reminderService');
 const ReminderUsageService = require('./services/reminderUsageService');
 const ReminderStatusTrackingService = require('./services/reminderStatusTrackingService');
 const VacationService = require('./services/vacationService');
-const SurvivorService = require('./services/survivorService');
 const MessageCleanupService = require('./services/messageCleanupService');
 const RaportCleanupService = require('./services/raportCleanupService');
 const BroadcastMessageService = require('./services/broadcastMessageService');
@@ -88,7 +87,6 @@ const reminderService = new ReminderService(config, appSync);
 const reminderUsageService = new ReminderUsageService(config);
 const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
-const survivorService = new SurvivorService(config, logger);
 const messageCleanupService = new MessageCleanupService(config, logger);
 const raportCleanupService = new RaportCleanupService(client, logger);
 const broadcastMessageService = new BroadcastMessageService(logger);
@@ -133,7 +131,6 @@ const sharedState = {
     reminderUsageService,
     reminderStatusTrackingService,
     vacationService,
-    survivorService,
     messageCleanupService,
     raportCleanupService,
     broadcastMessageService,
