@@ -2172,27 +2172,49 @@ class InteractionHandler {
             `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
         ).join('\n    ');
 
-        // Draw each clan's line and dots with delta labels
-        const clansSvg = validClans.map((clan, ci) => {
+        // Pass 1: build all pts for every clan
+        const clanPts = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
-            const pts = clan.history.map((d, di) => {
+            return clan.history.map((d, di) => {
                 const idx = allWeeks.findIndex(w => w.weekNumber === d.weekNumber && w.year === d.year);
                 if (idx < 0) return null;
                 const delta = di > 0 ? d.score - clan.history[di - 1].score : null;
-                return { x: toX(idx), y: toY(d.score), score: d.score, delta };
+                const deltaText = delta === null ? '' : delta > 0 ? `+${delta}` : String(delta);
+                return { x: toX(idx), y: toY(d.score), delta, deltaText, color, weekIdx: idx,
+                    preferredY: toY(d.score) - 8 };
             }).filter(Boolean);
+        });
 
+        // Resolve label collisions per week column across all clans
+        const byWeekScore = new Map();
+        for (const pts of clanPts) {
+            for (const p of pts) {
+                if (!p.deltaText) continue;
+                if (!byWeekScore.has(p.weekIdx)) byWeekScore.set(p.weekIdx, []);
+                byWeekScore.get(p.weekIdx).push(p);
+            }
+        }
+        for (const group of byWeekScore.values()) {
+            group.sort((a, b) => a.preferredY - b.preferredY);
+            group[0].labelY = Math.max(M.top + 2, group[0].preferredY);
+            for (let i = 1; i < group.length; i++) {
+                group[i].labelY = Math.max(
+                    Math.max(M.top + 2, group[i].preferredY),
+                    group[i - 1].labelY + 10
+                );
+            }
+        }
+
+        // Pass 2: render lines + dots
+        const clansSvg = clanPts.map(pts => {
             if (pts.length < 2) return '';
-
+            const color = pts[0].color;
             const linePath = buildCatmullRom(pts);
             const dotsSvg = pts.map(p => {
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
-                const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${p.delta}` : String(p.delta);
-                const deltaY = Math.max(M.top + 2, p.y - 8);
                 return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
-                    (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
+                    (p.deltaText && p.labelY != null ? `\n    <text x="${p.x.toFixed(1)}" y="${p.labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${p.deltaText}</text>` : '');
             }).join('\n    ');
-
             return `<path d="${linePath}" stroke="${color}" stroke-width="2.5" fill="none"/>
     ${dotsSvg}`;
         }).join('\n    ');
@@ -2313,13 +2335,13 @@ class InteractionHandler {
             `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
         ).join('\n    ');
 
-        // Each clan: line + dots + score label + delta label
-        const clansSvg = validClans.map((clan, ci) => {
+        // Pass 1: build all pts for every clan
+        const clanPts = validClans.map((clan, ci) => {
             const color = colors[ci % colors.length];
             const orderedHistory = [...clan.history].sort((a, b) =>
                 a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
             );
-            const pts = allWeeks.map((w, wi) => {
+            return allWeeks.map((w, wi) => {
                 const entry = clan.history.find(d => d.weekNumber === w.weekNumber && d.year === w.year);
                 if (!entry || entry[metricKey] == null) return null;
                 const hIdx = orderedHistory.findIndex(d => d.weekNumber === w.weekNumber && d.year === w.year);
@@ -2327,31 +2349,42 @@ class InteractionHandler {
                 const delta = (prevEntry && prevEntry[metricKey] != null)
                     ? entry[metricKey] - prevEntry[metricKey]
                     : null;
-                return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey], delta };
+                const deltaText = delta === null ? '' : delta > 0 ? `+${fmtDot(delta)}` : fmtDot(delta);
+                return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey], delta, deltaText, color, weekIdx: wi,
+                    preferredY: toY(entry[metricKey]) - 8 };
             }).filter(Boolean);
+        });
 
-            if (pts.length < 2) return '';
-
-            // Collision-aware dot labels
-            const labelOffsets = pts.map(() => 8);
-            for (let i = 1; i < pts.length; i++) {
-                const prevLY = pts[i - 1].y - labelOffsets[i - 1];
-                const wantLY = pts[i].y - 8;
-                if (Math.abs(wantLY - prevLY) < 11) {
-                    const newLY = Math.max(M.top - 10, Math.min(prevLY - 11, wantLY));
-                    labelOffsets[i] = pts[i].y - newLY;
-                }
+        // Resolve label collisions per week column across all clans
+        const byWeekMetric = new Map();
+        for (const pts of clanPts) {
+            for (const p of pts) {
+                if (!p.deltaText) continue;
+                if (!byWeekMetric.has(p.weekIdx)) byWeekMetric.set(p.weekIdx, []);
+                byWeekMetric.get(p.weekIdx).push(p);
             }
+        }
+        for (const group of byWeekMetric.values()) {
+            group.sort((a, b) => a.preferredY - b.preferredY);
+            group[0].labelY = Math.max(M.top + 2, group[0].preferredY);
+            for (let i = 1; i < group.length; i++) {
+                group[i].labelY = Math.max(
+                    Math.max(M.top + 2, group[i].preferredY),
+                    group[i - 1].labelY + 10
+                );
+            }
+        }
 
+        // Pass 2: render lines + dots
+        const clansSvg = clanPts.map(pts => {
+            if (pts.length < 2) return '';
+            const color = pts[0].color;
             const linePath = buildCatmullRom(pts);
-            const dotsSvg = pts.map((p, pi) => {
+            const dotsSvg = pts.map(p => {
                 const deltaColor = p.delta === null ? '#72767D' : p.delta > 0 ? '#43B581' : p.delta < 0 ? '#ED4245' : '#72767D';
-                const deltaText = p.delta === null ? '' : p.delta > 0 ? `+${fmtDot(p.delta)}` : fmtDot(p.delta);
-                const deltaY = Math.max(M.top + 2, p.y - labelOffsets[pi]);
                 return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#2B2D31" stroke="${color}" stroke-width="1.5"/>` +
-                    (deltaText ? `\n    <text x="${p.x.toFixed(1)}" y="${deltaY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${deltaText}</text>` : '');
+                    (p.deltaText && p.labelY != null ? `\n    <text x="${p.x.toFixed(1)}" y="${p.labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${deltaColor}" text-anchor="middle" font-weight="bold" opacity="0.9">${p.deltaText}</text>` : '');
             }).join('\n    ');
-
             return `<path d="${linePath}" stroke="${color}" stroke-width="2.5" fill="none"/>
     ${dotsSvg}`;
         }).join('\n    ');
