@@ -256,9 +256,16 @@ class EventMenedzer {
         let nextTrigger;
         let newTriggerCount = (event.triggerCount || 0) + 1;
 
+        const now = new Date();
+
         if (event.interval === 'msc') {
             const originalDay = event.monthlyDay || getWarsawComponents(lastTrigger).day;
-            nextTrigger = addOneMonthWarsaw(lastTrigger, originalDay).toISOString();
+            let next = addOneMonthWarsaw(lastTrigger, originalDay);
+            while (next <= now) {
+                next = addOneMonthWarsaw(next, originalDay);
+                newTriggerCount++;
+            }
+            nextTrigger = next.toISOString();
         } else {
             let nextIntervalMs;
             // Specjalny wzorzec "ee": 3d x8, potem 4d, powtórz
@@ -272,7 +279,12 @@ class EventMenedzer {
             } else {
                 nextIntervalMs = event.intervalMs;
             }
-            nextTrigger = new Date(lastTrigger.getTime() + nextIntervalMs).toISOString();
+            let next = new Date(lastTrigger.getTime() + nextIntervalMs);
+            while (next <= now) {
+                next = new Date(next.getTime() + nextIntervalMs);
+                newTriggerCount++;
+            }
+            nextTrigger = next.toISOString();
         }
 
         return await this.updateEvent(id, {
