@@ -2,7 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const messages = require('../config/messages');
 const fs = require('fs').promises;
 const path = require('path');
-const https = require('https');
+const { downloadDiscordImage } = require('../utils/helpers');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
@@ -602,28 +602,11 @@ class ReminderService {
      */
     async downloadImage(url, sessionId, index) {
         await this.initTempDir();
-
         const filename = `${sessionId}_${index}_${Date.now()}.png`;
         const filepath = path.join(this.tempDir, filename);
-
-        return new Promise((resolve, reject) => {
-            https.get(url, (response) => {
-                const fileStream = require('fs').createWriteStream(filepath);
-                response.pipe(fileStream);
-
-                fileStream.on('finish', () => {
-                    fileStream.close();
-                    logger.info(`[REMIND] 💾 Zapisano zdjęcie: ${filename}`);
-                    resolve(filepath);
-                });
-
-                fileStream.on('error', (err) => {
-                    reject(err);
-                });
-            }).on('error', (err) => {
-                reject(err);
-            });
-        });
+        await downloadDiscordImage(url, filepath);
+        logger.info(`[REMIND] 💾 Zapisano zdjęcie: ${filename}`);
+        return filepath;
     }
 
     /**
