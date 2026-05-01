@@ -11,7 +11,9 @@
 7b. **Snapshot graczy LME** - `clanHistoryService.savePlayerSnapshot()`: RC+TC i atak per gracz zapisywane do `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień, klucz = lowercase nick gry); odczytywane przez Stalker bot
 8. **Wątki** - Obsługa `parentId`, whitelist check
 9. **Emoji** - Server emoji w embedach
-10. **Rivals** - `garrytoolsService.getRivalsData()`: Fetch garrytools.com/lunar/rivals z Guild ID, POST formularz, parse 2 tabele (likely/unlikely matches), zwraca rank, Guild ID, name, members, leader, grade, score; wyświetlane w 2 embedach Discord
+10. **Rivals** - `garrytoolsService.getRivalsData()`: Fetch garrytools.com/lunar/rivals z Guild ID, POST formularz, parse 2 tabele (likely/unlikely matches), zwraca rank, Guild ID, name, members, leader, grade, score; wyświetlane w 2 embedach Discord; po embedach generowane wykresy: historia punktów (dla klanów w TOP500 ≥2 tygodnie), siła ataku i RC+TC (dla klanów w guildSnapshots — PS gildie)
+11. **Wykresy historii** - `generateMultiClanHistoryChart` i `generateGuildMetricChart` zawierają delta wartości (zmiana względem poprzedniego tygodnia) nad każdym punktem: zielony dla wzrostu (+N), czerwony dla spadku (-N)
+12. **Paginacja członków LME** - `/lunarmine` wyświetla wszystkich członków w jednym embed z paginacją publiczną (każda strona = jeden klan); przyciski `lme_prev::ID`, `lme_next::ID` dostępne dla wszystkich bez sprawdzania uprawnień
 
 **Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`), `/rivals` (wyszukiwanie rywali na podstawie Guild ID)
 **Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_LIST, WEBSHARE_URL
