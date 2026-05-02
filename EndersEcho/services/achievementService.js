@@ -213,7 +213,7 @@ class AchievementService {
                 const desc = isPol ? ach.descPol : ach.descEng;
                 const date = new Date(unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
                 const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
-                return `${rarity.emoji} **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
+                return `${ach.icon} (${rarity.emoji}) **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
             }).filter(Boolean);
             embed.setDescription(lines.join('\n\n'));
         }
@@ -296,7 +296,7 @@ class AchievementService {
             if (!ach) return null;
             const rarity = RARITY[ach.rarity];
             const name = isPol ? ach.namePol : ach.nameEng;
-            return `${rarity.emoji} **${name}**`;
+            return `${ach.icon} (${rarity.emoji}) **${name}**`;
         }).filter(Boolean);
 
         return lines.length > 0 ? lines.join('\n') : null;
