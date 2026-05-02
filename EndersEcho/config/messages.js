@@ -93,11 +93,11 @@ const pol = {
     ocrDebugOff: '🔇 **Szczegółowe logowanie OCR:** ❌ Wyłączone',
 
     // Przyciski nawigacji
-    buttonFirst: '⏪ Pierwsza',
     buttonPrev: '◀️ Poprzednia',
     buttonNext: 'Następna ▶️',
-    buttonLast: 'Ostatnia ⏩',
-    buttonBack: '↩️ Powrót do wyboru',
+    buttonMyPos: '🎯 Moja pozycja',
+    buttonGlobal: '🌐 Global',
+    buttonBack: '↩️ Wybór serwerów',
 
     // Role TOP
     topRoleUpdated: '🏆 Role TOP zostały zaktualizowane!',
@@ -350,11 +350,11 @@ const eng = {
     ocrDebugOff: '🔇 **Detailed OCR logging:** ❌ Disabled',
 
     // Navigation buttons
-    buttonFirst: '⏪ First',
     buttonPrev: '◀️ Previous',
     buttonNext: 'Next ▶️',
-    buttonLast: 'Last ⏩',
-    buttonBack: '↩️ Back to selection',
+    buttonMyPos: '🎯 My position',
+    buttonGlobal: '🌐 Global',
+    buttonBack: '↩️ Server selection',
 
     // TOP roles
     topRoleUpdated: '🏆 TOP roles have been updated!',

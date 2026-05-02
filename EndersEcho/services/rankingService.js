@@ -426,17 +426,44 @@ class RankingService {
      * @param {Object|null} messages - opcjonalny zestaw komunikatów
      * @returns {ActionRowBuilder}
      */
-    createRankingButtons(page, totalPages, disabled = false, messages = null, roleRows = []) {
+    /**
+     * @param {number} page
+     * @param {number} totalPages
+     * @param {boolean} disabled
+     * @param {object|null} messages
+     * @param {ActionRowBuilder[]} roleRows
+     * @param {object} options
+     * @param {number|null} options.userPage - strona z wynikiem wywołującego (null = brak)
+     * @param {'server'|'global'|'role'} options.mode
+     * @param {string|null} options.guildId - ID serwera kontekstowego (dla przycisku server/global)
+     * @param {string|null} options.guildName - nazwa serwera (dla etykiety przycisku)
+     */
+    createRankingButtons(page, totalPages, disabled = false, messages = null, roleRows = [], options = {}) {
         const msgs = messages || this.config.messages;
+        const { userPage = null, mode = 'server', guildId = null, guildName = null } = options;
+
+        // Przycisk 4: serwer ↔ global
+        let serverGlobalBtn;
+        if (mode === 'server') {
+            // Oglądamy serwer → przycisk skrót do globalnego
+            serverGlobalBtn = new ButtonBuilder()
+                .setCustomId('ranking_select_global')
+                .setLabel(msgs.buttonGlobal)
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled);
+        } else {
+            // Oglądamy global lub rolę → przycisk wraca do serwera
+            const label = guildName ? guildName.substring(0, 80) : (msgs.buttonGlobal || '🌐');
+            const serverId = guildId || '';
+            serverGlobalBtn = new ButtonBuilder()
+                .setCustomId(`ranking_select_server_${serverId}`)
+                .setLabel(label)
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled || !serverId);
+        }
 
         const navRow = new ActionRowBuilder();
         navRow.addComponents(
-            new ButtonBuilder()
-                .setCustomId('ranking_first')
-                .setLabel(msgs.buttonFirst)
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled || page === 0),
-
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
                 .setLabel(msgs.buttonPrev)
@@ -444,16 +471,18 @@ class RankingService {
                 .setDisabled(disabled || page === 0),
 
             new ButtonBuilder()
+                .setCustomId('ranking_mypos')
+                .setLabel(msgs.buttonMyPos)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled || userPage === null),
+
+            new ButtonBuilder()
                 .setCustomId('ranking_next')
                 .setLabel(msgs.buttonNext)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
-            new ButtonBuilder()
-                .setCustomId('ranking_last')
-                .setLabel(msgs.buttonLast)
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled || page >= totalPages - 1),
+            serverGlobalBtn,
 
             new ButtonBuilder()
                 .setCustomId('ranking_back')
@@ -470,19 +499,22 @@ class RankingService {
      * Maks. 10 ról = 2 wiersze po 5.
      * @param {Array} roleRankings - lista { roleId, roleName }
      * @param {string} guildId
+     * @param {string|null} activeRoleId - ID aktualnie wyświetlanej roli (przycisk wyłączony)
      * @returns {ActionRowBuilder[]}
      */
-    createRoleRankingButtons(roleRankings, guildId) {
+    createRoleRankingButtons(roleRankings, guildId, activeRoleId = null) {
         const rows = [];
         for (let i = 0; i < roleRankings.length; i += 5) {
             const row = new ActionRowBuilder();
             const chunk = roleRankings.slice(i, i + 5);
             for (const rr of chunk) {
+                const isActive = rr.roleId === activeRoleId;
                 row.addComponents(
                     new ButtonBuilder()
                         .setCustomId(`ranking_role_${guildId}_${rr.roleId}`)
                         .setLabel(rr.roleName.substring(0, 80))
-                        .setStyle(ButtonStyle.Primary)
+                        .setStyle(isActive ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                        .setDisabled(isActive)
                 );
             }
             rows.push(row);
