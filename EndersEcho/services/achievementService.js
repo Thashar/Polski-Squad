@@ -228,22 +228,16 @@ class AchievementService {
             const catAchs = ACHIEVEMENTS.filter(a => a.category === catKey);
             const catUnlocked = catAchs.filter(a => unlockedIds.has(a.id)).length;
             const label = isPol ? catLabel.pol : catLabel.eng;
-            return `${label}: **${catUnlocked}/${catAchs.length}**`;
+            // Ukryte kategorie pokazują liczbę odblokowanych, ale total jako "?"
+            const total = catLabel.hidden ? '?' : catAchs.length;
+            return `${label}: **${catUnlocked}/${total}**`;
         });
-
-        const statsLines = [
-            t(`📊 Pobite rekordy: **${progress.recordCount || 0}**`, `📊 Records beaten: **${progress.recordCount || 0}**`),
-            t(`🐉 Unikalne bossy: **${(progress.bossesEncountered || []).length}**`, `🐉 Unique bosses: **${(progress.bossesEncountered || []).length}**`),
-            t(`👁️ Przeglądy rankingu: **${progress.rankingViews || 0}**`, `👁️ Ranking views: **${progress.rankingViews || 0}**`),
-            t(`🔔 Subskrypcje: **${progress.subscriptions || 0}**`, `🔔 Subscriptions: **${progress.subscriptions || 0}**`),
-        ];
 
         const embed = new EmbedBuilder()
             .setColor(0x9b59b6)
             .setTitle(t('📊 Przegląd Osiągnięć', '📊 Achievement Overview'))
             .addFields(
-                { name: t('Kategorie', 'Categories'), value: catLines.join('\n'), inline: true },
-                { name: t('Statystyki', 'Statistics'), value: statsLines.join('\n'), inline: true },
+                { name: t('Kategorie', 'Categories'), value: catLines.join('\n'), inline: false },
             )
             .setFooter({ text: t(
                 `${unlockedIds.size} z ${ACHIEVEMENTS.length} odblokowanych`,

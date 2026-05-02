@@ -12,8 +12,8 @@ const RARITY = {
 const CATEGORY_INFO = {
     score:    { pol: '🏆 Wyniki',      eng: '🏆 Scores'   },
     records:  { pol: '🔁 Rekordy',     eng: '🔁 Records'  },
-    bosses:   { pol: '🐉 Bossowie',    eng: '🐉 Bosses'   },
-    explorer: { pol: '🕵️ Eksplorator', eng: '🕵️ Explorer' },
+    bosses:   { pol: '🎯 Łowy',        eng: '🎯 The Hunt' },
+    explorer: { pol: '🕵️ Eksplorator', eng: '🕵️ Explorer', hidden: true },
     prestige: { pol: '💎 Prestiż',     eng: '💎 Prestige'  },
 };
 
@@ -22,40 +22,10 @@ const CATEGORY_INFO = {
 const ACHIEVEMENTS = [
     // ===== WYNIKI (SCORES) =====
     {
-        id: 'score_first', category: 'score', rarity: 'common', hidden: false,
-        namePol: 'Pierwsze Kroki',   nameEng: 'First Steps',
-        descPol: 'Prześlij swój pierwszy wynik', descEng: 'Submit your first score',
-        check: (_p, ctx) => ctx.isNewRecord,
-    },
-    {
-        id: 'score_1k', category: 'score', rarity: 'common', hidden: false,
-        namePol: 'Debiutant',   nameEng: 'Beginner',
-        descPol: 'Osiągnij wynik 1 000', descEng: 'Reach a score of 1,000',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1_000,
-    },
-    {
-        id: 'score_10k', category: 'score', rarity: 'common', hidden: false,
-        namePol: 'Aspirant',   nameEng: 'Aspirant',
-        descPol: 'Osiągnij wynik 10 000', descEng: 'Reach a score of 10,000',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 10_000,
-    },
-    {
         id: 'score_100k', category: 'score', rarity: 'common', hidden: false,
         namePol: 'Zawodnik',   nameEng: 'Contender',
-        descPol: 'Osiągnij wynik 100 000', descEng: 'Reach a score of 100,000',
+        descPol: 'Osiągnij wynik 100K', descEng: 'Reach a score of 100K',
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 100_000,
-    },
-    {
-        id: 'score_1m', category: 'score', rarity: 'uncommon', hidden: false,
-        namePol: 'Milioner',   nameEng: 'Millionaire',
-        descPol: 'Osiągnij wynik 1M', descEng: 'Reach a score of 1M',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1_000_000,
-    },
-    {
-        id: 'score_10m', category: 'score', rarity: 'uncommon', hidden: false,
-        namePol: 'Magnat',   nameEng: 'Magnate',
-        descPol: 'Osiągnij wynik 10M', descEng: 'Reach a score of 10M',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 10_000_000,
     },
     {
         id: 'score_100m', category: 'score', rarity: 'uncommon', hidden: false,
@@ -64,34 +34,10 @@ const ACHIEVEMENTS = [
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 100_000_000,
     },
     {
-        id: 'score_1b', category: 'score', rarity: 'rare', hidden: false,
-        namePol: 'Miliarder',   nameEng: 'Billionaire',
-        descPol: 'Osiągnij wynik 1B', descEng: 'Reach a score of 1B',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1_000_000_000,
-    },
-    {
-        id: 'score_10b', category: 'score', rarity: 'rare', hidden: false,
-        namePol: 'Gigant',   nameEng: 'Giant',
-        descPol: 'Osiągnij wynik 10B', descEng: 'Reach a score of 10B',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 10_000_000_000,
-    },
-    {
         id: 'score_100b', category: 'score', rarity: 'rare', hidden: false,
         namePol: 'Lewiatan',   nameEng: 'Leviathan',
         descPol: 'Osiągnij wynik 100B', descEng: 'Reach a score of 100B',
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 100_000_000_000,
-    },
-    {
-        id: 'score_1t', category: 'score', rarity: 'epic', hidden: false,
-        namePol: 'Tytan',   nameEng: 'Titan',
-        descPol: 'Osiągnij wynik 1T', descEng: 'Reach a score of 1T',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1_000_000_000_000,
-    },
-    {
-        id: 'score_10t', category: 'score', rarity: 'epic', hidden: false,
-        namePol: 'Behemot',   nameEng: 'Behemoth',
-        descPol: 'Osiągnij wynik 10T', descEng: 'Reach a score of 10T',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 10_000_000_000_000,
     },
     {
         id: 'score_100t', category: 'score', rarity: 'epic', hidden: false,
@@ -100,46 +46,28 @@ const ACHIEVEMENTS = [
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 100_000_000_000_000,
     },
     {
-        id: 'score_1q', category: 'score', rarity: 'legendary', hidden: false,
-        namePol: 'Feniks',   nameEng: 'Phoenix',
-        descPol: 'Osiągnij wynik 1Q', descEng: 'Reach a score of 1Q',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e15,
-    },
-    {
-        id: 'score_10q', category: 'score', rarity: 'legendary', hidden: false,
-        namePol: 'Smok',   nameEng: 'Dragon',
-        descPol: 'Osiągnij wynik 10Q', descEng: 'Reach a score of 10Q',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e16,
-    },
-    {
         id: 'score_100q', category: 'score', rarity: 'legendary', hidden: false,
         namePol: 'Półbóg',   nameEng: 'Demigod',
         descPol: 'Osiągnij wynik 100Q', descEng: 'Reach a score of 100Q',
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e17,
     },
     {
-        id: 'score_1qi', category: 'score', rarity: 'mythic', hidden: false,
+        id: 'score_100qi', category: 'score', rarity: 'mythic', hidden: false,
         namePol: 'Nieśmiertelny',   nameEng: 'Immortal',
-        descPol: 'Osiągnij wynik 1Qi', descEng: 'Reach a score of 1Qi',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e18,
+        descPol: 'Osiągnij wynik 100Qi', descEng: 'Reach a score of 100Qi',
+        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e20,
     },
     {
-        id: 'score_10qi', category: 'score', rarity: 'mythic', hidden: false,
-        namePol: 'Transcendent',   nameEng: 'Transcendent',
-        descPol: 'Osiągnij wynik 10Qi', descEng: 'Reach a score of 10Qi',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e19,
-    },
-    {
-        id: 'score_1sx', category: 'score', rarity: 'mythic', hidden: false,
+        id: 'score_100sx', category: 'score', rarity: 'mythic', hidden: false,
         namePol: 'Bóg Wyników',   nameEng: 'Score God',
-        descPol: 'Osiągnij wynik 1Sx', descEng: 'Reach a score of 1Sx',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e21,
+        descPol: 'Osiągnij wynik 100Sx', descEng: 'Reach a score of 100Sx',
+        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e23,
     },
     {
-        id: 'score_1sp', category: 'score', rarity: 'mythic', hidden: false,
+        id: 'score_100xx', category: 'score', rarity: 'mythic', hidden: false,
         namePol: 'Poza Granicami',   nameEng: 'Beyond Limits',
         descPol: 'Osiągnij wynik w nieznanej jednostce', descEng: 'Reach a score in an unknown unit',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e24,
+        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e26,
     },
 
     // ===== REKORDY (RECORDS) =====
@@ -191,18 +119,6 @@ const ACHIEVEMENTS = [
         descPol: 'Pobij rekord 1000 razy', descEng: 'Beat your record 1000 times',
         check: (p, _ctx) => (p.recordCount || 0) >= 1000,
     },
-    {
-        id: 'improve_100pct', category: 'records', rarity: 'rare', hidden: false,
-        namePol: 'Podwójny Postęp',   nameEng: 'Double Progress',
-        descPol: 'Podwój swój wynik w jednym podejściu', descEng: 'Double your score in one submission',
-        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 2,
-    },
-    {
-        id: 'improve_200pct', category: 'records', rarity: 'legendary', hidden: false,
-        namePol: 'Potrójny Postęp',   nameEng: 'Triple Progress',
-        descPol: 'Potróż swój wynik w jednym podejściu', descEng: 'Triple your score in one submission',
-        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 3,
-    },
 
     // ===== BOSSOWIE (BOSSES) =====
     {
@@ -222,6 +138,24 @@ const ACHIEVEMENTS = [
         namePol: 'Łowca Bossów',   nameEng: 'Boss Hunter',
         descPol: 'Wyślij wyniki z 5 różnych bossów', descEng: 'Submit scores from 5 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 5,
+    },
+    {
+        id: 'boss_veteran', category: 'bosses', rarity: 'epic', hidden: false,
+        namePol: 'Weteran Łowów',   nameEng: 'Hunt Veteran',
+        descPol: 'Wyślij wyniki z 7 różnych bossów', descEng: 'Submit scores from 7 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 7,
+    },
+    {
+        id: 'boss_master', category: 'bosses', rarity: 'legendary', hidden: false,
+        namePol: 'Mistrz Łowów',   nameEng: 'Master of the Hunt',
+        descPol: 'Wyślij wyniki z 10 różnych bossów', descEng: 'Submit scores from 10 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 10,
+    },
+    {
+        id: 'boss_legend', category: 'bosses', rarity: 'mythic', hidden: false,
+        namePol: 'Legenda Łowów',   nameEng: 'Legend of the Hunt',
+        descPol: 'Wyślij wyniki z 13 różnych bossów', descEng: 'Submit scores from 13 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 13,
     },
 
     // ===== EKSPLORATOR (EXPLORER) — ukryte =====
@@ -255,6 +189,18 @@ const ACHIEVEMENTS = [
         descPol: 'Aktywuj 5 subskrypcji', descEng: 'Activate 5 subscriptions',
         check: (p, _ctx) => (p.subscriptions || 0) >= 5,
     },
+    {
+        id: 'improve_100pct', category: 'explorer', rarity: 'legendary', hidden: true,
+        namePol: 'Podwójny Postęp',   nameEng: 'Double Progress',
+        descPol: 'Podwój swój wynik w jednym podejściu', descEng: 'Double your score in one submission',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 2,
+    },
+    {
+        id: 'improve_200pct', category: 'explorer', rarity: 'mythic', hidden: true,
+        namePol: 'Potrójny Postęp',   nameEng: 'Triple Progress',
+        descPol: 'Potróż swój wynik w jednym podejściu', descEng: 'Triple your score in one submission',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 3,
+    },
 
     // ===== PRESTIŻ (PRESTIGE) =====
     {
@@ -274,12 +220,6 @@ const ACHIEVEMENTS = [
         namePol: 'Mistrz Serwera',   nameEng: 'Server Champion',
         descPol: 'Zdobądź miejsce #1 na serwerze', descEng: 'Reach #1 on the server',
         check: (_p, ctx) => ctx.currentPosition === 1,
-    },
-    {
-        id: 'big_leap', category: 'prestige', rarity: 'uncommon', hidden: false,
-        namePol: 'Wielki Skok',   nameEng: 'Big Leap',
-        descPol: 'Popraw wynik o ponad 50% w jednym podejściu', descEng: 'Improve your score by more than 50% in one submission',
-        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 1.5,
     },
     {
         id: 'comeback', category: 'prestige', rarity: 'rare', hidden: false,
