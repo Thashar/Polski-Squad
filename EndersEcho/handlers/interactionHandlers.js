@@ -2241,9 +2241,12 @@ class InteractionHandler {
 
                         const sentTo = [];
                         const failedAt = [];
+                        const top3Ctx = { titlePol: '⚠️ Błąd wysyłania powiadomienia Global Top 3', titleEng: '⚠️ Failed to deliver Global Top 3 notification' };
 
                         for (const guildCfg of allNotifGuilds) {
-                            const guildName = interaction.client.guilds.cache.get(guildCfg.id)?.name || guildCfg.id;
+                            const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
+                            const guildName = guildObj?.name || guildCfg.id;
+                            const lang = guildCfg.lang || 'pol';
                             try {
                                 // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
                                 let channel;
@@ -2251,10 +2254,12 @@ class InteractionHandler {
                                     channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                                 } catch (fetchErr) {
                                     failedAt.push(`${guildName} (${fetchErr.message})`);
+                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(fetchErr), lang, context: top3Ctx }).catch(() => {});
                                     continue;
                                 }
                                 if (!channel) {
                                     failedAt.push(`${guildName} (brak kanału)`);
+                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: { pol: 'Nie znaleziono kanału (ID kanału może być nieaktualne)', eng: 'Channel not found (channel ID may be outdated)', fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.', fix_eng: 'Use `/configure` to select a new channel for the bot.' }, lang, context: top3Ctx }).catch(() => {});
                                     continue;
                                 }
 
@@ -2292,6 +2297,7 @@ class InteractionHandler {
                                 sentTo.push(guildName);
                             } catch (notifError) {
                                 failedAt.push(`${guildName} (${notifError.message})`);
+                                if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(notifError), lang, context: top3Ctx }).catch(() => {});
                             }
                         }
 
@@ -3792,17 +3798,73 @@ class InteractionHandler {
     }
 
     /**
-     * Mapuje błąd Discord API na czytelny opis po polsku.
+     * Mapuje błąd Discord API na obiekt { pol, eng, fix_pol, fix_eng }.
      */
     _mapSendError(err) {
         const code = err.code;
         const msg = err.message || '';
-        if (code === 50001 || msg.includes('Missing Access')) return 'Brak dostępu — bot wyrzucony lub brak uprawnień na kanale';
-        if (code === 10003 || msg.includes('Unknown Channel')) return 'Kanał nie istnieje (skonfiguruj ponownie)';
-        if (code === 50013 || msg.includes('Missing Permissions')) return 'Brak uprawnień do wysyłania wiadomości';
-        if (code === 50035 || msg.includes('Invalid Form Body')) return 'Nieprawidłowy format wiadomości (embed za długi?)';
-        if (code === 10004 || msg.includes('Unknown Guild')) return 'Serwer nie istnieje';
-        return msg || 'Nieznany błąd';
+        if (code === 50001 || msg.includes('Missing Access')) return {
+            pol: 'Brak uprawnienia **Wyświetl kanał** — bot nie widzi tego kanału',
+            eng: 'Missing **View Channel** permission — bot cannot see this channel',
+            fix_pol: 'Wejdź w ustawienia kanału → Uprawnienia i nadaj botowi uprawnienie **Wyświetl kanał**.',
+            fix_eng: 'Go to channel settings → Permissions and grant the bot **View Channel**.',
+        };
+        if (code === 10003 || msg.includes('Unknown Channel')) return {
+            pol: 'Kanał nie istnieje lub został usunięty',
+            eng: 'Channel does not exist or was deleted',
+            fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.',
+            fix_eng: 'Use `/configure` to select a new channel for the bot.',
+        };
+        if (code === 50013 || msg.includes('Missing Permissions')) return {
+            pol: 'Brak uprawnień **Wyślij wiadomości** lub **Osadzaj linki**',
+            eng: 'Missing **Send Messages** or **Embed Links** permission',
+            fix_pol: 'Sprawdź uprawnienia bota na tym kanale — wymagane: **Wyślij wiadomości** i **Osadzaj linki**.',
+            fix_eng: 'Check bot permissions for this channel — required: **Send Messages** and **Embed Links**.',
+        };
+        if (code === 50035 || msg.includes('Invalid Form Body')) return {
+            pol: 'Nieprawidłowy format wiadomości (embed za długi lub niedozwolone znaki)',
+            eng: 'Invalid message format (embed too long or contains invalid characters)',
+            fix_pol: 'Skróć treść wiadomości `/info` i spróbuj ponownie.',
+            fix_eng: 'Shorten the `/info` message content and try again.',
+        };
+        if (code === 10004 || msg.includes('Unknown Guild')) return {
+            pol: 'Serwer nie istnieje w bazie Discord',
+            eng: 'Guild does not exist in Discord',
+            fix_pol: 'Zaktualizuj konfigurację bota.',
+            fix_eng: 'Update the bot configuration.',
+        };
+        return {
+            pol: msg || 'Nieznany błąd',
+            eng: msg || 'Unknown error',
+            fix_pol: 'Sprawdź logi bota lub skontaktuj się z administratorem.',
+            fix_eng: 'Check bot logs or contact the administrator.',
+        };
+    }
+
+    /**
+     * Wysyła DM do właściciela serwera z informacją o błędzie wysyłania wiadomości na kanał.
+     * @param {{ guildObj, label, channelId, error, lang, context: { titlePol, titleEng } }} params
+     */
+    async _sendChannelErrorDm({ guildObj, label, channelId, error, lang, context }) {
+        try {
+            const owner = await guildObj.fetchOwner();
+            if (!owner) return;
+            const isPol = lang === 'pol';
+            const embed = new EmbedBuilder()
+                .setColor(0xcc0000)
+                .setTitle(isPol ? context.titlePol : context.titleEng)
+                .addFields(
+                    { name: isPol ? 'Serwer' : 'Server', value: label, inline: true },
+                    { name: isPol ? 'Kanał' : 'Channel', value: `<#${channelId}>`, inline: true },
+                    { name: isPol ? '❌ Błąd' : '❌ Error', value: isPol ? error.pol : error.eng, inline: false },
+                )
+                .setTimestamp();
+            const fix = isPol ? error.fix_pol : error.fix_eng;
+            if (fix) embed.addFields({ name: isPol ? '🔧 Co zrobić' : '🔧 How to fix', value: fix, inline: false });
+            await owner.send({ embeds: [embed] });
+        } catch {
+            // DM zablokowane lub inny błąd — ignoruj cicho
+        }
     }
 
     /**
@@ -3823,29 +3885,57 @@ class InteractionHandler {
         for (const guildCfg of this.config.getAllGuilds()) {
             const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
             const guildLabel = guildObj?.name || guildCfg.tag || guildCfg.id;
+            const lang = guildCfg.lang || 'pol';
 
             if (!guildObj) {
-                results.push({ label: guildLabel, id: guildCfg.id, status: 'skipped', reason: 'Bot nie jest na tym serwerze (wyrzucony lub opuścił)' });
+                results.push({
+                    label: guildLabel, id: guildCfg.id, status: 'skipped', lang,
+                    error: {
+                        pol: 'Bot nie jest na tym serwerze (wyrzucony lub opuścił)',
+                        eng: 'Bot is not on this server (kicked or left)',
+                        fix_pol: null, fix_eng: null,
+                    },
+                    channelId: guildCfg.allowedChannelId, guildObj: null,
+                });
                 continue;
             }
 
             try {
                 const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
                 if (!channel) {
-                    results.push({ label: guildLabel, id: guildCfg.id, status: 'error', reason: 'Nie znaleziono kanału (ID nieaktualne?)' });
+                    results.push({
+                        label: guildLabel, id: guildCfg.id, status: 'error', lang,
+                        error: {
+                            pol: 'Nie znaleziono kanału (ID kanału może być nieaktualne)',
+                            eng: 'Channel not found (channel ID may be outdated)',
+                            fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.',
+                            fix_eng: 'Use `/configure` to select a new channel for the bot.',
+                        },
+                        channelId: guildCfg.allowedChannelId, guildObj,
+                    });
                     continue;
                 }
-                const description = guildCfg.lang === 'pol' ? data.descriptionPol : data.descriptionEng;
+                const description = lang === 'pol' ? data.descriptionPol : data.descriptionEng;
                 const embed = this._buildInfoEmbed(data, data.user, description);
                 await channel.send({ embeds: [embed] });
-                results.push({ label: guildLabel, id: guildCfg.id, status: 'ok' });
+                results.push({ label: guildLabel, id: guildCfg.id, status: 'ok', lang, guildObj });
             } catch (err) {
                 logger.error(`Błąd wysyłania /info do serwera ${guildCfg.id}: ${err.message}`);
-                results.push({ label: guildLabel, id: guildCfg.id, status: 'error', reason: this._mapSendError(err) });
+                results.push({
+                    label: guildLabel, id: guildCfg.id, status: 'error', lang,
+                    error: this._mapSendError(err),
+                    channelId: guildCfg.allowedChannelId, guildObj,
+                });
             }
         }
 
         this._clearInfoSession(interaction.user.id);
+
+        // DM do właścicieli serwerów z błędami (tylko gdy bot jest na serwerze)
+        const infoCtx = { titlePol: '⚠️ Błąd wysyłania wiadomości /info', titleEng: '⚠️ Failed to deliver /info message' };
+        for (const r of results.filter(r => r.status === 'error' && r.guildObj)) {
+            this._sendChannelErrorDm({ ...r, context: infoCtx }).catch(() => {});
+        }
 
         const sent = results.filter(r => r.status === 'ok').length;
         const failed = results.filter(r => r.status === 'error').length;
@@ -3856,27 +3946,38 @@ class InteractionHandler {
             : sent === 0 ? 0xcc0000
             : 0xff8800;
 
+        const interactionLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const isPol = interactionLang === 'pol';
+
         const summaryParts = [];
-        if (sent > 0) summaryParts.push(`✅ Wysłano: **${sent}**`);
-        if (skipped > 0) summaryParts.push(`⏭️ Pominięto: **${skipped}**`);
-        if (failed > 0) summaryParts.push(`❌ Błędy: **${failed}**`);
+        if (sent > 0) summaryParts.push(`✅ ${isPol ? 'Wysłano' : 'Sent'}: **${sent}**`);
+        if (skipped > 0) summaryParts.push(`⏭️ ${isPol ? 'Pominięto' : 'Skipped'}: **${skipped}**`);
+        if (failed > 0) summaryParts.push(`❌ ${isPol ? 'Błędy' : 'Errors'}: **${failed}**`);
 
         const reportEmbed = new EmbedBuilder()
-            .setTitle('📋 Raport wysyłania /info')
+            .setTitle(isPol ? '📋 Raport wysyłania /info' : '📋 /info delivery report')
             .setColor(color)
             .setDescription(summaryParts.join(' · '))
             .setTimestamp();
 
         for (const r of results.slice(0, 25)) {
-            const value = r.status === 'ok' ? '✅ Wysłano pomyślnie'
-                : r.status === 'skipped' ? `⏭️ ${r.reason}`
-                : `❌ ${r.reason}`;
+            let value;
+            if (r.status === 'ok') {
+                value = isPol ? '✅ Wysłano pomyślnie' : '✅ Sent successfully';
+            } else if (r.status === 'skipped') {
+                value = `⏭️ ${isPol ? r.error.pol : r.error.eng}`;
+            } else {
+                value = `❌ ${isPol ? r.error.pol : r.error.eng}`;
+                const fix = isPol ? r.error.fix_pol : r.error.fix_eng;
+                if (fix) value += `\n└ ${fix}`;
+            }
             reportEmbed.addFields({ name: r.label, value, inline: true });
         }
 
-        if (results.length > 25) {
-            reportEmbed.setFooter({ text: `Pokazano 25 z ${results.length} serwerów` });
-        }
+        const footerParts = [];
+        if (results.length > 25) footerParts.push(`${isPol ? 'Pokazano 25 z' : 'Showing 25 of'} ${results.length} ${isPol ? 'serwerów' : 'servers'}`);
+        if (failed > 0) footerParts.push(isPol ? 'Właściciele serwerów z błędami otrzymali powiadomienie DM' : 'Server owners with errors received a DM notification');
+        if (footerParts.length > 0) reportEmbed.setFooter({ text: footerParts.join(' · ') });
 
         await interaction.editReply({ content: '', embeds: [reportEmbed], components: [] });
     }
