@@ -141,7 +141,6 @@ client.once(Events.ClientReady, async () => {
         await bazarService.initialize(client);
 
         await przypomnieniaMenedzer.initialize();
-        await strefaCzasowaManager.initialize();
         await eventMenedzer.initialize();
 
         tablicaMenedzer = new TablicaMenedzer(client, config, logger, przypomnieniaMenedzer, strefaCzasowaManager, eventMenedzer);
