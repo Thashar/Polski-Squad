@@ -207,6 +207,16 @@ const pol = {
     // Modal blokady użytkownika
     blockUserModalTitle: 'Zablokuj użytkownika',
     blockUserTimeLabel: 'Czas blokady (np. 1h, 7d, 30m) — puste = permanentnie',
+
+    // /achievements
+    achievementsTitle: '🏆 Twoje Osiągnięcia',
+    achievementsOverviewTitle: '📊 Przegląd Osiągnięć',
+    achievementsEmpty: '❌ Nie masz jeszcze żadnych osiągnięć. Graj i bądź aktywny!',
+    achievementsPage: 'Strona {current} z {total} • {count} odblokowanych z {total_ach}',
+    achievementsUnlockedOf: '{count} z {total} odblokowanych',
+    achievementsBtnUnlocked: '🏆 Odblokowane',
+    achievementsBtnOverview: '📊 Podsumowanie',
+    achievementsNewField: '🎉 Nowe osiągnięcia',
     blockUserTimePlaceholder: 'Zostaw puste dla blokady permanentnej',
 
     // /info
@@ -468,6 +478,16 @@ const eng = {
     // User block modal
     blockUserModalTitle: 'Block user',
     blockUserTimeLabel: 'Block duration (e.g. 1h, 7d, 30m) — empty = permanent',
+
+    // /achievements
+    achievementsTitle: '🏆 Your Achievements',
+    achievementsOverviewTitle: '📊 Achievement Overview',
+    achievementsEmpty: '❌ No achievements yet. Play and stay active!',
+    achievementsPage: 'Page {current} of {total} • {count} unlocked of {total_ach}',
+    achievementsUnlockedOf: '{count} of {total} unlocked',
+    achievementsBtnUnlocked: '🏆 Unlocked',
+    achievementsBtnOverview: '📊 Overview',
+    achievementsNewField: '🎉 New achievements',
     blockUserTimePlaceholder: 'Leave empty for permanent block',
 
     // /info

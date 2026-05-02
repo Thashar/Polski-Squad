@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -61,6 +61,7 @@ class InteractionHandler {
         this.ocrBlockService = ocrBlockService;
         this.updateCooldownService = updateCooldownService;
         this.testerService = testerService;
+        this.achievementService = achievementService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -131,6 +132,11 @@ class InteractionHandler {
                         .setDescription('Screenshot of the boss result screen')
                         .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                         .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('achievements')
+                .setDescription('View your unlocked achievements')
+                .setDescriptionLocalizations(pl('Sprawdź swoje odblokowane osiągnięcia')),
 
             new SlashCommandBuilder()
                 .setName('configure')
@@ -242,9 +248,10 @@ class InteractionHandler {
             }
 
             switch (interaction.commandName) {
-                case 'ranking':   await this.handleRankingCommand(interaction);        break;
-                case 'update':    await this.handleUpdateCommand(interaction);         break;
-                case 'subscribe': await this.handleNotificationsCommand(interaction);  break;
+                case 'ranking':      await this.handleRankingCommand(interaction);        break;
+                case 'update':       await this.handleUpdateCommand(interaction);         break;
+                case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
+                case 'achievements': await this.handleAchievementsCommand(interaction);   break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -1786,6 +1793,11 @@ class InteractionHandler {
                 callerStats, roleRows, userPage
             });
 
+            // Śledź przegląd rankingu dla osiągnięć (fire-and-forget)
+            if (this.achievementService) {
+                this.achievementService.trackRankingView(guildId, interaction.user.id).catch(() => {});
+            }
+
         } catch (error) {
             await this.logService.logRankingError(error, 'handleRankingCommand', interaction.guildId);
             if (!interaction.replied && !interaction.deferred) {
@@ -2049,6 +2061,25 @@ class InteractionHandler {
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
             }
 
+            // Pozycja po zapisie (potrzebna do osiągnięć i do embeda)
+            let newAchievements = [];
+            let currentPositionForAch = 0;
+            if (isNewRecord && !dryRun && this.achievementService) {
+                try {
+                    const sortedAfter = await this.rankingService.getSortedPlayers(guildId);
+                    currentPositionForAch = sortedAfter.findIndex(p => p.userId === userId) + 1;
+                    const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
+                    const newScoreValue = this.rankingService.parseScoreValue(bestScore);
+                    newAchievements = await this.achievementService.processSubmission(guildId, userId, {
+                        scoreValue: newScoreValue,
+                        bossName,
+                        isNewRecord: true,
+                        prevScoreValue,
+                        currentPosition: currentPositionForAch,
+                    });
+                } catch {}
+            }
+
             if (!isNewRecord) {
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -2102,6 +2133,10 @@ class InteractionHandler {
 
             const guildConfig = this.config.getGuildConfig(interaction.guildId);
             const rolePositions = await this._computeRolePositions(guildId, userId, interaction.guild, interaction.member?.roles?.cache);
+            const lang = guildConfig?.lang || 'pol';
+            const achievementsFieldValue = this.achievementService
+                ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, lang)
+                : null;
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -2114,7 +2149,8 @@ class InteractionHandler {
                 interaction.guild,
                 guildConfig?.topRoles || null,
                 currentScore ? currentScore.timestamp : null,
-                rolePositions
+                rolePositions,
+                achievementsFieldValue
             );
 
             // Pobierz subskrybentów i dodaj liczbę obserwujących do embeda
@@ -2535,6 +2571,12 @@ class InteractionHandler {
             // === Przycisk powrotu do wyboru ===
             if (customId === 'ranking_back') {
                 await this._handleRankingBack(interaction);
+                return;
+            }
+
+            // === Przyciski /achievements ===
+            if (customId.startsWith('ach_view_')) {
+                await this._handleAchievementsButton(interaction, customId);
                 return;
             }
 
@@ -3151,6 +3193,46 @@ class InteractionHandler {
     /**
      * Obsługuje komendę /notifications
      */
+    // =====================================================================
+    // /achievements
+    // =====================================================================
+
+    async handleAchievementsCommand(interaction) {
+        if (!this._checkConfigured(interaction)) return;
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const guildId = interaction.guildId;
+            const userId = interaction.user.id;
+            const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
+            const { embed, components } = await this.achievementService.buildAchievementsView(
+                guildId, userId, lang, 'unlocked', 0
+            );
+            await interaction.editReply({ embeds: [embed], components });
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd /achievements: ${err.message}`);
+            await interaction.editReply({ content: this.msgs(interaction.guildId).generalError });
+        }
+    }
+
+    async _handleAchievementsButton(interaction, customId) {
+        // customId: ach_view_{tab}_{page}  — np. ach_view_unlocked_0
+        await interaction.deferUpdate();
+        try {
+            const parts = customId.split('_'); // ['ach', 'view', tab, page]
+            const tab = parts[2] || 'unlocked';
+            const page = parseInt(parts[3], 10) || 0;
+            const guildId = interaction.guildId;
+            const userId = interaction.user.id;
+            const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
+            const { embed, components } = await this.achievementService.buildAchievementsView(
+                guildId, userId, lang, tab, page
+            );
+            await interaction.editReply({ embeds: [embed], components });
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd przycisku osiągnięć: ${err.message}`);
+        }
+    }
+
     async handleNotificationsCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
         const row = new ActionRowBuilder().addComponents(
@@ -3412,6 +3494,10 @@ class InteractionHandler {
                 components: []
             });
             return;
+        }
+        // Śledź subskrypcję dla osiągnięć (fire-and-forget)
+        if (this.achievementService) {
+            this.achievementService.trackSubscription(interaction.guildId, interaction.user.id).catch(() => {});
         }
         await interaction.editReply({
             content: formatMessage(msgs.notifSuccess, { username: targetUsername, guild: targetGuildName }),

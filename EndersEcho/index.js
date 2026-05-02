@@ -24,6 +24,7 @@ const UsageLimitService = require('./services/usageLimitService');
 const { TokenUsageService } = require('./services/tokenUsageService');
 const { UpdateCooldownService } = require('./services/updateCooldownService');
 const InteractionHandler = require('./handlers/interactionHandlers');
+const AchievementService = require('./services/achievementService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { createAppSync } = require('../utils/appSync');
@@ -83,7 +84,8 @@ const roleRankingConfigService = new RoleRankingConfigService(config);
 const usageLimitService = new UsageLimitService(config);
 const tokenUsageService = new TokenUsageService(config);
 const updateCooldownService = new UpdateCooldownService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService);
+const achievementService = new AchievementService(config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService);
 
 /**
  * Inicjalizuje bota EndersEcho
