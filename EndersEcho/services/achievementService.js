@@ -95,7 +95,7 @@ class AchievementService {
 
             // Zbierz osiągnięcia do pokazania w embeddzie (odblokowane od ostatniego pobicia rekordu)
             const toShow = Object.entries(userData.unlocked)
-                .filter(([, info]) => !prevLastBeat || info.unlockedAt >= prevLastBeat)
+                .filter(([, info]) => !prevLastBeat || info.unlockedAt > prevLastBeat)
                 .map(([id]) => id);
 
             // Zapisz timestamp PO zebraniu listy (żeby prevLastBeat był sprzed obecnego rekordu)
