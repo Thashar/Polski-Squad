@@ -280,7 +280,7 @@ class VotingService {
         }
 
         const channelInfo = roleId ? ` na kanale ${message.channel.id} z pingiem do roli ${roleId}` : ` na kanale ${message.channel.id}`;
-        this.logger.info(`🗳️ Rozpoczęto głosowanie przeciwko ${targetUser.tag} (${targetUserId})${channelInfo}`);
+        this.logger.info(`🗳️ Rozpoczęto głosowanie przeciwko ${targetUser.username} (${targetUserId})${channelInfo}`);
     }
 
     /**

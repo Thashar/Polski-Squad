@@ -72,7 +72,7 @@ class MessageHandler {
                 // Usuń wiadomość bez obrazu od zwykłego użytkownika
                 try {
                     await message.delete();
-                    logger.info(`🗑️ Usunięto wiadomość bez zdjęcia od ${message.author.tag} na kanale ${channelConfig.name}`);
+                    logger.info(`🗑️ Usunięto wiadomość bez zdjęcia od ${message.author.username} na kanale ${channelConfig.name}`);
                 } catch (error) {
                     logger.error(`❌ Błąd usuwania wiadomości bez zdjęcia: ${error.message}`);
                 }
@@ -81,7 +81,7 @@ class MessageHandler {
                 this.scheduleLotteryInfo(message, channelConfig);
                 return;
             } else {
-                logger.info(`👑 Administrator ${member.user.tag} wysłał wiadomość bez zdjęcia na kanale ${channelConfig.name} - pozostawiono`);
+                logger.info(`👑 Administrator ${member.user.username} wysłał wiadomość bez zdjęcia na kanale ${channelConfig.name} - pozostawiono`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo braku zdjęcia
                 this.scheduleLotteryInfo(message, channelConfig);
@@ -116,7 +116,7 @@ class MessageHandler {
         // SPRAWDZENIE AKTYWNEJ LOTERII: Sprawdź czy dla klanu użytkownika jest aktywna loteria
         logger.info(`🔍 Sprawdzam warunki loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
         if (this.lotteryService && (channelConfig.name === 'Daily' || channelConfig.name === 'CX')) {
-            logger.info(`🔍 Sprawdzam aktywną loterię dla kanału ${channelConfig.name} (${member.user.tag})`);
+            logger.info(`🔍 Sprawdzam aktywną loterię dla kanału ${channelConfig.name} (${member.user.username})`);
             const targetRoleId = channelConfig.requiredRoleId;
             const lotteryCheck = this.lotteryService.checkUserLotteryEligibility(member, targetRoleId);
             logger.info(`📊 Wynik sprawdzenia loterii:`, {
@@ -136,7 +136,7 @@ class MessageHandler {
                     allowedMentions: { repliedUser: false }
                 });
                 
-                logger.info(`🚫 Zablokowano analizę OCR dla ${member.user.tag} - brak aktywnej loterii ${channelTypeName} dla klanu ${lotteryCheck.clanName}`);
+                logger.info(`🚫 Zablokowano analizę OCR dla ${member.user.username} - brak aktywnej loterii ${channelTypeName} dla klanu ${lotteryCheck.clanName}`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy
                 this.scheduleLotteryInfo(replyMessage, channelConfig);
@@ -173,21 +173,21 @@ class MessageHandler {
                     allowedMentions: { repliedUser: false }
                 });
                 
-                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.tag} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania, czekać ${timeToWait})`);
+                logger.info(`⏰ Zablokowano analizę OCR dla ${member.user.username} - poza oknem czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania, czekać ${timeToWait})`);
                 
                 // Wyślij informację o loterii z opóźnieniem mimo odmowy analizy (używamy reply message)
                 this.scheduleLotteryInfo(replyMessage, channelConfig);
                 return;
             } else {
                 const adminInfo = isAdmin ? ' (ADMINISTRATOR)' : '';
-                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.tag}${adminInfo} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
+                logger.info(`✅ Pozwolono na analizę OCR dla ${member.user.username}${adminInfo} - w oknie czasowym ${timeWindowCheck.channelType} (${timeWindowCheck.hoursUntilDraw}h do losowania)`);
             }
         } else {
             logger.info(`⚠️ Pominięto sprawdzenie loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
             logger.info(`🚨 UWAGA: Kontynuuję analizę OCR bez sprawdzenia loterii/okna czasowego!`);
         }
 
-        logger.info(`🎯 Kontynuuję z analizą OCR dla ${member.user.tag} na kanale ${channelConfig.name}`);
+        logger.info(`🎯 Kontynuuję z analizą OCR dla ${member.user.username} na kanale ${channelConfig.name}`);
         const displayName = member.displayName;
         const username = message.author.username;
 
@@ -292,13 +292,9 @@ class MessageHandler {
      */
     async downloadImage(attachment) {
         const fileName = `temp_${Date.now()}_${attachment.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-        const filePath = require('path').join(this.config.ocr.tempDir, fileName);
+        const filePath = path.join(this.config.ocr.tempDir, fileName);
         
-        // Upewnij się, że katalog istnieje
-        const fs = require('fs');
-        if (!fs.existsSync(this.config.ocr.tempDir)) {
-            fs.mkdirSync(this.config.ocr.tempDir, { recursive: true });
-        }
+        await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
         
         return await downloadFile(attachment.url, filePath);
     }

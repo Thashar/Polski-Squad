@@ -24,10 +24,10 @@
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot1):**
-- Użytkownicy z ID w `ROBOT1` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
+- Użytkownicy z ID w `ROBOT` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał z env `ROBOT1_FORWARD_CHANNEL`
 - Obsługuje tekst i załączniki
 - Wymaga intencji `DirectMessages` + partial `Channel`
-- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli `1486506395057524887`
+- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli z env `ROBOT1_MENTION_ROLE`
 
 ---
 
@@ -38,6 +38,12 @@
 KONTROLER_TOKEN=bot_token_here
 KONTROLER_CLIENT_ID=client_id
 KONTROLER_GUILD_ID=guild_id
+
+# Opcjonalne - z fallbackiem do wartości produkcyjnych
+ROBOT1_FORWARD_CHANNEL=channel_id         # Kanał forward dla Robot1
+ROBOT1_MENTION_ROLE=role_id               # Rola do pingu (@) dla Robot1
+ROBOT1_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot1
+KONTROLER_BLOCKED_ROLE=role_id            # Rola blokująca udział w loteriach
 
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example

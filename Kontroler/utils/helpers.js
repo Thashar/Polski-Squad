@@ -36,7 +36,7 @@ async function downloadFile(url, filePath) {
         }
 
         const buffer = await response.arrayBuffer();
-        fs.writeFileSync(filePath, Buffer.from(buffer));
+        await fs.promises.writeFile(filePath, Buffer.from(buffer));
         
         logger.info(`Plik zapisany: ${path.basename(filePath)}`);
         return filePath;

@@ -31,7 +31,7 @@ class LotteryService {
         await this.loadLotteries();
         
         // Ustaw czyszczenie starych ostrzeżeń co godzinę
-        setInterval(() => {
+        this.cleanupInterval = setInterval(() => {
             this.cleanupOldWarnings();
         }, 60 * 60 * 1000); // co godzinę
         
@@ -664,7 +664,7 @@ class LotteryService {
                 if (blockedRole.members.size > 0 && blockedRole.members.size <= 10) {
                     logger.info(`🚫 Członkowie z rolą blokującą:`);
                     for (const [memberId, member] of blockedRole.members) {
-                        logger.info(`   - ${member.user.tag} (${member.id})`);
+                        logger.info(`   - ${member.user.username} (${member.id})`);
                     }
                 }
             } else {
@@ -705,7 +705,7 @@ class LotteryService {
                             for (const [memberId, member] of guild.members.cache) {
                                 if (member.roles.cache.has(lottery.clanRoleId)) {
                                     foundManually++;
-                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.tag} ma rolę klanu`);
+                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.username} ma rolę klanu`);
                                     if (foundManually >= 3) {
                                         logger.info(`🔍 ... i więcej (pokazano tylko pierwsze 3)`);
                                         break;
@@ -749,7 +749,7 @@ class LotteryService {
                             for (const [memberId, member] of guild.members.cache) {
                                 if (member.roles.cache.has(lottery.targetRoleId)) {
                                     foundManually++;
-                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.tag} ma rolę docelową`);
+                                    logger.info(`🔍 Znaleziono ręcznie: ${member.user.username} ma rolę docelową`);
                                     if (foundManually >= 3) {
                                         logger.info(`🔍 ... i więcej (pokazano tylko pierwsze 3)`);
                                         break;
@@ -807,7 +807,7 @@ class LotteryService {
                     const isEligible = hasTargetRole && !hasBlockedRole && !isBot;
                     
                     if (isEligible) {
-                        logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id}) - członek klanu z rolą docelową`);
+                        logger.info(`✅ Kwalifikuje się: ${member.user.username} (${member.id}) - członek klanu z rolą docelową`);
                         eligibleMembers.set(memberId, member);
                     } else {
                         const reasons = [];
@@ -817,7 +817,7 @@ class LotteryService {
                         
                         // Log tylko jeśli ma przynajmniej jedną istotną przyczynę dyskwalifikacji
                         if (!hasTargetRole || hasBlockedRole) {
-                            logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
+                            logger.info(`❌ Nie kwalifikuje się: ${member.user.username} - ${reasons.join(', ')}`);
                         }
                     }
                 }
@@ -842,7 +842,7 @@ class LotteryService {
                     const isEligible = !hasBlockedRole && !isBot;
                     
                     if (isEligible) {
-                        logger.info(`✅ Kwalifikuje się: ${member.user.tag} (${member.id}) - członek serwera z rolą docelową`);
+                        logger.info(`✅ Kwalifikuje się: ${member.user.username} (${member.id}) - członek serwera z rolą docelową`);
                         eligibleMembers.set(memberId, member);
                     } else {
                         const reasons = [];
@@ -850,7 +850,7 @@ class LotteryService {
                         if (isBot) reasons.push('to bot');
                         
                         if (hasBlockedRole || isBot) {
-                            logger.info(`❌ Nie kwalifikuje się: ${member.user.tag} - ${reasons.join(', ')}`);
+                            logger.info(`❌ Nie kwalifikuje się: ${member.user.username} - ${reasons.join(', ')}`);
                         }
                     }
                 }
@@ -890,7 +890,7 @@ class LotteryService {
             
             logger.info(`🏆 Wylosowano ${winners.length} zwycięzców:`);
             winners.forEach((winner, index) => {
-                logger.info(`   ${index + 1}. ${winner.user.tag} (${winner.id})`);
+                logger.info(`   ${index + 1}. ${winner.user.username} (${winner.id})`);
             });
 
             // Zapisz wyniki
@@ -1607,9 +1607,14 @@ class LotteryService {
             }
         }
         this.cronJobs.clear();
-        
+
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
+
         logger.info('🛑 Serwis loterii został zatrzymany');
-        
+
         // Wyczyść mapę wysłanych ostrzeżeń
         this.sentWarnings.clear();
     }
