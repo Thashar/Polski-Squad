@@ -235,6 +235,12 @@ const ACHIEVEMENTS = [
         descPol: 'Wyślij wyniki z 10 różnych bossów', descEng: 'Submit scores from 10 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 10,
     },
+    {
+        id: 'boss_legend', category: 'bosses', rarity: 'mythic', hidden: false,
+        namePol: 'Legenda Łowów',   nameEng: 'Legend of the Hunt',
+        descPol: 'Wyślij wyniki z 13 różnych bossów', descEng: 'Submit scores from 13 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 13,
+    },
 
     // ===== EKSPLORATOR (EXPLORER) — ukryte =====
     {
