@@ -224,13 +224,13 @@ const ACHIEVEMENTS = [
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 5,
     },
     {
-        id: 'boss_veteran', category: 'bosses', rarity: 'rare', hidden: false,
+        id: 'boss_veteran', category: 'bosses', rarity: 'epic', hidden: false,
         namePol: 'Weteran Łowów',   nameEng: 'Hunt Veteran',
         descPol: 'Wyślij wyniki z 7 różnych bossów', descEng: 'Submit scores from 7 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 7,
     },
     {
-        id: 'boss_master', category: 'bosses', rarity: 'epic', hidden: false,
+        id: 'boss_master', category: 'bosses', rarity: 'legendary', hidden: false,
         namePol: 'Mistrz Łowów',   nameEng: 'Master of the Hunt',
         descPol: 'Wyślij wyniki z 10 różnych bossów', descEng: 'Submit scores from 10 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 10,
