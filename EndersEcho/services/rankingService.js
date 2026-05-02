@@ -473,6 +473,9 @@ class RankingService {
         if (!isGlobal && guild) {
             const iconUrl = guild.iconURL({ size: 128 });
             if (iconUrl) embed.setThumbnail(iconUrl);
+        } else if (isGlobal && client) {
+            const botIconUrl = client.user?.displayAvatarURL({ size: 128 });
+            if (botIconUrl) embed.setThumbnail(botIconUrl);
         }
 
         return embed;
