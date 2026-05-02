@@ -160,7 +160,7 @@ class RankingService {
      * @param {object} messages
      * @returns {EmbedBuilder}
      */
-    createGuildRankingEmbed(guildScores, page, totalPages, messages) {
+    createGuildRankingEmbed(guildScores, page, totalPages, messages, botIconUrl) {
         const msgs = messages || this.config.messages;
         const perPage = this.config.ranking.playersPerPage;
         const start = page * perPage;
@@ -173,11 +173,14 @@ class RankingService {
             return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} graczy • najlepszy: ${gs.topScore}`;
         });
 
-        return new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setTitle(msgs.guildRankingTitle || '🏛️ Ranking Serwerów')
             .setDescription(lines.join('\n\n') || (msgs.rankingEmpty || 'Brak danych'))
             .setColor(0x9b59b6)
             .setFooter({ text: `${msgs.guildRankingFooter || 'Suma top 30 graczy per serwer'} • ${page + 1}/${totalPages}` });
+
+        if (botIconUrl) embed.setThumbnail(botIconUrl);
+        return embed;
     }
 
     /**

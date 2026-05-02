@@ -2786,7 +2786,8 @@ class InteractionHandler {
             let embed;
             if (rankingData.mode === 'guild_ranking') {
                 embed = this.rankingService.createGuildRankingEmbed(
-                    rankingData.guildScores, newPage, rankingData.totalPages, msgs
+                    rankingData.guildScores, newPage, rankingData.totalPages, msgs,
+                    interaction.client.user?.displayAvatarURL({ size: 128 })
                 );
             } else {
                 const guild = (rankingData.mode === 'server' || rankingData.mode === 'role')
@@ -3099,7 +3100,8 @@ class InteractionHandler {
             const perPage = this.config.ranking.playersPerPage;
             const totalPages = Math.max(1, Math.ceil(guildScores.length / perPage));
 
-            const embed = this.rankingService.createGuildRankingEmbed(guildScores, 0, totalPages, msgs);
+            const embed = this.rankingService.createGuildRankingEmbed(guildScores, 0, totalPages, msgs,
+                interaction.client.user?.displayAvatarURL({ size: 128 }));
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, [], {
                 userPage: null,
                 mode: 'guild_ranking',
