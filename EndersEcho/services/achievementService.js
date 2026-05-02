@@ -195,8 +195,8 @@ class AchievementService {
             .setColor(0xf1c40f)
             .setTitle(t('🏆 Twoje Osiągnięcia', '🏆 Your Achievements'))
             .setFooter({ text: t(
-                `Strona ${currentPage + 1} z ${totalPages} • ${unlockedList.length} odblokowanych z ${ACHIEVEMENTS.length}`,
-                `Page ${currentPage + 1} of ${totalPages} • ${unlockedList.length} unlocked of ${ACHIEVEMENTS.length}`
+                `Strona ${currentPage + 1} z ${totalPages} • ${unlockedList.length} odblokowanych`,
+                `Page ${currentPage + 1} of ${totalPages} • ${unlockedList.length} unlocked`
             ) });
 
         if (pageItems.length === 0) {
@@ -224,7 +224,12 @@ class AchievementService {
     _buildOverviewEmbed(unlocked, progress, t, isPol) {
         const unlockedIds = new Set(Object.keys(unlocked));
 
-        const catLines = Object.entries(CATEGORY_INFO).map(([catKey, catLabel]) => {
+        const categoryOrder = Object.entries(CATEGORY_INFO).sort(([, a], [, b]) => {
+            if (a.hidden && !b.hidden) return 1;
+            if (!a.hidden && b.hidden) return -1;
+            return 0;
+        });
+        const catLines = categoryOrder.map(([catKey, catLabel]) => {
             const catAchs = ACHIEVEMENTS.filter(a => a.category === catKey);
             const catUnlocked = catAchs.filter(a => unlockedIds.has(a.id)).length;
             const label = isPol ? catLabel.pol : catLabel.eng;
@@ -240,8 +245,8 @@ class AchievementService {
                 { name: t('Kategorie', 'Categories'), value: catLines.join('\n'), inline: false },
             )
             .setFooter({ text: t(
-                `${unlockedIds.size} z ${ACHIEVEMENTS.length} odblokowanych`,
-                `${unlockedIds.size} of ${ACHIEVEMENTS.length} unlocked`
+                `${unlockedIds.size} odblokowanych`,
+                `${unlockedIds.size} unlocked`
             ) });
 
         return { embed, totalPages: 1, currentPage: 0 };
