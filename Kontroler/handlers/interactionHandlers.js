@@ -1,4 +1,10 @@
-const { SlashCommandBuilder, REST, Routes } = require('discord.js');
+const {
+    SlashCommandBuilder, REST, Routes,
+    EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
+    StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
+} = require('discord.js');
+const fs = require('fs').promises;
+const OligopolyService = require('../services/oligopolyService');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Kontroler');
@@ -160,7 +166,7 @@ async function handleOcrDebugCommand(interaction, config) {
     const statusText = enabled ? '✅ Włączone' : '❌ Wyłączone';
     const emoji = enabled ? '🔍' : '🔇';
     
-    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.username}`);
     
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
@@ -339,7 +345,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
                         `🆔 **ID loterii:** \`${result.lottery.id}\``
             });
 
-            logger.info(`✅ ${interaction.user.tag} utworzył loterię: ${result.lottery.name}`);
+            logger.info(`✅ ${interaction.user.username} utworzył loterię: ${result.lottery.name}`);
         }
     } catch (error) {
         await interaction.editReply({
@@ -384,7 +390,6 @@ async function handleLotteryRerollCommand(interaction, config, lotteryService) {
         }
 
         // Stwórz Select Menu z historią loterii (ostatnie 20)
-        const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
         
         const recentHistory = history.slice(-20); // Ostatnie 20 loterii
         const selectOptions = recentHistory.map((result, index) => {
@@ -419,7 +424,7 @@ async function handleLotteryRerollCommand(interaction, config, lotteryService) {
                            `• Domyślnie wybiera 1 dodatkowego zwycięzcę`)
             .setColor('#ffa500')
             .setFooter({ 
-                text: `Żądanie od ${interaction.user.tag}` 
+                text: `Żądanie od ${interaction.user.username}` 
             })
             .setTimestamp();
 
@@ -481,7 +486,6 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     }
 
     // Stwórz Select Menu z zaplanowanymi loteriami
-    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     
     const selectOptions = activeLotteries.map(lottery => {
         // Użyj nextDraw zamiast daty z ID loterii
@@ -513,7 +517,7 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
                        `⚠️ **Uwaga:** Usunięcie loterii zatrzyma wszystkie automatyczne losowania dla wybranej loterii.`)
         .setColor('#ff6b6b')
         .setFooter({ 
-            text: `Żądanie od ${interaction.user.tag}` 
+            text: `Żądanie od ${interaction.user.username}` 
         })
         .setTimestamp();
 
@@ -539,7 +543,6 @@ async function handleHistoricalLotteryRemove(interaction, config, lotteryService
     }
 
     // Stwórz Select Menu z ostatnimi 20 loteriami historycznymi
-    const { StringSelectMenuBuilder, ActionRowBuilder, EmbedBuilder } = require('discord.js');
     
     const recentHistory = history.slice(-20); // Ostatnie 20 loterii
     const selectOptions = recentHistory.map((result, index) => {
@@ -571,7 +574,7 @@ async function handleHistoricalLotteryRemove(interaction, config, lotteryService
                        `⚠️ **Uwaga:** Usunięcie loterii historycznej spowoduje trwałe usunięcie wszystkich związanych z nią danych, w tym rerolls.`)
         .setColor('#ff6b6b')
         .setFooter({ 
-            text: `Żądanie od ${interaction.user.tag}` 
+            text: `Żądanie od ${interaction.user.username}` 
         })
         .setTimestamp();
 
@@ -631,7 +634,6 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
 
         if (relatedResults.length > 0) {
             // Pytaj czy usunąć też historyczne wyniki
-            const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
             
             // Przygotuj listę historycznych wyników z datami
             let historyList = '';
@@ -683,7 +685,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     }
                 )
                 .setFooter({ 
-                    text: `Żądanie od ${interaction.user.tag}` 
+                    text: `Żądanie od ${interaction.user.username}` 
                 })
                 .setTimestamp();
 
@@ -707,7 +709,6 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
             // Brak historycznych wyników - usuń od razu
             await lotteryService.removeLottery(lotteryId);
 
-            const { EmbedBuilder } = require('discord.js');
             
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ LOTERIA USUNIĘTA')
@@ -746,7 +747,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     inline: false
                 })
                 .setFooter({ 
-                    text: `Usunięte przez ${interaction.user.tag}` 
+                    text: `Usunięte przez ${interaction.user.username}` 
                 })
                 .setTimestamp();
 
@@ -755,7 +756,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                 components: []
             });
 
-            logger.info(`✅ ${interaction.user.tag} usunął loterię przez Select Menu: ${lottery.name} (${lotteryId}) - brak historii`);
+            logger.info(`✅ ${interaction.user.username} usunął loterię przez Select Menu: ${lottery.name} (${lotteryId}) - brak historii`);
         }
 
     } catch (error) {
@@ -833,7 +834,6 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                 await lotteryService.removeHistoricalLottery(index);
             }
 
-            const { EmbedBuilder } = require('discord.js');
             
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ LOTERIA I HISTORIA USUNIĘTE')
@@ -872,7 +872,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     }
                 )
                 .setFooter({ 
-                    text: `Usunięte przez ${interaction.user.tag}` 
+                    text: `Usunięte przez ${interaction.user.username}` 
                 })
                 .setTimestamp();
 
@@ -881,12 +881,11 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                 components: []
             });
 
-            logger.info(`✅ ${interaction.user.tag} usunął loterię z historią: ${lottery.name} (${lotteryId}) - ${relatedIndices.length} wyników`);
+            logger.info(`✅ ${interaction.user.username} usunął loterię z historią: ${lottery.name} (${lotteryId}) - ${relatedIndices.length} wyników`);
         } else {
             // Usuń tylko zaplanowaną loterię
             await lotteryService.removeLottery(lotteryId);
 
-            const { EmbedBuilder } = require('discord.js');
             
             const successEmbed = new EmbedBuilder()
                 .setTitle('✅ LOTERIA USUNIĘTA')
@@ -925,7 +924,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     }
                 )
                 .setFooter({ 
-                    text: `Usunięte przez ${interaction.user.tag}` 
+                    text: `Usunięte przez ${interaction.user.username}` 
                 })
                 .setTimestamp();
 
@@ -934,7 +933,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                 components: []
             });
 
-            logger.info(`✅ ${interaction.user.tag} usunął tylko zaplanowaną loterię: ${lottery.name} (${lotteryId}) - historia zachowana`);
+            logger.info(`✅ ${interaction.user.username} usunął tylko zaplanowaną loterię: ${lottery.name} (${lotteryId}) - historia zachowana`);
         }
 
     } catch (error) {
@@ -982,7 +981,6 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
         // Usuń loterię historyczną
         const result = await lotteryService.removeHistoricalLottery(historyIndex);
 
-        const { EmbedBuilder } = require('discord.js');
         
         const successEmbed = new EmbedBuilder()
             .setTitle('✅ LOTERIA HISTORYCZNA USUNIĘTA')
@@ -1016,7 +1014,7 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
                 }
             )
             .setFooter({ 
-                text: `Usunięte przez ${interaction.user.tag}` 
+                text: `Usunięte przez ${interaction.user.username}` 
             })
             .setTimestamp();
 
@@ -1034,7 +1032,7 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
             components: []
         });
 
-        logger.info(`✅ ${interaction.user.tag} usunął loterię historyczną przez Select Menu: ${lotteryToRemove.lotteryName} (${lotteryToRemove.lotteryId})`);
+        logger.info(`✅ ${interaction.user.username} usunął loterię historyczną przez Select Menu: ${lotteryToRemove.lotteryName} (${lotteryToRemove.lotteryId})`);
 
     } catch (error) {
         await interaction.editReply({
@@ -1078,7 +1076,6 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
         const result = await lotteryService.rerollLottery(interaction, resultIndex, 1); // Domyślnie 1 dodatkowy zwycięzca
         
         if (result.success) {
-            const { EmbedBuilder } = require('discord.js');
             
             const embed = new EmbedBuilder()
                 .setTitle('🎰 PONOWNE LOSOWANIE')
@@ -1106,7 +1103,7 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
                     }
                 )
                 .setFooter({ 
-                    text: `Ponowne losowanie wykonane przez ${interaction.user.tag} | Oryginalna loteria: ${result.originalResult.lotteryId}` 
+                    text: `Ponowne losowanie wykonane przez ${interaction.user.username} | Oryginalna loteria: ${result.originalResult.lotteryId}` 
                 })
                 .setTimestamp();
 
@@ -1115,7 +1112,7 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
                 components: []
             });
 
-            logger.info(`✅ ${interaction.user.tag} wykonał ponowne losowanie przez Select Menu dla: ${result.originalResult.lotteryName}`);
+            logger.info(`✅ ${interaction.user.username} wykonał ponowne losowanie przez Select Menu dla: ${result.originalResult.lotteryName}`);
         }
     } catch (error) {
         await interaction.editReply({
@@ -1182,7 +1179,6 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
         
         // Sprawdź plik danych
         try {
-            const fs = require('fs').promises;
             const fileData = await fs.readFile(config.lottery.dataFile, 'utf8');
             const parsed = JSON.parse(fileData);
             debugInfo += `📄 **Plik danych:**\n`;
@@ -1196,7 +1192,7 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
         
         await interaction.editReply({ content: debugInfo });
         
-        logger.info(`🐛 ${interaction.user.tag} sprawdził debug loterii`);
+        logger.info(`🐛 ${interaction.user.username} sprawdził debug loterii`);
         
     } catch (error) {
         await interaction.editReply({
@@ -1376,7 +1372,7 @@ async function handleLotteryHistoryCommand(interaction, config, lotteryService, 
             }
         }
 
-        const { embed, components } = await generateHistoryEmbed(history, currentPage, config);
+        const { embed, components } = await generateHistoryEmbed(history, currentPage, config, interaction.guild);
         
         if (isUpdate) {
             await interaction.update({ embeds: [embed], components });
@@ -1423,7 +1419,7 @@ async function handleLotteryHistoryNavigation(interaction, config, lotteryServic
             currentPage = Math.max(currentPage - 1, 0);
         }
 
-        const { embed, components } = await generateHistoryEmbed(history, currentPage, config);
+        const { embed, components } = await generateHistoryEmbed(history, currentPage, config, interaction.guild);
         await interaction.update({ embeds: [embed], components });
 
     } catch (error) {
@@ -1468,8 +1464,7 @@ async function handleLotteryHistoryStats(interaction, config, lotteryService) {
 /**
  * Generuje embed z historią loterii
  */
-async function generateHistoryEmbed(history, currentPage, config) {
-    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+async function generateHistoryEmbed(history, currentPage, config, guild = null) {
     
     const itemsPerPage = 10;
     const totalPages = Math.ceil(history.length / itemsPerPage);
@@ -1517,7 +1512,7 @@ async function generateHistoryEmbed(history, currentPage, config) {
             } else if (result.targetRole) {
                 // Spróbuj znaleźć rolę po ID w Guild
                 try {
-                    const guild = interaction.guild;
+
                     if (guild && guild.roles.cache.has(result.targetRole)) {
                         const role = guild.roles.cache.get(result.targetRole);
                         roleName = role.name;
@@ -1582,7 +1577,6 @@ async function generateHistoryEmbed(history, currentPage, config) {
  * Generuje embed ze statystykami TOP3
  */
 async function generateStatsEmbed(history, config) {
-    const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
     
     // Grupuj zwycięzców według klanów
     const clanStats = {};
@@ -1729,7 +1723,6 @@ async function handleOligopolyCommand(interaction, config) {
 
     // Inicjalizuj oligopolyService jeśli nie istnieje
     if (!interaction.client.oligopolyService) {
-        const OligopolyService = require('../services/oligopolyService');
         interaction.client.oligopolyService = new OligopolyService(config, logger);
     }
 
@@ -1804,7 +1797,6 @@ async function handleOligopolyReviewCommand(interaction, config) {
 
     // Inicjalizuj oligopolyService jeśli nie istnieje
     if (!interaction.client.oligopolyService) {
-        const OligopolyService = require('../services/oligopolyService');
         interaction.client.oligopolyService = new OligopolyService(config, logger);
     }
 
@@ -1959,7 +1951,6 @@ async function handleOligopolyClearCommand(interaction, config) {
 
     // Inicjalizuj oligopolyService jeśli nie istnieje
     if (!interaction.client.oligopolyService) {
-        const OligopolyService = require('../services/oligopolyService');
         interaction.client.oligopolyService = new OligopolyService(config, logger);
     }
 
@@ -2071,7 +2062,6 @@ async function handleKawkaCommand(interaction, config) {
         // Pobierz nick z opcji komendy
         const nickOption = interaction.options.getString('nick');
 
-        const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
 
         // Stwórz modal z customId zawierającym nick
         // Enkodujemy nick w base64 żeby uniknąć problemów ze znakami specjalnymi
@@ -2108,7 +2098,7 @@ async function handleKawkaCommand(interaction, config) {
         // Pokaż modal
         await interaction.showModal(modal);
 
-        logger.info(`☕ ${interaction.user.tag} otworzył modal /kawka dla: ${nickOption}`);
+        logger.info(`☕ ${interaction.user.username} otworzył modal /kawka dla: ${nickOption}`);
     } catch (error) {
         logger.error('❌ Błąd podczas pokazywania modala kawka:', error);
 
@@ -2221,7 +2211,7 @@ async function handleKawkaModalSubmit(interaction, config) {
             content: `✅ **Wiadomość została wysłana na kanał!**\n\n📝 **Nick:** ${confirmNick}\n💰 **Kwota:** ${pln}\n📊 **Typ wpłaty:** ${wplata}${shouldPing ? '\n🔔 **Z pingiem**' : ''}`
         });
 
-        logger.info(`☕ ${interaction.user.tag} użył komendy /kawka - Nick: ${confirmNick}, PLN: ${pln}, Wpłata: ${wplata}, Ping: ${shouldPing}`);
+        logger.info(`☕ ${interaction.user.username} użył komendy /kawka - Nick: ${confirmNick}, PLN: ${pln}, Wpłata: ${wplata}, Ping: ${shouldPing}`);
 
     } catch (error) {
         logger.error('❌ Błąd podczas wysyłania wiadomości kawka:', error);

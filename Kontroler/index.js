@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, Events } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -130,7 +130,7 @@ async function saveRelay1(dmMessageId, channelId, messageId) {
 async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
     if (robotUsers.length === 0) return;
     try {
-        const activationChannel = await client.channels.fetch('1486510519119773818');
+        const activationChannel = await client.channels.fetch(config.robot1ActivationChannel);
         const guild = activationChannel.guild;
 
         const buttons = [];
@@ -192,7 +192,7 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
  * Konfiguruje event handlery
  */
 function setupEventHandlers() {
-    client.once('ready', async () => {
+    client.once(Events.ClientReady, async () => {
         try {
             await onReady();
             // Inicjalizuj serwis loterii z klientem Discord
@@ -209,7 +209,7 @@ function setupEventHandlers() {
             logger.error('❌ Błąd krytyczny podczas inicjalizacji Kontroler:', error);
         }
     });
-    client.on('messageCreate', async (message) => {
+    client.on(Events.MessageCreate, async (message) => {
         if (message.channel.type === ChannelType.DM && !message.author.bot) {
             if (config.robot1Users.length > 0 && config.robot1Users.includes(message.author.id)) {
                 if (message.partial) await message.fetch();
@@ -249,7 +249,7 @@ function setupEventHandlers() {
                         if (msgContent) payload.content = msgContent;
                         if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                         if (payload.content || payload.files) await forwardChannel.send(payload);
-                        logger.info(`[ROBOT1] Przekazano wiadomość od ${message.author.tag} na kanał`);
+                        logger.info(`[ROBOT1] Przekazano wiadomość od ${message.author.username} na kanał`);
                     }
                 } catch (error) {
                     logger.error(`[ROBOT1] Błąd przekazywania wiadomości: ${error.message}`);
@@ -270,7 +270,7 @@ function setupEventHandlers() {
                     if (attachmentUrls.length > 0) payload.files = attachmentUrls;
                     const dmMsg = await user.send(payload);
                     await saveRelay1(dmMsg.id, message.channelId, message.id);
-                    logger.info(`[ROBOT1] Przekazano ping od ${message.author.tag} do ${user.tag}`);
+                    logger.info(`[ROBOT1] Przekazano ping od ${message.author.username} do ${user.username}`);
                 } catch (err) {
                     logger.error(`[ROBOT1] Błąd przekazywania pinga do ${userId}: ${err.message}`);
                 }
@@ -279,14 +279,14 @@ function setupEventHandlers() {
 
         messageHandler.handleMessage(message);
     });
-    client.on('interactionCreate', async (interaction) => {
+    client.on(Events.InteractionCreate, async (interaction) => {
         if (interaction.isButton() && interaction.customId.startsWith('robot_activate_kontroler_')) {
             const userId = interaction.customId.replace('robot_activate_kontroler_', '');
             try {
                 const user = await client.users.fetch(userId);
                 await user.send('System przekazywania wiadomości aktywny!');
-                await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.tag}**`, ephemeral: true });
-                logger.info(`[ROBOT1] Aktywowano system dla ${user.tag}`);
+                await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, ephemeral: true });
+                logger.info(`[ROBOT1] Aktywowano system dla ${user.username}`);
             } catch (error) {
                 await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
                 logger.error(`[ROBOT1] Błąd aktywacji: ${error.message}`);
@@ -297,7 +297,7 @@ function setupEventHandlers() {
         interaction.client.votingService = votingService;
         handleInteraction(interaction, config, lotteryService);
     });
-    client.on('error', onError);
+    client.on(Events.Error, onError);
 
     process.on('unhandledRejection', onUnhandledRejection);
     process.on('uncaughtException', onUncaughtException);
@@ -319,8 +319,14 @@ async function start() {
     }
 }
 
+async function stop() {
+    if (lotteryService) lotteryService.stop();
+    return client.destroy();
+}
+
 module.exports = {
-    start
+    start,
+    stop
 };
 
 // Uruchomienie jeśli plik jest wywoływany bezpośrednio

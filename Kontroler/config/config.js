@@ -32,11 +32,12 @@ module.exports = {
 
     // Przekazywanie wiadomości z priv na kanał (robot1)
     robot1Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
-    notificationForwardChannel: '1486848827997818900',
-    mentionRoleId: '1486506395057524887',
+    notificationForwardChannel: process.env.ROBOT1_FORWARD_CHANNEL || '1486848827997818900',
+    mentionRoleId: process.env.ROBOT1_MENTION_ROLE || '1486506395057524887',
+    robot1ActivationChannel: process.env.ROBOT1_ACTIVATION_CHANNEL || '1486510519119773818',
 
     // Rola blokująca udział w loteriach
-    blockedRole: '1392812250263195718',
+    blockedRole: process.env.KONTROLER_BLOCKED_ROLE || '1392812250263195718',
     
     // Kanały do monitorowania
     channels: {
