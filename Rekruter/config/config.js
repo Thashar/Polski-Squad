@@ -46,8 +46,9 @@ module.exports = {
 
     // Przekazywanie wiadomości z priv na kanał (robot2)
     robot2Users: localEnv.ROBOT ? localEnv.ROBOT.split(',').map(id => id.trim()) : [],
-    notificationForwardChannel: '1486848827997818900',
-    mentionRoleId: '1486506395057524887',
+    notificationForwardChannel: process.env.ROBOT2_FORWARD_CHANNEL || '1486848827997818900',
+    mentionRoleId: process.env.ROBOT2_MENTION_ROLE || '1486506395057524887',
+    robot2ActivationChannel: process.env.ROBOT2_ACTIVATION_CHANNEL || '1486510519119773818',
 
     channels: {
         recruitment: process.env.RECRUITMENT_CHANNEL,
@@ -55,7 +56,9 @@ module.exports = {
         clan1: process.env.CLAN1_CHANNEL,
         clan2: process.env.CLAN2_CHANNEL,
         mainClan: process.env.MAIN_CLAN_CHANNEL,
-        welcome: process.env.WELCOME_CHANNEL
+        welcome: process.env.WELCOME_CHANNEL,
+        main: process.env.REKRUTER_MAIN_CHANNEL || '1170323972173340744',
+        boost: process.env.REKRUTER_BOOST_BONUS_CHANNEL || '1384597663378440363'
     },
     roles: {
         notPolish: process.env.NOT_POLISH_ROLE,
@@ -75,7 +78,7 @@ module.exports = {
         recruit2: process.env.RECRUIT_2_ROLE,
         recruitMain: process.env.RECRUIT_MAIN_ROLE
     },
-    
+
     // Konfiguracja monitorowania użytkowników bez ról
     roleMonitoring: {
         enabled: true,
@@ -84,17 +87,17 @@ module.exports = {
         dataFile: './Rekruter/data/user_monitoring.json',
         waitingRoomChannel: process.env.WAITING_ROOM_CHANNEL || 'poczekalnia'
     },
-    
+
     // Konfiguracja powiadomień o wejściach/wyjściach
     memberNotifications: {
         enabled: true,
-        channelId: '1170323972173340744',
+        channelId: process.env.REKRUTER_MAIN_CHANNEL || '1170323972173340744',
         emojis: {
             join: '<:PepeBizensik:1278014731113857037>',
             leave: '<:PepeRIP:1267576534252916849>'
         }
     },
-    
+
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
@@ -117,6 +120,6 @@ module.exports = {
             logPreprocessing: true
         }
     },
-    
+
     messages
 };
