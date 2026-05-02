@@ -2463,6 +2463,12 @@ class InteractionHandler {
                 return;
             }
 
+            // === Przycisk rankingu serwerów ===
+            if (customId === 'ranking_guild_ranking') {
+                await this._handleGuildRankingSelect(interaction);
+                return;
+            }
+
             // === Przycisk powrotu do wyboru ===
             if (customId === 'ranking_back') {
                 await this._handleRankingBack(interaction);
@@ -2657,27 +2663,37 @@ class InteractionHandler {
             rankingData.currentPage = newPage;
             this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
 
-            const guild = (rankingData.mode === 'server' || rankingData.mode === 'role')
-                ? (interaction.client.guilds.cache.get(rankingData.guildId) || interaction.guild)
-                : null;
+            const btnOptions = {
+                userPage: rankingData.userPage ?? null,
+                mode: rankingData.mode,
+                guildId: rankingData.guildId || null,
+                guildName: rankingData.guildName || null,
+                parentGuildId: rankingData.parentGuildId || null,
+                parentGuildName: rankingData.parentGuildName || null
+            };
 
-            const embed = await this.rankingService.createRankingEmbed(
-                rankingData.players, newPage, rankingData.totalPages, rankingData.userId, guild,
-                {
-                    mode: rankingData.mode,
-                    client: rankingData.mode === 'global' ? interaction.client : null,
-                    messages: msgs,
-                    callerStats: rankingData.callerStats || null
-                }
-            );
+            let embed;
+            if (rankingData.mode === 'guild_ranking') {
+                embed = this.rankingService.createGuildRankingEmbed(
+                    rankingData.guildScores, newPage, rankingData.totalPages, msgs
+                );
+            } else {
+                const guild = (rankingData.mode === 'server' || rankingData.mode === 'role')
+                    ? (interaction.client.guilds.cache.get(rankingData.guildId) || interaction.guild)
+                    : null;
+                embed = await this.rankingService.createRankingEmbed(
+                    rankingData.players, newPage, rankingData.totalPages, rankingData.userId, guild,
+                    {
+                        mode: rankingData.mode,
+                        client: rankingData.mode === 'global' ? interaction.client : null,
+                        messages: msgs,
+                        callerStats: rankingData.callerStats || null
+                    }
+                );
+            }
+
             const buttons = this.rankingService.createRankingButtons(
-                newPage, rankingData.totalPages, false, msgs, rankingData.roleRows || [],
-                {
-                    userPage: rankingData.userPage ?? null,
-                    mode: rankingData.mode,
-                    guildId: rankingData.guildId || rankingData.homeGuildId || null,
-                    guildName: rankingData.guildName || null
-                }
+                newPage, rankingData.totalPages, false, msgs, rankingData.roleRows || [], btnOptions
             );
 
             await interaction.editReply({ embeds: [embed], components: buttons });
@@ -2787,11 +2803,25 @@ class InteractionHandler {
                 ? Math.floor(callerIdx / this.config.ranking.playersPerPage)
                 : null;
 
-            // Nazwa serwera dla przycisku server↔global
+            // Nazwa serwera dla przycisków
             const guildName = guild?.name || null;
-            // homeGuildId — serwer użytkownika (fallback gdy tryb global)
-            const homeGuildId = guildId || interaction.guildId;
-            const homeGuildName = guildName || interaction.guild?.name || null;
+
+            // parentGuildId: serwer do którego wraca button5 w trybie global
+            // Gdy wchodzimy w global — poprzedni stan miał wybrany serwer (mode=server)
+            const prevData = this.rankingService.getActiveRanking(interaction.message.id);
+            let parentGuildId = null;
+            let parentGuildName = null;
+            if (mode === 'global') {
+                // Poprzedni widok był serwerem — zapamiętaj który
+                if (prevData?.mode === 'server' && prevData.guildId) {
+                    parentGuildId = prevData.guildId;
+                    parentGuildName = prevData.guildName || null;
+                } else if (prevData?.mode === 'guild_ranking') {
+                    // Wracamy z guild_ranking do global — zachowaj parentGuildId
+                    parentGuildId = prevData.parentGuildId || null;
+                    parentGuildName = prevData.parentGuildName || null;
+                }
+            }
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, currentPage, totalPages, interaction.user.id, guild,
@@ -2804,12 +2834,7 @@ class InteractionHandler {
             );
             const buttons = this.rankingService.createRankingButtons(
                 currentPage, totalPages, false, rankMsgs, roleRows,
-                {
-                    userPage,
-                    mode,
-                    guildId: mode === 'global' ? homeGuildId : guildId,
-                    guildName: mode === 'global' ? homeGuildName : guildName
-                }
+                { userPage, mode, guildId, guildName, parentGuildId, parentGuildName }
             );
 
             const reply = await interaction.editReply({
@@ -2827,8 +2852,8 @@ class InteractionHandler {
                 mode,
                 guildId,
                 guildName,
-                homeGuildId,
-                homeGuildName,
+                parentGuildId,
+                parentGuildName,
                 callerStats,
                 roleRows,
                 userPage
@@ -2936,6 +2961,63 @@ class InteractionHandler {
 
         } catch (err) {
             logger.error('Błąd w _handleRoleRankingSelect:', err);
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
+        }
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku "Ranking Serwerów" — tryb guild_ranking.
+     */
+    async _handleGuildRankingSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+
+        // Pobierz poprzedni stan — potrzebny parentGuildId
+        const prevData = this.rankingService.getActiveRanking(interaction.message.id);
+        const parentGuildId = prevData?.parentGuildId || prevData?.guildId || null;
+        const parentGuildName = prevData?.parentGuildName || prevData?.guildName || null;
+
+        try {
+            const guildScores = await this.rankingService.getGuildRanking(interaction.client);
+
+            if (guildScores.length === 0) {
+                await interaction.editReply({ content: msgs.rankingEmpty, embeds: [], components: [] });
+                return;
+            }
+
+            const perPage = this.config.ranking.playersPerPage;
+            const totalPages = Math.max(1, Math.ceil(guildScores.length / perPage));
+
+            const embed = this.rankingService.createGuildRankingEmbed(guildScores, 0, totalPages, msgs);
+            const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, [], {
+                userPage: null,
+                mode: 'guild_ranking',
+                guildId: null,
+                guildName: null,
+                parentGuildId,
+                parentGuildName
+            });
+
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+            this.rankingService.addActiveRanking(reply.id, {
+                guildScores,
+                players: [],
+                currentPage: 0,
+                totalPages,
+                userId: interaction.user.id,
+                messageId: reply.id,
+                mode: 'guild_ranking',
+                guildId: null,
+                guildName: null,
+                parentGuildId,
+                parentGuildName,
+                callerStats: null,
+                roleRows: [],
+                userPage: null
+            });
+
+        } catch (err) {
+            logger.error('Błąd w _handleGuildRankingSelect:', err);
             await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
         }
     }

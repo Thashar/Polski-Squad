@@ -121,6 +121,66 @@ class RankingService {
     }
 
     /**
+     * Oblicza ranking serwerów — suma wyników top 30 graczy per serwer.
+     * @param {import('discord.js').Client} client
+     * @returns {Promise<Array<{guildId,guildName,totalScoreValue,totalScore,playerCount,topScore,topScoreValue}>>}
+     */
+    async getGuildRanking(client) {
+        const configuredGuilds = this.config.getAllGuilds();
+        const results = [];
+
+        await Promise.all(configuredGuilds.map(async (guildCfg) => {
+            const guild = client?.guilds?.cache?.get(guildCfg.id);
+            const guildName = guild?.name || guildCfg.tag || guildCfg.id;
+            const players = await this.getSortedPlayers(guildCfg.id);
+            if (players.length === 0) return;
+
+            const top30 = players.slice(0, 30);
+            const totalScoreValue = top30.reduce((sum, p) => sum + (p.scoreValue || 0), 0);
+
+            results.push({
+                guildId: guildCfg.id,
+                guildName,
+                totalScoreValue,
+                totalScore: this.formatScore(totalScoreValue),
+                playerCount: top30.length,
+                topScore: players[0]?.score || '0',
+                topScoreValue: players[0]?.scoreValue || 0
+            });
+        }));
+
+        return results.sort((a, b) => b.totalScoreValue - a.totalScoreValue);
+    }
+
+    /**
+     * Tworzy embed z rankingiem serwerów.
+     * @param {Array} guildScores
+     * @param {number} page
+     * @param {number} totalPages
+     * @param {object} messages
+     * @returns {EmbedBuilder}
+     */
+    createGuildRankingEmbed(guildScores, page, totalPages, messages) {
+        const msgs = messages || this.config.messages;
+        const perPage = this.config.ranking.playersPerPage;
+        const start = page * perPage;
+        const pageItems = guildScores.slice(start, start + perPage);
+
+        const MEDALS = ['🥇', '🥈', '🥉'];
+        const lines = pageItems.map((gs, idx) => {
+            const rank = start + idx + 1;
+            const medal = MEDALS[rank - 1] || `**#${rank}**`;
+            return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} graczy • najlepszy: ${gs.topScore}`;
+        });
+
+        return new EmbedBuilder()
+            .setTitle(msgs.guildRankingTitle || '🏛️ Ranking Serwerów')
+            .setDescription(lines.join('\n\n') || (msgs.rankingEmpty || 'Brak danych'))
+            .setColor(0x9b59b6)
+            .setFooter({ text: `${msgs.guildRankingFooter || 'Suma top 30 graczy per serwer'} • ${page + 1}/${totalPages}` });
+    }
+
+    /**
      * Eksportuje globalny ranking do shared_data/endersecho_ranking.json.
      * @param {{ syncToApi?: boolean }} [options] — syncToApi=false pomija push
      *   do Web API (używane przy starcie bota, żeby nie spamować API rankingiem,
@@ -434,33 +494,70 @@ class RankingService {
      * @param {ActionRowBuilder[]} roleRows
      * @param {object} options
      * @param {number|null} options.userPage - strona z wynikiem wywołującego (null = brak)
-     * @param {'server'|'global'|'role'} options.mode
-     * @param {string|null} options.guildId - ID serwera kontekstowego (dla przycisku server/global)
-     * @param {string|null} options.guildName - nazwa serwera (dla etykiety przycisku)
+     * @param {'server'|'global'|'guild_ranking'|'role'} options.mode
+     * @param {string|null} options.guildId - ID serwera kontekstowego
+     * @param {string|null} options.guildName - nazwa serwera
+     * @param {string|null} options.parentGuildId - ID serwera do którego wraca button5 (w trybie global/guild_ranking)
+     * @param {string|null} options.parentGuildName - nazwa serwera do przycisku Powrót
      */
     createRankingButtons(page, totalPages, disabled = false, messages = null, roleRows = [], options = {}) {
         const msgs = messages || this.config.messages;
-        const { userPage = null, mode = 'server', guildId = null, guildName = null } = options;
+        const { userPage = null, mode = 'server', guildId = null, guildName = null, parentGuildId = null, parentGuildName = null } = options;
 
-        // Przycisk 4: serwer ↔ global
-        let serverGlobalBtn;
+        // Przycisk 4: przełącznik trybu
+        let switchBtn;
         if (mode === 'server') {
-            // Oglądamy serwer → przycisk skrót do globalnego
-            serverGlobalBtn = new ButtonBuilder()
+            switchBtn = new ButtonBuilder()
                 .setCustomId('ranking_select_global')
-                .setLabel(msgs.buttonGlobal)
+                .setLabel(msgs.buttonGlobal || '🌐 Global')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled);
+        } else if (mode === 'global') {
+            switchBtn = new ButtonBuilder()
+                .setCustomId('ranking_guild_ranking')
+                .setLabel(msgs.buttonServerRanking || '🏛️ Ranking Serwerów')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled);
+        } else if (mode === 'guild_ranking') {
+            switchBtn = new ButtonBuilder()
+                .setCustomId('ranking_select_global')
+                .setLabel(msgs.buttonIndividualRanking || '👤 Ranking Indywidualny')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled);
         } else {
-            // Oglądamy global lub rolę → przycisk wraca do serwera
-            const label = guildName ? guildName.substring(0, 80) : (msgs.buttonGlobal || '🌐');
+            // role — przycisk do serwera
+            const label = guildName ? guildName.substring(0, 80) : '🏠';
             const serverId = guildId || '';
-            serverGlobalBtn = new ButtonBuilder()
+            switchBtn = new ButtonBuilder()
                 .setCustomId(`ranking_select_server_${serverId}`)
                 .setLabel(label)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || !serverId);
         }
+
+        // Przycisk 5: powrót
+        // W global/guild_ranking — wraca do serwera który był wcześniej wybrany
+        // W server/role — wraca do wyboru serwerów
+        let backBtn;
+        if ((mode === 'global' || mode === 'guild_ranking') && parentGuildId) {
+            const backLabel = parentGuildName
+                ? `↩️ ${parentGuildName.substring(0, 70)}`
+                : (msgs.buttonBack || '↩️ Powrót');
+            backBtn = new ButtonBuilder()
+                .setCustomId(`ranking_select_server_${parentGuildId}`)
+                .setLabel(backLabel)
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled);
+        } else {
+            backBtn = new ButtonBuilder()
+                .setCustomId('ranking_back')
+                .setLabel(msgs.buttonBack || '↩️ Wybór serwerów')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled);
+        }
+
+        // "Moja pozycja" nieaktywna w guild_ranking (ranking serwerów, nie indywidualny)
+        const myPosDisabled = disabled || userPage === null || mode === 'guild_ranking';
 
         const navRow = new ActionRowBuilder();
         navRow.addComponents(
@@ -474,7 +571,7 @@ class RankingService {
                 .setCustomId('ranking_mypos')
                 .setLabel(msgs.buttonMyPos)
                 .setStyle(ButtonStyle.Primary)
-                .setDisabled(disabled || userPage === null),
+                .setDisabled(myPosDisabled),
 
             new ButtonBuilder()
                 .setCustomId('ranking_next')
@@ -482,13 +579,8 @@ class RankingService {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
-            serverGlobalBtn,
-
-            new ButtonBuilder()
-                .setCustomId('ranking_back')
-                .setLabel(msgs.buttonBack)
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(disabled)
+            switchBtn,
+            backBtn
         );
 
         return [navRow, ...roleRows];

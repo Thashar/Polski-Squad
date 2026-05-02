@@ -97,7 +97,11 @@ const pol = {
     buttonNext: 'Następna ▶️',
     buttonMyPos: '🎯 Moja pozycja',
     buttonGlobal: '🌐 Global',
+    buttonServerRanking: '🏛️ Ranking Serwerów',
+    buttonIndividualRanking: '👤 Ranking Indywidualny',
     buttonBack: '↩️ Wybór serwerów',
+    guildRankingTitle: '🏛️ Ranking Serwerów',
+    guildRankingFooter: 'Suma wyników top 30 graczy per serwer',
 
     // Role TOP
     topRoleUpdated: '🏆 Role TOP zostały zaktualizowane!',
@@ -354,7 +358,11 @@ const eng = {
     buttonNext: 'Next ▶️',
     buttonMyPos: '🎯 My position',
     buttonGlobal: '🌐 Global',
+    buttonServerRanking: '🏛️ Server Ranking',
+    buttonIndividualRanking: '👤 Individual Ranking',
     buttonBack: '↩️ Server selection',
+    guildRankingTitle: '🏛️ Server Ranking',
+    guildRankingFooter: 'Sum of top 30 players per server',
 
     // TOP roles
     topRoleUpdated: '🏆 TOP roles have been updated!',
