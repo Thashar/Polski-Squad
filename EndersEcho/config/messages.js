@@ -93,11 +93,15 @@ const pol = {
     ocrDebugOff: '🔇 **Szczegółowe logowanie OCR:** ❌ Wyłączone',
 
     // Przyciski nawigacji
-    buttonFirst: '⏪ Pierwsza',
     buttonPrev: '◀️ Poprzednia',
     buttonNext: 'Następna ▶️',
-    buttonLast: 'Ostatnia ⏩',
-    buttonBack: '↩️ Powrót do wyboru',
+    buttonMyPos: '🎯 Moja pozycja',
+    buttonGlobal: '🌐 Global',
+    buttonServerRanking: '🏛️ Ranking Serwerów',
+    buttonIndividualRanking: '👤 Ranking Indywidualny',
+    buttonBack: '↩️ Rankingi serwerów',
+    guildRankingTitle: '🏛️ Ranking Serwerów',
+    guildRankingFooter: 'Suma wyników top 30 graczy per serwer',
 
     // Role TOP
     topRoleUpdated: '🏆 Role TOP zostały zaktualizowane!',
@@ -350,11 +354,15 @@ const eng = {
     ocrDebugOff: '🔇 **Detailed OCR logging:** ❌ Disabled',
 
     // Navigation buttons
-    buttonFirst: '⏪ First',
     buttonPrev: '◀️ Previous',
     buttonNext: 'Next ▶️',
-    buttonLast: 'Last ⏩',
-    buttonBack: '↩️ Back to selection',
+    buttonMyPos: '🎯 My position',
+    buttonGlobal: '🌐 Global',
+    buttonServerRanking: '🏛️ Server Ranking',
+    buttonIndividualRanking: '👤 Individual Ranking',
+    buttonBack: '↩️ Server rankings',
+    guildRankingTitle: '🏛️ Server Ranking',
+    guildRankingFooter: 'Sum of top 30 players per server',
 
     // TOP roles
     topRoleUpdated: '🏆 TOP roles have been updated!',
