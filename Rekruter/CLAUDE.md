@@ -46,10 +46,10 @@
 **Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**
-- Użytkownicy z ID w `ROBOT2` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał `1486848827997818900`
+- Użytkownicy z ID w `ROBOT` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał z env `ROBOT2_FORWARD_CHANNEL`
 - Obsługuje tekst i załączniki
 - Wymaga partial `Channel`
-- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli `1486506395057524887`
+- **Ping roli:** Jeśli wiadomość DM zaczyna się od `@`, zostanie wysłana z pingiem do roli z env `ROBOT2_MENTION_ROLE`
 
 ---
 
@@ -80,6 +80,13 @@ MAIN_CLAN_ROLE=role_id
 USE_AI_OCR=false
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ANTHROPIC_MODEL=claude-3-haiku-20240307
+
+# Opcjonalne - z fallbackiem do wartości produkcyjnych
+REKRUTER_MAIN_CHANNEL=channel_id          # Kanał główny (notyfikacje dołączeń/boostów)
+REKRUTER_BOOST_BONUS_CHANNEL=channel_id   # Kanał bonusowy dla boosterów
+ROBOT2_FORWARD_CHANNEL=channel_id         # Kanał forward dla Robot2
+ROBOT2_MENTION_ROLE=role_id               # Rola do pingu (@) dla Robot2
+ROBOT2_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot2
 ```
 
 ## Najlepsze Praktyki

@@ -602,7 +602,7 @@ class MemberCacheService {
 
             // Loguj tylko faktyczne zmiany boost
             if (changes.changed) {
-                this.logger.info(`[BOOST] ${newMember.user.tag} - był booster: ${changes.wasBooster}, jest booster: ${changes.isBooster}${canNotify ? '' : ' (cooldown powiadomienia)'}`);
+                this.logger.info(`[BOOST] ${newMember.user.username} - był booster: ${changes.wasBooster}, jest booster: ${changes.isBooster}${canNotify ? '' : ' (cooldown powiadomienia)'}`);
             }
 
             return {

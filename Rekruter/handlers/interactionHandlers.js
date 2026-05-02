@@ -327,7 +327,7 @@ async function handleNickChangeModal(interaction) {
         // Zmień nick użytkownikowi który wypełnił formularz
         await member.setNickname(newNickname);
 
-        logger.info(`[NICK] ✅ ${interaction.user.tag} zmienił swój nick z "${oldNick}" na "${newNickname}"`);
+        logger.info(`[NICK] ✅ ${interaction.user.username} zmienił swój nick z "${oldNick}" na "${newNickname}"`);
 
         await interaction.editReply({
             content: `✅ **Sukces!** Twój nick został zmieniony!\n\n` +
@@ -336,7 +336,7 @@ async function handleNickChangeModal(interaction) {
         });
 
     } catch (error) {
-        logger.error(`[NICK] ❌ Błąd podczas zmiany nicku dla ${interaction.user.tag}:`, error);
+        logger.error(`[NICK] ❌ Błąd podczas zmiany nicku dla ${interaction.user.username}:`, error);
 
         await interaction.editReply({
             content: '❌ **Ups!** Nie udało się zmienić nicku.\n\n' +
@@ -382,7 +382,7 @@ async function handleOcrDebugCommand(interaction, config) {
     
     const { createBotLogger } = require('../../utils/consoleLogger');
     const logger = createBotLogger('Rekruter');
-    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.tag}`);
+    logger.info(`${emoji} Szczegółowe logowanie OCR zostało ${enabled ? 'włączone' : 'wyłączone'} przez ${interaction.user.username}`);
     
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,

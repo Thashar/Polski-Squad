@@ -129,7 +129,7 @@ class RoleMonitoringService {
                     // Usuń z monitorowania jeśli ma role
                     if (this.monitoringData[userId]) {
                         delete this.monitoringData[userId];
-                        logger.info(`Usunięto ${member.user.tag} z monitorowania - otrzymał role`);
+                        logger.info(`Usunięto ${member.user.username} z monitorowania - otrzymał role`);
                     }
                 }
             }
@@ -156,7 +156,7 @@ class RoleMonitoringService {
                 warned24h: false,
                 guildId: guild.id
             };
-            logger.info(`Rozpoczęto monitorowanie ${member.user.tag} - bez ról od ${new Date(now).toISOString()}`);
+            logger.info(`Rozpoczęto monitorowanie ${member.user.username} - bez ról od ${new Date(now).toISOString()}`);
             return;
         }
 
@@ -167,7 +167,7 @@ class RoleMonitoringService {
         if (timeSinceJoin >= warning24h && !userData.warned24h) {
             await this.send24hWarning(member);
             userData.warned24h = true;
-            logger.info(`Wysłano ostrzeżenie 24h do ${member.user.tag}`);
+            logger.info(`Wysłano ostrzeżenie 24h do ${member.user.username}`);
         }
     }
 
@@ -193,9 +193,9 @@ Pozdrawiamy,
 Bot Rekruter`;
 
             await member.send(warningMessage);
-            logger.info(`✅ Wysłano ostrzeżenie 24h do ${member.user.tag}`);
+            logger.info(`✅ Wysłano ostrzeżenie 24h do ${member.user.username}`);
         } catch (error) {
-            logger.error(`❌ Nie można wysłać wiadomości do ${member.user.tag}: ${error.message}`);
+            logger.error(`❌ Nie można wysłać wiadomości do ${member.user.username}: ${error.message}`);
         }
     }
 

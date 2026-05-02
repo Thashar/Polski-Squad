@@ -36,7 +36,7 @@ class MemberNotificationService {
             const joinMessage = `${member} jest w drodze na serwer ${this.config.memberNotifications.emojis.join}`;
             
             await channel.send(joinMessage);
-            logger.info(`📥 Powiadomienie o dołączeniu: ${member.user.tag}`);
+            logger.info(`📥 Powiadomienie o dołączeniu: ${member.user.username}`);
         } catch (error) {
             logger.error(`❌ Błąd wysyłania powiadomienia o dołączeniu: ${error.message}`);
         }
@@ -71,7 +71,7 @@ class MemberNotificationService {
             }
 
             await channel.send(leaveMessage);
-            logger.info(`📤 Powiadomienie o opuszczeniu: ${member.user.tag}${nickname ? ` (nick: ${nickname})` : ''}`);
+            logger.info(`📤 Powiadomienie o opuszczeniu: ${member.user.username}${nickname ? ` (nick: ${nickname})` : ''}`);
         } catch (error) {
             logger.error(`❌ Błąd wysyłania powiadomienia o opuszczeniu: ${error.message}`);
         }

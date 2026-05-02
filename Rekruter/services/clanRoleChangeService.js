@@ -107,7 +107,7 @@ class ClanRoleChangeService {
 
             // Sprawdź czy użytkownik wyłączył swoje powiadomienia
             if (this.notificationPreferencesService && this.notificationPreferencesService.isOptedOut(userId)) {
-                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} wyłączył powiadomienia - pomijam`);
+                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.username} wyłączył powiadomienia - pomijam`);
                 return;
             }
 
@@ -148,7 +148,7 @@ class ClanRoleChangeService {
 
             // Sprawdź czy użytkownik, któremu zmienia się rola, jest administratorem
             if (this.isUserAdmin(freshMember)) {
-                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.tag} jest administratorem - pomijam powiadomienie o zmianie klanu`);
+                logger.info(`[CLAN_ROLE] Użytkownik ${freshMember.user.username} jest administratorem - pomijam powiadomienie o zmianie klanu`);
                 return;
             }
 
@@ -254,7 +254,7 @@ class ClanRoleChangeService {
                 files: [attachment]
             });
 
-            logger.info(`[CLAN_ROLE] ${member.user.tag} awansował na ${roleName}`);
+            logger.info(`[CLAN_ROLE] ${member.user.username} awansował na ${roleName}`);
         } catch (error) {
             logger.error(`[CLAN_ROLE] ❌ Błąd wysyłania powiadomienia:`, error);
         }
@@ -313,7 +313,7 @@ class ClanRoleChangeService {
                 '0': 'PolskiSquad⁰'
             };
 
-            logger.info(`[CLAN_ROLE] ${member.user.tag} ${changeTypeText[changeType]} ${clanFullName[clanName]}`);
+            logger.info(`[CLAN_ROLE] ${member.user.username} ${changeTypeText[changeType]} ${clanFullName[clanName]}`);
         } catch (error) {
             logger.error(`[CLAN_ROLE] ❌ Błąd wysyłania powiadomienia:`, error);
         }
