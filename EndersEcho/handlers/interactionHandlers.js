@@ -3797,9 +3797,9 @@ class InteractionHandler {
     _mapSendError(err) {
         const code = err.code;
         const msg = err.message || '';
-        if (code === 50001 || msg.includes('Missing Access')) return 'Brak dostępu — bot wyrzucony lub brak uprawnień na kanale';
+        if (code === 50001 || msg.includes('Missing Access')) return 'Brak dostępu do kanału — sprawdź uprawnienie: **Wyświetl kanał**';
         if (code === 10003 || msg.includes('Unknown Channel')) return 'Kanał nie istnieje (skonfiguruj ponownie)';
-        if (code === 50013 || msg.includes('Missing Permissions')) return 'Brak uprawnień do wysyłania wiadomości';
+        if (code === 50013 || msg.includes('Missing Permissions')) return 'Brak uprawnień — sprawdź: **Wyślij wiadomości**, **Osadzaj linki**';
         if (code === 50035 || msg.includes('Invalid Form Body')) return 'Nieprawidłowy format wiadomości (embed za długi?)';
         if (code === 10004 || msg.includes('Unknown Guild')) return 'Serwer nie istnieje';
         return msg || 'Nieznany błąd';
