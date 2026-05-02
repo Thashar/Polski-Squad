@@ -10,11 +10,11 @@ const RARITY = {
 };
 
 const CATEGORY_INFO = {
-    score:    { pol: '🏆 Wyniki',      eng: '🏆 Scores'   },
-    records:  { pol: '🔁 Rekordy',     eng: '🔁 Records'  },
-    bosses:   { pol: '🐉 Bossowie',    eng: '🐉 Bosses'   },
-    explorer: { pol: '🕵️ Eksplorator', eng: '🕵️ Explorer' },
-    prestige: { pol: '💎 Prestiż',     eng: '💎 Prestige'  },
+    score:    { pol: '🏆 Wyniki',    eng: '🏆 Scores'   },
+    records:  { pol: '🔁 Rekordy',   eng: '🔁 Records'  },
+    bosses:   { pol: '🎯 Łowy',      eng: '🎯 The Hunt' },
+    explorer: { pol: '🕵️ Eksplorator', eng: '🕵️ Explorer', hidden: true },
+    prestige: { pol: '💎 Prestiż',   eng: '💎 Prestige'  },
 };
 
 // check(progress, context) — progress = user's stored progress object,
@@ -222,6 +222,12 @@ const ACHIEVEMENTS = [
         namePol: 'Łowca Bossów',   nameEng: 'Boss Hunter',
         descPol: 'Wyślij wyniki z 5 różnych bossów', descEng: 'Submit scores from 5 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 5,
+    },
+    {
+        id: 'boss_master', category: 'bosses', rarity: 'epic', hidden: false,
+        namePol: 'Mistrz Łowów',   nameEng: 'Master of the Hunt',
+        descPol: 'Wyślij wyniki z 10 różnych bossów', descEng: 'Submit scores from 10 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 10,
     },
 
     // ===== EKSPLORATOR (EXPLORER) — ukryte =====
