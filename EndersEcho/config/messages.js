@@ -99,7 +99,7 @@ const pol = {
     buttonGlobal: '🌐 Global',
     buttonServerRanking: '🏛️ Ranking Serwerów',
     buttonIndividualRanking: '👤 Ranking Indywidualny',
-    buttonBack: '↩️ Wybór serwerów',
+    buttonBack: '↩️ Rankingi serwerów',
     guildRankingTitle: '🏛️ Ranking Serwerów',
     guildRankingFooter: 'Suma wyników top 30 graczy per serwer',
 
@@ -360,7 +360,7 @@ const eng = {
     buttonGlobal: '🌐 Global',
     buttonServerRanking: '🏛️ Server Ranking',
     buttonIndividualRanking: '👤 Individual Ranking',
-    buttonBack: '↩️ Server selection',
+    buttonBack: '↩️ Server rankings',
     guildRankingTitle: '🏛️ Server Ranking',
     guildRankingFooter: 'Sum of top 30 players per server',
 

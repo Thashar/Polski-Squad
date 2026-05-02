@@ -1706,7 +1706,7 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /ranking — pokazuje ephemeral z przyciskami wyboru serwera/global
+     * Obsługuje komendę /ranking — pokazuje ephemeral z rankingiem własnego serwera.
      * @param {CommandInteraction} interaction
      */
     async handleRankingCommand(interaction) {
@@ -1715,16 +1715,79 @@ class InteractionHandler {
         try {
             await interaction.deferReply({ flags: ['Ephemeral'] });
 
-            const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs);
+            const guildId = interaction.guildId;
+            const guild = interaction.guild;
+            const players = await this.rankingService.getSortedPlayers(guildId);
 
-            await interaction.editReply({
-                content: msgs.rankingSelectPrompt,
-                components: selectRows
+            if (players.length === 0) {
+                await interaction.editReply({ content: msgs.rankingEmpty });
+                return;
+            }
+
+            const totalPages = Math.ceil(players.length / this.config.ranking.playersPerPage);
+
+            // Statystyki wywołującego
+            let callerStats = null;
+            try {
+                const callerUserId = interaction.user.id;
+                const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+                const globalIdx = globalRanking.findIndex(p => p.userId === callerUserId);
+                const serverIdx = players.findIndex(p => p.userId === callerUserId);
+                callerStats = {
+                    score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
+                    serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
+                    globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
+                    rolePositions: []
+                };
+                if (this.roleRankingConfigService) {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    const memberRoles = interaction.member?.roles?.cache;
+                    if (roleRankings.length > 0 && memberRoles) {
+                        for (const rr of roleRankings) {
+                            if (!memberRoles.has(rr.roleId)) continue;
+                            const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, guild, this.roleRankingConfigService);
+                            const roleIdx = rolePlayers.findIndex(p => p.userId === callerUserId);
+                            if (roleIdx !== -1) callerStats.rolePositions.push({ roleName: rr.roleName, position: roleIdx + 1 });
+                        }
+                    }
+                }
+            } catch (statsErr) {
+                logger.error('Błąd pobierania statystyk wywołującego:', statsErr);
+            }
+
+            // Przyciski ról
+            let roleRows = [];
+            if (this.roleRankingConfigService) {
+                try {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    if (roleRankings.length > 0) roleRows = this.rankingService.createRoleRankingButtons(roleRankings, guildId);
+                } catch (roleErr) {
+                    logger.warn('Błąd ładowania rankingów ról:', roleErr);
+                }
+            }
+
+            const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+            const userPage = callerIdx !== -1 ? Math.floor(callerIdx / this.config.ranking.playersPerPage) : null;
+
+            const embed = await this.rankingService.createRankingEmbed(
+                players, 0, totalPages, interaction.user.id, guild,
+                { mode: 'server', client: null, messages: msgs, callerStats }
+            );
+            const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, {
+                userPage, mode: 'server', guildId, guildName: guild?.name || null
+            });
+
+            const reply = await interaction.editReply({ embeds: [embed], components: buttons });
+            this.rankingService.addActiveRanking(reply.id, {
+                players, currentPage: 0, totalPages,
+                userId: interaction.user.id, messageId: reply.id,
+                mode: 'server', guildId, guildName: guild?.name || null,
+                parentGuildId: null, parentGuildName: null,
+                callerStats, roleRows, userPage
             });
 
         } catch (error) {
             await this.logService.logRankingError(error, 'handleRankingCommand', interaction.guildId);
-
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ content: msgs.rankingError, flags: ['Ephemeral'] });
             } else if (interaction.deferred) {

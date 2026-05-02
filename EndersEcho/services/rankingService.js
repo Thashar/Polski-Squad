@@ -653,13 +653,6 @@ class RankingService {
             );
         }
 
-        buttons.push(
-            new ButtonBuilder()
-                .setCustomId('ranking_select_global')
-                .setLabel(msgs.globalButtonLabel)
-                .setStyle(ButtonStyle.Success)
-        );
-
         const rows = [];
         for (let i = 0; i < buttons.length; i += 5) {
             const row = new ActionRowBuilder();
