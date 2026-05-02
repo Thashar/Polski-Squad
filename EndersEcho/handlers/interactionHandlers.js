@@ -2241,9 +2241,12 @@ class InteractionHandler {
 
                         const sentTo = [];
                         const failedAt = [];
+                        const top3Ctx = { titlePol: '⚠️ Błąd wysyłania powiadomienia Global Top 3', titleEng: '⚠️ Failed to deliver Global Top 3 notification' };
 
                         for (const guildCfg of allNotifGuilds) {
-                            const guildName = interaction.client.guilds.cache.get(guildCfg.id)?.name || guildCfg.id;
+                            const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
+                            const guildName = guildObj?.name || guildCfg.id;
+                            const lang = guildCfg.lang || 'pol';
                             try {
                                 // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
                                 let channel;
@@ -2251,10 +2254,12 @@ class InteractionHandler {
                                     channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
                                 } catch (fetchErr) {
                                     failedAt.push(`${guildName} (${fetchErr.message})`);
+                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(fetchErr), lang, context: top3Ctx }).catch(() => {});
                                     continue;
                                 }
                                 if (!channel) {
                                     failedAt.push(`${guildName} (brak kanału)`);
+                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: { pol: 'Nie znaleziono kanału (ID kanału może być nieaktualne)', eng: 'Channel not found (channel ID may be outdated)', fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.', fix_eng: 'Use `/configure` to select a new channel for the bot.' }, lang, context: top3Ctx }).catch(() => {});
                                     continue;
                                 }
 
@@ -2292,6 +2297,7 @@ class InteractionHandler {
                                 sentTo.push(guildName);
                             } catch (notifError) {
                                 failedAt.push(`${guildName} (${notifError.message})`);
+                                if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(notifError), lang, context: top3Ctx }).catch(() => {});
                             }
                         }
 
@@ -3836,23 +3842,25 @@ class InteractionHandler {
     }
 
     /**
-     * Wysyła DM do właściciela serwera z informacją o błędzie wysyłania /info.
+     * Wysyła DM do właściciela serwera z informacją o błędzie wysyłania wiadomości na kanał.
+     * @param {{ guildObj, label, channelId, error, lang, context: { titlePol, titleEng } }} params
      */
-    async _sendInfoErrorDm({ guildObj, label, channelId, error, lang }) {
+    async _sendChannelErrorDm({ guildObj, label, channelId, error, lang, context }) {
         try {
             const owner = await guildObj.fetchOwner();
             if (!owner) return;
             const isPol = lang === 'pol';
             const embed = new EmbedBuilder()
                 .setColor(0xcc0000)
-                .setTitle(isPol ? '⚠️ Błąd wysyłania wiadomości /info' : '⚠️ Failed to deliver /info message')
+                .setTitle(isPol ? context.titlePol : context.titleEng)
                 .addFields(
                     { name: isPol ? 'Serwer' : 'Server', value: label, inline: true },
                     { name: isPol ? 'Kanał' : 'Channel', value: `<#${channelId}>`, inline: true },
                     { name: isPol ? '❌ Błąd' : '❌ Error', value: isPol ? error.pol : error.eng, inline: false },
-                    { name: isPol ? '🔧 Co zrobić' : '🔧 How to fix', value: isPol ? error.fix_pol : error.fix_eng, inline: false },
                 )
                 .setTimestamp();
+            const fix = isPol ? error.fix_pol : error.fix_eng;
+            if (fix) embed.addFields({ name: isPol ? '🔧 Co zrobić' : '🔧 How to fix', value: fix, inline: false });
             await owner.send({ embeds: [embed] });
         } catch {
             // DM zablokowane lub inny błąd — ignoruj cicho
@@ -3924,8 +3932,9 @@ class InteractionHandler {
         this._clearInfoSession(interaction.user.id);
 
         // DM do właścicieli serwerów z błędami (tylko gdy bot jest na serwerze)
+        const infoCtx = { titlePol: '⚠️ Błąd wysyłania wiadomości /info', titleEng: '⚠️ Failed to deliver /info message' };
         for (const r of results.filter(r => r.status === 'error' && r.guildObj)) {
-            this._sendInfoErrorDm(r).catch(() => {});
+            this._sendChannelErrorDm({ ...r, context: infoCtx }).catch(() => {});
         }
 
         const sent = results.filter(r => r.status === 'ok').length;
