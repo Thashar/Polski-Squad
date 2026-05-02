@@ -131,6 +131,18 @@
    - Subskrypcje są trwałe (plik JSON) — przeżywają restart bota
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
+7. **System Osiągnięć** — `achievementService.js` + `config/achievements.js`:
+   - **43 stałe osiągnięcia** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
+   - **Kategorie:** 🏆 Wyniki (20) · 🔁 Rekordy (10) · 🐉 Bossowie (3) · 🕵️ Eksplorator/ukryte (5) · 💎 Prestiż (5)
+   - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
+   - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
+   - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
+   - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
+   - **Komenda /achievements:** ephemeral embed z zakładkami: `🏆 Odblokowane` (paginacja po 10) i `📊 Podsumowanie` (per-kategoria + statystyki)
+   - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm` po udanej subskrypcji
+   - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`
+   - **CustomIDs:** `ach_view_{tab}_{page}` — tab = `unlocked` | `overview`
+
 6. **Panel Admina** — dostępny przez `/manage`:
    - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP. Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
    - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`. Jeśli blokada pochodzi od Head Admina (`blockedByHeadAdmin: true`) — zwykły Admin nie może odblokować.
@@ -140,7 +152,7 @@
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
 
-**Komendy slash:** `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
+**Komendy slash:** `/achievements`, `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
 **Panel Admina** — dostępny przez `/manage`:
 - Dostęp: każdy admin Discord (Administrator)

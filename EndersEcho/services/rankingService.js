@@ -778,7 +778,7 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = []) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null) {
         const msgs = messages || this.config.messages;
 
         // Oblicz postęp i poprawę w jednej linii
@@ -887,6 +887,11 @@ class RankingService {
 
         if (authorData) {
             embed.setAuthor(authorData);
+        }
+
+        if (achievementsFieldValue) {
+            const fieldName = msgs.achievementsNewField || '🎉 Nowe osiągnięcia';
+            embed.addFields({ name: fieldName, value: achievementsFieldValue, inline: false });
         }
 
         return embed;
