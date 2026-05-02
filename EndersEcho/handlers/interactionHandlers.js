@@ -3792,6 +3792,20 @@ class InteractionHandler {
     }
 
     /**
+     * Mapuje błąd Discord API na czytelny opis po polsku.
+     */
+    _mapSendError(err) {
+        const code = err.code;
+        const msg = err.message || '';
+        if (code === 50001 || msg.includes('Missing Access')) return 'Brak dostępu — bot wyrzucony lub brak uprawnień na kanale';
+        if (code === 10003 || msg.includes('Unknown Channel')) return 'Kanał nie istnieje (skonfiguruj ponownie)';
+        if (code === 50013 || msg.includes('Missing Permissions')) return 'Brak uprawnień do wysyłania wiadomości';
+        if (code === 50035 || msg.includes('Invalid Form Body')) return 'Nieprawidłowy format wiadomości (embed za długi?)';
+        if (code === 10004 || msg.includes('Unknown Guild')) return 'Serwer nie istnieje';
+        return msg || 'Nieznany błąd';
+    }
+
+    /**
      * Obsługuje przycisk "Wyślij" — wysyła embed na kanały wszystkich serwerów.
      */
     async _handleInfoSend(interaction) {
@@ -3803,28 +3817,68 @@ class InteractionHandler {
         }
 
         await interaction.deferUpdate();
-        let sent = 0;
-        let failed = 0;
+
+        const results = [];
 
         for (const guildCfg of this.config.getAllGuilds()) {
+            const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
+            const guildLabel = guildObj?.name || guildCfg.tag || guildCfg.id;
+
+            if (!guildObj) {
+                results.push({ label: guildLabel, id: guildCfg.id, status: 'skipped', reason: 'Bot nie jest na tym serwerze (wyrzucony lub opuścił)' });
+                continue;
+            }
+
             try {
-                const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
-                if (!channel) { failed++; continue; }
+                const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
+                if (!channel) {
+                    results.push({ label: guildLabel, id: guildCfg.id, status: 'error', reason: 'Nie znaleziono kanału (ID nieaktualne?)' });
+                    continue;
+                }
                 const description = guildCfg.lang === 'pol' ? data.descriptionPol : data.descriptionEng;
                 const embed = this._buildInfoEmbed(data, data.user, description);
                 await channel.send({ embeds: [embed] });
-                sent++;
+                results.push({ label: guildLabel, id: guildCfg.id, status: 'ok' });
             } catch (err) {
                 logger.error(`Błąd wysyłania /info do serwera ${guildCfg.id}: ${err.message}`);
-                failed++;
+                results.push({ label: guildLabel, id: guildCfg.id, status: 'error', reason: this._mapSendError(err) });
             }
         }
 
         this._clearInfoSession(interaction.user.id);
-        const summary = failed > 0
-            ? `✅ Wysłano na **${sent}** serwer(ów). ❌ Błąd na **${failed}** serwer(ach).`
-            : `✅ Wiadomość wysłana na **${sent}** serwer(ów).`;
-        await interaction.editReply({ content: summary, embeds: [], components: [] });
+
+        const sent = results.filter(r => r.status === 'ok').length;
+        const failed = results.filter(r => r.status === 'error').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
+
+        const color = failed === 0 && skipped === 0 ? 0x00aa00
+            : failed === 0 ? 0xffaa00
+            : sent === 0 ? 0xcc0000
+            : 0xff8800;
+
+        const summaryParts = [];
+        if (sent > 0) summaryParts.push(`✅ Wysłano: **${sent}**`);
+        if (skipped > 0) summaryParts.push(`⏭️ Pominięto: **${skipped}**`);
+        if (failed > 0) summaryParts.push(`❌ Błędy: **${failed}**`);
+
+        const reportEmbed = new EmbedBuilder()
+            .setTitle('📋 Raport wysyłania /info')
+            .setColor(color)
+            .setDescription(summaryParts.join(' · '))
+            .setTimestamp();
+
+        for (const r of results.slice(0, 25)) {
+            const value = r.status === 'ok' ? '✅ Wysłano pomyślnie'
+                : r.status === 'skipped' ? `⏭️ ${r.reason}`
+                : `❌ ${r.reason}`;
+            reportEmbed.addFields({ name: r.label, value, inline: true });
+        }
+
+        if (results.length > 25) {
+            reportEmbed.setFooter({ text: `Pokazano 25 z ${results.length} serwerów` });
+        }
+
+        await interaction.editReply({ content: '', embeds: [reportEmbed], components: [] });
     }
 
     /**
