@@ -136,6 +136,7 @@
    - **Kategorie:** 🏆 Wyniki (20) · 🔁 Rekordy (10) · 🐉 Bossowie (3) · 🕵️ Eksplorator/ukryte (5) · 💎 Prestiż (5)
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
+   - **Kasowanie:** `clearUserAchievements(guildId, userId)` — usuwa cały wpis gracza z pliku; wywoływane automatycznie przy usunięciu gracza z rankingu (panel admina + komenda `/remove`)
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
    - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
    - **Komenda /achievements:** ephemeral embed z zakładkami: `🏆 Odblokowane` (paginacja po 10) i `📊 Podsumowanie` (per-kategoria + statystyki)
@@ -144,7 +145,7 @@
    - **CustomIDs:** `ach_view_{tab}_{page}` — tab = `unlocked` | `overview`
 
 6. **Panel Admina** — dostępny przez `/manage`:
-   - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP. Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
+   - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP + wyczyszczenie wszystkich osiągnięć gracza (`achievementService.clearUserAchievements`). Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
    - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`. Jeśli blokada pochodzi od Head Admina (`blockedByHeadAdmin: true`) — zwykły Admin nie może odblokować.
    - **Zablokuj gracza (head admin):** modal wyszukiwania nicku cross-server → lista graczy → potwierdzenie → modal czasu blokady. Blokada zapisywana z flagą `blockedByHeadAdmin: true`.
    - **Zużycie tokenów (admin/head admin):** embed ze statystykami AI per serwer. Admin = swój serwer, Head Admin = wszystkie + breakdown

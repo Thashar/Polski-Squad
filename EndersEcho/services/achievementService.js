@@ -110,7 +110,19 @@ class AchievementService {
     }
 
     /**
-     * Śledzi przegląd rankingu — może odblokować ukryte osiągnięcia eksploratora.
+     * Usuwa wszystkie osiągnięcia i postęp gracza na danym serwerze.
+     * Wywoływane przy usunięciu gracza z rankingu przez admina.
+     */
+    async clearUserAchievements(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            if (!data[userId]) return;
+            delete data[userId];
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    /**
      */
     async trackRankingView(guildId, userId) {
         try {
