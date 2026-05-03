@@ -274,7 +274,7 @@ class AchievementService {
                 const desc = isPol ? ach.descPol : ach.descEng;
                 const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
                 const date = new Date(unlocked[ach.id].unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
-                return `${rarity.emoji} **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
+                return `${ach.icon} (${rarity.emoji}) **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
             });
 
         const unlockedCount = catAchs.filter(a => unlocked[a.id]).length;
