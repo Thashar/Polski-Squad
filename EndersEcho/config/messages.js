@@ -54,6 +54,7 @@ const pol = {
     // Nowy rekord — ogłoszenie ephemeral
     newRecordConfirmed: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.',
     newRecordFallback: '🏆 **NOWY REKORD!**\n**Gracz:** {username}\n**Nowy rekord:** {score}\n**Poprzedni:** {previous}\n\n*Błąd wysyłania pełnego embed*',
+    sameScoreOtherServer: '✅ Wynik **{score}** zapisany na tym serwerze.\n⚠️ Taki sam wynik masz już na serwerze **{guildName}** — nie jest to nowy rekord globalny.',
     noRecordFallback: '❌ Nie pobito rekordu\n**Gracz:** {username}\n**Wynik:** {score}\n**Obecny rekord:** {current}\n\n*Błąd wysyłania embed z obrazem*',
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
 
@@ -350,6 +351,7 @@ const eng = {
     // New record — ephemeral announcement
     newRecordConfirmed: '✅ **New record set and announced!**\n🏆 Congratulations! Your score has been published for everyone.',
     newRecordFallback: '🏆 **NEW RECORD!**\n**Player:** {username}\n**New record:** {score}\n**Previous:** {previous}\n\n*Error sending full embed*',
+    sameScoreOtherServer: '✅ Score **{score}** saved for this server.\n⚠️ You already have the same score on server **{guildName}** — this is not a new global record.',
     noRecordFallback: '❌ Record not beaten\n**Player:** {username}\n**Score:** {score}\n**Current record:** {current}\n\n*Error sending embed with image*',
     rankingImageCaption: '📎 **Original result image:**',
 
