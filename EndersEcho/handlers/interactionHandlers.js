@@ -2997,6 +2997,7 @@ class InteractionHandler {
                 customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
+                customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
                 this.logService._gl(interaction.guildId).info(`[${nick}] /configure → ${this._describeCfgButton(customId)}`);
