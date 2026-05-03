@@ -1215,12 +1215,13 @@ class InteractionHandler {
                 ))],
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('🏆 Usuń z osiągnięciami', '🏆 Remove with Achievements')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
 
-    async _handlePanelRemoveConfirm(interaction, rawValue) {
+    async _handlePanelRemoveConfirm(interaction, rawValue, { resetAllAchievements = false } = {}) {
         // rawValue: "userId:targetGuildId" (zawiera docelowy serwer, niekoniecznie bieżący)
         const [targetUserId, targetGuildId] = rawValue.split(':');
         const t = this._panelT(interaction.guildId);
@@ -1241,9 +1242,13 @@ class InteractionHandler {
                     await this.roleService.updateTopRoles(targetGuild, updatedPlayers, guildConfig?.topRoles || null);
                 }
                 if (this.achievementService) {
-                    await this.achievementService.clearUserAchievements(targetGuildId, targetUserId);
+                    if (resetAllAchievements) {
+                        await this.achievementService.resetAllAchievements(targetGuildId, targetUserId);
+                    } else {
+                        await this.achievementService.clearUserAchievements(targetGuildId, targetUserId);
+                    }
                 }
-                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu (serwer ${targetGuildId}) przez panel admina`, interaction);
+                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${targetGuildId}) przez panel admina`, interaction);
             } catch (roleError) {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
@@ -1252,7 +1257,10 @@ class InteractionHandler {
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0x57F287)
                     .setTitle(t('✅ Gracz usunięty', '✅ Player Removed'))
-                    .setDescription(t(`Gracz <@${targetUserId}> został usunięty z rankingu${serverNote}.`, `Player <@${targetUserId}> has been removed from the ranking${serverNote}.`))],
+                    .setDescription(t(
+                        `Gracz <@${targetUserId}> został usunięty z rankingu${serverNote}${resetAllAchievements ? ' wraz ze wszystkimi osiągnięciami' : ''}.`,
+                        `Player <@${targetUserId}> has been removed from the ranking${serverNote}${resetAllAchievements ? ' along with all achievements' : ''}.`
+                    ))],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
@@ -2425,6 +2433,7 @@ class InteractionHandler {
         if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
         if (customId.startsWith('panel_remove_confirm_')) return 'Potwierdzenie usunięcia gracza';
+        if (customId.startsWith('panel_remove_all_confirm_')) return 'Potwierdzenie usunięcia gracza z osiągnięciami';
         if (customId === 'panel_unblock') return 'Odblokuj gracza';
         if (customId === 'panel_block') return 'Zablokuj gracza';
         if (customId.startsWith('panel_block_time_')) return 'Ustaw czas blokady gracza';
@@ -2635,6 +2644,11 @@ class InteractionHandler {
             if (customId.startsWith('panel_remove_confirm_')) {
                 const rawValue = customId.replace('panel_remove_confirm_', '');
                 await this._handlePanelRemoveConfirm(interaction, rawValue);
+                return;
+            }
+            if (customId.startsWith('panel_remove_all_confirm_')) {
+                const rawValue = customId.replace('panel_remove_all_confirm_', '');
+                await this._handlePanelRemoveConfirm(interaction, rawValue, { resetAllAchievements: true });
                 return;
             }
             if (customId === 'panel_unblock') {
