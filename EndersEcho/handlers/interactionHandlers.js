@@ -3010,28 +3010,12 @@ class InteractionHandler {
                 await this._handlePanelTesterRemove(interaction);
                 return;
             }
-            if (customId === 'panel_tester_remove_select') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelTesterRemoveSelect(interaction);
-                return;
-            }
             if (customId === 'panel_ach_reset') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
                 await this._handlePanelAchReset(interaction);
-                return;
-            }
-            if (customId === 'panel_ach_reset_select') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelAchResetSelect(interaction);
                 return;
             }
             if (customId.startsWith('panel_ach_reset_confirm_')) {
@@ -4017,6 +4001,24 @@ class InteractionHandler {
             }
 
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
+
+            if (customId === 'panel_tester_remove_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_reset_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchResetSelect(interaction);
+                return;
+            }
 
             if (customId === 'notif_server_select') {
                 await this._handleNotifServerSelect(interaction);
