@@ -714,6 +714,9 @@ class InteractionHandler {
                 ) + '\n\n' + t(
                     `**Aktualny próg:** ${currentThreshold} zgłoszeń`,
                     `**Current threshold:** ${currentThreshold} reports`
+                ) + '\n' + (state.communityVerifEnabled
+                    ? t('**Status:** ✅ Włączony', '**Status:** ✅ Enabled')
+                    : t('**Status:** ❌ Wyłączony', '**Status:** ❌ Disabled')
                 ));
 
             const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('✅ Włącz', '✅ Enable')).setStyle(ButtonStyle.Success);
