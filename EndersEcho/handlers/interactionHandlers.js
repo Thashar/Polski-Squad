@@ -3467,6 +3467,11 @@ class InteractionHandler {
         } catch (e) {
             logger.error(`CV _cvRemoveRecord revert ranking error: ${e.message}`);
         }
+        if (this.scoreHistoryService && session.newRecord?.scoreValue != null) {
+            this.scoreHistoryService.removeEntry(
+                session.guildId, session.userId, session.newRecord.scoreValue
+            ).catch(e => logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`));
+        }
         try {
             if (this.achievementService && session.newAchievements?.length > 0) {
                 await this.achievementService.revertSubmissionAchievements(

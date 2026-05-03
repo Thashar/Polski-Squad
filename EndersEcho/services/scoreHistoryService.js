@@ -31,6 +31,17 @@ class ScoreHistoryService {
         await this._save(guildId, data);
     }
 
+    // Usuwa ostatni wpis z danym scoreValue (przy cofaniu rekordu przez admina)
+    async removeEntry(guildId, userId, scoreValue) {
+        const data = await this._load(guildId);
+        const history = data[userId];
+        if (!history || history.length === 0) return;
+        const lastIdx = history.map(e => e.scoreValue).lastIndexOf(scoreValue);
+        if (lastIdx === -1) return;
+        history.splice(lastIdx, 1);
+        await this._save(guildId, data);
+    }
+
     // Zwraca wpisy z ostatnich maxDaysBack dni, posortowane chronologicznie
     async getUserHistory(guildId, userId, maxDaysBack = 90) {
         const data = await this._load(guildId);
