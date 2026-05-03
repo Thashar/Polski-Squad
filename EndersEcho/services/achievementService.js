@@ -110,14 +110,23 @@ class AchievementService {
     }
 
     /**
-     * Usuwa wszystkie osiągnięcia i postęp gracza na danym serwerze.
-     * Wywoływane przy usunięciu gracza z rankingu przez admina.
+     * Usuwa osiągnięcia powiązane z wynikiem i pobijaniem rekordów (kategorie 'score' i 'records')
+     * oraz resetuje powiązane pola progress. Wywoływane przy usunięciu gracza z rankingu przez admina.
      */
     async clearUserAchievements(guildId, userId) {
         try {
             const data = await this.loadData(guildId);
             if (!data[userId]) return;
-            delete data[userId];
+            const userData = data[userId];
+            const scoreAndRecordIds = new Set(
+                ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
+            );
+            for (const id of scoreAndRecordIds) {
+                delete userData.unlocked[id];
+            }
+            userData.progress.recordCount = 0;
+            userData.progress.lastRecordAt = null;
+            userData.progress.lastRecordBeatAt = null;
             await this.saveData(guildId, data);
         } catch {}
     }

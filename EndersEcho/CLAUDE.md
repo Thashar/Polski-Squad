@@ -136,7 +136,7 @@
    - **Kategorie:** 🏆 Wyniki (20) · 🔁 Rekordy (10) · 🐉 Bossowie (3) · 🕵️ Eksplorator/ukryte (5) · 💎 Prestiż (5)
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
-   - **Kasowanie:** `clearUserAchievements(guildId, userId)` — usuwa cały wpis gracza z pliku; wywoływane automatycznie przy usunięciu gracza z rankingu (panel admina + komenda `/remove`)
+   - **Kasowanie:** `clearUserAchievements(guildId, userId)` — usuwa osiągnięcia kategorii `score` i `records` oraz resetuje `recordCount`/`lastRecordAt`/`lastRecordBeatAt`; pozostałe kategorie (bosses, explorer, prestige) zostają; wywoływane automatycznie przy usunięciu gracza z rankingu (panel admina + komenda `/remove`)
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
    - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
    - **Komenda /achievements:** ephemeral embed z zakładkami: `🏆 Odblokowane` (paginacja po 10) i `📊 Podsumowanie` (per-kategoria + statystyki)
