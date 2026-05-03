@@ -143,7 +143,7 @@ class RankingService {
                 guildName,
                 totalScoreValue,
                 totalScore: this.formatScore(totalScoreValue),
-                playerCount: top30.length,
+                playerCount: players.length,
                 topScore: players[0]?.score || '0',
                 topScoreValue: players[0]?.scoreValue || 0
             });
