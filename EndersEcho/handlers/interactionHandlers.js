@@ -1281,18 +1281,18 @@ class InteractionHandler {
 
         let row1, row2;
         if (isHeadAdmin) {
-            // Rząd 1 Head Admin (5 przycisków): Zablokuj, Odblokuj, Usuń gracza, Testerzy, Usuń osiągnięcia
+            // Rząd 1 Head Admin (4 przyciski): Zablokuj, Odblokuj, Usuń gracza, Usuń osiągnięcia
             row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Testerzy', '🧪 Testers')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
             );
-            // Rząd 2 Head Admin: AI OCR on/off, Ustaw limity
+            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy
             row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR on/off', '🔄 AI OCR on/off')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR', '🔄 AI OCR')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_limit').setLabel(t('⚙️ Ustaw limity', '⚙️ Set Limits')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Testerzy', '🧪 Testers')).setStyle(ButtonStyle.Primary),
             );
         } else {
             // Rząd 1 Admin: Usuń gracza, Odblokuj
@@ -1312,13 +1312,6 @@ class InteractionHandler {
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
-            ));
-        }
-        // Przycisk "Wróć do konfiguracji" tylko gdy istnieje aktywna sesja wizarda /configure
-        const hasConfigureSession = this._configWizard.has(this._wizardKey(interaction.user.id, interaction.guildId));
-        if (hasConfigureSession) {
-            components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back_configure').setLabel(t('◀️ Wróć do konfiguracji', '◀️ Back to Configure')).setStyle(ButtonStyle.Secondary),
             ));
         }
 
