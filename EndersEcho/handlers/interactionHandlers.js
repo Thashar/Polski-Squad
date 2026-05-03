@@ -1128,20 +1128,91 @@ class InteractionHandler {
 
             // Powiadomienie o skonfigurowanym serwerze — webhook logów lub fallback na kanał raportów
             try {
-                const configEmbed = new EmbedBuilder()
-                    .setColor(0x5865F2)
-                    .setTitle(`⚙️ Serwer w pełni skonfigurowany${wasAlreadyConfigured ? ' (rekonfiguracja)' : ''}`)
-                    .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
-                    .addFields(
-                        { name: 'Serwer', value: `${interaction.guild.name}` },
-                        { name: 'Administrator', value: `${interaction.user.tag}` },
-                        { name: 'Kanał bota', value: `<#${newData.allowedChannelId}>` },
-                        { name: 'Język', value: newData.lang || 'pol' },
-                        { name: 'Tag', value: newData.tag || '—' },
-                        { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
-                        { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' }
-                    )
-                    .setTimestamp();
+                let configEmbed;
+                if (!wasAlreadyConfigured) {
+                    // Pierwsza konfiguracja — pełny embed ze wszystkimi ustawieniami
+                    configEmbed = new EmbedBuilder()
+                        .setColor(0x5865F2)
+                        .setTitle('⚙️ Nowy serwer skonfigurowany')
+                        .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
+                        .addFields(
+                            { name: 'Serwer', value: interaction.guild.name },
+                            { name: 'Administrator', value: interaction.member?.displayName || interaction.user.username },
+                            { name: 'Kanał bota', value: `<#${newData.allowedChannelId}>` },
+                            { name: 'Język', value: newData.lang || 'pol' },
+                            { name: 'Tag', value: newData.tag || '—' },
+                            { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
+                            { name: 'Powiadomienia Global Top3', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
+                            { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
+                            { name: 'Weryfikacja społeczności', value: newData.communityVerification?.enabled ? `✅ Włączona (próg: ${newData.communityVerification.threshold})` : '❌ Wyłączona' }
+                        )
+                        .setTimestamp();
+                } else {
+                    // Rekonfiguracja — tylko zmienione pola
+                    const old = existingConfig;
+                    const diffFields = [];
+
+                    if (old?.allowedChannelId !== newData.allowedChannelId) {
+                        const oldVal = old?.allowedChannelId ? `<#${old.allowedChannelId}>` : '—';
+                        diffFields.push({ name: 'Kanał bota', value: `${oldVal} → <#${newData.allowedChannelId}>` });
+                    }
+                    if ((old?.invalidReportChannelId || null) !== newData.invalidReportChannelId) {
+                        const oldVal = old?.invalidReportChannelId ? `<#${old.invalidReportChannelId}>` : '—';
+                        const newVal = newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—';
+                        diffFields.push({ name: 'Kanał raportów', value: `${oldVal} → ${newVal}` });
+                    }
+                    if ((old?.lang || 'pol') !== newData.lang) {
+                        diffFields.push({ name: 'Język', value: `${old?.lang || 'pol'} → ${newData.lang}` });
+                    }
+                    if ((old?.tag || null) !== newData.tag) {
+                        diffFields.push({ name: 'Tag', value: `${old?.tag || '—'} → ${newData.tag || '—'}` });
+                    }
+                    const roleKeys = { top1: 'Top 1', top2: 'Top 2', top3: 'Top 3', top4to10: 'Top 4-10', top11to30: 'Top 11-30' };
+                    for (const [key, label] of Object.entries(roleKeys)) {
+                        const oldVal = old?.topRoles?.[key] || null;
+                        const newVal = newData.topRoles?.[key] || null;
+                        if (oldVal !== newVal) {
+                            diffFields.push({ name: `Rola ${label}`, value: `${oldVal ? `<@&${oldVal}>` : '—'} → ${newVal ? `<@&${newVal}>` : '—'}` });
+                        }
+                    }
+                    if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
+                        const oldVal = old?.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
+                        const newVal = newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
+                        diffFields.push({ name: 'Powiadomienia Global Top3', value: `${oldVal} → ${newVal}` });
+                    }
+                    const oldCvEnabled = old?.communityVerification?.enabled || false;
+                    const newCvEnabled = newData.communityVerification?.enabled || false;
+                    if (oldCvEnabled !== newCvEnabled) {
+                        diffFields.push({ name: 'Weryfikacja społeczności', value: `${oldCvEnabled ? '✅ Włączona' : '❌ Wyłączona'} → ${newCvEnabled ? '✅ Włączona' : '❌ Wyłączona'}` });
+                    }
+                    if (newCvEnabled) {
+                        const oldCvChannel = old?.communityVerification?.rejectedChannelId || null;
+                        const newCvChannel = newData.communityVerification?.rejectedChannelId || null;
+                        if (oldCvChannel !== newCvChannel) {
+                            const oldVal = oldCvChannel ? `<#${oldCvChannel}>` : '—';
+                            const newVal = newCvChannel ? `<#${newCvChannel}>` : '—';
+                            diffFields.push({ name: 'Kanał weryfikacji', value: `${oldVal} → ${newVal}` });
+                        }
+                        const oldThreshold = old?.communityVerification?.threshold || 5;
+                        const newThreshold = newData.communityVerification?.threshold || 5;
+                        if (oldThreshold !== newThreshold) {
+                            diffFields.push({ name: 'Próg zgłoszeń', value: `${oldThreshold} → ${newThreshold}` });
+                        }
+                    }
+
+                    if (diffFields.length === 0) return; // nic się nie zmieniło
+                    configEmbed = new EmbedBuilder()
+                        .setColor(0xFEE75C)
+                        .setTitle('⚙️ Zmiana konfiguracji serwera')
+                        .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
+                        .addFields(
+                            { name: 'Serwer', value: interaction.guild.name, inline: true },
+                            { name: 'Administrator', value: interaction.member?.displayName || interaction.user.username, inline: true },
+                            ...diffFields
+                        )
+                        .setTimestamp();
+                }
+
                 const sentViaWebhook = this.logService.sendEmbed(configEmbed);
                 if (!sentViaWebhook) {
                     const reportChannelId = this.config.invalidReportChannelId;

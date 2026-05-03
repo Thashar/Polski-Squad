@@ -465,3 +465,67 @@ Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get
 - **Ranking globalny:** `rankingService.getGlobalRanking()` (merge wszystkich serwerów, best per player)
 - **Role opcjonalne:** Zawsze przekazuj `guildConfig?.topRoles || null` do `roleService.updateTopRoles()`
 - **Migracja:** Automatyczna przy starcie — stary `ranking.json` → `ranking_{guild1Id}.json`
+
+---
+
+## Zasady Tworzenia Logów i Embedów
+
+### ❌ NIGDY nie używaj surowych ID w logach ani embedach
+
+```javascript
+// ŹLE
+logger.info(`Serwer ${guild.id}`);
+logger.info(`Użytkownik ${userId}`);
+logger.info(`Rola ${roleId}`);
+logger.info(`Kanał ${channelId}`);
+embed.addFields({ name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` });
+```
+
+### ✅ Zawsze używaj nazw
+
+```javascript
+// DOBRZE — logger (tekst konsola/webhook)
+logger.info(`Serwer "${guild.name}"`);
+logger.info(`Użytkownik "${member?.displayName || user.username}"`);
+logger.info(`Rola "${guild.roles.cache.get(roleId)?.name || roleId}"`);
+logger.info(`Kanał "${channel?.name || client.channels.cache.get(channelId)?.name || channelId}"`);
+
+// DOBRZE — embed (Discord renderuje wzmianki jako nazwy)
+embed.addFields({ name: 'Serwer', value: guild.name });
+embed.addFields({ name: 'Kanał', value: `<#${channelId}>` });       // renderuje jako #kanał
+embed.addFields({ name: 'Rola', value: `<@&${roleId}>` });          // renderuje jako @Rola
+embed.addFields({ name: 'Użytkownik', value: `<@${userId}>` });     // renderuje jako @Nick
+```
+
+### Wzorce lookup dla samego ID (gdy brak obiektu)
+
+```javascript
+// Nazwa serwera — z guildConfigService (przechowuje guildName)
+const guildName = this.guildConfigService.getConfig(guildId)?.guildName || guildId;
+
+// Nazwa serwera — z cache Discord (gdy jest klient)
+const guildName = client.guilds.cache.get(guildId)?.name || guildId;
+
+// Nazwa kanału — z cache Discord
+const channelName = client.channels.cache.get(channelId)?.name || channelId;
+
+// Nick użytkownika — z obiektu GuildMember
+const nick = member?.displayName || member?.user?.username || userId;
+
+// Nick użytkownika — z interaction
+const nick = interaction.member?.displayName || interaction.user.username;
+
+// Nazwa roli — z cache gildii
+const roleName = guild.roles.cache.get(roleId)?.name || roleId;
+
+// Tag serwera — z config.getAllGuilds() (gdy nie ma klienta Discord)
+const label = this.config.getAllGuilds().find(g => g.id === guildId)?.tag || guildId;
+```
+
+### Embedy administracyjne (cfg_accept, guildCreate, guildDelete)
+
+- **Pierwsza konfiguracja** → pełny embed ze wszystkimi ustawieniami (kolor `0x5865F2`)
+- **Rekonfiguracja** → embed tylko ze zmienionymi polami format `stara wartość → nowa wartość` (kolor `0xFEE75C`)
+- Jeśli nic się nie zmieniło → pomijamy wysyłanie embeda
+- Wysyłaj przez `logService.sendEmbed(embed)` lub `guildLogger.sendEmbed(embed)` — nie przez kanał Discord
+- Fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
