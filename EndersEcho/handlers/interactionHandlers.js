@@ -763,6 +763,8 @@ class InteractionHandler {
             await interaction.update({ embeds: [embed], components: rows });
         } else if (interaction.customId === 'cfg_cv_channel_select') {
             state.communityVerifChannelId = interaction.values[0];
+            state.communityVerifEnabled = true;
+            state.communityVerifDone = true;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -1015,26 +1017,24 @@ class InteractionHandler {
 
         // Krok 8 — weryfikacja społeczności
         if (customId === 'cfg_cv_enable') {
-            state.communityVerifEnabled = true;
             if (!state.communityVerifThreshold) state.communityVerifThreshold = 5;
-            state.communityVerifDone = true;
             this._configWizard.set(key, state);
-            // Pokaż wybór kanału raportów CV
+            // Pokaż wybór kanału raportów CV — enabled/done ustawiane dopiero po wyborze kanału
             const cvEmbed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('📢 Krok 8 — Kanał zgłoszeń społeczności', '📢 Step 8 — Community Report Channel'))
                 .setDescription(t(
-                    'Wybierz kanał, na który będą wysyłane raporty społeczności.\nAdmin zobaczy link do zgłoszonej wiadomości i będzie mógł zatwierdzić lub usunąć rekord.\n\n*(Możesz też pominąć — raporty trafią tylko na globalny kanał head admina)*',
-                    'Select the channel where community reports will be sent.\nAn admin will see a link to the flagged message and be able to approve or remove the record.\n\n*(You can also skip — reports will only go to the global head admin channel)*'
+                    'Wybierz kanał, na który będą wysyłane raporty społeczności.\nAdmin zobaczy link do zgłoszonej wiadomości i będzie mógł zatwierdzić lub usunąć rekord.',
+                    'Select the channel where community reports will be sent.\nAn admin will see a link to the flagged message and be able to approve or remove the record.'
                 ));
             const cvChannelSelect = new ChannelSelectMenuBuilder()
                 .setCustomId('cfg_cv_channel_select')
                 .setPlaceholder(t('Wybierz kanał zgłoszeń...', 'Choose a report channel...'))
                 .setChannelTypes(ChannelType.GuildText);
-            const cvBackBtn = new ButtonBuilder()
+            const cvCancelBtn = new ButtonBuilder()
                 .setCustomId('cfg_step_8')
-                .setLabel(t('⏭️ Pomiń kanał', '⏭️ Skip channel'))
+                .setLabel(t('← Anuluj', '← Cancel'))
                 .setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [cvEmbed], components: [new ActionRowBuilder().addComponents(cvChannelSelect), new ActionRowBuilder().addComponents(cvBackBtn)] });
+            await interaction.update({ embeds: [cvEmbed], components: [new ActionRowBuilder().addComponents(cvChannelSelect), new ActionRowBuilder().addComponents(cvCancelBtn)] });
             return;
         }
         if (customId === 'cfg_cv_disable') {
