@@ -251,6 +251,66 @@ const ACHIEVEMENTS = [
         descPol: 'Aktywuj 10 subskrypcji', descEng: 'Activate 10 subscriptions',
         check: (p, _ctx) => (p.subscriptions || 0) >= 10,
     },
+    {
+        id: 'night_owl', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🌙',
+        namePol: 'Nocna Mara',   nameEng: 'Night Owl',
+        descPol: 'Pobij rekord między północą a 4:00 UTC', descEng: 'Beat a record between midnight and 4:00 UTC',
+        check: (_p, _ctx) => { const h = new Date().getUTCHours(); return h >= 0 && h < 4; },
+    },
+    {
+        id: 'throne_defender', category: 'explorer', rarity: 'rare', hidden: true, icon: '🏰',
+        namePol: 'Obrońca Tronu',   nameEng: 'Throne Defender',
+        descPol: 'Pobij rekord będąc na pozycji #1', descEng: 'Beat a record while holding #1',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.currentPosition === 1,
+    },
+    {
+        id: 'tsunami', category: 'explorer', rarity: 'mythic', hidden: true, icon: '🌊',
+        namePol: 'Tsunami',   nameEng: 'Tsunami',
+        descPol: 'Zwiększ wynik 10× w jednym podejściu', descEng: 'Multiply your score by 10× in one submission',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 10,
+    },
+    {
+        id: 'unlucky_13', category: 'explorer', rarity: 'epic', hidden: true, icon: '💀',
+        namePol: 'Pechowa 13',   nameEng: 'Unlucky 13',
+        descPol: 'Zajmij dokładnie 13. miejsce w rankingu', descEng: 'Rank exactly #13 on the server',
+        check: (_p, ctx) => ctx.currentPosition === 13,
+    },
+    {
+        id: 'lucky_seven', category: 'explorer', rarity: 'rare', hidden: true, icon: '🎰',
+        namePol: 'Siódemka Szczęścia',   nameEng: 'Lucky Seven',
+        descPol: 'Pobij rekord dokładnie 7 razy', descEng: 'Beat your record exactly 7 times',
+        check: (p, _ctx) => (p.recordCount || 0) === 7,
+    },
+    {
+        id: 'same_day', category: 'explorer', rarity: 'rare', hidden: true, icon: '⚡',
+        namePol: 'Niestrudzony',   nameEng: 'Unstoppable',
+        descPol: 'Pobij rekord 2 razy tego samego dnia', descEng: 'Beat your record twice in the same day',
+        check: (p, _ctx) => (p.todayRecordCount || 0) >= 2,
+    },
+    {
+        id: 'same_day_3', category: 'explorer', rarity: 'legendary', hidden: true, icon: '🌪️',
+        namePol: 'Wir Siły',   nameEng: 'Whirlwind',
+        descPol: 'Pobij rekord 3 razy tego samego dnia', descEng: 'Beat your record 3 times in the same day',
+        check: (p, _ctx) => (p.todayRecordCount || 0) >= 3,
+    },
+    {
+        id: 'no_record', category: 'explorer', rarity: 'common', hidden: true, icon: '📸',
+        namePol: 'Dla Historii',   nameEng: 'For the Record',
+        descPol: 'Dodaj screen nie pobijając rekordu', descEng: 'Submit a screenshot without beating your record',
+        check: (p, _ctx) => (p.nonRecordCount || 0) >= 1,
+    },
+    {
+        id: 'cv_approved', category: 'explorer', rarity: 'epic', hidden: true, icon: '🏛️',
+        namePol: 'Oczyszczony',   nameEng: 'Cleared',
+        descPol: 'Twój wynik został zatwierdzony przez admina po zgłoszeniu', descEng: 'Your score was approved by an admin after being reported',
+        check: (p, _ctx) => (p.cvApprovedCount || 0) >= 1,
+    },
+    {
+        id: 'ai_rescued', category: 'explorer', rarity: 'rare', hidden: true, icon: '🤖',
+        namePol: 'Ocalony przez Admina',   nameEng: 'Admin Rescue',
+        descPol: 'Twój wynik przeanalizowany przez admina po odrzuceniu przez AI', descEng: 'Your score was re-analyzed by an admin after AI rejection',
+        check: (p, _ctx) => (p.aiRescuedCount || 0) >= 1,
+    },
 
     // ===== PRESTIŻ (PRESTIGE) =====
     {

@@ -2372,6 +2372,10 @@ class InteractionHandler {
                 } catch {}
             }
 
+            if (!isNewRecord && !dryRun && this.achievementService) {
+                this.achievementService.trackNonRecord(guildId, userId).catch(() => {});
+            }
+
             if (!isNewRecord) {
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -3405,6 +3409,9 @@ class InteractionHandler {
             await this._updateOriginalRecordButton(interaction.client, session, 'approved');
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminApproved.replace('{adminName}', adminName), []);
+            if (this.achievementService) {
+                this.achievementService.trackCvApproved(session.guildId, session.userId).catch(() => {});
+            }
 
         } else if (action === 'remove') {
             await this._cvRemoveRecord(session);
@@ -5112,6 +5119,10 @@ class InteractionHandler {
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
+
+            if (this.achievementService) {
+                this.achievementService.trackAiAnalyzed(targetGuildId, targetUserId).catch(() => {});
+            }
 
             // Aktualizuj role TOP jeśli nowy rekord
             if (isNewRecord) {

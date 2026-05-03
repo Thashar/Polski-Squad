@@ -70,6 +70,14 @@ class AchievementService {
             // Aktualizuj progress przed sprawdzeniem warunków
             p.recordCount = (p.recordCount || 0) + 1;
 
+            // Dzienny licznik rekordów (same_day / same_day_3)
+            const todayStr = new Date().toISOString().slice(0, 10);
+            if (p.todayRecordDate !== todayStr) {
+                p.todayRecordDate = todayStr;
+                p.todayRecordCount = 0;
+            }
+            p.todayRecordCount = (p.todayRecordCount || 0) + 1;
+
             if (ctx.bossName) {
                 const boss = ctx.bossName.trim();
                 if (boss && boss !== 'Nieznany' && boss !== 'Unknown') {
@@ -227,6 +235,60 @@ class AchievementService {
                 } catch {}
             }
 
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    async trackNonRecord(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            const userData = this._ensureUser(data, userId);
+            const p = userData.progress;
+            p.nonRecordCount = (p.nonRecordCount || 0) + 1;
+
+            const nowIso = new Date().toISOString();
+            for (const ach of ACHIEVEMENTS) {
+                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
+                try {
+                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                } catch {}
+            }
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    async trackCvApproved(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            const userData = this._ensureUser(data, userId);
+            const p = userData.progress;
+            p.cvApprovedCount = (p.cvApprovedCount || 0) + 1;
+
+            const nowIso = new Date().toISOString();
+            for (const ach of ACHIEVEMENTS) {
+                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
+                try {
+                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                } catch {}
+            }
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    async trackAiAnalyzed(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            const userData = this._ensureUser(data, userId);
+            const p = userData.progress;
+            p.aiRescuedCount = (p.aiRescuedCount || 0) + 1;
+
+            const nowIso = new Date().toISOString();
+            for (const ach of ACHIEVEMENTS) {
+                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
+                try {
+                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                } catch {}
+            }
             await this.saveData(guildId, data);
         } catch {}
     }
