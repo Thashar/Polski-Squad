@@ -208,13 +208,13 @@ const ACHIEVEMENTS = [
         check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 5,
     },
     {
-        id: 'improve_tiny', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🪶',
+        id: 'improve_tiny', category: 'explorer', rarity: 'epic', hidden: true, icon: '🪶',
         namePol: 'Na Włosku',   nameEng: 'By a Hair',
         descPol: 'Pobij rekord o mniej niż 0,5%', descEng: 'Beat your record by less than 0.5%',
         check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue > ctx.prevScoreValue && ctx.scoreValue < ctx.prevScoreValue * 1.005,
     },
     {
-        id: 'improve_micro', category: 'explorer', rarity: 'rare', hidden: true, icon: '🔬',
+        id: 'improve_micro', category: 'explorer', rarity: 'legendary', hidden: true, icon: '🔬',
         namePol: 'Chirurg',   nameEng: 'Surgeon',
         descPol: 'Pobij rekord o mniej niż 0,1%', descEng: 'Beat your record by less than 0.1%',
         check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue > ctx.prevScoreValue && ctx.scoreValue < ctx.prevScoreValue * 1.001,
