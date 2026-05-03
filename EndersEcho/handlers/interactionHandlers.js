@@ -3167,12 +3167,19 @@ class InteractionHandler {
                 );
             }
 
-            // Usuń przycisk Zgłoś z oryginalnej wiadomości
+            // Zablokuj przycisk Zgłoś na oryginalnej wiadomości (disabled z licznikiem)
             try {
                 const ch = await client.channels.fetch(session.channelId).catch(() => null);
                 if (ch) {
                     const orig = await ch.messages.fetch(messageId).catch(() => null);
-                    if (orig) await orig.edit({ components: [] }).catch(() => {});
+                    if (orig) {
+                        const disabledBtn = new ButtonBuilder()
+                            .setCustomId(`cv_vote_${messageId}`)
+                            .setLabel(`⚠️ Zgłoszono (${session.count})`)
+                            .setStyle(ButtonStyle.Secondary)
+                            .setDisabled(true);
+                        await orig.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] }).catch(() => {});
+                    }
                 }
             } catch {}
 
