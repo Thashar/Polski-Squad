@@ -5815,12 +5815,47 @@ class InteractionHandler {
         }
     }
 
+    async _resolveTesterNames(testers, guild) {
+        const nameMap = new Map();
+        const toFetch = [];
+        for (const te of testers) {
+            if (te.username) {
+                nameMap.set(te.userId, te.username);
+            } else {
+                const cached = guild.members.cache.get(te.userId);
+                if (cached) {
+                    nameMap.set(te.userId, cached.displayName || cached.user.username);
+                } else {
+                    toFetch.push(te.userId);
+                }
+            }
+        }
+        if (toFetch.length > 0) {
+            try {
+                const fetched = await guild.members.fetch({ user: toFetch });
+                for (const [id, member] of fetched) {
+                    nameMap.set(id, member.displayName || member.user.username);
+                }
+            } catch {}
+        }
+        return nameMap;
+    }
+
     async _handlePanelTester(interaction) {
         const t = this._panelT(interaction.guildId);
         const testers = this.testerService ? this.testerService.getTesters() : [];
-        const desc = testers.length > 0
-            ? testers.map((t2, i) => `${i + 1}. <@${t2.userId}>`).join('\n')
-            : t('Brak testerów.', 'No testers.');
+        let desc;
+        if (testers.length > 0) {
+            const nameMap = await this._resolveTesterNames(testers, interaction.guild);
+            desc = testers.map((te, i) => {
+                const name = nameMap.get(te.userId);
+                return name
+                    ? `${i + 1}. **${name}** (<@${te.userId}>)`
+                    : `${i + 1}. <@${te.userId}>`;
+            }).join('\n');
+        } else {
+            desc = t('Brak testerów.', 'No testers.');
+        }
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(t('🧪 Testerzy OCR', '🧪 OCR Testers'))
@@ -5858,12 +5893,18 @@ class InteractionHandler {
             await interaction.reply({ content: t('❌ Nieprawidłowe ID użytkownika.', '❌ Invalid user ID.'), flags: ['Ephemeral'] });
             return;
         }
-        const added = await this.testerService.addTester(userId, interaction.user.id);
+        let username = null;
+        try {
+            const member = await interaction.guild.members.fetch(userId);
+            username = member.displayName || member.user.username || null;
+        } catch {}
+        const added = await this.testerService.addTester(userId, interaction.user.id, username);
         if (!added) {
             await interaction.reply({ content: t(`⚠️ Użytkownik <@${userId}> jest już testerem.`, `⚠️ User <@${userId}> is already a tester.`), flags: ['Ephemeral'] });
             return;
         }
-        await interaction.reply({ content: t(`✅ Dodano <@${userId}> jako testera OCR.`, `✅ Added <@${userId}> as OCR tester.`), flags: ['Ephemeral'] });
+        const displayName = username ? `**${username}** (<@${userId}>)` : `<@${userId}>`;
+        await interaction.reply({ content: t(`✅ Dodano ${displayName} jako testera OCR.`, `✅ Added ${displayName} as OCR tester.`), flags: ['Ephemeral'] });
     }
 
     async _handlePanelTesterRemove(interaction) {
@@ -5878,8 +5919,9 @@ class InteractionHandler {
             });
             return;
         }
+        const nameMap = await this._resolveTesterNames(testers.slice(0, 25), interaction.guild);
         const options = testers.slice(0, 25).map(te => ({
-            label: te.userId,
+            label: (nameMap.get(te.userId) || te.userId).slice(0, 100),
             value: te.userId,
             description: t(`Dodany: ${new Date(te.addedAt).toLocaleDateString('pl-PL')}`, `Added: ${new Date(te.addedAt).toLocaleDateString('en-US')}`),
         }));

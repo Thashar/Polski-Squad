@@ -36,9 +36,9 @@ class TesterService {
         return [...this._testers];
     }
 
-    async addTester(userId, addedBy) {
+    async addTester(userId, addedBy, username = null) {
         if (this.isTester(userId)) return false;
-        this._testers.push({ userId, addedBy, addedAt: new Date().toISOString() });
+        this._testers.push({ userId, username: username || null, addedBy, addedAt: new Date().toISOString() });
         await this._save();
         return true;
     }
