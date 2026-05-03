@@ -143,7 +143,7 @@ class RankingService {
                 guildName,
                 totalScoreValue,
                 totalScore: this.formatScore(totalScoreValue),
-                playerCount: top30.length,
+                playerCount: players.length,
                 topScore: players[0]?.score || '0',
                 topScoreValue: players[0]?.scoreValue || 0
             });
@@ -312,7 +312,7 @@ class RankingService {
                 const unitValue = value / unit.value;
                 return unitValue % 1 === 0 ?
                     `${unitValue}${unit.name}` :
-                    `${unitValue.toFixed(2)}${unit.name}`;
+                    `${parseFloat(unitValue.toFixed(2))}${unit.name}`;
             }
         }
 
@@ -445,7 +445,10 @@ class RankingService {
             .setTitle(title)
             .setDescription(rankingText);
 
-        // Pole statystyk wywołującego (pierwsze)
+        // Pole statystyk ogólnych (pierwsze)
+        embed.addFields({ name: isGlobal ? msgs.rankingStatsGlobal : msgs.rankingStats, value: statsLines.join('\n'), inline: false });
+
+        // Pole statystyk wywołującego (drugie)
         if (callerStats !== null) {
             let callerValue;
             if (!callerStats.score) {
@@ -465,9 +468,6 @@ class RankingService {
             }
             embed.addFields({ name: msgs.rankingYourStats, value: callerValue, inline: false });
         }
-
-        // Pole statystyk ogólnych (drugie)
-        embed.addFields({ name: isGlobal ? msgs.rankingStatsGlobal : msgs.rankingStats, value: statsLines.join('\n'), inline: false });
 
         embed
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
