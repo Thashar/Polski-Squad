@@ -17,7 +17,7 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v1',
+    'extract-data-eng':  'v2',
     'compare-template':  'v3',
 };
 const sharp = require('sharp');
@@ -96,7 +96,7 @@ class AIOCRService {
 
     async _extractData(base64Image, mediaType, telemetryMeta) {
         const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
-1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
+1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników. Jeśli nazwa jest w innym języku niż angielski, przetłumacz ją na angielski. Jeśli nazwa jest własną nazwą własną bez angielskiego odpowiednika, podaj oryginalną nazwę.
 2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
 3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
 WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx
@@ -109,7 +109,7 @@ NIE DODAWAJ cyfr których nie ma na ekranie.
 JEŻELI NIE MA TEKSTU NA EKRANIE ZWRÓĆ ZERO!
 ZAKAZ HALUCYNACJI, ZAKAZ WYMYŚLANIA LICZB!
 Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
-<nazwa bossa>
+<nazwa bossa po angielsku>
 <wynik Best z jednostką>
 <wynik Total z jednostką>`;
 
