@@ -3233,13 +3233,16 @@ class InteractionHandler {
                 }
             }
 
-            // Wyślij na globalny kanał (head admin)
-            if (this.config.invalidReportChannelId) {
+            // Wyślij na globalny kanał zgłoszeń społeczności (head admin)
+            // Pomijamy jeśli to ten sam kanał co per-guild (żeby nie duplikować)
+            const globalCvChannelId = this.config.communityReportChannelId;
+            const skipGlobal = globalCvChannelId && cvCfg?.rejectedChannelId && globalCvChannelId === cvCfg.rejectedChannelId;
+            if (globalCvChannelId && !skipGlobal) {
                 try {
-                    const globalCh = await client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
+                    const globalCh = await client.channels.fetch(globalCvChannelId).catch(() => null);
                     if (globalCh) {
                         const sent = await globalCh.send({ embeds: [reportEmbed], components });
-                        rejectedMsgIds.push(`global:${this.config.invalidReportChannelId}:${sent.id}`);
+                        rejectedMsgIds.push(`global:${globalCvChannelId}:${sent.id}`);
                     }
                 } catch (e) {
                     logger.warn(`⚠️ CV: błąd wysyłania raportu na globalny channel: ${e.message}`);
