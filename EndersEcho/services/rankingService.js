@@ -7,9 +7,10 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { formatMessage } = require('../utils/helpers');
 
 class RankingService {
-    constructor(config, appSync) {
+    constructor(config, appSync, scoreHistoryService = null) {
         this.config = config;
         this.appSync = appSync;
+        this.scoreHistoryService = scoreHistoryService;
         this.activeRankings = new Map();
         this._writeQueues = new Map();
         // Cache odczytów z dysku — TTL 30s, inwalidowany przy saveRanking
@@ -1084,6 +1085,14 @@ class RankingService {
                     bossName: bossName || this.config.messages.unknownBossLabel
                 };
                 await this.saveRanking(guildId, ranking);
+                if (this.scoreHistoryService) {
+                    this.scoreHistoryService.addEntry(guildId, userId, {
+                        score: bestScore,
+                        scoreValue: newScoreValue,
+                        timestamp: new Date().toISOString(),
+                        bossName: bossName || this.config.messages.unknownBossLabel
+                    }).catch(err => logger.error('Błąd zapisu historii wyników:', err));
+                }
                 await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
             }
 

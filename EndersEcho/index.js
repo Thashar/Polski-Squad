@@ -26,6 +26,8 @@ const { UpdateCooldownService } = require('./services/updateCooldownService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const AchievementService = require('./services/achievementService');
 const CommunityVerificationService = require('./services/communityVerificationService');
+const ScoreHistoryService = require('./services/scoreHistoryService');
+const { generateScoreHistoryChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { createAppSync } = require('../utils/appSync');
@@ -73,7 +75,9 @@ const client = new Client({
 
 const ocrService = new OCRService(config);
 const aiOcrService = new AIOCRService(config, llmAdapter);
-const rankingService = new RankingService(config, appSync);
+const scoreHistoryService = new ScoreHistoryService(config.ranking.dataDir);
+const chartService = { generateScoreHistoryChart };
+const rankingService = new RankingService(config, appSync, scoreHistoryService);
 const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService);
@@ -87,7 +91,7 @@ const tokenUsageService = new TokenUsageService(config);
 const updateCooldownService = new UpdateCooldownService(config);
 const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService);
 
 /**
  * Inicjalizuje bota EndersEcho

@@ -109,6 +109,7 @@
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
    - Nazwy serwerów pobierane dynamicznie z `client.guilds.cache`
    - Po kliknięciu serwera → ranking z paginacją (10/strona, 1h timeout) + przyciski rankingów ról (jeśli skonfigurowane)
+   - **Wykres historii rekordów** (`scoreHistoryService` + `chartService`): jeśli wywołujący ma ≥ 2 wpisy w ciągu ostatnich 90 dni → PNG 800×280 dołączony do tej samej wiadomości rankingowej. Oś X: daty rzeczywiste (max 3 miesiące), oś Y: wyniki z jednostkami (K/M/B/T/Q/Qi/Sx), kropki z wynikiem nad każdym. Dane persystowane w `data/score_history_{guildId}.json` — każde pobicie rekordu to nowy wpis.
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
    - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)
@@ -326,13 +327,16 @@
 **Struktura danych:**
 ```
 EndersEcho/data/
-├── ranking_{guildId1}.json   # Ranking serwera 1
-├── ranking_{guildId2}.json   # Ranking serwera 2
-├── notifications.json        # Subskrypcje powiadomień DM
-├── guild_configs.json        # Per-guild konfiguracja
-├── update_cooldowns.json     # Cooldowny /update (userId → expiresAt timestamp ms)
+├── ranking_{guildId1}.json        # Ranking serwera 1 (aktualny rekord per gracz)
+├── ranking_{guildId2}.json        # Ranking serwera 2
+├── score_history_{guildId1}.json  # Historia rekordów serwera 1 (wszystkie pobicia)
+├── score_history_{guildId2}.json  # Historia rekordów serwera 2
+├── notifications.json             # Subskrypcje powiadomień DM
+├── guild_configs.json             # Per-guild konfiguracja
+├── update_cooldowns.json          # Cooldowny /update (userId → expiresAt timestamp ms)
 └── ...
 ```
+Format wpisu historii: `{ score: "304Q", scoreValue: 304e15, timestamp: "ISO", bossName: "..." }`
 
 **Rejestracja komend:** Komendy slash rejestrowane per-serwer przez `registerSlashCommands()` (start) i `registerCommandsForGuild()` (guildCreate / po /configure).
 

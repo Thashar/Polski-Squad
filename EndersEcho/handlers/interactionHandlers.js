@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -63,6 +63,8 @@ class InteractionHandler {
         this.testerService = testerService;
         this.achievementService = achievementService;
         this.communityVerificationService = communityVerificationService || null;
+        this.scoreHistoryService = scoreHistoryService;
+        this.chartService = chartService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -2019,7 +2021,27 @@ class InteractionHandler {
                 userPage, mode: 'server', guildId, guildName: guild?.name || null
             });
 
-            const reply = await interaction.editReply({ embeds: [embed], components: buttons });
+            // Wykres historii rekordów wywołującego (dołączany do tej samej wiadomości)
+            let scoreHistoryAttachment = null;
+            if (this.scoreHistoryService && this.chartService) {
+                try {
+                    const callerHistory = await this.scoreHistoryService.getUserHistory(guildId, interaction.user.id, 90);
+                    if (callerHistory.length >= 2) {
+                        const chartTitle = msgs.chartTitle;
+                        const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle);
+                        if (chartBuffer) {
+                            scoreHistoryAttachment = new AttachmentBuilder(chartBuffer, { name: 'score_history.png' });
+                        }
+                    }
+                } catch (chartErr) {
+                    logger.warn('Błąd generowania wykresu historii wyników:', chartErr);
+                }
+            }
+
+            const replyOptions = { embeds: [embed], components: buttons };
+            if (scoreHistoryAttachment) replyOptions.files = [scoreHistoryAttachment];
+            const reply = await interaction.editReply(replyOptions);
             this.rankingService.addActiveRanking(reply.id, {
                 players, currentPage: 0, totalPages,
                 userId: interaction.user.id, messageId: reply.id,

@@ -28,6 +28,7 @@ const pol = {
     rankingYourServerPos: 'Na serwerze',
     rankingYourGlobalPos: 'Globalnie',
     rankingNotInRanking: 'Nie jesteś jeszcze w rankingu.',
+    chartTitle: '📈 Historia Rekordów',
 
     // Pozycja gracza w rankingu
     rankingPosition: 'Miejsce w rankingu: {pos}',
@@ -327,6 +328,7 @@ const eng = {
     rankingYourServerPos: 'On server',
     rankingYourGlobalPos: 'Global',
     rankingNotInRanking: 'You are not in the ranking yet.',
+    chartTitle: '📈 Score History',
 
     // Player ranking position
     rankingPosition: 'Ranking position: {pos}',
