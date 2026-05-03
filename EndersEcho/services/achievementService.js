@@ -132,6 +132,19 @@ class AchievementService {
     }
 
     /**
+     * Usuwa WSZYSTKIE osiągnięcia i cały progress gracza na danym serwerze.
+     * Wywoływane przez head admina z poziomu /manage → Reset osiągnięć.
+     */
+    async resetAllAchievements(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            if (!data[userId]) return;
+            delete data[userId];
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    /**
      */
     async trackRankingView(guildId, userId) {
         try {
