@@ -275,7 +275,7 @@
 - **Kto może głosować:** tylko gracze obecni w rankingu serwera (`rankingService.loadRanking()` — sprawdzane przy każdym kliknięciu). Autor zgłoszenia jest wykluczony z głosowania na własny wynik
 - **Licznik:** etykieta przycisku aktualizuje się po każdym głosie: `⚠️ Zgłoś (N)`
 - **Próg zgłoszeń:** konfigurowalne 1–25 (domyślnie 5). Po osiągnięciu progu: użytkownik blokowany na **24h** (`userBlockService.blockUser(..., '24h', false)`) + przycisk usuwany z oryginalnej wiadomości + raporty wysyłane na kanały rejected
-- **Raporty:** wysyłane jednocześnie na **per-guild kanał** (`communityVerification.rejectedChannelId`) i **globalny kanał** (`ENDERSECHO_INVALID_REPORT_CHANNEL_ID`). Embed zawiera: nick, serwer, boss, nowy/poprzedni wynik, liczbę zgłoszeń, link do zgłoszonej wiadomości (w polu embeda, nie w przycisku). Footer: `cv:{messageId}|uid:{userId}|gid:{guildId}`
+- **Raporty:** wysyłane jednocześnie na **per-guild kanał** (`communityVerification.rejectedChannelId`) i **globalny kanał** (`ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID`). Jeśli oba kanały mają to samo ID — wysyłana jest tylko jedna wiadomość (brak duplikatu). Embed zawiera: nick, serwer, boss, nowy/poprzedni wynik, liczbę zgłoszeń, link do zgłoszonej wiadomości (w polu embeda, nie w przycisku). Footer: `cv:{messageId}|uid:{userId}|gid:{guildId}`
 - **Przyciski admina w raporcie:**
   - `cv_admin_approve_{messageId}` → **Zatwierdź**: odblokuj użytkownika + zaktualizuj embedy raportów (usuń przyciski, dodaj info o akcji)
   - `cv_admin_remove_{messageId}` → **Usuń rekord i osiągnięcia**: przywróć poprzedni rekord (lub usuń wpis) + cofnij osiągnięcia zdobyte tym rekordem (`achievementService.revertSubmissionAchievements()`) + odblokuj użytkownika
@@ -386,6 +386,11 @@ ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 # Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
 # Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
 ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
+
+# Globalny kanał zgłoszeń społeczności (opcjonalne)
+# Wysyła embed gdy gracz osiągnie próg zgłoszeń weryfikacji społeczności (CV system)
+# Jeśli ten sam ID co per-guild rejectedChannelId → wysyłany tylko jeden raport (bez duplikatu)
+ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID=channel_id
 
 # Użytkownicy uprawnieni do /ocr-on-off (ID rozdzielone przecinkami)
 # Komenda włącza/wyłącza /update i/lub /test per-guild (parametry: action, target, guild z autocomplete)
