@@ -3270,31 +3270,25 @@ class InteractionHandler {
         const adminName = interaction.member?.displayName || interaction.user.username;
 
         if (action === 'approve') {
-            // Odblokuj użytkownika
             if (this.userBlockService) {
                 await this.userBlockService.unblockUser(session.userId, this._isHeadAdmin(interaction.user.id)).catch(() => {});
             }
             await this.communityVerificationService.closeSession(messageId, 'approved');
-
-            // Zaktualizuj wiadomości raportów
+            await this._updateOriginalRecordButton(interaction.client, session, 'approved', msgs);
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminApproved.replace('{adminName}', adminName), []);
 
         } else if (action === 'remove') {
-            // Przywróć poprzedni rekord + cofnij osiągnięcia
             await this._cvRemoveRecord(session);
             await this.communityVerificationService.closeSession(messageId, 'removed');
-
-            // Odblokuj (kara 24h + akcja admina = unlock)
             if (this.userBlockService) {
                 await this.userBlockService.unblockUser(session.userId, true).catch(() => {});
             }
-
+            await this._updateOriginalRecordButton(interaction.client, session, 'removed', msgs);
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminRemoved.replace('{adminName}', adminName), []);
 
         } else if (action === 'block') {
-            // Permanentna blokada + usunięcie rekordu
             if (this.userBlockService) {
                 await this.userBlockService.blockUser(
                     session.userId, 'unknown', session.guildId, 'unknown', '', true
@@ -3302,9 +3296,37 @@ class InteractionHandler {
             }
             await this._cvRemoveRecord(session);
             await this.communityVerificationService.closeSession(messageId, 'blocked');
-
+            await this._updateOriginalRecordButton(interaction.client, session, 'blocked', msgs);
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminBlocked.replace('{adminName}', adminName), []);
+        }
+    }
+
+    async _updateOriginalRecordButton(client, session, action, msgs) {
+        try {
+            const ch = await client.channels.fetch(session.channelId).catch(() => null);
+            if (!ch) return;
+            const msg = await ch.messages.fetch(session.messageId).catch(() => null);
+            if (!msg) return;
+
+            let label, style;
+            if (action === 'approved') {
+                label = msgs.cvBtnStatusApproved;
+                style = ButtonStyle.Success;
+            } else {
+                label = msgs.cvBtnStatusRemoved;
+                style = ButtonStyle.Danger;
+            }
+
+            const doneBtn = new ButtonBuilder()
+                .setCustomId(`cv_done_${session.messageId}`)
+                .setLabel(label)
+                .setStyle(style)
+                .setDisabled(true);
+
+            await msg.edit({ components: [new ActionRowBuilder().addComponents(doneBtn)] }).catch(() => {});
+        } catch (e) {
+            logger.warn(`CV _updateOriginalRecordButton error: ${e.message}`);
         }
     }
 

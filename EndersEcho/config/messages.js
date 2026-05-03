@@ -290,6 +290,8 @@ const pol = {
     cvAdminRemoved: '🗑️ Rekord usunięty przez **{adminName}** — poprzedni wynik przywrócony.',
     cvAdminBlocked: '🔒 Użytkownik zablokowany permanentnie przez **{adminName}** — rekord usunięty.',
     cvUserBlocked: '🔒 Twój wynik zgłoszony przez społeczność. Możliwość przesyłania wyników zablokowana na 24h lub do weryfikacji przez administratora.',
+    cvBtnStatusApproved: '✅ Zatwierdzone przez admina',
+    cvBtnStatusRemoved: '🗑️ Usunięte przez admina',
 };
 
 const eng = {
@@ -584,6 +586,8 @@ const eng = {
     cvAdminRemoved: '🗑️ Record removed by **{adminName}** — previous score restored.',
     cvAdminBlocked: '🔒 User permanently blocked by **{adminName}** — record removed.',
     cvUserBlocked: '🔒 Your score has been reported by the community. Score submission blocked for 24h or until administrator review.',
+    cvBtnStatusApproved: '✅ Approved by admin',
+    cvBtnStatusRemoved: '🗑️ Removed by admin',
 };
 
 module.exports = { pol, eng };
