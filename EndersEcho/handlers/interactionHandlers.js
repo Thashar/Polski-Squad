@@ -1227,6 +1227,8 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
+            const playersBefore = await this.rankingService.getSortedPlayers(targetGuildId).catch(() => []);
+            const playerName = playersBefore.find(p => p.userId === targetUserId)?.username || targetUserId;
             const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, targetGuildId);
             if (!wasRemoved) {
                 const { embed, components } = this._buildAdminPanel(interaction);
@@ -1248,7 +1250,8 @@ class InteractionHandler {
                         await this.achievementService.clearUserAchievements(targetGuildId, targetUserId);
                     }
                 }
-                await this.logService.logMessage('success', `Gracz ${targetUserId} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${targetGuildId}) przez panel admina`, interaction);
+                const guildNameLog = targetGuild?.name || targetGuildId;
+                await this.logService.logMessage('success', `Gracz ${playerName} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${guildNameLog}) przez panel admina`, interaction);
             } catch (roleError) {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
