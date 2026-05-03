@@ -54,6 +54,16 @@ class LogService {
     }
 
     /**
+     * Wysyła embed przez webhook logów EndersEcho.
+     * Zwraca true jeśli webhook skonfigurowany, false gdy brak webhooka.
+     * @param {Object|import('discord.js').EmbedBuilder} embed
+     * @returns {boolean}
+     */
+    sendEmbed(embed) {
+        return this.guildLogger.sendEmbed(embed);
+    }
+
+    /**
      * Ogólny log — bez kontekstu serwera (fallback do base loggera).
      * @param {string} type
      * @param {string} message

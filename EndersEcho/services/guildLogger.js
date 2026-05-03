@@ -48,6 +48,19 @@ class GuildLogger {
         };
     }
 
+    /**
+     * Wysyła embed przez webhook (np. powiadomienia o serwerze).
+     * Zwraca true jeśli webhook jest skonfigurowany, false gdy nie ma gdzie wysłać.
+     * @param {Object|import('discord.js').EmbedBuilder} embed
+     * @returns {boolean}
+     */
+    sendEmbed(embed) {
+        if (!this.webhookUrl) return false;
+        const embedData = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
+        this._enqueue({ embeds: [embedData] });
+        return true;
+    }
+
     _sendTestMessage() {
         const ts = getTimestamp();
         const content = `${SEPARATOR}\n${BOT_EMOJI} **${BOT_NAME}** [${ts}] ✅ GuildLogger online`;
