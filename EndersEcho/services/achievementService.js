@@ -192,11 +192,11 @@ class AchievementService {
      * @param {string} guildId
      * @param {string} userId
      * @param {string} lang - 'pol' | 'eng'
-     * @param {string} tab  - 'unlocked' | 'overview'
-     * @param {number} page - 0-based
-     * @returns {Promise<{ embed: EmbedBuilder, components: ActionRowBuilder[], totalPages: number, currentPage: number }>}
+     * @param {string} view - 'cat' | 'overview'
+     * @param {string|null} category - klucz kategorii (gdy view='cat')
+     * @returns {Promise<{ embed: EmbedBuilder, components: ActionRowBuilder[] }>}
      */
-    async buildAchievementsView(guildId, userId, lang, tab, page) {
+    async buildAchievementsView(guildId, userId, lang, view, category) {
         const isPol = lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
 
@@ -204,55 +204,48 @@ class AchievementService {
         const userData = this._ensureUser(data, userId);
         const { unlocked, progress } = userData;
 
-        let embed, totalPages, currentPage;
-
-        if (tab === 'overview') {
-            ({ embed, totalPages, currentPage } = this._buildOverviewEmbed(unlocked, progress, t, isPol));
+        let embed;
+        if (view === 'overview') {
+            ({ embed } = this._buildOverviewEmbed(unlocked, progress, t, isPol));
         } else {
-            ({ embed, totalPages, currentPage } = this._buildUnlockedEmbed(unlocked, t, isPol, page));
+            const cat = (category && CATEGORY_INFO[category]) ? category : 'score';
+            ({ embed } = this._buildCategoryEmbed(unlocked, cat, t, isPol));
         }
 
-        const components = this._buildComponents(tab, currentPage, totalPages, t);
-        return { embed, components, totalPages, currentPage };
+        const activeKey = view === 'overview' ? 'overview' : ((category && CATEGORY_INFO[category]) ? category : 'score');
+        const components = this._buildComponents(activeKey, isPol, t);
+        return { embed, components };
     }
 
-    _buildUnlockedEmbed(unlocked, t, isPol, page) {
-        const unlockedList = Object.entries(unlocked)
-            .map(([id, info]) => ({ id, unlockedAt: info.unlockedAt }))
-            .sort((a, b) => (b.unlockedAt > a.unlockedAt ? 1 : -1)); // najnowsze pierwsze
+    _buildCategoryEmbed(unlocked, categoryKey, t, isPol) {
+        const catInfo = CATEGORY_INFO[categoryKey];
+        const catAchs = ACHIEVEMENTS.filter(a => a.category === categoryKey);
+        const catLabel = isPol ? catInfo.pol : catInfo.eng;
 
-        const totalPages = Math.max(1, Math.ceil(unlockedList.length / PER_PAGE));
-        const currentPage = Math.max(0, Math.min(page, totalPages - 1));
-        const pageItems = unlockedList.slice(currentPage * PER_PAGE, (currentPage + 1) * PER_PAGE);
+        const lines = catAchs.map(ach => {
+            const isUnlocked = !!unlocked[ach.id];
+            const rarity = RARITY[ach.rarity];
+            const name = isPol ? ach.namePol : ach.nameEng;
+            const desc = isPol ? ach.descPol : ach.descEng;
+            const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
+            if (isUnlocked) {
+                const date = new Date(unlocked[ach.id].unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
+                return `${rarity.emoji} **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
+            }
+            if (catInfo.hidden) return `🔒 **???** *(${rarityLabel})*`;
+            return `🔒 ~~${name}~~ *(${rarityLabel})*\n└ ${desc}`;
+        });
+
+        const unlockedCount = catAchs.filter(a => unlocked[a.id]).length;
+        const total = catInfo.hidden ? '?' : catAchs.length;
 
         const embed = new EmbedBuilder()
             .setColor(0xf1c40f)
-            .setTitle(t('🏆 Twoje Osiągnięcia', '🏆 Your Achievements'))
-            .setFooter({ text: t(
-                `Strona ${currentPage + 1} z ${totalPages} • ${unlockedList.length} odblokowanych`,
-                `Page ${currentPage + 1} of ${totalPages} • ${unlockedList.length} unlocked`
-            ) });
+            .setTitle(catLabel)
+            .setDescription(lines.length > 0 ? lines.join('\n\n') : t('Brak osiągnięć w tej kategorii.', 'No achievements in this category.'))
+            .setFooter({ text: t(`${unlockedCount}/${total} odblokowanych`, `${unlockedCount}/${total} unlocked`) });
 
-        if (pageItems.length === 0) {
-            embed.setDescription(t(
-                '❌ Nie masz jeszcze żadnych osiągnięć. Graj i bądź aktywny!',
-                '❌ No achievements yet. Play and stay active!'
-            ));
-        } else {
-            const lines = pageItems.map(({ id, unlockedAt }) => {
-                const ach = ACHIEVEMENTS.find(a => a.id === id);
-                if (!ach) return null;
-                const rarity = RARITY[ach.rarity];
-                const name = isPol ? ach.namePol : ach.nameEng;
-                const desc = isPol ? ach.descPol : ach.descEng;
-                const date = new Date(unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
-                const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
-                return `${ach.icon} (${rarity.emoji}) **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
-            }).filter(Boolean);
-            embed.setDescription(lines.join('\n\n'));
-        }
-
-        return { embed, totalPages, currentPage };
+        return { embed };
     }
 
     _buildOverviewEmbed(unlocked, progress, t, isPol) {
@@ -267,7 +260,6 @@ class AchievementService {
             const catAchs = ACHIEVEMENTS.filter(a => a.category === catKey);
             const catUnlocked = catAchs.filter(a => unlockedIds.has(a.id)).length;
             const label = isPol ? catLabel.pol : catLabel.eng;
-            // Ukryte kategorie pokazują liczbę odblokowanych, ale total jako "?"
             const total = catLabel.hidden ? '?' : catAchs.length;
             return `${label}: **${catUnlocked}/${total}**`;
         });
@@ -283,36 +275,38 @@ class AchievementService {
                 `${unlockedIds.size} unlocked`
             ) });
 
-        return { embed, totalPages: 1, currentPage: 0 };
+        return { embed };
     }
 
-    _buildComponents(tab, currentPage, totalPages, t) {
-        const isUnlocked = tab === 'unlocked';
+    _buildComponents(activeKey, isPol, t) {
+        const isOverview = activeKey === 'overview';
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`ach_view_unlocked_${currentPage - 1}`)
-                .setLabel('◀')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!isUnlocked || currentPage <= 0),
-            new ButtonBuilder()
-                .setCustomId(`ach_view_unlocked_${currentPage + 1}`)
-                .setLabel('▶')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!isUnlocked || currentPage >= totalPages - 1),
-            new ButtonBuilder()
-                .setCustomId('ach_view_unlocked_0')
-                .setLabel(t('🏆 Odblokowane', '🏆 Unlocked'))
-                .setStyle(isUnlocked ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                .setDisabled(isUnlocked),
-            new ButtonBuilder()
-                .setCustomId('ach_view_overview_0')
-                .setLabel(t('📊 Podsumowanie', '📊 Overview'))
-                .setStyle(!isUnlocked ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                .setDisabled(!isUnlocked),
+        const CATS = [
+            { key: 'score',    pol: '🏆 Wyniki',       eng: '🏆 Scores'    },
+            { key: 'records',  pol: '🔁 Rekordy',      eng: '🔁 Records'   },
+            { key: 'bosses',   pol: '🎯 Łowy',         eng: '🎯 The Hunt'  },
+            { key: 'prestige', pol: '💎 Prestiż',      eng: '💎 Prestige'  },
+            { key: 'explorer', pol: '🕵️ Eksplorator',  eng: '🕵️ Explorer'  },
+        ];
+
+        const catRow = new ActionRowBuilder().addComponents(
+            ...CATS.map(c => new ButtonBuilder()
+                .setCustomId(`ach_cat_${c.key}`)
+                .setLabel(isPol ? c.pol : c.eng)
+                .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(activeKey === c.key)
+            )
         );
 
-        return [row];
+        const overviewRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ach_overview')
+                .setLabel(t('📊 Podsumowanie', '📊 Overview'))
+                .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(isOverview)
+        );
+
+        return [catRow, overviewRow];
     }
 
     /**

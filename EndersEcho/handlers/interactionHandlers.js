@@ -2613,7 +2613,7 @@ class InteractionHandler {
             }
 
             // === Przyciski /achievements ===
-            if (customId.startsWith('ach_view_')) {
+            if (customId.startsWith('ach_cat_') || customId === 'ach_overview') {
                 await this._handleAchievementsButton(interaction, customId);
                 return;
             }
@@ -3275,7 +3275,7 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const { embed, components } = await this.achievementService.buildAchievementsView(
-                guildId, userId, lang, 'unlocked', 0
+                guildId, userId, lang, 'cat', 'score'
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -3285,17 +3285,17 @@ class InteractionHandler {
     }
 
     async _handleAchievementsButton(interaction, customId) {
-        // customId: ach_view_{tab}_{page}  — np. ach_view_unlocked_0
+        // customId: ach_cat_{category} | ach_overview
         await interaction.deferUpdate();
         try {
-            const parts = customId.split('_'); // ['ach', 'view', tab, page]
-            const tab = parts[2] || 'unlocked';
-            const page = parseInt(parts[3], 10) || 0;
+            const isOverview = customId === 'ach_overview';
+            const view = isOverview ? 'overview' : 'cat';
+            const category = isOverview ? null : customId.replace('ach_cat_', '');
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const { embed, components } = await this.achievementService.buildAchievementsView(
-                guildId, userId, lang, tab, page
+                guildId, userId, lang, view, category
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {

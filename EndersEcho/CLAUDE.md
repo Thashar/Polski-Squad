@@ -140,10 +140,10 @@
    - **Reset pełny:** `resetAllAchievements(guildId, userId)` — usuwa cały wpis gracza z pliku (wszystkie kategorie + cały progress); wywoływane ręcznie przez head admina z `/manage` → `🏆 Resetuj osiągnięcia`
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
    - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
-   - **Komenda /achievements:** ephemeral embed z zakładkami: `🏆 Odblokowane` (paginacja po 10) i `📊 Podsumowanie` (per-kategoria + statystyki)
+   - **Komenda /achievements:** ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania. Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po `/achievements`: kategoria `score`.
    - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm` po udanej subskrypcji
    - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`
-   - **CustomIDs:** `ach_view_{tab}_{page}` — tab = `unlocked` | `overview`
+   - **CustomIDs:** `ach_cat_{categoryKey}` (score/records/bosses/prestige/explorer) | `ach_overview`
 
 6. **Panel Admina** — dostępny przez `/manage`:
    - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP + wyczyszczenie wszystkich osiągnięć gracza (`achievementService.clearUserAchievements`). Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
