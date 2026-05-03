@@ -266,19 +266,16 @@ class AchievementService {
         const catAchs = ACHIEVEMENTS.filter(a => a.category === categoryKey);
         const catLabel = isPol ? catInfo.pol : catInfo.eng;
 
-        const lines = catAchs.map(ach => {
-            const isUnlocked = !!unlocked[ach.id];
-            const rarity = RARITY[ach.rarity];
-            const name = isPol ? ach.namePol : ach.nameEng;
-            const desc = isPol ? ach.descPol : ach.descEng;
-            const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
-            if (isUnlocked) {
+        const lines = catAchs
+            .filter(ach => !!unlocked[ach.id])
+            .map(ach => {
+                const rarity = RARITY[ach.rarity];
+                const name = isPol ? ach.namePol : ach.nameEng;
+                const desc = isPol ? ach.descPol : ach.descEng;
+                const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
                 const date = new Date(unlocked[ach.id].unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
                 return `${rarity.emoji} **${name}** *(${rarityLabel})*\n└ ${desc} — ${date}`;
-            }
-            if (catInfo.hidden) return `🔒 **???** *(${rarityLabel})*`;
-            return `🔒 ~~${name}~~ *(${rarityLabel})*\n└ ${desc}`;
-        });
+            });
 
         const unlockedCount = catAchs.filter(a => unlocked[a.id]).length;
         const total = catInfo.hidden ? '?' : catAchs.length;
