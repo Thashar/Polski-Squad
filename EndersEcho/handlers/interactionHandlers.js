@@ -3145,7 +3145,7 @@ class InteractionHandler {
         try {
             const voteBtn = new ButtonBuilder()
                 .setCustomId(`cv_vote_${messageId}`)
-                .setLabel(`${msgs.cvVoteButton} (${count})`)
+                .setLabel(msgs.cvVoteButton)
                 .setStyle(ButtonStyle.Secondary);
             await interaction.update({ components: [new ActionRowBuilder().addComponents(voteBtn)] });
         } catch {
@@ -3175,7 +3175,7 @@ class InteractionHandler {
                     if (orig) {
                         const disabledBtn = new ButtonBuilder()
                             .setCustomId(`cv_vote_${messageId}`)
-                            .setLabel(`⚠️ Zgłoszono (${session.count})`)
+                            .setLabel(`⚠️ Zgłoszono`)
                             .setStyle(ButtonStyle.Secondary)
                             .setDisabled(true);
                         await orig.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] }).catch(() => {});
