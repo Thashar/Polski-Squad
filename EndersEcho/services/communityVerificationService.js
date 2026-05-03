@@ -78,7 +78,8 @@ class CommunityVerificationService {
      * Pobiera sesję po messageId.
      */
     getSession(messageId) {
-        return this._sessions[messageId] || null;
+        const s = this._sessions[messageId];
+        return s ? { messageId, ...s } : null;
     }
 
     /**
