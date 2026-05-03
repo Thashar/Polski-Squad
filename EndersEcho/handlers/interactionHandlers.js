@@ -2398,9 +2398,17 @@ class InteractionHandler {
                 achievementsFieldValue
             );
 
+            // Wykryj duplikat cross-server: wynik nowy dla tego serwera, ale globalnie się nie poprawił
+            const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
+            const _prevGlobalUser = !dryRun ? prevGlobalRanking?.find(p => p.userId === userId) : null;
+            const isCrossServerDuplicate = !dryRun &&
+                _prevGlobalUser &&
+                _prevGlobalUser.scoreValue >= _newScoreValue &&
+                _prevGlobalUser.sourceGuildId !== guildId;
+
             // Pobierz subskrybentów i dodaj liczbę obserwujących do embeda
             let recordSubscribers = [];
-            if (!dryRun) {
+            if (!dryRun && !isCrossServerDuplicate) {
                 try {
                     recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
                     if (recordSubscribers.length > 0) {
@@ -2421,6 +2429,15 @@ class InteractionHandler {
                         files: [imageAttachment]
                     });
                     gl.info('✅ Wysłano ephemeral podgląd nowego rekordu (tryb testowy)');
+                } else if (isCrossServerDuplicate) {
+                    const sourceGuildName = interaction.client.guilds.cache.get(_prevGlobalUser.sourceGuildId)?.name
+                        || _prevGlobalUser.sourceGuildId;
+                    await interaction.editReply({
+                        content: formatMessage(msgs.sameScoreOtherServer, { score: bestScore, guildName: sourceGuildName }),
+                        embeds: [publicEmbed],
+                        files: [imageAttachment]
+                    });
+                    gl.info(`✅ [${userName}] Wysłano ephemeral o duplikacie cross-server (serwer źródłowy: "${sourceGuildName}")`);
                 } else {
                     await interaction.editReply({ content: msgs.newRecordConfirmed });
 
