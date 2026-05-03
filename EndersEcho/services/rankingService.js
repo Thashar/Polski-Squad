@@ -54,7 +54,7 @@ class RankingService {
             if (this.config.guilds[0]?.id === guildId) {
                 const legacy = await this._loadLegacyRanking();
                 if (legacy) {
-                    logger.info(`🔄 Migruję stary ranking.json do ranking_${guildId}.json`);
+                    logger.info(`🔄 Migruję stary ranking.json do ranking_${guildId}.json (serwer "${this.config.guilds[0]?.tag || guildId}")`);
                     await this.saveRanking(guildId, legacy);
                     return legacy;
                 }
@@ -1047,7 +1047,7 @@ class RankingService {
         // Całe read-modify-write w kolejce per-guild — eliminuje race condition przy równoczesnych /update
         return this._enqueue(guildId, async () => {
             if (this.config.ocr.detailedLogging.enabled) {
-                logger.info(`🔍 DEBUG: updateUserRanking - guildId: ${guildId}, userId: ${userId}, bestScore: "${bestScore}"`);
+                logger.info(`🔍 DEBUG: updateUserRanking - serwer: "${this.config.getAllGuilds().find(g => g.id === guildId)?.tag || guildId}", gracz: "${userName}", bestScore: "${bestScore}"`);
             }
 
             const ranking = await this.loadRanking(guildId);
@@ -1152,7 +1152,9 @@ class RankingService {
             await this._enqueue(guild.id, async () => {
                 const ranking = await this.loadRanking(guild.id);
                 if (ranking[userId] && ranking[userId].scoreValue < newScoreValue) {
-                    logger.info(`🗑️ Usunięto gorszy wynik gracza ${userId} z serwera ${guild.id} (pobity przez rekord na ${currentGuildId})`);
+                    const playerName = ranking[userId].username || userId;
+                    const currentGuildTag = this.config.getAllGuilds().find(g => g.id === currentGuildId)?.tag;
+                    logger.info(`🗑️ Usunięto gorszy wynik gracza "${playerName}" z serwera "${guild.tag || guild.id}" (pobity przez rekord na "${currentGuildTag || currentGuildId}")`);
                     delete ranking[userId];
                     await this.saveRanking(guild.id, ranking);
                 }
@@ -1171,9 +1173,11 @@ class RankingService {
             const ranking = await this.loadRanking(guildId);
 
             if (ranking[userId]) {
+                const playerName = ranking[userId].username || userId;
                 delete ranking[userId];
                 await this.saveRanking(guildId, ranking);
-                logger.info(`🗑️ Usunięto gracza ${userId} z rankingu serwera ${guildId}`);
+                const guildTag = this.config.getAllGuilds().find(g => g.id === guildId)?.tag;
+                logger.info(`🗑️ Usunięto gracza "${playerName}" z rankingu serwera "${guildTag || guildId}"`);
                 return true;
             }
 

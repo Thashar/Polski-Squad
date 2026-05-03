@@ -43,7 +43,7 @@ class OcrBlockService {
         const existing = new Set(this._guildConfigService.getOcrBlocked(guildId));
         for (const cmd of commands) existing.add(cmd);
         await this._guildConfigService.setOcrBlocked(guildId, [...existing]);
-        logger.info(`🔒 OCR zablokowano [${commands.join(', ')}] na serwerze ${guildId}`);
+        logger.info(`🔒 OCR zablokowano [${commands.join(', ')}] na serwerze "${this._guildConfigService.getConfig(guildId)?.guildName || guildId}"`);
     }
 
     /**
@@ -55,7 +55,7 @@ class OcrBlockService {
         const existing = new Set(this._guildConfigService.getOcrBlocked(guildId));
         for (const cmd of commands) existing.delete(cmd);
         await this._guildConfigService.setOcrBlocked(guildId, [...existing]);
-        logger.info(`🔓 OCR odblokowano [${commands.join(', ')}] na serwerze ${guildId}`);
+        logger.info(`🔓 OCR odblokowano [${commands.join(', ')}] na serwerze "${this._guildConfigService.getConfig(guildId)?.guildName || guildId}"`);
     }
 }
 

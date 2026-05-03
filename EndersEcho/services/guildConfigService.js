@@ -74,7 +74,7 @@ class GuildConfigService {
                     importedFromEnv: true,
                 };
                 this._guilds.set(envGuild.id, entry);
-                logger.info(`📥 Zaimportowano serwer ${envGuild.id} z .env do guild_configs.json`);
+                logger.info(`📥 Zaimportowano serwer "${envGuild.tag || envGuild.id}" z .env do guild_configs.json`);
                 didImport = true;
             }
         }
