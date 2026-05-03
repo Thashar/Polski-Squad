@@ -312,7 +312,7 @@ class RankingService {
                 const unitValue = value / unit.value;
                 return unitValue % 1 === 0 ?
                     `${unitValue}${unit.name}` :
-                    `${unitValue.toFixed(2)}${unit.name}`;
+                    `${parseFloat(unitValue.toFixed(2))}${unit.name}`;
             }
         }
 
