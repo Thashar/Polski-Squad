@@ -267,6 +267,29 @@ const pol = {
     configureCancelled: '❌ Konfiguracja anulowana. Poprzednie ustawienia pozostają bez zmian.',
     configureTagTooLong: '❌ Tag może mieć maksymalnie 4 znaki.',
     configureTagEmpty: '❌ Tag nie może być pusty.',
+
+    // Weryfikacja społeczności
+    cvVoteButton: '⚠️ Zgłoś',
+    cvVoteAlreadyVoted: '⚠️ Już zgłosiłeś ten wynik.',
+    cvVoteNotInRanking: '⚠️ Możesz głosować tylko jeśli jesteś w rankingu.',
+    cvVoteSelf: '⚠️ Nie możesz zgłosić własnego wyniku.',
+    cvVoteInvalid: '⚠️ Ta sesja głosowania jest nieaktywna.',
+    cvVoteRegistered: '✅ Zgłoszenie zarejestrowane ({count}/{threshold}).',
+    cvReportTitle: '🚨 Zgłoszenie przez społeczność',
+    cvReportFieldUser: 'Użytkownik',
+    cvReportFieldServer: 'Serwer',
+    cvReportFieldScore: 'Nowy wynik',
+    cvReportFieldPrev: 'Poprzedni wynik',
+    cvReportFieldBoss: 'Boss',
+    cvReportFieldVotes: 'Zgłoszeń',
+    cvReportFieldLink: 'Link do wiadomości',
+    cvReportBtnApprove: '✅ Zatwierdź',
+    cvReportBtnRemove: '🗑️ Usuń rekord i osiągnięcia',
+    cvReportBtnBlock: '🔒 Zablokuj permanentnie + usuń rekord',
+    cvAdminApproved: '✅ Zatwierdzone przez **{adminName}** — użytkownik odblokowany.',
+    cvAdminRemoved: '🗑️ Rekord usunięty przez **{adminName}** — poprzedni wynik przywrócony.',
+    cvAdminBlocked: '🔒 Użytkownik zablokowany permanentnie przez **{adminName}** — rekord usunięty.',
+    cvUserBlocked: '🔒 Twój wynik zgłoszony przez społeczność. Możliwość przesyłania wyników zablokowana na 24h lub do weryfikacji przez administratora.',
 };
 
 const eng = {
@@ -538,6 +561,29 @@ const eng = {
     configureCancelled: '❌ Configuration cancelled. Previous settings remain unchanged.',
     configureTagTooLong: '❌ The tag can have a maximum of 4 characters.',
     configureTagEmpty: '❌ The tag cannot be empty.',
+
+    // Community verification
+    cvVoteButton: '⚠️ Report',
+    cvVoteAlreadyVoted: '⚠️ You have already reported this score.',
+    cvVoteNotInRanking: '⚠️ Only players in the ranking can vote.',
+    cvVoteSelf: '⚠️ You cannot report your own score.',
+    cvVoteInvalid: '⚠️ This voting session is no longer active.',
+    cvVoteRegistered: '✅ Report registered ({count}/{threshold}).',
+    cvReportTitle: '🚨 Community Report',
+    cvReportFieldUser: 'User',
+    cvReportFieldServer: 'Server',
+    cvReportFieldScore: 'New Score',
+    cvReportFieldPrev: 'Previous Score',
+    cvReportFieldBoss: 'Boss',
+    cvReportFieldVotes: 'Reports',
+    cvReportFieldLink: 'Message Link',
+    cvReportBtnApprove: '✅ Approve',
+    cvReportBtnRemove: '🗑️ Remove Record & Achievements',
+    cvReportBtnBlock: '🔒 Permanent Ban + Remove Record',
+    cvAdminApproved: '✅ Approved by **{adminName}** — user unblocked.',
+    cvAdminRemoved: '🗑️ Record removed by **{adminName}** — previous score restored.',
+    cvAdminBlocked: '🔒 User permanently blocked by **{adminName}** — record removed.',
+    cvUserBlocked: '🔒 Your score has been reported by the community. Score submission blocked for 24h or until administrator review.',
 };
 
 module.exports = { pol, eng };

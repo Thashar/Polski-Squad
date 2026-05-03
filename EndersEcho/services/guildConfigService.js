@@ -167,6 +167,31 @@ class GuildConfigService {
     }
 
     /**
+     * Zwraca konfigurację weryfikacji społeczności dla serwera.
+     * @param {string} guildId
+     * @returns {{ enabled: boolean, rejectedChannelId: string|null, threshold: number }}
+     */
+    getCommunityVerification(guildId) {
+        const cfg = this._guilds.get(guildId)?.communityVerification;
+        return {
+            enabled: cfg?.enabled === true,
+            rejectedChannelId: cfg?.rejectedChannelId || null,
+            threshold: cfg?.threshold || 5,
+        };
+    }
+
+    /**
+     * Ustawia konfigurację weryfikacji społeczności dla serwera.
+     * @param {string} guildId
+     * @param {{ enabled: boolean, rejectedChannelId: string|null, threshold: number }} data
+     */
+    async setCommunityVerification(guildId, data) {
+        const existing = this._guilds.get(guildId) || {};
+        this._guilds.set(guildId, { ...existing, communityVerification: { ...data } });
+        await this._persist();
+    }
+
+    /**
      * Persystuje stan do pliku JSON (serialized writes)
      */
     async _persist() {
