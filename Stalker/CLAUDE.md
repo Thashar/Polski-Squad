@@ -3,13 +3,16 @@
 **10 Systemów:**
 1. **Kary OCR** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
-   - **AI OCR (opcjonalny):** `aiOcrService.js` - Anthropic API (Claude Vision), analiza wyników graczy przez AI
-     - Włączany przez `USE_STALKER_AI_OCR=true` w .env
-     - Używa tego samego modelu co AI Chat (domyślnie: Claude 3 Haiku)
+   - **AI OCR (opcjonalny):** `aiOcrService.js` - Google Gemini API (Gemini Vision), analiza wyników graczy przez AI
+     - Włączany przez `USE_STALKER_AI_OCR=true` w .env + klucz `STALKER_GOOGLE_AI_API_KEY`
+     - Domyślny model: `gemini-2.5-flash-preview-05-20` (nadpisywalny przez `STALKER_GOOGLE_AI_MODEL`)
      - Prompt: "Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie: <nick> - <wynik>"
      - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
-     - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`
+     - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`, Core Stock (skan ekwipunku)
      - Walidacja wyników: 0–999999 (obsługuje wyniki 5-cyfrowe i wyższe)
+     - Retry 3× z exponential backoff (1s/2s/4s) dla błędów 429/503/500/sieciowych
+     - Weryfikacja wersji promptów przez `PROMPT_VERSIONS` (Langfuse telemetria)
+     - Inicjalizacja przez `llmAdapter` (wspólny wrapper `utils/llmAdapter.js`) + DI z `index.js`
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto); przy częściowym usunięciu → `lifetime_points` zmniejszane o tę samą liczbę. `appSync.punishmentEvent` wysyła `lifetimeDelta` do web API — web app aktualizuje `lifetimePoints` na podstawie tej wartości. Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
@@ -17,7 +20,7 @@
    - Dostępny dla wszystkich członków klanu (targetRoles)
    - Wchodzi do wspólnej kolejki OCR (1-minutowy timeout sesji)
    - Po dostaniu dostępu: użytkownik ma 1 minutę na wysłanie zdjęcia zakładki "Core Stock"
-   - Analiza przez AI (Claude Vision): wyciąga nazwę przedmiotu + pierwszą liczbę przed "/" (ilość "All")
+   - Analiza przez AI (Google Gemini Vision): wyciąga nazwę przedmiotu + pierwszą liczbę przed "/" (ilość "All")
    - Prompt AI: wyciąga JSON `{"Transmute Core": 29, ...}` z ekranu Core Stock
    - Wyniki wyświetlane w ephemeralu ze zdjęciem + przyciski "💾 Zapisz" / "❌ Anuluj"
    - Po zapisie: dane agregowane per userId w `data/equipment_data.json`
@@ -277,9 +280,10 @@ STALKER_LME_VACATION_CHANNEL_ID=channel_id
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 
-# AI OCR (opcjonalne)
+# AI OCR Google Gemini (opcjonalne)
 USE_STALKER_AI_OCR=false
-STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
+STALKER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
+STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 
 # Sync do Polski Squad web API (opcjonalne)
 # Gdy puste — wszystkie wywołania appSync są no-op (bezpieczne w dev).

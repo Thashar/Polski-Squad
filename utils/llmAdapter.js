@@ -53,7 +53,7 @@ class LlmAdapterError extends Error {
     }
 }
 
-function createLlmAdapter({ botSlug, tracerName, logger } = {}) {
+function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
     const log = logger || createBotLogger('LlmAdapter');
     const effectiveTracerName = tracerName || botSlug || DEFAULT_TRACER_NAME;
 
@@ -62,7 +62,8 @@ function createLlmAdapter({ botSlug, tracerName, logger } = {}) {
     function getGemini() {
         if (geminiClient) return geminiClient;
         const { GoogleGenerativeAI } = require('@google/generative-ai');
-        const key = process.env.ENDERSECHO_GOOGLE_AI_API_KEY
+        const key = apiKey
+                 || process.env.ENDERSECHO_GOOGLE_AI_API_KEY
                  || process.env.GOOGLE_AI_API_KEY;
         if (!key) {
             throw new LlmAdapterError('Brak klucza Google Generative AI w env', {

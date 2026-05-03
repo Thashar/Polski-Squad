@@ -1,36 +1,87 @@
-const fs = require('fs').promises;
 const path = require('path');
-const Anthropic = require('@anthropic-ai/sdk');
+const { HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
+
+const SAFETY_SETTINGS_OFF = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
+
+const PROMPT_VERSIONS = {
+    'extract-results':   'v1',
+    'extract-equipment': 'v1',
+};
 
 const logger = createBotLogger('Stalker');
 
 /**
- * AI OCR Service - Analiza zdjęć z wynikami graczy przez Anthropic API
- * Używa Claude Vision do odczytu nicków i wyników z ekranu Survivor.io
+ * AI OCR Service - Analiza zdjęć z wynikami graczy przez Google Gemini API
+ * Używa Gemini Vision do odczytu nicków i wyników z ekranu Survivor.io
  */
 class AIOCRService {
-    constructor(config) {
+    /**
+     * @param {Object} config
+     * @param {{ generate: Function }} llmAdapter — wspólny wrapper z utils/llmAdapter.js
+     */
+    constructor(config, llmAdapter) {
         this.config = config;
+        this.adapter = llmAdapter;
 
-        // Anthropic API
-        this.apiKey = process.env.ANTHROPIC_API_KEY;
-        this.enabled = !!this.apiKey && config.ocr.useAI === true;
+        const apiKey = config.ocr.googleAiApiKey;
+        this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
+        this.modelName = config.ocr.googleAiModel || 'gemini-2.5-flash-preview-05-20';
 
         if (this.enabled) {
-            this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = process.env.STALKER_LME_AI_OCR_MODEL || 'claude-3-haiku-20240307';
-            logger.success(`✅ AI OCR aktywny - model: ${this.model}`);
-        } else if (!this.apiKey) {
-            logger.warn('⚠️ AI OCR wyłączony - brak ANTHROPIC_API_KEY');
+            logger.success(`✅ AI OCR aktywny (Google Gemini) - model: ${this.modelName}`);
+        } else if (!apiKey) {
+            logger.warn('⚠️ AI OCR wyłączony - brak STALKER_GOOGLE_AI_API_KEY');
+        } else if (!llmAdapter) {
+            logger.warn('⚠️ AI OCR wyłączony - brak llmAdapter (DI) w konstruktorze');
         } else {
             logger.info('ℹ️ AI OCR wyłączony - USE_STALKER_AI_OCR=false');
         }
     }
 
     /**
-     * Analizuje zdjęcie z wynikami graczy przez Claude Vision
+     * Wywołanie Gemini przez wspólny adapter z retry.
+     */
+    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3) {
+        let lastError;
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                const result = await this.adapter.generate({
+                    provider: 'gemini',
+                    model:    this.modelName,
+                    parts,
+                    maxOutputTokens,
+                    safetySettings: SAFETY_SETTINGS_OFF,
+                    meta,
+                });
+
+                return {
+                    text:          result.content,
+                    promptTokens:  result.usage.inputTokens,
+                    outputTokens:  result.usage.outputTokens,
+                    thoughtTokens: result.usage.thoughtTokens || 0,
+                };
+            } catch (err) {
+                lastError = err;
+                const status = err.status ?? err.statusCode ?? err.code;
+                const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
+                if (!isRetryable || attempt === retries - 1) throw err;
+                const delay = 1000 * Math.pow(2, attempt);
+                logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+        throw lastError;
+    }
+
+    /**
+     * Analizuje zdjęcie z wynikami graczy przez Gemini Vision
      * @param {string} imagePath - Ścieżka do obrazu
      * @returns {Promise<{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}>}
      */
@@ -42,48 +93,30 @@ class AIOCRService {
         try {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
 
-            // Konwertuj obraz na PNG używając sharp (normalizacja formatu)
-            const pngBuffer = await sharp(imagePath)
-                .png()
-                .toBuffer();
-
+            const pngBuffer = await sharp(imagePath).png().toBuffer();
             const base64Image = pngBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            logger.info(`[AI OCR] Wysyłam zapytanie do Claude Vision...`);
+            logger.info('[AI OCR] Wysyłam zapytanie do Gemini Vision...');
 
-            const extractPrompt = `Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie:
+            const prompt = `Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie:
 <nick nr 1> - <wynik>
-<nick nr 2> - <wynik> itd.`;
+<nick nr 2> - <wynik> itd.
+Jeśli nie możesz odczytać wyników lub zdjęcie nie zawiera wyników graczy, odpowiedz: "Nie wykryto wyników graczy".`;
 
-            const message = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 2000,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: {
-                                type: 'base64',
-                                media_type: mediaType,
-                                data: base64Image
-                            }
-                        },
-                        {
-                            type: 'text',
-                            text: extractPrompt
-                        }
-                    ]
-                }]
+            const res = await this._generateContent([
+                { inlineData: { data: base64Image, mimeType: mediaType } },
+                { text: prompt }
+            ], 2000, {
+                step:          'extract-results',
+                promptName:    'extract-results',
+                promptVersion: PROMPT_VERSIONS['extract-results'],
             });
 
-            const response = message.content[0].text;
-            logger.info(`[AI OCR] Odpowiedź Claude:`);
-            logger.info(response);
+            logger.info(`[AI OCR] Odpowiedź Gemini:`);
+            logger.info(res.text);
 
-            // Parsuj odpowiedź AI
-            const result = this.parseAIResponse(response);
+            const result = this.parseAIResponse(res.text);
             logger.info(`[AI OCR] Wynik parsowania: ${result.players.length} graczy`);
 
             return result;
@@ -95,14 +128,13 @@ class AIOCRService {
     }
 
     /**
-     * Parsuje odpowiedź Claude i wyciąga listę graczy z wynikami
-     * @param {string} responseText - Odpowiedź AI
+     * Parsuje odpowiedź AI i wyciąga listę graczy z wynikami
+     * @param {string} responseText
      * @returns {{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}}
      */
     parseAIResponse(responseText) {
         const lowerResponse = responseText.toLowerCase();
 
-        // Sprawdź czy AI wykrył niepoprawny screen
         const invalidKeywords = [
             'niepoprawny screen',
             'przesłano niepoprawny',
@@ -111,8 +143,13 @@ class AIOCRService {
             'nie wykryto',
             'nie znalazłem',
             'nie można odczytać',
+            'nie mogę odczytać',
             'brak wyników',
-            'brak graczy'
+            'brak graczy',
+            'cannot read',
+            'unable to read',
+            'no results',
+            'no players'
         ];
 
         for (const keyword of invalidKeywords) {
@@ -127,30 +164,25 @@ class AIOCRService {
             }
         }
 
-        // Parsuj linie z wynikami (format: "nick - wynik")
         const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
         const players = [];
 
         for (const line of lines) {
-            // Szukaj wzorca: nick - wynik (może być z przecinkami, spacjami itp.)
             const match = line.match(/^(.+?)\s*[-–—]\s*(.+)$/);
 
             if (match) {
                 let playerName = match[1].trim();
                 let scoreStr = match[2].trim();
 
-                // Usuń prefiks "nick nr X:" jeśli występuje
                 playerName = playerName.replace(/^nick\s+nr\s+\d+[:\s]*/i, '');
-                playerName = playerName.replace(/^\d+[\.\)]\s*/, ''); // Usuń numerację (1. , 2) , 3.)
+                playerName = playerName.replace(/^\d+[\.\)]\s*/, '');
 
-                // Parsuj wynik - usuń spacje, przecinki, kropki
                 scoreStr = scoreStr.replace(/[\s,._]/g, '');
                 const scoreMatch = scoreStr.match(/\d+/);
 
                 if (scoreMatch && playerName.length > 0) {
                     const score = parseInt(scoreMatch[0]);
 
-                    // Walidacja wyniku (rozsądne wartości dla Survivor.io - do 999999)
                     if (score >= 0 && score <= 999999) {
                         players.push({
                             playerName: playerName,
@@ -162,14 +194,12 @@ class AIOCRService {
             }
         }
 
-        // Walidacja
         const isValid = players.length > 0;
 
         if (!isValid) {
-            logger.warn(`[AI OCR] Nie znaleziono żadnych graczy w odpowiedzi AI`);
+            logger.warn('[AI OCR] Nie znaleziono żadnych graczy w odpowiedzi AI');
         }
 
-        // Oblicz confidence (prosta heurystyka)
         let confidence = 0;
         if (players.length > 0) {
             confidence = Math.min(50 + (players.length * 10), 100);
@@ -190,7 +220,7 @@ class AIOCRService {
      */
     async analyzeEquipmentImage(imageBuffer) {
         if (!this.enabled) {
-            throw new Error('AI OCR nie jest włączony - brak ANTHROPIC_API_KEY lub USE_STALKER_AI_OCR=false');
+            throw new Error('AI OCR nie jest włączony - brak STALKER_GOOGLE_AI_API_KEY lub USE_STALKER_AI_OCR=false');
         }
 
         try {
@@ -205,25 +235,18 @@ Return ONLY a JSON object mapping item names to their total quantities, like thi
 {"Transmute Core": 29, "Xeno Pet Core": 75, "Mount Core": 7, "Relic Core": 155, "Resonance Chip": 68, "Survivor Awakening Core": 131}
 If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
 
-            const message = await this.client.messages.create({
-                model: this.model,
-                max_tokens: 500,
-                messages: [{
-                    role: 'user',
-                    content: [
-                        {
-                            type: 'image',
-                            source: { type: 'base64', media_type: 'image/png', data: base64Image }
-                        },
-                        { type: 'text', text: prompt }
-                    ]
-                }]
+            const res = await this._generateContent([
+                { inlineData: { data: base64Image, mimeType: 'image/png' } },
+                { text: prompt }
+            ], 500, {
+                step:          'extract-equipment',
+                promptName:    'extract-equipment',
+                promptVersion: PROMPT_VERSIONS['extract-equipment'],
             });
 
-            const responseText = message.content[0].text.trim();
+            const responseText = res.text.trim();
             logger.info(`[AI OCR - Equipment] Odpowiedź: ${responseText}`);
 
-            // Wyciągnij JSON z odpowiedzi (Claude może dodać tekst przed/po)
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
             if (!jsonMatch) {
                 return { items: {}, isValid: false, error: 'NO_JSON_IN_RESPONSE' };
@@ -235,7 +258,6 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
                 return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
             }
 
-            // Walidacja - wszystkie wartości muszą być liczbami >= 0
             const items = {};
             for (const [name, qty] of Object.entries(parsed)) {
                 const num = Number(qty);
@@ -248,7 +270,6 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
                 return { items: {}, isValid: false, error: 'NO_ITEMS_FOUND' };
             }
 
-            // Walidacja nazw przedmiotów - tylko dozwolone typy corów
             const ALLOWED_ITEMS = new Set([
                 'Transmute Core', 'Xeno Pet Core', 'Mount Core',
                 'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'

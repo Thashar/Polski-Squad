@@ -110,8 +110,10 @@ module.exports = {
     
     // Konfiguracja OCR
     ocr: {
-        // AI OCR (opcjonalne)
+        // AI OCR (opcjonalne) - Google Gemini
         useAI: process.env.USE_STALKER_AI_OCR === 'true',
+        googleAiApiKey: process.env.STALKER_GOOGLE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY || null,
+        googleAiModel: process.env.STALKER_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20',
 
         // Polski alfabet dla OCR whitelist (oryginalny)
         polishAlphabet: 'aąbcćdeęfghijklłmnńoópqrsśtuvwxyzźżAĄBCĆDEĘFGHIJKLŁMNŃOÓPQRSŚTUVWXYZŹŻ0123456789.,;:!?-()[]{}/" ',
