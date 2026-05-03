@@ -11,8 +11,10 @@ class RankingService {
         this.config = config;
         this.appSync = appSync;
         this.activeRankings = new Map();
-        // Kolejka operacji per-guild — zapobiega race condition przy równoczesnych /update
         this._writeQueues = new Map();
+        // Cache odczytów z dysku — TTL 30s, inwalidowany przy saveRanking
+        this._rankingCache = new Map(); // guildId → { data, ts }
+        this._CACHE_TTL = 30_000;
     }
 
     // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
@@ -46,10 +48,16 @@ class RankingService {
      * @returns {Promise<Object>}
      */
     async loadRanking(guildId) {
+        const cached = this._rankingCache.get(guildId);
+        if (cached && Date.now() - cached.ts < this._CACHE_TTL) {
+            return cached.data;
+        }
         const file = this.getRankingFile(guildId);
         try {
             const data = await fs.readFile(file, 'utf8');
-            return JSON.parse(data);
+            const parsed = JSON.parse(data);
+            this._rankingCache.set(guildId, { data: parsed, ts: Date.now() });
+            return parsed;
         } catch (error) {
             if (this.config.guilds[0]?.id === guildId) {
                 const legacy = await this._loadLegacyRanking();
@@ -86,6 +94,7 @@ class RankingService {
             await fs.mkdir(this.config.ranking.dataDir, { recursive: true });
             const file = this.getRankingFile(guildId);
             await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
+            this._rankingCache.set(guildId, { data: ranking, ts: Date.now() });
             await this.saveSharedRanking();
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
