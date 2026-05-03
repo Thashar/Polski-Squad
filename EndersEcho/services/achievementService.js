@@ -132,7 +132,7 @@ class AchievementService {
             userData.progress.lastRecordBeatAt = prevTs;
             await this.saveData(guildId, data);
         } catch (err) {
-            logger.error(`revertSubmissionAchievements error (${userId}@${guildId}): ${err.message}`);
+            logger.error(`revertSubmissionAchievements error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
         }
     }
 

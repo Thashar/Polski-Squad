@@ -84,11 +84,11 @@ class RoleRankingConfigService {
     async getMembersWithRole(guild, roleId, playerUserIds) {
         const cached = this._getCached(guild.id, roleId);
         if (cached) {
-            logger.info(`[RoleRanking] Cache hit: rola ${roleId} na serwerze ${guild.id}`);
+            logger.info(`[RoleRanking] Cache hit: rola "${guild.roles.cache.get(roleId)?.name || roleId}" na serwerze "${guild.name}"`);
             return cached;
         }
 
-        logger.info(`[RoleRanking] Fetchuję ${playerUserIds.length} graczy dla roli ${roleId} na serwerze ${guild.id}...`);
+        logger.info(`[RoleRanking] Fetchuję ${playerUserIds.length} graczy dla roli "${guild.roles.cache.get(roleId)?.name || roleId}" na serwerze "${guild.name}"...`);
 
         const withRole = new Set();
         // Discord pozwala batch do 100 ID w jednym żądaniu — fetche wykonywane równolegle
@@ -116,7 +116,7 @@ class RoleRankingConfigService {
         }
 
         this._setCache(guild.id, roleId, withRole);
-        logger.info(`[RoleRanking] Znaleziono ${withRole.size} graczy z rolą ${roleId}`);
+        logger.info(`[RoleRanking] Znaleziono ${withRole.size} graczy z rolą "${guild.roles.cache.get(roleId)?.name || roleId}"`);
         return withRole;
     }
 }

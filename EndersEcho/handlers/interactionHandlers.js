@@ -176,9 +176,9 @@ class InteractionHandler {
                     Routes.applicationGuildCommands(this.config.clientId, guildId),
                     { body: commands }
                 );
-                logger.info(`✅ Zarejestrowano komendy dla serwera ${guildId} (${cfg.lang || 'eng'})`);
+                logger.info(`✅ Zarejestrowano komendy dla serwera "${client.guilds.cache.get(guildId)?.name || guildId}" (${cfg.lang || 'eng'})`);
             } catch (error) {
-                logger.error(`Błąd rejestracji slash commands dla serwera ${guildId}:`, error);
+                logger.error(`Błąd rejestracji slash commands dla serwera "${client.guilds.cache.get(guildId)?.name || guildId}":`, error);
             }
         }
         if (skipped.length > 0) {
@@ -198,9 +198,9 @@ class InteractionHandler {
                 Routes.applicationGuildCommands(this.config.clientId, guildId),
                 { body: commands }
             );
-            logger.info(`✅ Zarejestrowano komendy dla nowego serwera ${guildId}`);
+            logger.info(`✅ Zarejestrowano komendy dla nowego serwera "${client.guilds.cache.get(guildId)?.name || guildId}"`);
         } catch (error) {
-            logger.error(`Błąd rejestracji komend dla serwera ${guildId}:`, error);
+            logger.error(`Błąd rejestracji komend dla serwera "${client.guilds.cache.get(guildId)?.name || guildId}":`, error);
         }
     }
 
@@ -1149,7 +1149,7 @@ class InteractionHandler {
                         await reportChannel.send({ embeds: [configEmbed] });
                     }
                 } catch (err) {
-                    logger.error(`Błąd wysyłania powiadomienia cfg_accept (guildId=${interaction.guildId}):`, err.message);
+                    logger.error(`Błąd wysyłania powiadomienia cfg_accept (serwer "${interaction.guild?.name || interaction.guildId}"):`, err.message);
                 }
             }
             return;
@@ -1337,7 +1337,7 @@ class InteractionHandler {
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelRemoveSearch (guildId=${guildId}):`, err);
+            logger.error(`Błąd _handlePanelRemoveSearch (serwer "${interaction.guild?.name || guildId}"):`, err);
             await interaction.editReply({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
         }
     }
@@ -1414,7 +1414,7 @@ class InteractionHandler {
                 )]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelRemoveConfirm (targetGuildId=${targetGuildId}, userId=${targetUserId}):`, err);
+            logger.error(`Błąd _handlePanelRemoveConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd usuwania gracza.', '❌ Error removing player.'), embeds: [], components: [] });
         }
     }
@@ -1617,7 +1617,7 @@ class InteractionHandler {
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelBlockSearch (guildId=${interaction.guildId}):`, err);
+            logger.error(`Błąd _handlePanelBlockSearch (serwer "${interaction.guild?.name || interaction.guildId}"):`, err);
             await interaction.editReply({ content: t('❌ Błąd wyszukiwania gracza.', '❌ Error searching for player.'), embeds: [], components: [] });
         }
     }
@@ -1694,7 +1694,7 @@ class InteractionHandler {
                 )]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelBlockModal (userId=${targetUserId}):`, err);
+            logger.error(`Błąd _handlePanelBlockModal (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd blokowania gracza.', '❌ Error blocking player.'), embeds: [], components: [] });
         }
     }
@@ -2000,7 +2000,7 @@ class InteractionHandler {
             }
             return result;
         } catch (err) {
-            logger.warn(`Błąd pobierania pozycji ról dla użytkownika ${userId}: ${err.message}`);
+            logger.warn(`Błąd pobierania pozycji ról dla użytkownika "${guild?.members?.cache?.get(userId)?.displayName || userId}": ${err.message}`);
             return [];
         }
     }
@@ -3250,7 +3250,7 @@ class InteractionHandler {
             }
 
             await this.communityVerificationService.markTriggered(messageId, rejectedMsgIds);
-            logger.info(`🚨 CV: zgłoszenie wysłane dla userId=${session.userId} (${session.count} głosów)`);
+            logger.info(`🚨 CV: zgłoszenie wysłane dla "${targetUser?.username || session.userId}" na serwerze "${sourceGuild?.name || session.guildId}" (${session.count} głosów)`);
         } catch (err) {
             logger.error(`CV _triggerCvReport error: ${err.message}`);
         }
@@ -4481,7 +4481,7 @@ class InteractionHandler {
                 await channel.send({ embeds: [embed] });
                 results.push({ label: guildLabel, id: guildCfg.id, status: 'ok', lang, guildObj });
             } catch (err) {
-                logger.error(`Błąd wysyłania /info do serwera ${guildCfg.id}: ${err.message}`);
+                logger.error(`Błąd wysyłania /info do serwera "${guildLabel}": ${err.message}`);
                 results.push({
                     label: guildLabel, id: guildCfg.id, status: 'error', lang,
                     error: this._mapSendError(err),
@@ -5671,7 +5671,7 @@ class InteractionHandler {
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchResetSearch (guildId=${guildId}):`, err);
+            logger.error(`Błąd _handlePanelAchResetSearch (serwer "${interaction.guild?.name || guildId}"):`, err);
             await interaction.editReply({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
         }
     }
@@ -5721,7 +5721,7 @@ class InteractionHandler {
                 )]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchResetConfirm (targetGuildId=${targetGuildId}, userId=${targetUserId}):`, err);
+            logger.error(`Błąd _handlePanelAchResetConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd resetu osiągnięć.', '❌ Error resetting achievements.'), embeds: [], components: [] });
         }
     }

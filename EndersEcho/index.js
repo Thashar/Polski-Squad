@@ -185,7 +185,7 @@ client.on('guildCreate', async (guild) => {
             .setTimestamp()
         );
     } catch (err) {
-        logger.error(`Błąd przy dodawaniu do serwera ${guild.id}: ${err.message}`);
+        logger.error(`Błąd przy dodawaniu do serwera "${guild.name}": ${err.message}`);
     }
 });
 
@@ -196,7 +196,7 @@ async function sendAdminNotification(discordClient, embed) {
         const channel = await discordClient.channels.fetch(channelId);
         if (channel) await channel.send({ embeds: [embed] });
     } catch (err) {
-        logger.error(`Błąd wysyłania powiadomienia admin (channelId=${channelId}):`, err.message);
+        logger.error(`Błąd wysyłania powiadomienia admin (kanał "${discordClient.channels.cache.get(channelId)?.name || channelId}"):`, err.message);
     }
 }
 
@@ -229,7 +229,7 @@ async function bootstrapGuildSync(guild) {
         try {
             fetched = await guild.members.fetch();
         } catch (err) {
-            logger.warn(`members.fetch() fail (gid=${guild.id}): ${err.message}`);
+            logger.warn(`members.fetch() fail (serwer "${guild.name}"): ${err.message}`);
             return;
         }
 
@@ -251,9 +251,9 @@ async function bootstrapGuildSync(guild) {
                 totalCount += res.count;
             }
         }
-        logger.info(`appSync bootstrap ${guild.name} (${guild.id}): wysłano ${members.length}, API potwierdziło count=${totalCount}`);
+        logger.info(`appSync bootstrap "${guild.name}": wysłano ${members.length}, API potwierdziło count=${totalCount}`);
     } catch (err) {
-        logger.error(`Błąd bootstrap appSync (guildId=${guild.id}): ${err.message}`);
+        logger.error(`Błąd bootstrap appSync (serwer "${guild.name}"): ${err.message}`);
     }
 }
 
@@ -266,7 +266,7 @@ client.on('guildDelete', async (guild) => {
     try {
         await appSync.guildLeft({ guildId: guild.id });
     } catch (err) {
-        logger.error(`Błąd guildLeft (guildId=${guild.id}):`, err);
+        logger.error(`Błąd guildLeft (serwer "${guild.name}"):`, err);
     }
     await sendAdminNotification(client, new EmbedBuilder()
         .setColor(0xED4245)
@@ -285,7 +285,7 @@ client.on('guildMemberAdd', async (member) => {
         if (!payload) return;
         await appSync.memberSeen(payload);
     } catch (err) {
-        logger.error(`Błąd memberSeen add (guildId=${member?.guild?.id}, discordId=${member?.user?.id}):`, err);
+        logger.error(`Błąd memberSeen add (serwer "${member?.guild?.name}", użytkownik "${member?.displayName || member?.user?.username || member?.user?.id}"):`, err);
     }
 });
 
@@ -295,7 +295,7 @@ client.on('guildMemberUpdate', async (_oldMember, newMember) => {
         if (!payload) return;
         await appSync.memberSeen(payload);
     } catch (err) {
-        logger.error(`Błąd memberSeen update (guildId=${newMember?.guild?.id}, discordId=${newMember?.user?.id}):`, err);
+        logger.error(`Błąd memberSeen update (serwer "${newMember?.guild?.name}", użytkownik "${newMember?.displayName || newMember?.user?.username || newMember?.user?.id}"):`, err);
     }
 });
 
