@@ -198,30 +198,56 @@ class ReminderStatusTrackingService {
     async updateUserStatus(userId, roleId, confirmationTimestamp) {
         try {
             const trackingKey = this.getTrackingKey(roleId);
-            const tracking = this.trackingData[trackingKey];
+            let tracking = this.trackingData[trackingKey];
+            let actualTrackingKey = trackingKey;
+
+            // Jeśli nie znaleziono po kluczu z roleId użytkownika (np. moderator z innego klanu),
+            // przeszukaj wszystkie trackings z dziś i znajdź ten który zawiera userId
+            if (!tracking) {
+                const now = new Date();
+                const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+                const dateStr = polandTime.toISOString().split('T')[0];
+
+                for (const [key, data] of Object.entries(this.trackingData)) {
+                    if (!key.endsWith(`_${dateStr}`)) continue;
+                    const foundInKey = data.reminders.some(r => r.users[userId]);
+                    if (foundInKey) {
+                        tracking = data;
+                        actualTrackingKey = key;
+                        logger.info(`[REMINDER-TRACKING] 🔍 Znaleziono tracking po userId: ${key} (zamiast ${trackingKey})`);
+                        break;
+                    }
+                }
+            }
 
             if (!tracking) {
-                logger.warn(`[REMINDER-TRACKING] ⚠️ Brak trackingu dla ${trackingKey}`);
+                logger.warn(`[REMINDER-TRACKING] ⚠️ Brak trackingu dla ${trackingKey} i nie znaleziono po userId ${userId}`);
                 return false;
             }
 
-            // Znajdź ostatni reminder (najnowszy)
-            const latestReminder = tracking.reminders[tracking.reminders.length - 1];
+            // Znajdź reminder zawierający userId (przeszukaj WSZYSTKIE, nie tylko najnowszy)
+            let targetReminder = null;
+            for (const reminder of tracking.reminders) {
+                if (reminder.users[userId]) {
+                    targetReminder = reminder;
+                    // Nie przerywaj - jeśli jest w kilku reminderach, weź ostatni
+                }
+            }
 
-            if (!latestReminder.users[userId]) {
-                logger.warn(`[REMINDER-TRACKING] ⚠️ Użytkownik ${userId} nie jest w najnowszym reminderze`);
+            if (!targetReminder) {
+                logger.warn(`[REMINDER-TRACKING] ⚠️ Użytkownik ${userId} nie jest w żadnym reminderze trackingu ${actualTrackingKey}`);
                 return false;
             }
 
             // Oznacz jako confirmed i zapisz timestamp
-            latestReminder.users[userId].confirmed = true;
-            latestReminder.users[userId].confirmedAt = confirmationTimestamp;
+            targetReminder.users[userId].confirmed = true;
+            targetReminder.users[userId].confirmedAt = confirmationTimestamp;
 
-            logger.info(`[REMINDER-TRACKING] ✅ Zaktualizowano status użytkownika ${userId} w ${trackingKey} (remind ${latestReminder.reminderNumber})`);
+            logger.info(`[REMINDER-TRACKING] ✅ Zaktualizowano status użytkownika ${userId} w ${actualTrackingKey} (remind ${targetReminder.reminderNumber})`);
 
             // Zapisz i aktualizuj embed
             await this.saveTrackingData();
-            await this.updateEmbed(trackingKey);
+            await this.updateEmbed(actualTrackingKey);
 
             return true;
         } catch (error) {
