@@ -254,7 +254,7 @@
 | `panel_block_modal_{userId}_{guildId}` | Modal czasu blokady (pole `block_duration`) |
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
-- 7-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
+- 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Język (pol/eng) — wszystkie komunikaty i opisy komend
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
@@ -262,11 +262,32 @@
 - **Krok 5:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
 - **Krok 6:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
+- **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
+
+**8. Weryfikacja społeczności** — `communityVerificationService.js` + `data/community_votes.json`:
+- **Włączanie:** opcjonalne per-serwer przez `/configure` krok 8 — flaga `communityVerification.enabled` w `guild_configs.json`
+- **Przycisk Zgłoś:** Po opublikowaniu nowego rekordu bot edytuje wiadomość dodając przycisk `⚠️ Zgłoś` (`cv_vote_{messageId}`). Przycisk pojawia się wyłącznie gdy `communityVerification.enabled === true`
+- **Kto może głosować:** tylko gracze obecni w rankingu serwera (`rankingService.loadRanking()` — sprawdzane przy każdym kliknięciu). Autor zgłoszenia jest wykluczony z głosowania na własny wynik
+- **Licznik:** etykieta przycisku aktualizuje się po każdym głosie: `⚠️ Zgłoś (N)`
+- **Próg zgłoszeń:** konfigurowalne 1–25 (domyślnie 5). Po osiągnięciu progu: użytkownik blokowany na **24h** (`userBlockService.blockUser(..., '24h', false)`) + przycisk usuwany z oryginalnej wiadomości + raporty wysyłane na kanały rejected
+- **Raporty:** wysyłane jednocześnie na **per-guild kanał** (`communityVerification.rejectedChannelId`) i **globalny kanał** (`ENDERSECHO_INVALID_REPORT_CHANNEL_ID`). Embed zawiera: nick, serwer, boss, nowy/poprzedni wynik, liczbę zgłoszeń, link do zgłoszonej wiadomości (w polu embeda, nie w przycisku). Footer: `cv:{messageId}|uid:{userId}|gid:{guildId}`
+- **Przyciski admina w raporcie:**
+  - `cv_admin_approve_{messageId}` → **Zatwierdź**: odblokuj użytkownika + zaktualizuj embedy raportów (usuń przyciski, dodaj info o akcji)
+  - `cv_admin_remove_{messageId}` → **Usuń rekord i osiągnięcia**: przywróć poprzedni rekord (lub usuń wpis) + cofnij osiągnięcia zdobyte tym rekordem (`achievementService.revertSubmissionAchievements()`) + odblokuj użytkownika
+  - `cv_admin_block_{messageId}` → **Zablokuj permanentnie + usuń rekord**: permanentna blokada (`blockedByHeadAdmin: true`) + jak "Usuń rekord"
+- **Wygasanie sesji:** przy nowym rekordzie gracza wszystkie jego pending sesje są zamykane (`status: 'expired'`) i przyciski usuwane ze starych wiadomości. Logika w `_runUpdateFlow` przed `createSession()`
+- **Poprzedni rekord:** zapisywany w sesji jako snapshot przed `updateUserRanking()` — używany przez `revertUserRecord()` przy akcji admina
+- **Nowe osiągnięcia:** lista ID z `processSubmission()` zapisywana w sesji — używana przez `revertSubmissionAchievements()` przy usunięciu rekordu
+- **Persistencja:** `data/community_votes.json` (per-bot, nie per-guild); struktura: `{ [messageId]: { guildId, userId, channelId, messageUrl, previousRecord, newRecord, newAchievements, voters[], count, status, rejectedMsgIds[], createdAt } }`
+- **Status sesji:** `pending` → `triggered` → `approved|removed|blocked|expired`
+- **`rejectedMsgIds`:** format `"guild:{channelId}:{msgId}"` lub `"global:{channelId}:{msgId}"` — używane przez `_updateAllCvReportMsgs()` do aktualizacji obu embedów raportów po decyzji admina
+- **Wymagane uprawnienie do akcji admina:** `Administrator` lub Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
+- **CustomIDs:** `cv_vote_{messageId}` | `cv_admin_approve_{messageId}` | `cv_admin_remove_{messageId}` | `cv_admin_block_{messageId}` | `cfg_cv_enable` | `cfg_cv_disable` | `cfg_cv_threshold` | `cfg_cv_channel_select`
 
 **System raportów odrzuconych screenów** (per-guild + global):
 - Raport w języku serwera źródłowego (`config.getMessages(guildId)`) — klucze `reportTitle`, `reportField*`, `reportReason*`

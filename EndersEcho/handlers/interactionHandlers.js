@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -62,6 +62,7 @@ class InteractionHandler {
         this.updateCooldownService = updateCooldownService;
         this.testerService = testerService;
         this.achievementService = achievementService;
+        this.communityVerificationService = communityVerificationService || null;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -328,6 +329,10 @@ class InteractionHandler {
                 await this._handleConfigureRolesModal(interaction);
                 return;
             }
+            if (interaction.customId === 'cfg_cv_threshold_modal') {
+                await this._handleConfigureCvThresholdModal(interaction);
+                return;
+            }
         }
     }
 
@@ -382,6 +387,7 @@ class InteractionHandler {
             5: state.topRoles !== null || state.rolesSkipped,
             6: state.globalTop3Notifications !== null,
             7: state.roleRankingsDone === true,
+            8: state.communityVerifDone === true,
         };
         const allDone = Object.values(done).every(Boolean);
 
@@ -401,6 +407,9 @@ class InteractionHandler {
                 btn(5, '5. Role TOP (opcjonalne)', '5. TOP Roles (optional)'),
                 btn(6, '6. Powiadomienia Global TOP3', '6. Global TOP3 Notifications'),
                 btn(7, '7. Ranking roli (opcjonalne)', '7. Role Rankings (optional)'),
+            ),
+            new ActionRowBuilder().addComponents(
+                btn(8, '8. Weryfikacja społeczności (opcjonalne)', '8. Community Verification (optional)'),
             ),
         ];
 
@@ -430,6 +439,7 @@ class InteractionHandler {
             done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
             done[6] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
             done[7] ? `🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')}` : null,
+            done[8] ? `🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${state.communityVerifEnabled ? t('Włączona (próg: ', 'Enabled (threshold: ') + (state.communityVerifThreshold || 5) + ')' : t('Wyłączona', 'Disabled')}` : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -456,7 +466,8 @@ class InteractionHandler {
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
                         '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
-                        '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n\n' +
+                        '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
+                        '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
                         polOcrLine + '\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.',
                         '📋 **Steps overview:**\n' +
@@ -466,7 +477,8 @@ class InteractionHandler {
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
                         '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
-                        '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n\n' +
+                        '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
+                        '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
                         engOcrLine + '\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.'
                     );
@@ -488,6 +500,7 @@ class InteractionHandler {
         if (!this._configWizard.has(key)) {
             const existing = this.guildConfigService?.getConfig(interaction.guildId);
             if (existing?.configured) {
+                const existingCv = existing.communityVerification || {};
                 this._configWizard.set(key, {
                     allowedChannelId: existing.allowedChannelId || null,
                     invalidReportChannelId: existing.invalidReportChannelId || null,
@@ -499,6 +512,10 @@ class InteractionHandler {
                         ? existing.globalTop3Notifications
                         : true,
                     roleRankingsDone: true,
+                    communityVerifDone: true,
+                    communityVerifEnabled: existingCv.enabled === true,
+                    communityVerifChannelId: existingCv.rejectedChannelId || null,
+                    communityVerifThreshold: existingCv.threshold || 5,
                 });
             } else {
                 this._configWizard.set(key, {
@@ -510,6 +527,10 @@ class InteractionHandler {
                     rolesSkipped: false,
                     globalTop3Notifications: null,
                     roleRankingsDone: false,
+                    communityVerifDone: false,
+                    communityVerifEnabled: false,
+                    communityVerifChannelId: null,
+                    communityVerifThreshold: 5,
                 });
             }
         }
@@ -659,6 +680,46 @@ class InteractionHandler {
                 .setLabel(t('Gotowe / Pomiń', 'Done / Skip'))
                 .setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(addBtn, removeBtn, skipBtn, backBtn)] });
+
+        } else if (step === 8) {
+            const cvCfg = this.guildConfigService?.getCommunityVerification(guildId) || {};
+            const currentThreshold = state.communityVerifThreshold ?? cvCfg.threshold ?? 5;
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🗳️ Krok 8 — Weryfikacja społeczności (opcjonalne)', '🗳️ Step 8 — Community Verification (optional)'))
+                .setDescription(t(
+                    'Gdy ta opcja jest włączona, pod każdym nowym rekordem pojawi się przycisk **⚠️ Zgłoś**.\n\n' +
+                    '**Jak działa:**\n' +
+                    '• Głosować mogą tylko gracze obecni w rankingu tego serwera\n' +
+                    '• Gracz nie może zgłosić własnego wyniku\n' +
+                    '• Po osiągnięciu progu zgłoszeń: użytkownik blokowany na **24h** lub do zatwierdzenia przez admina\n' +
+                    '• Na kanał raportów trafia embed z linkiem do zgłoszonej wiadomości i przyciskami akcji admina\n' +
+                    '• To samo zgłoszenie wysyłane jest na globalny kanał raportów (dla head admina)\n' +
+                    '• Sesja głosowania wygasa gdy gracz pobije rekord ponownie\n\n' +
+                    '**Akcje admina po zgłoszeniu:**\n' +
+                    '✅ **Zatwierdź** — usuwa przyciski z raportu, odblokuje użytkownika\n' +
+                    '🗑️ **Usuń rekord i osiągnięcia** — przywraca poprzedni wynik (lub usuwa wpis) i cofa zdobyte osiągnięcia\n' +
+                    '🔒 **Zablokuj permanentnie + usuń rekord** — permanentna blokada + usunięcie rekordu i osiągnięć',
+                    'When enabled, a **⚠️ Report** button appears under every new record.\n\n' +
+                    '**How it works:**\n' +
+                    '• Only players present in this server\'s ranking can vote\n' +
+                    '• Players cannot report their own scores\n' +
+                    '• When the report threshold is reached: user is blocked for **24h** or until admin review\n' +
+                    '• A report embed with a link to the flagged message and admin action buttons is sent to the report channel\n' +
+                    '• The same report is also sent to the global report channel (for head admins)\n' +
+                    '• The voting session expires when the player submits a new record\n\n' +
+                    '**Admin actions after a report:**\n' +
+                    '✅ **Approve** — removes buttons from the report, unblocks the user\n' +
+                    '🗑️ **Remove Record & Achievements** — restores the previous score (or deletes the entry) and reverts earned achievements\n' +
+                    '🔒 **Permanent Ban + Remove Record** — permanent block + record and achievements removal'
+                ) + '\n\n' + t(
+                    `**Aktualny próg:** ${currentThreshold} zgłoszeń`,
+                    `**Current threshold:** ${currentThreshold} reports`
+                ));
+
+            const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('✅ Włącz', '✅ Enable')).setStyle(ButtonStyle.Success);
+            const disableBtn = new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('❌ Wyłącz / Pomiń', '❌ Disable / Skip')).setStyle(ButtonStyle.Secondary);
+            const thresholdBtn = new ButtonBuilder().setCustomId('cfg_cv_threshold').setLabel(t('🔢 Ustaw próg', '🔢 Set Threshold')).setStyle(ButtonStyle.Primary);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(enableBtn, disableBtn, thresholdBtn, backBtn)] });
         }
     }
 
@@ -694,6 +755,11 @@ class InteractionHandler {
                 return;
             }
             state.invalidReportChannelId = selectedId;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+        } else if (interaction.customId === 'cfg_cv_channel_select') {
+            state.communityVerifChannelId = interaction.values[0];
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -741,6 +807,28 @@ class InteractionHandler {
         this._configWizard.set(key, state);
         const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
         await interaction.update({ embeds: [embed], components: rows });
+    }
+
+    async _handleConfigureCvThresholdModal(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.reply({ content: '⚠️ Session expired.', flags: ['Ephemeral'] }); return; }
+
+        const isPol = state.lang === 'pol';
+        const raw = interaction.fields.getTextInputValue('cfg_cv_threshold_input').trim();
+        const val = parseInt(raw, 10);
+        if (!val || val < 1 || val > 25) {
+            await interaction.reply({
+                content: isPol
+                    ? '❌ Próg musi być liczbą od 1 do 25.'
+                    : '❌ Threshold must be a number between 1 and 25.',
+                flags: ['Ephemeral']
+            });
+            return;
+        }
+        state.communityVerifThreshold = val;
+        this._configWizard.set(key, state);
+        await this._showConfigureStep(interaction, 8);
     }
 
     async _handleConfigureButton(interaction, customId) {
@@ -922,6 +1010,52 @@ class InteractionHandler {
             return;
         }
 
+        // Krok 8 — weryfikacja społeczności
+        if (customId === 'cfg_cv_enable') {
+            state.communityVerifEnabled = true;
+            if (!state.communityVerifThreshold) state.communityVerifThreshold = 5;
+            if (!state.communityVerifDone) state.communityVerifChannelRequired = true;
+            state.communityVerifDone = true;
+            this._configWizard.set(key, state);
+            // Pokaż wybór kanału raportów CV
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('📢 Krok 8 — Kanał zgłoszeń społeczności', '📢 Step 8 — Community Report Channel'))
+                .setDescription(t(
+                    'Wybierz kanał, na który będą wysyłane raporty społeczności.\nAdmin zobaczy link do zgłoszonej wiadomości i będzie mógł zatwierdzić lub usunąć rekord.',
+                    'Select the channel where community reports will be sent.\nAn admin will see a link to the flagged message and be able to approve or remove the record.'
+                ));
+            const channelSelect = new ChannelSelectMenuBuilder()
+                .setCustomId('cfg_cv_channel_select')
+                .setPlaceholder(t('Wybierz kanał zgłoszeń...', 'Choose a report channel...'))
+                .setChannelTypes(ChannelType.GuildText);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
+            return;
+        }
+        if (customId === 'cfg_cv_disable') {
+            state.communityVerifEnabled = false;
+            state.communityVerifDone = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+        if (customId === 'cfg_cv_threshold') {
+            const modal = new ModalBuilder()
+                .setCustomId('cfg_cv_threshold_modal')
+                .setTitle(t('🔢 Próg zgłoszeń', '🔢 Report Threshold'))
+                .addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('cfg_cv_threshold_input')
+                        .setLabel(t('Ile zgłoszeń wyzwala raport? (1–25)', 'How many reports trigger a report? (1–25)'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setPlaceholder('5')
+                        .setValue(String(state.communityVerifThreshold || 5))
+                ));
+            await interaction.showModal(modal);
+            return;
+        }
+
         // Anuluj konfigurację
         if (customId === 'cfg_cancel') {
             this._configWizard.delete(key);
@@ -954,6 +1088,11 @@ class InteractionHandler {
                 tag: state.tag || null,
                 topRoles: state.topRoles || null,
                 globalTop3Notifications: state.globalTop3Notifications !== false,
+                communityVerification: state.communityVerifEnabled ? {
+                    enabled: true,
+                    rejectedChannelId: state.communityVerifChannelId || null,
+                    threshold: state.communityVerifThreshold || 5,
+                } : { enabled: false, rejectedChannelId: null, threshold: 5 },
             };
             // Nowy serwer domyślnie ma zablokowane OCR komendy
             if (!wasAlreadyConfigured) {
@@ -2065,6 +2204,9 @@ class InteractionHandler {
 
             const prevGlobalRanking = dryRun ? null : await this.rankingService.getGlobalRanking();
 
+            // Zapamiętaj poprzedni rekord przed nadpisaniem (potrzebne do community verification)
+            const previousRecordSnapshot = dryRun ? null : await this.rankingService.getUserRecord(guildId, userId);
+
             let isNewRecord;
             let currentScore;
             if (dryRun) {
@@ -2204,10 +2346,56 @@ class InteractionHandler {
                 } else {
                     await interaction.editReply({ content: msgs.newRecordConfirmed });
 
-                    await interaction.followUp({
+                    // Sprawdź czy community verification włączona
+                    const cvCfg = this.guildConfigService?.getCommunityVerification(guildId);
+                    const cvEnabled = cvCfg?.enabled === true && this.communityVerificationService;
+
+                    // Wyślij publiczny embed (bez przycisku na starcie — ID wiadomości nieznane przed wysłaniem)
+                    const publicMsg = await interaction.followUp({
                         embeds: [publicEmbed],
-                        files: [imageAttachment]
+                        files: [imageAttachment],
                     });
+
+                    // Jeśli CV włączone — teraz znamy ID wiadomości, dodaj przycisk i utwórz sesję
+                    if (cvEnabled && publicMsg) {
+                        try {
+                            // Wygaś stare pending sesje tego gracza i usuń przyciski ze starych wiadomości
+                            const expired = await this.communityVerificationService.expireUserSessions(userId, guildId);
+                            for (const oldMsgId of expired) {
+                                try {
+                                    const oldSession = this.communityVerificationService.getSession(oldMsgId);
+                                    if (oldSession) {
+                                        const ch = await interaction.client.channels.fetch(oldSession.channelId).catch(() => null);
+                                        if (ch) {
+                                            const oldMsg = await ch.messages.fetch(oldMsgId).catch(() => null);
+                                            if (oldMsg) await oldMsg.edit({ components: [] }).catch(() => {});
+                                        }
+                                    }
+                                } catch {}
+                            }
+
+                            // Dodaj przycisk Zgłoś z prawidłowym ID wiadomości
+                            const voteBtn = new ButtonBuilder()
+                                .setCustomId(`cv_vote_${publicMsg.id}`)
+                                .setLabel(msgs.cvVoteButton)
+                                .setStyle(ButtonStyle.Secondary);
+                            await publicMsg.edit({ components: [new ActionRowBuilder().addComponents(voteBtn)] }).catch(() => {});
+
+                            const msgUrl = `https://discord.com/channels/${guildId}/${publicMsg.channelId}/${publicMsg.id}`;
+                            await this.communityVerificationService.createSession({
+                                guildId,
+                                userId,
+                                messageId: publicMsg.id,
+                                channelId: publicMsg.channelId,
+                                messageUrl: msgUrl,
+                                previousRecord: previousRecordSnapshot,
+                                newRecord: { score: bestScore, bossName, timestamp: new Date().toISOString() },
+                                newAchievements,
+                            });
+                        } catch (cvErr) {
+                            gl.warn(`⚠️ community verification session error: ${cvErr.message}`);
+                        }
+                    }
 
                     gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
                 }
@@ -2479,8 +2667,19 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction
      */
     async handleButtonInteraction(interaction) {
+        const customId = interaction.customId;
+
+        // === Community Verification — poza głównym try (własne error handling) ===
+        if (customId.startsWith('cv_vote_')) {
+            await this._handleCvVote(interaction);
+            return;
+        }
+        if (customId.startsWith('cv_admin_')) {
+            await this._handleCvAdmin(interaction);
+            return;
+        }
+
         try {
-            const customId = interaction.customId;
 
             // === Przyciski raportów odrzuconych screenów ===
             if (customId.startsWith('ee_approve_')) {
@@ -2882,6 +3081,287 @@ class InteractionHandler {
             } else if (interaction.deferred) {
                 await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
             }
+        }
+    }
+
+    // =====================================================================
+    // Community Verification — obsługa głosowania i akcji admina
+    // =====================================================================
+
+    async _handleCvVote(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        if (!this.communityVerificationService) {
+            await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const messageId = interaction.customId.replace('cv_vote_', '');
+        const session = this.communityVerificationService.getSession(messageId);
+
+        if (!session || session.status !== 'pending') {
+            await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const voterId = interaction.user.id;
+
+        if (session.userId === voterId) {
+            await interaction.reply({ content: msgs.cvVoteSelf, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Sprawdź czy głosujący jest w rankingu
+        const inRanking = await this.communityVerificationService.isVoterInRanking(
+            this.rankingService, session.guildId, voterId
+        );
+        if (!inRanking) {
+            await interaction.reply({ content: msgs.cvVoteNotInRanking, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const result = await this.communityVerificationService.registerVote(messageId, voterId);
+
+        if (result.invalid) {
+            await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
+            return;
+        }
+        if (result.alreadyVoted) {
+            await interaction.reply({ content: msgs.cvVoteAlreadyVoted, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const cvCfg = this.guildConfigService?.getCommunityVerification(session.guildId);
+        const threshold = cvCfg?.threshold || 5;
+        const count = result.count;
+
+        // Zaktualizuj etykietę przycisku na wiadomości
+        try {
+            const voteBtn = new ButtonBuilder()
+                .setCustomId(`cv_vote_${messageId}`)
+                .setLabel(`${msgs.cvVoteButton} (${count})`)
+                .setStyle(ButtonStyle.Secondary);
+            await interaction.update({ components: [new ActionRowBuilder().addComponents(voteBtn)] });
+        } catch {
+            await interaction.reply({ content: msgs.cvVoteRegistered.replace('{count}', count).replace('{threshold}', threshold), flags: ['Ephemeral'] }).catch(() => {});
+        }
+
+        // Sprawdź czy próg osiągnięty
+        if (count >= threshold) {
+            await this._triggerCvReport(interaction.client, session, messageId);
+        }
+    }
+
+    async _triggerCvReport(client, session, messageId) {
+        try {
+            // Zablokuj użytkownika na 24h
+            if (this.userBlockService) {
+                await this.userBlockService.blockUser(
+                    session.userId, 'unknown', session.guildId, 'unknown', '24h', false
+                );
+            }
+
+            // Usuń przycisk Zgłoś z oryginalnej wiadomości
+            try {
+                const ch = await client.channels.fetch(session.channelId).catch(() => null);
+                if (ch) {
+                    const orig = await ch.messages.fetch(messageId).catch(() => null);
+                    if (orig) await orig.edit({ components: [] }).catch(() => {});
+                }
+            } catch {}
+
+            // Zbuduj embed raportu (jeden dla obu kanałów)
+            const sourceGuild = client.guilds.cache.get(session.guildId);
+            const targetUser = await client.users.fetch(session.userId).catch(() => null);
+            const msgs = this.config.getMessages(session.guildId);
+
+            const reportEmbed = new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle(msgs.cvReportTitle)
+                .addFields(
+                    { name: msgs.cvReportFieldUser, value: targetUser ? `<@${session.userId}> (${targetUser.username})` : `<@${session.userId}>`, inline: true },
+                    { name: msgs.cvReportFieldServer, value: sourceGuild?.name || session.guildId, inline: true },
+                    { name: msgs.cvReportFieldBoss, value: session.newRecord?.bossName || '—', inline: true },
+                    { name: msgs.cvReportFieldScore, value: session.newRecord?.score || '—', inline: true },
+                    { name: msgs.cvReportFieldPrev, value: session.previousRecord?.score || '—', inline: true },
+                    { name: msgs.cvReportFieldVotes, value: String(session.count), inline: true },
+                    { name: msgs.cvReportFieldLink, value: session.messageUrl || '—', inline: false },
+                )
+                .setTimestamp()
+                .setFooter({ text: `cv:${messageId}|uid:${session.userId}|gid:${session.guildId}` });
+
+            const approveBtn = new ButtonBuilder()
+                .setCustomId(`cv_admin_approve_${messageId}`)
+                .setLabel(msgs.cvReportBtnApprove)
+                .setStyle(ButtonStyle.Success);
+            const removeBtn = new ButtonBuilder()
+                .setCustomId(`cv_admin_remove_${messageId}`)
+                .setLabel(msgs.cvReportBtnRemove)
+                .setStyle(ButtonStyle.Danger);
+            const blockBtn = new ButtonBuilder()
+                .setCustomId(`cv_admin_block_${messageId}`)
+                .setLabel(msgs.cvReportBtnBlock)
+                .setStyle(ButtonStyle.Danger);
+            const components = [new ActionRowBuilder().addComponents(approveBtn, removeBtn, blockBtn)];
+
+            const rejectedMsgIds = [];
+
+            // Wyślij na per-guild kanał
+            const cvCfg = this.guildConfigService?.getCommunityVerification(session.guildId);
+            if (cvCfg?.rejectedChannelId) {
+                try {
+                    const guildCh = await client.channels.fetch(cvCfg.rejectedChannelId).catch(() => null);
+                    if (guildCh) {
+                        const sent = await guildCh.send({ embeds: [reportEmbed], components });
+                        rejectedMsgIds.push(`guild:${cvCfg.rejectedChannelId}:${sent.id}`);
+                    }
+                } catch (e) {
+                    logger.warn(`⚠️ CV: błąd wysyłania raportu na per-guild channel: ${e.message}`);
+                }
+            }
+
+            // Wyślij na globalny kanał (head admin)
+            if (this.config.invalidReportChannelId) {
+                try {
+                    const globalCh = await client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
+                    if (globalCh) {
+                        const sent = await globalCh.send({ embeds: [reportEmbed], components });
+                        rejectedMsgIds.push(`global:${this.config.invalidReportChannelId}:${sent.id}`);
+                    }
+                } catch (e) {
+                    logger.warn(`⚠️ CV: błąd wysyłania raportu na globalny channel: ${e.message}`);
+                }
+            }
+
+            await this.communityVerificationService.markTriggered(messageId, rejectedMsgIds);
+            logger.info(`🚨 CV: zgłoszenie wysłane dla userId=${session.userId} (${session.count} głosów)`);
+        } catch (err) {
+            logger.error(`CV _triggerCvReport error: ${err.message}`);
+        }
+    }
+
+    async _handleCvAdmin(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        if (!interaction.member.permissions.has('Administrator') && !this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        if (!this.communityVerificationService) {
+            await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // cv_admin_{action}_{messageId}
+        const withoutPrefix = interaction.customId.replace('cv_admin_', '');
+        const firstUnderscore = withoutPrefix.indexOf('_');
+        const action = withoutPrefix.substring(0, firstUnderscore);
+        const messageId = withoutPrefix.substring(firstUnderscore + 1);
+
+        const session = this.communityVerificationService.getSession(messageId);
+        if (!session || (session.status !== 'triggered' && session.status !== 'pending')) {
+            await interaction.deferUpdate().catch(() => {});
+            await interaction.editReply({ embeds: interaction.message.embeds, components: [] }).catch(() => {});
+            return;
+        }
+
+        await interaction.deferUpdate();
+        const adminName = interaction.member?.displayName || interaction.user.username;
+
+        if (action === 'approve') {
+            if (this.userBlockService) {
+                await this.userBlockService.unblockUser(session.userId, this._isHeadAdmin(interaction.user.id)).catch(() => {});
+            }
+            await this.communityVerificationService.closeSession(messageId, 'approved');
+            await this._updateOriginalRecordButton(interaction.client, session, 'approved');
+            await this._updateAllCvReportMsgs(interaction.client, session,
+                msgs.cvAdminApproved.replace('{adminName}', adminName), []);
+
+        } else if (action === 'remove') {
+            await this._cvRemoveRecord(session);
+            await this.communityVerificationService.closeSession(messageId, 'removed');
+            if (this.userBlockService) {
+                await this.userBlockService.unblockUser(session.userId, true).catch(() => {});
+            }
+            await this._updateOriginalRecordButton(interaction.client, session, 'removed');
+            await this._updateAllCvReportMsgs(interaction.client, session,
+                msgs.cvAdminRemoved.replace('{adminName}', adminName), []);
+
+        } else if (action === 'block') {
+            if (this.userBlockService) {
+                await this.userBlockService.blockUser(
+                    session.userId, 'unknown', session.guildId, 'unknown', '', true
+                );
+            }
+            await this._cvRemoveRecord(session);
+            await this.communityVerificationService.closeSession(messageId, 'blocked');
+            await this._updateOriginalRecordButton(interaction.client, session, 'blocked');
+            await this._updateAllCvReportMsgs(interaction.client, session,
+                msgs.cvAdminBlocked.replace('{adminName}', adminName), []);
+        }
+    }
+
+    async _updateOriginalRecordButton(client, session, action) {
+        try {
+            const ch = await client.channels.fetch(session.channelId).catch(() => null);
+            if (!ch) return;
+            const msg = await ch.messages.fetch(session.messageId).catch(() => null);
+            if (!msg) return;
+
+            const sourceMsgs = this.config.getMessages(session.guildId);
+            let label, style;
+            if (action === 'approved') {
+                label = sourceMsgs.cvBtnStatusApproved;
+                style = ButtonStyle.Success;
+            } else {
+                label = sourceMsgs.cvBtnStatusRemoved;
+                style = ButtonStyle.Danger;
+            }
+
+            const doneBtn = new ButtonBuilder()
+                .setCustomId(`cv_done_${session.messageId}`)
+                .setLabel(label)
+                .setStyle(style)
+                .setDisabled(true);
+
+            await msg.edit({ components: [new ActionRowBuilder().addComponents(doneBtn)] }).catch(() => {});
+        } catch (e) {
+            logger.warn(`CV _updateOriginalRecordButton error: ${e.message}`);
+        }
+    }
+
+    async _cvRemoveRecord(session) {
+        try {
+            await this.rankingService.revertUserRecord(
+                session.guildId, session.userId, session.previousRecord
+            );
+        } catch (e) {
+            logger.error(`CV _cvRemoveRecord revert ranking error: ${e.message}`);
+        }
+        try {
+            if (this.achievementService && session.newAchievements?.length > 0) {
+                await this.achievementService.revertSubmissionAchievements(
+                    session.guildId, session.userId, session.newAchievements, session.previousRecord
+                );
+            }
+        } catch (e) {
+            logger.error(`CV _cvRemoveRecord revert achievements error: ${e.message}`);
+        }
+    }
+
+    async _updateAllCvReportMsgs(client, session, statusText, newComponents) {
+        for (const ref of (session.rejectedMsgIds || [])) {
+            try {
+                // format: "guild:{channelId}:{msgId}" lub "global:{channelId}:{msgId}"
+                const parts = ref.split(':');
+                const channelId = parts[1];
+                const msgId = parts[2];
+                const ch = await client.channels.fetch(channelId).catch(() => null);
+                if (!ch) continue;
+                const msg = await ch.messages.fetch(msgId).catch(() => null);
+                if (!msg) continue;
+                const updatedEmbed = EmbedBuilder.from(msg.embeds[0])
+                    .addFields({ name: '─', value: statusText, inline: false });
+                await msg.edit({ embeds: [updatedEmbed], components: newComponents }).catch(() => {});
+            } catch {}
         }
     }
 

@@ -1083,6 +1083,36 @@ class RankingService {
     }
 
     /**
+     * Zwraca aktualny rekord gracza lub null.
+     * @param {string} guildId
+     * @param {string} userId
+     * @returns {Promise<Object|null>}
+     */
+    async getUserRecord(guildId, userId) {
+        const ranking = await this.loadRanking(guildId);
+        return ranking[userId] || null;
+    }
+
+    /**
+     * Przywraca poprzedni rekord gracza (lub usuwa wpis gdy previousRecord=null).
+     * Używane przez community verification po decyzji admina.
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {Object|null} previousRecord
+     */
+    async revertUserRecord(guildId, userId, previousRecord) {
+        return this._enqueue(guildId, async () => {
+            const ranking = await this.loadRanking(guildId);
+            if (previousRecord) {
+                ranking[userId] = { ...previousRecord };
+            } else {
+                delete ranking[userId];
+            }
+            await this.saveRanking(guildId, ranking);
+        });
+    }
+
+    /**
      * Pobiera posortowanych graczy dla danego serwera
      * @param {string} guildId
      * @returns {Promise<Array>}

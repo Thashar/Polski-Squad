@@ -110,6 +110,33 @@ class AchievementService {
     }
 
     /**
+     * Cofa konkretne osiągnięcia zdobyte przy danym submission (community verification).
+     * Usuwa podane achievementIds z unlocked, dekrementuje recordCount o 1,
+     * przywraca lastRecordAt i lastRecordBeatAt do wartości z poprzedniego rekordu.
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {string[]} achievementIds - ID osiągnięć zdobytych tym rekordem
+     * @param {Object|null} previousRecord - poprzedni rekord ({ timestamp } lub null)
+     */
+    async revertSubmissionAchievements(guildId, userId, achievementIds, previousRecord) {
+        try {
+            const data = await this.loadData(guildId);
+            if (!data[userId]) return;
+            const userData = data[userId];
+            for (const id of achievementIds) {
+                delete userData.unlocked[id];
+            }
+            userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 1) - 1);
+            const prevTs = previousRecord?.timestamp || null;
+            userData.progress.lastRecordAt = prevTs;
+            userData.progress.lastRecordBeatAt = prevTs;
+            await this.saveData(guildId, data);
+        } catch (err) {
+            logger.error(`revertSubmissionAchievements error (${userId}@${guildId}): ${err.message}`);
+        }
+    }
+
+    /**
      * Usuwa osiągnięcia powiązane z wynikiem i pobijaniem rekordów (kategorie 'score' i 'records')
      * oraz resetuje powiązane pola progress. Wywoływane przy usunięciu gracza z rankingu przez admina.
      */
