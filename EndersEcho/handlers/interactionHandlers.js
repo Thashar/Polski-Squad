@@ -303,12 +303,12 @@ class InteractionHandler {
                 await this._handlePanelBlockSearch(interaction);
                 return;
             }
-            if (interaction.customId === 'panel_ach_reset_modal') {
+            if (interaction.customId === 'panel_ach_del_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                await this._handlePanelAchResetSearch(interaction);
+                await this._handlePanelAchDelSearch(interaction);
                 return;
             }
             if (interaction.customId.startsWith('panel_block_modal_')) {
@@ -1263,8 +1263,8 @@ class InteractionHandler {
               '📢 **Send Info** — compose a message and send it to all configured servers\' channels.'),
             t('🧪 **Dodaj/usuń testera** — zarządzaj listą testerów uprawnionych do `/test`.',
               '🧪 **Add/Remove Tester** — manage the list of testers authorized to use `/test`.'),
-            t('🏆 **Resetuj osiągnięcia** — usuń wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
-              '🏆 **Reset Achievements** — remove all achievements and progress of a selected player on a selected server.'),
+            t('🏆 **Usuń osiągnięcia** — usuń wybrane osiągnięcie lub wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
+              '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
         ];
 
         const optionLines = isHeadAdmin
@@ -1311,7 +1311,7 @@ class InteractionHandler {
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Dodaj/usuń testera', '🧪 Add/Remove Tester')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_ach_reset').setLabel(t('🏆 Resetuj osiągnięcia', '🏆 Reset Achievements')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
             ));
         }
         // Przycisk "Wróć do konfiguracji" tylko gdy istnieje aktywna sesja wizarda /configure
@@ -2755,9 +2755,10 @@ class InteractionHandler {
         if (customId === 'panel_tester_add') return 'Dodaj testera';
         if (customId === 'panel_tester_remove') return 'Usuń testera (otwórz listę)';
         if (customId === 'panel_tester_remove_select') return 'Usuń testera (wybrano)';
-        if (customId === 'panel_ach_reset') return 'Resetuj osiągnięcia (szukaj gracza)';
-        if (customId === 'panel_ach_reset_select') return 'Resetuj osiągnięcia (wybrano gracza)';
-        if (customId.startsWith('panel_ach_reset_confirm_')) return 'Potwierdzenie resetu osiągnięć';
+        if (customId === 'panel_ach_del') return 'Usuń osiągnięcia (szukaj gracza)';
+        if (customId === 'panel_ach_del_ps') return 'Usuń osiągnięcia (wybrano gracza)';
+        if (customId === 'panel_ach_del_as') return 'Usuń osiągnięcia (wybrano osiągnięcie)';
+        if (customId.startsWith('panel_ach_ok_')) return 'Potwierdzenie usunięcia osiągnięcia';
         if (customId === 'panel_ocr') return 'AI OCR on/off (szukaj serwera)';
         if (customId.startsWith('panel_ocr_en_')) return `Włącz AI OCR: ${customId.replace('panel_ocr_en_', '')}`;
         if (customId.startsWith('panel_ocr_dis_')) return `Wyłącz AI OCR: ${customId.replace('panel_ocr_dis_', '')}`;
@@ -3036,21 +3037,20 @@ class InteractionHandler {
                 await this._handlePanelTesterRemove(interaction);
                 return;
             }
-            if (customId === 'panel_ach_reset') {
+            if (customId === 'panel_ach_del') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                await this._handlePanelAchReset(interaction);
+                await this._handlePanelAchDel(interaction);
                 return;
             }
-            if (customId.startsWith('panel_ach_reset_confirm_')) {
+            if (customId.startsWith('panel_ach_ok_')) {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                const rawValue = customId.replace('panel_ach_reset_confirm_', '');
-                await this._handlePanelAchResetConfirm(interaction, rawValue);
+                await this._handlePanelAchDelConfirm(interaction, customId.replace('panel_ach_ok_', ''));
                 return;
             }
             if (customId === 'panel_ocr') {
@@ -4037,12 +4037,21 @@ class InteractionHandler {
                 return;
             }
 
-            if (customId === 'panel_ach_reset_select') {
+            if (customId === 'panel_ach_del_ps') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                await this._handlePanelAchResetSelect(interaction);
+                await this._handlePanelAchDelPlayerSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_del_as') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelAchSelect(interaction);
                 return;
             }
 
@@ -5717,14 +5726,14 @@ class InteractionHandler {
         return { embeds: [embed], components };
     }
 
-    async _handlePanelAchReset(interaction) {
+    async _handlePanelAchDel(interaction) {
         const t = this._panelT(interaction.guildId);
         const modal = new ModalBuilder()
-            .setCustomId('panel_ach_reset_modal')
-            .setTitle(t('🏆 Resetuj osiągnięcia', '🏆 Reset Achievements'))
+            .setCustomId('panel_ach_del_modal')
+            .setTitle(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements'))
             .addComponents(new ActionRowBuilder().addComponents(
                 new TextInputBuilder()
-                    .setCustomId('ach_reset_query')
+                    .setCustomId('ach_del_query')
                     .setLabel(t('Fragment nicku gracza', 'Player nick fragment'))
                     .setStyle(TextInputStyle.Short)
                     .setRequired(true)
@@ -5733,10 +5742,10 @@ class InteractionHandler {
         await interaction.showModal(modal);
     }
 
-    async _handlePanelAchResetSearch(interaction) {
+    async _handlePanelAchDelSearch(interaction) {
         const guildId = interaction.guildId;
         const t = this._panelT(guildId);
-        const query = interaction.fields.getTextInputValue('ach_reset_query').trim().toLowerCase();
+        const query = interaction.fields.getTextInputValue('ach_del_query').trim().toLowerCase();
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             const searchGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
@@ -5757,7 +5766,7 @@ class InteractionHandler {
                         .setTitle(t('🏆 Nie znaleziono gracza', '🏆 Player Not Found'))
                         .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_reset').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
                         new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
@@ -5777,47 +5786,132 @@ class InteractionHandler {
                     .setDescription(subtitle)],
                 components: [
                     new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder().setCustomId('panel_ach_reset_select')
-                            .setPlaceholder(t('Wybierz gracza do resetu osiągnięć...', 'Select player to reset achievements...'))
+                        new StringSelectMenuBuilder().setCustomId('panel_ach_del_ps')
+                            .setPlaceholder(t('Wybierz gracza...', 'Select player...'))
                             .addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_reset').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
                         new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchResetSearch (serwer "${interaction.guild?.name || guildId}"):`, err);
+            logger.error(`Błąd _handlePanelAchDelSearch (serwer "${interaction.guild?.name || guildId}"):`, err);
             await interaction.editReply({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
         }
     }
 
-    async _handlePanelAchResetSelect(interaction) {
+    async _handlePanelAchDelPlayerSelect(interaction) {
         const value = interaction.values[0]; // format: userId:guildId
         const [targetUserId, targetGuildId] = value.split(':');
         const t = this._panelT(interaction.guildId);
+        await interaction.deferUpdate();
+        try {
+            const players = await this.rankingService.getSortedPlayers(targetGuildId);
+            const player = players.find(p => p.userId === targetUserId);
+            const displayName = player?.username || targetUserId;
+            const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+            const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
+
+            const unlockedAchs = this.achievementService
+                ? await this.achievementService.getUnlockedAchievements(targetGuildId, targetUserId)
+                : [];
+
+            if (unlockedAchs.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                        .setTitle(t('🏆 Brak osiągnięć', '🏆 No Achievements'))
+                        .setDescription(t(
+                            `Gracz **${displayName}**${serverNote} nie ma żadnych odblokowanych osiągnięć.`,
+                            `Player **${displayName}**${serverNote} has no unlocked achievements.`
+                        ))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+
+            const achOptions = [
+                {
+                    label: t('🗑️ Usuń WSZYSTKIE osiągnięcia', '🗑️ Remove ALL achievements'),
+                    description: t(`Usuwa wszystkie ${unlockedAchs.length} osiągnięcia i cały progress`, `Removes all ${unlockedAchs.length} achievements and all progress`).slice(0, 100),
+                    value: `all:${targetUserId}:${targetGuildId}`,
+                },
+                ...unlockedAchs.slice(0, 24).map(a => ({
+                    label: `${a.icon} ${(a.namePol || a.nameEng || a.id).slice(0, 90)}`.slice(0, 100),
+                    description: (a.descPol || a.descEng || '').slice(0, 100),
+                    value: `${a.id}:${targetUserId}:${targetGuildId}`,
+                })),
+            ];
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                    .setTitle(t('🏆 Wybierz osiągnięcie', '🏆 Select Achievement'))
+                    .setDescription(t(
+                        `Gracz: **${displayName}**${serverNote}\nOdblokowanych osiągnięć: **${unlockedAchs.length}**\n\nWybierz osiągnięcie do usunięcia lub opcję "Usuń wszystkie".`,
+                        `Player: **${displayName}**${serverNote}\nUnlocked achievements: **${unlockedAchs.length}**\n\nSelect an achievement to remove or "Remove ALL".`
+                    ))],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('panel_ach_del_as')
+                            .setPlaceholder(t('Wybierz osiągnięcie...', 'Select achievement...'))
+                            .addOptions(achOptions)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Nowe wyszukiwanie', '🔍 New Search')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    )
+                ]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelAchDelPlayerSelect (gracz ${targetUserId}, serwer ${targetGuildId}):`, err);
+            await interaction.editReply({ content: t('❌ Błąd wczytywania osiągnięć.', '❌ Error loading achievements.'), embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelAchDelAchSelect(interaction) {
+        const value = interaction.values[0]; // format: achId:userId:guildId  lub  all:userId:guildId
+        const parts = value.split(':');
+        // achId może zawierać '_' ale nie ':', więc pierwsze dwie ostatnie wartości to userId i guildId
+        const targetGuildId = parts[parts.length - 1];
+        const targetUserId = parts[parts.length - 2];
+        const achId = parts.slice(0, parts.length - 2).join(':');
+        const isAll = achId === 'all';
+        const t = this._panelT(interaction.guildId);
+
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
         const player = players.find(p => p.userId === targetUserId);
         const displayName = player?.username || targetUserId;
         const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
         const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
+
+        const confirmId = isAll
+            ? `panel_ach_ok_all:${targetUserId}:${targetGuildId}`
+            : `panel_ach_ok_1:${achId}:${targetUserId}:${targetGuildId}`;
+
+        const descPol = isAll
+            ? `Czy na pewno chcesz usunąć **WSZYSTKIE** osiągnięcia i cały progress gracza **${displayName}**${serverNote}?\n\nTej operacji nie można cofnąć.`
+            : `Czy na pewno chcesz usunąć osiągnięcie **${achId}** gracza **${displayName}**${serverNote}?`;
+        const descEng = isAll
+            ? `Are you sure you want to remove **ALL** achievements and progress of player **${displayName}**${serverNote}?\n\nThis action cannot be undone.`
+            : `Are you sure you want to remove achievement **${achId}** of player **${displayName}**${serverNote}?`;
+
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0xFF6B35)
-                .setTitle(t('🏆 Potwierdzenie resetu', '🏆 Confirm Reset'))
-                .setDescription(t(
-                    `Czy na pewno chcesz usunąć **WSZYSTKIE** osiągnięcia gracza **${displayName}**${serverNote}?\n\nTej operacji nie można cofnąć.`,
-                    `Are you sure you want to remove **ALL** achievements of player **${displayName}**${serverNote}?\n\nThis action cannot be undone.`
-                ))],
+                .setTitle(t('🏆 Potwierdzenie', '🏆 Confirm'))
+                .setDescription(t(descPol, descEng))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_ach_reset_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('✅ Resetuj', '✅ Reset')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(confirmId).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
 
-    async _handlePanelAchResetConfirm(interaction, rawValue) {
-        const [targetUserId, targetGuildId] = rawValue.split(':');
+    async _handlePanelAchDelConfirm(interaction, rawValue) {
+        // rawValue: "all:{userId}:{guildId}" lub "1:{achId}:{userId}:{guildId}"
         const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
@@ -5825,21 +5919,56 @@ class InteractionHandler {
                 await interaction.editReply({ content: t('❌ Serwis osiągnięć niedostępny.', '❌ Achievement service unavailable.'), embeds: [], components: [] });
                 return;
             }
-            await this.achievementService.resetAllAchievements(targetGuildId, targetUserId);
+
+            const parts = rawValue.split(':');
+            const isAll = parts[0] === 'all';
+            let targetUserId, targetGuildId, achId;
+
+            if (isAll) {
+                // all:{userId}:{guildId}
+                [, targetUserId, targetGuildId] = parts;
+            } else {
+                // 1:{achId}:{userId}:{guildId}  (achId nie zawiera ':')
+                targetGuildId = parts[parts.length - 1];
+                targetUserId = parts[parts.length - 2];
+                achId = parts.slice(1, parts.length - 2).join(':');
+            }
+
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
-            await this.logService.logMessage('success', `Osiągnięcia gracza ${targetUserId} zresetowane (serwer ${targetGuildId}) przez panel admina`, interaction);
-            await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor(0x57F287)
-                    .setTitle(t('✅ Osiągnięcia zresetowane', '✅ Achievements Reset'))
-                    .setDescription(t(`Osiągnięcia gracza <@${targetUserId}>${serverNote} zostały zresetowane.`, `Achievements of player <@${targetUserId}>${serverNote} have been reset.`))],
-                components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
-                )]
-            });
+
+            if (isAll) {
+                await this.achievementService.resetAllAchievements(targetGuildId, targetUserId);
+                await this.logService.logMessage('success', `Wszystkie osiągnięcia gracza ${targetUserId} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0x57F287)
+                        .setTitle(t('✅ Osiągnięcia usunięte', '✅ Achievements Removed'))
+                        .setDescription(t(
+                            `Wszystkie osiągnięcia gracza <@${targetUserId}>${serverNote} zostały usunięte.`,
+                            `All achievements of player <@${targetUserId}>${serverNote} have been removed.`
+                        ))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    )]
+                });
+            } else {
+                await this.achievementService.removeOneAchievement(targetGuildId, targetUserId, achId);
+                await this.logService.logMessage('success', `Osiągnięcie "${achId}" gracza ${targetUserId} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0x57F287)
+                        .setTitle(t('✅ Osiągnięcie usunięte', '✅ Achievement Removed'))
+                        .setDescription(t(
+                            `Osiągnięcie **${achId}** gracza <@${targetUserId}>${serverNote} zostało usunięte.`,
+                            `Achievement **${achId}** of player <@${targetUserId}>${serverNote} has been removed.`
+                        ))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    )]
+                });
+            }
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchResetConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
-            await interaction.editReply({ content: t('❌ Błąd resetu osiągnięć.', '❌ Error resetting achievements.'), embeds: [], components: [] });
+            logger.error(`Błąd _handlePanelAchDelConfirm (rawValue="${rawValue}"):`, err);
+            await interaction.editReply({ content: t('❌ Błąd usuwania osiągnięcia.', '❌ Error removing achievement.'), embeds: [], components: [] });
         }
     }
 

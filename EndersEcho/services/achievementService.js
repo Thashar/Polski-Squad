@@ -171,6 +171,23 @@ class AchievementService {
         } catch {}
     }
 
+    async removeOneAchievement(guildId, userId, achId) {
+        try {
+            const data = await this.loadData(guildId);
+            if (!data[userId]?.unlocked?.[achId]) return;
+            delete data[userId].unlocked[achId];
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
+    async getUnlockedAchievements(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            const unlocked = data[userId]?.unlocked || {};
+            return ACHIEVEMENTS.filter(a => unlocked[a.id]).map(a => ({ ...a, unlockedAt: unlocked[a.id].unlockedAt }));
+        } catch { return []; }
+    }
+
     /**
      */
     async trackRankingView(guildId, userId) {

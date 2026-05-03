@@ -137,7 +137,9 @@
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
    - **Kasowanie częściowe:** `clearUserAchievements(guildId, userId)` — usuwa osiągnięcia kategorii `score` i `records` oraz resetuje `recordCount`/`lastRecordAt`/`lastRecordBeatAt`; pozostałe kategorie (bosses, explorer, prestige) zostają; wywoływane automatycznie przy usunięciu gracza z rankingu (panel admina + komenda `/remove`)
-   - **Reset pełny:** `resetAllAchievements(guildId, userId)` — usuwa cały wpis gracza z pliku (wszystkie kategorie + cały progress); wywoływane ręcznie przez head admina z `/manage` → `🏆 Resetuj osiągnięcia`
+   - **Reset pełny:** `resetAllAchievements(guildId, userId)` — usuwa cały wpis gracza z pliku (wszystkie kategorie + cały progress); wywoływane ręcznie przez head admina z `/manage` → `🏆 Usuń osiągnięcia` → opcja "Usuń wszystkie"
+   - **Usunięcie jednego:** `removeOneAchievement(guildId, userId, achId)` — usuwa tylko jedno odblokowane osiągnięcie; wywoływane przez head admina z `/manage` → `🏆 Usuń osiągnięcia` → wybór konkretnego osiągnięcia
+   - **Odczyt odblokowanych:** `getUnlockedAchievements(guildId, userId)` — zwraca tablicę `[{ ...ach, unlockedAt }]` dla osiągnięć gracza; używane przez panel admina do zbudowania listy wyboru
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
    - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
    - **Komenda /achievements:** ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania. Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po `/achievements`: kategoria `score`.
@@ -165,7 +167,7 @@
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`
   - Rząd 2: `📊 Zużycie tokenów`, `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
-  - Rząd 3: `📢 Wyślij Info`, `🧪 Dodaj/usuń testera`, `🏆 Resetuj osiągnięcia`
+  - Rząd 3: `📢 Wyślij Info`, `🧪 Dodaj/usuń testera`, `🏆 Usuń osiągnięcia`
   - Rząd 4: `◀️ Wróć do konfiguracji`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
@@ -238,10 +240,12 @@
 | `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
 | `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
-| `panel_ach_reset` | Otwórz modal wyszukiwania gracza do resetu (head admin) |
-| `panel_ach_reset_modal` | Modal wyszukiwania (pole `ach_reset_query`) |
-| `panel_ach_reset_select` | StringSelectMenu — wybór gracza do resetu |
-| `panel_ach_reset_confirm_{userId}:{guildId}` | Potwierdzenie resetu osiągnięć |
+| `panel_ach_del` | Otwórz modal wyszukiwania gracza (head admin) |
+| `panel_ach_del_modal` | Modal wyszukiwania (pole `ach_del_query`) |
+| `panel_ach_del_ps` | StringSelectMenu — wybór gracza |
+| `panel_ach_del_as` | StringSelectMenu — wybór osiągnięcia lub "Usuń wszystkie" |
+| `panel_ach_ok_all:{userId}:{guildId}` | Potwierdzenie usunięcia wszystkich osiągnięć |
+| `panel_ach_ok_1:{achId}:{userId}:{guildId}` | Potwierdzenie usunięcia jednego osiągnięcia |
 | `panel_ocr` | Otwórz modal wyszukiwania serwera OCR (head admin) |
 | `panel_ocr_search_modal` | Modal wyszukiwania (pole `ocr_query`) |
 | `panel_ocr_guild_select` | StringSelectMenu — wybór serwera (wiele wyników) |
