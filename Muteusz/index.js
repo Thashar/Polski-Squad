@@ -172,8 +172,8 @@ client.on(Events.MessageCreate, async (message) => {
     ]);
     if (!message.author.bot && message.guild && message.content) {
         const trimmedContent = message.content.trim();
-        const isStatusEmoji = trimmedContent === '🛑' || trimmedContent === '🟢';
-        const isValuePattern = /^\d+([.,]\d+)?k?$/i.test(trimmedContent);
+        const isStatusEmoji = trimmedContent === '🛑' || trimmedContent === '🟢' || trimmedContent === '🔥';
+        const isValuePattern = /^\d+([.,]\d+)?k$/i.test(trimmedContent);
         if (isStatusEmoji || isValuePattern) {
             const isAdmin = await isAdminMember(message.guild, message.author.id);
             const hasRenameRole = message.member?.roles.cache.has(CHANNEL_RENAME_ROLE_ID) &&
