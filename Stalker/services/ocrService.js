@@ -13,14 +13,14 @@ const AIOCRService = require('./aiOcrService');
 const logger = createBotLogger('Stalker');
 
 class OCRService {
-    constructor(config, client = null) {
+    constructor(config, client = null, llmAdapter = null) {
         this.config = config;
         this.client = client;
         this.tempDir = this.config.ocr.tempDir || './Stalker/temp';
         this.processedDir = this.config.ocr.processedDir || './Stalker/processed';
 
-        // Inicjalizuj AI OCR Service (opcjonalny)
-        this.aiOcrService = new AIOCRService(config);
+        // Inicjalizuj AI OCR Service (opcjonalny) — Google Gemini przez llmAdapter
+        this.aiOcrService = new AIOCRService(config, llmAdapter);
 
         // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
         this.activeProcessing = new Map(); // guildId → {userId, commandName, expiresAt, timeout}
@@ -127,7 +127,7 @@ class OCRService {
 
             // === KROK 1: Spróbuj AI OCR jeśli włączony ===
             if (this.config.ocr.useAI && this.aiOcrService.enabled) {
-                logger.info('[AI OCR] 🤖 Próba analizy przez Claude Vision...');
+                logger.info('[AI OCR] 🤖 Próba analizy przez Gemini Vision...');
 
                 try {
                     const aiResult = await this.aiOcrService.analyzeResultsImage(filepath);

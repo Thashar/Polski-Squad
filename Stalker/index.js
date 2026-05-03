@@ -22,9 +22,11 @@ const { exportClanThresholds } = require('./services/clanThresholdsExportService
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 const { createAppSync } = require('../utils/appSync');
+const { createLlmAdapter } = require('../utils/llmAdapter');
 
 const logger = createBotLogger('Stalker');
 const { sync: appSync } = createAppSync();
+const llmAdapter = createLlmAdapter({ botSlug: 'stalker', tracerName: 'stalker-bot', apiKey: config.ocr.googleAiApiKey });
 
 // Cooldown kalkulatora - raz na godzinę per kanał (persistencja w pliku)
 const calculatorCooldownsFile = path.join(__dirname, 'data', 'calculator_cooldowns.json');
@@ -81,7 +83,7 @@ const client = new Client({
 });
 
 const databaseService = new DatabaseService(config, appSync);
-const ocrService = new OCRService(config);
+const ocrService = new OCRService(config, null, llmAdapter);
 const punishmentService = new PunishmentService(config, databaseService);
 const reminderService = new ReminderService(config, appSync);
 const reminderUsageService = new ReminderUsageService(config);
