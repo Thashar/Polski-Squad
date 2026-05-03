@@ -46,7 +46,9 @@
 - **Tracking Potwierdzeń:** `reminderStatusTrackingService.js` - embed na kanale WARNING (nie CONFIRMATION) z godziną potwierdzenia obok nicku
 - Format: `✅ NickName • 14:27` - pokazuje kiedy użytkownik potwierdził (oba przypomnienia w jednym embedzie)
 - Struktura: `tracking.reminders[]` - tablica z obu przypomnieniami (reminderNumber, sentAt, users)
+- Klucz trackingu: `{roleId}_YYYY-MM-DD` gdzie roleId = rola klanu moderatora (session.userClanRoleId)
 - Aktualizacja przez usunięcie i ponowne wysłanie embeda (świeża pozycja na dole czatu)
+- **`updateUserStatus` fallback**: Jeśli tracking nie jest znajdowany po roleId użytkownika (moderator z innego klanu), przeszukuje wszystkie trackings z dzisiaj szukając userId. Szuka userId w WSZYSTKICH reminderach (nie tylko najnowszym).
 - **`handleConfirmReminderButton` używa `deferUpdate()` natychmiast** - przed wszystkimi operacjami sieciowymi/I/O, potem `editReply()` / `followUp()`. Zapobiega wygasaniu interakcji Discord (limit 3s) gdy fetch guild lub I/O pliku trwa dłużej.
 
 **Mapowanie Nicków** - System automatycznego mapowania użytkowników po zmianie nicku Discord:
