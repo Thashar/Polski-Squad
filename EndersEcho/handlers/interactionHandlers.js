@@ -439,7 +439,7 @@ class InteractionHandler {
             done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
             done[6] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
             done[7] ? `🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')}` : null,
-            done[8] ? `🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${state.communityVerifEnabled ? t('Włączona (próg: ', 'Enabled (threshold: ') + (state.communityVerifThreshold || 5) + ')' : t('Wyłączona', 'Disabled')}` : null,
+            done[8] ? `🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${state.communityVerifEnabled ? t('Włączona (próg: ', 'Enabled (threshold: ') + (state.communityVerifThreshold || 5) + t(', kanał: ', ', channel: ') + (state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')) + ')' : t('Wyłączona', 'Disabled')}` : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
