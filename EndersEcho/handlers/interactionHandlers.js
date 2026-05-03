@@ -1261,8 +1261,8 @@ class InteractionHandler {
               '⚙️ **Set Limits** — configure cooldown after `/update` and daily usage limit.'),
             t('📢 **Wyślij Info** — skomponuj wiadomość i wyślij ją na kanały wszystkich skonfigurowanych serwerów.',
               '📢 **Send Info** — compose a message and send it to all configured servers\' channels.'),
-            t('🧪 **Dodaj/usuń testera** — zarządzaj listą testerów uprawnionych do `/test`.',
-              '🧪 **Add/Remove Tester** — manage the list of testers authorized to use `/test`.'),
+            t('🧪 **Testerzy** — zarządzaj listą testerów uprawnionych do `/test`.',
+              '🧪 **Testers** — manage the list of testers authorized to use `/test`.'),
             t('🏆 **Usuń osiągnięcia** — usuń wybrane osiągnięcie lub wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
               '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
         ];
@@ -1279,39 +1279,39 @@ class InteractionHandler {
                 optionLines.join('\n\n')
             );
 
-        // Rząd 1: operacje gracza (wszyscy admini)
-        const row1Components = [
-            new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-        ];
+        let row1, row2;
         if (isHeadAdmin) {
-            row1Components.push(
+            // Rząd 1 Head Admin (5 przycisków): Zablokuj, Odblokuj, Usuń gracza, Testerzy, Usuń osiągnięcia
+            row1 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Testerzy', '🧪 Testers')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
             );
-        }
-        row1Components.push(
-            new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
-        );
-        const row1 = new ActionRowBuilder().addComponents(...row1Components);
-
-        // Rząd 2: narzędzia (tokeny dla wszystkich, OCR+Limity tylko Head Admin)
-        const row2Components = [
-            new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
-        ];
-        if (isHeadAdmin) {
-            row2Components.push(
+            // Rząd 2 Head Admin: AI OCR on/off, Ustaw limity
+            row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR on/off', '🔄 AI OCR on/off')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_limit').setLabel(t('⚙️ Ustaw limity', '⚙️ Set Limits')).setStyle(ButtonStyle.Primary),
             );
+        } else {
+            // Rząd 1 Admin: Usuń gracza, Odblokuj
+            row1 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
+            );
+            // Rząd 2 Admin: Zużycie tokenów
+            row2 = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
+            );
         }
-        const row2 = new ActionRowBuilder().addComponents(...row2Components);
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3: Head Admin only — Wyślij Info + Testerzy + Reset osiągnięć
+            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Dodaj/usuń testera', '🧪 Add/Remove Tester')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
             ));
         }
         // Przycisk "Wróć do konfiguracji" tylko gdy istnieje aktywna sesja wizarda /configure

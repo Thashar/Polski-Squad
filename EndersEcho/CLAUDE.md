@@ -165,9 +165,9 @@
   - Rząd 2: `📊 Zużycie tokenów`
   - Rząd 3: `◀️ Wróć do konfiguracji`
 - **Układ rzędów (Tryb Head Admin):**
-  - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`
-  - Rząd 2: `📊 Zużycie tokenów`, `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
-  - Rząd 3: `📢 Wyślij Info`, `🧪 Dodaj/usuń testera`, `🏆 Usuń osiągnięcia`
+  - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🧪 Testerzy`, `🏆 Usuń osiągnięcia`
+  - Rząd 2: `🔄 AI OCR on/off`, `⚙️ Ustaw limity`
+  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`
   - Rząd 4: `◀️ Wróć do konfiguracji`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
