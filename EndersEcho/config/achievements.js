@@ -201,6 +201,56 @@ const ACHIEVEMENTS = [
         descPol: 'Potróż swój wynik w jednym podejściu', descEng: 'Triple your score in one submission',
         check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 3,
     },
+    {
+        id: 'improve_5x', category: 'explorer', rarity: 'mythic', hidden: true, icon: '💥',
+        namePol: 'Wielki Wybuch',   nameEng: 'Big Bang',
+        descPol: 'Zwiększ wynik 5× w jednym podejściu', descEng: 'Multiply your score by 5 in one submission',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue >= ctx.prevScoreValue * 5,
+    },
+    {
+        id: 'improve_tiny', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🪶',
+        namePol: 'Na Włosku',   nameEng: 'By a Hair',
+        descPol: 'Pobij rekord o mniej niż 0,5%', descEng: 'Beat your record by less than 0.5%',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue > ctx.prevScoreValue && ctx.scoreValue < ctx.prevScoreValue * 1.005,
+    },
+    {
+        id: 'improve_micro', category: 'explorer', rarity: 'rare', hidden: true, icon: '🔬',
+        namePol: 'Chirurg',   nameEng: 'Surgeon',
+        descPol: 'Pobij rekord o mniej niż 0,1%', descEng: 'Beat your record by less than 0.1%',
+        check: (_p, ctx) => ctx.prevScoreValue > 0 && ctx.scoreValue > ctx.prevScoreValue && ctx.scoreValue < ctx.prevScoreValue * 1.001,
+    },
+    {
+        id: 'comeback_60', category: 'explorer', rarity: 'rare', hidden: true, icon: '⌛',
+        namePol: 'Powrót Legendy',   nameEng: 'Return of a Legend',
+        descPol: 'Pobij rekord po przerwie ponad 60 dni', descEng: 'Beat a record after a break of over 60 days',
+        check: (p, _ctx) => {
+            if (!p.lastRecordAt) return false;
+            const daysSince = (Date.now() - new Date(p.lastRecordAt).getTime()) / (1000 * 60 * 60 * 24);
+            return daysSince >= 60;
+        },
+    },
+    {
+        id: 'comeback_180', category: 'explorer', rarity: 'legendary', hidden: true, icon: '🏺',
+        namePol: 'Niezniszczalny',   nameEng: 'Indestructible',
+        descPol: 'Pobij rekord po przerwie ponad 180 dni', descEng: 'Beat a record after a break of over 180 days',
+        check: (p, _ctx) => {
+            if (!p.lastRecordAt) return false;
+            const daysSince = (Date.now() - new Date(p.lastRecordAt).getTime()) / (1000 * 60 * 60 * 24);
+            return daysSince >= 180;
+        },
+    },
+    {
+        id: 'view_500', category: 'explorer', rarity: 'epic', hidden: true, icon: '📚',
+        namePol: 'Kronikarz',   nameEng: 'Chronicler',
+        descPol: 'Sprawdź ranking 500 razy', descEng: 'View the ranking 500 times',
+        check: (p, _ctx) => (p.rankingViews || 0) >= 500,
+    },
+    {
+        id: 'sub_10', category: 'explorer', rarity: 'rare', hidden: true, icon: '💙',
+        namePol: 'Wielbiciel',   nameEng: 'Devotee',
+        descPol: 'Aktywuj 10 subskrypcji', descEng: 'Activate 10 subscriptions',
+        check: (p, _ctx) => (p.subscriptions || 0) >= 10,
+    },
 
     // ===== PRESTIŻ (PRESTIGE) =====
     {
@@ -230,6 +280,18 @@ const ACHIEVEMENTS = [
             const daysSince = (Date.now() - new Date(p.lastRecordAt).getTime()) / (1000 * 60 * 60 * 24);
             return daysSince >= 30;
         },
+    },
+    {
+        id: 'rank_top20', category: 'prestige', rarity: 'uncommon', hidden: false, icon: '🎗️',
+        namePol: 'Pretendent',   nameEng: 'Contender',
+        descPol: 'Zdobądź miejsce w Top 20 serwera', descEng: 'Reach the Top 20 on the server',
+        check: (_p, ctx) => ctx.currentPosition > 0 && ctx.currentPosition <= 20,
+    },
+    {
+        id: 'rank_top5', category: 'prestige', rarity: 'epic', hidden: false, icon: '🥈',
+        namePol: 'Finał',   nameEng: 'Finals',
+        descPol: 'Zdobądź miejsce w Top 5 serwera', descEng: 'Reach the Top 5 on the server',
+        check: (_p, ctx) => ctx.currentPosition > 0 && ctx.currentPosition <= 5,
     },
 ];
 
