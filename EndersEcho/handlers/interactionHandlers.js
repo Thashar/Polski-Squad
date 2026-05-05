@@ -6776,7 +6776,7 @@ class InteractionHandler {
 
     async _handleAchCheckModal(interaction) {
         const query = interaction.fields.getTextInputValue('ach_check_query').toLowerCase().trim();
-        await interaction.deferReply({ flags: ['Ephemeral'] });
+        await interaction.deferUpdate();
         const t = this._panelT(interaction.guildId);
 
         try {
