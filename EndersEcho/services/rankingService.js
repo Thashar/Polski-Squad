@@ -13,9 +13,12 @@ class RankingService {
         this.scoreHistoryService = scoreHistoryService;
         this.activeRankings = new Map();
         this._writeQueues = new Map();
-        // Cache odczytów z dysku — TTL 30s, inwalidowany przy saveRanking
-        this._rankingCache = new Map(); // guildId → { data, ts }
-        this._CACHE_TTL = 30_000;
+        // Write-through cache odczytów z dysku — inwalidowany przy saveRanking (brak TTL)
+        this._rankingCache = new Map(); // guildId → data
+        // Cache posortowanych graczy — inwalidowany przy saveRanking
+        this._sortedCache = new Map(); // guildId → Array
+        // Cache globalnego rankingu — inwalidowany przy saveRanking
+        this._globalCache = null; // Array | null
     }
 
     // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
@@ -50,14 +53,12 @@ class RankingService {
      */
     async loadRanking(guildId) {
         const cached = this._rankingCache.get(guildId);
-        if (cached && Date.now() - cached.ts < this._CACHE_TTL) {
-            return cached.data;
-        }
+        if (cached) return cached;
         const file = this.getRankingFile(guildId);
         try {
             const data = await fs.readFile(file, 'utf8');
             const parsed = JSON.parse(data);
-            this._rankingCache.set(guildId, { data: parsed, ts: Date.now() });
+            this._rankingCache.set(guildId, parsed);
             return parsed;
         } catch {
             return {};
@@ -74,7 +75,9 @@ class RankingService {
             const file = this.getRankingFile(guildId);
             await fs.mkdir(path.dirname(file), { recursive: true });
             await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
-            this._rankingCache.set(guildId, { data: ranking, ts: Date.now() });
+            this._rankingCache.set(guildId, ranking);
+            this._sortedCache.delete(guildId);
+            this._globalCache = null;
             await this.saveSharedRanking();
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
@@ -88,6 +91,9 @@ class RankingService {
      * @returns {Promise<Array>}
      */
     async getGlobalRanking(activeGuildIds = null) {
+        // Gdy filtrujemy po aktywnych guildach (np. status bota) — pomijamy globalny cache
+        if (!activeGuildIds && this._globalCache) return this._globalCache;
+
         const guilds = this.config.getAllGuilds()
             .filter(g => !activeGuildIds || activeGuildIds.has(g.id));
 
@@ -105,8 +111,11 @@ class RankingService {
             }
         }
 
-        return Array.from(bestPerPlayer.values())
+        const sorted = Array.from(bestPerPlayer.values())
             .sort((a, b) => b.scoreValue - a.scoreValue);
+
+        if (!activeGuildIds) this._globalCache = sorted;
+        return sorted;
     }
 
     /**
@@ -1115,9 +1124,14 @@ class RankingService {
      * @returns {Promise<Array>}
      */
     async getSortedPlayers(guildId) {
+        const cached = this._sortedCache.get(guildId);
+        if (cached) return cached;
         const ranking = await this.loadRanking(guildId);
-        const players = Object.entries(ranking).map(([userId, data]) => ({ ...data, userId }));
-        return players.sort((a, b) => b.scoreValue - a.scoreValue);
+        const sorted = Object.entries(ranking)
+            .map(([userId, data]) => ({ ...data, userId }))
+            .sort((a, b) => b.scoreValue - a.scoreValue);
+        this._sortedCache.set(guildId, sorted);
+        return sorted;
     }
 
     /**
