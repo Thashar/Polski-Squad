@@ -5842,7 +5842,7 @@ class InteractionHandler {
                 .map(gc =>
                     new ButtonBuilder()
                         .setCustomId(`tk_g_${monthStr}_${gc.id}_${userId}`)
-                        .setLabel((guildNames[gc.id] || gc.id).slice(0, 20))
+                        .setLabel((guildNames[gc.id] || gc.id).substring(0, 80))
                         .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 );
             for (let i = 0; i < guildButtons.length; i += 5) {
