@@ -6799,11 +6799,6 @@ class InteractionHandler {
                 return;
             }
 
-            if (matches.length === 1) {
-                await this._showPlayerAchievements(interaction, matches[0].userId, matches[0].username, matches[0].sourceGuildId);
-                return;
-            }
-
             if (matches.length > 25) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0xFF8C00)
