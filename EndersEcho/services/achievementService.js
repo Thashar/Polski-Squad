@@ -304,7 +304,7 @@ class AchievementService {
      * @param {string|null} category - klucz kategorii (gdy view='cat')
      * @returns {Promise<{ embed: EmbedBuilder, components: ActionRowBuilder[] }>}
      */
-    async buildAchievementsView(guildId, userId, lang, view, category) {
+    async buildAchievementsView(guildId, userId, lang, view, category, crossServerGuildName = null) {
         const isPol = lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
 
@@ -314,7 +314,7 @@ class AchievementService {
 
         let embed;
         if (view === 'overview') {
-            ({ embed } = this._buildOverviewEmbed(unlocked, progress, t, isPol));
+            ({ embed } = this._buildOverviewEmbed(unlocked, progress, t, isPol, crossServerGuildName));
         } else {
             const cat = (category && CATEGORY_INFO[category]) ? category : 'score';
             ({ embed } = this._buildCategoryEmbed(unlocked, cat, t, isPol));
@@ -353,7 +353,7 @@ class AchievementService {
         return { embed };
     }
 
-    _buildOverviewEmbed(unlocked, progress, t, isPol) {
+    _buildOverviewEmbed(unlocked, progress, t, isPol, crossServerGuildName = null) {
         const unlockedIds = new Set(Object.keys(unlocked));
 
         const categoryOrder = Object.entries(CATEGORY_INFO).sort(([, a], [, b]) => {
@@ -379,6 +379,17 @@ class AchievementService {
                 `${unlockedIds.size} odblokowanych`,
                 `${unlockedIds.size} unlocked`
             ) });
+
+        if (crossServerGuildName) {
+            embed.addFields({
+                name: t('ℹ️ Uwaga', 'ℹ️ Note'),
+                value: t(
+                    `Twoje osiągnięcia pochodzą z serwera **${crossServerGuildName}**, gdzie zapisany jest Twój najlepszy wynik.`,
+                    `Your achievements come from **${crossServerGuildName}**, where your best score is recorded.`
+                ),
+                inline: false
+            });
+        }
 
         return { embed };
     }

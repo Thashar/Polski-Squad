@@ -4081,6 +4081,21 @@ class InteractionHandler {
     // /achievements
     // =====================================================================
 
+    async _resolveAchGuildId(userId, guildId, client) {
+        const ranking = await this.rankingService.loadRanking(guildId);
+        if (ranking[userId]) return { achGuildId: guildId, crossServerGuildName: null };
+        const allGuildIds = new Set(
+            this.config.getAllGuilds()
+                .filter(g => client.guilds.cache.has(g.id))
+                .map(g => g.id)
+        );
+        const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+        const entry = globalRanking.find(p => p.userId === userId);
+        if (!entry) return { achGuildId: guildId, crossServerGuildName: null };
+        const crossServerGuildName = client.guilds.cache.get(entry.sourceGuildId)?.name || entry.sourceGuildId;
+        return { achGuildId: entry.sourceGuildId, crossServerGuildName };
+    }
+
     async handleAchievementsCommand(interaction) {
         if (!this._checkConfigured(interaction)) return;
         await interaction.deferReply({ flags: ['Ephemeral'] });
@@ -4088,8 +4103,9 @@ class InteractionHandler {
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
+            const { achGuildId, crossServerGuildName } = await this._resolveAchGuildId(userId, guildId, interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsView(
-                guildId, userId, lang, 'overview', null
+                achGuildId, userId, lang, 'overview', null, crossServerGuildName
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -4108,8 +4124,9 @@ class InteractionHandler {
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
+            const { achGuildId, crossServerGuildName } = await this._resolveAchGuildId(userId, guildId, interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsView(
-                guildId, userId, lang, view, category
+                achGuildId, userId, lang, view, category, isOverview ? crossServerGuildName : null
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
