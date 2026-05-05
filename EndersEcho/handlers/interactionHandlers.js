@@ -6978,11 +6978,6 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Primary)
             );
         }
-        buttons.push(new ButtonBuilder()
-            .setCustomId('ach_rank_global')
-            .setLabel(t('🌐 Global', '🌐 Global'))
-            .setStyle(ButtonStyle.Secondary)
-        );
 
         const rows = [];
         for (let i = 0; i < buttons.length; i += 5) {
@@ -6990,7 +6985,7 @@ class InteractionHandler {
         }
 
         await interaction.editReply({
-            content: t('🏆 Wybierz serwer lub globalny ranking osiągnięć:', '🏆 Select a server or global achievement ranking:'),
+            content: t('🏆 Wybierz serwer:', '🏆 Select a server:'),
             embeds: [],
             components: rows
         });
