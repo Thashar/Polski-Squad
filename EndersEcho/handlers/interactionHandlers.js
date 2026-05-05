@@ -5671,8 +5671,12 @@ class InteractionHandler {
         const month    = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
         let userId, guildFilter, page;
-        if (action === 'a' || action === 'total') {
+        if (action === 'a') {
             userId      = parts[3];
+            guildFilter = 'all';
+            page        = 0;
+        } else if (action === 'total') {
+            userId      = parts[2];
             guildFilter = 'all';
             page        = 0;
         } else if (action === 'u') {
