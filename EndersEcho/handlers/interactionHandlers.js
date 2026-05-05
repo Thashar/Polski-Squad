@@ -4821,18 +4821,7 @@ class InteractionHandler {
             const guildLabel = guildObj?.name || guildCfg.tag || guildCfg.id;
             const lang = guildCfg.lang || 'pol';
 
-            if (!guildObj) {
-                results.push({
-                    label: guildLabel, id: guildCfg.id, status: 'skipped', lang,
-                    error: {
-                        pol: 'Bot nie jest na tym serwerze (wyrzucony lub opuścił)',
-                        eng: 'Bot is not on this server (kicked or left)',
-                        fix_pol: null, fix_eng: null,
-                    },
-                    channelId: guildCfg.allowedChannelId, guildObj: null,
-                });
-                continue;
-            }
+            if (!guildObj) continue;
 
             try {
                 const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
@@ -4873,10 +4862,8 @@ class InteractionHandler {
 
         const sent = results.filter(r => r.status === 'ok').length;
         const failed = results.filter(r => r.status === 'error').length;
-        const skipped = results.filter(r => r.status === 'skipped').length;
 
-        const color = failed === 0 && skipped === 0 ? 0x00aa00
-            : failed === 0 ? 0xffaa00
+        const color = failed === 0 ? 0x00aa00
             : sent === 0 ? 0xcc0000
             : 0xff8800;
 
@@ -4885,7 +4872,6 @@ class InteractionHandler {
 
         const summaryParts = [];
         if (sent > 0) summaryParts.push(`✅ ${isPol ? 'Wysłano' : 'Sent'}: **${sent}**`);
-        if (skipped > 0) summaryParts.push(`⏭️ ${isPol ? 'Pominięto' : 'Skipped'}: **${skipped}**`);
         if (failed > 0) summaryParts.push(`❌ ${isPol ? 'Błędy' : 'Errors'}: **${failed}**`);
 
         const reportEmbed = new EmbedBuilder()
@@ -4898,8 +4884,6 @@ class InteractionHandler {
             let value;
             if (r.status === 'ok') {
                 value = isPol ? '✅ Wysłano pomyślnie' : '✅ Sent successfully';
-            } else if (r.status === 'skipped') {
-                value = `⏭️ ${isPol ? r.error.pol : r.error.eng}`;
             } else {
                 value = `❌ ${isPol ? r.error.pol : r.error.eng}`;
                 const fix = isPol ? r.error.fix_pol : r.error.fix_eng;
@@ -4909,7 +4893,7 @@ class InteractionHandler {
         }
 
         const footerParts = [];
-        if (results.length > 25) footerParts.push(`${isPol ? 'Pokazano 25 z' : 'Showing 25 of'} ${results.length} ${isPol ? 'serwerów' : 'servers'}`);
+        if (results.length > 25) footerParts.push(`${isPol ? 'Pokazano 25 z' : 'Showing 25 of'} ${results.length} ${isPol ? 'aktywnych serwerów' : 'active servers'}`);
         if (failed > 0) footerParts.push(isPol ? 'Właściciele serwerów z błędami otrzymali powiadomienie DM' : 'Server owners with errors received a DM notification');
         if (footerParts.length > 0) reportEmbed.setFooter({ text: footerParts.join(' · ') });
 
