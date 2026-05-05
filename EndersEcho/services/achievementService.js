@@ -394,16 +394,7 @@ class AchievementService {
             { key: 'explorer', pol: '🕵️ Eksplorator',  eng: '🕵️ Explorer'  },
         ];
 
-        const catRow = new ActionRowBuilder().addComponents(
-            ...CATS.map(c => new ButtonBuilder()
-                .setCustomId(`ach_cat_${c.key}`)
-                .setLabel(isPol ? c.pol : c.eng)
-                .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                .setDisabled(activeKey === c.key)
-            )
-        );
-
-        const overviewRow = new ActionRowBuilder().addComponents(
+        const topRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ach_overview')
                 .setLabel(t('📊 Podsumowanie', '📊 Overview'))
@@ -419,7 +410,16 @@ class AchievementService {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-        return [catRow, overviewRow];
+        const catRow = new ActionRowBuilder().addComponents(
+            ...CATS.map(c => new ButtonBuilder()
+                .setCustomId(`ach_cat_${c.key}`)
+                .setLabel(isPol ? c.pol : c.eng)
+                .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(activeKey === c.key)
+            )
+        );
+
+        return [topRow, catRow];
     }
 
     // ─── Widok osiągnięć innego gracza (bez opisów) ─────────────────────────

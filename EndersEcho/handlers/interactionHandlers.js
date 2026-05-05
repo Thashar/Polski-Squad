@@ -4085,7 +4085,7 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const { embed, components } = await this.achievementService.buildAchievementsView(
-                guildId, userId, lang, 'cat', 'score'
+                guildId, userId, lang, 'overview', null
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
