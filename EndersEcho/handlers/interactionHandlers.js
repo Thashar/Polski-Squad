@@ -459,7 +459,7 @@ class InteractionHandler {
                     return t(
                         '📋 **Przegląd kroków:**\n' +
                         '1️⃣  **Język** — interfejs po polsku lub angielsku\n' +
-                        '2️⃣  **Kanał bota** — kanał dla `/update`, `/ranking` i `/subscribe`\n' +
+                        '2️⃣  **Kanał bota** — kanał dla `/update`, `/ranking`, `/subscribe` i `/achievements`\n' +
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
@@ -470,7 +470,7 @@ class InteractionHandler {
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.',
                         '📋 **Steps overview:**\n' +
                         '1️⃣  **Language** — Polish or English interface\n' +
-                        '2️⃣  **Bot Channel** — where `/update`, `/ranking` and `/subscribe` work\n' +
+                        '2️⃣  **Bot Channel** — where `/update`, `/ranking`, `/subscribe` and `/achievements` work\n' +
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
@@ -581,10 +581,10 @@ class InteractionHandler {
                 .setDescription(
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
-                        '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n\n' +
+                        '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n• `/achievements` — wyświetl osiągnięcia\n\n' +
                         'Komendy adminów są dostępne przez `/manage` z dowolnego kanału.',
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
-                        '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n\n' +
+                        '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n• `/achievements` — view achievements\n\n' +
                         'Admin commands are available through `/manage` from any channel.'
                     )
                 );
