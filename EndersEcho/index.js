@@ -1,3 +1,4 @@
+const path = require('path');
 const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
 const config = require('./config/config');
 const GuildConfigService = require('./services/guildConfigService');
@@ -29,6 +30,7 @@ const CommunityVerificationService = require('./services/communityVerificationSe
 const GuildBanService = require('./services/guildBanService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
+const { fixBossNamesInData } = require('./fix-boss-names');
 const { generateScoreHistoryChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -103,6 +105,10 @@ async function initializeBot() {
     try {
         // Migracja struktury folderów data/ → data/guilds/{guildId}/
         await dataMigration.migrate(config.ranking.dataDir);
+
+        // Korekcja nazw bossów w istniejących danych (jednorazowe poprawki po starcie)
+        const sharedDataDir = path.join(__dirname, '../shared_data');
+        await fixBossNamesInData(config.ranking.dataDir, sharedDataDir, false, logger);
 
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);

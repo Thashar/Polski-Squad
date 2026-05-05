@@ -1,144 +1,36 @@
 'use strict';
 
 /**
- * Jednorazowy skrypt naprawczy — koryguje nazwy bossów w istniejących danych EndersEcho.
+ * Korekcja nazw bossów w istniejących danych EndersEcho.
+ * Wywoływany automatycznie przy starcie bota (z index.js).
  *
- * Pliki skanowane:
- *   EndersEcho/data/ranking.json
- *   EndersEcho/data/guilds/{guildId}/ranking.json
- *   EndersEcho/data/wyniki/{userId}.json
- *   EndersEcho/data/guilds/{guildId}/wyniki/{userId}.json
+ * Skanuje:
+ *   data/ranking.json
+ *   data/guilds/{guildId}/ranking.json
+ *   data/wyniki/{userId}.json
+ *   data/guilds/{guildId}/wyniki/{userId}.json
  *   shared_data/endersecho_ranking.json
  *
- * Uruchamianie:
- *   node EndersEcho/fix-boss-names.js          -- tryb podglądu (DRY RUN, nic nie zapisuje)
- *   node EndersEcho/fix-boss-names.js --fix    -- tryb naprawy (nadpisuje pliki)
+ * Można też uruchomić ręcznie:
+ *   node EndersEcho/fix-boss-names.js          -- DRY RUN (podgląd)
+ *   node EndersEcho/fix-boss-names.js --fix    -- zapis
  */
 
 const fs   = require('fs');
 const path = require('path');
-
 const { correctBossName, KNOWN_BOSS_NAMES } = require('./config/bossNames');
+const { createBotLogger } = require('../utils/consoleLogger');
 
-const DRY_RUN = !process.argv.includes('--fix');
-const ROOT    = path.join(__dirname, '..');
-
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function readJson(filePath) {
-    try {
-        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    } catch {
-        return null;
-    }
+    try { return JSON.parse(fs.readFileSync(filePath, 'utf8')); }
+    catch { return null; }
 }
 
 function writeJson(filePath, data) {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
-
-function tryCorrect(raw) {
-    if (!raw) return { corrected: raw, changed: false };
-    const corrected = correctBossName(raw);
-    return { corrected, changed: corrected !== raw };
-}
-
-const stats = { files: 0, changed: 0, fixes: 0, unrecognized: new Set() };
-
-function logFix(file, context, from, to) {
-    stats.fixes++;
-    console.log(`  ✏️  ${context}: "${from}" → "${to}"`);
-}
-
-function logUnknown(name) {
-    if (name && !KNOWN_BOSS_NAMES.includes(name)) stats.unrecognized.add(name);
-}
-
-// ── ranking.json (stary format: { userId: { bossName, ... } }) ───────────────
-
-function fixRankingFlat(filePath) {
-    const data = readJson(filePath);
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
-
-    let dirty = false;
-    const relPath = path.relative(ROOT, filePath);
-
-    for (const [userId, entry] of Object.entries(data)) {
-        if (!entry || !entry.bossName) { continue; }
-        const { corrected, changed } = tryCorrect(entry.bossName);
-        if (changed) {
-            logFix(relPath, `userId=${userId}`, entry.bossName, corrected);
-            if (!DRY_RUN) entry.bossName = corrected;
-            dirty = true;
-        } else {
-            logUnknown(entry.bossName);
-        }
-    }
-
-    if (dirty) {
-        stats.changed++;
-        if (!DRY_RUN) writeJson(filePath, data);
-    }
-    stats.files++;
-}
-
-// ── shared_data/endersecho_ranking.json (format: { players: [...] }) ─────────
-
-function fixSharedRanking(filePath) {
-    const data = readJson(filePath);
-    if (!data || !Array.isArray(data.players)) return;
-
-    let dirty = false;
-    const relPath = path.relative(ROOT, filePath);
-
-    for (const player of data.players) {
-        if (!player.bossName) continue;
-        const { corrected, changed } = tryCorrect(player.bossName);
-        if (changed) {
-            logFix(relPath, `userId=${player.userId || player.discordId}`, player.bossName, corrected);
-            if (!DRY_RUN) player.bossName = corrected;
-            dirty = true;
-        } else {
-            logUnknown(player.bossName);
-        }
-    }
-
-    if (dirty) {
-        stats.changed++;
-        if (!DRY_RUN) writeJson(filePath, data);
-    }
-    stats.files++;
-}
-
-// ── wyniki/{userId}.json (format: tablica [ { bossName, score, ... } ]) ───────
-
-function fixHistoryFile(filePath) {
-    const data = readJson(filePath);
-    if (!Array.isArray(data)) return;
-
-    let dirty = false;
-    const relPath = path.relative(ROOT, filePath);
-
-    for (const entry of data) {
-        if (!entry.bossName) continue;
-        const { corrected, changed } = tryCorrect(entry.bossName);
-        if (changed) {
-            logFix(relPath, `ts=${entry.timestamp}`, entry.bossName, corrected);
-            if (!DRY_RUN) entry.bossName = corrected;
-            dirty = true;
-        } else {
-            logUnknown(entry.bossName);
-        }
-    }
-
-    if (dirty) {
-        stats.changed++;
-        if (!DRY_RUN) writeJson(filePath, data);
-    }
-    stats.files++;
-}
-
-// ── glob helper ───────────────────────────────────────────────────────────────
 
 function walkDir(dir, callback) {
     if (!fs.existsSync(dir)) return;
@@ -149,71 +41,143 @@ function walkDir(dir, callback) {
     }
 }
 
-// ── main ──────────────────────────────────────────────────────────────────────
+// ── fixery per typ pliku ──────────────────────────────────────────────────────
 
-console.log(`\n🔍 EndersEcho fix-boss-names — tryb: ${DRY_RUN ? 'DRY RUN (podgląd, bez zapisu)' : '⚠️  FIX (nadpisuje pliki)'}\n`);
-
-const dataDir = path.join(__dirname, 'data');
-
-// 1. Stary ranking (płaski)
-const oldRanking = path.join(dataDir, 'ranking.json');
-if (fs.existsSync(oldRanking)) {
-    console.log(`📄 ${path.relative(ROOT, oldRanking)}`);
-    fixRankingFlat(oldRanking);
+function fixRankingFlat(filePath, dryRun, log, stats) {
+    const data = readJson(filePath);
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+    let dirty = false;
+    for (const [userId, entry] of Object.entries(data)) {
+        if (!entry?.bossName) continue;
+        const corrected = correctBossName(entry.bossName);
+        if (corrected !== entry.bossName) {
+            log.info(`[FixBossNames] "${entry.bossName}" → "${corrected}" (userId=${userId})`);
+            if (!dryRun) entry.bossName = corrected;
+            dirty = true;
+            stats.fixes++;
+        } else if (!KNOWN_BOSS_NAMES.includes(entry.bossName)) {
+            stats.unrecognized.add(entry.bossName);
+        }
+    }
+    if (dirty) {
+        stats.changedFiles++;
+        if (!dryRun) writeJson(filePath, data);
+    }
+    stats.files++;
 }
 
-// 2. Nowe rankingi per-guild
-const guildsDir = path.join(dataDir, 'guilds');
-walkDir(guildsDir, (filePath) => {
-    const base = path.basename(filePath);
-    if (base === 'ranking.json') {
-        console.log(`📄 ${path.relative(ROOT, filePath)}`);
-        fixRankingFlat(filePath);
+function fixSharedRanking(filePath, dryRun, log, stats) {
+    const data = readJson(filePath);
+    if (!data || !Array.isArray(data.players)) return;
+    let dirty = false;
+    for (const player of data.players) {
+        if (!player.bossName) continue;
+        const corrected = correctBossName(player.bossName);
+        if (corrected !== player.bossName) {
+            log.info(`[FixBossNames] "${player.bossName}" → "${corrected}" (userId=${player.userId || player.discordId})`);
+            if (!dryRun) player.bossName = corrected;
+            dirty = true;
+            stats.fixes++;
+        } else if (!KNOWN_BOSS_NAMES.includes(player.bossName)) {
+            stats.unrecognized.add(player.bossName);
+        }
     }
-});
-
-// 3. Historia wyników (stara lokalizacja: data/wyniki/)
-walkDir(path.join(dataDir, 'wyniki'), (filePath) => {
-    if (filePath.endsWith('.json')) {
-        console.log(`📄 ${path.relative(ROOT, filePath)}`);
-        fixHistoryFile(filePath);
+    if (dirty) {
+        stats.changedFiles++;
+        if (!dryRun) writeJson(filePath, data);
     }
-});
-
-// 4. Historia wyników (nowa lokalizacja: data/guilds/{id}/wyniki/)
-walkDir(guildsDir, (filePath) => {
-    if (path.basename(path.dirname(filePath)) === 'wyniki' && filePath.endsWith('.json')) {
-        console.log(`📄 ${path.relative(ROOT, filePath)}`);
-        fixHistoryFile(filePath);
-    }
-});
-
-// 5. Globalny ranking shared_data
-const sharedRanking = path.join(ROOT, 'shared_data', 'endersecho_ranking.json');
-if (fs.existsSync(sharedRanking)) {
-    console.log(`📄 ${path.relative(ROOT, sharedRanking)}`);
-    fixSharedRanking(sharedRanking);
+    stats.files++;
 }
 
-// ── podsumowanie ──────────────────────────────────────────────────────────────
-
-console.log('\n─────────────────────────────────────────────');
-console.log(`📊 Przeskanowane pliki : ${stats.files}`);
-console.log(`✏️  Pliki ze zmianami  : ${stats.changed}`);
-console.log(`🔧 Korekty ogółem     : ${stats.fixes}`);
-
-if (stats.unrecognized.size > 0) {
-    console.log(`\n⚠️  Nierozpoznane nazwy bossów (nie zmienione):`);
-    for (const name of [...stats.unrecognized].sort()) {
-        console.log(`   • "${name}"`);
+function fixHistoryFile(filePath, dryRun, log, stats) {
+    const data = readJson(filePath);
+    if (!Array.isArray(data)) return;
+    let dirty = false;
+    for (const entry of data) {
+        if (!entry.bossName) continue;
+        const corrected = correctBossName(entry.bossName);
+        if (corrected !== entry.bossName) {
+            log.info(`[FixBossNames] "${entry.bossName}" → "${corrected}" (ts=${entry.timestamp})`);
+            if (!dryRun) entry.bossName = corrected;
+            dirty = true;
+            stats.fixes++;
+        } else if (!KNOWN_BOSS_NAMES.includes(entry.bossName)) {
+            stats.unrecognized.add(entry.bossName);
+        }
     }
+    if (dirty) {
+        stats.changedFiles++;
+        if (!dryRun) writeJson(filePath, data);
+    }
+    stats.files++;
 }
 
-if (DRY_RUN && stats.fixes > 0) {
-    console.log(`\n💡 Uruchom z --fix aby zastosować zmiany:\n   node EndersEcho/fix-boss-names.js --fix`);
-} else if (!DRY_RUN && stats.fixes > 0) {
-    console.log('\n✅ Zmiany zapisane.');
-} else if (stats.fixes === 0) {
-    console.log('\n✅ Brak nazw do korekty — dane są aktualne.');
+// ── główna funkcja (eksport) ──────────────────────────────────────────────────
+
+/**
+ * @param {string} dataDir        ścieżka do EndersEcho/data/
+ * @param {string} sharedDataDir  ścieżka do shared_data/
+ * @param {boolean} dryRun        true = tylko podgląd, false = zapis
+ * @param {object} log            logger (createBotLogger) lub console
+ */
+async function fixBossNamesInData(dataDir, sharedDataDir, dryRun = false, log = console) {
+    const stats = { files: 0, changedFiles: 0, fixes: 0, unrecognized: new Set() };
+
+    // stary płaski ranking
+    const oldRanking = path.join(dataDir, 'ranking.json');
+    if (fs.existsSync(oldRanking)) fixRankingFlat(oldRanking, dryRun, log, stats);
+
+    // nowe rankingi per-guild
+    const guildsDir = path.join(dataDir, 'guilds');
+    walkDir(guildsDir, (fp) => {
+        if (path.basename(fp) === 'ranking.json') fixRankingFlat(fp, dryRun, log, stats);
+    });
+
+    // historia wyników — stara lokalizacja
+    walkDir(path.join(dataDir, 'wyniki'), (fp) => {
+        if (fp.endsWith('.json')) fixHistoryFile(fp, dryRun, log, stats);
+    });
+
+    // historia wyników — nowa lokalizacja data/guilds/{id}/wyniki/
+    walkDir(guildsDir, (fp) => {
+        if (path.basename(path.dirname(fp)) === 'wyniki' && fp.endsWith('.json'))
+            fixHistoryFile(fp, dryRun, log, stats);
+    });
+
+    // globalny shared ranking
+    const sharedFile = path.join(sharedDataDir, 'endersecho_ranking.json');
+    if (fs.existsSync(sharedFile)) fixSharedRanking(sharedFile, dryRun, log, stats);
+
+    if (stats.fixes > 0) {
+        log.info(`[FixBossNames] ${dryRun ? 'DRY RUN — ' : ''}Naprawiono ${stats.fixes} nazw w ${stats.changedFiles} plik(ach)`);
+    }
+    if (stats.unrecognized.size > 0) {
+        log.info(`[FixBossNames] Nierozpoznane nazwy (niezmienione): ${[...stats.unrecognized].sort().join(', ')}`);
+    }
+
+    return stats;
 }
-console.log('');
+
+module.exports = { fixBossNamesInData };
+
+// ── tryb CLI ──────────────────────────────────────────────────────────────────
+
+if (require.main === module) {
+    const dryRun  = !process.argv.includes('--fix');
+    const dataDir = path.join(__dirname, 'data');
+    const sharedDataDir = path.join(__dirname, '..', 'shared_data');
+    const log = createBotLogger('EndersEcho');
+
+    console.log(`\n🔍 fix-boss-names — tryb: ${dryRun ? 'DRY RUN' : '⚠️  FIX'}\n`);
+
+    fixBossNamesInData(dataDir, sharedDataDir, dryRun, log).then(stats => {
+        console.log(`\nPliki: ${stats.files} | Zmiany: ${stats.changedFiles} | Korekty: ${stats.fixes}`);
+        if (stats.unrecognized.size > 0) {
+            console.log(`Nierozpoznane: ${[...stats.unrecognized].sort().join(', ')}`);
+        }
+        if (dryRun && stats.fixes > 0) {
+            console.log(`\nUruchom z --fix aby zapisać:\n  node EndersEcho/fix-boss-names.js --fix`);
+        }
+        console.log('');
+    });
+}
