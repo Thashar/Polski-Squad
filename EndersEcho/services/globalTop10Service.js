@@ -212,8 +212,7 @@ class GlobalTop10Service {
             lines += `${posLabel} ${changeLabel} ${displayName} • **${this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}\n\n`;
         }
 
-        const cyclePos = (this._cfg.triggerCount || 0) % CYCLE_LEN;
-        const isBreakNext = cyclePos === CYCLE_LEN - 2; // po tym raporcie idzie przerwa
+        const nextIntervalDays = Math.round(this._nextIntervalMs() / (24 * 60 * 60 * 1000));
 
         const embed = new EmbedBuilder()
             .setColor(0xe74c3c)
@@ -226,9 +225,7 @@ class GlobalTop10Service {
             })
             .setTimestamp()
             .setFooter({
-                text: isBreakNext
-                    ? (msgs.globalTop10FooterBreak || 'Następny raport za 1 dzień (przerwa)')
-                    : (msgs.globalTop10Footer || 'Następny raport za 3 dni'),
+                text: `Następny raport za ${nextIntervalDays} dni`,
             });
 
         const botIconUrl = this.client?.user?.displayAvatarURL({ size: 128 });
