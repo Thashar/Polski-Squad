@@ -1186,13 +1186,45 @@ class InteractionHandler {
                 logger.warn(`⚠️ Nie można ponownie zarejestrować komend po konfiguracji: ${regErr.message}`);
             }
 
-            const finalMsgs = this.config.getMessages(interaction.guildId);
+            const savedOcrBlocked = this.guildConfigService.getConfig(interaction.guildId)?.ocrBlocked || [];
+            const updateBlocked = savedOcrBlocked.includes('update');
+            const testBlocked = savedOcrBlocked.includes('test');
+            const thasharLink = '[Thashar](https://discord.com/users/398983446812295168)';
+
+            let ocrLine;
+            if (updateBlocked && testBlocked) {
+                ocrLine = t(
+                    `⚠️ Komendy \`/update\` i \`/test\` są **wyłączone**. Aby je włączyć, skontaktuj się z ${thasharLink}.`,
+                    `⚠️ Commands \`/update\` and \`/test\` are **disabled**. To enable them, contact ${thasharLink}.`
+                );
+            } else if (!updateBlocked && !testBlocked) {
+                ocrLine = t(
+                    `✅ Komendy \`/update\` i \`/test\` są **włączone** i gotowe do użycia. W razie pytań skontaktuj się z ${thasharLink}.`,
+                    `✅ Commands \`/update\` and \`/test\` are **enabled** and ready to use. For questions, contact ${thasharLink}.`
+                );
+            } else if (!updateBlocked && testBlocked) {
+                ocrLine = t(
+                    `✅ Komenda \`/update\` jest **włączona**. Komenda \`/test\` jest wyłączona. W razie pytań skontaktuj się z ${thasharLink}.`,
+                    `✅ Command \`/update\` is **enabled**. Command \`/test\` is disabled. For questions, contact ${thasharLink}.`
+                );
+            } else {
+                ocrLine = t(
+                    `✅ Komenda \`/test\` jest **włączona**. Komenda \`/update\` jest wyłączona. W razie pytań skontaktuj się z ${thasharLink}.`,
+                    `✅ Command \`/test\` is **enabled**. Command \`/update\` is disabled. For questions, contact ${thasharLink}.`
+                );
+            }
+
+            const savedDesc = t(
+                `✅ Konfiguracja została zapisana! Bot jest teraz aktywny na tym serwerze.\n\n${ocrLine}`,
+                `✅ Configuration saved! The bot is now active on this server.\n\n${ocrLine}`
+            );
+
             await interaction.update({
                 embeds: [
                     new EmbedBuilder()
                         .setColor(0x57F287)
                         .setTitle(t('✅ Konfiguracja zapisana!', '✅ Configuration saved!'))
-                        .setDescription(finalMsgs.configureSaved)
+                        .setDescription(savedDesc)
                 ],
                 components: []
             });
