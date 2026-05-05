@@ -5925,7 +5925,7 @@ class InteractionHandler {
 
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId(`tk_m_${prevMonthRaw}_all_${userId}`)
+                .setCustomId(`tk_m_${prevMonthRaw}_all_${userId}_p`)
                 .setLabel('◀')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
@@ -5935,7 +5935,7 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(true),
             new ButtonBuilder()
-                .setCustomId(`tk_m_${nextMonthRaw}_all_${userId}`)
+                .setCustomId(`tk_m_${nextMonthRaw}_all_${userId}_n`)
                 .setLabel('▶')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasNext),
