@@ -270,6 +270,7 @@
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
+- Przy każdym zapisaniu konfiguracji zapisywane jest `configuredBy: { userId, username, configuredAt }` — używane do DM alertów uprawnień
 - Konfiguracja persystowana w `data/guild_configs.json` przez `GuildConfigService`
 - Stan wizarda trzymany w RAM (`_configWizard` Map, per userId_guildId)
 
@@ -460,6 +461,7 @@ Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get
 
 ## Najlepsze Praktyki
 
+- **Alerty uprawnień:** `_dmPermissionAlert(client, guildId, { channelId, missingPerms, context })` — wysyła DM do `configuredBy` + właściciela serwera gdy bot nie może zapisać do kanału (50001/50013). `_sendChannelErrorDm({ guildObj, ... })` — analogicznie dla Global TOP3 i /info. Oba fire-and-forget, nie przerywają głównego flow.
 - **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera. Metoda `sendEmbed(embed)` wysyła embed przez webhook (powiadomienia o dołączeniu serwera, usunięciu, zmianie konfiguracji); zwraca `true` jeśli webhook skonfigurowany
