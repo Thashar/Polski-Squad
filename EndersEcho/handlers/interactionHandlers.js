@@ -6503,12 +6503,10 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
         const matches = [];
-        for (const guildConfig of this.config.getAllGuilds()) {
-            const guild = interaction.client.guilds.cache.get(guildConfig.id);
-            if (!guild) continue;
+        for (const [guildId, guild] of interaction.client.guilds.cache) {
             if (!guild.name.toLowerCase().includes(query)) continue;
-            if (this.guildBanService?.isBanned(guildConfig.id)) continue;
-            matches.push({ guildId: guildConfig.id, guildName: guild.name });
+            if (this.guildBanService?.isBanned(guildId)) continue;
+            matches.push({ guildId, guildName: guild.name });
         }
 
         if (matches.length === 0) {
