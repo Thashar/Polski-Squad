@@ -659,7 +659,7 @@ class RankingService {
         for (const guildConfig of this.config.getAllGuilds()) {
             if (!client.guilds.cache.has(guildConfig.id)) continue;
             const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Server ${guildConfig.id}`;
-            const label = guildName.length > 20 ? guildName.substring(0, 20) + '…' : guildName;
+            const label = guildName.substring(0, 80);
 
             buttons.push(
                 new ButtonBuilder()
