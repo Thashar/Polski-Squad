@@ -5671,7 +5671,7 @@ class InteractionHandler {
         const month    = `${monthRaw.slice(0, 4)}-${monthRaw.slice(4, 6)}`;
 
         let userId, guildFilter, page;
-        if (action === 'a') {
+        if (action === 'a' || action === 'total') {
             userId      = parts[3];
             guildFilter = 'all';
             page        = 0;
@@ -5705,6 +5705,19 @@ class InteractionHandler {
         // Widok Zbiorczo (breakdown per serwer)
         if (action === 'm') {
             const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
+            if (reply.components.length < 5) {
+                reply.components.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                ));
+            }
+            await interaction.editReply(reply);
+            return;
+        }
+
+        // Widok Całe zużycie (all-time per serwer)
+        if (action === 'total') {
+            if (!isSuperUser) return;
+            const reply = await this._buildTokensTotalBreakdown(interaction);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
@@ -5930,9 +5943,75 @@ class InteractionHandler {
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
                 .setLabel('📅 Dniowo')
                 .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId(`tk_total_${userId}`)
+                .setLabel('📦 Całe zużycie')
+                .setStyle(ButtonStyle.Secondary),
         );
 
         return { embeds: [embed], components: [backRow] };
+    }
+
+    async _buildTokensTotalBreakdown(interaction) {
+        const { PRICING } = require('../services/tokenUsageService');
+        const userId   = interaction.user.id;
+        const fmtCost  = (c) => `$${c.toFixed(5)}`;
+        const allMonths = this.tokenUsageService.getAvailableMonths('all');
+        const tokenGuildIds = Object.keys(this.tokenUsageService.data.guilds);
+
+        const activeLines = [];
+        const leftLines   = [];
+        let totalCost = 0;
+
+        for (const guildId of tokenGuildIds) {
+            let promptTokens = 0, outputTokens = 0, requests = 0;
+            for (const month of allMonths) {
+                const s = this.tokenUsageService.getMonthlyStats(guildId, month);
+                promptTokens += s.promptTokens;
+                outputTokens += s.outputTokens;
+                requests     += s.requests;
+            }
+            if (requests === 0) continue;
+            const cost = (promptTokens / 1_000_000) * PRICING.input + (outputTokens / 1_000_000) * PRICING.output;
+            totalCost += cost;
+            const liveName   = interaction.client.guilds.cache.get(guildId)?.name;
+            const storedName = this.guildConfigService.getConfig(guildId)?.guildName;
+            const name       = (liveName || storedName || guildId).slice(0, 24);
+            const line = `**${name}** — ${fmtCost(cost)} (${requests} req)`;
+            if (liveName) {
+                activeLines.push(line);
+            } else {
+                leftLines.push(line);
+            }
+        }
+
+        activeLines.push('');
+        activeLines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
+
+        const currentMonthRaw = new Date().toISOString().slice(0, 7).replace('-', '');
+
+        const embed = new EmbedBuilder()
+            .setColor(0x9B59B6)
+            .setTitle('📦 Całe zużycie — wszystkie miesiące')
+            .setDescription(activeLines.join('\n'));
+
+        if (leftLines.length > 0) {
+            embed.addFields({ name: '🚪 Serwery bez aplikacji', value: leftLines.join('\n'), inline: false });
+        }
+
+        embed
+            .addFields({ name: 'Cennik', value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
+            .setTimestamp()
+            .setFooter({ text: 'Dane z /update • wszystkie dostępne miesiące' });
+
+        const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`tk_m_${currentMonthRaw}_all_${userId}`)
+                .setLabel('🗂️ Zbiorczo')
+                .setStyle(ButtonStyle.Secondary),
+        );
+
+        return { embeds: [embed], components: [navRow] };
     }
 
     async _buildTokensUsersEmbed(interaction, month, guildFilter, page, isSuperUser) {
