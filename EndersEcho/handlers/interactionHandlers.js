@@ -327,10 +327,6 @@ class InteractionHandler {
                 await this._handleConfigureTagModal(interaction);
                 return;
             }
-            if (interaction.customId === 'cfg_roles_modal') {
-                await this._handleConfigureRolesModal(interaction);
-                return;
-            }
             if (interaction.customId === 'cfg_cv_threshold_modal') {
                 await this._handleConfigureCvThresholdModal(interaction);
                 return;
@@ -638,7 +634,7 @@ class InteractionHandler {
                         '**Role tiers:**\n🥇 TOP 1 — Best player on the server\n🥈 TOP 2 — Second place\n🥉 TOP 3 — Third place\n⭐ TOP 4–10 — Strong performers\n🎯 TOP 11–30 — Active players\n\nYou can skip this step and configure roles later by running `/configure` again.'
                     )
                 );
-            const configRolesBtn = new ButtonBuilder().setCustomId('cfg_roles_open').setLabel(t('Skonfiguruj role', 'Configure Roles')).setStyle(ButtonStyle.Primary);
+            const configRolesBtn = new ButtonBuilder().setCustomId('cfg_roles_start').setLabel(t('Skonfiguruj role', 'Configure Roles')).setStyle(ButtonStyle.Primary);
             const skipBtn = new ButtonBuilder().setCustomId('cfg_roles_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(configRolesBtn, skipBtn, backBtn)] });
 
@@ -796,24 +792,88 @@ class InteractionHandler {
         await interaction.update({ embeds: [embed], components: rows });
     }
 
-    async _handleConfigureRolesModal(interaction) {
+    async _showTopRoleSubStep(interaction, state, wizardKey, stepIdx) {
+        const ROLE_STEPS = [
+            { key: 'top1',      emoji: '🥇', labelPol: 'TOP 1',    labelEng: 'TOP 1',     descPol: 'Najlepszy gracz na serwerze',  descEng: 'Best player on the server' },
+            { key: 'top2',      emoji: '🥈', labelPol: 'TOP 2',    labelEng: 'TOP 2',     descPol: 'Drugie miejsce',               descEng: 'Second place' },
+            { key: 'top3',      emoji: '🥉', labelPol: 'TOP 3',    labelEng: 'TOP 3',     descPol: 'Trzecie miejsce',              descEng: 'Third place' },
+            { key: 'top4to10',  emoji: '⭐', labelPol: 'TOP 4–10', labelEng: 'TOP 4–10',  descPol: 'Gracze z miejsc 4–10',         descEng: 'Players ranked 4–10' },
+            { key: 'top11to30', emoji: '🎯', labelPol: 'TOP 11–30',labelEng: 'TOP 11–30', descPol: 'Gracze z miejsc 11–30',        descEng: 'Players ranked 11–30' },
+        ];
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const step = ROLE_STEPS[stepIdx];
+        const temp = state.topRolesTemp || {};
+
+        const selectedLines = ROLE_STEPS.slice(0, stepIdx).map(s => {
+            const roleId = temp[s.key];
+            return `${s.emoji} **${t(s.labelPol, s.labelEng)}** — ${roleId ? `<@&${roleId}>` : t('*(pominięto)*', '*(skipped)*')}`;
+        });
+
+        let desc = t(
+            `Wybierz rolę Discord dla pozycji **${step.emoji} ${step.labelPol}** (${step.descPol}).\n\nMożesz pominąć jeśli nie chcesz konfigurować tej pozycji — rola nie będzie przyznawana.`,
+            `Select a Discord role for the **${step.emoji} ${step.labelEng}** tier (${step.descEng}).\n\nYou can skip if you don't want to configure this tier — the role won't be assigned.`
+        );
+        if (selectedLines.length > 0) {
+            desc += `\n\n${t('**Wybrane dotychczas:**', '**Selected so far:**')}\n${selectedLines.join('\n')}`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(t(`🏆 Role TOP — krok ${stepIdx + 1}/5`, `🏆 TOP Roles — step ${stepIdx + 1}/5`));
+        embed.setDescription(desc);
+
+        const existingRoleId = temp[step.key];
+        const roleSelect = new RoleSelectMenuBuilder()
+            .setCustomId(`cfg_roles_sel_${stepIdx}`)
+            .setPlaceholder(t(`Wybierz rolę dla ${step.emoji} ${step.labelPol}`, `Select role for ${step.emoji} ${step.labelEng}`))
+            .setMinValues(1)
+            .setMaxValues(1);
+        if (existingRoleId) {
+            try { roleSelect.setDefaultRoles([existingRoleId]); } catch { /* ignoruj */ }
+        }
+
+        const skipBtn = new ButtonBuilder()
+            .setCustomId(`cfg_roles_skip_${stepIdx}`)
+            .setLabel(t('Pomiń ⏭️', 'Skip ⏭️'))
+            .setStyle(ButtonStyle.Secondary);
+        const backBtn = new ButtonBuilder()
+            .setCustomId(`cfg_roles_back_${stepIdx}`)
+            .setLabel(t('← Wstecz', '← Back'))
+            .setStyle(ButtonStyle.Secondary);
+
+        await interaction.update({
+            embeds: [embed],
+            components: [
+                new ActionRowBuilder().addComponents(roleSelect),
+                new ActionRowBuilder().addComponents(skipBtn, backBtn),
+            ]
+        });
+    }
+
+    async _handleTopRoleSelect(interaction) {
+        const ROLE_KEYS = ['top1', 'top2', 'top3', 'top4to10', 'top11to30'];
         const key = this._wizardKey(interaction.user.id, interaction.guildId);
         const state = this._configWizard.get(key);
         if (!state) { await interaction.reply({ content: '⚠️ Session expired.', flags: ['Ephemeral'] }); return; }
 
-        const topRoles = {};
-        const fields = ['top1', 'top2', 'top3', 'top4to10', 'top11to30'];
-        for (const f of fields) {
-            try {
-                const val = interaction.fields.getTextInputValue(`cfg_role_${f}`).trim();
-                if (val && /^\d+$/.test(val)) topRoles[f] = val;
-            } catch { /* pole opcjonalne */ }
-        }
-        state.topRoles = Object.keys(topRoles).length > 0 ? topRoles : null;
-        state.rolesSkipped = false;
+        const stepIdx = parseInt(interaction.customId.replace('cfg_roles_sel_', ''), 10);
+        if (!state.topRolesTemp) state.topRolesTemp = {};
+        state.topRolesTemp[ROLE_KEYS[stepIdx]] = interaction.values[0];
         this._configWizard.set(key, state);
-        const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
-        await interaction.update({ embeds: [embed], components: rows });
+
+        const nextIdx = stepIdx + 1;
+        if (nextIdx >= 5) {
+            const temp = state.topRolesTemp;
+            state.topRoles = Object.keys(temp).length > 0 ? temp : null;
+            state.rolesSkipped = !state.topRoles;
+            state.topRolesTemp = undefined;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+        } else {
+            await this._showTopRoleSubStep(interaction, state, key, nextIdx);
+        }
     }
 
     async _handleConfigureCvThresholdModal(interaction) {
@@ -902,44 +962,48 @@ class InteractionHandler {
             return;
         }
 
-        // Otwórz modal ról TOP
-        if (customId === 'cfg_roles_open') {
-            const existing = state.topRoles || {};
-            const modal = new ModalBuilder()
-                .setCustomId('cfg_roles_modal')
-                .setTitle(t('🏆 Role TOP — ID ról', '🏆 TOP Roles — Role IDs'))
-                .addComponents(
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('cfg_role_top1')
-                            .setLabel(t('🥇 TOP 1 — ID roli (opcjonalnie)', '🥇 TOP 1 — Role ID (optional)'))
-                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top1 || '')
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('cfg_role_top2')
-                            .setLabel(t('🥈 TOP 2 — ID roli (opcjonalnie)', '🥈 TOP 2 — Role ID (optional)'))
-                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top2 || '')
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('cfg_role_top3')
-                            .setLabel(t('🥉 TOP 3 — ID roli (opcjonalnie)', '🥉 TOP 3 — Role ID (optional)'))
-                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top3 || '')
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('cfg_role_top4to10')
-                            .setLabel(t('⭐ TOP 4–10 — ID roli (opcjonalnie)', '⭐ TOP 4–10 — Role ID (optional)'))
-                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top4to10 || '')
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new TextInputBuilder().setCustomId('cfg_role_top11to30')
-                            .setLabel(t('🎯 TOP 11–30 — ID roli (opcjonalnie)', '🎯 TOP 11–30 — Role ID (optional)'))
-                            .setStyle(TextInputStyle.Short).setRequired(false).setValue(existing.top11to30 || '')
-                    )
-                );
-            await interaction.showModal(modal);
+        // Rozpocznij sub-wizard wyboru ról TOP
+        if (customId === 'cfg_roles_start') {
+            state.topRolesTemp = { ...(state.topRoles || {}) };
+            this._configWizard.set(key, state);
+            await this._showTopRoleSubStep(interaction, state, key, 0);
             return;
         }
 
-        // Pomiń role
+        // Sub-wizard ról TOP — pomiń krok N
+        if (customId.startsWith('cfg_roles_skip_')) {
+            const stepIdx = parseInt(customId.replace('cfg_roles_skip_', ''), 10);
+            if (!state.topRolesTemp) state.topRolesTemp = {};
+            const nextIdx = stepIdx + 1;
+            if (nextIdx >= 5) {
+                const temp = state.topRolesTemp;
+                state.topRoles = Object.keys(temp).length > 0 ? temp : null;
+                state.rolesSkipped = !state.topRoles;
+                state.topRolesTemp = undefined;
+                this._configWizard.set(key, state);
+                const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+                await interaction.update({ embeds: [embed], components: rows });
+            } else {
+                this._configWizard.set(key, state);
+                await this._showTopRoleSubStep(interaction, state, key, nextIdx);
+            }
+            return;
+        }
+
+        // Sub-wizard ról TOP — wróć do poprzedniego kroku
+        if (customId.startsWith('cfg_roles_back_')) {
+            const stepIdx = parseInt(customId.replace('cfg_roles_back_', ''), 10);
+            if (!state.topRolesTemp) state.topRolesTemp = {};
+            if (stepIdx <= 0) {
+                const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+                await interaction.update({ embeds: [embed], components: rows });
+            } else {
+                await this._showTopRoleSubStep(interaction, state, key, stepIdx - 1);
+            }
+            return;
+        }
+
+        // Pomiń wszystkie role (z głównego kroku 5 dashboardu)
         if (customId === 'cfg_roles_skip') {
             state.topRoles = null;
             state.rolesSkipped = true;
@@ -2790,8 +2854,11 @@ class InteractionHandler {
         if (customId === 'cfg_lang_eng') return 'Wybrano język: angielski';
         if (customId === 'cfg_back') return 'Cofnij krok';
         if (customId === 'cfg_tag_open') return 'Ustaw tag serwera (modal)';
-        if (customId === 'cfg_roles_open') return 'Ustaw role TOP (modal)';
+        if (customId === 'cfg_roles_start') return 'Rozpocznij konfigurację ról TOP';
         if (customId === 'cfg_roles_skip') return 'Pomiń role TOP';
+        if (customId.startsWith('cfg_roles_skip_')) return `Pomiń rolę TOP (krok ${parseInt(customId.replace('cfg_roles_skip_', ''), 10) + 1}/5)`;
+        if (customId.startsWith('cfg_roles_back_')) return `Wróć (krok ról TOP ${parseInt(customId.replace('cfg_roles_back_', ''), 10) + 1}/5)`;
+        if (customId.startsWith('cfg_roles_sel_')) return `Wybrano rolę TOP (krok ${parseInt(customId.replace('cfg_roles_sel_', ''), 10) + 1}/5)`;
         if (customId === 'cfg_notif_yes') return 'Powiadomienia Global TOP3: TAK';
         if (customId === 'cfg_notif_no') return 'Powiadomienia Global TOP3: NIE';
         if (customId === 'cfg_role_ranking_add') return 'Dodaj ranking roli';
@@ -3118,7 +3185,8 @@ class InteractionHandler {
             // === Przyciski wizarda /configure ===
             if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
-                customId === 'cfg_roles_open' || customId === 'cfg_roles_skip' ||
+                customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' ||
+                customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
@@ -4050,6 +4118,11 @@ class InteractionHandler {
 
             if (customId === 'cfg_role_ranking_remove_select') {
                 await this._handleCfgRoleRankingRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId.startsWith('cfg_roles_sel_')) {
+                await this._handleTopRoleSelect(interaction);
                 return;
             }
 
