@@ -5902,23 +5902,30 @@ class InteractionHandler {
             .setTimestamp()
             .setFooter({ text: 'Dane z /update' });
 
-        // Przycisk powrotu do widoku głównego (dla aktualnego filtra = all)
+        // Nawigacja miesiącami (na podstawie dostępnych danych — wszystkie serwery)
+        const available    = this.tokenUsageService.getAvailableMonths('all');
+        const idx          = available.indexOf(month);
+        const hasPrev      = idx > 0;
+        const hasNext      = idx < available.length - 1;
+        const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
+        const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
+
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId(`tk_p_${monthStr}_all_${userId}`)
+                .setCustomId(`tk_m_${prevMonthRaw}_all_${userId}`)
                 .setLabel('◀')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
+                .setDisabled(!hasPrev),
             new ButtonBuilder()
                 .setCustomId(`tk_m_${monthStr}_all_${userId}`)
                 .setLabel(monthLabel)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(true),
             new ButtonBuilder()
-                .setCustomId(`tk_n_${monthStr}_all_${userId}`)
+                .setCustomId(`tk_m_${nextMonthRaw}_all_${userId}`)
                 .setLabel('▶')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(true),
+                .setDisabled(!hasNext),
             new ButtonBuilder()
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
                 .setLabel('🌐 Wszystkie')
