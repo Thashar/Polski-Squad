@@ -313,7 +313,7 @@ class GlobalTop10Service {
         };
 
         const prevLabel = prevGlobalPosition ? `#${prevGlobalPosition}` : '—';
-        const direction = !prevGlobalPosition || prevGlobalPosition > newGlobalPosition ? '⬆️' : '⬇️';
+        const direction = !prevGlobalPosition || prevGlobalPosition > newGlobalPosition ? '↑' : '↓';
         const title = msgs.globalSnippetTitle || '🌐 Zmiana w globalnym rankingu';
 
         const lines = [];
