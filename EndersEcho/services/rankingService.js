@@ -39,7 +39,7 @@ class RankingService {
      * @returns {string}
      */
     getRankingFile(guildId) {
-        return path.join(this.config.ranking.dataDir, `ranking_${guildId}.json`);
+        return path.join(this.config.ranking.dataDir, 'guilds', guildId, 'ranking.json');
     }
 
     /**
@@ -59,29 +59,8 @@ class RankingService {
             const parsed = JSON.parse(data);
             this._rankingCache.set(guildId, { data: parsed, ts: Date.now() });
             return parsed;
-        } catch (error) {
-            if (this.config.guilds[0]?.id === guildId) {
-                const legacy = await this._loadLegacyRanking();
-                if (legacy) {
-                    logger.info(`🔄 Migruję stary ranking.json do ranking_${guildId}.json (serwer "${this.config.guilds[0]?.tag || guildId}")`);
-                    await this.saveRanking(guildId, legacy);
-                    return legacy;
-                }
-            }
-            return {};
-        }
-    }
-
-    /**
-     * Wczytuje stary ranking.json (migracja jednorazowa)
-     * @returns {Promise<Object|null>}
-     */
-    async _loadLegacyRanking() {
-        try {
-            const data = await fs.readFile(this.config.ranking.legacyFile, 'utf8');
-            return JSON.parse(data);
         } catch {
-            return null;
+            return {};
         }
     }
 
@@ -92,8 +71,8 @@ class RankingService {
      */
     async saveRanking(guildId, ranking) {
         try {
-            await fs.mkdir(this.config.ranking.dataDir, { recursive: true });
             const file = this.getRankingFile(guildId);
+            await fs.mkdir(path.dirname(file), { recursive: true });
             await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
             this._rankingCache.set(guildId, { data: ranking, ts: Date.now() });
             await this.saveSharedRanking();

@@ -6,48 +6,46 @@ class ScoreHistoryService {
         this.dataDir = dataDir;
     }
 
-    _file(guildId) {
-        return path.join(this.dataDir, `score_history_${guildId}.json`);
+    _file(guildId, userId) {
+        return path.join(this.dataDir, 'guilds', guildId, 'wyniki', `${userId}.json`);
     }
 
-    async _load(guildId) {
+    async _load(guildId, userId) {
         try {
-            const raw = await fs.readFile(this._file(guildId), 'utf8');
+            const raw = await fs.readFile(this._file(guildId, userId), 'utf8');
             return JSON.parse(raw);
         } catch {
-            return {};
+            return [];
         }
     }
 
-    async _save(guildId, data) {
-        await fs.mkdir(this.dataDir, { recursive: true });
-        await fs.writeFile(this._file(guildId), JSON.stringify(data, null, 2), 'utf8');
+    async _save(guildId, userId, entries) {
+        const file = this._file(guildId, userId);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, JSON.stringify(entries, null, 2), 'utf8');
     }
 
     async addEntry(guildId, userId, entry) {
-        const data = await this._load(guildId);
-        if (!data[userId]) data[userId] = [];
-        data[userId].push(entry);
-        await this._save(guildId, data);
+        const entries = await this._load(guildId, userId);
+        entries.push(entry);
+        await this._save(guildId, userId, entries);
     }
 
     // Usuwa ostatni wpis z danym scoreValue (przy cofaniu rekordu przez admina)
     async removeEntry(guildId, userId, scoreValue) {
-        const data = await this._load(guildId);
-        const history = data[userId];
-        if (!history || history.length === 0) return;
-        const lastIdx = history.map(e => e.scoreValue).lastIndexOf(scoreValue);
+        const entries = await this._load(guildId, userId);
+        if (entries.length === 0) return;
+        const lastIdx = entries.map(e => e.scoreValue).lastIndexOf(scoreValue);
         if (lastIdx === -1) return;
-        history.splice(lastIdx, 1);
-        await this._save(guildId, data);
+        entries.splice(lastIdx, 1);
+        await this._save(guildId, userId, entries);
     }
 
     // Zwraca wpisy z ostatnich maxDaysBack dni, posortowane chronologicznie
     async getUserHistory(guildId, userId, maxDaysBack = 90) {
-        const data = await this._load(guildId);
-        const history = data[userId] || [];
+        const entries = await this._load(guildId, userId);
         const cutoff = Date.now() - maxDaysBack * 24 * 60 * 60 * 1000;
-        return history
+        return entries
             .filter(e => new Date(e.timestamp).getTime() >= cutoff)
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }

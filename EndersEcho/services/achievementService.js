@@ -14,7 +14,7 @@ class AchievementService {
     }
 
     _getDataFile(guildId) {
-        return path.join(this.dataDir, `achievements_${guildId}.json`);
+        return path.join(this.dataDir, 'guilds', guildId, 'achievements.json');
     }
 
     async loadData(guildId) {
@@ -27,7 +27,9 @@ class AchievementService {
     }
 
     async saveData(guildId, data) {
-        await fs.writeFile(this._getDataFile(guildId), JSON.stringify(data, null, 2), 'utf8');
+        const file = this._getDataFile(guildId);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
     }
 
     _ensureUser(data, userId) {

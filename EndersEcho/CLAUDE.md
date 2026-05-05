@@ -67,7 +67,7 @@
      - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
      - Identyczny przepływ jak `/update` (te same walidacje, ten sam `analyzeTestImage()` z weryfikacją wzorca, ten sam prompt) **z wyjątkiem** kroków dry-run:
        - Wynik (rekord i brak rekordu) wyświetlany jako **ephemeral** w `editReply` — bez publicznego `followUp`
-       - **Brak zapisu do rankingu** (`ranking_{guildId}.json`) — `isNewRecord` obliczany porównaniem z aktualnym stanem bez `updateUserRanking()`
+       - **Brak zapisu do rankingu** (`guilds/{guildId}/ranking.json`) — `isNewRecord` obliczany porównaniem z aktualnym stanem bez `updateUserRanking()`
        - **Brak aktualizacji ról TOP** (`roleService.updateTopRoles`)
        - **Brak powiadomień Global Top 3** na inne serwery
        - **Brak powiadomień DM** do subskrybentów
@@ -76,7 +76,7 @@
      - Respektuje `isAllowedChannel`, blokadę użytkownika (`userBlockService`) oraz globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
-   - **Per-serwer:** Osobny plik `data/ranking_{guildId}.json` dla każdego serwera
+   - **Per-serwer:** Osobny plik `data/guilds/{guildId}/ranking.json` dla każdego serwera
    - **Globalny:** `getGlobalRanking()` — najlepszy wynik gracza ze wszystkich serwerów (z adnotacją skąd pochodzi)
    - Eksport do `shared_data/endersecho_ranking.json` (globalny, format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp, sourceGuildId}]}`)
    - Eksport przy każdym zapisie i przy starcie bota
@@ -109,14 +109,14 @@
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
    - Nazwy serwerów pobierane dynamicznie z `client.guilds.cache`
    - Po kliknięciu serwera → ranking z paginacją (10/strona, 1h timeout) + przyciski rankingów ról (jeśli skonfigurowane)
-   - **Wykres historii rekordów** (`scoreHistoryService` + `chartService`): jeśli wywołujący ma ≥ 2 wpisy w ciągu ostatnich 90 dni → PNG 800×280 dołączony do tej samej wiadomości rankingowej. Oś X: daty rzeczywiste (max 3 miesiące), oś Y: wyniki z jednostkami (K/M/B/T/Q/Qi/Sx), kropki z wynikiem nad każdym. Dane persystowane w `data/score_history_{guildId}.json` — każde pobicie rekordu to nowy wpis.
+   - **Wykres historii rekordów** (`scoreHistoryService` + `chartService`): jeśli wywołujący ma ≥ 2 wpisy w ciągu ostatnich 90 dni → PNG 800×280 dołączony do tej samej wiadomości rankingowej. Oś X: daty rzeczywiste (max 3 miesiące), oś Y: wyniki z jednostkami (K/M/B/T/Q/Qi/Sx), kropki z wynikiem nad każdym. Dane persystowane w `data/guilds/{guildId}/wyniki/{userId}.json` — każde pobicie rekordu to nowy wpis.
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
    - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)
 
 6. **Rankingi Ról** - `roleRankingConfigService.js` + `interactionHandlers.js`:
    - Zarządzanie przez `/configure` krok 7 (admin) → przyciski: "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"
-   - Max **10 ról** per serwer; konfiguracja persystowana w `data/role_rankings_{guildId}.json` (`[{ roleId, roleName, addedAt }]`)
+   - Max **10 ról** per serwer; konfiguracja persystowana w `data/guilds/{guildId}/role_rankings.json` (`[{ roleId, roleName, addedAt }]`)
    - Po wybraniu serwera w `/ranking` → pod paginacją pojawiają się przyciski `[NazwaRoli]` (max 2 wiersze po 5)
    - Kliknięcie przycisku roli → ranking filtrowany do graczy aktualnie posiadających tę rolę
    - Filtrowanie: batch-fetch tylko graczy z rankingu (nie całego serwera) → `guild.members.fetch({ user: [...ids] })`
@@ -142,7 +142,7 @@
    - **Usunięcie jednego:** `removeOneAchievement(guildId, userId, achId)` — usuwa tylko jedno odblokowane osiągnięcie; wywoływane przez head admina z `/manage` → `🏆 Usuń osiągnięcia` → wybór konkretnego osiągnięcia
    - **Odczyt odblokowanych:** `getUnlockedAchievements(guildId, userId)` — zwraca tablicę `[{ ...ach, unlockedAt }]` dla osiągnięć gracza; używane przez panel admina do zbudowania listy wyboru
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` TYLKO z osiągnięciami zdobytymi od poprzedniego pobicia rekordu (`lastRecordBeatAt`)
-   - **Persistencja:** `data/achievements_{guildId}.json` — per-serwer; przeżywa restart
+   - **Persistencja:** `data/guilds/{guildId}/achievements.json` — per-serwer; przeżywa restart
    - **Komenda /achievements:** ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania. Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po `/achievements`: kategoria `score`.
    - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm`; `trackNonRecord(guildId, userId)` — wołane w `_runUpdateFlow` gdy `!isNewRecord && !dryRun`; `trackCvApproved(guildId, userId)` — wołane w CV approve handler; `trackAiAnalyzed(guildId, userId)` — wołane w `_handleAnalyzeButton` po zapisaniu wyniku
    - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`
@@ -336,16 +336,26 @@
 **Struktura danych:**
 ```
 EndersEcho/data/
-├── ranking_{guildId1}.json        # Ranking serwera 1 (aktualny rekord per gracz)
-├── ranking_{guildId2}.json        # Ranking serwera 2
-├── score_history_{guildId1}.json  # Historia rekordów serwera 1 (wszystkie pobicia)
-├── score_history_{guildId2}.json  # Historia rekordów serwera 2
+├── guilds/
+│   └── {guildId}/
+│       ├── ranking.json           # Ranking serwera (aktualny rekord per gracz)
+│       ├── achievements.json      # Osiągnięcia graczy serwera
+│       ├── role_rankings.json     # Konfiguracja rankingów ról
+│       └── wyniki/
+│           └── {userId}.json      # Historia rekordów gracza na tym serwerze
 ├── notifications.json             # Subskrypcje powiadomień DM
 ├── guild_configs.json             # Per-guild konfiguracja
 ├── update_cooldowns.json          # Cooldowny /update (userId → expiresAt timestamp ms)
-└── ...
+├── user_blocks.json               # Blokady użytkowników
+├── usage_limits.json              # Dzienny limit użytkownika
+├── token_usage.json               # Koszty AI (Gemini)
+├── testers.json                   # Lista testerów OCR
+├── banned_guilds.json             # Zbanowane serwery
+└── community_votes.json           # Sesje weryfikacji społeczności
 ```
-Format wpisu historii: `{ score: "304Q", scoreValue: 304e15, timestamp: "ISO", bossName: "..." }`
+Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
+
+**Migracja danych:** Przy pierwszym starcie `dataMigration.js` automatycznie przenosi stare pliki (`ranking_{id}.json`, `achievements_{id}.json`, `role_rankings_{id}.json`, `score_history_{id}.json`) do nowej struktury. Operacja jest idempotentna — bezpieczna przy wielokrotnym uruchomieniu.
 
 **Rejestracja komend:** Komendy slash rejestrowane per-serwer przez `registerSlashCommands()` (start) i `registerCommandsForGuild()` (guildCreate / po /configure).
 
