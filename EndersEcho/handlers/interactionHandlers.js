@@ -73,6 +73,8 @@ class InteractionHandler {
         this._infoSessionTimers = new Map();
         // Stan wizarda /configure (userId_guildId -> { step data })
         this._configWizard = new Map();
+        // Cache rankingu osiągnięć (messageId -> { players, currentPage, totalPages, ... })
+        this._achRankings = new Map();
     }
 
     /**
@@ -142,6 +144,11 @@ class InteractionHandler {
                 .setName('achievements')
                 .setDescription('View your unlocked achievements')
                 .setDescriptionLocalizations(pl('Sprawdź swoje odblokowane osiągnięcia')),
+
+            new SlashCommandBuilder()
+                .setName('ranking-osiagniec')
+                .setDescription('View the achievements ranking (by achievement count)')
+                .setDescriptionLocalizations(pl('Wyświetl ranking osiągnięć (według liczby zdobytych osiągnięć)')),
 
             new SlashCommandBuilder()
                 .setName('configure')
@@ -256,7 +263,8 @@ class InteractionHandler {
                 case 'ranking':      await this.handleRankingCommand(interaction);        break;
                 case 'update':       await this.handleUpdateCommand(interaction);         break;
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
-                case 'achievements': await this.handleAchievementsCommand(interaction);   break;
+                case 'achievements':       await this.handleAchievementsCommand(interaction);   break;
+                case 'ranking-osiagniec': await this.handleAchRankingCommand(interaction);    break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -321,6 +329,10 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBanGuildSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'ach_check_modal') {
+                await this._handleAchCheckModal(interaction);
                 return;
             }
             if (interaction.customId === 'panel_ach_del_modal') {
@@ -3040,6 +3052,30 @@ class InteractionHandler {
                 return;
             }
 
+            // === Sprawdź gracza (osiągnięcia innego gracza) ===
+            if (customId === 'ach_check_player') {
+                await this._handleAchCheckPlayer(interaction);
+                return;
+            }
+            if (customId.startsWith('ach_vc_') || customId.startsWith('ach_vo_') || customId === 'ach_vb') {
+                await this._handleAchViewOtherButton(interaction, customId);
+                return;
+            }
+
+            // === Ranking osiągnięć ===
+            if (customId === 'ach_rank_back') {
+                await this._handleAchRankingBack(interaction);
+                return;
+            }
+            if (customId === 'ach_rank_global' || customId.startsWith('ach_rank_srv_') || customId.startsWith('ach_rank_role_')) {
+                await this._handleAchRankingSelect(interaction, customId);
+                return;
+            }
+            if (customId === 'ach_rank_prev' || customId === 'ach_rank_next' || customId === 'ach_rank_mypos') {
+                await this._handleAchRankingPage(interaction, customId);
+                return;
+            }
+
             // === Przyciski Panelu Admina ===
             if (customId.startsWith('panel_') || customId === 'cfg_admin_panel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
@@ -4103,6 +4139,11 @@ class InteractionHandler {
     async handleSelectMenuInteraction(interaction) {
         try {
             const customId = interaction.customId;
+
+            if (customId === 'ach_check_sel') {
+                await this._handleAchCheckSelect(interaction);
+                return;
+            }
 
             if (customId === 'panel_remove_select') {
                 await this._handlePanelRemoveSelect(interaction);
@@ -6715,6 +6756,347 @@ class InteractionHandler {
                 `✅ TOP10 schedule set.\n📅 First report: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)`
             )
         });
+    }
+
+    // ─── Sprawdź gracza — osiągnięcia innego gracza ──────────────────────────
+
+    async _handleAchCheckPlayer(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('ach_check_modal')
+            .setTitle(t('Sprawdź gracza', 'Check Player'));
+        modal.addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('ach_check_query')
+                    .setLabel(t('Nick gracza (fragment nazwy)', 'Player nick (part of name)'))
+                    .setStyle(TextInputStyle.Short)
+                    .setMinLength(2)
+                    .setMaxLength(50)
+                    .setRequired(true)
+            )
+        );
+        await interaction.showModal(modal);
+    }
+
+    async _handleAchCheckModal(interaction) {
+        const query = interaction.fields.getTextInputValue('ach_check_query').toLowerCase().trim();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const t = this._panelT(interaction.guildId);
+
+        try {
+            const allGuildIds = new Set(interaction.client.guilds.cache.keys());
+            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+
+            const matches = globalRanking.filter(p =>
+                (p.username || '').toLowerCase().includes(query)
+            );
+
+            if (matches.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                        .setDescription(t(
+                            `Nie znaleziono gracza z nickiem zawierającym **"${query}"**.`,
+                            `No player found with a nick containing **"${query}"**.`
+                        ))],
+                    components: []
+                });
+                return;
+            }
+
+            if (matches.length === 1) {
+                await this._showPlayerAchievements(interaction, matches[0].userId, matches[0].username, matches[0].sourceGuildId);
+                return;
+            }
+
+            if (matches.length > 25) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                        .setDescription(t(
+                            `Znaleziono zbyt wiele wyników (${matches.length}). Podaj dokładniejszy fragment nicku.`,
+                            `Too many results (${matches.length}). Please provide a more specific name fragment.`
+                        ))],
+                    components: []
+                });
+                return;
+            }
+
+            const options = matches.map(p => ({
+                label: p.username.substring(0, 100),
+                description: t(
+                    `Serwer: ${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId}`,
+                    `Server: ${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId}`
+                ).substring(0, 100),
+                value: `${p.userId}:${p.sourceGuildId}`
+            }));
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x5865f2)
+                    .setTitle(t('🔍 Wybierz gracza', '🔍 Select a Player'))
+                    .setDescription(t(
+                        `Znaleziono **${matches.length}** graczy. Wybierz z listy:`,
+                        `Found **${matches.length}** players. Select from the list:`
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('ach_check_sel')
+                        .setPlaceholder(t('Wybierz gracza...', 'Select a player...'))
+                        .addOptions(options.map(o => new StringSelectMenuOptionBuilder()
+                            .setLabel(o.label)
+                            .setDescription(o.description)
+                            .setValue(o.value)
+                        ))
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handleAchCheckModal: ${err.message}`);
+            await interaction.editReply({ content: t('❌ Błąd podczas wyszukiwania gracza.', '❌ Error while searching for player.') });
+        }
+    }
+
+    async _handleAchCheckSelect(interaction) {
+        await interaction.deferUpdate();
+        try {
+            const [userId, guildId] = interaction.values[0].split(':');
+            const allGuildIds = new Set(interaction.client.guilds.cache.keys());
+            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+            const player = globalRanking.find(p => p.userId === userId);
+            const username = player?.username || userId;
+            await this._showPlayerAchievements(interaction, userId, username, guildId);
+        } catch (err) {
+            logger.error(`Błąd _handleAchCheckSelect: ${err.message}`);
+        }
+    }
+
+    async _showPlayerAchievements(interaction, targetUserId, targetUsername, sourceGuildId) {
+        const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const { embed, components } = await this.achievementService.buildAchievementsViewForUser(
+            sourceGuildId, targetUserId, targetUsername, lang, 'cat', 'score'
+        );
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ embeds: [embed], components });
+        } else {
+            await interaction.update({ embeds: [embed], components });
+        }
+    }
+
+    async _handleAchViewOtherButton(interaction, customId) {
+        await interaction.deferUpdate();
+        try {
+            const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+
+            if (customId === 'ach_vb') {
+                // Powrót do własnych osiągnięć
+                const { embed, components } = await this.achievementService.buildAchievementsView(
+                    interaction.guildId, interaction.user.id, lang, 'cat', 'score'
+                );
+                await interaction.editReply({ embeds: [embed], components });
+                return;
+            }
+
+            // ach_vc_{category}_{userId}_{guildId}  lub  ach_vo_{userId}_{guildId}
+            const isOverview = customId.startsWith('ach_vo_');
+            let targetUserId, targetGuildId, category;
+
+            if (isOverview) {
+                // ach_vo_{userId}_{guildId}
+                const parts = customId.replace('ach_vo_', '').split('_');
+                targetUserId = parts[0];
+                targetGuildId = parts[1];
+            } else {
+                // ach_vc_{category}_{userId}_{guildId}
+                const withoutPrefix = customId.replace('ach_vc_', '');
+                const firstUnderscore = withoutPrefix.indexOf('_');
+                category = withoutPrefix.substring(0, firstUnderscore);
+                const rest = withoutPrefix.substring(firstUnderscore + 1);
+                const secondUnderscore = rest.indexOf('_');
+                targetUserId = rest.substring(0, secondUnderscore);
+                targetGuildId = rest.substring(secondUnderscore + 1);
+            }
+
+            const allGuildIds = new Set(interaction.client.guilds.cache.keys());
+            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+            const player = globalRanking.find(p => p.userId === targetUserId);
+            const targetUsername = player?.username || targetUserId;
+
+            const { embed, components } = await this.achievementService.buildAchievementsViewForUser(
+                targetGuildId, targetUserId, targetUsername, lang,
+                isOverview ? 'overview' : 'cat',
+                isOverview ? null : category
+            );
+            await interaction.editReply({ embeds: [embed], components });
+        } catch (err) {
+            logger.error(`Błąd _handleAchViewOtherButton: ${err.message}`);
+        }
+    }
+
+    // ─── Ranking osiągnięć (/ranking-osiagniec) ───────────────────────────────
+
+    async handleAchRankingCommand(interaction) {
+        if (!this._checkConfigured(interaction)) return;
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const isPol = lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        try {
+            // Buduj przyciski wyboru serwera z wszystkich gildii bota
+            const buttons = [];
+            for (const [guildId, guild] of interaction.client.guilds.cache) {
+                buttons.push(new ButtonBuilder()
+                    .setCustomId(`ach_rank_srv_${guildId}`)
+                    .setLabel(guild.name.substring(0, 80))
+                    .setStyle(ButtonStyle.Primary)
+                );
+            }
+            buttons.push(new ButtonBuilder()
+                .setCustomId('ach_rank_global')
+                .setLabel(t('🌐 Global', '🌐 Global'))
+                .setStyle(ButtonStyle.Secondary)
+            );
+
+            const rows = [];
+            for (let i = 0; i < buttons.length; i += 5) {
+                rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+            }
+
+            await interaction.editReply({
+                content: t('🏆 Wybierz serwer lub globalny ranking osiągnięć:', '🏆 Select a server or global achievement ranking:'),
+                components: rows
+            });
+        } catch (err) {
+            logger.error(`Błąd handleAchRankingCommand: ${err.message}`);
+            await interaction.editReply({ content: this.msgs(interaction.guildId).generalError });
+        }
+    }
+
+    async _handleAchRankingBack(interaction) {
+        await interaction.deferUpdate();
+        const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const isPol = lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        const buttons = [];
+        for (const [guildId, guild] of interaction.client.guilds.cache) {
+            buttons.push(new ButtonBuilder()
+                .setCustomId(`ach_rank_srv_${guildId}`)
+                .setLabel(guild.name.substring(0, 80))
+                .setStyle(ButtonStyle.Primary)
+            );
+        }
+        buttons.push(new ButtonBuilder()
+            .setCustomId('ach_rank_global')
+            .setLabel(t('🌐 Global', '🌐 Global'))
+            .setStyle(ButtonStyle.Secondary)
+        );
+
+        const rows = [];
+        for (let i = 0; i < buttons.length; i += 5) {
+            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        }
+
+        await interaction.editReply({
+            content: t('🏆 Wybierz serwer lub globalny ranking osiągnięć:', '🏆 Select a server or global achievement ranking:'),
+            embeds: [],
+            components: rows
+        });
+    }
+
+    async _handleAchRankingSelect(interaction, customId) {
+        await interaction.deferUpdate();
+        const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const isPol = lang === 'pol';
+        const perPage = this.config.ranking.playersPerPage;
+
+        try {
+            let players, mode, guildId = null, guildName = null, activeRoleId = null;
+
+            if (customId === 'ach_rank_global') {
+                const allGuildIds = new Set(interaction.client.guilds.cache.keys());
+                players = await this.achievementService.getGlobalAchievementRanking(allGuildIds, this.rankingService);
+                mode = 'global';
+            } else if (customId.startsWith('ach_rank_role_')) {
+                const withoutPrefix = customId.replace('ach_rank_role_', '');
+                const underscoreIdx = withoutPrefix.indexOf('_');
+                guildId = withoutPrefix.substring(0, underscoreIdx);
+                activeRoleId = withoutPrefix.substring(underscoreIdx + 1);
+                const guild = interaction.client.guilds.cache.get(guildId);
+                guildName = guild?.name || guildId;
+                players = await this.achievementService.getAchievementRankingByRole(
+                    guildId, activeRoleId, guild, this.rankingService, this.roleRankingConfigService
+                );
+                mode = 'role';
+            } else {
+                guildId = customId.replace('ach_rank_srv_', '');
+                const guild = interaction.client.guilds.cache.get(guildId);
+                guildName = guild?.name || guildId;
+                players = await this.achievementService.getAchievementRanking(guildId, this.rankingService);
+                mode = 'server';
+            }
+
+            const totalPages = Math.ceil(players.length / perPage) || 1;
+
+            // Strona wywołującego
+            const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+            const userPage = callerIdx !== -1 ? Math.floor(callerIdx / perPage) : null;
+
+            // Przyciski ról (tylko dla trybu serwera)
+            let roleRows = [];
+            if ((mode === 'server' || mode === 'role') && guildId && this.roleRankingConfigService) {
+                try {
+                    const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
+                    if (roleRankings.length > 0) {
+                        roleRows = this.achievementService.createAchRankingRoleButtons(roleRankings, guildId, activeRoleId);
+                    }
+                } catch {}
+            }
+
+            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol);
+            const buttons = this.achievementService.createAchRankingButtons(
+                0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage
+            );
+
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+
+            this._achRankings.set(reply.id, {
+                players, currentPage: 0, totalPages, perPage,
+                userId: interaction.user.id, mode, guildId, guildName,
+                roleRows, userPage, isPol, activeRoleId
+            });
+        } catch (err) {
+            logger.error(`Błąd _handleAchRankingSelect: ${err.message}`);
+        }
+    }
+
+    async _handleAchRankingPage(interaction, customId) {
+        await interaction.deferUpdate();
+        const data = this._achRankings.get(interaction.message.id);
+        if (!data) {
+            const t = this._panelT(interaction.guildId);
+            await interaction.editReply({ content: t('⏱️ Sesja rankingu wygasła. Użyj komendy ponownie.', '⏱️ Ranking session expired. Use the command again.'), embeds: [], components: [] });
+            return;
+        }
+
+        if (interaction.user.id !== data.userId) {
+            const t = this._panelT(interaction.guildId);
+            await interaction.followUp({ content: t('⛔ To nie jest Twój ranking.', '⛔ This is not your ranking.'), flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (customId === 'ach_rank_prev') data.currentPage = Math.max(0, data.currentPage - 1);
+        else if (customId === 'ach_rank_next') data.currentPage = Math.min(data.totalPages - 1, data.currentPage + 1);
+        else if (customId === 'ach_rank_mypos') data.currentPage = data.userPage ?? data.currentPage;
+
+        this._achRankings.set(interaction.message.id, data);
+
+        const embed = this.achievementService.buildAchRankingEmbed(
+            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol
+        );
+        const buttons = this.achievementService.createAchRankingButtons(
+            data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
+            data.roleRows, data.isPol, data.userPage
+        );
+        await interaction.editReply({ embeds: [embed], components: buttons });
     }
 }
 

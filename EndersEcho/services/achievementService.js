@@ -408,10 +408,271 @@ class AchievementService {
                 .setCustomId('ach_overview')
                 .setLabel(t('📊 Podsumowanie', '📊 Overview'))
                 .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                .setDisabled(isOverview)
+                .setDisabled(isOverview),
+            new ButtonBuilder()
+                .setCustomId('ach_check_player')
+                .setLabel(t('🔍 Sprawdź gracza', '🔍 Check Player'))
+                .setStyle(ButtonStyle.Secondary)
         );
 
         return [catRow, overviewRow];
+    }
+
+    // ─── Widok osiągnięć innego gracza (bez opisów) ─────────────────────────
+
+    async buildAchievementsViewForUser(guildId, targetUserId, targetUsername, viewerLang, view, category) {
+        const isPol = viewerLang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        const data = await this.loadData(guildId);
+        const unlocked = data[targetUserId]?.unlocked || {};
+
+        let embed;
+        if (view === 'overview') {
+            ({ embed } = this._buildOverviewEmbedNoDesc(unlocked, t, isPol, targetUsername));
+        } else {
+            const cat = (category && CATEGORY_INFO[category]) ? category : 'score';
+            ({ embed } = this._buildCategoryEmbedNoDesc(unlocked, cat, t, isPol, targetUsername));
+        }
+
+        const activeKey = view === 'overview' ? 'overview' : ((category && CATEGORY_INFO[category]) ? category : 'score');
+        return { embed, components: this._buildComponentsForUser(activeKey, isPol, t, targetUserId, guildId) };
+    }
+
+    _buildCategoryEmbedNoDesc(unlocked, categoryKey, t, isPol, targetName) {
+        const catInfo = CATEGORY_INFO[categoryKey];
+        const catAchs = ACHIEVEMENTS.filter(a => a.category === categoryKey);
+        const catLabel = isPol ? catInfo.pol : catInfo.eng;
+
+        const lines = catAchs
+            .filter(ach => !!unlocked[ach.id])
+            .map(ach => {
+                const rarity = RARITY[ach.rarity];
+                const name = isPol ? ach.namePol : ach.nameEng;
+                const rarityLabel = rarity[isPol ? 'pol' : 'eng'];
+                const date = new Date(unlocked[ach.id].unlockedAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
+                return `${ach.icon} (${rarity.emoji}) **${name}** *(${rarityLabel})* — ${date}`;
+            });
+
+        const unlockedCount = catAchs.filter(a => unlocked[a.id]).length;
+        const total = catInfo.hidden ? '?' : catAchs.length;
+
+        return {
+            embed: new EmbedBuilder()
+                .setColor(0xf1c40f)
+                .setTitle(`${catLabel} — ${targetName}`)
+                .setDescription(lines.length > 0 ? lines.join('\n\n') : t('Brak osiągnięć w tej kategorii.', 'No achievements in this category.'))
+                .setFooter({ text: t(`${unlockedCount}/${total} odblokowanych`, `${unlockedCount}/${total} unlocked`) })
+        };
+    }
+
+    _buildOverviewEmbedNoDesc(unlocked, t, isPol, targetName) {
+        const unlockedIds = new Set(Object.keys(unlocked));
+
+        const categoryOrder = Object.entries(CATEGORY_INFO).sort(([, a], [, b]) => {
+            if (a.hidden && !b.hidden) return 1;
+            if (!a.hidden && b.hidden) return -1;
+            return 0;
+        });
+        const catLines = categoryOrder.map(([catKey, catLabel]) => {
+            const catAchs = ACHIEVEMENTS.filter(a => a.category === catKey);
+            const catUnlocked = catAchs.filter(a => unlockedIds.has(a.id)).length;
+            const label = isPol ? catLabel.pol : catLabel.eng;
+            const total = catLabel.hidden ? '?' : catAchs.length;
+            return `${label}: **${catUnlocked}/${total}**`;
+        });
+
+        return {
+            embed: new EmbedBuilder()
+                .setColor(0x9b59b6)
+                .setTitle(t(`📊 Osiągnięcia — ${targetName}`, `📊 Achievements — ${targetName}`))
+                .addFields({ name: t('Kategorie', 'Categories'), value: catLines.join('\n'), inline: false })
+                .setFooter({ text: t(`${unlockedIds.size} odblokowanych`, `${unlockedIds.size} unlocked`) })
+        };
+    }
+
+    _buildComponentsForUser(activeKey, isPol, t, targetUserId, targetGuildId) {
+        const isOverview = activeKey === 'overview';
+
+        const CATS = [
+            { key: 'score',    pol: '🏆 Wyniki',       eng: '🏆 Scores'    },
+            { key: 'records',  pol: '🔁 Rekordy',      eng: '🔁 Records'   },
+            { key: 'bosses',   pol: '🎯 Łowy',         eng: '🎯 The Hunt'  },
+            { key: 'prestige', pol: '💎 Prestiż',      eng: '💎 Prestige'  },
+            { key: 'explorer', pol: '🕵️ Eksplorator',  eng: '🕵️ Explorer'  },
+        ];
+
+        const catRow = new ActionRowBuilder().addComponents(
+            ...CATS.map(c => new ButtonBuilder()
+                .setCustomId(`ach_vc_${c.key}_${targetUserId}_${targetGuildId}`)
+                .setLabel(isPol ? c.pol : c.eng)
+                .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(activeKey === c.key)
+            )
+        );
+
+        const overviewRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ach_vo_${targetUserId}_${targetGuildId}`)
+                .setLabel(t('📊 Podsumowanie', '📊 Overview'))
+                .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(isOverview),
+            new ButtonBuilder()
+                .setCustomId('ach_vb')
+                .setLabel(t('↩️ Moje osiągnięcia', '↩️ My Achievements'))
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        return [catRow, overviewRow];
+    }
+
+    // ─── Ranking osiągnięć ───────────────────────────────────────────────────
+
+    async getAchievementRanking(guildId, rankingService) {
+        const [achieveData, ranking] = await Promise.all([
+            this.loadData(guildId),
+            rankingService.loadRanking(guildId)
+        ]);
+        const total = ACHIEVEMENTS.length;
+        const playerMap = new Map();
+
+        for (const [userId, data] of Object.entries(ranking)) {
+            const count = achieveData[userId]?.unlocked
+                ? Object.keys(achieveData[userId].unlocked).length
+                : 0;
+            playerMap.set(userId, { userId, username: data.username || userId, count, total });
+        }
+
+        return Array.from(playerMap.values())
+            .sort((a, b) => b.count - a.count || a.username.localeCompare(b.username));
+    }
+
+    async getGlobalAchievementRanking(allGuildIds, rankingService) {
+        const total = ACHIEVEMENTS.length;
+        const bestPerPlayer = new Map();
+
+        await Promise.all(Array.from(allGuildIds).map(async (guildId) => {
+            const [achieveData, ranking] = await Promise.all([
+                this.loadData(guildId),
+                rankingService.loadRanking(guildId)
+            ]);
+
+            for (const [userId, data] of Object.entries(ranking)) {
+                const count = achieveData[userId]?.unlocked
+                    ? Object.keys(achieveData[userId].unlocked).length
+                    : 0;
+                const existing = bestPerPlayer.get(userId);
+                if (!existing || count > existing.count) {
+                    bestPerPlayer.set(userId, {
+                        userId,
+                        username: data.username || userId,
+                        count,
+                        total,
+                        sourceGuildId: guildId
+                    });
+                }
+            }
+        }));
+
+        return Array.from(bestPerPlayer.values())
+            .sort((a, b) => b.count - a.count || a.username.localeCompare(b.username));
+    }
+
+    async getAchievementRankingByRole(guildId, roleId, guild, rankingService, roleRankingConfigService) {
+        const allPlayers = await this.getAchievementRanking(guildId, rankingService);
+        const playerIds = allPlayers.map(p => p.userId);
+        const membersWithRole = await roleRankingConfigService.getMembersWithRole(guild, roleId, playerIds);
+        return allPlayers.filter(p => membersWithRole.has(p.userId));
+    }
+
+    buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol) {
+        const t = (pol, eng) => isPol ? pol : eng;
+        const start = page * perPage;
+        const pageItems = players.slice(start, start + perPage);
+        const totalPages = Math.ceil(players.length / perPage) || 1;
+
+        let title;
+        if (mode === 'global') {
+            title = t('🏆 Ranking Osiągnięć — 🌐 Global', '🏆 Achievement Ranking — 🌐 Global');
+        } else if (mode === 'role') {
+            title = t(`🏆 Ranking Osiągnięć — ${guildName}`, `🏆 Achievement Ranking — ${guildName}`);
+        } else {
+            title = t(`🏆 Ranking Osiągnięć — ${guildName}`, `🏆 Achievement Ranking — ${guildName}`);
+        }
+
+        const lines = pageItems.map((p, i) => {
+            const pos = start + i + 1;
+            const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `**#${pos}**`;
+            return `${medal} ${p.username} — **${p.count}** / ${p.total} 🏆`;
+        });
+
+        return new EmbedBuilder()
+            .setColor(mode === 'global' ? 0x5865f2 : 0xf1c40f)
+            .setTitle(title)
+            .setDescription(lines.length > 0 ? lines.join('\n') : t('Brak danych.', 'No data.'))
+            .setFooter({ text: t(
+                `Strona ${page + 1}/${totalPages} • ${players.length} graczy`,
+                `Page ${page + 1}/${totalPages} • ${players.length} players`
+            ) });
+    }
+
+    createAchRankingButtons(page, totalPages, mode, guildId, guildName, roleRows, isPol, userPage = null) {
+        const t = (pol, eng) => isPol ? pol : eng;
+
+        const switchBtn = (mode === 'server' || mode === 'role')
+            ? new ButtonBuilder()
+                .setCustomId('ach_rank_global')
+                .setLabel(t('🌐 Global', '🌐 Global'))
+                .setStyle(ButtonStyle.Secondary)
+            : new ButtonBuilder()
+                .setCustomId(guildId ? `ach_rank_srv_${guildId}` : 'ach_rank_back')
+                .setLabel(guildName ? guildName.substring(0, 80) : t('🏠 Serwer', '🏠 Server'))
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(!guildId);
+
+        const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ach_rank_prev')
+                .setLabel(t('◀️ Poprzednia', '◀️ Previous'))
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page === 0),
+            new ButtonBuilder()
+                .setCustomId('ach_rank_mypos')
+                .setLabel(t('📍 Moja pozycja', '📍 My Position'))
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(userPage === null),
+            new ButtonBuilder()
+                .setCustomId('ach_rank_next')
+                .setLabel(t('▶️ Następna', '▶️ Next'))
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages - 1),
+            switchBtn,
+            new ButtonBuilder()
+                .setCustomId('ach_rank_back')
+                .setLabel(t('↩️ Wybór serwerów', '↩️ Server Selection'))
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        return [navRow, ...roleRows];
+    }
+
+    createAchRankingRoleButtons(roleRankings, guildId, activeRoleId = null) {
+        const rows = [];
+        for (let i = 0; i < roleRankings.length; i += 5) {
+            const row = new ActionRowBuilder();
+            for (const rr of roleRankings.slice(i, i + 5)) {
+                const isActive = rr.roleId === activeRoleId;
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ach_rank_role_${guildId}_${rr.roleId}`)
+                        .setLabel(rr.roleName.substring(0, 80))
+                        .setStyle(isActive ? ButtonStyle.Secondary : ButtonStyle.Primary)
+                        .setDisabled(isActive)
+                );
+            }
+            rows.push(row);
+        }
+        return rows;
     }
 
     /**

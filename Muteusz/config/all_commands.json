@@ -587,6 +587,12 @@
           "requiredPermission": "public"
         },
         {
+          "name": "/ranking-osiagniec",
+          "description": "Wyświetla ranking graczy wg liczby zdobytych osiągnięć. Dostępne: per-serwer, globalny i rankingi ról.",
+          "usage": "/ranking-osiagniec → przyciski wyboru serwera / 🌐 Global",
+          "requiredPermission": "public"
+        },
+        {
           "name": "/subscribe",
           "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
           "usage": "/subscribe",
