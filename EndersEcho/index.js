@@ -130,6 +130,9 @@ async function initializeBot() {
             logger.warn('Nie można wyeksportować rankingu do shared_data przy starcie:', e.message);
         }
 
+        // Przekaż klienta do GuildLogger — embedy admin wysyłane przez bota (nie webhook HTTP)
+        await guildLogger.setClient(client);
+
         // Status rotacji — "Watching [nick]'s results" co 30 sekund
         await _updateStatus();
         statusInterval = setInterval(_updateStatus, 30_000);

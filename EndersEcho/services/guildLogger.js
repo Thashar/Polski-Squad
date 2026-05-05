@@ -25,6 +25,8 @@ class GuildLogger {
         this._lastGuildId = null;
         this._queue = [];
         this._processing = false;
+        this._client = null;
+        this._channelId = null;
 
         if (this.webhookUrl) {
             logger.info(`📋 GuildLogger: dedykowany webhook skonfigurowany`);
@@ -32,6 +34,39 @@ class GuildLogger {
         } else {
             logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOG_WEBHOOK_URL — logi tylko w konsoli`);
         }
+    }
+
+    async setClient(discordClient) {
+        this._client = discordClient;
+        if (!this.webhookUrl) return;
+        try {
+            const info = await this._fetchWebhookInfo();
+            if (info?.channel_id) {
+                this._channelId = info.channel_id;
+                logger.info(`📋 GuildLogger: kanał webhooka pobrano (ID: ${this._channelId})`);
+            } else {
+                logger.warn(`⚠️ GuildLogger: nie udało się pobrać channel_id z webhooka`);
+            }
+        } catch (err) {
+            logger.warn(`⚠️ GuildLogger: błąd pobierania info webhooka: ${err.message}`);
+        }
+    }
+
+    _fetchWebhookInfo() {
+        return new Promise((resolve, reject) => {
+            const url = new URL(this.webhookUrl);
+            const req = https.request(
+                { hostname: url.hostname, path: url.pathname, method: 'GET',
+                  headers: { 'Content-Type': 'application/json' } },
+                res => {
+                    let body = '';
+                    res.on('data', d => body += d);
+                    res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
+                }
+            );
+            req.on('error', reject);
+            req.end();
+        });
     }
 
     /**
@@ -57,7 +92,13 @@ class GuildLogger {
     sendEmbed(embed) {
         if (!this.webhookUrl) return false;
         const embedData = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
-        this._enqueue({ embeds: [embedData] });
+        if (this._client && this._channelId) {
+            this._client.channels.fetch(this._channelId)
+                .then(ch => ch?.send({ embeds: [embedData] }))
+                .catch(err => logger.warn(`GuildLogger sendEmbed błąd: ${err.message}`));
+        } else {
+            this._enqueue({ embeds: [embedData] });
+        }
         return true;
     }
 
