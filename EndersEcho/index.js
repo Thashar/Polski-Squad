@@ -26,6 +26,7 @@ const { UpdateCooldownService } = require('./services/updateCooldownService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const AchievementService = require('./services/achievementService');
 const CommunityVerificationService = require('./services/communityVerificationService');
+const GuildBanService = require('./services/guildBanService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const { generateScoreHistoryChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -91,7 +92,8 @@ const tokenUsageService = new TokenUsageService(config);
 const updateCooldownService = new UpdateCooldownService(config);
 const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService);
+const guildBanService = new GuildBanService(config.ranking.dataDir);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -108,10 +110,11 @@ async function initializeBot() {
         // Inicjalizuj OCR service
         await ocrService.initialize();
 
-        // Wczytaj limit dzienny, historię tokenów i cooldowny /update
+        // Wczytaj limit dzienny, historię tokenów, cooldowny /update i listę zbanowanych serwerów
         await usageLimitService.load();
         await tokenUsageService.load();
         await updateCooldownService.load();
+        await guildBanService.load();
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
@@ -169,6 +172,11 @@ client.on('interactionCreate', async (interaction) => {
 
 client.on('guildCreate', async (guild) => {
     try {
+        if (guildBanService.isBanned(guild.id)) {
+            logger.warn(`🚫 Próba dodania do zbanowanego serwera "${guild.name}" (${guild.id}) — wychodzę`);
+            await guild.leave().catch(() => {});
+            return;
+        }
         logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);
         const existing = guildConfigService.getConfig(guild.id);
         await guildConfigService.saveConfig(guild.id, {

@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -65,6 +65,7 @@ class InteractionHandler {
         this.communityVerificationService = communityVerificationService || null;
         this.scoreHistoryService = scoreHistoryService;
         this.chartService = chartService;
+        this.guildBanService = guildBanService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -303,6 +304,14 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBlockSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'panel_ban_guild_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBanGuildSearch(interaction);
                 return;
             }
             if (interaction.customId === 'panel_ach_del_modal') {
@@ -1395,6 +1404,8 @@ class InteractionHandler {
               '🧪 **Testers** — manage the list of testers authorized to use `/test`.'),
             t('🏆 **Usuń osiągnięcia** — usuń wybrane osiągnięcie lub wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
               '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
+            t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
+              '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
         ];
 
         const optionLines = isHeadAdmin
@@ -1438,10 +1449,11 @@ class InteractionHandler {
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów
+            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów, Zbanuj serwer
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('🚫 Zbanuj serwer', '🚫 Ban Server')).setStyle(ButtonStyle.Danger),
             ));
         }
 
@@ -2910,6 +2922,10 @@ class InteractionHandler {
         if (customId.startsWith('panel_ocr_en_')) return `Włącz AI OCR: ${customId.replace('panel_ocr_en_', '')}`;
         if (customId.startsWith('panel_ocr_dis_')) return `Wyłącz AI OCR: ${customId.replace('panel_ocr_dis_', '')}`;
         if (customId === 'panel_limit') return 'Ustaw limity';
+        if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
+        if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
+        if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
+        if (customId.startsWith('panel_ban_guild_ok_')) return `Zbanuj serwer (potwierdź: ${customId.replace('panel_ban_guild_ok_', '')})`;
         return `panel: ${customId}`;
     }
 
@@ -3243,6 +3259,40 @@ class InteractionHandler {
                     )
                 );
                 await interaction.showModal(modal);
+                return;
+            }
+
+            if (customId === 'panel_ban_server') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBanServer(interaction);
+                return;
+            }
+            if (customId === 'panel_ban_guild') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBanGuild(interaction);
+                return;
+            }
+            if (customId === 'panel_unban_guild') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelUnbanGuild(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_ban_guild_ok_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const guildIdToBan = customId.replace('panel_ban_guild_ok_', '');
+                await this._handlePanelBanGuildConfirm(interaction, guildIdToBan);
                 return;
             }
 
@@ -4152,6 +4202,22 @@ class InteractionHandler {
 
             if (customId === 'panel_ocr_guild_select') {
                 await this._handlePanelOcrGuildSelect(interaction);
+                return;
+            }
+            if (customId === 'panel_ban_guild_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBanGuildSelect(interaction);
+                return;
+            }
+            if (customId === 'panel_unban_guild_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelUnbanGuildSelect(interaction);
                 return;
             }
 
@@ -6335,6 +6401,229 @@ class InteractionHandler {
             return;
         }
         await interaction.reply({ content: t(`✅ Usunięto <@${userId}> z listy testerów OCR.`, `✅ Removed <@${userId}> from OCR testers.`), flags: ['Ephemeral'] });
+    }
+
+    // =====================================================================
+    // Panel Admina — Zbanuj serwer (Head Admin)
+    // =====================================================================
+
+    async _handlePanelBanServer(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const bannedCount = this.guildBanService?.getBannedGuilds().length ?? 0;
+        const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle(t('🚫 Zbanuj serwer', '🚫 Ban Server'))
+            .setDescription(
+                t(
+                    `Zablokuj serwer — bot wyjdzie z serwera i nie będzie mógł być ponownie dodany.\n\n🚫 **Zablokowane serwery:** ${bannedCount}`,
+                    `Block a server — the bot will leave and cannot be re-added.\n\n🚫 **Banned servers:** ${bannedCount}`
+                )
+            );
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🚫 Zablokuj serwer', '🚫 Block Server')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unban_guild').setLabel(t('🔓 Odblokuj serwer', '🔓 Unblock Server')).setStyle(ButtonStyle.Secondary).setDisabled(bannedCount === 0),
+            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Wróć do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [row] });
+    }
+
+    async _handlePanelBanGuild(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_ban_guild_modal')
+            .setTitle(t('Zbanuj serwer — wyszukaj', 'Ban Server — Search'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('ban_guild_query')
+                .setLabel(t('Fragment nazwy serwera', 'Part of server name'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Polski Squad', 'e.g. Gaming Hub'))
+                .setMinLength(1)
+                .setMaxLength(100)
+                .setRequired(true)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelBanGuildSearch(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const query = interaction.fields.getTextInputValue('ban_guild_query').toLowerCase().trim();
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        const matches = [];
+        for (const guildConfig of this.config.getAllGuilds()) {
+            const guild = interaction.client.guilds.cache.get(guildConfig.id);
+            if (!guild) continue;
+            if (!guild.name.toLowerCase().includes(query)) continue;
+            if (this.guildBanService?.isBanned(guildConfig.id)) continue;
+            matches.push({ guildId: guildConfig.id, guildName: guild.name });
+        }
+
+        if (matches.length === 0) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                    .setDescription(t(`Brak aktywnego serwera z nazwą zawierającą "**${query}**".`, `No active server with name containing "**${query}**".`))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+
+        const options = matches.slice(0, 25).map(({ guildId, guildName }) => ({
+            label: guildName.substring(0, 100),
+            description: guildId,
+            value: guildId,
+        }));
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor(0xFF0000)
+                .setTitle(t('🚫 Wybierz serwer do zbanowania', '🚫 Select Server to Ban'))
+                .setDescription(t(`Znaleziono **${matches.length}** serwer(ów). Wybierz z listy:`, `Found **${matches.length}** server(s). Select from the list:`))],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('panel_ban_guild_sel')
+                        .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                        .addOptions(options)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                ),
+            ],
+        });
+    }
+
+    async _handlePanelBanGuildSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const guildId = interaction.values[0];
+        const guild = interaction.client.guilds.cache.get(guildId);
+        const guildName = guild?.name || guildId;
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle(t('⚠️ Potwierdź zbanowanie serwera', '⚠️ Confirm Server Ban'))
+            .setDescription(
+                t(
+                    `Czy na pewno chcesz zbanować serwer **${guildName}**?\n\n` +
+                    `• Bot **wyjdzie** z tego serwera\n` +
+                    `• Serwer zostanie **trwale zablokowany** — bot nie będzie mógł być ponownie dodany\n` +
+                    `• Odblokować może tylko Head Admin`,
+                    `Are you sure you want to ban server **${guildName}**?\n\n` +
+                    `• The bot will **leave** this server\n` +
+                    `• The server will be **permanently blocked** — the bot cannot be re-added\n` +
+                    `• Only a Head Admin can unban`
+                )
+            );
+        if (guild?.iconURL()) embed.setThumbnail(guild.iconURL({ dynamic: true, size: 128 }));
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`panel_ban_guild_ok_${guildId}`).setLabel(t('✅ Tak, zbanuj', '✅ Yes, ban')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('❌ Anuluj', '❌ Cancel')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [row] });
+    }
+
+    async _handlePanelBanGuildConfirm(interaction, guildIdToBan) {
+        const t = this._panelT(interaction.guildId);
+        if (!this.guildBanService) {
+            await interaction.update({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ GuildBanService niedostępny.')], components: [] });
+            return;
+        }
+
+        const guild = interaction.client.guilds.cache.get(guildIdToBan);
+        const guildName = guild?.name || guildIdToBan;
+        const adminName = interaction.member?.displayName || interaction.user.username;
+
+        await this.guildBanService.banGuild(guildIdToBan, guildName, adminName);
+
+        // Wyjdź z serwera (fire-and-forget z logowaniem)
+        if (guild) {
+            guild.leave().catch(err => {
+                logger.warn(`Błąd opuszczania serwera "${guildName}" po banie: ${err.message}`);
+            });
+        }
+
+        const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        this.logService._gl(interaction.guildId).warn(`${this.logService.nickLink(nick, interaction.user.id)} Zbanowano serwer "${guildName}" (${guildIdToBan})`);
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle(t('✅ Serwer zbanowany', '✅ Server Banned'))
+                .setDescription(t(
+                    `Serwer **${guildName}** został zbanowany. Bot wychodzi z serwera i nie będzie mógł być ponownie dodany.`,
+                    `Server **${guildName}** has been banned. The bot is leaving and cannot be re-added.`
+                ))],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    async _handlePanelUnbanGuild(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const banned = this.guildBanService?.getBannedGuilds() ?? [];
+
+        if (banned.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(t('Brak zbanowanych serwerów.', 'No banned servers.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+
+        const options = banned.slice(0, 25).map(({ guildId, guildName, bannedAt }) => {
+            const date = bannedAt ? new Date(bannedAt).toLocaleDateString('pl-PL') : '?';
+            return {
+                label: guildName.substring(0, 100),
+                description: `ID: ${guildId} | ${t('Zbanowano', 'Banned')}: ${date}`,
+                value: guildId,
+            };
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF8C00)
+            .setTitle(t('🔓 Odblokuj serwer', '🔓 Unblock Server'))
+            .setDescription(t(`Wybierz serwer do odblokowania (${banned.length} zbanowanych):`, `Select a server to unblock (${banned.length} banned):`));
+
+        await interaction.update({
+            embeds: [embed],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('panel_unban_guild_sel')
+                        .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                        .addOptions(options)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                ),
+            ],
+        });
+    }
+
+    async _handlePanelUnbanGuildSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const guildId = interaction.values[0];
+        const info = this.guildBanService?.getBannedGuilds().find(g => g.guildId === guildId);
+        const guildName = info?.guildName || guildId;
+
+        await this.guildBanService?.unbanGuild(guildId);
+
+        const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} Odbanowano serwer "${guildName}" (${guildId})`);
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(0x57F287)
+                .setDescription(t(`✅ Serwer **${guildName}** został odblokowany.`, `✅ Server **${guildName}** has been unblocked.`))],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+            )],
+        });
     }
 }
 

@@ -156,6 +156,7 @@
    - **AI OCR on/off (head admin):** modal wyszukiwania nazwy serwera → jeśli 1 wynik: bezpośrednio toggle, jeśli wiele: lista → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
+   - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
 
 **Komendy slash:** `/achievements`, `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
@@ -168,7 +169,7 @@
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
   - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`
-  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`
+  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `🚫 Zbanuj serwer`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -240,6 +241,13 @@
 | `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
 | `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
+| `panel_ban_server` | Panel zbanowania serwera (head admin) |
+| `panel_ban_guild` | Otwórz modal wyszukiwania serwera do bana |
+| `panel_ban_guild_modal` | Modal wyszukiwania (pole `ban_guild_query`) |
+| `panel_ban_guild_sel` | StringSelectMenu — wybór serwera z wyników |
+| `panel_ban_guild_ok_{guildId}` | Potwierdź ban serwera |
+| `panel_unban_guild` | Lista zbanowanych serwerów |
+| `panel_unban_guild_sel` | StringSelectMenu — wybór serwera do odbanowania |
 | `panel_ach_del` | Otwórz modal wyszukiwania gracza (head admin) |
 | `panel_ach_del_modal` | Modal wyszukiwania (pole `ach_del_query`) |
 | `panel_ach_del_ps` | StringSelectMenu — wybór gracza |
