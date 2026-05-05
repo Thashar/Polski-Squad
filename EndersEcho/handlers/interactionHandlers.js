@@ -6703,7 +6703,7 @@ class InteractionHandler {
         }
 
         const [, dd, mm, yyyy, hh, min] = match;
-        const date = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${hh.padStart(2,'0')}:${min}:00`);
+        const date = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${hh.padStart(2,'0')}:${min}:00Z`);
         if (isNaN(date.getTime())) {
             await interaction.editReply({ content: t('❌ Podana data jest nieprawidłowa.', '❌ The provided date is invalid.') });
             return;
