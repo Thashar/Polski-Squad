@@ -263,7 +263,7 @@
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
 - **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
-- **Krok 5:** Role TOP (opcjonalne, modal 5 pól ID ról) z wyjaśnieniem systemu
+- **Krok 5:** Role TOP (opcjonalne, sub-wizard 5 kroków z RoleSelectMenu) — każda pozycja wybierana osobno z listy ról serwera; każdy krok można pominąć; "Wstecz" cofa do poprzedniego kroku; customIDs: `cfg_roles_start`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`
 - **Krok 6:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
