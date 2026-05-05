@@ -56,7 +56,7 @@ const pol = {
     newRecordConfirmed: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.',
     newRecordFallback: '🏆 **NOWY REKORD!**\n**Gracz:** {username}\n**Nowy rekord:** {score}\n**Poprzedni:** {previous}\n\n*Błąd wysyłania pełnego embed*',
     resultNotBeatenCrossServer: '❌ Nie pobito rekordu — taki sam wynik (**{score}**) widnieje już na serwerze **{guildName}**.',
-    crossServerScoreRemovedField: '🗑️ Usunięto z innego serwera',
+    crossServerScoreRemovedField: '🗑️ USUNIĘTO Z INNEGO SERWERA',
     crossServerScoreRemovedValue: 'Poprzedni wynik **{score}** na serwerze **{guildName}** został usunięty.',
     noRecordFallback: '❌ Nie pobito rekordu\n**Gracz:** {username}\n**Wynik:** {score}\n**Obecny rekord:** {current}\n\n*Błąd wysyłania embed z obrazem*',
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
@@ -72,9 +72,9 @@ const pol = {
     // Embed — nowy rekord
     recordTitle: '🏆 GRATULACJE!',
     recordDescription: '## {username} pobił swój rekord!',
-    recordNewScore: '🏆 Wynik',
-    recordProgress: '📈 Progres',
-    recordRanking: '🏅 Pozycja',
+    recordNewScore: '🏆 WYNIK',
+    recordProgress: '📈 PROGRES',
+    recordRanking: '🏅 POZYCJA',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
     recordDateLabel: '📅 Data',
@@ -114,7 +114,7 @@ const pol = {
     topRoleRemoved: '🗑️ Usunięto rolę {roleName} od {username}',
 
     // Global TOP snippet (pod wynikiem)
-    globalSnippetTitle: '🌐 Zmiana w globalnym rankingu',
+    globalSnippetTitle: '🌐 ZMIANA W GLOBALNYM RANKINGU',
 
     // Global TOP10 cykliczny raport
     globalTop10ReportTitle: '🌐 TOP 10 Globalny',
@@ -220,7 +220,7 @@ const pol = {
     achievementsUnlockedOf: '{count} z {total} odblokowanych',
     achievementsBtnUnlocked: '🏆 Odblokowane',
     achievementsBtnOverview: '📊 Podsumowanie',
-    achievementsNewField: '🎉 Nowe osiągnięcia',
+    achievementsNewField: '🎉 NOWE OSIĄGNIĘCIA',
     blockUserTimePlaceholder: 'Zostaw puste dla blokady permanentnej',
 
     // /info
@@ -356,7 +356,7 @@ const eng = {
     newRecordConfirmed: '✅ **New record set and announced!**\n🏆 Congratulations! Your score has been published for everyone.',
     newRecordFallback: '🏆 **NEW RECORD!**\n**Player:** {username}\n**New record:** {score}\n**Previous:** {previous}\n\n*Error sending full embed*',
     resultNotBeatenCrossServer: '❌ Record not beaten — same score (**{score}**) already exists on server **{guildName}**.',
-    crossServerScoreRemovedField: '🗑️ Removed from other server',
+    crossServerScoreRemovedField: '🗑️ REMOVED FROM OTHER SERVER',
     crossServerScoreRemovedValue: 'Previous score **{score}** on server **{guildName}** was removed.',
     noRecordFallback: '❌ Record not beaten\n**Player:** {username}\n**Score:** {score}\n**Current record:** {current}\n\n*Error sending embed with image*',
     rankingImageCaption: '📎 **Original result image:**',
@@ -372,9 +372,9 @@ const eng = {
     // Embed — new record
     recordTitle: '🏆 CONGRATULATIONS!',
     recordDescription: '## {username} broke their record!',
-    recordNewScore: '🏆 Score',
-    recordProgress: '📈 Progress',
-    recordRanking: '🏅 Position',
+    recordNewScore: '🏆 SCORE',
+    recordProgress: '📈 PROGRESS',
+    recordRanking: '🏅 POSITION',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
     recordDateLabel: '📅 Date',
@@ -414,7 +414,7 @@ const eng = {
     topRoleRemoved: '🗑️ Role {roleName} removed from {username}',
 
     // Global TOP snippet (under result)
-    globalSnippetTitle: '🌐 Global Ranking Change',
+    globalSnippetTitle: '🌐 GLOBAL RANKING CHANGE',
 
     // Global TOP10 periodic report
     globalTop10ReportTitle: '🌐 Global TOP 10',
@@ -520,7 +520,7 @@ const eng = {
     achievementsUnlockedOf: '{count} of {total} unlocked',
     achievementsBtnUnlocked: '🏆 Unlocked',
     achievementsBtnOverview: '📊 Overview',
-    achievementsNewField: '🎉 New achievements',
+    achievementsNewField: '🎉 NEW ACHIEVEMENTS',
     blockUserTimePlaceholder: 'Leave empty for permanent block',
 
     // /info
