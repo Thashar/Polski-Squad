@@ -6971,10 +6971,12 @@ class InteractionHandler {
         const t = (pol, eng) => isPol ? pol : eng;
 
         const buttons = [];
-        for (const [guildId, guild] of interaction.client.guilds.cache) {
+        for (const guildConfig of this.config.getAllGuilds()) {
+            if (!interaction.client.guilds.cache.has(guildConfig.id)) continue;
+            const guildName = interaction.client.guilds.cache.get(guildConfig.id)?.name || guildConfig.id;
             buttons.push(new ButtonBuilder()
-                .setCustomId(`ach_rank_srv_${guildId}`)
-                .setLabel(guild.name.substring(0, 80))
+                .setCustomId(`ach_rank_srv_${guildConfig.id}`)
+                .setLabel(guildName.substring(0, 80))
                 .setStyle(ButtonStyle.Primary)
             );
         }
@@ -7005,7 +7007,11 @@ class InteractionHandler {
                 const prevState = this._achRankings.get(interaction.message.id);
                 parentGuildId = prevState?.guildId || interaction.guildId || null;
                 parentGuildName = prevState?.guildName || interaction.client.guilds.cache.get(parentGuildId)?.name || null;
-                const allGuildIds = new Set(interaction.client.guilds.cache.keys());
+                const allGuildIds = new Set(
+                    this.config.getAllGuilds()
+                        .filter(g => interaction.client.guilds.cache.has(g.id))
+                        .map(g => g.id)
+                );
                 players = await this.achievementService.getGlobalAchievementRanking(allGuildIds, this.rankingService);
                 mode = 'global';
                 iconUrl = interaction.client.user?.displayAvatarURL({ size: 128 }) || null;
