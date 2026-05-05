@@ -449,13 +449,35 @@ class InteractionHandler {
                     'Complete all steps below to activate EndersEcho on this server.\nClick each button to configure that step.'
                 ) + '\n\n' +
                 (() => {
-                    const commandsEnabled = !this.ocrBlockService.isBlocked(guildId, 'update') && !this.ocrBlockService.isBlocked(guildId, 'test');
-                    const polOcrLine = commandsEnabled
-                        ? '✅ Komendy `/update` i `/test` są **włączone** i można z nich korzystać.'
-                        : '⚠️ Po aktywacji `/update` i `/test` będą **domyślnie wyłączone**. Skontaktuj się z @Thashar w celu odblokowania komend do analizy.';
-                    const engOcrLine = commandsEnabled
-                        ? '✅ Commands `/update` and `/test` are **enabled** and ready to use.'
-                        : '⚠️ After activation `/update` and `/test` will be **disabled** by default. Contact @Thashar to unlock the analysis commands.';
+                    const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
+                    const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
+                    const thasharLink = '[Thashar](https://discord.com/users/398983446812295168)';
+                    const contactLine = t(
+                        `\n💡 W razie pytań skontaktuj się z ${thasharLink}.`,
+                        `\n💡 For questions, contact ${thasharLink}.`
+                    );
+                    let ocrLine;
+                    if (updateBlocked && testBlocked) {
+                        ocrLine = t(
+                            `⚠️ Komendy \`/update\` i \`/test\` są **wyłączone**. Aby je włączyć, skontaktuj się z ${thasharLink}.`,
+                            `⚠️ Commands \`/update\` and \`/test\` are **disabled**. To enable them, contact ${thasharLink}.`
+                        );
+                    } else if (!updateBlocked && !testBlocked) {
+                        ocrLine = t(
+                            `✅ Komendy \`/update\` i \`/test\` są **włączone** i gotowe do użycia.`,
+                            `✅ Commands \`/update\` and \`/test\` are **enabled** and ready to use.`
+                        ) + contactLine;
+                    } else if (!updateBlocked && testBlocked) {
+                        ocrLine = t(
+                            `✅ Komenda \`/update\` jest **włączona**. Komenda \`/test\` jest wyłączona.`,
+                            `✅ Command \`/update\` is **enabled**. Command \`/test\` is disabled.`
+                        ) + contactLine;
+                    } else {
+                        ocrLine = t(
+                            `✅ Komenda \`/test\` jest **włączona**. Komenda \`/update\` jest wyłączona.`,
+                            `✅ Command \`/test\` is **enabled**. Command \`/update\` is disabled.`
+                        ) + contactLine;
+                    }
                     return t(
                         '📋 **Przegląd kroków:**\n' +
                         '1️⃣  **Język** — interfejs po polsku lub angielsku\n' +
@@ -466,8 +488,8 @@ class InteractionHandler {
                         '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
-                        polOcrLine + '\n' +
-                        '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.',
+                        '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
+                        ocrLine,
                         '📋 **Steps overview:**\n' +
                         '1️⃣  **Language** — Polish or English interface\n' +
                         '2️⃣  **Bot Channel** — where `/update`, `/ranking`, `/subscribe` and `/achievements` work\n' +
@@ -477,8 +499,8 @@ class InteractionHandler {
                         '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
-                        engOcrLine + '\n' +
-                        '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.'
+                        '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
+                        ocrLine
                     );
                 })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
             );
