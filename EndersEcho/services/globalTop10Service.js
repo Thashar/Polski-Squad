@@ -282,10 +282,10 @@ class GlobalTop10Service {
     // ── snippet po nowym rekordzie ─────────────────────────────────────────────
 
     /**
-     * Buduje snippet embed (awans w globalnym rankingu).
-     * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
+     * Buduje dane snippetu (awans w globalnym rankingu).
+     * Zwraca { title, description } lub null jeśli brak zmiany pozycji.
      */
-    async buildSnippetEmbed(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
+    async buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
         const newGlobalIndex = newGlobalRanking.findIndex(p => p.userId === userId);
         if (newGlobalIndex === -1) return null;
         const newGlobalPosition = newGlobalIndex + 1;
@@ -328,17 +328,26 @@ class GlobalTop10Service {
 
         const prevLabel = prevGlobalPosition ? `#${prevGlobalPosition}` : '—';
         const direction = !prevGlobalPosition || prevGlobalPosition > newGlobalPosition ? '▲' : '▼';
-        const titleKey  = msgs.globalSnippetTitle || '🌐 Zmiana w globalnym rankingu';
+        const title = msgs.globalSnippetTitle || '🌐 Zmiana w globalnym rankingu';
 
-        const embed = new EmbedBuilder()
+        return {
+            title,
+            description: `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` + lines.join('\n\n')
+        };
+    }
+
+    /**
+     * Buduje snippet embed (awans w globalnym rankingu).
+     * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
+     */
+    async buildSnippetEmbed(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
+        const data = await this.buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client);
+        if (!data) return null;
+
+        return new EmbedBuilder()
             .setColor(0x5865f2)
-            .setTitle(titleKey)
-            .setDescription(
-                `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` +
-                lines.join('\n\n')
-            );
-
-        return embed;
+            .setTitle(data.title)
+            .setDescription(data.description);
     }
 }
 

@@ -2586,6 +2586,24 @@ class InteractionHandler {
             const achievementsFieldValue = this.achievementService
                 ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, lang)
                 : null;
+
+            // Snippet globalny — dla wszystkich graczy u których zmieniła się pozycja
+            let globalSnippetData = null;
+            if (!dryRun) {
+                try {
+                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+                    globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
+                        userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
+                    );
+                    if (globalSnippetData) {
+                        const newGlobalIdx = newGlobalRanking.findIndex(p => p.userId === userId);
+                        gl.info(`🌐 Snippet globalny: ${prevGlobalPosition ?? '—'} → #${newGlobalIdx + 1}`);
+                    }
+                } catch (snippetErr) {
+                    gl.error(`❌ Błąd snippeta globalnego: ${snippetErr.message}`);
+                }
+            }
+
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -2599,7 +2617,8 @@ class InteractionHandler {
                 guildConfig?.topRoles || null,
                 currentScore ? currentScore.timestamp : null,
                 rolePositions,
-                achievementsFieldValue
+                achievementsFieldValue,
+                globalSnippetData
             );
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
@@ -2720,30 +2739,6 @@ class InteractionHandler {
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
-            }
-
-            // Snippet globalnego rankingu pod wynikiem (gdy gracz z TOP10 serwera zmienił pozycję globalną)
-            try {
-                const serverPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
-                const serverPosition = serverPlayers.findIndex(p => p.userId === userId);
-
-                if (serverPosition !== -1 && serverPosition < 10) {
-                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-                    const newGlobalIndex = newGlobalRanking.findIndex(p => p.userId === userId);
-                    const newGlobalPosition = newGlobalIndex !== -1 ? newGlobalIndex + 1 : null;
-
-                    if (newGlobalPosition && newGlobalPosition !== prevGlobalPosition) {
-                        const snippetEmbed = await this.globalTop10Service.buildSnippetEmbed(
-                            userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
-                        );
-                        if (snippetEmbed) {
-                            await interaction.followUp({ embeds: [snippetEmbed] });
-                            gl.info(`🌐 Snippet globalny: ${prevGlobalPosition ?? '—'} → #${newGlobalPosition} (serwer #${serverPosition + 1})`);
-                        }
-                    }
-                }
-            } catch (snippetErr) {
-                gl.error(`❌ Błąd snippeta globalnego: ${snippetErr.message}`);
             }
 
             // DM powiadomienia dla subskrybentów (lista pobrana wcześniej przy liczeniu obserwujących)

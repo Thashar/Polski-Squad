@@ -59,7 +59,7 @@
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów)
      - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów)
      - Gdy screen niepodobny do wzorca → embed `testNotSimilarTitle/Description` (brak zapisu)
-     - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, snippet globalnego rankingu (gdy TOP10 serwera), powiadomienia DM
+     - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, snippet globalnego rankingu (gdy pozycja globalna się zmieniła), powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
      - **Cooldown 5 min** po udanym zapisie wyniku — sprawdzany przez `updateCooldownService`; informuje gracza ile czasu pozostało (w języku serwera); persystowany w `data/update_cooldowns.json` (przeżywa restart)
@@ -97,9 +97,9 @@
      - Pola: Postęp (`stary ➜ nowy`), Poprawa (`+X`), Data, Pozycja z medalem emoji
      - Author (górny pasek): ikona roli + nazwa roli (jeśli rola ma ikonę/emoji)
      - Thumbnail: avatar gracza | Image: screenshot wyniku
-   - **Snippet globalny** (`globalTop10Service.buildSnippetEmbed`):
-     - Wysyłany jako drugi embed pod wynikiem, **tylko na serwerze źródłowym**
-     - Warunek: gracz w TOP10 serwera AND jego pozycja globalna zmieniła się
+   - **Snippet globalny** (`globalTop10Service.buildSnippetFieldData`):
+     - Wbudowany jako pole w głównym embedzie rekordu, **powyżej pola osiągnięć**
+     - Warunek: pozycja globalna gracza zmieniła się (dotyczy WSZYSTKICH graczy, nie tylko TOP10 serwera)
      - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
    - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:
      - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
@@ -489,7 +489,7 @@ Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera. Metoda `sendEmbed(embed)` wysyła embed przez webhook (powiadomienia o dołączeniu serwera, usunięciu, zmianie konfiguracji); zwraca `true` jeśli webhook skonfigurowany
 - **Embedy administracyjne przez webhook:** `guildLogger.sendEmbed(embed)` lub `logService.sendEmbed(embed)` — używane dla powiadomień guildCreate/guildDelete (`index.js`) i konfiguracji `/configure` (`interactionHandlers`). Fallback na kanał `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
-- **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli TOP10 serwera i zmiana pozycji)
+- **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli zmiana pozycji globalnej)
 - **Logi /update (odrzucenie, 3 linie):** start → `[AI Test] Test wzorca: "NOK: reason"` → `❌ Odrzucono: NOT_SIMILAR/FAKE_PHOTO/...`
 - **OCR Debug:** Brak komendy — logi pośrednie AI OCR (Total, Boss/score z parseAIResponse) są usunięte; szczegóły widoczne tylko w logach błędów
 - **Ranking per-serwer:** `rankingService.loadRanking(guildId)` / `saveRanking(guildId, ranking)`
