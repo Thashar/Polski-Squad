@@ -159,10 +159,12 @@
    - Per-serwer: `achievementService.getAchievementRanking(guildId, rankingService)` — gracze z `ranking.json` posortowani po liczbie osiągnięć (gracze bez osiągnięć = 0)
    - Globalny: `achievementService.getGlobalAchievementRanking(allGuildIds, rankingService)` — najlepszy wynik (max count) per gracz, wszystkie gildie
    - Ranking ról: `achievementService.getAchievementRankingByRole(guildId, roleId, guild, ...)` — jak per-serwer ale filtrowany przez `getMembersWithRole`
-   - Embed: `buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol)` — format linii: `🥇 Nick — **N** / 54 🏆`; kolor globalny 0x5865f2, serwer 0xf1c40f
+   - Embed: `buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol)` — format linii: `🥇 Nick — **N**`; kolor globalny 0x5865f2, serwer 0xf1c40f
    - Przyciski: `createAchRankingButtons(...)` — prev/mypos/next/switch/back analogicznie do `/ranking`
    - State paginacji: `this._achRankings` Map (RAM) w `InteractionHandler`, kluczem messageId
-   - CustomIDs: `ach_rank_srv_{guildId}` | `ach_rank_global` | `ach_rank_role_{guildId}_{roleId}` | `ach_rank_prev` | `ach_rank_next` | `ach_rank_mypos` | `ach_rank_back`
+   - `ach_rank_start` → od razu przechodzi do rankingu bieżącego serwera (nie ekranu wyboru); `ach_rank_back` → ekran wyboru serwera
+   - W trybie global: przycisk "powrót do serwera" używa `ach_rank_srv_{parentGuildId}` (zapamiętany z poprzedniego widoku lub `interaction.guildId`); gdy brak parentGuildId → `ach_rank_no_srv` (disabled)
+   - CustomIDs: `ach_rank_start` | `ach_rank_srv_{guildId}` | `ach_rank_global` | `ach_rank_role_{guildId}_{roleId}` | `ach_rank_prev` | `ach_rank_next` | `ach_rank_mypos` | `ach_rank_back` | `ach_rank_no_srv`
 
 6. **Panel Admina** — dostępny przez `/manage`:
    - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP + wyczyszczenie wszystkich osiągnięć gracza (`achievementService.clearUserAchievements`). Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).

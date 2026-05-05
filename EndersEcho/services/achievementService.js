@@ -607,7 +607,7 @@ class AchievementService {
         const lines = pageItems.map((p, i) => {
             const pos = start + i + 1;
             const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `**#${pos}**`;
-            return `${medal} ${p.username} — **${p.count}** / ${p.total} 🏆`;
+            return `${medal} ${p.username} — **${p.count}**`;
         });
 
         return new EmbedBuilder()
@@ -620,7 +620,7 @@ class AchievementService {
             ) });
     }
 
-    createAchRankingButtons(page, totalPages, mode, guildId, guildName, roleRows, isPol, userPage = null) {
+    createAchRankingButtons(page, totalPages, mode, guildId, guildName, roleRows, isPol, userPage = null, parentGuildId = null, parentGuildName = null) {
         const t = (pol, eng) => isPol ? pol : eng;
 
         const switchBtn = (mode === 'server' || mode === 'role')
@@ -629,10 +629,10 @@ class AchievementService {
                 .setLabel(t('🌐 Global', '🌐 Global'))
                 .setStyle(ButtonStyle.Secondary)
             : new ButtonBuilder()
-                .setCustomId(guildId ? `ach_rank_srv_${guildId}` : 'ach_rank_back')
-                .setLabel(guildName ? guildName.substring(0, 80) : t('🏠 Serwer', '🏠 Server'))
+                .setCustomId(parentGuildId ? `ach_rank_srv_${parentGuildId}` : 'ach_rank_no_srv')
+                .setLabel(parentGuildName ? parentGuildName.substring(0, 80) : t('🏠 Serwer', '🏠 Server'))
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!guildId);
+                .setDisabled(!parentGuildId);
 
         const navRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()

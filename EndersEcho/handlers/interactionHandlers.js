@@ -3058,7 +3058,11 @@ class InteractionHandler {
             }
 
             // === Ranking osiągnięć ===
-            if (customId === 'ach_rank_start' || customId === 'ach_rank_back') {
+            if (customId === 'ach_rank_start') {
+                await this._handleAchRankingSelect(interaction, 'ach_rank_srv_' + interaction.guildId);
+                return;
+            }
+            if (customId === 'ach_rank_back') {
                 await this._handleAchRankingBack(interaction);
                 return;
             }
@@ -6999,9 +7003,12 @@ class InteractionHandler {
         const perPage = this.config.ranking.playersPerPage;
 
         try {
-            let players, mode, guildId = null, guildName = null, activeRoleId = null;
+            let players, mode, guildId = null, guildName = null, activeRoleId = null, parentGuildId = null, parentGuildName = null;
 
             if (customId === 'ach_rank_global') {
+                const prevState = this._achRankings.get(interaction.message.id);
+                parentGuildId = prevState?.guildId || interaction.guildId || null;
+                parentGuildName = prevState?.guildName || interaction.client.guilds.cache.get(parentGuildId)?.name || null;
                 const allGuildIds = new Set(interaction.client.guilds.cache.keys());
                 players = await this.achievementService.getGlobalAchievementRanking(allGuildIds, this.rankingService);
                 mode = 'global';
@@ -7043,7 +7050,7 @@ class InteractionHandler {
 
             const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol);
             const buttons = this.achievementService.createAchRankingButtons(
-                0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage
+                0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
 
             const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
@@ -7051,7 +7058,7 @@ class InteractionHandler {
             this._achRankings.set(reply.id, {
                 players, currentPage: 0, totalPages, perPage,
                 userId: interaction.user.id, mode, guildId, guildName,
-                roleRows, userPage, isPol, activeRoleId
+                roleRows, userPage, isPol, activeRoleId, parentGuildId, parentGuildName
             });
         } catch (err) {
             logger.error(`Błąd _handleAchRankingSelect: ${err.message}`);
@@ -7084,7 +7091,7 @@ class InteractionHandler {
         );
         const buttons = this.achievementService.createAchRankingButtons(
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
-            data.roleRows, data.isPol, data.userPage
+            data.roleRows, data.isPol, data.userPage, data.parentGuildId, data.parentGuildName
         );
         await interaction.editReply({ embeds: [embed], components: buttons });
     }
