@@ -1191,6 +1191,11 @@ class InteractionHandler {
             const testBlocked = savedOcrBlocked.includes('test');
             const thasharLink = '[Thashar](https://discord.com/users/398983446812295168)';
 
+            const contactLine = t(
+                `\n💡 W razie pytań skontaktuj się z ${thasharLink}.`,
+                `\n💡 For questions, contact ${thasharLink}.`
+            );
+
             let ocrLine;
             if (updateBlocked && testBlocked) {
                 ocrLine = t(
@@ -1199,19 +1204,19 @@ class InteractionHandler {
                 );
             } else if (!updateBlocked && !testBlocked) {
                 ocrLine = t(
-                    `✅ Komendy \`/update\` i \`/test\` są **włączone** i gotowe do użycia. W razie pytań skontaktuj się z ${thasharLink}.`,
-                    `✅ Commands \`/update\` and \`/test\` are **enabled** and ready to use. For questions, contact ${thasharLink}.`
-                );
+                    `✅ Komendy \`/update\` i \`/test\` są **włączone** i gotowe do użycia.`,
+                    `✅ Commands \`/update\` and \`/test\` are **enabled** and ready to use.`
+                ) + contactLine;
             } else if (!updateBlocked && testBlocked) {
                 ocrLine = t(
-                    `✅ Komenda \`/update\` jest **włączona**. Komenda \`/test\` jest wyłączona. W razie pytań skontaktuj się z ${thasharLink}.`,
-                    `✅ Command \`/update\` is **enabled**. Command \`/test\` is disabled. For questions, contact ${thasharLink}.`
-                );
+                    `✅ Komenda \`/update\` jest **włączona**. Komenda \`/test\` jest wyłączona.`,
+                    `✅ Command \`/update\` is **enabled**. Command \`/test\` is disabled.`
+                ) + contactLine;
             } else {
                 ocrLine = t(
-                    `✅ Komenda \`/test\` jest **włączona**. Komenda \`/update\` jest wyłączona. W razie pytań skontaktuj się z ${thasharLink}.`,
-                    `✅ Command \`/test\` is **enabled**. Command \`/update\` is disabled. For questions, contact ${thasharLink}.`
-                );
+                    `✅ Komenda \`/test\` jest **włączona**. Komenda \`/update\` jest wyłączona.`,
+                    `✅ Command \`/test\` is **enabled**. Command \`/update\` is disabled.`
+                ) + contactLine;
             }
 
             const savedDesc = t(
