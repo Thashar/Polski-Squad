@@ -15,7 +15,7 @@ class RoleRankingConfigService {
     }
 
     _filePath(guildId) {
-        return path.join(this.dataDir, `role_rankings_${guildId}.json`);
+        return path.join(this.dataDir, 'guilds', guildId, 'role_rankings.json');
     }
 
     async loadRoleRankings(guildId) {
@@ -28,8 +28,9 @@ class RoleRankingConfigService {
     }
 
     async saveRoleRankings(guildId, list) {
-        await fs.mkdir(this.dataDir, { recursive: true });
-        await fs.writeFile(this._filePath(guildId), JSON.stringify(list, null, 2), 'utf8');
+        const file = this._filePath(guildId);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await fs.writeFile(file, JSON.stringify(list, null, 2), 'utf8');
     }
 
     async addRoleRanking(guildId, roleId, roleName) {

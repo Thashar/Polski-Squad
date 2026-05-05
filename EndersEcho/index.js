@@ -28,6 +28,7 @@ const AchievementService = require('./services/achievementService');
 const CommunityVerificationService = require('./services/communityVerificationService');
 const GuildBanService = require('./services/guildBanService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
+const dataMigration = require('./services/dataMigration');
 const { generateScoreHistoryChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -100,6 +101,9 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
  */
 async function initializeBot() {
     try {
+        // Migracja struktury folderów data/ → data/guilds/{guildId}/
+        await dataMigration.migrate(config.ranking.dataDir);
+
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);
         config.setGuildConfigService(guildConfigService);
