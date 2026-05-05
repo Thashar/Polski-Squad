@@ -203,7 +203,7 @@ async function processWebhookQueue() {
 // Funkcja do wysyłania pojedynczego webhook'a
 function sendWebhookRequest(webhookData, webhookUrl) {
     return new Promise((resolve, reject) => {
-        const data = JSON.stringify({ content: webhookData.content });
+        const data = JSON.stringify({ content: webhookData.content, flags: 4 });
         const url = new URL(webhookUrl);
 
         const options = {

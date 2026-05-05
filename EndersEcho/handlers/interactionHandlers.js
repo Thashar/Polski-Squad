@@ -3197,7 +3197,7 @@ class InteractionHandler {
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-                const profileLink = `[[🔗](https://discord.com/users/${interaction.user.id})]`;
+                const profileLink = `[[X](https://discord.com/users/${interaction.user.id})]`;
                 this.logService._gl(interaction.guildId).info(`[${nick}] ${profileLink} /configure → ${this._describeCfgButton(customId)}`);
                 await this._handleConfigureButton(interaction, customId);
                 return;
