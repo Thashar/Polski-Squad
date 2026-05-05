@@ -1165,6 +1165,11 @@ class InteractionHandler {
                     rejectedChannelId: state.communityVerifChannelId || null,
                     threshold: state.communityVerifThreshold || 5,
                 } : { enabled: false, rejectedChannelId: null, threshold: 5 },
+                configuredBy: {
+                    userId: interaction.user.id,
+                    username: interaction.user.username,
+                    configuredAt: new Date().toISOString(),
+                },
             };
             // Nowy serwer domyślnie ma zablokowane OCR komendy
             if (!wasAlreadyConfigured) {
@@ -3416,6 +3421,13 @@ class InteractionHandler {
                     }
                 } catch (e) {
                     logger.warn(`⚠️ CV: błąd wysyłania raportu na per-guild channel: ${e.message}`);
+                    if (e.code === 50001 || e.code === 50013) {
+                        await this._dmPermissionAlert(client, session.guildId, {
+                            channelId: cvCfg.rejectedChannelId,
+                            missingPerms: e.code === 50001 ? ['ViewChannel'] : ['SendMessages', 'EmbedLinks'],
+                            context: 'Kanał zgłoszeń weryfikacji społeczności (CV)',
+                        });
+                    }
                 }
             }
 
@@ -4629,13 +4641,11 @@ class InteractionHandler {
     }
 
     /**
-     * Wysyła DM do właściciela serwera z informacją o błędzie wysyłania wiadomości na kanał.
+     * Wysyła DM do właściciela serwera i osoby która skonfigurowała bota z informacją o błędzie kanału.
      * @param {{ guildObj, label, channelId, error, lang, context: { titlePol, titleEng } }} params
      */
     async _sendChannelErrorDm({ guildObj, label, channelId, error, lang, context }) {
         try {
-            const owner = await guildObj.fetchOwner();
-            if (!owner) return;
             const isPol = lang === 'pol';
             const embed = new EmbedBuilder()
                 .setColor(0xcc0000)
@@ -4648,7 +4658,19 @@ class InteractionHandler {
                 .setTimestamp();
             const fix = isPol ? error.fix_pol : error.fix_eng;
             if (fix) embed.addFields({ name: isPol ? '🔧 Co zrobić' : '🔧 How to fix', value: fix, inline: false });
-            await owner.send({ embeds: [embed] });
+
+            const sentTo = new Set();
+            const owner = await guildObj.fetchOwner().catch(() => null);
+            if (owner) {
+                await owner.send({ embeds: [embed] }).catch(() => {});
+                sentTo.add(owner.id);
+            }
+
+            const configuredById = this.guildConfigService.getConfig(guildObj.id)?.configuredBy?.userId;
+            if (configuredById && !sentTo.has(configuredById)) {
+                const configAdmin = await guildObj.client.users.fetch(configuredById).catch(() => null);
+                if (configAdmin) await configAdmin.send({ embeds: [embed] }).catch(() => {});
+            }
         } catch {
             // DM zablokowane lub inny błąd — ignoruj cicho
         }
@@ -5283,6 +5305,44 @@ class InteractionHandler {
         }
     }
 
+    async _dmPermissionAlert(client, guildId, { channelId, missingPerms, context }) {
+        try {
+            const storedCfg = this.guildConfigService.getConfig(guildId);
+            const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+            const guildName = guild?.name || guildId;
+            const ch = guild?.channels.cache.get(channelId) || await guild?.channels.fetch(channelId).catch(() => null);
+            const channelName = ch ? `#${ch.name}` : `<#${channelId}>`;
+            const isPol = storedCfg?.lang !== 'eng';
+
+            const missingList = missingPerms.length
+                ? missingPerms.map(p => `• **${p}**`).join('\n')
+                : '• *(nieznane uprawnienie)*';
+
+            const dmEmbed = new EmbedBuilder()
+                .setColor(0xFF4444)
+                .setTitle(isPol ? '⚠️ EndersEcho — brak uprawnień' : '⚠️ EndersEcho — missing permissions')
+                .setDescription(isPol
+                    ? `Bot napotkał błąd uprawnień na serwerze **${guildName}** i nie może wykonać swojego zadania.\n\n**Kanał:** ${channelName}\n**Kontekst:** ${context}\n\n**Brakujące uprawnienia:**\n${missingList}\n\nPrzejdź do ustawień kanału i nadaj botowi brakujące uprawnienia, lub zmień kanał przez \`/configure\`.`
+                    : `The bot encountered a permission error on **${guildName}** and cannot complete its task.\n\n**Channel:** ${channelName}\n**Context:** ${context}\n\n**Missing permissions:**\n${missingList}\n\nGo to the channel settings and grant the bot the missing permissions, or change the channel via \`/configure\`.`
+                )
+                .setTimestamp();
+
+            const sentTo = new Set();
+            const configuredById = storedCfg?.configuredBy?.userId;
+            if (configuredById) {
+                const admin = await client.users.fetch(configuredById).catch(() => null);
+                if (admin) {
+                    await admin.send({ embeds: [dmEmbed] }).catch(() => {});
+                    sentTo.add(configuredById);
+                }
+            }
+            const owner = guild ? await guild.fetchOwner().catch(() => null) : null;
+            if (owner && !sentTo.has(owner.id)) {
+                await owner.send({ embeds: [dmEmbed] }).catch(() => {});
+            }
+        } catch { /* fire-and-forget, nie przerywaj głównego flow */ }
+    }
+
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
         const hasGlobal = !!this.config.invalidReportChannelId;
         const guildCfg = this.config.getGuildConfig(interaction.guildId);
@@ -5409,14 +5469,20 @@ class InteractionHandler {
                             const me = await guild.members.fetchMe();
                             const ch = guild.channels.cache.get(perGuildChannelId)
                                 || await guild.channels.fetch(perGuildChannelId).catch(() => null);
+                            const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles', 'ReadMessageHistory'];
+                            let missing = needed;
                             if (ch && me) {
                                 const perms = ch.permissionsFor(me);
-                                const needed = ['ViewChannel', 'SendMessages', 'EmbedLinks', 'AttachFiles', 'ReadMessageHistory'];
-                                const missing = needed.filter(p => !perms.has(p));
+                                missing = needed.filter(p => !perms.has(p));
                                 gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code} ${err.message}). Brakujące uprawnienia: ${missing.length ? missing.join(', ') : 'wszystkie OK — inny powód'}`);
                             } else {
                                 gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code}): nie udało się pobrać kanału/membera`);
                             }
+                            await this._dmPermissionAlert(interaction.client, interaction.guildId, {
+                                channelId: perGuildChannelId,
+                                missingPerms: missing,
+                                context: 'Kanał raportów odrzuconych screenów',
+                            });
                         } catch (diagErr) {
                             gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code} ${err.message}): diagnostyka nieudana — ${diagErr.message}`);
                         }
