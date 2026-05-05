@@ -120,7 +120,7 @@ const pol = {
     globalTop10ReportTitle: '🌐 TOP 10 Globalny',
     globalTop10BossField: '⚔️ Boss okresu',
     globalTop10Footer: 'Następny raport za 3 dni',
-    globalTop10FooterBreak: 'Następny raport za 1 dzień (przerwa)',
+    globalTop10FooterBreak: 'Następny raport za 4 dni (przerwa)',
 
     // /subscribe
     notifDescription: '🔔 Zarządzaj powiadomieniami o nowych rekordach graczy.',
@@ -420,7 +420,7 @@ const eng = {
     globalTop10ReportTitle: '🌐 Global TOP 10',
     globalTop10BossField: '⚔️ Boss of the period',
     globalTop10Footer: 'Next report in 3 days',
-    globalTop10FooterBreak: 'Next report in 1 day (break)',
+    globalTop10FooterBreak: 'Next report in 4 days (break)',
 
     // /subscribe
     notifDescription: '🔔 Manage notifications for player record breaks.',

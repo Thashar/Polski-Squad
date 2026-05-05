@@ -102,7 +102,7 @@
      - Warunek: gracz w TOP10 serwera AND jego pozycja globalna zmieniła się
      - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
    - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:
-     - Interwał: 9 raportów co 3 dni, potem 1 dzień przerwy, powtórz (cykl 10)
+     - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
      - Konfiguracja w `data/global_top10_config.json` (enabled, nextTrigger, triggerCount, lastSnapshot)
      - Snapshot poprzednich pozycji → zmiany ▲/▼/=/🆕 przy każdym graczu
      - Boss okresu: najczęstszy boss z ostatnich 10 wpisów historii wyników (`wyniki/`)
