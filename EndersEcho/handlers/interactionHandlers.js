@@ -5928,7 +5928,7 @@ class InteractionHandler {
                 .setDisabled(!hasNext),
             new ButtonBuilder()
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
-                .setLabel('🌐 Wszystkie')
+                .setLabel('📅 Dniowo')
                 .setStyle(ButtonStyle.Secondary),
         );
 
