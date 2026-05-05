@@ -113,14 +113,14 @@ const pol = {
     topRoleAssigned: '✅ Przyznano rolę {roleName} użytkownikowi {username}',
     topRoleRemoved: '🗑️ Usunięto rolę {roleName} od {username}',
 
-    // Global Top 3 notification
-    globalTop3Title: '🌐 ZMIANA W TOP 3 GLOBALNYM!',
-    globalTop3Description: '## {username} jest teraz {medal} #{position} w globalnym rankingu!',
-    globalTop3Server: '🌍 Serwer',
-    globalTop3GlobalPosition: '🌐 Pozycja globalna',
-    globalTop3EnteredTop3: 'wejście do Top 3',
-    globalTop3PositionImproved: 'awans z #{prevPos}',
-    globalTop3PodiumLabel: '🏅 Aktualne podium',
+    // Global TOP snippet (pod wynikiem)
+    globalSnippetTitle: '🌐 Zmiana w globalnym rankingu',
+
+    // Global TOP10 cykliczny raport
+    globalTop10ReportTitle: '🌐 TOP 10 Globalny',
+    globalTop10BossField: '⚔️ Boss okresu',
+    globalTop10Footer: 'Następny raport za 3 dni',
+    globalTop10FooterBreak: 'Następny raport za 1 dzień (przerwa)',
 
     // /subscribe
     notifDescription: '🔔 Zarządzaj powiadomieniami o nowych rekordach graczy.',
@@ -413,14 +413,14 @@ const eng = {
     topRoleAssigned: '✅ Role {roleName} assigned to {username}',
     topRoleRemoved: '🗑️ Role {roleName} removed from {username}',
 
-    // Global Top 3 notification
-    globalTop3Title: '🌐 GLOBAL TOP 3 CHANGE!',
-    globalTop3Description: '## {username} is now {medal} #{position} in the global ranking!',
-    globalTop3Server: '🌍 Server',
-    globalTop3GlobalPosition: '🌐 Global Position',
-    globalTop3EnteredTop3: 'entered Top 3',
-    globalTop3PositionImproved: 'promoted from #{prevPos}',
-    globalTop3PodiumLabel: '🏅 Current podium',
+    // Global TOP snippet (under result)
+    globalSnippetTitle: '🌐 Global Ranking Change',
+
+    // Global TOP10 periodic report
+    globalTop10ReportTitle: '🌐 Global TOP 10',
+    globalTop10BossField: '⚔️ Boss of the period',
+    globalTop10Footer: 'Next report in 3 days',
+    globalTop10FooterBreak: 'Next report in 1 day (break)',
 
     // /subscribe
     notifDescription: '🔔 Manage notifications for player record breaks.',

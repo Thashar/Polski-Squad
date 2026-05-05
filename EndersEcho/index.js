@@ -31,6 +31,7 @@ const GuildBanService = require('./services/guildBanService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
+const GlobalTop10Service = require('./services/globalTop10Service');
 const { generateScoreHistoryChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -96,7 +97,8 @@ const updateCooldownService = new UpdateCooldownService(config);
 const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
 const guildBanService = new GuildBanService(config.ranking.dataDir);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService);
+const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -125,6 +127,10 @@ async function initializeBot() {
         await tokenUsageService.load();
         await updateCooldownService.load();
         await guildBanService.load();
+
+        // Uruchom scheduler cyklicznych raportów TOP10 globalnego
+        globalTop10Service.setClient(client);
+        globalTop10Service.start();
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
@@ -350,6 +356,7 @@ async function startBot() {
  */
 async function stopBot() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
+    globalTop10Service.stop();
     try {
         if (client.readyAt) {
             await client.destroy();

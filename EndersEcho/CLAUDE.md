@@ -59,7 +59,7 @@
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów)
      - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów)
      - Gdy screen niepodobny do wzorca → embed `testNotSimilarTitle/Description` (brak zapisu)
-     - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, powiadomienia Global Top 3, powiadomienia DM
+     - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, snippet globalnego rankingu (gdy TOP10 serwera), powiadomienia DM
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
      - **Cooldown 5 min** po udanym zapisie wyniku — sprawdzany przez `updateCooldownService`; informuje gracza ile czasu pozostało (w języku serwera); persystowany w `data/update_cooldowns.json` (przeżywa restart)
@@ -69,7 +69,7 @@
        - Wynik (rekord i brak rekordu) wyświetlany jako **ephemeral** w `editReply` — bez publicznego `followUp`
        - **Brak zapisu do rankingu** (`guilds/{guildId}/ranking.json`) — `isNewRecord` obliczany porównaniem z aktualnym stanem bez `updateUserRanking()`
        - **Brak aktualizacji ról TOP** (`roleService.updateTopRoles`)
-       - **Brak powiadomień Global Top 3** na inne serwery
+       - **Brak snippeta globalnego rankingu**
        - **Brak powiadomień DM** do subskrybentów
        - **Brak `logScoreUpdate`** (log rekordu do webhooka)
      - Nadal działa: `logCommandUsage('test')`, `usageLimitService` (zlicza dzienny limit), `tokenUsageService` (rejestruje koszty AI), `_sendInvalidScreenReport` dla NOT_SIMILAR/FAKE_PHOTO, Operations Gateway z `hints.command='test'`
@@ -97,13 +97,17 @@
      - Pola: Postęp (`stary ➜ nowy`), Poprawa (`+X`), Data, Pozycja z medalem emoji
      - Author (górny pasek): ikona roli + nazwa roli (jeśli rola ma ikonę/emoji)
      - Thumbnail: avatar gracza | Image: screenshot wyniku
-   - **Powiadomienie Global Top 3** (`rankingService.createGlobalTop3Embed`):
-     - Wysyłane na kanał każdego serwera gdy gracz wchodzi lub poprawia wynik w globalnym Top 3 (pozycje 1-3)
-     - Warunek: `isNewRecord = true` ORAZ wynik gracza w globalnym rankingu faktycznie wzrósł (eliminuje przypadek gdy nowy rekord lokalny jest słabszy od wyniku z innego serwera)
-     - Embed zawiera: kto, jaki wynik (z postępem `stary ➜ nowy +X`), na jakim serwerze, kiedy (+ ile temu poprzedni), lokata globalna z medalem i adnotacją (wejście do Top3 / awans z #N)
-     - Kolor embeda wg pozycji globalnej (złoty/srebrny/brązowy)
-     - Każdy serwer otrzymuje wiadomość **w swoim języku** (pol/eng wg konfiguracji `ENDERSECHO_GUILD_N_LANG`)
-     - Powiadomienie idzie do `allowedChannelId` każdego serwera
+   - **Snippet globalny** (`globalTop10Service.buildSnippetEmbed`):
+     - Wysyłany jako drugi embed pod wynikiem, **tylko na serwerze źródłowym**
+     - Warunek: gracz w TOP10 serwera AND jego pozycja globalna zmieniła się
+     - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
+   - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:
+     - Interwał: 9 raportów co 3 dni, potem 1 dzień przerwy, powtórz (cykl 10)
+     - Konfiguracja w `data/global_top10_config.json` (enabled, nextTrigger, triggerCount, lastSnapshot)
+     - Snapshot poprzednich pozycji → zmiany ▲/▼/=/🆕 przy każdym graczu
+     - Boss okresu: najczęstszy boss z ostatnich 10 wpisów historii wyników (`wyniki/`)
+     - Wysyłany na każdy serwer z `globalTopNotifications !== false` do `allowedChannelId`
+     - Konfiguracja przez panel admina → **📅 Interwał TOP10** (tylko head admin) → modal z datą i godziną pierwszego raportu (format `DD.MM.RRRR GG:MM`); puste pole = wyłącz harmonogram
 
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
@@ -272,7 +276,7 @@
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
 - **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
 - **Krok 5:** Role TOP (opcjonalne, sub-wizard 5 kroków z RoleSelectMenu) — każda pozycja wybierana osobno z listy ról serwera; każdy krok można pominąć; "Wstecz" cofa do poprzedniego kroku; customIDs: `cfg_roles_start`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`
-- **Krok 6:** Powiadomienia Global TOP3 (Tak/Nie) — per-guild flaga `globalTop3Notifications`
+- **Krok 6:** Powiadomienia Global TOP10 (Tak/Nie) — per-guild flaga `globalTopNotifications` (backward compat: odczytuje też stare `globalTop3Notifications`)
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
@@ -324,7 +328,7 @@
 - `load(envGuilds)`: importuje serwery z `.env` (configured, importedFromEnv), migruje `ocr_blocked.json`
 - `saveConfig(guildId, data)`: merge z istniejącą konfiguracją, serialized write queue
 - `getOcrBlocked/setOcrBlocked`: per-guild stan blokady OCR
-- `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTop3Notifications)
+- `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTopNotifications)
 
 **Uprawnienia komend:**
 - Bez konfiguracji (zawsze): `/configure` (wizard), `/manage` (bezpośredni panel admina)
@@ -457,7 +461,7 @@ Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko
 | [index.js](index.js) | `createLlmAdapter`, `createAppSync({ apiKey: config.appApiKey }).sync`, `createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey })` budowane w launcherze i wstrzykiwane przez konstruktory (DI) do `AIOCRService`, `RankingService`, `InteractionHandler` |
 | [services/aiOcrService.js](services/aiOcrService.js) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
 | [services/rankingService.js](services/rankingService.js) | `appSync` wstrzykiwany przez konstruktor, używany jako `this.appSync.endersEchoSnapshot(...)` |
-| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (ostatni arg); wspólne ciało `/update` i `/test` to `_runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey })` — `dryRun:true` wyłącza zapis do rankingu, role TOP, powiadomienia Global Top 3 i DM |
+| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (przedostatni → ostatni arg to `globalTop10Service`); wspólne ciało `/update` i `/test` to `_runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey })` — `dryRun:true` wyłącza zapis do rankingu, role TOP, snippet globalny i DM |
 
 ### Specyfika bota
 
@@ -479,13 +483,13 @@ Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get
 
 ## Najlepsze Praktyki
 
-- **Alerty uprawnień:** `_dmPermissionAlert(client, guildId, { channelId, missingPerms, context })` — wysyła DM do `configuredBy` + właściciela serwera gdy bot nie może zapisać do kanału (50001/50013). `_sendChannelErrorDm({ guildObj, ... })` — analogicznie dla Global TOP3 i /info. Oba fire-and-forget, nie przerywają głównego flow.
+- **Alerty uprawnień:** `_dmPermissionAlert(client, guildId, { channelId, missingPerms, context })` — wysyła DM do `configuredBy` + właściciela serwera gdy bot nie może zapisać do kanału (50001/50013). `_sendChannelErrorDm({ guildObj, ... })` — analogicznie dla /info. Oba fire-and-forget, nie przerywają głównego flow.
 - **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera. Metoda `sendEmbed(embed)` wysyła embed przez webhook (powiadomienia o dołączeniu serwera, usunięciu, zmianie konfiguracji); zwraca `true` jeśli webhook skonfigurowany
 - **Embedy administracyjne przez webhook:** `guildLogger.sendEmbed(embed)` lub `logService.sendEmbed(embed)` — używane dla powiadomień guildCreate/guildDelete (`index.js`) i konfiguracji `/configure` (`interactionHandlers`). Fallback na kanał `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
-- **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Global Top 3
+- **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli TOP10 serwera i zmiana pozycji)
 - **Logi /update (odrzucenie, 3 linie):** start → `[AI Test] Test wzorca: "NOK: reason"` → `❌ Odrzucono: NOT_SIMILAR/FAKE_PHOTO/...`
 - **OCR Debug:** Brak komendy — logi pośrednie AI OCR (Total, Boss/score z parseAIResponse) są usunięte; szczegóły widoczne tylko w logach błędów
 - **Ranking per-serwer:** `rankingService.loadRanking(guildId)` / `saveRanking(guildId, ranking)`

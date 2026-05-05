@@ -69,7 +69,7 @@ class GuildConfigService {
                     tag: envGuild.tag || null,
                     icon: envGuild.icon || null,
                     topRoles: envGuild.topRoles || null,
-                    globalTop3Notifications: true,
+                    globalTopNotifications: true,
                     ocrBlocked: legacyBlockedCommands.length > 0 ? [...legacyBlockedCommands] : [],
                     importedFromEnv: true,
                 };
@@ -131,7 +131,7 @@ class GuildConfigService {
                 tag: cfg.tag || null,
                 icon: cfg.icon || null,
                 topRoles: cfg.topRoles || null,
-                globalTop3Notifications: cfg.globalTop3Notifications !== false,
+                globalTopNotifications: cfg.globalTopNotifications ?? cfg.globalTop3Notifications ?? true,
             }));
     }
 

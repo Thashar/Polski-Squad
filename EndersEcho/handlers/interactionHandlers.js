@@ -44,7 +44,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -66,6 +66,7 @@ class InteractionHandler {
         this.scoreHistoryService = scoreHistoryService;
         this.chartService = chartService;
         this.guildBanService = guildBanService;
+        this.globalTop10Service = globalTop10Service;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -298,6 +299,14 @@ class InteractionHandler {
                 await this._handlePanelTesterAddModal(interaction);
                 return;
             }
+            if (interaction.customId === 'top10_interval_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleTop10IntervalModal(interaction);
+                return;
+            }
             if (interaction.customId === 'panel_block_search_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -412,7 +421,7 @@ class InteractionHandler {
             new ActionRowBuilder().addComponents(
                 btn(4, '4. Tag serwera', '4. Server Tag'),
                 btn(5, '5. Role TOP (opcjonalne)', '5. TOP Roles (optional)'),
-                btn(6, '6. Powiadomienia Global TOP3', '6. Global TOP3 Notifications'),
+                btn(6, '6. Powiadomienia Global TOP10', '6. Global TOP10 Notifications'),
                 btn(7, '7. Ranking roli (opcjonalne)', '7. Role Rankings (optional)'),
             ),
             new ActionRowBuilder().addComponents(
@@ -444,7 +453,7 @@ class InteractionHandler {
             done[3] ? `⚠️ ${t('Kanał raportów:', 'Report Channel:')} <#${state.invalidReportChannelId}>` : null,
             done[4] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
             done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
-            done[6] ? `🔔 ${t('Powiadomienia TOP3:', 'TOP3 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
+            done[6] ? `🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
             done[7] ? `🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')}` : null,
             done[8] ? `🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${state.communityVerifEnabled ? t('Włączona (próg: ', 'Enabled (threshold: ') + (state.communityVerifThreshold || 5) + t(', kanał: ', ', channel: ') + (state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')) + ')' : t('Wyłączona', 'Disabled')}` : null,
         ].filter(Boolean);
@@ -494,7 +503,7 @@ class InteractionHandler {
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
-                        '6️⃣  **Powiadomienia Global TOP3** — ogłoszenia gdy gracz wchodzi do globalnego TOP3\n' +
+                        '6️⃣  **Powiadomienia Global TOP10** — cykliczne raporty TOP10 globalnego (co ~3 dni)\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
@@ -505,7 +514,7 @@ class InteractionHandler {
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
-                        '6️⃣  **Global TOP3 Notifications** — announcements when players enter global TOP3\n' +
+                        '6️⃣  **Global TOP10 Notifications** — periodic TOP10 global reports (every ~3 days)\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
@@ -537,9 +546,7 @@ class InteractionHandler {
                     lang: existing.lang || null,
                     topRoles: existing.topRoles || null,
                     rolesSkipped: !existing.topRoles,
-                    globalTop3Notifications: existing.globalTop3Notifications !== undefined
-                        ? existing.globalTop3Notifications
-                        : true,
+                    globalTop3Notifications: existing.globalTopNotifications ?? existing.globalTop3Notifications ?? true,
                     roleRankingsDone: true,
                     communityVerifDone: true,
                     communityVerifEnabled: existingCv.enabled === true,
@@ -671,11 +678,11 @@ class InteractionHandler {
 
         } else if (step === 6) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🌐 Krok 6 — Powiadomienia Global TOP3', '🌐 Step 6 — Global TOP3 Notifications'))
+                .setTitle(t('🌐 Krok 6 — Powiadomienia Global TOP10', '🌐 Step 6 — Global TOP10 Notifications'))
                 .setDescription(
                     t(
-                        'Gdy jakikolwiek gracz z dowolnego serwera EndersEcho wbije nowy rekord i wejdzie do globalnego TOP3, bot może wysłać ogłoszenie na Twój kanał bota.\n\nOgłoszenie zawiera: kto wchodzi do TOP3, wynik i poprawę, z jakiego serwera pochodzi oraz aktualne podium globalnego TOP3.\n\nCzy chcesz otrzymywać te ogłoszenia?',
-                        'When any player across all EndersEcho servers submits a new best score and enters the global TOP3 ranking, the bot can post an announcement in your Bot Channel.\n\nThe announcement includes: who entered TOP3, their score, which server they\'re from, and the current global TOP3 podium.\n\nWould you like to receive these announcements?'
+                        'Bot może cyklicznie (co ~3 dni) wysyłać na Twój kanał raport TOP10 globalnego rankingu EndersEcho.\n\nRaport zawiera: 10 najlepszych graczy ze wszystkich serwerów, ich wyniki, zmiany pozycji (▲/▼) od poprzedniego raportu oraz bossa, z którym walczono w tym okresie.\n\nCzy chcesz otrzymywać te raporty?',
+                        'The bot can periodically (every ~3 days) send a TOP10 global ranking report to your channel.\n\nThe report includes: top 10 players from all servers, their scores, position changes (▲/▼) since the last report, and the boss fought during that period.\n\nWould you like to receive these reports?'
                     )
                 );
             const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('✅ Tak, włącz', '✅ Yes, enable')).setStyle(ButtonStyle.Success);
@@ -1190,7 +1197,7 @@ class InteractionHandler {
                 lang: state.lang,
                 tag: state.tag || null,
                 topRoles: state.topRoles || null,
-                globalTop3Notifications: state.globalTop3Notifications !== false,
+                globalTopNotifications: state.globalTop3Notifications !== false,
                 communityVerification: state.communityVerifEnabled ? {
                     enabled: true,
                     rejectedChannelId: state.communityVerifChannelId || null,
@@ -1281,7 +1288,7 @@ class InteractionHandler {
                             { name: 'Język', value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
                             { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
-                            { name: 'Powiadomienia Global Top3', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
+                            { name: 'Powiadomienia Global TOP10', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
                             { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
                             { name: 'Weryfikacja społeczności', value: newData.communityVerification?.enabled ? `✅ Włączona (próg: ${newData.communityVerification.threshold})` : '❌ Wyłączona' }
                         )
@@ -1317,7 +1324,7 @@ class InteractionHandler {
                     if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
                         const oldVal = old?.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
                         const newVal = newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
-                        diffFields.push({ name: 'Powiadomienia Global Top3', value: `${oldVal} → ${newVal}` });
+                        diffFields.push({ name: 'Powiadomienia Global TOP10', value: `${oldVal} → ${newVal}` });
                     }
                     const oldCvEnabled = old?.communityVerification?.enabled || false;
                     const newCvEnabled = newData.communityVerification?.enabled || false;
@@ -1406,6 +1413,8 @@ class InteractionHandler {
               '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
             t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
               '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
+            t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
+              '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
         ];
 
         const optionLines = isHeadAdmin
@@ -1429,11 +1438,12 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
             );
-            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy
+            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy, Interwał TOP10
             row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR', '🔄 AI OCR')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_limit').setLabel(t('⚙️ Ustaw limity', '⚙️ Set Limits')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Testerzy', '🧪 Testers')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_top10_interval').setLabel(t('📅 Interwał TOP10', '📅 TOP10 Interval')).setStyle(ButtonStyle.Primary),
             );
         } else {
             // Rząd 1 Admin: Usuń gracza, Odblokuj
@@ -2435,7 +2445,10 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
 
-            const prevGlobalRanking = dryRun ? null : await this.rankingService.getGlobalRanking();
+            const prevGlobalRanking = dryRun ? null : await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+            const prevGlobalPosition = !dryRun
+                ? (() => { const i = prevGlobalRanking?.findIndex(p => p.userId === userId); return i !== -1 ? i + 1 : null; })()
+                : null;
 
             // Dane cross-server — obliczane raz, używane przy sprawdzeniu duplikatu i przy embeddzie rekordu
             const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
@@ -2709,102 +2722,28 @@ class InteractionHandler {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
             }
 
-            // Powiadomienie o zmianie w Global Top 3
+            // Snippet globalnego rankingu pod wynikiem (gdy gracz z TOP10 serwera zmienił pozycję globalną)
             try {
-                const newGlobalRanking = await this.rankingService.getGlobalRanking();
-                const newGlobalUserIndex = newGlobalRanking.findIndex(p => p.userId === userId);
-                const newGlobalPosition = newGlobalUserIndex !== -1 ? newGlobalUserIndex + 1 : null;
-                const prevGlobalUserIndex = prevGlobalRanking.findIndex(p => p.userId === userId);
-                const prevGlobalPosition = prevGlobalUserIndex !== -1 ? prevGlobalUserIndex + 1 : null;
+                const serverPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
+                const serverPosition = serverPlayers.findIndex(p => p.userId === userId);
 
-                if (newGlobalPosition && newGlobalPosition <= 3) {
-                    const prevGlobalUser = prevGlobalRanking.find(p => p.userId === userId);
-                    const newGlobalUser = newGlobalRanking[newGlobalUserIndex];
-                    const globalScoreChanged = !prevGlobalUser || newGlobalUser.scoreValue > prevGlobalUser.scoreValue;
-                    const positionChanged = prevGlobalPosition !== newGlobalPosition;
+                if (serverPosition !== -1 && serverPosition < 10) {
+                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+                    const newGlobalIndex = newGlobalRanking.findIndex(p => p.userId === userId);
+                    const newGlobalPosition = newGlobalIndex !== -1 ? newGlobalIndex + 1 : null;
 
-                    if (globalScoreChanged && positionChanged) {
-                        const sourceGuildName = interaction.guild.name;
-                        const notifAvatarUrl = interaction.user.displayAvatarURL();
-
-                        const allNotifGuilds = this.config.getAllGuilds()
-                            .filter(g => g.globalTop3Notifications !== false)
-                            .filter(g => interaction.client.guilds.cache.has(g.id));
-                        gl.info(`🌐 Global Top 3: ${prevGlobalPosition ?? 'brak'}→${newGlobalPosition} — wysyłam do ${allNotifGuilds.length} serwerów`);
-
-                        const sentTo = [];
-                        const failedAt = [];
-                        const top3Ctx = { titlePol: '⚠️ Błąd wysyłania powiadomienia Global Top 3', titleEng: '⚠️ Failed to deliver Global Top 3 notification' };
-
-                        for (const guildCfg of allNotifGuilds) {
-                            const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
-                            const guildName = guildObj?.name || guildCfg.id;
-                            const lang = guildCfg.lang || 'pol';
-                            try {
-                                // Pobieramy kanał bezpośrednio przez klienta bota, żeby mieć pewność tokenu
-                                let channel;
-                                try {
-                                    channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId);
-                                } catch (fetchErr) {
-                                    failedAt.push(`${guildName} (${fetchErr.message})`);
-                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(fetchErr), lang, context: top3Ctx }).catch(() => {});
-                                    continue;
-                                }
-                                if (!channel) {
-                                    failedAt.push(`${guildName} (brak kanału)`);
-                                    if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: { pol: 'Nie znaleziono kanału (ID kanału może być nieaktualne)', eng: 'Channel not found (channel ID may be outdated)', fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.', fix_eng: 'Use `/configure` to select a new channel for the bot.' }, lang, context: top3Ctx }).catch(() => {});
-                                    continue;
-                                }
-
-                                const guildMsgs = this.msgs(guildCfg.id);
-                                // Na serwerze macierzystym plik był już w embeddzie rekordu — bez duplikatu.
-                                // Na innych serwerach tworzymy nowy AttachmentBuilder z oryginalnego pliku (plik
-                                // jeszcze istnieje — usuwany jest dopiero po zakończeniu całej pętli notyfikacji).
-                                const isSourceGuild = guildCfg.id === interaction.guildId;
-
-                                let notifImageRef = null;
-                                let notifFiles;
-                                if (!isSourceGuild) {
-                                    const notifAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
-                                    notifImageRef = `attachment://${notifAttachment.name}`;
-                                    notifFiles = [notifAttachment];
-                                }
-
-                                const globalEmbed = this.rankingService.createGlobalTop3Embed(
-                                    userName,
-                                    bestScore,
-                                    currentScore ? currentScore.score : null,
-                                    notifAvatarUrl,
-                                    newGlobalPosition,
-                                    prevGlobalPosition,
-                                    sourceGuildName,
-                                    guildMsgs,
-                                    currentScore ? currentScore.timestamp : null,
-                                    notifImageRef,
-                                    newGlobalRanking.slice(0, 3)
-                                );
-
-                                const sendPayload = { embeds: [globalEmbed] };
-                                if (notifFiles) sendPayload.files = notifFiles;
-                                await channel.send(sendPayload);
-                                sentTo.push(guildName);
-                            } catch (notifError) {
-                                failedAt.push(`${guildName} (${notifError.message})`);
-                                if (guildObj) this._sendChannelErrorDm({ guildObj, label: guildName, channelId: guildCfg.allowedChannelId, error: this._mapSendError(notifError), lang, context: top3Ctx }).catch(() => {});
-                            }
+                    if (newGlobalPosition && newGlobalPosition !== prevGlobalPosition) {
+                        const snippetEmbed = await this.globalTop10Service.buildSnippetEmbed(
+                            userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
+                        );
+                        if (snippetEmbed) {
+                            await interaction.followUp({ embeds: [snippetEmbed] });
+                            gl.info(`🌐 Snippet globalny: ${prevGlobalPosition ?? '—'} → #${newGlobalPosition} (serwer #${serverPosition + 1})`);
                         }
-
-                        const sentPart = sentTo.length ? `✅ ${sentTo.join(', ')}` : '';
-                        const failPart = failedAt.length ? `❌ ${failedAt.join(', ')}` : '';
-                        gl.info(`🌐 Global Top 3 wysłano: ${[sentPart, failPart].filter(Boolean).join(' | ')}`);
-                    } else {
-                        gl.info(`🌐 Global Top 3: pos=${newGlobalPosition} (bez zmian) — warunki nie spełnione`);
                     }
-                } else {
-                    gl.info(`🌐 Global Top 3: pos=${newGlobalPosition ?? 'brak'} — nie wysyłam powiadomień`);
                 }
-            } catch (globalCheckError) {
-                gl.error(`❌ Błąd sprawdzania/wysyłania Global Top 3: ${globalCheckError.message}`);
+            } catch (snippetErr) {
+                gl.error(`❌ Błąd snippeta globalnego: ${snippetErr.message}`);
             }
 
             // DM powiadomienia dla subskrybentów (lista pobrana wcześniej przy liczeniu obserwujących)
@@ -2939,8 +2878,9 @@ class InteractionHandler {
         if (customId.startsWith('cfg_roles_skip_')) return `Pomiń rolę TOP (krok ${parseInt(customId.replace('cfg_roles_skip_', ''), 10) + 1}/5)`;
         if (customId.startsWith('cfg_roles_back_')) return `Wróć (krok ról TOP ${parseInt(customId.replace('cfg_roles_back_', ''), 10) + 1}/5)`;
         if (customId.startsWith('cfg_roles_sel_')) return `Wybrano rolę TOP (krok ${parseInt(customId.replace('cfg_roles_sel_', ''), 10) + 1}/5)`;
-        if (customId === 'cfg_notif_yes') return 'Powiadomienia Global TOP3: TAK';
-        if (customId === 'cfg_notif_no') return 'Powiadomienia Global TOP3: NIE';
+        if (customId === 'cfg_notif_yes') return 'Powiadomienia Global TOP10: TAK';
+        if (customId === 'cfg_notif_no') return 'Powiadomienia Global TOP10: NIE';
+        if (customId === 'panel_top10_interval') return 'Interwał TOP10 — otwórz modal';
         if (customId === 'cfg_role_ranking_add') return 'Dodaj ranking roli';
         if (customId === 'cfg_role_ranking_remove') return 'Usuń ranking roli';
         if (customId === 'cfg_role_ranking_skip') return 'Pomiń ranking roli';
@@ -3256,6 +3196,38 @@ class InteractionHandler {
                         new TextInputBuilder().setCustomId('cooldown_value').setLabel(msgs.limitCooldownLabel)
                             .setStyle(TextInputStyle.Short).setPlaceholder(msgs.limitCooldownPlaceholder)
                             .setValue(currentCooldownStr).setRequired(false)
+                    )
+                );
+                await interaction.showModal(modal);
+                return;
+            }
+
+            if (customId === 'panel_top10_interval') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const cfg = this.globalTop10Service.getConfig();
+                const currentVal = cfg.nextTrigger
+                    ? (() => {
+                        const d = new Date(cfg.nextTrigger);
+                        return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                    })()
+                    : '';
+                const t = this._panelT(interaction.guildId);
+                const modal = new ModalBuilder()
+                    .setCustomId('top10_interval_modal')
+                    .setTitle(t('📅 Interwał TOP10 globalnego', '📅 Global TOP10 Interval'));
+                modal.addComponents(
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('top10_first_trigger')
+                            .setLabel(t('Data i godzina pierwszego raportu', 'Date and time of first report'))
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('DD.MM.RRRR GG:MM  np. 10.05.2026 20:00')
+                            .setValue(currentVal)
+                            .setRequired(false)
+                            .setMaxLength(20)
                     )
                 );
                 await interaction.showModal(modal);
@@ -6708,6 +6680,47 @@ class InteractionHandler {
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
             )],
+        });
+    }
+
+    async _handleTop10IntervalModal(interaction) {
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const t = this._panelT(interaction.guildId);
+        const raw = interaction.fields.getTextInputValue('top10_first_trigger').trim();
+
+        if (!raw) {
+            // Wyłącz harmonogram
+            this.globalTop10Service.disableSchedule();
+            await interaction.editReply({ content: t('✅ Raport TOP10 globalnego został **wyłączony**.', '✅ Global TOP10 report has been **disabled**.') });
+            return;
+        }
+
+        // Parsuj format DD.MM.RRRR GG:MM
+        const match = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})$/);
+        if (!match) {
+            await interaction.editReply({ content: t('❌ Nieprawidłowy format daty. Użyj: `DD.MM.RRRR GG:MM`', '❌ Invalid date format. Use: `DD.MM.YYYY HH:MM`') });
+            return;
+        }
+
+        const [, dd, mm, yyyy, hh, min] = match;
+        const date = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${hh.padStart(2,'0')}:${min}:00`);
+        if (isNaN(date.getTime())) {
+            await interaction.editReply({ content: t('❌ Podana data jest nieprawidłowa.', '❌ The provided date is invalid.') });
+            return;
+        }
+        if (date.getTime() < Date.now()) {
+            await interaction.editReply({ content: t('❌ Data pierwszego raportu nie może być w przeszłości.', '❌ The first report date cannot be in the past.') });
+            return;
+        }
+
+        this.globalTop10Service.setSchedule(date.toISOString());
+
+        const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
+        await interaction.editReply({
+            content: t(
+                `✅ Harmonogram TOP10 ustawiony.\n📅 Pierwszy raport: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 1 dzień przerwy, powtórz)`,
+                `✅ TOP10 schedule set.\n📅 First report: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 1 day break, repeat)`
+            )
         });
     }
 }
