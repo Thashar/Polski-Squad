@@ -5865,28 +5865,39 @@ class InteractionHandler {
 
         // Iteruj po wszystkich guildach które kiedykolwiek miały dane tokenów
         const tokenGuildIds = Object.keys(this.tokenUsageService.data.guilds);
-        const lines = [];
+        const activeLines = [];
+        const leftLines   = [];
         let totalCost = 0;
 
         for (const guildId of tokenGuildIds) {
             const stats = this.tokenUsageService.getMonthlyStats(guildId, month);
-            const cost  = stats.cost;
-            totalCost  += cost;
-            // Kolejność: aktywny cache → zapisana nazwa w config → ID serwera
-            const liveName    = interaction.client.guilds.cache.get(guildId)?.name;
-            const storedName  = this.guildConfigService.getConfig(guildId)?.guildName;
-            const name        = (liveName || storedName || guildId).slice(0, 24);
-            const leftMarker  = liveName ? '' : ' *(opuścił)*';
-            lines.push(`**${name}**${leftMarker} — ${fmtCost(cost)} (${stats.requests} req)`);
+            if (stats.requests === 0) continue;
+            const cost = stats.cost;
+            totalCost += cost;
+            const liveName   = interaction.client.guilds.cache.get(guildId)?.name;
+            const storedName = this.guildConfigService.getConfig(guildId)?.guildName;
+            const name       = (liveName || storedName || guildId).slice(0, 24);
+            const line = `**${name}** — ${fmtCost(cost)} (${stats.requests} req)`;
+            if (liveName) {
+                activeLines.push(line);
+            } else {
+                leftLines.push(line);
+            }
         }
 
-        lines.push('');
-        lines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
+        activeLines.push('');
+        activeLines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
 
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
             .setTitle(`📊 Koszty miesięczne — ${monthLabel}`)
-            .setDescription(lines.join('\n'))
+            .setDescription(activeLines.join('\n'));
+
+        if (leftLines.length > 0) {
+            embed.addFields({ name: '🚪 Serwery bez aplikacji', value: leftLines.join('\n'), inline: false });
+        }
+
+        embed
             .addFields({ name: 'Cennik', value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
             .setTimestamp()
             .setFooter({ text: 'Dane z /update' });
