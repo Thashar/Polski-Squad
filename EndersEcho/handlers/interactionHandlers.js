@@ -5801,7 +5801,7 @@ class InteractionHandler {
         const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
         const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
 
-        // Wiersz 1: ◀ | [Miesiąc → per user] | ▶ | 🌐 Wszystkie (superUser) | Zbiorczo (superUser)
+        // Wiersz 1: ◀ | [Miesiąc → per user] | ▶ | 📅 Dniowo (superUser) | Zbiorczo (superUser)
         const row1Buttons = [
             new ButtonBuilder()
                 .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
@@ -5823,7 +5823,7 @@ class InteractionHandler {
             row1Buttons.push(
                 new ButtonBuilder()
                     .setCustomId(`tk_a_${monthStr}_${userId}`)
-                    .setLabel('🌐 Wszystkie')
+                    .setLabel('📅 Dniowo')
                     .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
@@ -5928,7 +5928,7 @@ class InteractionHandler {
                 .setDisabled(!hasNext),
             new ButtonBuilder()
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
-                .setLabel('🌐 Wszystkie')
+                .setLabel('📅 Dniowo')
                 .setStyle(ButtonStyle.Secondary),
         );
 
@@ -6001,7 +6001,7 @@ class InteractionHandler {
         if (isSuperUser) {
             row1.push(new ButtonBuilder()
                 .setCustomId(`tk_u_${monthStr}_all_0_${userId}`)
-                .setLabel('🌐 Wszystkie')
+                .setLabel('📅 Dniowo')
                 .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
         }
 
