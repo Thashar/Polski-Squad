@@ -126,7 +126,7 @@ class GuildLogger {
         const line = `${tagPrefix}[${timestamp}] ${levelEmoji} ${message}`;
         const content = isNewGuild ? `${SEPARATOR}\n${line}` : line;
 
-        const payload = { content };
+        const payload = { content, flags: 4 };
         if (guildIcon) payload.avatar_url = guildIcon;
 
         this._enqueue(payload);
