@@ -282,10 +282,10 @@ class GlobalTop10Service {
     // ── snippet po nowym rekordzie ─────────────────────────────────────────────
 
     /**
-     * Buduje snippet embed (awans w globalnym rankingu).
-     * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
+     * Buduje dane snippetu (awans w globalnym rankingu).
+     * Zwraca { title, description } lub null jeśli brak zmiany pozycji.
      */
-    async buildSnippetEmbed(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
+    async buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
         const newGlobalIndex = newGlobalRanking.findIndex(p => p.userId === userId);
         if (newGlobalIndex === -1) return null;
         const newGlobalPosition = newGlobalIndex + 1;
@@ -312,6 +312,10 @@ class GlobalTop10Service {
             return `${posLabel} ${displayName} • **${this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}`;
         };
 
+        const prevLabel = prevGlobalPosition ? `#${prevGlobalPosition}` : '—';
+        const direction = !prevGlobalPosition || prevGlobalPosition > newGlobalPosition ? '↑' : '↓';
+        const title = msgs.globalSnippetTitle || '🌐 Zmiana w globalnym rankingu';
+
         const lines = [];
         const above = newGlobalRanking[newGlobalIndex - 1];
         const current = newGlobalRanking[newGlobalIndex];
@@ -319,26 +323,31 @@ class GlobalTop10Service {
 
         if (above)   lines.push(await buildLine(above, newGlobalPosition - 1));
 
-        // Środkowa linia — pogrubiona i oznaczona strzałką zmiany
+        // Środkowa linia — oznaczona strzałką kierunku zmiany pozycji
         let currentLine = await buildLine(current, newGlobalPosition);
-        currentLine = `**→ ${currentLine.replace(/^\*\*/, '').replace(/\*\*$/, '')}**`;
+        currentLine = `${direction} ${currentLine}`;
         lines.push(currentLine);
 
         if (below)   lines.push(await buildLine(below, newGlobalPosition + 1));
 
-        const prevLabel = prevGlobalPosition ? `#${prevGlobalPosition}` : '—';
-        const direction = !prevGlobalPosition || prevGlobalPosition > newGlobalPosition ? '▲' : '▼';
-        const titleKey  = msgs.globalSnippetTitle || '🌐 Zmiana w globalnym rankingu';
+        return {
+            title,
+            description: `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` + lines.join('\n\n')
+        };
+    }
 
-        const embed = new EmbedBuilder()
+    /**
+     * Buduje snippet embed (awans w globalnym rankingu).
+     * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
+     */
+    async buildSnippetEmbed(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
+        const data = await this.buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client);
+        if (!data) return null;
+
+        return new EmbedBuilder()
             .setColor(0x5865f2)
-            .setTitle(titleKey)
-            .setDescription(
-                `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` +
-                lines.join('\n\n')
-            );
-
-        return embed;
+            .setTitle(data.title)
+            .setDescription(data.description);
     }
 }
 
