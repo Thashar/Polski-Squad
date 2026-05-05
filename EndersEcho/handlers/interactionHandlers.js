@@ -2295,7 +2295,7 @@ class InteractionHandler {
             await editReplyStep(msgs.updateComparingTemplate);
 
             const displayNameForLog = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-            gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${displayNameForLog}${dryRun ? ' (tryb testowy)' : ''}`);
+            gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${this.logService.nickLink(displayNameForLog, interaction.user.id)}${dryRun ? ' (tryb testowy)' : ''}`);
 
             const onProgress = async (step) => {
                 if (step === 'extracting') {
@@ -2394,7 +2394,7 @@ class InteractionHandler {
                 });
                 crossServerEmbed.setImage(`attachment://${imageAttachment.name}`);
                 await interaction.editReply({ embeds: [crossServerEmbed], files: [imageAttachment] });
-                gl.info(`✅ [${userName}] Duplikat cross-server (nie zapisano) — serwer: "${sourceGuildName}"`);
+                gl.info(`✅ ${this.logService.nickLink(userName, userId)} Duplikat cross-server (nie zapisano) — serwer: "${sourceGuildName}"`);
                 return;
             }
 
@@ -2633,7 +2633,7 @@ class InteractionHandler {
             try {
                 const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
-                gl.success(`✅ [${userName}] Role TOP zaktualizowane po nowym rekordzie`);
+                gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
             }
@@ -3033,7 +3033,7 @@ class InteractionHandler {
             // === Przyciski Panelu Admina ===
             if (customId.startsWith('panel_') || customId === 'cfg_admin_panel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-                this.logService._gl(interaction.guildId).info(`[${nick}] /manage → ${this._describePanelButton(customId)}`);
+                this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} /manage → ${this._describePanelButton(customId)}`);
             }
 
             if (customId === 'cfg_admin_panel' || customId === 'panel_back') {
@@ -3197,8 +3197,7 @@ class InteractionHandler {
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-                const profileLink = `[[X](https://discord.com/users/${interaction.user.id})]`;
-                this.logService._gl(interaction.guildId).info(`[${nick}] ${profileLink} /configure → ${this._describeCfgButton(customId)}`);
+                this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} /configure → ${this._describeCfgButton(customId)}`);
                 await this._handleConfigureButton(interaction, customId);
                 return;
             }
