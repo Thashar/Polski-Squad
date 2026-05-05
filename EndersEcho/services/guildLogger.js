@@ -109,7 +109,7 @@ class GuildLogger {
     }
 
     _log(guildId, message, level) {
-        logger[level](message);
+        logger[level](message.replace(/\s?\[\[X\]\(https:\/\/discord\.com\/users\/\d+\)\]/g, ''));
         if (!this.webhookUrl) return;
 
         const guildConfig = this.config.getGuildConfig(guildId);
