@@ -6718,8 +6718,8 @@ class InteractionHandler {
         const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
         await interaction.editReply({
             content: t(
-                `✅ Harmonogram TOP10 ustawiony.\n📅 Pierwszy raport: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 1 dzień przerwy, powtórz)`,
-                `✅ TOP10 schedule set.\n📅 First report: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 1 day break, repeat)`
+                `✅ Harmonogram TOP10 ustawiony.\n📅 Pierwszy raport: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)`,
+                `✅ TOP10 schedule set.\n📅 First report: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)`
             )
         });
     }

@@ -7,10 +7,10 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-// Interwał: 9 × 3 dni, potem 1 dzień przerwy, powtórz (cykl 10)
+// Interwał: 9 × 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
 const CYCLE_LEN          = 10;
 const REPORT_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 dni
-const BREAK_INTERVAL_MS  =     24 * 60 * 60 * 1000;  // 1 dzień
+const BREAK_INTERVAL_MS  = 4 * 24 * 60 * 60 * 1000;  // 4 dni
 
 const CHECK_INTERVAL_MS  = 60_000; // sprawdzaj co minutę
 
