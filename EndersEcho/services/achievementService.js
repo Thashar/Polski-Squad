@@ -589,7 +589,7 @@ class AchievementService {
         return allPlayers.filter(p => membersWithRole.has(p.userId));
     }
 
-    buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol) {
+    buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol, iconUrl = null) {
         const t = (pol, eng) => isPol ? pol : eng;
         const start = page * perPage;
         const pageItems = players.slice(start, start + perPage);
@@ -610,7 +610,7 @@ class AchievementService {
             return `${medal} ${p.username} — **${p.count}**`;
         });
 
-        return new EmbedBuilder()
+        const embed = new EmbedBuilder()
             .setColor(mode === 'global' ? 0x5865f2 : 0xf1c40f)
             .setTitle(title)
             .setDescription(lines.length > 0 ? lines.join('\n') : t('Brak danych.', 'No data.'))
@@ -618,6 +618,8 @@ class AchievementService {
                 `Strona ${page + 1}/${totalPages} • ${players.length} graczy`,
                 `Page ${page + 1}/${totalPages} • ${players.length} players`
             ) });
+        if (iconUrl) embed.setThumbnail(iconUrl);
+        return embed;
     }
 
     createAchRankingButtons(page, totalPages, mode, guildId, guildName, roleRows, isPol, userPage = null, parentGuildId = null, parentGuildName = null) {

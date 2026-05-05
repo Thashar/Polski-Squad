@@ -216,7 +216,7 @@ class GlobalTop10Service {
         const isBreakNext = cyclePos === CYCLE_LEN - 2; // po tym raporcie idzie przerwa
 
         const embed = new EmbedBuilder()
-            .setColor(0x5865f2)
+            .setColor(0xe74c3c)
             .setTitle(msgs.globalTop10ReportTitle || '🌐 TOP 10 Globalny')
             .setDescription(lines || msgs.rankingEmpty)
             .addFields({
@@ -230,6 +230,9 @@ class GlobalTop10Service {
                     ? (msgs.globalTop10FooterBreak || 'Następny raport za 1 dzień (przerwa)')
                     : (msgs.globalTop10Footer || 'Następny raport za 3 dni'),
             });
+
+        const botIconUrl = this.client?.user?.displayAvatarURL({ size: 128 });
+        if (botIconUrl) embed.setThumbnail(botIconUrl);
 
         return embed;
     }

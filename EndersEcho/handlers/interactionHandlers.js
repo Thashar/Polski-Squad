@@ -7005,6 +7005,7 @@ class InteractionHandler {
         try {
             let players, mode, guildId = null, guildName = null, activeRoleId = null, parentGuildId = null, parentGuildName = null;
 
+            let iconUrl = null;
             if (customId === 'ach_rank_global') {
                 const prevState = this._achRankings.get(interaction.message.id);
                 parentGuildId = prevState?.guildId || interaction.guildId || null;
@@ -7012,6 +7013,7 @@ class InteractionHandler {
                 const allGuildIds = new Set(interaction.client.guilds.cache.keys());
                 players = await this.achievementService.getGlobalAchievementRanking(allGuildIds, this.rankingService);
                 mode = 'global';
+                iconUrl = interaction.client.user?.displayAvatarURL({ size: 128 }) || null;
             } else if (customId.startsWith('ach_rank_role_')) {
                 const withoutPrefix = customId.replace('ach_rank_role_', '');
                 const underscoreIdx = withoutPrefix.indexOf('_');
@@ -7023,12 +7025,14 @@ class InteractionHandler {
                     guildId, activeRoleId, guild, this.rankingService, this.roleRankingConfigService
                 );
                 mode = 'role';
+                iconUrl = guild?.iconURL({ size: 128 }) || null;
             } else {
                 guildId = customId.replace('ach_rank_srv_', '');
                 const guild = interaction.client.guilds.cache.get(guildId);
                 guildName = guild?.name || guildId;
                 players = await this.achievementService.getAchievementRanking(guildId, this.rankingService);
                 mode = 'server';
+                iconUrl = guild?.iconURL({ size: 128 }) || null;
             }
 
             const totalPages = Math.ceil(players.length / perPage) || 1;
@@ -7048,7 +7052,7 @@ class InteractionHandler {
                 } catch {}
             }
 
-            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol);
+            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl);
             const buttons = this.achievementService.createAchRankingButtons(
                 0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
@@ -7058,7 +7062,7 @@ class InteractionHandler {
             this._achRankings.set(reply.id, {
                 players, currentPage: 0, totalPages, perPage,
                 userId: interaction.user.id, mode, guildId, guildName,
-                roleRows, userPage, isPol, activeRoleId, parentGuildId, parentGuildName
+                roleRows, userPage, isPol, activeRoleId, parentGuildId, parentGuildName, iconUrl
             });
         } catch (err) {
             logger.error(`Błąd _handleAchRankingSelect: ${err.message}`);
@@ -7087,7 +7091,7 @@ class InteractionHandler {
         this._achRankings.set(interaction.message.id, data);
 
         const embed = this.achievementService.buildAchRankingEmbed(
-            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol
+            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl
         );
         const buttons = this.achievementService.createAchRankingButtons(
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
