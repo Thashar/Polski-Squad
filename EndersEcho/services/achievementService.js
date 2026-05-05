@@ -604,10 +604,17 @@ class AchievementService {
             title = t(`🏆 Ranking Osiągnięć — ${guildName}`, `🏆 Achievement Ranking — ${guildName}`);
         }
 
+        let guildTagMap = null;
+        if (mode === 'global') {
+            guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag]));
+        }
+
         const lines = pageItems.map((p, i) => {
             const pos = start + i + 1;
             const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `**#${pos}**`;
-            return `${medal} ${p.username} — **${p.count}**`;
+            const tag = guildTagMap ? (guildTagMap.get(p.sourceGuildId) || '') : '';
+            const tagSuffix = tag ? ` • ${tag}` : '';
+            return `${medal} ${p.username} — **${p.count}**${tagSuffix}`;
         });
 
         const embed = new EmbedBuilder()
