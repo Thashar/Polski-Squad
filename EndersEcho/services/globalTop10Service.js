@@ -328,7 +328,7 @@ class GlobalTop10Service {
         currentLine = `${direction} ${currentLine}`;
         lines.push(currentLine);
 
-        if (below)   lines.push(await buildLine(below, newGlobalPosition + 1));
+        if (below)   lines.push(`↓ ${await buildLine(below, newGlobalPosition + 1)}`);
 
         return {
             title,
