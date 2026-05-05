@@ -319,9 +319,9 @@ class GlobalTop10Service {
 
         if (above)   lines.push(await buildLine(above, newGlobalPosition - 1));
 
-        // Środkowa linia — pogrubiona i oznaczona strzałką zmiany
+        // Środkowa linia — oznaczona strzałką kierunku zmiany pozycji
         let currentLine = await buildLine(current, newGlobalPosition);
-        currentLine = `**→ ${currentLine.replace(/^\*\*/, '').replace(/\*\*$/, '')}**`;
+        currentLine = `${direction} ${currentLine}`;
         lines.push(currentLine);
 
         if (below)   lines.push(await buildLine(below, newGlobalPosition + 1));
