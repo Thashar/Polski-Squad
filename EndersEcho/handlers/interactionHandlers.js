@@ -6791,6 +6791,13 @@ class InteractionHandler {
                 (p.username || '').toLowerCase().includes(query)
             );
 
+            const backRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('ach_vb')
+                    .setLabel(t('↩️ Wróć', '↩️ Back'))
+                    .setStyle(ButtonStyle.Secondary)
+            );
+
             if (matches.length === 0) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0xFF8C00)
@@ -6798,7 +6805,7 @@ class InteractionHandler {
                             `Nie znaleziono gracza z nickiem zawierającym **"${query}"**.`,
                             `No player found with a nick containing **"${query}"**.`
                         ))],
-                    components: []
+                    components: [backRow]
                 });
                 return;
             }
@@ -6810,7 +6817,7 @@ class InteractionHandler {
                             `Znaleziono zbyt wiele wyników (${matches.length}). Podaj dokładniejszy fragment nicku.`,
                             `Too many results (${matches.length}). Please provide a more specific name fragment.`
                         ))],
-                    components: []
+                    components: [backRow]
                 });
                 return;
             }
@@ -6831,16 +6838,19 @@ class InteractionHandler {
                         `Znaleziono **${matches.length}** graczy. Wybierz z listy:`,
                         `Found **${matches.length}** players. Select from the list:`
                     ))],
-                components: [new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId('ach_check_sel')
-                        .setPlaceholder(t('Wybierz gracza...', 'Select a player...'))
-                        .addOptions(options.map(o => new StringSelectMenuOptionBuilder()
-                            .setLabel(o.label)
-                            .setDescription(o.description)
-                            .setValue(o.value)
-                        ))
-                )]
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId('ach_check_sel')
+                            .setPlaceholder(t('Wybierz gracza...', 'Select a player...'))
+                            .addOptions(options.map(o => new StringSelectMenuOptionBuilder()
+                                .setLabel(o.label)
+                                .setDescription(o.description)
+                                .setValue(o.value)
+                            ))
+                    ),
+                    backRow
+                ]
             });
         } catch (err) {
             logger.error(`Błąd _handleAchCheckModal: ${err.message}`);
