@@ -412,6 +412,10 @@ class AchievementService {
             new ButtonBuilder()
                 .setCustomId('ach_check_player')
                 .setLabel(t('🔍 Sprawdź gracza', '🔍 Check Player'))
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('ach_rank_start')
+                .setLabel(t('🏆 Ranking osiągnięć', '🏆 Achievement Ranking'))
                 .setStyle(ButtonStyle.Secondary)
         );
 

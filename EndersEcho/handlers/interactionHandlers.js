@@ -145,10 +145,6 @@ class InteractionHandler {
                 .setDescription('View your unlocked achievements')
                 .setDescriptionLocalizations(pl('Sprawdź swoje odblokowane osiągnięcia')),
 
-            new SlashCommandBuilder()
-                .setName('ranking-osiagniec')
-                .setDescription('View the achievements ranking (by achievement count)')
-                .setDescriptionLocalizations(pl('Wyświetl ranking osiągnięć (według liczby zdobytych osiągnięć)')),
 
             new SlashCommandBuilder()
                 .setName('configure')
@@ -263,8 +259,7 @@ class InteractionHandler {
                 case 'ranking':      await this.handleRankingCommand(interaction);        break;
                 case 'update':       await this.handleUpdateCommand(interaction);         break;
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
-                case 'achievements':       await this.handleAchievementsCommand(interaction);   break;
-                case 'ranking-osiagniec': await this.handleAchRankingCommand(interaction);    break;
+                case 'achievements': await this.handleAchievementsCommand(interaction); break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -3063,7 +3058,7 @@ class InteractionHandler {
             }
 
             // === Ranking osiągnięć ===
-            if (customId === 'ach_rank_back') {
+            if (customId === 'ach_rank_start' || customId === 'ach_rank_back') {
                 await this._handleAchRankingBack(interaction);
                 return;
             }

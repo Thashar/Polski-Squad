@@ -153,7 +153,7 @@
    - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`
    - **CustomIDs:** `ach_cat_{categoryKey}` (score/records/bosses/prestige/explorer) | `ach_overview` | `ach_check_player` | `ach_check_modal` | `ach_check_sel` | `ach_vc_{cat}_{userId}_{guildId}` | `ach_vo_{userId}_{guildId}` | `ach_vb`
 
-8. **Ranking Osiągnięć** — `/ranking-osiagniec`:
+8. **Ranking Osiągnięć** — przycisk `🏆 Ranking osiągnięć` w `/achievements`:
    - Komenda analogiczna do `/ranking` ale sortuje wg liczby zdobytych osiągnięć
    - Przy wejściu: przyciski wyboru serwera (wszystkie gildie bota) + `🌐 Global`
    - Per-serwer: `achievementService.getAchievementRanking(guildId, rankingService)` — gracze z `ranking.json` posortowani po liczbie osiągnięć (gracze bez osiągnięć = 0)
@@ -174,7 +174,7 @@
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
    - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
 
-**Komendy slash:** `/achievements`, `/configure`, `/manage`, `/ranking`, `/ranking-osiagniec`, `/subscribe`, `/test`, `/update`
+**Komendy slash:** `/achievements`, `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
 **Panel Admina** — dostępny przez `/manage`:
 - Dostęp: każdy admin Discord (Administrator)
