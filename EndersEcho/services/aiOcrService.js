@@ -22,6 +22,7 @@ const PROMPT_VERSIONS = {
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { correctBossName } = require('../config/bossNames');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -146,7 +147,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             return { bossName: null, score: null, isValidVictory: false, error: 'PARSING_ERROR' };
         }
 
-        let bossName = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
+        let rawBoss  = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
+        let bossName = correctBossName(rawBoss);
+        if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
         let score    = lines[1].replace(/^wynik[:\s]*/i, '').replace(/^score[:\s]*/i, '').replace(/^best[:\s]*/i, '').trim();
 
         let total = null;
