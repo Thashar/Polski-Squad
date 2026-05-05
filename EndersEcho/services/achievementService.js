@@ -589,7 +589,7 @@ class AchievementService {
         return allPlayers.filter(p => membersWithRole.has(p.userId));
     }
 
-    buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol, iconUrl = null) {
+    buildAchRankingEmbed(players, page, perPage, mode, guildName, isPol, iconUrl = null, callerId = null) {
         const t = (pol, eng) => isPol ? pol : eng;
         const start = page * perPage;
         const pageItems = players.slice(start, start + perPage);
@@ -614,7 +614,8 @@ class AchievementService {
             const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `**#${pos}**`;
             const tag = guildTagMap ? (guildTagMap.get(p.sourceGuildId) || '') : '';
             const tagSuffix = tag ? ` • ${tag}` : '';
-            return `${medal} ${p.username} — **${p.count}**${tagSuffix}`;
+            const name = p.userId === callerId ? `**${p.username}**` : p.username;
+            return `${medal} ${name} — **${p.count}**${tagSuffix}`;
         });
 
         const embed = new EmbedBuilder()

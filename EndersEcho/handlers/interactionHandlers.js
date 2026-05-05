@@ -7052,7 +7052,7 @@ class InteractionHandler {
                 } catch {}
             }
 
-            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl);
+            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl, interaction.user.id);
             const buttons = this.achievementService.createAchRankingButtons(
                 0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
@@ -7091,7 +7091,7 @@ class InteractionHandler {
         this._achRankings.set(interaction.message.id, data);
 
         const embed = this.achievementService.buildAchRankingEmbed(
-            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl
+            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl, data.userId
         );
         const buttons = this.achievementService.createAchRankingButtons(
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
