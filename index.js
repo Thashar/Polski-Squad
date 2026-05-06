@@ -168,6 +168,7 @@ function setupShutdownHandlers() {
 async function runFsDiagnostics() {
     const { execSync } = require('child_process');
     const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' }).trim(); } catch { return null; } };
+    const log = (msg) => logger.info(msg);
 
     // --- Dysk i inody ---
     const dfRaw = run('df -h /home/container 2>/dev/null || df -h .');
@@ -208,10 +209,12 @@ async function runFsDiagnostics() {
         return `  ${p[0].padStart(5)} plików  ${p[1].replace('/home/container/', '')}`;
     }) : [];
 
-    logger.info('💽 Dysk:   ' + diskLine);
-    logger.info('🗂️  Inody:  ' + inodeLine);
-    logger.info('📦 Top 5 katalogów wg rozmiaru:\n' + (topDirs.join('\n') || '  (brak danych)'));
-    logger.info('📁 Top 5 katalogów wg liczby plików:\n' + (topFiles.join('\n') || '  (brak danych)'));
+    log('💽 Dysk:   ' + diskLine);
+    log('🗂️  Inody:  ' + inodeLine);
+    log('📦 Top 5 katalogów wg rozmiaru:');
+    (topDirs.length ? topDirs : ['  (brak danych)']).forEach(l => log(l));
+    log('📁 Top 5 katalogów wg liczby plików:');
+    (topFiles.length ? topFiles : ['  (brak danych)']).forEach(l => log(l));
 }
 
 // Główna funkcja uruchamiająca
