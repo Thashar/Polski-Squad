@@ -86,13 +86,13 @@ class ReactionRoleService {
     async restoreTimersFromFile() {
         try {
             const data = await fs.readFile(this.timersFilePath, 'utf8');
-            const timersData = safeParse(data, {});
-            
+            const timersData = safeParse(data, []);
+
             let restoredCount = 0;
             let expiredCount = 0;
             const currentTime = Date.now();
             const stillActiveTimers = [];
-            
+
             for (const timerInfo of timersData) {
                 const { userId, roleId, guildId, expiresAt } = timerInfo;
                 

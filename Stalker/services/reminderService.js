@@ -942,7 +942,7 @@ class ReminderService {
     async loadActiveReminderDMs() {
         try {
             const data = await fs.readFile(this.config.database.activeReminderDMs, 'utf8');
-            const sessions = JSON.parse(data);
+            const sessions = JSON.parse(data || '{}');
 
             // Sprawdź czy deadline nie minął - jeśli tak, wyczyść wszystkie sesje
             if (this.isDeadlinePassed()) {

@@ -130,7 +130,9 @@ class DataService {
     loadTriggerState() {
         const triggerPath = path.join(this.dataPath, 'trigger.json');
         if (fs.existsSync(triggerPath)) {
-            const data = JSON.parse(fs.readFileSync(triggerPath));
+            const raw = fs.readFileSync(triggerPath, 'utf8');
+            if (!raw.trim()) return { trigger: null, triggerSetTimestamp: null, triggerClearedTimestamp: null, triggerSetBy: null, timerStates: {} };
+            const data = JSON.parse(raw);
             logger.info('📂 Wczytano stan triggera:', {
                 trigger: data.trigger,
                 triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
