@@ -9570,6 +9570,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Stwórz wykresy progress barów (identycznie jak w /progres, ale tylko 12 tygodni)
         const maxScore = Math.max(...playerProgressData.map(d => d.score));
+        const maxScore4Weeks = Math.max(...playerProgressData.slice(0, Math.min(4, playerProgressData.length)).map(d => d.score).filter(s => s > 0), 0);
         const barLength = 10;
 
         // Stwórz mapę wyników gracza
@@ -9897,7 +9898,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
 
         // Footer z informacją o wygaśnięciu
         embed.setFooter({
-            text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik: ${maxScore.toLocaleString('pl-PL')} | Wygasa: za 5 min`
+            text: `Tygodni z danymi: ${playerProgressData.length}/12 | Najlepszy wynik (4 tyg): ${maxScore4Weeks > 0 ? maxScore4Weeks.toLocaleString('pl-PL') : 'brak'} | Wygasa: za 5 min`
         });
 
         // Oblicz pozycje w klanie per tydzień (do wykresu rankingowego)
