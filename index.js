@@ -8,6 +8,44 @@ const GitAutoFix = require('./utils/gitAutoFix');
 
 const logger = createBotLogger('Launcher');
 
+// Globalny monitor ENOSPC — przechwytuje wszystkie fs.writeFile i wysyła alert na webhook
+(function patchWriteFile() {
+    const fs = require('fs');
+    const original = fs.promises.writeFile;
+    const sentPaths = new Set(); // dedup — jeden alert per plik per sesję
+
+    fs.promises.writeFile = async function(filePath, data, options) {
+        try {
+            return await original.call(this, filePath, data, options);
+        } catch (err) {
+            if (err.code === 'ENOSPC' && !sentPaths.has(String(filePath))) {
+                sentPaths.add(String(filePath));
+                const shortPath = String(filePath).replace('/home/container/', '');
+                logger.error(`[ENOSPC] ❌ Uszkodzony plik: ${shortPath}`);
+                const webhookUrl = process.env.DISCORD_LOG_WEBHOOK_URL;
+                if (webhookUrl) {
+                    const body = JSON.stringify({
+                        embeds: [{
+                            title: '🚨 ENOSPC — plik uszkodzony (zapisany jako pusty)',
+                            description: `Brak miejsca na dysku podczas zapisu.\n\n📄 **Plik:** \`${shortPath}\`\n⏰ **Czas:** ${new Date().toLocaleString('pl-PL')}`,
+                            color: 0xFF0000,
+                            footer: { text: 'Sprawdź i przywróć plik z backupu' }
+                        }]
+                    });
+                    try {
+                        const { request } = require('https');
+                        const u = new URL(webhookUrl);
+                        const req = request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } });
+                        req.write(body);
+                        req.end();
+                    } catch {}
+                }
+            }
+            throw err;
+        }
+    };
+}());
+
 /**
  * Konfiguracja botów z ich właściwościami
  */
