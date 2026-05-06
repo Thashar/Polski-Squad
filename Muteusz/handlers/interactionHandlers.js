@@ -653,41 +653,40 @@ class InteractionHandler {
                 content: `${startMessage}\nSzacowany czas: ${Math.ceil(membersWithRole.size / 60)} minut`
             });
             
-            let delay = 0;
-            
-            for (const [memberId, member] of membersWithRole) {
-                setTimeout(async () => {
+            const BATCH_SIZE = 5;
+            const BATCH_DELAY = 300;
+            const memberArray = [...membersWithRole.values()];
+
+            for (let i = 0; i < memberArray.length; i += BATCH_SIZE) {
+                const batch = memberArray.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(batch.map(async (member) => {
                     try {
                         await member.roles.remove(roleToRemove);
                         successCount++;
-                        
-                        if (successCount % this.config.roles.maxRemovalsPerBatch === 0) {
-                            const progressMessage = formatMessage(this.config.messages.progressUpdate, {
-                                current: successCount,
-                                total: membersWithRole.size
-                            });
-                            
-                            await interaction.editReply({ content: progressMessage });
-                        }
-                        
-                        if (successCount + errorCount === membersWithRole.size) {
-                            const completionMessage = formatMessage(this.config.messages.completionSuccess, {
-                                roleName: roleToRemove.name,
-                                success: successCount,
-                                errors: errorCount
-                            });
-                            
-                            await interaction.editReply({ content: completionMessage });
-                            await this.logService.logMessage('success', `Usuwanie roli ${roleToRemove.name} zakończone. Sukces: ${successCount}, Błędy: ${errorCount}`, interaction);
-                        }
                     } catch (error) {
                         errorCount++;
                         await this.logService.logMessage('error', `Błąd podczas usuwania roli od ${member.user.tag}: ${error.message}`, interaction);
                     }
-                }, delay);
-                
-                delay += this.config.roles.delayBetweenRemovals;
+                }));
+
+                if (i + BATCH_SIZE < memberArray.length) {
+                    const progressMessage = formatMessage(this.config.messages.progressUpdate, {
+                        current: successCount + errorCount,
+                        total: membersWithRole.size
+                    });
+                    await interaction.editReply({ content: progressMessage });
+                    await new Promise(resolve => setTimeout(resolve, BATCH_DELAY));
+                }
             }
+
+            const completionMessage = formatMessage(this.config.messages.completionSuccess, {
+                roleName: roleToRemove.name,
+                success: successCount,
+                errors: errorCount
+            });
+            await interaction.editReply({ content: completionMessage });
+            await this.logService.logMessage('success', `Usuwanie roli ${roleToRemove.name} zakończone. Sukces: ${successCount}, Błędy: ${errorCount}`, interaction);
             
         } catch (error) {
             await this.logService.logMessage('error', `Błąd podczas usuwania ról: ${error.message}`, interaction);
