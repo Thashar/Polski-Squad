@@ -164,8 +164,35 @@ function setupShutdownHandlers() {
     });
 }
 
+// Diagnostyka systemu plików przy starcie
+async function runFsDiagnostics() {
+    const { execSync } = require('child_process');
+    const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' }).trim(); } catch (e) { return `(błąd: ${e.message.split('\n')[0]})`; } };
+
+    logger.info('🔍 ========== DIAGNOSTYKA SYSTEMU PLIKÓW ==========');
+
+    logger.info('📊 Inody:');
+    logger.info(run('df -i /home/container 2>/dev/null || df -i .'));
+
+    logger.info('💾 Miejsce na dysku:');
+    logger.info(run('df -h /home/container 2>/dev/null || df -h .'));
+
+    logger.info('📦 Rozmiar głównych katalogów:');
+    logger.info(run('du -sh /home/container/node_modules /home/container/logs /home/container/processed_ocr /home/container/.npm /home/container/.git /home/container/backups 2>/dev/null | sort -rh'));
+
+    logger.info('📂 Rozmiar folderów botów:');
+    logger.info(run('du -sh /home/container/Rekruter /home/container/Szkolenia /home/container/Stalker /home/container/Muteusz /home/container/EndersEcho /home/container/Kontroler /home/container/Konklawe /home/container/Wydarzynier /home/container/Gary 2>/dev/null | sort -rh'));
+
+    logger.info('📁 Foldery z największą liczbą plików (bez node_modules):');
+    logger.info(run('find /home/container -maxdepth 4 -not -path "*/node_modules/*" -not -path "*/.git/*" -type d 2>/dev/null | while read d; do c=$(find "$d" -maxdepth 1 -type f 2>/dev/null | wc -l); [ "$c" -gt 5 ] && echo "$c $d"; done | sort -rn | head -20'));
+
+    logger.info('🔍 ========== KONIEC DIAGNOSTYKI ==========');
+}
+
 // Główna funkcja uruchamiająca
 async function main() {
+    await runFsDiagnostics();
+
     // Git auto-fix (jeśli włączony w .env)
     if (process.env.AUTO_GIT_FIX === 'true') {
         logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
