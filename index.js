@@ -164,41 +164,8 @@ function setupShutdownHandlers() {
     });
 }
 
-// Diagnostyka systemu plików (tymczasowa - do usunięcia po diagnozie)
-async function runFsDiagnostics() {
-    const { execSync } = require('child_process');
-    logger.info('🔍 === DIAGNOSTYKA SYSTEMU PLIKÓW ===');
-    try {
-        logger.info('📊 df -i (inody):');
-        logger.info(execSync('df -i /home/container 2>/dev/null || df -i .', { encoding: 'utf8' }).trim());
-    } catch (e) { logger.info('df -i error: ' + e.message); }
-    try {
-        logger.info('💾 df -h (miejsce):');
-        logger.info(execSync('df -h /home/container 2>/dev/null || df -h .', { encoding: 'utf8' }).trim());
-    } catch (e) { logger.info('df -h error: ' + e.message); }
-    try {
-        logger.info('📁 Liczba plików per katalog (top 15):');
-        const out = execSync(
-            'find /home/container -maxdepth 3 -not -path "*/node_modules/*" -type d 2>/dev/null | head -50 | while read d; do c=$(find "$d" -maxdepth 1 -type f 2>/dev/null | wc -l); [ "$c" -gt 10 ] && echo "$c $d"; done | sort -rn | head -15',
-            { encoding: 'utf8', shell: '/bin/bash' }
-        ).trim();
-        logger.info(out || '(brak wyników)');
-    } catch (e) { logger.info('find error: ' + e.message); }
-    try {
-        logger.info('📦 node_modules łącznie plików:');
-        logger.info(execSync('find /home/container/node_modules -type f 2>/dev/null | wc -l', { encoding: 'utf8' }).trim());
-    } catch (e) { logger.info('node_modules count error: ' + e.message); }
-    try {
-        logger.info('🗜️ Pliki ZIP:');
-        logger.info(execSync('find /home/container -maxdepth 3 -name "*.zip" -ls 2>/dev/null || echo "brak"', { encoding: 'utf8' }).trim());
-    } catch (e) { logger.info('zip find error: ' + e.message); }
-    logger.info('🔍 === KONIEC DIAGNOSTYKI ===');
-}
-
 // Główna funkcja uruchamiająca
 async function main() {
-    await runFsDiagnostics();
-
     // Git auto-fix (jeśli włączony w .env)
     if (process.env.AUTO_GIT_FIX === 'true') {
         logger.info('🔧 AUTO_GIT_FIX włączony - sprawdzam repozytorium git...');
