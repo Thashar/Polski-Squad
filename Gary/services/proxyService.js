@@ -80,7 +80,8 @@ class ProxyService {
     loadProxyStatuses() {
         try {
             if (fs.existsSync(this.proxyStatusFile)) {
-                const data = JSON.parse(fs.readFileSync(this.proxyStatusFile, 'utf8'));
+                const raw = fs.readFileSync(this.proxyStatusFile, 'utf8');
+                const data = JSON.parse(raw || '{}');
                 const now = Date.now();
 
                 // Wczytaj statusy z pliku

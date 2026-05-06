@@ -35,7 +35,7 @@ class MessageCleanupService {
     async loadScheduledDeletions() {
         try {
             const data = await fs.readFile(this.dataPath, 'utf8');
-            this.scheduledDeletions = JSON.parse(data);
+            this.scheduledDeletions = JSON.parse(data || '[]');
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje - pierwszy start
