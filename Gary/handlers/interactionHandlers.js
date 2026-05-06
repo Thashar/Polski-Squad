@@ -2391,10 +2391,12 @@ class InteractionHandler {
                 if (!entry || entry[metricKey] == null) return null;
                 const hIdx = orderedHistory.findIndex(d => d.weekNumber === w.weekNumber && d.year === w.year);
                 const prevEntry = hIdx > 0 ? orderedHistory[hIdx - 1] : null;
-                const delta = (prevEntry && prevEntry[metricKey] != null)
+                const rawDelta = (prevEntry && prevEntry[metricKey] != null)
                     ? entry[metricKey] - prevEntry[metricKey]
                     : null;
-                const deltaText = delta === null ? '' : delta > 0 ? `+${fmtDot(delta)}` : fmtDot(delta);
+                // For invertY (rank): negate so positive delta = improvement (lower rank number = better)
+                const delta = (invertY && rawDelta !== null) ? -rawDelta : rawDelta;
+                const deltaText = delta === null ? '' : delta > 0 ? `+${fmtDot(Math.abs(rawDelta))}` : delta < 0 ? `-${fmtDot(Math.abs(rawDelta))}` : fmtDot(0);
                 return { x: toX(wi), y: toY(entry[metricKey]), v: entry[metricKey], delta, deltaText, color, weekIdx: wi,
                     preferredY: toY(entry[metricKey]) - 8 };
             }).filter(Boolean);
