@@ -186,8 +186,9 @@
   - Rząd 3: `◀️ Wróć do konfiguracji`
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
-  - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`
-  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `🚫 Zbanuj serwer`
+  - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`
+  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
+  - Rząd 4: `🚫 Zbanuj serwer`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**

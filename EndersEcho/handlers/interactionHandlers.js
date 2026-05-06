@@ -1422,6 +1422,8 @@ class InteractionHandler {
               '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
             t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
               '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
+            t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
+              '⚠️ **Unconfigured** — list of servers where the bot is present but has not yet been configured via /configure.'),
         ];
 
         const optionLines = isHeadAdmin
@@ -1466,10 +1468,14 @@ class InteractionHandler {
 
         const components = [row1, row2];
         if (isHeadAdmin) {
-            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów, Zbanuj serwer
+            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów, Nieskonfigurowane
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_unconfigured').setLabel(t('⚠️ Nieskonfigurowane', '⚠️ Unconfigured')).setStyle(ButtonStyle.Secondary),
+            ));
+            // Rząd 4 Head Admin: Zbanuj serwer
+            components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('🚫 Zbanuj serwer', '🚫 Ban Server')).setStyle(ButtonStyle.Danger),
             ));
         }
@@ -2863,6 +2869,7 @@ class InteractionHandler {
         if (customId.startsWith('panel_ocr_en_')) return `Włącz AI OCR: ${customId.replace('panel_ocr_en_', '')}`;
         if (customId.startsWith('panel_ocr_dis_')) return `Wyłącz AI OCR: ${customId.replace('panel_ocr_dis_', '')}`;
         if (customId === 'panel_limit') return 'Ustaw limity';
+        if (customId === 'panel_unconfigured') return 'Nieskonfigurowane serwery';
         if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
@@ -3261,6 +3268,15 @@ class InteractionHandler {
                     )
                 );
                 await interaction.showModal(modal);
+                return;
+            }
+
+            if (customId === 'panel_unconfigured') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelUnconfigured(interaction);
                 return;
             }
 
@@ -6514,6 +6530,41 @@ class InteractionHandler {
 
     // =====================================================================
     // Panel Admina — Zbanuj serwer (Head Admin)
+    // =====================================================================
+
+    async _handlePanelUnconfigured(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const allGuilds = interaction.client.guilds.cache;
+
+        const unconfigured = [];
+        for (const [guildId, guild] of allGuilds) {
+            if (!this.guildConfigService.isConfigured(guildId)) {
+                unconfigured.push({ id: guildId, name: guild.name, memberCount: guild.memberCount });
+            }
+        }
+
+        let description;
+        if (unconfigured.length === 0) {
+            description = t('✅ Wszystkie serwery z botem są skonfigurowane.', '✅ All servers with the bot are configured.');
+        } else {
+            const lines = unconfigured.map(g => `• **${g.name}** (\`${g.id}\`) — ${g.memberCount} członków`);
+            description = t(
+                `⚠️ Serwery bez konfiguracji (${unconfigured.length}):\n\n${lines.join('\n')}\n\nBot wysyła codziennie wiadomość na tych serwerach z prośbą o uruchomienie \`/configure\`.`,
+                `⚠️ Unconfigured servers (${unconfigured.length}):\n\n${lines.join('\n')}\n\nThe bot sends a daily message on these servers prompting an admin to run \`/configure\`.`
+            );
+        }
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(unconfigured.length > 0 ? 0xFEE75C : 0x57F287)
+                .setTitle(t('⚠️ Nieskonfigurowane serwery', '⚠️ Unconfigured Servers'))
+                .setDescription(description)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+            )]
+        });
+    }
+
     // =====================================================================
 
     async _handlePanelBanServer(interaction) {

@@ -37,6 +37,7 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { createAppSync } = require('../utils/appSync');
 const { createBotOperations } = require('../utils/operationRunner');
+const cron = require('node-cron');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -131,6 +132,36 @@ async function initializeBot() {
         // Uruchom scheduler cyklicznych raportów TOP10 globalnego
         globalTop10Service.setClient(client);
         globalTop10Service.start();
+
+        // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
+        cron.schedule('0 10 * * *', async () => {
+            try {
+                for (const [guildId, guild] of client.guilds.cache) {
+                    if (guildConfigService.isConfigured(guildId)) continue;
+
+                    const channel = guild.systemChannel ||
+                        guild.channels.cache
+                            .filter(c => c.type === 0 && c.permissionsFor(guild.members.me)?.has('SendMessages'))
+                            .sort((a, b) => a.position - b.position)
+                            .first();
+
+                    if (!channel) continue;
+
+                    await channel.send(
+                        '⚠️ **EndersEcho** has not been configured on this server yet.\n\n' +
+                        'An administrator must run **/configure** to unlock all bot features:\n' +
+                        '🏆 **Rankings** — track player scores with automatic TOP role assignment\n' +
+                        '📸 **Score submission** — submit boss scores via `/update` with AI image recognition\n' +
+                        '🔔 **Notifications** — subscribe to DM alerts when a tracked player breaks their record\n' +
+                        '🎖️ **Achievements** — unlock 53+ achievements based on performance and activity\n' +
+                        '🌐 **Global ranking** — compare scores across all servers the bot is on\n\n' +
+                        '*This reminder will appear daily until the bot is configured.*'
+                    ).catch(() => {});
+                }
+            } catch (err) {
+                logger.error('Błąd przy codziennym przypomnieniu nieskonfigurowanym serwerom:', err.message);
+            }
+        }, { timezone: 'UTC' });
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
