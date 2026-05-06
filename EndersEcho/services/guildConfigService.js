@@ -60,7 +60,8 @@ class GuildConfigService {
         // Import serwerów z .env
         let didImport = false;
         for (const envGuild of envGuilds) {
-            if (!this._guilds.has(envGuild.id)) {
+            const existing = this._guilds.get(envGuild.id);
+            if (!existing) {
                 const entry = {
                     configured: true,
                     allowedChannelId: envGuild.allowedChannelId,
@@ -75,6 +76,12 @@ class GuildConfigService {
                 };
                 this._guilds.set(envGuild.id, entry);
                 logger.info(`📥 Zaimportowano serwer "${envGuild.tag || envGuild.id}" z .env do guild_configs.json`);
+                didImport = true;
+            } else if (!existing.configured) {
+                // Serwer jest w JSON ale nie jest oznaczony jako skonfigurowany (np. crash w trakcie /configure)
+                // Serwery z .env zawsze traktujemy jako skonfigurowane
+                existing.configured = true;
+                logger.info(`✅ Przywrócono flagę configured dla serwera "${envGuild.tag || envGuild.id}" (był w JSON z configured=false)`);
                 didImport = true;
             }
         }
