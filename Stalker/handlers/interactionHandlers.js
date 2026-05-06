@@ -12706,7 +12706,7 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     const ratioData = allRawRatios.slice(-displayCount);
     if (ratioData.length < 2) return null;
 
-    const W = 800, H = 260;
+    const W = 800, H = 380;
     const M = { top: 44, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -12795,7 +12795,7 @@ async function generateProgressChart(playerProgressData, playerNick) {
     const rawData = [...playerProgressData].reverse().filter(d => d.score > 0);
     if (rawData.length < 2) return null;
 
-    const W = 800, H = 260;
+    const W = 800, H = 380;
     const M = { top: 42, right: 28, bottom: 44, left: 68 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -12888,7 +12888,7 @@ async function generateClanRankingChart(clanRankData, playerNick, clanNames = {}
         a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
     );
 
-    const W = 800, H = 280;
+    const W = 800, H = 400;
     const M = { top: 52, right: 130, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13020,7 +13020,7 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const allWeeks = sortedWeeks.slice(-displayCount);
     if (allWeeks.length < 2) return null;
 
-    const W = 800, H = 270;
+    const W = 800, H = 390;
     const M = { top: 54, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13139,7 +13139,7 @@ async function generateCompareProgressChart(data1, data2, name1, name2) {
     const displayedScores = allWeeks.flatMap(w => [scoreMap1.get(w.key), scoreMap2.get(w.key)]).filter(s => s !== undefined);
     if (displayedScores.length < 2) return null;
 
-    const W = 800, H = 270;
+    const W = 800, H = 390;
     const M = { top: 54, right: 28, bottom: 44, left: 68 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13261,7 +13261,7 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
     const allPositions = [...posMap1.values(), ...posMap2.values()];
     if (allPositions.length < 2) return null;
 
-    const W = 800, H = 270;
+    const W = 800, H = 390;
     const M = { top: 54, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13509,7 +13509,7 @@ async function generateCombatChart(historyData, playerNick, metricKey, title, li
     const filtered = historyData.filter(d => d[metricKey] > 0);
     if (filtered.length < 2) return null;
 
-    const W = 800, H = 260;
+    const W = 800, H = 380;
     const M = { top: 42, right: 28, bottom: 44, left: 72 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13614,7 +13614,7 @@ async function generateCompareCombatChart(h1, h2, name1, name2, metricKey, title
 
     if (allWeeks.length < 2) return null;
 
-    const W = 800, H = 270;
+    const W = 800, H = 390;
     const M = { top: 54, right: 28, bottom: 44, left: 72 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13728,7 +13728,7 @@ async function generateClanRankChart(historyData, clanName) {
     const filtered = historyData.filter(d => d.rank != null && d.rank > 0);
     if (filtered.length < 2) return null;
 
-    const W = 800, H = 260;
+    const W = 800, H = 380;
     const M = { top: 42, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
@@ -13817,7 +13817,7 @@ async function generateClanProgressChart(clanProgressData, clanName) {
     const rawData = [...clanProgressData].reverse().filter(d => d.top30Sum > 0);
     if (rawData.length < 2) return null;
 
-    const W = 800, H = 260;
+    const W = 800, H = 380;
     const M = { top: 42, right: 28, bottom: 44, left: 68 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
