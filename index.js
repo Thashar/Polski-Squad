@@ -255,53 +255,40 @@ async function runFsDiagnostics() {
     (topFiles.length ? topFiles : ['  (brak danych)']).forEach(l => log(l));
 }
 
-// Monitor dysku — cykliczne sprawdzanie zapełnienia hosta
-function startDiskMonitor() {
-    const WARN_THRESHOLD  = 90; // % — ostrzeżenie
-    const CRIT_THRESHOLD  = 95; // % — krytyczne
-    const CHECK_INTERVAL  = 60 * 60 * 1000; // co 1h
+// Monitor dysku — sprawdzanie zapełnienia hosta przy starcie
+function checkDiskOnStartup() {
+    const WARN_THRESHOLD = 90; // % — ostrzeżenie
+    const CRIT_THRESHOLD = 95; // % — krytyczne
     const webhookUrl = process.env.DISCORD_LOG_WEBHOOK_URL;
 
-    const sendAlert = (percent, avail, used, total, level) => {
+    try {
+        const { execSync } = require('child_process');
+        const raw = execSync('df -h /home/container 2>/dev/null || df -h .', { encoding: 'utf8' }).trim();
+        const p = raw.split('\n').pop().trim().split(/\s+/);
+        const percent = parseInt(p[4]);
+        const [used, total, avail] = [p[2], p[1], p[3]];
+
+        if (percent < WARN_THRESHOLD) return;
+
+        const isCrit = percent >= CRIT_THRESHOLD;
+        logger[isCrit ? 'error' : 'warn'](`[DISK] ${isCrit ? '🚨' : '⚠️'} Dysk hosta: ${percent}% (${used}/${total}, wolne: ${avail})`);
+
         if (!webhookUrl) return;
-        const isWarn = level === 'warn';
         const body = JSON.stringify({
             embeds: [{
-                title: isWarn ? '⚠️ Dysk hosta — wysokie zapełnienie' : '🚨 Dysk hosta — stan krytyczny!',
-                description: `Zapełnienie dysku fizycznego serwera przekroczyło próg.\n\n💽 **Zajęte:** ${used} / ${total} (${percent}%)\n📂 **Wolne:** ${avail}`,
-                color: isWarn ? 0xFFA500 : 0xFF0000,
-                footer: { text: isWarn ? `Próg ostrzeżenia: ${WARN_THRESHOLD}%` : `Próg krytyczny: ${CRIT_THRESHOLD}% — ryzyko ENOSPC!` },
+                title: isCrit ? '🚨 Dysk hosta — stan krytyczny!' : '⚠️ Dysk hosta — wysokie zapełnienie',
+                description: `💽 **Zajęte:** ${used} / ${total} (${percent}%)\n📂 **Wolne:** ${avail}`,
+                color: isCrit ? 0xFF0000 : 0xFFA500,
+                footer: { text: isCrit ? `Próg krytyczny: ${CRIT_THRESHOLD}% — ryzyko ENOSPC!` : `Próg ostrzeżenia: ${WARN_THRESHOLD}%` },
                 timestamp: new Date().toISOString()
             }]
         });
-        try {
-            const { request } = require('https');
-            const u = new URL(webhookUrl);
-            const req = request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } });
-            req.write(body);
-            req.end();
-        } catch {}
-    };
-
-    const check = () => {
-        try {
-            const { execSync } = require('child_process');
-            const raw = execSync('df -h /home/container 2>/dev/null || df -h .', { encoding: 'utf8' }).trim();
-            const p = raw.split('\n').pop().trim().split(/\s+/);
-            const percent = parseInt(p[4]);
-            const [used, total, avail] = [p[2], p[1], p[3]];
-            if (percent >= CRIT_THRESHOLD) {
-                logger.error(`[DISK] 🚨 Dysk hosta krytyczny: ${percent}% (${used}/${total}, wolne: ${avail})`);
-                sendAlert(percent, avail, used, total, 'crit');
-            } else if (percent >= WARN_THRESHOLD) {
-                logger.warn(`[DISK] ⚠️ Dysk hosta wysoki: ${percent}% (${used}/${total}, wolne: ${avail})`);
-                sendAlert(percent, avail, used, total, 'warn');
-            }
-        } catch {}
-    };
-
-    setInterval(check, CHECK_INTERVAL);
-    check(); // sprawdź też od razu przy starcie
+        const { request } = require('https');
+        const u = new URL(webhookUrl);
+        const req = request({ hostname: u.hostname, path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } });
+        req.write(body);
+        req.end();
+    } catch {}
 }
 
 // Główna funkcja uruchamiająca
@@ -317,7 +304,7 @@ async function main() {
     }
 
     setupShutdownHandlers();
-    startDiskMonitor();
+    checkDiskOnStartup();
     await startAllBots();
 
     // Uruchom scheduler backupów (tylko w produkcji)
