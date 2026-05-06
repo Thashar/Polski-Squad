@@ -167,26 +167,51 @@ function setupShutdownHandlers() {
 // Diagnostyka systemu plików przy starcie
 async function runFsDiagnostics() {
     const { execSync } = require('child_process');
-    const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' }).trim(); } catch (e) { return `(błąd: ${e.message.split('\n')[0]})`; } };
+    const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' }).trim(); } catch { return null; } };
 
-    logger.info('🔍 ========== DIAGNOSTYKA SYSTEMU PLIKÓW ==========');
+    // --- Dysk i inody ---
+    const dfRaw = run('df -h /home/container 2>/dev/null || df -h .');
+    const diRaw = run('df -i /home/container 2>/dev/null || df -i .');
+    let diskLine = '?', inodeLine = '?';
+    if (dfRaw) {
+        const p = dfRaw.split('\n').pop().trim().split(/\s+/);
+        diskLine = `${p[2]} / ${p[1]} użyte  (${p[4]} zapełniony, ${p[3]} wolne)`;
+    }
+    if (diRaw) {
+        const p = diRaw.split('\n').pop().trim().split(/\s+/);
+        inodeLine = `${Number(p[2]).toLocaleString('pl')} / ${Number(p[1]).toLocaleString('pl')} użyte  (${p[4]})`;
+    }
 
-    logger.info('📊 Inody:');
-    logger.info(run('df -i /home/container 2>/dev/null || df -i .'));
+    // --- Rozmiary katalogów (top 5) ---
+    const watched = [
+        '/home/container/node_modules', '/home/container/.git', '/home/container/.npm',
+        '/home/container/logs', '/home/container/processed_ocr', '/home/container/backups',
+        '/home/container/Rekruter', '/home/container/Szkolenia', '/home/container/Stalker',
+        '/home/container/Muteusz', '/home/container/EndersEcho', '/home/container/Kontroler',
+        '/home/container/Konklawe', '/home/container/Wydarzynier', '/home/container/Gary',
+    ];
+    const duRaw = run(`du -s ${watched.join(' ')} 2>/dev/null`);
+    const duHuman = run(`du -sh ${watched.join(' ')} 2>/dev/null`);
+    let topDirs = [];
+    if (duRaw && duHuman) {
+        const sizes = duRaw.split('\n').map(l => { const p = l.trim().split(/\s+/); return { kb: parseInt(p[0]) || 0, path: p[1] }; });
+        const human = duHuman.split('\n').map(l => l.trim().split(/\s+/)[0]);
+        topDirs = sizes.map((s, i) => ({ ...s, human: human[i] || '?' }))
+            .sort((a, b) => b.kb - a.kb).slice(0, 5)
+            .map(s => `  ${s.human.padStart(7)}  ${s.path.replace('/home/container/', '')}`);
+    }
 
-    logger.info('💾 Miejsce na dysku:');
-    logger.info(run('df -h /home/container 2>/dev/null || df -h .'));
+    // --- Foldery z największą liczbą plików (top 5) ---
+    const fcRaw = run('find /home/container -maxdepth 4 -not -path "*/node_modules/*" -not -path "*/.git/*" -type d 2>/dev/null | while read d; do c=$(find "$d" -maxdepth 1 -type f 2>/dev/null | wc -l); [ "$c" -gt 5 ] && echo "$c $d"; done | sort -rn | head -5');
+    const topFiles = fcRaw ? fcRaw.split('\n').map(l => {
+        const p = l.trim().split(/\s+/);
+        return `  ${p[0].padStart(5)} plików  ${p[1].replace('/home/container/', '')}`;
+    }) : [];
 
-    logger.info('📦 Rozmiar głównych katalogów:');
-    logger.info(run('du -sh /home/container/node_modules /home/container/logs /home/container/processed_ocr /home/container/.npm /home/container/.git /home/container/backups 2>/dev/null | sort -rh'));
-
-    logger.info('📂 Rozmiar folderów botów:');
-    logger.info(run('du -sh /home/container/Rekruter /home/container/Szkolenia /home/container/Stalker /home/container/Muteusz /home/container/EndersEcho /home/container/Kontroler /home/container/Konklawe /home/container/Wydarzynier /home/container/Gary 2>/dev/null | sort -rh'));
-
-    logger.info('📁 Foldery z największą liczbą plików (bez node_modules):');
-    logger.info(run('find /home/container -maxdepth 4 -not -path "*/node_modules/*" -not -path "*/.git/*" -type d 2>/dev/null | while read d; do c=$(find "$d" -maxdepth 1 -type f 2>/dev/null | wc -l); [ "$c" -gt 5 ] && echo "$c $d"; done | sort -rn | head -20'));
-
-    logger.info('🔍 ========== KONIEC DIAGNOSTYKI ==========');
+    logger.info('💽 Dysk:   ' + diskLine);
+    logger.info('🗂️  Inody:  ' + inodeLine);
+    logger.info('📦 Top 5 katalogów wg rozmiaru:\n' + (topDirs.join('\n') || '  (brak danych)'));
+    logger.info('📁 Top 5 katalogów wg liczby plików:\n' + (topFiles.join('\n') || '  (brak danych)'));
 }
 
 // Główna funkcja uruchamiająca
