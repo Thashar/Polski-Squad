@@ -153,9 +153,8 @@ async function initializeBot() {
                         '🏆 **Rankings** — track player scores with automatic TOP role assignment\n' +
                         '📸 **Score submission** — submit boss scores via `/update` with AI image recognition\n' +
                         '🔔 **Notifications** — subscribe to DM alerts when a tracked player breaks their record\n' +
-                        '🎖️ **Achievements** — unlock 53+ achievements based on performance and activity\n' +
-                        '🌐 **Global ranking** — compare scores across all servers the bot is on\n\n' +
-                        '*This reminder will appear daily until the bot is configured.*'
+                        '🎖️ **Achievements** — unlock achievements based on performance and activity\n' +
+                        '🌐 **Global ranking** — compare scores across all servers the bot is on'
                     ).catch(() => {});
                 }
             } catch (err) {
