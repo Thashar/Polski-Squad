@@ -179,7 +179,7 @@
 **Komendy slash:** `/achievements`, `/configure`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
 **Panel Admina** — dostępny przez `/manage`:
-- Dostęp: Administrator Discord lub Manage Server (`ManageGuild`)
+- Dostęp: Administrator Discord
 - **Układ rzędów (Tryb Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
   - Rząd 2: `📊 Zużycie tokenów`
@@ -349,7 +349,7 @@
 - Bez konfiguracji (zawsze): `/configure` (wizard), `/manage` (bezpośredni panel admina)
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
-- Panel Admina (tryb Admin): Administrator lub Manage Server → usuń gracza, odblokuj, tokeny
+- Panel Admina (tryb Admin): Administrator Discord → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
 **Struktura danych:**
