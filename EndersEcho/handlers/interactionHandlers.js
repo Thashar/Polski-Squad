@@ -3025,6 +3025,12 @@ class InteractionHandler {
                 return;
             }
 
+            // === Paginacja ekranu wyboru serwera ===
+            if (customId.startsWith('ranking_srv_prev_') || customId.startsWith('ranking_srv_next_')) {
+                await this._handleRankingSrvPage(interaction, customId);
+                return;
+            }
+
             // === Przyciski wyboru serwera/global ===
             if (customId.startsWith('ranking_select_')) {
                 await this._handleRankingSelect(interaction, customId);
@@ -3072,6 +3078,10 @@ class InteractionHandler {
             }
             if (customId === 'ach_rank_back') {
                 await this._handleAchRankingBack(interaction);
+                return;
+            }
+            if (customId.startsWith('ach_rank_srv_prev_') || customId.startsWith('ach_rank_srv_next_')) {
+                await this._handleAchRankingSrvPage(interaction, customId);
                 return;
             }
             if (customId === 'ach_rank_global' || customId.startsWith('ach_rank_srv_') || customId.startsWith('ach_rank_role_')) {
@@ -3898,9 +3908,24 @@ class InteractionHandler {
     async _handleRankingBack(interaction) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
+        const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs, interaction.guildId, 0);
+        await interaction.editReply({
+            content: msgs.rankingSelectPrompt,
+            embeds: [],
+            components: selectRows
+        });
+    }
 
-        // Zawsze wróć do wyboru serwerów
-        const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs);
+    async _handleRankingSrvPage(interaction, customId) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const isPrev = customId.startsWith('ranking_srv_prev_');
+        const withoutPrefix = customId.replace(isPrev ? 'ranking_srv_prev_' : 'ranking_srv_next_', '');
+        const underscoreIdx = withoutPrefix.indexOf('_');
+        const currentPage = parseInt(withoutPrefix.substring(0, underscoreIdx)) || 0;
+        const homeGuildId = withoutPrefix.substring(underscoreIdx + 1) || interaction.guildId;
+        const newPage = isPrev ? currentPage - 1 : currentPage + 1;
+        const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs, homeGuildId, newPage);
         await interaction.editReply({
             content: msgs.rankingSelectPrompt,
             embeds: [],
@@ -7024,6 +7049,58 @@ class InteractionHandler {
 
     // ─── Ranking osiągnięć (/ranking-osiagniec) ───────────────────────────────
 
+    _buildAchServerSelectRows(client, homeGuildId, isPol, page = 0) {
+        const t = (pol, eng) => isPol ? pol : eng;
+        const allGuilds = this.config.getAllGuilds().filter(gc => client.guilds.cache.has(gc.id));
+        const otherGuilds = allGuilds.filter(gc => gc.id !== homeGuildId);
+
+        const PER_PAGE = 20; // 4 wiersze × 5 = 20 slotów na inne serwery
+        const totalPages = Math.max(1, Math.ceil(otherGuilds.length / PER_PAGE));
+        const safePage = Math.max(0, Math.min(page, totalPages - 1));
+        const pageGuilds = otherGuilds.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+
+        const homeGuild = homeGuildId ? allGuilds.find(gc => gc.id === homeGuildId) : null;
+        const homeLabel = homeGuild
+            ? (client.guilds.cache.get(homeGuildId)?.name || homeGuildId).substring(0, 76)
+            : '🏠';
+        const safeHome = homeGuildId || '';
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ach_rank_srv_${safeHome}`)
+                .setLabel(homeLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!safeHome),
+            new ButtonBuilder()
+                .setCustomId(`ach_rank_srv_prev_${safePage}_${safeHome}`)
+                .setLabel('◀')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(safePage === 0),
+            new ButtonBuilder()
+                .setCustomId(`ach_rank_srv_next_${safePage}_${safeHome}`)
+                .setLabel('▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(safePage >= totalPages - 1),
+            new ButtonBuilder()
+                .setCustomId('ach_rank_global')
+                .setLabel(t('🌐 Global', '🌐 Global'))
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+        const rows = [row1];
+        for (let i = 0; i < pageGuilds.length; i += 5) {
+            const rowBtns = pageGuilds.slice(i, i + 5).map(gc => {
+                const guildName = client.guilds.cache.get(gc.id)?.name || gc.id;
+                return new ButtonBuilder()
+                    .setCustomId(`ach_rank_srv_${gc.id}`)
+                    .setLabel(guildName.substring(0, 80))
+                    .setStyle(ButtonStyle.Secondary);
+            });
+            rows.push(new ActionRowBuilder().addComponents(rowBtns));
+        }
+        return rows;
+    }
+
     async handleAchRankingCommand(interaction) {
         if (!this._checkConfigured(interaction)) return;
         await interaction.deferReply({ flags: ['Ephemeral'] });
@@ -7032,26 +7109,7 @@ class InteractionHandler {
         const t = (pol, eng) => isPol ? pol : eng;
 
         try {
-            // Buduj przyciski wyboru serwera z wszystkich gildii bota
-            const buttons = [];
-            for (const [guildId, guild] of interaction.client.guilds.cache) {
-                buttons.push(new ButtonBuilder()
-                    .setCustomId(`ach_rank_srv_${guildId}`)
-                    .setLabel(guild.name.substring(0, 80))
-                    .setStyle(ButtonStyle.Primary)
-                );
-            }
-            buttons.push(new ButtonBuilder()
-                .setCustomId('ach_rank_global')
-                .setLabel(t('🌐 Global', '🌐 Global'))
-                .setStyle(ButtonStyle.Secondary)
-            );
-
-            const rows = [];
-            for (let i = 0; i < buttons.length; i += 5) {
-                rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
-            }
-
+            const rows = this._buildAchServerSelectRows(interaction.client, interaction.guildId, isPol, 0);
             await interaction.editReply({
                 content: t('🏆 Wybierz serwer lub globalny ranking osiągnięć:', '🏆 Select a server or global achievement ranking:'),
                 components: rows
@@ -7068,22 +7126,28 @@ class InteractionHandler {
         const isPol = lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
 
-        const buttons = [];
-        for (const guildConfig of this.config.getAllGuilds()) {
-            if (!interaction.client.guilds.cache.has(guildConfig.id)) continue;
-            const guildName = interaction.client.guilds.cache.get(guildConfig.id)?.name || guildConfig.id;
-            buttons.push(new ButtonBuilder()
-                .setCustomId(`ach_rank_srv_${guildConfig.id}`)
-                .setLabel(guildName.substring(0, 80))
-                .setStyle(ButtonStyle.Primary)
-            );
-        }
+        const rows = this._buildAchServerSelectRows(interaction.client, interaction.guildId, isPol, 0);
+        await interaction.editReply({
+            content: t('🏆 Wybierz serwer:', '🏆 Select a server:'),
+            embeds: [],
+            components: rows
+        });
+    }
 
-        const rows = [];
-        for (let i = 0; i < buttons.length; i += 5) {
-            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
-        }
+    async _handleAchRankingSrvPage(interaction, customId) {
+        await interaction.deferUpdate();
+        const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+        const isPol = lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
 
+        const isPrev = customId.startsWith('ach_rank_srv_prev_');
+        const withoutPrefix = customId.replace(isPrev ? 'ach_rank_srv_prev_' : 'ach_rank_srv_next_', '');
+        const underscoreIdx = withoutPrefix.indexOf('_');
+        const currentPage = parseInt(withoutPrefix.substring(0, underscoreIdx)) || 0;
+        const homeGuildId = withoutPrefix.substring(underscoreIdx + 1) || interaction.guildId;
+        const newPage = isPrev ? currentPage - 1 : currentPage + 1;
+
+        const rows = this._buildAchServerSelectRows(interaction.client, homeGuildId, isPol, newPage);
         await interaction.editReply({
             content: t('🏆 Wybierz serwer:', '🏆 Select a server:'),
             embeds: [],
