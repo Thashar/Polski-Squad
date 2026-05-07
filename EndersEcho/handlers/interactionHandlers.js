@@ -3376,11 +3376,32 @@ class InteractionHandler {
                     interaction.client.user?.displayAvatarURL({ size: 128 })
                 );
             } else {
+                // Re-fetch fresh player data for server and global modes so pagination
+                // always shows up-to-date scores after a new record is submitted.
+                // Role mode keeps cached data (member-fetch is expensive and role list rarely changes).
+                let players = rankingData.players;
+                if (rankingData.mode === 'server' && rankingData.guildId) {
+                    players = await this.rankingService.getSortedPlayers(rankingData.guildId);
+                } else if (rankingData.mode === 'global') {
+                    players = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+                }
+
+                // Re-calculate totalPages in case the player count changed, clamp current page.
+                const perPage = this.config.ranking.playersPerPage;
+                const freshTotalPages = Math.max(1, Math.ceil(players.length / perPage));
+                if (freshTotalPages !== rankingData.totalPages) {
+                    rankingData.totalPages = freshTotalPages;
+                    newPage = Math.min(newPage, freshTotalPages - 1);
+                    rankingData.currentPage = newPage;
+                }
+                rankingData.players = players;
+                this.rankingService.updateActiveRanking(interaction.message.id, rankingData);
+
                 const guild = (rankingData.mode === 'server' || rankingData.mode === 'role')
                     ? (interaction.client.guilds.cache.get(rankingData.guildId) || interaction.guild)
                     : null;
                 embed = await this.rankingService.createRankingEmbed(
-                    rankingData.players, newPage, rankingData.totalPages, rankingData.userId, guild,
+                    players, newPage, rankingData.totalPages, rankingData.userId, guild,
                     {
                         mode: rankingData.mode,
                         client: rankingData.mode === 'global' ? interaction.client : null,
