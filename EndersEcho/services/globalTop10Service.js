@@ -328,11 +328,15 @@ class GlobalTop10Service {
         currentLine = `${direction} ${currentLine}`;
         lines.push(currentLine);
 
-        if (below)   lines.push(await buildLine(below, newGlobalPosition + 1));
+        if (below) {
+            // Gracz poniżej nowej pozycji został wypchnięty w przeciwnym kierunku
+            const belowDirection = direction === '↑' ? '↓' : '↑';
+            lines.push(`${belowDirection} ${await buildLine(below, newGlobalPosition + 1)}`);
+        }
 
         return {
-            title,
-            description: `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` + lines.join('\n\n')
+            title: `${title} ${direction} ${prevLabel} → #${newGlobalPosition}`,
+            description: lines.join('\n\n')
         };
     }
 
