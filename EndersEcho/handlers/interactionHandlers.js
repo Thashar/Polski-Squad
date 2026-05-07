@@ -150,13 +150,13 @@ class InteractionHandler {
                 .setName('configure')
                 .setDescription('Configure EndersEcho for this server (admins only)')
                 .setDescriptionLocalizations(pl('Skonfiguruj EndersEcho na tym serwerze (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
             new SlashCommandBuilder()
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins only)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (tylko dla adminów)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
         ];
     }
 
@@ -534,7 +534,7 @@ class InteractionHandler {
     }
 
     async handleConfigureCommand(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
             return;
@@ -584,7 +584,7 @@ class InteractionHandler {
     }
 
     async handleManageCommand(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
             return;
