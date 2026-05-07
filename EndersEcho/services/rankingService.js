@@ -638,32 +638,61 @@ class RankingService {
     /**
      * Tworzy przyciski wyboru serwera/global dla komendy /ranking.
      * Etykiety przycisków serwera to nazwy z Discord, przycisk Global — z komunikatów danego serwera.
+     * Układ: wiersz 1 = [serwer bieżący] [◀] [▶], wiersze 2–5 = inne serwery (paginacja, max 20/strona).
      * @param {Client} client
      * @param {Object} messages - komunikaty serwera wywołującego
+     * @param {string|null} homeGuildId - ID serwera użytkownika (zawsze w wierszu 1)
+     * @param {number} page - strona "innych serwerów" (0-based)
      * @returns {ActionRowBuilder[]}
      */
-    createServerSelectButtons(client, messages = null) {
+    createServerSelectButtons(client, messages = null, homeGuildId = null, page = 0) {
         const msgs = messages || this.config.messages;
-        const buttons = [];
 
-        for (const guildConfig of this.config.getAllGuilds()) {
-            if (!client.guilds.cache.has(guildConfig.id)) continue;
-            const guildName = client.guilds.cache.get(guildConfig.id)?.name || `Server ${guildConfig.id}`;
-            const label = guildName.substring(0, 80);
+        const allGuilds = this.config.getAllGuilds().filter(gc => client.guilds.cache.has(gc.id));
+        const otherGuilds = allGuilds.filter(gc => gc.id !== homeGuildId);
 
-            buttons.push(
-                new ButtonBuilder()
-                    .setCustomId(`ranking_select_server_${guildConfig.id}`)
-                    .setLabel(label)
-                    .setStyle(ButtonStyle.Primary)
-            );
-        }
+        const PER_PAGE = 20; // 4 wiersze × 5 przycisków
+        const totalPages = Math.max(1, Math.ceil(otherGuilds.length / PER_PAGE));
+        const safePage = Math.max(0, Math.min(page, totalPages - 1));
+        const pageGuilds = otherGuilds.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
 
-        const rows = [];
-        for (let i = 0; i < buttons.length; i += 5) {
-            const row = new ActionRowBuilder();
-            row.addComponents(buttons.slice(i, i + 5));
-            rows.push(row);
+        // Wiersz 1: bieżący serwer + strzałki paginacji
+        const homeGuild = homeGuildId ? allGuilds.find(gc => gc.id === homeGuildId) : null;
+        const homeLabel = homeGuild
+            ? (client.guilds.cache.get(homeGuildId)?.name || homeGuildId).substring(0, 76)
+            : '🏠';
+        const safeHome = homeGuildId || '';
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ranking_select_server_${safeHome}`)
+                .setLabel(homeLabel)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!safeHome),
+            new ButtonBuilder()
+                .setCustomId(`ranking_srv_prev_${safePage}_${safeHome}`)
+                .setLabel('◀')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(safePage === 0),
+            new ButtonBuilder()
+                .setCustomId(`ranking_srv_next_${safePage}_${safeHome}`)
+                .setLabel('▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(safePage >= totalPages - 1)
+        );
+
+        const rows = [row1];
+
+        // Wiersze 2–5: inne serwery (max 20)
+        for (let i = 0; i < pageGuilds.length; i += 5) {
+            const rowBtns = pageGuilds.slice(i, i + 5).map(gc => {
+                const guildName = client.guilds.cache.get(gc.id)?.name || gc.id;
+                return new ButtonBuilder()
+                    .setCustomId(`ranking_select_server_${gc.id}`)
+                    .setLabel(guildName.substring(0, 80))
+                    .setStyle(ButtonStyle.Secondary);
+            });
+            rows.push(new ActionRowBuilder().addComponents(rowBtns));
         }
 
         return rows;
