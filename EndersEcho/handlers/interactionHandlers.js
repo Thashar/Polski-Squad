@@ -5480,20 +5480,18 @@ class InteractionHandler {
             const storedCfg = this.guildConfigService.getConfig(guildId);
             const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
             const guildName = guild?.name || guildId;
-            const ch = guild?.channels.cache.get(channelId) || await guild?.channels.fetch(channelId).catch(() => null);
-            const channelName = ch ? `#${ch.name}` : `<#${channelId}>`;
             const isPol = storedCfg?.lang !== 'eng';
 
             const missingList = missingPerms.length
                 ? missingPerms.map(p => `• **${p}**`).join('\n')
-                : '• *(nieznane uprawnienie)*';
+                : isPol ? '• *(nieznane uprawnienie)*' : '• *(unknown permission)*';
 
             const dmEmbed = new EmbedBuilder()
                 .setColor(0xFF4444)
                 .setTitle(isPol ? '⚠️ EndersEcho — brak uprawnień' : '⚠️ EndersEcho — missing permissions')
                 .setDescription(isPol
-                    ? `Bot napotkał błąd uprawnień na serwerze **${guildName}** i nie może wykonać swojego zadania.\n\n**Kanał:** ${channelName}\n**Kontekst:** ${context}\n\n**Brakujące uprawnienia:**\n${missingList}\n\nPrzejdź do ustawień kanału i nadaj botowi brakujące uprawnienia, lub zmień kanał przez \`/configure\`.`
-                    : `The bot encountered a permission error on **${guildName}** and cannot complete its task.\n\n**Channel:** ${channelName}\n**Context:** ${context}\n\n**Missing permissions:**\n${missingList}\n\nGo to the channel settings and grant the bot the missing permissions, or change the channel via \`/configure\`.`
+                    ? `Bot napotkał błąd uprawnień na serwerze **${guildName}** i nie może wykonać swojego zadania.\n\n**Kanał:** <#${channelId}>\n**Kontekst:** ${context}\n\n**Brakujące uprawnienia:**\n${missingList}\n\nPrzejdź do ustawień kanału i nadaj botowi brakujące uprawnienia, lub zmień kanał przez \`/configure\`.`
+                    : `The bot encountered a permission error on **${guildName}** and cannot complete its task.\n\n**Channel:** <#${channelId}>\n**Context:** ${context}\n\n**Missing permissions:**\n${missingList}\n\nGo to the channel settings and grant the bot the missing permissions, or change the channel via \`/configure\`.`
                 )
                 .setTimestamp();
 
