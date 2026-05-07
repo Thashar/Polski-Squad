@@ -1321,11 +1321,12 @@ class InteractionHandler {
                         diffFields.push({ name: 'Tag', value: `${old?.tag || '—'} → ${newData.tag || '—'}` });
                     }
                     const roleKeys = { top1: 'Top 1', top2: 'Top 2', top3: 'Top 3', top4to10: 'Top 4-10', top11to30: 'Top 11-30' };
+                    const roleName = (id) => id ? (interaction.guild.roles.cache.get(id)?.name || id) : '—';
                     for (const [key, label] of Object.entries(roleKeys)) {
                         const oldVal = old?.topRoles?.[key] || null;
                         const newVal = newData.topRoles?.[key] || null;
                         if (oldVal !== newVal) {
-                            diffFields.push({ name: `Rola ${label}`, value: `${oldVal ? `<@&${oldVal}>` : '—'} → ${newVal ? `<@&${newVal}>` : '—'}` });
+                            diffFields.push({ name: `Rola ${label}`, value: `${roleName(oldVal)} → ${roleName(newVal)}` });
                         }
                     }
                     if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
