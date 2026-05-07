@@ -335,8 +335,8 @@ class GlobalTop10Service {
         }
 
         return {
-            title,
-            description: `${direction} **${prevLabel} → #${newGlobalPosition}**\n\n` + lines.join('\n\n')
+            title: `${title} ${direction} ${prevLabel} → #${newGlobalPosition}`,
+            description: lines.join('\n\n')
         };
     }
 
