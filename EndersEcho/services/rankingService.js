@@ -168,7 +168,9 @@ class RankingService {
         const lines = pageItems.map((gs, idx) => {
             const rank = start + idx + 1;
             const medal = MEDALS[rank - 1] || `**#${rank}**`;
-            return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} graczy • najlepszy: ${gs.topScore}`;
+            const playersLabel = msgs.guildRankingPlayers || 'graczy';
+            const bestLabel = msgs.guildRankingBest || 'najlepszy';
+            return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} ${playersLabel} • ${bestLabel}: ${gs.topScore}`;
         });
 
         const embed = new EmbedBuilder()

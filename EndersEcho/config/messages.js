@@ -106,6 +106,8 @@ const pol = {
     buttonBack: '↩️ Rankingi serwerów',
     guildRankingTitle: '🏛️ Ranking Serwerów',
     guildRankingFooter: 'Suma wyników top 30 graczy per serwer',
+    guildRankingPlayers: 'graczy',
+    guildRankingBest: 'najlepszy',
 
     // Role TOP
     topRoleUpdated: '🏆 Role TOP zostały zaktualizowane!',
@@ -406,6 +408,8 @@ const eng = {
     buttonBack: '↩️ Server rankings',
     guildRankingTitle: '🏛️ Server Ranking',
     guildRankingFooter: 'Sum of top 30 players per server',
+    guildRankingPlayers: 'players',
+    guildRankingBest: 'best',
 
     // TOP roles
     topRoleUpdated: '🏆 TOP roles have been updated!',
