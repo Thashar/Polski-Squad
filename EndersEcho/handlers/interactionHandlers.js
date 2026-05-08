@@ -1011,10 +1011,6 @@ class InteractionHandler {
             try { roleSelect.setDefaultRoles([existingRoleId]); } catch { /* ignoruj */ }
         }
 
-        const skipBtn = new ButtonBuilder()
-            .setCustomId(`cfg_roles_skip_${tierIdx}`)
-            .setLabel(t('Pomiń ⏭️', 'Skip ⏭️'))
-            .setStyle(ButtonStyle.Secondary);
         const backBtn = new ButtonBuilder()
             .setCustomId(`cfg_roles_back_${tierIdx}`)
             .setLabel(t('← Wstecz', '← Back'))
@@ -1024,7 +1020,7 @@ class InteractionHandler {
             embeds: [embed],
             components: [
                 new ActionRowBuilder().addComponents(roleSelect),
-                new ActionRowBuilder().addComponents(skipBtn, backBtn),
+                new ActionRowBuilder().addComponents(backBtn),
             ]
         });
     }
