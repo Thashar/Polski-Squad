@@ -2,6 +2,25 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
+/**
+ * Konwertuje stary format topRoles (top1/top2/top3/top4to10/top11to30) lub nowy format (tiers[])
+ * na znormalizowany format { tiers: [{from, to, roleId}] }.
+ * Zwraca null jeśli brak konfiguracji.
+ */
+function normalizeTiers(topRoles) {
+    if (!topRoles) return null;
+    if (topRoles.tiers) return topRoles;
+
+    // Stary format → nowy
+    const tiers = [];
+    if (topRoles.top1)     tiers.push({ from: 1,  to: 1,  roleId: topRoles.top1 });
+    if (topRoles.top2)     tiers.push({ from: 2,  to: 2,  roleId: topRoles.top2 });
+    if (topRoles.top3)     tiers.push({ from: 3,  to: 3,  roleId: topRoles.top3 });
+    if (topRoles.top4to10) tiers.push({ from: 4,  to: 10, roleId: topRoles.top4to10 });
+    if (topRoles.top11to30)tiers.push({ from: 11, to: 30, roleId: topRoles.top11to30 });
+    return tiers.length > 0 ? { tiers } : null;
+}
+
 class RoleService {
     constructor(config, rankingService) {
         this.config = config;
@@ -71,15 +90,15 @@ class RoleService {
      * Operacje usuwania i dodawania wykonywane są równolegle (Promise.allSettled).
      */
     async _applyRoleDiff(guild, sortedPlayers, guildTopRoles) {
-        const roleMap = {
-            top1:     guildTopRoles.top1     ? guild.roles.cache.get(guildTopRoles.top1)     : null,
-            top2:     guildTopRoles.top2     ? guild.roles.cache.get(guildTopRoles.top2)     : null,
-            top3:     guildTopRoles.top3     ? guild.roles.cache.get(guildTopRoles.top3)     : null,
-            top4to10: guildTopRoles.top4to10 ? guild.roles.cache.get(guildTopRoles.top4to10) : null,
-            top11to30:guildTopRoles.top11to30? guild.roles.cache.get(guildTopRoles.top11to30): null,
-        };
+        const normalized = normalizeTiers(guildTopRoles);
+        if (!normalized) return;
 
-        const allTopRoles = Object.values(roleMap).filter(Boolean);
+        const tierRoles = normalized.tiers
+            .filter(t => t.roleId)
+            .map(t => ({ ...t, role: guild.roles.cache.get(t.roleId) }))
+            .filter(t => t.role);
+
+        const allTopRoles = tierRoles.map(t => t.role);
         if (allTopRoles.length === 0) {
             logger.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze ${guild.name}`);
             return;
@@ -89,13 +108,8 @@ class RoleService {
         const desired = new Map();
         for (let i = 0; i < sortedPlayers.length; i++) {
             const pos = i + 1;
-            let role = null;
-            if (pos === 1)                    role = roleMap.top1;
-            else if (pos === 2)               role = roleMap.top2;
-            else if (pos === 3)               role = roleMap.top3;
-            else if (pos >= 4 && pos <= 10)   role = roleMap.top4to10;
-            else if (pos >= 11 && pos <= 30)  role = roleMap.top11to30;
-            desired.set(sortedPlayers[i].userId, role);
+            const tier = tierRoles.find(t => pos >= t.from && pos <= t.to);
+            desired.set(sortedPlayers[i].userId, tier ? tier.role : null);
         }
 
         // Aktualny stan z cache Discorda: userId -> role
@@ -200,26 +214,29 @@ class RoleService {
     }
 
     /**
-     * Pobiera informacje o aktualnych posiadaczach ról TOP
+     * Pobiera informacje o aktualnych posiadaczach ról TOP (per tier).
      * @param {Guild} guild
      * @param {Object|null} guildTopRoles
+     * @returns {Array<{from, to, role, members}>}
      */
     async getTopRoleHolders(guild, guildTopRoles = null) {
-        const topRoles = guildTopRoles || {};
+        const normalized = normalizeTiers(guildTopRoles);
+        if (!normalized) return [];
         try {
-            const get = (key) => topRoles[key] ? guild.roles.cache.get(topRoles[key]) : null;
-            const toArr = (role) => role ? Array.from(role.members.values()) : [];
-
-            return {
-                top1:      toArr(get('top1')),
-                top2:      toArr(get('top2')),
-                top3:      toArr(get('top3')),
-                top4to10:  toArr(get('top4to10')),
-                top11to30: toArr(get('top11to30'))
-            };
+            return normalized.tiers
+                .filter(t => t.roleId)
+                .map(t => {
+                    const role = guild.roles.cache.get(t.roleId);
+                    return {
+                        from: t.from,
+                        to: t.to,
+                        role,
+                        members: role ? Array.from(role.members.values()) : []
+                    };
+                });
         } catch (error) {
             logger.error('Błąd pobierania posiadaczy ról TOP:', error);
-            return { top1: [], top2: [], top3: [], top4to10: [], top11to30: [] };
+            return [];
         }
     }
 
@@ -229,8 +246,9 @@ class RoleService {
      * @param {Object|null} guildTopRoles
      */
     getUserTopRole(member, guildTopRoles = null) {
-        const topRoles = guildTopRoles || {};
-        const roleIds = Object.values(topRoles).filter(Boolean);
+        const normalized = normalizeTiers(guildTopRoles);
+        if (!normalized) return null;
+        const roleIds = normalized.tiers.map(t => t.roleId).filter(Boolean);
 
         for (const roleId of roleIds) {
             if (member.roles.cache.has(roleId)) {
@@ -260,3 +278,4 @@ class RoleService {
 }
 
 module.exports = RoleService;
+module.exports.normalizeTiers = normalizeTiers;

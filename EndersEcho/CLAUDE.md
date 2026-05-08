@@ -85,7 +85,9 @@
    - **Migracja:** Przy pierwszym starcie stary `ranking.json` jest automatycznie migrowany do `ranking_{guild1Id}.json`
 
 3. **Role TOP (opcjonalne)** - `roleService.js`:
-   - 5 poziomów (top1, top2, top3, top4-10, top11-30), auto-update
+   - Do **10 w pełni konfigurowalnych progów** per serwer; każdy próg = zakres pozycji rankingowych + rola Discord
+   - **Format danych:** `{ tiers: [{ from, to, roleId }] }` w `guild_configs.json`; backward compat ze starym formatem `{ top1, top2, top3, top4to10, top11to30 }` przez `normalizeTiers()`
+   - **Backward compat:** `normalizeTiers(topRoles)` konwertuje stary format na `tiers[]` on-the-fly; istniejące konfiguracje działają bez migracji
    - Role są **opcjonalne per serwer** — jeśli serwer nie ma skonfigurowanych ról, bot je pomija
    - `updateTopRoles(guild, _sortedPlayers, guildTopRoles)` — zawsze pobiera świeże dane z rankingu (parametr `sortedPlayers` ignorowany)
    - **Mutex per-guild** (`_locks` Map): jeśli aktualizacja dla danego serwera jest już w toku, kolejna zostaje oznaczona jako `hasPending`; po zakończeniu bieżącej uruchamiana jest automatycznie z najświeższym rankingiem (via `setImmediate`). Wyklucza race condition przy równoczesnych rekordach.
@@ -290,7 +292,14 @@
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
 - **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
-- **Krok 5:** Role TOP (opcjonalne, sub-wizard 5 kroków z RoleSelectMenu) — każda pozycja wybierana osobno z listy ról serwera; każdy krok można pominąć; "Wstecz" cofa do poprzedniego kroku; customIDs: `cfg_roles_start`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`
+- **Krok 5:** Role TOP (opcjonalne) — do 10 w pełni konfigurowalnych progów per serwer:
+  - Ekran progów: 10 przycisków (zielony=skonfigurowany, niebieski=następny aktywny, szary=nieaktywny); pod nimi: "Przydziel role", "Usuń konfigurację progów", "Pomiń"
+  - Kliknięcie aktywnego przycisku → modal zakresu (np. `1-3` lub `4`); walidacja: ciągłość (brak luk), format, minimum = previous.to+1
+  - Unieważnienie późniejszych progów po zmianie zakresu
+  - "Przydziel role" → sekwencja RoleSelectMenu (jeden na próg); każdy można pominąć; "← Wstecz" wraca do poprzedniego progu lub do ekranu progów
+  - "Usuń konfigurację progów" → czyści wszystkie zakresy, reset do pustego ekranu
+  - Backward compat: istniejące `{ top1, top2, top3, top4to10, top11to30 }` automatycznie pre-fillowane do nowego UI przy wejściu
+  - customIDs: `cfg_roles_start`, `cfg_tier_N` (N=0-9), `cfg_tier_modal_N` (modal), `cfg_tier_assign`, `cfg_tier_reset`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`, `cfg_roles_skip`
 - **Krok 6:** Powiadomienia Global TOP10 (Tak/Nie) — per-guild flaga `globalTopNotifications` (backward compat: odczytuje też stare `globalTop3Notifications`)
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`

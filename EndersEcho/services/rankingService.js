@@ -786,6 +786,13 @@ class RankingService {
 
     getPositionRole(position, guildTopRoles, guild) {
         if (!guildTopRoles || !guild) return null;
+        // Nowy format: { tiers: [{from, to, roleId}] }
+        if (guildTopRoles.tiers) {
+            const tier = guildTopRoles.tiers.find(t => position >= t.from && position <= t.to);
+            const roleId = tier?.roleId;
+            return roleId ? guild.roles.cache.get(roleId) || null : null;
+        }
+        // Stary format (backward compat)
         let roleId = null;
         if (position === 1) roleId = guildTopRoles.top1;
         else if (position === 2) roleId = guildTopRoles.top2;
