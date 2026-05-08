@@ -671,21 +671,7 @@ class InteractionHandler {
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(tagBtn, backBtn)] });
 
         } else if (step === 5) {
-            const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🏆 Krok 5 — Role TOP (opcjonalne)', '🏆 Step 5 — TOP Roles (optional)'))
-                .setDescription(
-                    t(
-                        'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w rankingu serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
-                        '**Jak to działa:**\nKażdy raz gdy wynik gracza zostanie zaktualizowany, bot automatycznie przelicza ranking i przypisuje role. Nie wymaga ręcznej pracy.\nGracze, którzy wypadną z danego progu, tracą rolę i mogą otrzymać niższą.\n\n' +
-                        '**Konfiguracja:**\nMożesz zdefiniować do **10 progów** — każdy próg to zakres pozycji rankingowych i przypisana rola Discord.\nPrzykład: Próg 1 = miejsca 1–3 → rola Gold, Próg 2 = miejsca 4–10 → rola Silver.\n\nMożesz pominąć ten krok i skonfigurować role później przez `/configure`.',
-                        'You can assign special Discord roles to players based on their position in the server ranking. This highlights your most active players.\n\n' +
-                        '**How it works:**\nEvery time a player\'s score is updated, the bot automatically recalculates the ranking and reassigns roles in real time. No manual work needed.\nPlayers who drop out of a tier lose the role and may receive a lower one.\n\n' +
-                        '**Configuration:**\nYou can define up to **10 tiers** — each tier is a range of ranking positions with an assigned Discord role.\nExample: Tier 1 = positions 1–3 → Gold role, Tier 2 = positions 4–10 → Silver role.\n\nYou can skip this step and configure roles later by running `/configure` again.'
-                    )
-                );
-            const configRolesBtn = new ButtonBuilder().setCustomId('cfg_roles_start').setLabel(t('Skonfiguruj role', 'Configure Roles')).setStyle(ButtonStyle.Primary);
-            const skipBtn = new ButtonBuilder().setCustomId('cfg_roles_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(configRolesBtn, skipBtn, backBtn)] });
+            await this._showStep5Screen(interaction, state);
 
         } else if (step === 6) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
@@ -895,8 +881,8 @@ class InteractionHandler {
             .setStyle(ButtonStyle.Danger)
             .setDisabled(tierRanges.length === 0);
         const skipBtn = new ButtonBuilder()
-            .setCustomId('cfg_roles_skip')
-            .setLabel(tierRanges.length > 0 ? t('Wyłącz 🔕', 'Disable 🔕') : t('← Cofnij', '← Back'))
+            .setCustomId('cfg_tier_back')
+            .setLabel(t('← Wstecz', '← Back'))
             .setStyle(ButtonStyle.Secondary);
 
         await interaction.update({
@@ -906,6 +892,74 @@ class InteractionHandler {
                 new ActionRowBuilder().addComponents(...tierBtns2),
                 new ActionRowBuilder().addComponents(assignBtn, resetBtn, skipBtn),
             ]
+        });
+    }
+
+    async _showStep5Screen(interaction, state) {
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const fmtRange = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
+
+        const existingTopRoles = state.topRoles;
+        const hasTiers = existingTopRoles?.tiers?.length > 0;
+        const isDisabled = existingTopRoles?.disabled === true;
+
+        let desc = t(
+            'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w rankingu serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
+            '**Jak to działa:**\nKażdy raz gdy wynik gracza zostanie zaktualizowany, bot automatycznie przelicza ranking i przypisuje role. Nie wymaga ręcznej pracy.\nGracze, którzy wypadną z danego progu, tracą rolę i mogą otrzymać niższą.\n\n' +
+            '**Konfiguracja:**\nMożesz zdefiniować do **10 progów** — każdy próg to zakres pozycji rankingowych i przypisana rola Discord.\nPrzykład: Próg 1 = miejsca 1–3 → rola Gold, Próg 2 = miejsca 4–10 → rola Silver.\n\nMożesz pominąć ten krok i skonfigurować role później przez `/configure`.',
+            'You can assign special Discord roles to players based on their position in the server ranking. This highlights your most active players.\n\n' +
+            '**How it works:**\nEvery time a player\'s score is updated, the bot automatically recalculates the ranking and reassigns roles in real time. No manual work needed.\nPlayers who drop out of a tier lose the role and may receive a lower one.\n\n' +
+            '**Configuration:**\nYou can define up to **10 tiers** — each tier is a range of ranking positions with an assigned Discord role.\nExample: Tier 1 = positions 1–3 → Gold role, Tier 2 = positions 4–10 → Silver role.\n\nYou can skip this step and configure roles later by running `/configure` again.'
+        );
+
+        if (hasTiers) {
+            const statusStr = isDisabled
+                ? t('🔴 **Wyłączone**', '🔴 **Disabled**')
+                : t('🟢 **Aktywne**', '🟢 **Active**');
+            const tierLines = existingTopRoles.tiers.map((tier, i) => {
+                const roleStr = tier.roleId ? `<@&${tier.roleId}>` : t('*(brak roli)*', '*(no role)*');
+                return `**${t('Próg', 'Tier')} ${i + 1}** (${fmtRange(tier)}) → ${roleStr}`;
+            }).join('\n');
+            desc += `\n\n${t('**Aktualna konfiguracja:**', '**Current configuration:**')} ${statusStr}\n${tierLines}`;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(t('🏆 Krok 5 — Role TOP (opcjonalne)', '🏆 Step 5 — TOP Roles (optional)'))
+            .setDescription(desc);
+
+        const configBtn = new ButtonBuilder()
+            .setCustomId('cfg_roles_start')
+            .setLabel(t('Skonfiguruj role', 'Configure Roles'))
+            .setStyle(ButtonStyle.Primary);
+
+        let actionBtn;
+        if (!hasTiers) {
+            actionBtn = new ButtonBuilder()
+                .setCustomId('cfg_roles_skip')
+                .setLabel(t('Pomiń', 'Skip'))
+                .setStyle(ButtonStyle.Secondary);
+        } else if (isDisabled) {
+            actionBtn = new ButtonBuilder()
+                .setCustomId('cfg_roles_enable')
+                .setLabel(t('Włącz 🔔', 'Enable 🔔'))
+                .setStyle(ButtonStyle.Success);
+        } else {
+            actionBtn = new ButtonBuilder()
+                .setCustomId('cfg_roles_skip')
+                .setLabel(t('Wyłącz 🔕', 'Disable 🔕'))
+                .setStyle(ButtonStyle.Secondary);
+        }
+
+        const backBtn = new ButtonBuilder()
+            .setCustomId('cfg_back')
+            .setLabel(t('← Powrót', '← Back'))
+            .setStyle(ButtonStyle.Secondary);
+
+        await interaction.update({
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(configBtn, actionBtn, backBtn)]
         });
     }
 
@@ -1308,10 +1362,30 @@ class InteractionHandler {
         }
 
         // Pomiń cały krok 5 (role TOP)
+        // Wstecz z ekranu progów → krok 5 landing (bez zmian w state)
+        if (customId === 'cfg_tier_back') {
+            await this._showStep5Screen(interaction, state);
+            return;
+        }
+
+        // Włącz role TOP (usunięcie flagi disabled)
+        if (customId === 'cfg_roles_enable') {
+            if (state.topRoles?.tiers) {
+                const { disabled, ...enabledConfig } = state.topRoles;
+                state.topRoles = enabledConfig;
+                state.rolesSkipped = false;
+                this._configWizard.set(key, state);
+            }
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
         if (customId === 'cfg_roles_skip') {
-            const tierRangesNow = state.topRolesTemp?.tierRanges || [];
-            if (tierRangesNow.length > 0) {
-                // Wyłącz feature ale zachowaj konfigurację progów i ról
+            // Jeśli topRolesTemp ma progi (edytowane w ekranie progów), użyj ich
+            // W przeciwnym razie zachowaj istniejące tiers z state.topRoles
+            const tierRangesNow = state.topRolesTemp?.tierRanges;
+            if (tierRangesNow?.length > 0) {
                 const assigningNow = state.topRolesTemp?.tierAssigning || {};
                 const tiers = tierRangesNow.map((r, i) => ({
                     from: r.from,
@@ -1319,6 +1393,9 @@ class InteractionHandler {
                     roleId: assigningNow[i] || null
                 }));
                 state.topRoles = { tiers, disabled: true };
+            } else if (state.topRoles?.tiers?.length > 0) {
+                // Brak topRolesTemp ale config istnieje — wyłącz bez kasowania
+                state.topRoles = { ...state.topRoles, disabled: true };
             } else {
                 state.topRoles = null;
             }
@@ -3153,7 +3230,9 @@ class InteractionHandler {
         if (customId === 'cfg_back') return 'Cofnij krok';
         if (customId === 'cfg_tag_open') return 'Ustaw tag serwera (modal)';
         if (customId === 'cfg_roles_start') return 'Konfiguracja progów ról TOP — ekran główny';
-        if (customId === 'cfg_roles_skip') return 'Pomiń role TOP';
+        if (customId === 'cfg_roles_skip') return 'Wyłącz/Pomiń role TOP';
+        if (customId === 'cfg_roles_enable') return 'Włącz role TOP';
+        if (customId === 'cfg_tier_back') return '← Wstecz (ekran progów → krok 5)';
         if (/^cfg_tier_\d+$/.test(customId)) return `Otwórz modal zakresu — próg ${parseInt(customId.replace('cfg_tier_', ''), 10) + 1}`;
         if (customId === 'cfg_tier_assign') return 'Przydziel role do progów — start';
         if (customId === 'cfg_tier_reset') return 'Usuń konfigurację progów';
@@ -3600,7 +3679,7 @@ class InteractionHandler {
             // === Przyciski wizarda /configure ===
             if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
-                customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' ||
+                customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' || customId === 'cfg_tier_back' || customId === 'cfg_roles_enable' ||
                 customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') ||
                 /^cfg_tier_\d+$/.test(customId) || customId === 'cfg_tier_assign' || customId === 'cfg_tier_reset' || customId === 'cfg_tier_reset_ok' || customId === 'cfg_tier_reset_cancel' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
