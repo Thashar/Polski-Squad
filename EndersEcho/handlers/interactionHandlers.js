@@ -432,7 +432,7 @@ class InteractionHandler {
             new ActionRowBuilder().addComponents(
                 btn(4, '4. Tag serwera', '4. Server Tag'),
                 btn(5, '5. Role TOP', '5. TOP Roles'),
-                btn(6, '6. Powiadomienia Global TOP10', '6. Global TOP10 Notifications'),
+                btn(6, '6. Raporty Global TOP10', '6. Global TOP10 Reports'),
                 btn(7, '7. Ranking roli', '7. Role Rankings'),
             ),
             new ActionRowBuilder().addComponents(
@@ -514,7 +514,7 @@ class InteractionHandler {
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — konfigurowalne automatyczne role za pozycje w rankingu\n' +
-                        '6️⃣  **Powiadomienia Global TOP10** — cykliczne raporty TOP10 globalnego (co ~3 dni)\n' +
+                        '6️⃣  **Raporty Global TOP10** — cykliczne raporty TOP10 globalnego (co ~3 dni)\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
@@ -525,7 +525,7 @@ class InteractionHandler {
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — configurable automatic roles based on ranking positions\n' +
-                        '6️⃣  **Global TOP10 Notifications** — periodic TOP10 global reports (every ~3 days)\n' +
+                        '6️⃣  **Global TOP10 Reports** — periodic TOP10 global reports (every ~3 days)\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
@@ -675,7 +675,7 @@ class InteractionHandler {
 
         } else if (step === 6) {
             const embed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🌐 Krok 6 — Powiadomienia Global TOP10', '🌐 Step 6 — Global TOP10 Notifications'))
+                .setTitle(t('🌐 Krok 6 — Raporty Global TOP10', '🌐 Step 6 — Global TOP10 Reports'))
                 .setDescription(
                     t(
                         'Bot może cyklicznie (co ~3 dni) wysyłać na Twój kanał raport TOP10 globalnego rankingu EndersEcho.\n\nRaport zawiera: 10 najlepszych graczy ze wszystkich serwerów, ich wyniki, zmiany pozycji (▲/▼) od poprzedniego raportu oraz bossa, z którym walczono w tym okresie.\n\nCzy chcesz otrzymywać te raporty?',
@@ -1653,7 +1653,7 @@ class InteractionHandler {
                             { name: 'Język', value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
                             { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
-                            { name: 'Powiadomienia Global TOP10', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
+                            { name: 'Raporty Global TOP10', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
                             { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
                             { name: 'Weryfikacja społeczności', value: newData.communityVerification?.enabled ? `✅ Włączona (próg: ${newData.communityVerification.threshold})` : '❌ Wyłączona' }
                         )
@@ -1688,7 +1688,7 @@ class InteractionHandler {
                     if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
                         const oldVal = old?.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
                         const newVal = newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
-                        diffFields.push({ name: 'Powiadomienia Global TOP10', value: `${oldVal} → ${newVal}` });
+                        diffFields.push({ name: 'Raporty Global TOP10', value: `${oldVal} → ${newVal}` });
                     }
                     const oldCvEnabled = old?.communityVerification?.enabled || false;
                     const newCvEnabled = newData.communityVerification?.enabled || false;
@@ -3250,8 +3250,8 @@ class InteractionHandler {
         if (customId.startsWith('cfg_roles_skip_')) return `Pomiń rolę (próg ${parseInt(customId.replace('cfg_roles_skip_', ''), 10) + 1})`;
         if (customId.startsWith('cfg_roles_back_')) return `Wróć (próg ${parseInt(customId.replace('cfg_roles_back_', ''), 10) + 1})`;
         if (customId.startsWith('cfg_roles_sel_')) return `Wybrano rolę dla progu ${parseInt(customId.replace('cfg_roles_sel_', ''), 10) + 1}`;
-        if (customId === 'cfg_notif_yes') return 'Powiadomienia Global TOP10: TAK';
-        if (customId === 'cfg_notif_no') return 'Powiadomienia Global TOP10: NIE';
+        if (customId === 'cfg_notif_yes') return 'Raporty Global TOP10: TAK';
+        if (customId === 'cfg_notif_no') return 'Raporty Global TOP10: NIE';
         if (customId === 'panel_top10_interval') return 'Interwał TOP10 — otwórz modal';
         if (customId === 'cfg_role_ranking_add') return 'Dodaj ranking roli';
         if (customId === 'cfg_role_ranking_remove') return 'Usuń ranking roli';
