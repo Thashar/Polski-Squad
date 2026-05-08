@@ -894,7 +894,7 @@ class InteractionHandler {
             .setDisabled(tierRanges.length === 0);
         const skipBtn = new ButtonBuilder()
             .setCustomId('cfg_roles_skip')
-            .setLabel(t('Pomiń ⏭️', 'Skip ⏭️'))
+            .setLabel(t('← Cofnij', '← Back'))
             .setStyle(ButtonStyle.Secondary);
 
         await interaction.update({
