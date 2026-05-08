@@ -113,26 +113,6 @@ async function initializeBot() {
         const sharedDataDir = path.join(__dirname, '../shared_data');
         await fixBossNamesInData(config.ranking.dataDir, sharedDataDir, false, logger);
 
-        // Jednorazowy reset topRoles — czyści stare/placeholder konfiguracje ról TOP
-        const guildCfgPath = require('path').join(__dirname, 'data', 'guild_configs.json');
-        try {
-            const rawCfg = await require('fs').promises.readFile(guildCfgPath, 'utf8');
-            const allCfgs = JSON.parse(rawCfg);
-            let resetCount = 0;
-            for (const cfg of Object.values(allCfgs)) {
-                if (cfg.topRoles !== null && cfg.topRoles !== undefined) {
-                    cfg.topRoles = null;
-                    resetCount++;
-                }
-            }
-            if (resetCount > 0) {
-                await require('fs').promises.writeFile(guildCfgPath, JSON.stringify(allCfgs, null, 2), 'utf8');
-                logger.info(`🔄 Reset topRoles: wyczyszczono ${resetCount} serwerów`);
-            }
-        } catch (err) {
-            if (err.code !== 'ENOENT') logger.warn('Reset topRoles błąd:', err.message);
-        }
-
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);
         config.setGuildConfigService(guildConfigService);
