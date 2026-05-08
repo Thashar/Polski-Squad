@@ -431,12 +431,12 @@ class InteractionHandler {
             ),
             new ActionRowBuilder().addComponents(
                 btn(4, '4. Tag serwera', '4. Server Tag'),
-                btn(5, '5. Role TOP (opcjonalne)', '5. TOP Roles (optional)'),
+                btn(5, '5. Role TOP', '5. TOP Roles'),
                 btn(6, '6. Powiadomienia Global TOP10', '6. Global TOP10 Notifications'),
-                btn(7, '7. Ranking roli (opcjonalne)', '7. Role Rankings (optional)'),
+                btn(7, '7. Ranking roli', '7. Role Rankings'),
             ),
             new ActionRowBuilder().addComponents(
-                btn(8, '8. Weryfikacja społeczności (opcjonalne)', '8. Community Verification (optional)'),
+                btn(8, '8. Weryfikacja społeczności', '8. Community Verification'),
             ),
         ];
 
@@ -513,7 +513,7 @@ class InteractionHandler {
                         '2️⃣  **Kanał bota** — kanał dla `/update`, `/ranking`, `/subscribe` i `/achievements`\n' +
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
-                        '5️⃣  **Role TOP** *(opcjonalne)* — automatyczne role za TOP30 na serwerze\n' +
+                        '5️⃣  **Role TOP** *(opcjonalne)* — konfigurowalne automatyczne role za pozycje w rankingu\n' +
                         '6️⃣  **Powiadomienia Global TOP10** — cykliczne raporty TOP10 globalnego (co ~3 dni)\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
@@ -524,7 +524,7 @@ class InteractionHandler {
                         '2️⃣  **Bot Channel** — where `/update`, `/ranking`, `/subscribe` and `/achievements` work\n' +
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
-                        '5️⃣  **TOP Roles** *(optional)* — automatic roles based on server TOP30\n' +
+                        '5️⃣  **TOP Roles** *(optional)* — configurable automatic roles based on ranking positions\n' +
                         '6️⃣  **Global TOP10 Notifications** — periodic TOP10 global reports (every ~3 days)\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
