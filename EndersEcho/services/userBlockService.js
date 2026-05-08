@@ -100,10 +100,12 @@ class UserBlockService {
         });
     }
 
-    formatTimeRemaining(blockedUntil) {
-        if (blockedUntil === null) return '∞ Permanentnie';
+    formatTimeRemaining(blockedUntil, labels = {}) {
+        const permanent = labels.permanent ?? '∞ Permanentnie';
+        const expired = labels.expired ?? 'Wygasła';
+        if (blockedUntil === null) return permanent;
         const remaining = blockedUntil - Date.now();
-        if (remaining <= 0) return 'Wygasła';
+        if (remaining <= 0) return expired;
         const days = Math.floor(remaining / 86400000);
         const hours = Math.floor((remaining % 86400000) / 3600000);
         const minutes = Math.floor((remaining % 3600000) / 60000);

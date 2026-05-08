@@ -18,14 +18,14 @@ function mapGatewayErrorMessage(gwError, msgs) {
         case 'QUOTA_EXCEEDED':
             return formatMessage(msgs.dailyLimitExceeded, { limit: gwError.retryAfter || '' });
         case 'RATE_LIMITED':
-            return `⏱️ Zbyt wiele żądań. Spróbuj ponownie${gwError.retryAfter ? ` za ${gwError.retryAfter}s` : ''}.`;
+            return formatMessage(msgs.gatewayRateLimited, { retry: gwError.retryAfter ? ` ${gwError.retryAfter}s` : '' });
         case 'OPERATION_NOT_ENTITLED':
-            return `🔒 Operacja nie jest dostępna dla tego serwera.`;
+            return msgs.gatewayNotEntitled;
         case 'VALIDATION_FAILED':
         case 'GATEWAY_UNAVAILABLE':
             return msgs.updateError;
         default:
-            return `❌ ${gwError.message || 'Żądanie odrzucone przez gateway.'}`;
+            return `❌ ${gwError.message || msgs.gatewayDefault}`;
     }
 }
 
@@ -1639,23 +1639,25 @@ class InteractionHandler {
 
             // Powiadomienie o skonfigurowanym serwerze — webhook logów lub fallback na kanał raportów
             try {
+                const isEng = (newData.lang || 'pol') === 'eng';
+                const tCfg = (p, e) => isEng ? e : p;
                 let configEmbed;
                 if (!wasAlreadyConfigured) {
                     // Pierwsza konfiguracja — pełny embed ze wszystkimi ustawieniami
                     configEmbed = new EmbedBuilder()
                         .setColor(0x5865F2)
-                        .setTitle('⚙️ Nowy serwer skonfigurowany')
+                        .setTitle(tCfg('⚙️ Nowy serwer skonfigurowany', '⚙️ New server configured'))
                         .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
                         .addFields(
-                            { name: 'Serwer', value: interaction.guild.name },
-                            { name: 'Administrator', value: interaction.member?.displayName || interaction.user.username },
-                            { name: 'Kanał bota', value: `<#${newData.allowedChannelId}>` },
-                            { name: 'Język', value: newData.lang || 'pol' },
+                            { name: tCfg('Serwer', 'Server'), value: interaction.guild.name },
+                            { name: tCfg('Administrator', 'Administrator'), value: interaction.member?.displayName || interaction.user.username },
+                            { name: tCfg('Kanał bota', 'Bot channel'), value: `<#${newData.allowedChannelId}>` },
+                            { name: tCfg('Język', 'Language'), value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
-                            { name: 'Role TOP', value: newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak' },
-                            { name: 'Raporty Global TOP10', value: newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone' },
-                            { name: 'Kanał raportów', value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
-                            { name: 'Weryfikacja społeczności', value: newData.communityVerification?.enabled ? `✅ Włączona (próg: ${newData.communityVerification.threshold})` : '❌ Wyłączona' }
+                            { name: 'Role TOP', value: newData.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None') },
+                            { name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: newData.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled') },
+                            { name: tCfg('Kanał raportów', 'Reports channel'), value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
+                            { name: tCfg('Weryfikacja społeczności', 'Community verification'), value: newData.communityVerification?.enabled ? `${tCfg('✅ Włączona', '✅ Enabled')} (${tCfg('próg', 'threshold')}: ${newData.communityVerification.threshold})` : tCfg('❌ Wyłączona', '❌ Disabled') }
                         )
                         .setTimestamp();
                 } else {
@@ -1665,15 +1667,15 @@ class InteractionHandler {
 
                     if (old?.allowedChannelId !== newData.allowedChannelId) {
                         const oldVal = old?.allowedChannelId ? `<#${old.allowedChannelId}>` : '—';
-                        diffFields.push({ name: 'Kanał bota', value: `${oldVal} → <#${newData.allowedChannelId}>` });
+                        diffFields.push({ name: tCfg('Kanał bota', 'Bot channel'), value: `${oldVal} → <#${newData.allowedChannelId}>` });
                     }
                     if ((old?.invalidReportChannelId || null) !== newData.invalidReportChannelId) {
                         const oldVal = old?.invalidReportChannelId ? `<#${old.invalidReportChannelId}>` : '—';
                         const newVal = newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—';
-                        diffFields.push({ name: 'Kanał raportów', value: `${oldVal} → ${newVal}` });
+                        diffFields.push({ name: tCfg('Kanał raportów', 'Reports channel'), value: `${oldVal} → ${newVal}` });
                     }
                     if ((old?.lang || 'pol') !== newData.lang) {
-                        diffFields.push({ name: 'Język', value: `${old?.lang || 'pol'} → ${newData.lang}` });
+                        diffFields.push({ name: tCfg('Język', 'Language'), value: `${old?.lang || 'pol'} → ${newData.lang}` });
                     }
                     if ((old?.tag || null) !== newData.tag) {
                         diffFields.push({ name: 'Tag', value: `${old?.tag || '—'} → ${newData.tag || '—'}` });
@@ -1681,19 +1683,19 @@ class InteractionHandler {
                     const oldRolesJson = JSON.stringify(old?.topRoles || null);
                     const newRolesJson = JSON.stringify(newData.topRoles || null);
                     if (oldRolesJson !== newRolesJson) {
-                        const oldLabel = old?.topRoles ? '✅ Skonfigurowane' : '❌ Brak';
-                        const newLabel = newData.topRoles ? '✅ Skonfigurowane' : '❌ Brak';
+                        const oldLabel = old?.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None');
+                        const newLabel = newData.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None');
                         diffFields.push({ name: 'Role TOP', value: `${oldLabel} → ${newLabel}` });
                     }
                     if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
-                        const oldVal = old?.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
-                        const newVal = newData.globalTop3Notifications !== false ? '✅ Włączone' : '❌ Wyłączone';
-                        diffFields.push({ name: 'Raporty Global TOP10', value: `${oldVal} → ${newVal}` });
+                        const oldVal = old?.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
+                        const newVal = newData.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
+                        diffFields.push({ name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: `${oldVal} → ${newVal}` });
                     }
                     const oldCvEnabled = old?.communityVerification?.enabled || false;
                     const newCvEnabled = newData.communityVerification?.enabled || false;
                     if (oldCvEnabled !== newCvEnabled) {
-                        diffFields.push({ name: 'Weryfikacja społeczności', value: `${oldCvEnabled ? '✅ Włączona' : '❌ Wyłączona'} → ${newCvEnabled ? '✅ Włączona' : '❌ Wyłączona'}` });
+                        diffFields.push({ name: tCfg('Weryfikacja społeczności', 'Community verification'), value: `${oldCvEnabled ? tCfg('✅ Włączona', '✅ Enabled') : tCfg('❌ Wyłączona', '❌ Disabled')} → ${newCvEnabled ? tCfg('✅ Włączona', '✅ Enabled') : tCfg('❌ Wyłączona', '❌ Disabled')}` });
                     }
                     if (newCvEnabled) {
                         const oldCvChannel = old?.communityVerification?.rejectedChannelId || null;
@@ -1701,23 +1703,23 @@ class InteractionHandler {
                         if (oldCvChannel !== newCvChannel) {
                             const oldVal = oldCvChannel ? `<#${oldCvChannel}>` : '—';
                             const newVal = newCvChannel ? `<#${newCvChannel}>` : '—';
-                            diffFields.push({ name: 'Kanał weryfikacji', value: `${oldVal} → ${newVal}` });
+                            diffFields.push({ name: tCfg('Kanał weryfikacji', 'Verification channel'), value: `${oldVal} → ${newVal}` });
                         }
                         const oldThreshold = old?.communityVerification?.threshold || 5;
                         const newThreshold = newData.communityVerification?.threshold || 5;
                         if (oldThreshold !== newThreshold) {
-                            diffFields.push({ name: 'Próg zgłoszeń', value: `${oldThreshold} → ${newThreshold}` });
+                            diffFields.push({ name: tCfg('Próg zgłoszeń', 'Report threshold'), value: `${oldThreshold} → ${newThreshold}` });
                         }
                     }
 
                     if (diffFields.length === 0) return; // nic się nie zmieniło
                     configEmbed = new EmbedBuilder()
                         .setColor(0xFEE75C)
-                        .setTitle('⚙️ Zmiana konfiguracji serwera')
+                        .setTitle(tCfg('⚙️ Zmiana konfiguracji serwera', '⚙️ Server configuration changed'))
                         .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
                         .addFields(
-                            { name: 'Serwer', value: interaction.guild.name, inline: true },
-                            { name: 'Administrator', value: interaction.member?.displayName || interaction.user.username, inline: true },
+                            { name: tCfg('Serwer', 'Server'), value: interaction.guild.name, inline: true },
+                            { name: tCfg('Administrator', 'Administrator'), value: interaction.member?.displayName || interaction.user.username, inline: true },
                             ...diffFields
                         )
                         .setTimestamp();
@@ -2060,8 +2062,9 @@ class InteractionHandler {
             });
             return;
         }
+        const blockLabels = { permanent: t('∞ Permanentnie', '∞ Permanent'), expired: t('Wygasła', 'Expired') };
         const options = filtered.slice(0, 25).map(entry => {
-            const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+            const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil, blockLabels);
             return {
                 label: entry.username.slice(0, 100),
                 description: `${entry.guildName} | ${t('Pozostało', 'Remaining')}: ${timeLabel}`.slice(0, 100),
@@ -2076,7 +2079,7 @@ class InteractionHandler {
                 .setDescription(
                     subtitle + '\n\n' +
                     filtered.slice(0, 25).map((entry, i) => {
-                        const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil);
+                        const timeLabel = this.userBlockService.formatTimeRemaining(entry.blockedUntil, blockLabels);
                         return `${i + 1}. **${entry.username}** — ${entry.guildName} | \`${timeLabel}\``;
                     }).join('\n')
                 )
@@ -2266,7 +2269,7 @@ class InteractionHandler {
                 true // blockedByHeadAdmin
             );
             const timeLabel = blockedUntil
-                ? this.userBlockService.formatTimeRemaining(blockedUntil)
+                ? this.userBlockService.formatTimeRemaining(blockedUntil, { permanent: t('∞ Permanentnie', '∞ Permanent'), expired: t('Wygasła', 'Expired') })
                 : t('∞ Permanentnie', '∞ Permanent');
             logger.info(`🔒 Head Admin zablokował ${username} (${targetUserId}) na serwerze ${guildName} — ${timeLabel}`);
             await interaction.editReply({
@@ -3526,7 +3529,7 @@ class InteractionHandler {
                     return;
                 }
                 const prefill = this._infoSessions.get(interaction.user.id) || {};
-                await interaction.showModal(this._buildInfoModal(prefill));
+                await interaction.showModal(this._buildInfoModal(prefill, interaction.guildId));
                 return;
             }
             if (customId === 'panel_tester') {
@@ -3886,9 +3889,10 @@ class InteractionHandler {
                 if (ch) {
                     const orig = await ch.messages.fetch(messageId).catch(() => null);
                     if (orig) {
+                        const cvMsgs = this.msgs(session.guildId);
                         const disabledBtn = new ButtonBuilder()
                             .setCustomId(`cv_vote_${messageId}`)
-                            .setLabel(`⚠️ Zgłoszono`)
+                            .setLabel(cvMsgs.cvReported || '⚠️ Reported')
                             .setStyle(ButtonStyle.Secondary)
                             .setDisabled(true);
                         await orig.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] }).catch(() => {});
@@ -3947,7 +3951,7 @@ class InteractionHandler {
                         await this._dmPermissionAlert(client, session.guildId, {
                             channelId: cvCfg.rejectedChannelId,
                             missingPerms: e.code === 50001 ? ['ViewChannel'] : ['SendMessages', 'EmbedLinks'],
-                            context: 'Kanał zgłoszeń weryfikacji społeczności (CV)',
+                            context: { pol: 'Kanał zgłoszeń weryfikacji społeczności (CV)', eng: 'Community verification reports channel (CV)' },
                         });
                     }
                 }
@@ -4346,7 +4350,7 @@ class InteractionHandler {
             if (players.length === 0) {
                 const emptyButtons = this.rankingService.createRankingButtons(0, 1, false, msgs, roleRows, btnOptions);
                 await interaction.editReply({
-                    content: `📋 Brak graczy z rolą **${roleName}** w rankingu.`,
+                    content: formatMessage(msgs.roleRankingEmpty, { roleName }),
                     embeds: [],
                     components: emptyButtons
                 });
@@ -5039,12 +5043,13 @@ class InteractionHandler {
      * Buduje modal do tworzenia/edycji wiadomości informacyjnej.
      * @param {{ title?: string, description?: string, icon?: string, image?: string }} prefill
      */
-    _buildInfoModal(prefill = {}) {
+    _buildInfoModal(prefill = {}, guildId = null) {
+        const tM = guildId ? this._panelT(guildId) : (p, _e) => p;
         const titleInput = new TextInputBuilder()
             .setCustomId('embedTitle')
-            .setLabel('Tytuł (opcjonalnie)')
+            .setLabel(tM('Tytuł (opcjonalnie)', 'Title (optional)'))
             .setStyle(TextInputStyle.Short)
-            .setPlaceholder('Tytuł wiadomości')
+            .setPlaceholder(tM('Tytuł wiadomości', 'Message title'))
             .setRequired(false)
             .setMaxLength(256);
         if (prefill.title) titleInput.setValue(prefill.title);
@@ -5069,7 +5074,7 @@ class InteractionHandler {
 
         const iconInput = new TextInputBuilder()
             .setCustomId('embedIcon')
-            .setLabel('Ikona URL (opcjonalnie)')
+            .setLabel(tM('Ikona URL (opcjonalnie)', 'Icon URL (optional)'))
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('https://...')
             .setRequired(false);
@@ -5077,7 +5082,7 @@ class InteractionHandler {
 
         const imageInput = new TextInputBuilder()
             .setCustomId('embedImage')
-            .setLabel('Obraz URL (opcjonalnie)')
+            .setLabel(tM('Obraz URL (opcjonalnie)', 'Image URL (optional)'))
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('https://...')
             .setRequired(false);
@@ -5085,7 +5090,7 @@ class InteractionHandler {
 
         return new ModalBuilder()
             .setCustomId('info_modal')
-            .setTitle('Nowa wiadomość informacyjna')
+            .setTitle(tM('Nowa wiadomość informacyjna', 'New Info Message'))
             .addComponents(
                 new ActionRowBuilder().addComponents(titleInput),
                 new ActionRowBuilder().addComponents(descPolInput),
@@ -5122,7 +5127,7 @@ class InteractionHandler {
             return;
         }
         const prefill = this._infoSessions.get(interaction.user.id) || {};
-        await interaction.showModal(this._buildInfoModal(prefill));
+        await interaction.showModal(this._buildInfoModal(prefill, interaction.guildId));
     }
 
     /**
@@ -5363,7 +5368,7 @@ class InteractionHandler {
      */
     async _handleInfoEdit(interaction) {
         const data = this._infoSessions.get(interaction.user.id) || {};
-        await interaction.showModal(this._buildInfoModal(data));
+        await interaction.showModal(this._buildInfoModal(data, interaction.guildId));
     }
 
     /**
@@ -5707,7 +5712,7 @@ class InteractionHandler {
         const imageUrl = interaction.message.embeds[0]?.image?.url;
         if (!imageUrl) {
             await interaction.editReply({
-                content: '❌ Brak zdjęcia w raporcie.',
+                content: msgs.analyzeNoImage,
                 embeds: interaction.message.embeds,
                 attachments: [],
                 components: [],
@@ -5863,7 +5868,7 @@ class InteractionHandler {
         } catch (err) {
             gl.error(`❌ [Analizuj] Błąd ee_analyze: ${err.message}`);
             await interaction.editReply({
-                content: `❌ Błąd analizy: ${err.message}`,
+                content: formatMessage(msgs.analyzeError, { error: err.message }),
                 embeds: interaction.message.embeds,
                 components: [],
             }).catch(() => {});
@@ -5879,6 +5884,10 @@ class InteractionHandler {
             const guildName = guild?.name || guildId;
             const isPol = storedCfg?.lang !== 'eng';
 
+            const ctxText = typeof context === 'object'
+                ? (isPol ? context.pol : context.eng)
+                : context;
+
             const missingList = missingPerms.length
                 ? missingPerms.map(p => `• **${p}**`).join('\n')
                 : isPol ? '• *(nieznane uprawnienie)*' : '• *(unknown permission)*';
@@ -5887,8 +5896,8 @@ class InteractionHandler {
                 .setColor(0xFF4444)
                 .setTitle(isPol ? '⚠️ EndersEcho — brak uprawnień' : '⚠️ EndersEcho — missing permissions')
                 .setDescription(isPol
-                    ? `Bot napotkał błąd uprawnień na serwerze **${guildName}** i nie może wykonać swojego zadania.\n\n**Kanał:** <#${channelId}>\n**Kontekst:** ${context}\n\n**Brakujące uprawnienia:**\n${missingList}\n\nPrzejdź do ustawień kanału i nadaj botowi brakujące uprawnienia, lub zmień kanał przez \`/configure\`.`
-                    : `The bot encountered a permission error on **${guildName}** and cannot complete its task.\n\n**Channel:** <#${channelId}>\n**Context:** ${context}\n\n**Missing permissions:**\n${missingList}\n\nGo to the channel settings and grant the bot the missing permissions, or change the channel via \`/configure\`.`
+                    ? `Bot napotkał błąd uprawnień na serwerze **${guildName}** i nie może wykonać swojego zadania.\n\n**Kanał:** <#${channelId}>\n**Kontekst:** ${ctxText}\n\n**Brakujące uprawnienia:**\n${missingList}\n\nPrzejdź do ustawień kanału i nadaj botowi brakujące uprawnienia, lub zmień kanał przez \`/configure\`.`
+                    : `The bot encountered a permission error on **${guildName}** and cannot complete its task.\n\n**Channel:** <#${channelId}>\n**Context:** ${ctxText}\n\n**Missing permissions:**\n${missingList}\n\nGo to the channel settings and grant the bot the missing permissions, or change the channel via \`/configure\`.`
                 )
                 .setTimestamp();
 
@@ -6046,7 +6055,7 @@ class InteractionHandler {
                             await this._dmPermissionAlert(interaction.client, interaction.guildId, {
                                 channelId: perGuildChannelId,
                                 missingPerms: missing,
-                                context: 'Kanał raportów odrzuconych screenów',
+                                context: { pol: 'Kanał raportów odrzuconych screenów', eng: 'Rejected screenshots reports channel' },
                             });
                         } catch (diagErr) {
                             gl.warn(`⚠️ Nie można wysłać raportu do per-guild kanału (${err.code} ${err.message}): diagnostyka nieudana — ${diagErr.message}`);
@@ -6146,7 +6155,8 @@ class InteractionHandler {
         }
 
         if (userId !== interaction.user.id) {
-            await interaction.reply({ content: 'Tylko osoba która użyła komendy może klikać te przyciski.', flags: ['Ephemeral'] });
+            const tTk = this._panelT(interaction.guildId);
+            await interaction.reply({ content: tTk('Tylko osoba która użyła komendy może klikać te przyciski.', 'Only the person who used the command can click these buttons.'), flags: ['Ephemeral'] });
             return;
         }
 
@@ -7109,7 +7119,7 @@ class InteractionHandler {
     async _handlePanelBanGuildConfirm(interaction, guildIdToBan) {
         const t = this._panelT(interaction.guildId);
         if (!this.guildBanService) {
-            await interaction.update({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription('❌ GuildBanService niedostępny.')], components: [] });
+            await interaction.update({ embeds: [new EmbedBuilder().setColor(0xFF0000).setDescription(t('❌ GuildBanService niedostępny.', '❌ GuildBanService unavailable.'))], components: [] });
             return;
         }
 

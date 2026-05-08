@@ -200,14 +200,16 @@ client.on('interactionCreate', async (interaction) => {
         logger.error('Błąd podczas obsługi interakcji:', error);
 
         try {
+            const errMsgs = interaction.guildId ? config.getMessages(interaction.guildId) : null;
+            const errContent = errMsgs?.commandError || '❌ An error occurred while processing the command.';
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+                    content: errContent,
                     flags: ['Ephemeral']
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({
-                    content: '❌ Wystąpił błąd podczas przetwarzania komendy.'
+                    content: errContent
                 });
             }
         } catch (replyError) {
@@ -235,13 +237,15 @@ client.on('guildCreate', async (guild) => {
                 '⚙️ **EndersEcho** has been added to your server!\nAn administrator must run **/configure** to set up the bot before it can be used.'
             ).catch(() => {});
         }
+        const guildLang = guildConfigService.getConfig(guild.id)?.lang || 'pol';
+        const tGC = guildLang === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
         await sendAdminNotification(client, new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle('🆕 Bot dodany do serwera')
+            .setTitle(tGC('🆕 Bot dodany do serwera', '🆕 Bot added to server'))
             .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
             .addFields(
-                { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` },
-                { name: 'Członkowie', value: `${guild.memberCount}` }
+                { name: tGC('Serwer', 'Server'), value: `${guild.name} (\`${guild.id}\`)` },
+                { name: tGC('Członkowie', 'Members'), value: `${guild.memberCount}` }
             )
             .setTimestamp()
         );
@@ -333,12 +337,14 @@ client.on('guildDelete', async (guild) => {
     } catch (err) {
         logger.error(`Błąd guildLeft (serwer "${guild.name}"):`, err);
     }
+    const guildLangDel = guildConfigService.getConfig(guild.id)?.lang || 'pol';
+    const tGD = guildLangDel === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
     await sendAdminNotification(client, new EmbedBuilder()
         .setColor(0xED4245)
-        .setTitle('🚪 Bot usunięty z serwera')
+        .setTitle(tGD('🚪 Bot usunięty z serwera', '🚪 Bot removed from server'))
         .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
         .addFields(
-            { name: 'Serwer', value: `${guild.name} (\`${guild.id}\`)` }
+            { name: tGD('Serwer', 'Server'), value: `${guild.name} (\`${guild.id}\`)` }
         )
         .setTimestamp()
     );
