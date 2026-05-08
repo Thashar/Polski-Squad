@@ -882,10 +882,12 @@ class InteractionHandler {
             else tierBtns2.push(btn);
         }
 
+        const assigning = state.topRolesTemp?.tierAssigning || {};
+        const hasRolesAssigned = Object.values(assigning).some(v => v !== null && v !== undefined);
         const assignBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_assign')
             .setLabel(t('Przydziel role ✅', 'Assign Roles ✅'))
-            .setStyle(ButtonStyle.Success)
+            .setStyle(hasRolesAssigned ? ButtonStyle.Success : ButtonStyle.Primary)
             .setDisabled(tierRanges.length === 0);
         const resetBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_reset')
@@ -894,7 +896,7 @@ class InteractionHandler {
             .setDisabled(tierRanges.length === 0);
         const skipBtn = new ButtonBuilder()
             .setCustomId('cfg_roles_skip')
-            .setLabel(t('← Cofnij', '← Back'))
+            .setLabel(tierRanges.length > 0 ? t('Wyłącz 🔕', 'Disable 🔕') : t('← Cofnij', '← Back'))
             .setStyle(ButtonStyle.Secondary);
 
         await interaction.update({
@@ -1307,7 +1309,19 @@ class InteractionHandler {
 
         // Pomiń cały krok 5 (role TOP)
         if (customId === 'cfg_roles_skip') {
-            state.topRoles = null;
+            const tierRangesNow = state.topRolesTemp?.tierRanges || [];
+            if (tierRangesNow.length > 0) {
+                // Wyłącz feature ale zachowaj konfigurację progów i ról
+                const assigningNow = state.topRolesTemp?.tierAssigning || {};
+                const tiers = tierRangesNow.map((r, i) => ({
+                    from: r.from,
+                    to: r.to,
+                    roleId: assigningNow[i] || null
+                }));
+                state.topRoles = { tiers, disabled: true };
+            } else {
+                state.topRoles = null;
+            }
             state.rolesSkipped = true;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);

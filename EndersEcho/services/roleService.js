@@ -9,6 +9,7 @@ const logger = createBotLogger('EndersEcho');
  */
 function normalizeTiers(topRoles) {
     if (!topRoles) return null;
+    if (topRoles.disabled) return null; // Feature wyłączone, konfiguracja zachowana ale nieaktywna
     if (topRoles.tiers) return topRoles;
 
     // Stary format → nowy
