@@ -852,8 +852,10 @@ class InteractionHandler {
             'Skonfiguruj progi rangowe dla ról TOP. Każdy próg definiuje zakres pozycji rankingowych, które otrzymują daną rolę.\n\nKlikaj kolejno przyciski aby ustawiać progi. Każdy kolejny musi zaczynać od miejsca gdzie poprzedni się skończył.\n\n**Przykład:** Próg 1 = `1-3`, Próg 2 = `4-10`, Próg 3 = `11-30`\n\nPo ustawieniu progów kliknij **Przydziel role** aby wybrać role dla każdego progu.',
             'Configure rank thresholds for TOP roles. Each threshold defines a range of ranking positions that receive a specific role.\n\nClick buttons in order to set each threshold. Each next one must start where the previous ended.\n\n**Example:** Tier 1 = `1-3`, Tier 2 = `4-10`, Tier 3 = `11-30`\n\nAfter setting tiers, click **Assign Roles** to pick a role for each tier.'
         );
+        const fmtRange = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
+
         if (tierRanges.length > 0) {
-            const lines = tierRanges.map((r, i) => `**${t('Próg', 'Tier')} ${i + 1}:** ${r.from}–${r.to}`).join('\n');
+            const lines = tierRanges.map((r, i) => `**${t('Próg', 'Tier')} ${i + 1}:** ${fmtRange(r)}`).join('\n');
             desc += `\n\n${t('**Skonfigurowane progi:**', '**Configured tiers:**')}\n${lines}`;
         }
 
@@ -869,12 +871,12 @@ class InteractionHandler {
             const isConfigured = !!r;
             const isNext = i === nextActive;
             let label = `${t('Próg', 'Tier')} ${i + 1}`;
-            if (isConfigured) label += ` (${r.from}–${r.to}) ✅`;
+            if (isConfigured) label += ` (${fmtRange(r)}) ✅`;
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_tier_${i}`)
                 .setLabel(label)
                 .setStyle(isConfigured ? ButtonStyle.Success : (isNext ? ButtonStyle.Primary : ButtonStyle.Secondary))
-                .setDisabled(!isConfigured && !isNext);
+                .setDisabled(!isNext); // aktywny TYLKO następny do skonfigurowania
             if (i < 5) tierBtns1.push(btn);
             else tierBtns2.push(btn);
         }
@@ -912,14 +914,15 @@ class InteractionHandler {
         const tier = tierRanges[tierIdx];
         const assigning = state.topRolesTemp?.tierAssigning || {};
 
+        const fmtR = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
         const selectedLines = tierRanges.slice(0, tierIdx).map((r, i) => {
             const roleId = assigning[i];
-            return `**${t('Próg', 'Tier')} ${i + 1}** (${r.from}–${r.to}) — ${roleId ? `<@&${roleId}>` : t('*(pominięto)*', '*(skipped)*')}`;
+            return `**${t('Próg', 'Tier')} ${i + 1}** (${fmtR(r)}) — ${roleId ? `<@&${roleId}>` : t('*(pominięto)*', '*(skipped)*')}`;
         });
 
         let desc = t(
-            `Wybierz rolę Discord dla **Progu ${tierIdx + 1}** (miejsca ${tier.from}–${tier.to}).\n\nMożesz pominąć jeśli nie chcesz przyznawać roli za te pozycje.`,
-            `Select a Discord role for **Tier ${tierIdx + 1}** (positions ${tier.from}–${tier.to}).\n\nYou can skip if you don't want to assign a role for these positions.`
+            `Wybierz rolę Discord dla **Progu ${tierIdx + 1}** (miejsce${tier.from === tier.to ? '' : 'a'} ${fmtR(tier)}).\n\nMożesz pominąć jeśli nie chcesz przyznawać roli za te pozycje.`,
+            `Select a Discord role for **Tier ${tierIdx + 1}** (position${tier.from === tier.to ? '' : 's'} ${fmtR(tier)}).\n\nYou can skip if you don't want to assign a role for these positions.`
         );
         if (selectedLines.length > 0) {
             desc += `\n\n${t('**Wybrane dotychczas:**', '**Selected so far:**')}\n${selectedLines.join('\n')}`;
@@ -933,7 +936,7 @@ class InteractionHandler {
         const existingRoleId = assigning[tierIdx];
         const roleSelect = new RoleSelectMenuBuilder()
             .setCustomId(`cfg_roles_sel_${tierIdx}`)
-            .setPlaceholder(t(`Wybierz rolę dla Progu ${tierIdx + 1} (${tier.from}–${tier.to})`, `Select role for Tier ${tierIdx + 1} (${tier.from}–${tier.to})`))
+            .setPlaceholder(t(`Wybierz rolę dla Progu ${tierIdx + 1} (${fmtR(tier)})`, `Select role for Tier ${tierIdx + 1} (${fmtR(tier)})`))
             .setMinValues(1)
             .setMaxValues(1);
         if (existingRoleId) {
@@ -1182,7 +1185,7 @@ class InteractionHandler {
             const tierRanges = state.topRolesTemp.tierRanges || [];
             const existingRange = tierRanges[tierIdx];
             const defaultVal = existingRange
-                ? `${existingRange.from}-${existingRange.to}`
+                ? (existingRange.from === existingRange.to ? `${existingRange.from}` : `${existingRange.from}-${existingRange.to}`)
                 : (tierIdx > 0 && tierRanges[tierIdx - 1] ? `${tierRanges[tierIdx - 1].to + 1}` : '');
             const modal = new ModalBuilder()
                 .setCustomId(`cfg_tier_modal_${tierIdx}`)
@@ -1211,12 +1214,42 @@ class InteractionHandler {
             return;
         }
 
-        // Wyczyść wszystkie progi
+        // Wyczyść wszystkie progi — ekran potwierdzenia
         if (customId === 'cfg_tier_reset') {
+            const confirmEmbed = new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle(t('⚠️ Usuń konfigurację progów?', '⚠️ Clear tier configuration?'))
+                .setDescription(t(
+                    'Czy na pewno chcesz usunąć **wszystkie skonfigurowane progi**?\n\nTej operacji nie da się cofnąć.',
+                    'Are you sure you want to remove **all configured tiers**?\n\nThis operation cannot be undone.'
+                ));
+            const confirmBtn = new ButtonBuilder()
+                .setCustomId('cfg_tier_reset_ok')
+                .setLabel(t('Tak, usuń wszystkie progi', 'Yes, clear all tiers'))
+                .setStyle(ButtonStyle.Danger);
+            const cancelBtn = new ButtonBuilder()
+                .setCustomId('cfg_tier_reset_cancel')
+                .setLabel(t('Anuluj', 'Cancel'))
+                .setStyle(ButtonStyle.Secondary);
+            await interaction.update({
+                embeds: [confirmEmbed],
+                components: [new ActionRowBuilder().addComponents(confirmBtn, cancelBtn)]
+            });
+            return;
+        }
+
+        // Potwierdzone usunięcie progów
+        if (customId === 'cfg_tier_reset_ok') {
             if (!state.topRolesTemp) state.topRolesTemp = {};
             state.topRolesTemp.tierRanges = [];
             delete state.topRolesTemp.tierAssigning;
             this._configWizard.set(key, state);
+            await this._showTierConfigScreen(interaction, state, key);
+            return;
+        }
+
+        // Anuluj usunięcie progów — wróć do ekranu progów
+        if (customId === 'cfg_tier_reset_cancel') {
             await this._showTierConfigScreen(interaction, state, key);
             return;
         }
@@ -3544,7 +3577,7 @@ class InteractionHandler {
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
                 customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' ||
                 customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') ||
-                /^cfg_tier_\d+$/.test(customId) || customId === 'cfg_tier_assign' || customId === 'cfg_tier_reset' ||
+                /^cfg_tier_\d+$/.test(customId) || customId === 'cfg_tier_assign' || customId === 'cfg_tier_reset' || customId === 'cfg_tier_reset_ok' || customId === 'cfg_tier_reset_cancel' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
