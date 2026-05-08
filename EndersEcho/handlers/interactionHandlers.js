@@ -1007,7 +1007,7 @@ class InteractionHandler {
             .setPlaceholder(t(`Wybierz rolę dla Progu ${tierIdx + 1} (${fmtR(tier)})`, `Select role for Tier ${tierIdx + 1} (${fmtR(tier)})`))
             .setMinValues(1)
             .setMaxValues(1);
-        if (existingRoleId) {
+        if (existingRoleId && /^\d{17,20}$/.test(String(existingRoleId))) {
             try { roleSelect.setDefaultRoles([existingRoleId]); } catch { /* ignoruj */ }
         }
 
