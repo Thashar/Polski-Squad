@@ -127,7 +127,6 @@ async function initializeBot() {
             }
             await require('fs').promises.writeFile(guildCfgPath, JSON.stringify(allCfgs, null, 2), 'utf8');
             logger.info(`🔄 Reset topRoles: wyczyszczono ${resetCount} serwerów`);
-            }
         } catch (err) {
             if (err.code !== 'ENOENT') logger.warn('Reset topRoles błąd:', err.message);
         }
