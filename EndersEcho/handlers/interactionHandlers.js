@@ -870,6 +870,8 @@ class InteractionHandler {
 
         const assigning = state.topRolesTemp?.tierAssigning || {};
         const hasRolesAssigned = Object.values(assigning).some(v => v !== null && v !== undefined);
+        const allTiersAssigned = tierRanges.length > 0 && Object.keys(assigning).length >= tierRanges.length;
+
         const assignBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_assign')
             .setLabel(t('Przydziel role ✅', 'Assign Roles ✅'))
@@ -880,17 +882,26 @@ class InteractionHandler {
             .setLabel(t('Usuń konfigurację progów i ról 🗑️', 'Clear Tier & Role Config 🗑️'))
             .setStyle(ButtonStyle.Danger)
             .setDisabled(tierRanges.length === 0);
-        const skipBtn = new ButtonBuilder()
+        const backBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_back')
             .setLabel(t('← Wstecz', '← Back'))
             .setStyle(ButtonStyle.Secondary);
+
+        const bottomBtns = [assignBtn];
+        if (allTiersAssigned) {
+            bottomBtns.push(new ButtonBuilder()
+                .setCustomId('cfg_tier_accept')
+                .setLabel(t('Zaakceptuj zmiany ✅', 'Accept Changes ✅'))
+                .setStyle(ButtonStyle.Success));
+        }
+        bottomBtns.push(resetBtn, backBtn);
 
         await interaction.update({
             embeds: [embed],
             components: [
                 new ActionRowBuilder().addComponents(...tierBtns1),
                 new ActionRowBuilder().addComponents(...tierBtns2),
-                new ActionRowBuilder().addComponents(assignBtn, resetBtn, skipBtn),
+                new ActionRowBuilder().addComponents(...bottomBtns),
             ]
         });
     }
@@ -1112,18 +1123,10 @@ class InteractionHandler {
 
         const tierRanges = state.topRolesTemp.tierRanges || [];
         const nextIdx = tierIdx + 1;
+        this._configWizard.set(key, state);
         if (nextIdx >= tierRanges.length) {
-            const tiers = tierRanges.map((r, i) => ({
-                from: r.from,
-                to: r.to,
-                roleId: state.topRolesTemp.tierAssigning[i] || null
-            }));
-            state.topRoles = tiers.some(t => t.roleId) ? { tiers } : null;
-            state.rolesSkipped = !state.topRoles;
-            state.topRolesTemp = undefined;
-            this._configWizard.set(key, state);
-            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
-            await interaction.update({ embeds: [embed], components: rows });
+            // Wróć do ekranu progów — "Zaakceptuj zmiany" zatwierdza do dashboardu
+            await this._showTierConfigScreen(interaction, state, key);
         } else {
             await this._showTierRoleAssign(interaction, state, key, nextIdx);
         }
@@ -1329,18 +1332,11 @@ class InteractionHandler {
             state.topRolesTemp.tierAssigning[tierIdx] = null;
             const tierRanges = state.topRolesTemp.tierRanges || [];
             const nextIdx = tierIdx + 1;
+            this._configWizard.set(key, state);
             if (nextIdx >= tierRanges.length) {
-                const tiers = tierRanges.map((r, i) => ({
-                    from: r.from, to: r.to, roleId: state.topRolesTemp.tierAssigning[i] || null
-                }));
-                state.topRoles = tiers.some(t => t.roleId) ? { tiers } : null;
-                state.rolesSkipped = !state.topRoles;
-                state.topRolesTemp = undefined;
-                this._configWizard.set(key, state);
-                const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
-                await interaction.update({ embeds: [embed], components: rows });
+                // Wróć do ekranu progów — "Zaakceptuj zmiany" zatwierdza do dashboardu
+                await this._showTierConfigScreen(interaction, state, key);
             } else {
-                this._configWizard.set(key, state);
                 await this._showTierRoleAssign(interaction, state, key, nextIdx);
             }
             return;
@@ -1362,6 +1358,24 @@ class InteractionHandler {
         }
 
         // Pomiń cały krok 5 (role TOP)
+        // Zaakceptuj konfigurację progów i ról → zapisz do state i idź do dashboardu
+        if (customId === 'cfg_tier_accept') {
+            const tierRangesNow = state.topRolesTemp?.tierRanges || [];
+            const assigningNow = state.topRolesTemp?.tierAssigning || {};
+            if (tierRangesNow.length > 0) {
+                const tiers = tierRangesNow.map((r, i) => ({
+                    from: r.from, to: r.to, roleId: assigningNow[i] || null
+                }));
+                state.topRoles = tiers.some(t => t.roleId) ? { tiers } : null;
+                state.rolesSkipped = !state.topRoles;
+                state.topRolesTemp = undefined;
+            }
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
         // Wstecz z ekranu progów → krok 5 landing (bez zmian w state)
         if (customId === 'cfg_tier_back') {
             await this._showStep5Screen(interaction, state);
@@ -3233,6 +3247,7 @@ class InteractionHandler {
         if (customId === 'cfg_roles_skip') return 'Wyłącz/Pomiń role TOP';
         if (customId === 'cfg_roles_enable') return 'Włącz role TOP';
         if (customId === 'cfg_tier_back') return '← Wstecz (ekran progów → krok 5)';
+        if (customId === 'cfg_tier_accept') return 'Zaakceptuj konfigurację ról TOP';
         if (/^cfg_tier_\d+$/.test(customId)) return `Otwórz modal zakresu — próg ${parseInt(customId.replace('cfg_tier_', ''), 10) + 1}`;
         if (customId === 'cfg_tier_assign') return 'Przydziel role do progów — start';
         if (customId === 'cfg_tier_reset') return 'Usuń konfigurację progów';
@@ -3679,7 +3694,7 @@ class InteractionHandler {
             // === Przyciski wizarda /configure ===
             if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
-                customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' || customId === 'cfg_tier_back' || customId === 'cfg_roles_enable' ||
+                customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' || customId === 'cfg_tier_back' || customId === 'cfg_tier_accept' || customId === 'cfg_roles_enable' ||
                 customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') ||
                 /^cfg_tier_\d+$/.test(customId) || customId === 'cfg_tier_assign' || customId === 'cfg_tier_reset' || customId === 'cfg_tier_reset_ok' || customId === 'cfg_tier_reset_cancel' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
