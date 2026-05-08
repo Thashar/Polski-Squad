@@ -862,7 +862,7 @@ class InteractionHandler {
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_tier_${i}`)
                 .setLabel(label)
-                .setStyle(isConfigured ? ButtonStyle.Success : (isNext ? ButtonStyle.Primary : ButtonStyle.Secondary))
+                .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!isNext && !isLastConfigured);
             if (i < 5) tierBtns1.push(btn);
             else tierBtns2.push(btn);
@@ -874,8 +874,8 @@ class InteractionHandler {
 
         const assignBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_assign')
-            .setLabel(t('Przydziel role ✅', 'Assign Roles ✅'))
-            .setStyle(hasRolesAssigned ? ButtonStyle.Success : ButtonStyle.Primary)
+            .setLabel(hasRolesAssigned ? t('Przydziel role ✅', 'Assign Roles ✅') : t('Przydziel role', 'Assign Roles'))
+            .setStyle(ButtonStyle.Secondary)
             .setDisabled(tierRanges.length === 0);
         const resetBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_reset')
