@@ -514,7 +514,7 @@ class InteractionHandler {
                         '3️⃣  **Kanał raportów** — gdzie trafiają alerty o odrzuconych screenach\n' +
                         '4️⃣  **Tag serwera** — 1–4 znaki/emoji widoczne w globalnym rankingu\n' +
                         '5️⃣  **Role TOP** *(opcjonalne)* — konfigurowalne automatyczne role za pozycje w rankingu\n' +
-                        '6️⃣  **Raporty Global TOP10** — cykliczne raporty TOP10 globalnego (co ~3 dni)\n' +
+                        '6️⃣  **Raporty Global TOP10** — publikowane po zmianie bossa\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
@@ -525,7 +525,7 @@ class InteractionHandler {
                         '3️⃣  **Report Channel** — where rejected screenshot alerts appear\n' +
                         '4️⃣  **Server Tag** — 1–4 char/emoji shown in the global ranking\n' +
                         '5️⃣  **TOP Roles** *(optional)* — configurable automatic roles based on ranking positions\n' +
-                        '6️⃣  **Global TOP10 Reports** — periodic TOP10 global reports (every ~3 days)\n' +
+                        '6️⃣  **Global TOP10 Reports** — published after boss change\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
