@@ -119,15 +119,14 @@ async function initializeBot() {
             const rawCfg = await require('fs').promises.readFile(guildCfgPath, 'utf8');
             const allCfgs = JSON.parse(rawCfg);
             let resetCount = 0;
-            for (const cfg of Object.values(allCfgs)) {
+            for (const cfg of Object.values(allCfgs.guilds || {})) {
                 if (cfg.topRoles !== null && cfg.topRoles !== undefined) {
                     cfg.topRoles = null;
                     resetCount++;
                 }
             }
-            if (resetCount > 0) {
-                await require('fs').promises.writeFile(guildCfgPath, JSON.stringify(allCfgs, null, 2), 'utf8');
-                logger.info(`🔄 Reset topRoles: wyczyszczono ${resetCount} serwerów`);
+            await require('fs').promises.writeFile(guildCfgPath, JSON.stringify(allCfgs, null, 2), 'utf8');
+            logger.info(`🔄 Reset topRoles: wyczyszczono ${resetCount} serwerów`);
             }
         } catch (err) {
             if (err.code !== 'ENOENT') logger.warn('Reset topRoles błąd:', err.message);
