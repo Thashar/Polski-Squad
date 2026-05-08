@@ -856,7 +856,7 @@ class InteractionHandler {
             const r = tierRanges[i];
             const isConfigured = !!r;
             const isNext = i === nextActive;
-            let label = `${t('Próg', 'Tier')} ${i + 1}`;
+            let label = `${isConfigured ? '' : '🔘 '}${t('Próg', 'Tier')} ${i + 1}`;
             if (isConfigured) label += ` (${fmtRange(r)}) ✅`;
             const isLastConfigured = isConfigured && i === tierRanges.length - 1;
             const btn = new ButtonBuilder()
