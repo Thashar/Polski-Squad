@@ -727,7 +727,7 @@ class InteractionHandler {
                     '• Po osiągnięciu progu zgłoszeń: użytkownik blokowany na **24h** lub do zatwierdzenia przez admina\n' +
                     '• Na kanał raportów trafia embed z linkiem do zgłoszonej wiadomości i przyciskami akcji admina\n' +
                     '• To samo zgłoszenie wysyłane jest na globalny kanał raportów (dla head admina)\n' +
-                    '• Sesja głosowania wygasa gdy gracz pobije rekord ponownie\n\n' +
+                    '• Sesja głosowania wygasa po 24h\n\n' +
                     '**Akcje admina po zgłoszeniu:**\n' +
                     '✅ **Zatwierdź** — usuwa przyciski z raportu, odblokuje użytkownika\n' +
                     '🗑️ **Usuń rekord i osiągnięcia** — przywraca poprzedni wynik (lub usuwa wpis) i cofa zdobyte osiągnięcia\n' +
@@ -739,7 +739,7 @@ class InteractionHandler {
                     '• When the report threshold is reached: user is blocked for **24h** or until admin review\n' +
                     '• A report embed with a link to the flagged message and admin action buttons is sent to the report channel\n' +
                     '• The same report is also sent to the global report channel (for head admins)\n' +
-                    '• The voting session expires when the player submits a new record\n\n' +
+                    '• The voting session expires after 24h\n\n' +
                     '**Admin actions after a report:**\n' +
                     '✅ **Approve** — removes buttons from the report, unblocks the user\n' +
                     '🗑️ **Remove Record & Achievements** — restores the previous score (or deletes the entry) and reverts earned achievements\n' +
@@ -4069,6 +4069,7 @@ class InteractionHandler {
     }
 
     async _cvRemoveRecord(session) {
+        // Cofaj ranking do stanu sprzed zgłoszenia (ignoruje rekordy B, C pobite po A)
         try {
             await this.rankingService.revertUserRecord(
                 session.guildId, session.userId, session.previousRecord
@@ -4076,15 +4077,17 @@ class InteractionHandler {
         } catch (e) {
             logger.error(`CV _cvRemoveRecord revert ranking error: ${e.message}`);
         }
-        if (this.scoreHistoryService && session.newRecord?.scoreValue != null) {
-            this.scoreHistoryService.removeEntry(
-                session.guildId, session.userId, session.newRecord.scoreValue
+        // Usuń wszystkie wpisy historii od momentu zgłoszonego rekordu (A + B + C + ...)
+        if (this.scoreHistoryService && session.newRecord?.timestamp) {
+            this.scoreHistoryService.removeEntriesAfter(
+                session.guildId, session.userId, session.newRecord.timestamp
             ).catch(e => logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`));
         }
+        // Wyczyść osiągnięcia score/records — kolejne rekordy po A też mogły odblokować nowe
         try {
-            if (this.achievementService && session.newAchievements?.length > 0) {
-                await this.achievementService.revertSubmissionAchievements(
-                    session.guildId, session.userId, session.newAchievements, session.previousRecord
+            if (this.achievementService) {
+                await this.achievementService.clearUserAchievements(
+                    session.guildId, session.userId
                 );
             }
         } catch (e) {
