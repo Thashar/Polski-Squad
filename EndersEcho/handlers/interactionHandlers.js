@@ -4684,8 +4684,12 @@ class InteractionHandler {
                 const targetUserId = interaction.values[0];
                 const entry = (await this.userBlockService.getBlockedUsers()).find(e => e.userId === targetUserId);
                 if (entry?.blockedByHeadAdmin && !isHeadAdmin) {
+                    const tUB = this._panelT(interaction.guildId);
                     await interaction.update({
-                        content: `⛔ **${entry.username}** został zablokowany przez Head Admina. Tylko Head Admin może go odblokować.`,
+                        content: tUB(
+                            `⛔ **${entry.username}** został zablokowany przez Head Admina. Tylko Head Admin może go odblokować.`,
+                            `⛔ **${entry.username}** was blocked by the Head Admin. Only the Head Admin can unblock them.`
+                        ),
                         embeds: [],
                         components: []
                     });
@@ -5160,14 +5164,15 @@ class InteractionHandler {
 
         const embedPol = this._buildInfoEmbed(data, interaction.user, descriptionPol);
         const embedEng = this._buildInfoEmbed(data, interaction.user, descriptionEng);
+        const tInfo = this._panelT(interaction.guildId);
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('info_send').setLabel('Wyślij').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('info_edit').setLabel('Edytuj').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('info_cancel').setLabel('Anuluj').setStyle(ButtonStyle.Danger)
+            new ButtonBuilder().setCustomId('info_send').setLabel(tInfo('Wyślij', 'Send')).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('info_edit').setLabel(tInfo('Edytuj', 'Edit')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('info_cancel').setLabel(tInfo('Anuluj', 'Cancel')).setStyle(ButtonStyle.Danger)
         );
 
         await interaction.reply({
-            content: `${formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length })}\n🇵🇱 **Podgląd PL** (powyżej) • 🇬🇧 **Podgląd ENG** (poniżej)`,
+            content: `${formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length })}\n${tInfo('🇵🇱 **Podgląd PL** (powyżej) • 🇬🇧 **Podgląd ENG** (poniżej)', '🇵🇱 **PL Preview** (above) • 🇬🇧 **EN Preview** (below)')}`,
             embeds: [embedPol, embedEng],
             components: [row],
             flags: ['Ephemeral']
@@ -6214,13 +6219,15 @@ class InteractionHandler {
 
     async _buildTokensEmbed(interaction, month, guildFilter, isSuperUser = false) {
         const { PRICING } = require('../services/tokenUsageService');
+        const t = this._panelT(interaction.guildId);
 
         const [y, m] = month.split('-').map(Number);
         const monthStr = `${y}${String(m).padStart(2, '0')}`;
         const userId   = interaction.user.id;
 
-        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+        const MONTH_NAMES_POL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const MONTH_NAMES_ENG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const monthLabel = `${t(MONTH_NAMES_POL[m - 1], MONTH_NAMES_ENG[m - 1])} ${y}`;
 
         // Wykres tekstowy
         const chartText = this.tokenUsageService.generateChartText(guildFilter, month, isSuperUser);
@@ -6238,27 +6245,27 @@ class InteractionHandler {
         }
 
         const footerText = guildFilter === 'all'
-            ? 'Wszystkie serwery'
+            ? t('Wszystkie serwery', 'All servers')
             : (guildNames[guildFilter] || guildFilter);
 
         const embedFields = [
-            { name: '📨 Zapytania', value: `\`${totals.requests}\``, inline: true },
-            { name: '🔤 Tokeny',    value: `\`${fmtTok(totals.promptTokens + totals.outputTokens)}\``, inline: true },
+            { name: t('📨 Zapytania', '📨 Requests'), value: `\`${totals.requests}\``, inline: true },
+            { name: t('🔤 Tokeny', '🔤 Tokens'),      value: `\`${fmtTok(totals.promptTokens + totals.outputTokens)}\``, inline: true },
         ];
         if (isSuperUser) {
-            embedFields.push({ name: '💰 Koszt', value: `**${fmtCost(totals.cost)}**`, inline: true });
+            embedFields.push({ name: t('💰 Koszt', '💰 Cost'), value: `**${fmtCost(totals.cost)}**`, inline: true });
         }
         const detailValue = `In: \`${fmtTok(totals.promptTokens)}\` • Out: \`${fmtTok(totals.outputTokens)}\`` +
-            (isSuperUser ? `\nCennik: In $${PRICING.input}/1M • Out $${PRICING.output}/1M` : '');
-        embedFields.push({ name: 'Szczegóły', value: detailValue, inline: false });
+            (isSuperUser ? `\n${t('Cennik', 'Pricing')}: In $${PRICING.input}/1M • Out $${PRICING.output}/1M` : '');
+        embedFields.push({ name: t('Szczegóły', 'Details'), value: detailValue, inline: false });
 
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
-            .setTitle(`📊 Tokeny AI — ${monthLabel}`)
+            .setTitle(t(`📊 Tokeny AI — ${monthLabel}`, `📊 AI Tokens — ${monthLabel}`))
             .setDescription(chartText)
             .addFields(...embedFields)
             .setTimestamp()
-            .setFooter({ text: `${footerText} • dane z /update` });
+            .setFooter({ text: `${footerText} • ${t('dane z /update', 'data from /update')}` });
 
         // Nawigacja miesiącami
         const available = this.tokenUsageService.getAvailableMonths(guildFilter);
@@ -6291,11 +6298,11 @@ class InteractionHandler {
             row1Buttons.push(
                 new ButtonBuilder()
                     .setCustomId(`tk_a_${monthStr}_${userId}`)
-                    .setLabel('🌐 Wszystkie')
+                    .setLabel(t('🌐 Wszystkie', '🌐 All'))
                     .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
-                    .setLabel('🗂️ Zbiorczo')
+                    .setLabel(t('🗂️ Zbiorczo', '🗂️ Summary'))
                     .setStyle(ButtonStyle.Secondary)
             );
         }
@@ -6323,9 +6330,11 @@ class InteractionHandler {
 
     async _buildTokensMonthBreakdown(interaction, month, isSuperUser) {
         const { PRICING } = require('../services/tokenUsageService');
+        const t = this._panelT(interaction.guildId);
         const [y, m] = month.split('-').map(Number);
-        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+        const MONTH_NAMES_POL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const MONTH_NAMES_ENG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const monthLabel = `${t(MONTH_NAMES_POL[m - 1], MONTH_NAMES_ENG[m - 1])} ${y}`;
         const monthStr   = `${y}${String(m).padStart(2, '0')}`;
         const userId     = interaction.user.id;
 
@@ -6354,21 +6363,21 @@ class InteractionHandler {
         }
 
         activeLines.push('');
-        activeLines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
+        activeLines.push(`**${t('Łącznie', 'Total')}** — **${fmtCost(totalCost)}**`);
 
         const embed = new EmbedBuilder()
             .setColor(0x4285F4)
-            .setTitle(`📊 Koszty miesięczne — ${monthLabel}`)
+            .setTitle(t(`📊 Koszty miesięczne — ${monthLabel}`, `📊 Monthly Costs — ${monthLabel}`))
             .setDescription(activeLines.join('\n'));
 
         if (leftLines.length > 0) {
-            embed.addFields({ name: '🚪 Serwery bez aplikacji', value: leftLines.join('\n'), inline: false });
+            embed.addFields({ name: t('🚪 Serwery bez aplikacji', '🚪 Servers no longer present'), value: leftLines.join('\n'), inline: false });
         }
 
         embed
-            .addFields({ name: 'Cennik', value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
+            .addFields({ name: t('Cennik', 'Pricing'), value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
             .setTimestamp()
-            .setFooter({ text: 'Dane z /update' });
+            .setFooter({ text: t('Dane z /update', 'Data from /update') });
 
         // Nawigacja miesiącami (na podstawie dostępnych danych — wszystkie serwery)
         const available    = this.tokenUsageService.getAvailableMonths('all');
@@ -6396,11 +6405,11 @@ class InteractionHandler {
                 .setDisabled(!hasNext),
             new ButtonBuilder()
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
-                .setLabel('📅 Dniowo')
+                .setLabel(t('📅 Dniowo', '📅 Daily'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId(`tk_total_${userId}`)
-                .setLabel('📦 Całe zużycie')
+                .setLabel(t('📦 Całe zużycie', '📦 All-time Usage'))
                 .setStyle(ButtonStyle.Secondary),
         );
 
@@ -6409,6 +6418,7 @@ class InteractionHandler {
 
     async _buildTokensTotalBreakdown(interaction) {
         const { PRICING } = require('../services/tokenUsageService');
+        const t = this._panelT(interaction.guildId);
         const userId   = interaction.user.id;
         const fmtCost  = (c) => `$${c.toFixed(5)}`;
         const allMonths = this.tokenUsageService.getAvailableMonths('all');
@@ -6441,28 +6451,28 @@ class InteractionHandler {
         }
 
         activeLines.push('');
-        activeLines.push(`**Łącznie** — **${fmtCost(totalCost)}**`);
+        activeLines.push(`**${t('Łącznie', 'Total')}** — **${fmtCost(totalCost)}**`);
 
         const currentMonthRaw = new Date().toISOString().slice(0, 7).replace('-', '');
 
         const embed = new EmbedBuilder()
             .setColor(0x9B59B6)
-            .setTitle('📦 Całe zużycie — wszystkie miesiące')
+            .setTitle(t('📦 Całe zużycie — wszystkie miesiące', '📦 All-time Usage — all months'))
             .setDescription(activeLines.join('\n'));
 
         if (leftLines.length > 0) {
-            embed.addFields({ name: '🚪 Serwery bez aplikacji', value: leftLines.join('\n'), inline: false });
+            embed.addFields({ name: t('🚪 Serwery bez aplikacji', '🚪 Servers no longer present'), value: leftLines.join('\n'), inline: false });
         }
 
         embed
-            .addFields({ name: 'Cennik', value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
+            .addFields({ name: t('Cennik', 'Pricing'), value: `In $${PRICING.input}/1M • Out $${PRICING.output}/1M`, inline: false })
             .setTimestamp()
-            .setFooter({ text: 'Dane z /update • wszystkie dostępne miesiące' });
+            .setFooter({ text: t('Dane z /update • wszystkie dostępne miesiące', 'Data from /update • all available months') });
 
         const navRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`tk_m_${currentMonthRaw}_all_${userId}`)
-                .setLabel('🗂️ Zbiorczo')
+                .setLabel(t('🗂️ Zbiorczo', '🗂️ Summary'))
                 .setStyle(ButtonStyle.Secondary),
         );
 
@@ -6471,9 +6481,11 @@ class InteractionHandler {
 
     async _buildTokensUsersEmbed(interaction, month, guildFilter, page, isSuperUser) {
         const PAGE_SIZE  = 20;
+        const t = this._panelT(interaction.guildId);
         const [y, m]     = month.split('-').map(Number);
-        const MONTH_NAMES = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
-        const monthLabel = `${MONTH_NAMES[m - 1]} ${y}`;
+        const MONTH_NAMES_POL = ['Styczeń','Luty','Marzec','Kwiecień','Maj','Czerwiec','Lipiec','Sierpień','Wrzesień','Październik','Listopad','Grudzień'];
+        const MONTH_NAMES_ENG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const monthLabel = `${t(MONTH_NAMES_POL[m - 1], MONTH_NAMES_ENG[m - 1])} ${y}`;
         const monthStr   = `${y}${String(m).padStart(2, '0')}`;
         const userId     = interaction.user.id;
 
@@ -6499,25 +6511,25 @@ class InteractionHandler {
         const lines = pageStats.map((u, i) => {
             const rank  = safePage * PAGE_SIZE + i + 1;
             const nick  = getNick(u.userId);
-            const cols  = [`${rank}. **${nick}**`, `${u.requests} analiz`, `${fmtTok(u.promptTokens + u.outputTokens)} tok`];
+            const cols  = [`${rank}. **${nick}**`, `${u.requests} ${t('analiz', 'analyses')}`, `${fmtTok(u.promptTokens + u.outputTokens)} ${t('tok', 'tok')}`];
             if (isSuperUser) cols.push(fmtCost(u.cost));
             return cols.join(' — ');
         });
 
-        const description = lines.length > 0 ? lines.join('\n') : 'Brak danych.';
+        const description = lines.length > 0 ? lines.join('\n') : t('Brak danych.', 'No data.');
 
         const guildNames = {};
         for (const gc of this.config.getAllGuilds()) {
             const g = interaction.client.guilds.cache.get(gc.id);
             guildNames[gc.id] = g?.name || gc.id;
         }
-        const footerText = guildFilter === 'all' ? 'Wszystkie serwery' : (guildNames[guildFilter] || guildFilter);
+        const footerText = guildFilter === 'all' ? t('Wszystkie serwery', 'All servers') : (guildNames[guildFilter] || guildFilter);
 
         const embed = new EmbedBuilder()
             .setColor(0x57F287)
-            .setTitle(`👥 Tokeny per user — ${monthLabel}`)
+            .setTitle(t(`👥 Tokeny per user — ${monthLabel}`, `👥 Tokens per user — ${monthLabel}`))
             .setDescription(description)
-            .setFooter({ text: `${footerText} • str. ${safePage + 1}/${totalPages} • ${allStats.length} userów` })
+            .setFooter({ text: `${footerText} • ${t('str.', 'p.')} ${safePage + 1}/${totalPages} • ${allStats.length} ${t('userów', 'users')}` })
             .setTimestamp();
 
         const hasPrevPage = safePage > 0;
@@ -6530,12 +6542,12 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
             new ButtonBuilder().setCustomId(`tk_ui_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
-            new ButtonBuilder().setCustomId(chartId).setLabel('📊 Wykres').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(chartId).setLabel(t('📊 Wykres', '📊 Chart')).setStyle(ButtonStyle.Secondary),
         ];
         if (isSuperUser) {
             row1.push(new ButtonBuilder()
                 .setCustomId(`tk_u_${monthStr}_all_0_${userId}`)
-                .setLabel('🌐 Wszystkie')
+                .setLabel(t('🌐 Wszystkie', '🌐 All'))
                 .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
         }
 

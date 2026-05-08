@@ -216,10 +216,11 @@
 - Admin widzi tylko swój serwer; Head Admin widzi wszystkie + breakdown
 - Nawigacja `tk_*` zachowuje przycisk `◀️ Powrót do panelu`
 - Dane z `data/token_usage.json`, cennik: In $0.15, Out $0.60, Think $0.35 / 1M tokenów
+- **Dwujęzyczny:** wszystkie tytuły, pola, przyciski i stopki w embedach tokenów (`_buildTokensEmbed`, `_buildTokensMonthBreakdown`, `_buildTokensTotalBreakdown`, `_buildTokensUsersEmbed`) używają `t = this._panelT(interaction.guildId)` — nazwy miesięcy też mają obie wersje (`MONTH_NAMES_POL` / `MONTH_NAMES_ENG`)
 
 **📢 Wyślij Info** (Head Admin):
 - Otwiera modal z 4 polami: Tytuł, Opis PL, Opis ENG, Ikona URL, Obraz URL
-- Podgląd embeda + przyciski Wyślij / Edytuj / Anuluj
+- Podgląd embeda + przyciski Wyślij / Edytuj / Anuluj (przetłumaczone przez `tInfo = this._panelT`)
 - Wysyła na `allowedChannelId` każdego serwera w odpowiednim języku
 - Dostęp: `ENDERSECHO_BLOCK_OCR_USER_IDS` (ta sama zmienna co Head Admin)
 
