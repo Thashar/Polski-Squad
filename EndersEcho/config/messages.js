@@ -123,6 +123,7 @@ const pol = {
     globalTop10BossField: '⚔️ Boss okresu',
     globalTop10Footer: 'Następny raport za 3 dni',
     globalTop10FooterBreak: 'Następny raport za 4 dni (przerwa)',
+    globalTop10FooterNext: 'Następny raport za {days} dni',
 
     // /subscribe
     notifDescription: '🔔 Zarządzaj powiadomieniami o nowych rekordach graczy.',
@@ -150,6 +151,7 @@ const pol = {
     notifDmBeatYourRecord: '🚨 Pobił Twój rekord o {diff}',
     notifDmMissingToRecord: '✅ Brakuje {diff} do Twojego rekordu',
     notifDmNoSubscriberRecord: '📊 Nie masz jeszcze wyniku na tym serwerze',
+    notifDmScoresEqual: '🎯 Wyniki równe!',
 
     // /block-ocr
     ocrBlocked: '🚫 **Analiza zdjęć jest tymczasowo zablokowana.**\nZostaniesz powiadomiony gdy zostanie wznowiona.',
@@ -165,6 +167,10 @@ const pol = {
 
     // Uprawnienia
     noPermission: 'Brak uprawnień do tej komendy.',
+    commandError: '❌ Wystąpił błąd podczas przetwarzania komendy.',
+    gatewayRateLimited: '⏱️ Zbyt wiele żądań. Spróbuj ponownie za{retry}.',
+    gatewayNotEntitled: '🔒 Operacja nie jest dostępna dla tego serwera.',
+    gatewayDefault: '❌ Żądanie odrzucone przez gateway.',
 
     // Blokada użytkownika
     userBlocked: '🚫 Twoje konto zostało zablokowane z powodu próby przesłania fałszywego zdjęcia. W celu odblokowania skontaktuj się z administratorem serwera.',
@@ -187,6 +193,9 @@ const pol = {
     roleRankingLimitReached: '❌ Osiągnięto limit **{max}** rankingów ról. Usuń istniejący przed dodaniem nowego.',
     roleRankingAdded: '✅ Dodano ranking dla roli **{roleName}**. Pojawi się w komendzie `/ranking` po wybraniu tego serwera.',
     roleRankingNoRankings: '⚠️ Brak skonfigurowanych rankingów ról na tym serwerze.',
+    roleRankingEmpty: '📋 Brak graczy z rolą **{roleName}** w rankingu.',
+    analyzeNoImage: '❌ Brak zdjęcia w raporcie.',
+    analyzeError: '❌ Błąd analizy: {error}',
 
     // /unblock
     unblockTitle: '🔒 Zablokowani użytkownicy OCR',
@@ -276,6 +285,7 @@ const pol = {
 
     // Weryfikacja społeczności
     cvVoteButton: '⚠️ Zgłoś',
+    cvReported: '⚠️ Zgłoszono',
     cvVoteAlreadyVoted: '⚠️ Już zgłosiłeś ten wynik.',
     cvVoteNotInRanking: '⚠️ Możesz głosować tylko jeśli jesteś w rankingu.',
     cvVoteSelf: '⚠️ Nie możesz zgłosić własnego wyniku.',
@@ -425,6 +435,7 @@ const eng = {
     globalTop10BossField: '⚔️ Boss of the period',
     globalTop10Footer: 'Next report in 3 days',
     globalTop10FooterBreak: 'Next report in 4 days (break)',
+    globalTop10FooterNext: 'Next report in {days} days',
 
     // /subscribe
     notifDescription: '🔔 Manage notifications for player record breaks.',
@@ -452,6 +463,7 @@ const eng = {
     notifDmBeatYourRecord: '🚨 Beat your record by {diff}',
     notifDmMissingToRecord: '✅ {diff} away from your record',
     notifDmNoSubscriberRecord: '📊 You have no score on this server yet',
+    notifDmScoresEqual: '🎯 Scores are equal!',
 
     // /block-ocr
     ocrBlocked: '🚫 **Screenshot analysis is temporarily blocked.**\nYou will be notified when it resumes.',
@@ -467,6 +479,10 @@ const eng = {
 
     // Permissions
     noPermission: 'You do not have permission to use this command.',
+    commandError: '❌ An error occurred while processing the command.',
+    gatewayRateLimited: '⏱️ Too many requests. Try again in{retry}.',
+    gatewayNotEntitled: '🔒 This operation is not available for this server.',
+    gatewayDefault: '❌ Request rejected by the gateway.',
 
     // User block
     userBlocked: '🚫 Your account has been blocked due to submitting a fake screenshot. Contact a server administrator to appeal.',
@@ -489,6 +505,9 @@ const eng = {
     roleRankingLimitReached: '❌ Reached the limit of **{max}** role rankings. Remove an existing one before adding a new one.',
     roleRankingAdded: '✅ Added ranking for role **{roleName}**. It will appear in the `/ranking` command when this server is selected.',
     roleRankingNoRankings: '⚠️ No role rankings configured on this server.',
+    roleRankingEmpty: '📋 No players with role **{roleName}** in the ranking.',
+    analyzeNoImage: '❌ No image found in the report.',
+    analyzeError: '❌ Analysis error: {error}',
 
     // /unblock
     unblockTitle: '🔒 Blocked OCR Users',
@@ -578,6 +597,7 @@ const eng = {
 
     // Community verification
     cvVoteButton: '⚠️ Report',
+    cvReported: '⚠️ Reported',
     cvVoteAlreadyVoted: '⚠️ You have already reported this score.',
     cvVoteNotInRanking: '⚠️ Only players in the ranking can vote.',
     cvVoteSelf: '⚠️ You cannot report your own score.',

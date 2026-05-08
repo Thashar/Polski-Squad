@@ -4,6 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { formatMessage } = require('../utils/helpers');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -225,7 +226,7 @@ class GlobalTop10Service {
             })
             .setTimestamp()
             .setFooter({
-                text: `Następny raport za ${nextIntervalDays} dni`,
+                text: formatMessage(msgs.globalTop10FooterNext || 'Next report in {days} days', { days: nextIntervalDays }),
             });
 
         const botIconUrl = this.client?.user?.displayAvatarURL({ size: 128 });

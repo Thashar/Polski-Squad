@@ -988,7 +988,7 @@ class RankingService {
             } else if (diff < 0) {
                 comparisonText = formatMessage(msgs.notifDmMissingToRecord, { diff: this.formatScore(Math.abs(diff)) });
             } else {
-                comparisonText = '🎯 Wyniki równe!';
+                comparisonText = msgs.notifDmScoresEqual;
             }
         } else {
             comparisonText = msgs.notifDmNoSubscriberRecord;
