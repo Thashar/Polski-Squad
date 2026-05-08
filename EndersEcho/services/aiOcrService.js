@@ -17,8 +17,8 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v1',
-    'compare-template':  'v3',
+    'extract-data-eng':  'v2',
+    'compare-template':  'v4',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -102,6 +102,7 @@ class AIOCRService {
 3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
 WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx
 UWAGA: Litera Q może wyglądać jak cyfra 0 — rozróżniaj je uważnie.
+UWAGA: Litera S może wyglądać jak cyfra 5 — gdy wynik kończy się na "5x", to prawdopodobnie "Sx".
 UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra.
 ⚠️ KRYTYCZNA ZASADA:
 Odczytaj wartości DOKŁADNIE tak jak są na ekranie.
@@ -207,6 +208,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         } else if (/\di$/i.test(score) && !/Qi$/i.test(score)) {
             const fixed = score.replace(/i$/i, 'Qi');
             log.info(`[AI OCR] normalizeScore: "i" → "Qi" "${score}" → "${fixed}"`);
+            score = fixed;
+        }
+
+        // Przy 3+ cyfrach przed przecinkiem po przecinku jest zawsze 1 cyfra.
+        // OCR może pomylić "S" z "5", więc "103.25x" to tak naprawdę "103.2Sx".
+        if (/^\d{3,}\.\d5x$/i.test(score)) {
+            const fixed = score.replace(/(\.\d)5x$/i, '$1Sx');
+            log.info(`[AI OCR] normalizeScore: "5x" → "Sx" "${score}" → "${fixed}"`);
             score = fixed;
         }
 
@@ -348,7 +357,7 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
 - pod banerem: nazwa własna Bossa
 - w centrum panelu: JEDNA duża ikona z liczbą
-- poniżej: dwie linie statystyk (Best / Total)
+- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (np. Best: 25015.1Qi, Total: 103.2Sx) — to jest normalne
 - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
 - pod panelem: jeden żółty przycisk
 
