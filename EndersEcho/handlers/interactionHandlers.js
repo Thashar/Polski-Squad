@@ -849,8 +849,8 @@ class InteractionHandler {
         const nextActive = tierRanges.length < MAX_TIERS ? tierRanges.length : -1;
 
         let desc = t(
-            'Skonfiguruj progi rangowe dla ról TOP. Każdy próg definiuje zakres pozycji rankingowych, które otrzymują daną rolę.\n\nKlikaj kolejno przyciski aby ustawiać progi. Każdy kolejny musi zaczynać od miejsca gdzie poprzedni się skończył.\n\n**Przykład:** Próg 1 = `1-3`, Próg 2 = `4-10`, Próg 3 = `11-30`\n\nPo ustawieniu progów kliknij **Przydziel role** aby wybrać role dla każdego progu.',
-            'Configure rank thresholds for TOP roles. Each threshold defines a range of ranking positions that receive a specific role.\n\nClick buttons in order to set each threshold. Each next one must start where the previous ended.\n\n**Example:** Tier 1 = `1-3`, Tier 2 = `4-10`, Tier 3 = `11-30`\n\nAfter setting tiers, click **Assign Roles** to pick a role for each tier.'
+            'Skonfiguruj progi rangowe dla ról TOP. Każdy próg definiuje zakres pozycji rankingowych, które otrzymują daną rolę.\n\nKlikaj kolejno przyciski aby ustawiać progi. Każdy kolejny musi zaczynać od miejsca gdzie poprzedni się skończył.\n\n**Przykład:** Próg 1 = `1-3`, Próg 2 = `4-10`, Próg 3 = `11-30`\n\nPo ustawieniu progów kliknij **Przydziel role** aby wybrać role dla każdego progu.\n\n**Legenda przycisków:**\n🟢 ostatni zielony = kliknij aby zmienić zakres (puste pole = usuń próg)\n🔵 niebieski = kliknij aby ustawić kolejny próg\n⚫ szary = niedostępny (ustaw poprzednie progi najpierw)',
+            'Configure rank thresholds for TOP roles. Each threshold defines a range of ranking positions that receive a specific role.\n\nClick buttons in order to set each threshold. Each next one must start where the previous ended.\n\n**Example:** Tier 1 = `1-3`, Tier 2 = `4-10`, Tier 3 = `11-30`\n\nAfter setting tiers, click **Assign Roles** to pick a role for each tier.\n\n**Button legend:**\n🟢 last green = click to change range (leave empty to remove tier)\n🔵 blue = click to set the next tier\n⚫ grey = unavailable (set previous tiers first)'
         );
         const fmtRange = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
 
@@ -872,11 +872,12 @@ class InteractionHandler {
             const isNext = i === nextActive;
             let label = `${t('Próg', 'Tier')} ${i + 1}`;
             if (isConfigured) label += ` (${fmtRange(r)}) ✅`;
+            const isLastConfigured = isConfigured && i === tierRanges.length - 1;
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_tier_${i}`)
                 .setLabel(label)
                 .setStyle(isConfigured ? ButtonStyle.Success : (isNext ? ButtonStyle.Primary : ButtonStyle.Secondary))
-                .setDisabled(!isNext); // aktywny TYLKO następny do skonfigurowania
+                .setDisabled(!isNext && !isLastConfigured);
             if (i < 5) tierBtns1.push(btn);
             else tierBtns2.push(btn);
         }
@@ -888,7 +889,7 @@ class InteractionHandler {
             .setDisabled(tierRanges.length === 0);
         const resetBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_reset')
-            .setLabel(t('Usuń konfigurację progów 🗑️', 'Clear Tier Config 🗑️'))
+            .setLabel(t('Usuń konfigurację progów i ról 🗑️', 'Clear Tier & Role Config 🗑️'))
             .setStyle(ButtonStyle.Danger)
             .setDisabled(tierRanges.length === 0);
         const skipBtn = new ButtonBuilder()
@@ -969,6 +970,16 @@ class InteractionHandler {
         const tierIdx = parseInt(interaction.customId.replace('cfg_tier_modal_', ''), 10);
         const raw = interaction.fields.getTextInputValue('tier_range').trim();
         const isPol = state.lang === 'pol';
+
+        // Puste pole = usuń ten próg i wszystkie kolejne
+        if (raw === '') {
+            if (!state.topRolesTemp) state.topRolesTemp = { tierRanges: [] };
+            state.topRolesTemp.tierRanges = state.topRolesTemp.tierRanges.slice(0, tierIdx);
+            delete state.topRolesTemp.tierAssigning;
+            this._configWizard.set(key, state);
+            await this._showTierConfigScreen(interaction, state, key);
+            return;
+        }
 
         let from, to;
         if (/^\d+$/.test(raw)) {
@@ -1193,10 +1204,10 @@ class InteractionHandler {
                 .addComponents(new ActionRowBuilder().addComponents(
                     new TextInputBuilder()
                         .setCustomId('tier_range')
-                        .setLabel(t('Zakres (np. 1-3 lub 4)', 'Range (e.g. 1-3 or 4)'))
+                        .setLabel(t('Zakres (puste = usuń próg)', 'Range (empty = remove tier)'))
                         .setStyle(TextInputStyle.Short)
-                        .setRequired(true)
-                        .setPlaceholder(t('np. 1-3 lub 4-10', 'e.g. 1-3 or 4-10'))
+                        .setRequired(false)
+                        .setPlaceholder(t('np. 1-3 lub 4 (puste aby usunąć)', 'e.g. 1-3 or 4 (empty to remove)'))
                         .setMaxLength(10)
                         .setValue(defaultVal)
                 ));
@@ -1220,8 +1231,8 @@ class InteractionHandler {
                 .setColor(0xED4245)
                 .setTitle(t('⚠️ Usuń konfigurację progów?', '⚠️ Clear tier configuration?'))
                 .setDescription(t(
-                    'Czy na pewno chcesz usunąć **wszystkie skonfigurowane progi**?\n\nTej operacji nie da się cofnąć.',
-                    'Are you sure you want to remove **all configured tiers**?\n\nThis operation cannot be undone.'
+                    'Czy na pewno chcesz usunąć **wszystkie skonfigurowane progi i przypisane role**?\n\nTej operacji nie da się cofnąć.',
+                    'Are you sure you want to remove **all configured tiers and role assignments**?\n\nThis operation cannot be undone.'
                 ));
             const confirmBtn = new ButtonBuilder()
                 .setCustomId('cfg_tier_reset_ok')
