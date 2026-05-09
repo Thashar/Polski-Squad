@@ -374,16 +374,14 @@ class RankingService {
 
         let rankingText = '';
 
+        const MEDALS = ['👑', '🥈', '🥉'];
+
         for (const [index, player] of currentPagePlayers.entries()) {
             try {
                 const actualPosition = startIndex + index + 1;
-                let position;
-                if (actualPosition <= 3) {
-                    const medalMap = { 1: '🥇', 2: '🥈', 3: '🥉' };
-                    position = medalMap[actualPosition];
-                } else {
-                    position = `${actualPosition}.`;
-                }
+                const posLabel = actualPosition <= 3
+                    ? `\`${String(actualPosition).padStart(2, '0')}\` ${MEDALS[actualPosition - 1]}`
+                    : `\`${String(actualPosition).padStart(2, '0')}\``;
 
                 const date = new Date(player.timestamp);
                 const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -404,14 +402,14 @@ class RankingService {
 
                 const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
-                const nickDisplay = isCurrentUser ? `**${displayName}**` : displayName;
-                let serverSuffix = '';
+                const nickDisplay = isCurrentUser ? `**__${displayName}__**` : `**${displayName}**`;
+                let tagSuffix = '';
                 if (isGlobal) {
                     const guildTag = this.config.getAllGuilds().find(g => g.id === player.sourceGuildId)?.tag;
-                    serverSuffix = guildTag ? ` • ${guildTag}` : '';
+                    tagSuffix = guildTag ? `  ·  ${guildTag}` : '';
                 }
 
-                const lineText = `${position} ${nickDisplay}‎ • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
+                const lineText = `${posLabel}  ${nickDisplay}  ·  **${this.formatScore(player.scoreValue)}**\n> ${bossName}  ·  *${shortDate}*${tagSuffix}\n\n`;
 
                 rankingText += lineText;
 
