@@ -177,7 +177,8 @@ class GlobalTop10Service {
 
     async _buildTop10Embed(top10, lastSnapshot, bossName, msgs, guildCfg, client) {
         const guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag || null]));
-        const medals = ['🥇', '🥈', '🥉'];
+        const medals      = ['👑', '🥈', '🥉'];
+        const top1Score   = top10[0]?.scoreValue || 1;
 
         let lines = '';
         for (let i = 0; i < top10.length; i++) {
@@ -185,15 +186,23 @@ class GlobalTop10Service {
             const position = i + 1;
             const prevPos  = lastSnapshot[player.userId] || null;
 
-            // Ikona pozycji
-            const posLabel = position <= 3 ? medals[i] : `**${position}.**`;
-
             // Zmiana pozycji
-            let changeLabel;
-            if (!prevPos)                         changeLabel = '🆕';
-            else if (prevPos === position)        changeLabel = '`=`';
-            else if (prevPos > position)          changeLabel = `\`▲${prevPos - position}\``;
-            else                                  changeLabel = `\`▼${position - prevPos}\``;
+            let changeStr, changeSign;
+            if (!prevPos) {
+                changeStr  = '🆕';
+                changeSign = null;
+            } else if (prevPos === position) {
+                changeStr  = '`=`';
+                changeSign = 'eq';
+            } else if (prevPos > position) {
+                const diff = prevPos - position;
+                changeStr  = `**▲ +${diff}**`;
+                changeSign = 'up';
+            } else {
+                const diff = position - prevPos;
+                changeStr  = `**▼ −${diff}**`;
+                changeSign = 'down';
+            }
 
             // Nick (pobieramy z Discord)
             let displayName = player.username || `ID:${player.userId}`;
@@ -205,12 +214,27 @@ class GlobalTop10Service {
                 }
             } catch { /* fallback na username */ }
 
-            const tag = guildTagMap.get(player.sourceGuildId);
-            const date = new Date(player.timestamp);
+            const tag       = guildTagMap.get(player.sourceGuildId);
+            const date      = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            const serverSuffix = tag ? ` • ${tag}` : '';
+            const tagSuffix = tag ? `  ·  ${tag}` : '';
+            const scoreStr  = this.rankingService.formatScore(player.scoreValue);
+            const bossStr   = player.bossName || msgs.unknownBoss;
 
-            lines += `${posLabel} ${changeLabel} ${displayName} • **${this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}\n\n`;
+            if (position <= 3) {
+                // TOP 3 — blok z blockquote i paskiem postępu
+                const pct      = Math.round((player.scoreValue / top1Score) * 100);
+                const filled   = Math.round(pct / 5); // 20 kratek = 100%
+                const bar      = '█'.repeat(filled) + '░'.repeat(20 - filled);
+                const posLabel = medals[i];
+
+                lines += `\`${String(position).padStart(2, '0')}\` ${posLabel}  **${displayName}**  ·  **${scoreStr}**\n`;
+                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n`;
+                lines += `> ${bar}  \`${pct}%\`\n\n`;
+            } else {
+                // 4–10 — kompaktowa jednolinijkowa
+                lines += `\`${String(position).padStart(2, '0')}\`  ${changeStr}  **${displayName}**  —  ${scoreStr}  ·  ${bossStr}  *${shortDate}*${tagSuffix}\n`;
+            }
         }
 
         const nextIntervalDays = Math.round(this._nextIntervalMs() / (24 * 60 * 60 * 1000));
@@ -220,8 +244,8 @@ class GlobalTop10Service {
             .setTitle(msgs.globalTop10ReportTitle || '🌐 TOP 10 Globalny')
             .setDescription(lines || msgs.rankingEmpty)
             .addFields({
-                name: msgs.globalTop10BossField || '⚔️ Boss tygodnia',
-                value: bossName || msgs.unknownBoss,
+                name:   msgs.globalTop10BossField || '⚔️ Boss okresu',
+                value:  bossName || msgs.unknownBoss,
                 inline: true,
             })
             .setTimestamp()
@@ -233,6 +257,21 @@ class GlobalTop10Service {
         if (botIconUrl) embed.setThumbnail(botIconUrl);
 
         return embed;
+    }
+
+    /**
+     * Generuje embed TOP 10 na żądanie (komenda /generate).
+     * Nie aktualizuje snapshootu ani harmonogramu.
+     */
+    async buildOnDemandEmbed(msgs, client) {
+        const globalRanking = await this.rankingService.getGlobalRanking(
+            new Set(client.guilds.cache.keys())
+        );
+        const top10      = globalRanking.slice(0, 10);
+        const bossName   = await this._getMostFrequentBoss(10);
+        const lastSnapshot = this._cfg.lastSnapshot || {};
+
+        return this._buildTop10Embed(top10, lastSnapshot, bossName, msgs, null, client);
     }
 
     // ── most frequent boss ─────────────────────────────────────────────────────

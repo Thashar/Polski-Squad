@@ -157,6 +157,12 @@ class InteractionHandler {
                 .setDescription('Open EndersEcho admin panel (admins only)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (tylko dla adminów)'))
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+            new SlashCommandBuilder()
+                .setName('generate')
+                .setDescription('Generate Global TOP 10 report on demand (head admins only)')
+                .setDescriptionLocalizations(pl('Wygeneruj raport Global TOP 10 na żądanie (tylko head adminowie)'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
     }
 
@@ -235,6 +241,11 @@ class InteractionHandler {
             if (interaction.commandName === 'manage') {
                 if (!this._checkConfigured(interaction)) return;
                 await this.handleManageCommand(interaction);
+                return;
+            }
+
+            if (interaction.commandName === 'generate') {
+                await this.handleGenerateCommand(interaction);
                 return;
             }
 
@@ -605,6 +616,44 @@ class InteractionHandler {
         }
         const { embed, components } = this._buildAdminPanel(interaction);
         await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+    }
+
+    async handleGenerateCommand(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        try {
+            const msgs  = this.msgs(interaction.guildId);
+            const embed = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
+
+            // Wyślij na dozwolony kanał serwera
+            const guildCfg  = this.config.getAllGuilds().find(g => g.id === interaction.guildId)
+                           || this.guildConfigService?.getConfig(interaction.guildId);
+            const channelId = guildCfg?.allowedChannelId;
+
+            if (channelId) {
+                const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
+                if (channel) {
+                    await channel.send({ embeds: [embed] });
+                    const lang  = this.guildConfigService?.getConfig(interaction.guildId)?.lang
+                               || this.config.getAllGuilds().find(g => g.id === interaction.guildId)?.lang
+                               || 'pol';
+                    await interaction.editReply({ content: lang === 'pol' ? `✅ Wysłano TOP 10 na <#${channelId}>` : `✅ TOP 10 sent to <#${channelId}>` });
+                    return;
+                }
+            }
+
+            // Fallback — wyślij ephemeral jeśli kanał niedostępny
+            await interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            logger.error(`[/generate] Błąd: ${err.message}`);
+            await interaction.editReply({ content: '❌ Błąd podczas generowania TOP 10.' });
+        }
     }
 
     /** Buduje embed kroku konfiguracji (step 1–6) i aktualizuje wiadomość */
