@@ -2114,8 +2114,8 @@ class InteractionHandler {
                     `Are you sure you want to remove **${displayName}**${serverNote} from the ranking?\n\nThis action cannot be undone.`
                 ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('🏆 Usuń z osiągnięciami', '🏆 Remove with Achievements')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setEmoji('✅').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetUserId}:${targetGuildId}`).setEmoji('🏆').setLabel(t('Usuń z osiągnięciami', 'Remove with Achievements')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
@@ -2390,7 +2390,7 @@ class InteractionHandler {
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`)
-                    .setLabel(t('⏱️ Ustaw czas blokady', '⏱️ Set Block Duration'))
+                    .setEmoji('⏱️').setLabel(t('Ustaw czas blokady', 'Set Block Duration'))
                     .setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_block').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
@@ -2507,14 +2507,14 @@ class InteractionHandler {
                     )],
                 components: [
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel(t('🔓 Włącz /update', '🔓 Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
-                        new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel(t('🔓 Włącz /test', '🔓 Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
-                        new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel(t('🔓 Włącz oba', '🔓 Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setEmoji('🔓').setLabel(t('Włącz /update', 'Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setEmoji('🔓').setLabel(t('Włącz /test', 'Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setEmoji('🔓').setLabel(t('Włącz oba', 'Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel(t('🔒 Wyłącz /update', '🔒 Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
-                        new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel(t('🔒 Wyłącz /test', '🔒 Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
-                        new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz /update', 'Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz /test', 'Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
+                        new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz oba', 'Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                     ),
                     new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
@@ -2569,14 +2569,14 @@ class InteractionHandler {
                 )],
             components: [
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setLabel(t('🔓 Włącz /update', '🔓 Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setLabel(t('🔓 Włącz /test', '🔓 Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setLabel(t('🔓 Włącz oba', '🔓 Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_update_${gid}`).setEmoji('🔓').setLabel(t('Włącz /update', 'Enable /update')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_test_${gid}`).setEmoji('🔓').setLabel(t('Włącz /test', 'Enable /test')).setStyle(ButtonStyle.Success).setDisabled(!testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_en_both_${gid}`).setEmoji('🔓').setLabel(t('Włącz oba', 'Enable Both')).setStyle(ButtonStyle.Success).setDisabled(!updateBlocked && !testBlocked),
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setLabel(t('🔒 Wyłącz /update', '🔒 Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setLabel(t('🔒 Wyłącz /test', '🔒 Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
-                    new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_update_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz /update', 'Disable /update')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_test_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz /test', 'Disable /test')).setStyle(ButtonStyle.Danger).setDisabled(testBlocked),
+                    new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz oba', 'Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                 ),
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
@@ -6344,7 +6344,7 @@ class InteractionHandler {
             const reply = await this._buildTokensMonthBreakdown(interaction, month, isSuperUser);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(tTok('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 ));
             }
             await interaction.editReply(reply);
@@ -6357,7 +6357,7 @@ class InteractionHandler {
             const reply = await this._buildTokensTotalBreakdown(interaction);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(tTok('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 ));
             }
             await interaction.editReply(reply);
@@ -6369,7 +6369,7 @@ class InteractionHandler {
             const reply = await this._buildTokensUsersEmbed(interaction, month, effectiveFilter, page, isSuperUser);
             if (reply.components.length < 5) {
                 reply.components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(tTok('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 ));
             }
             await interaction.editReply(reply);
@@ -6472,11 +6472,11 @@ class InteractionHandler {
             row1Buttons.push(
                 new ButtonBuilder()
                     .setCustomId(`tk_a_${monthStr}_${userId}`)
-                    .setLabel(t('🌐 Wszystkie', '🌐 All'))
+                    .setEmoji('🌐').setLabel(t('Wszystkie', 'All'))
                     .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_m_${monthStr}_${guildFilter}_${userId}`)
-                    .setLabel(t('🗂️ Zbiorczo', '🗂️ Summary'))
+                    .setEmoji('🗂️').setLabel(t('Zbiorczo', 'Summary'))
                     .setStyle(ButtonStyle.Secondary)
             );
         }
@@ -6507,7 +6507,7 @@ class InteractionHandler {
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('panel_back')
-                    .setLabel(t2('◀️ Powrót do panelu', '◀️ Back to Panel'))
+                    .setEmoji('◀️').setLabel(t2('Powrót do panelu', 'Back to Panel'))
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`)
@@ -6524,7 +6524,7 @@ class InteractionHandler {
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('panel_back')
-                    .setLabel(t2('◀️ Powrót do panelu', '◀️ Back to Panel'))
+                    .setEmoji('◀️').setLabel(t2('Powrót do panelu', 'Back to Panel'))
                     .setStyle(ButtonStyle.Secondary)
             ));
         }
@@ -6609,11 +6609,11 @@ class InteractionHandler {
                 .setDisabled(!hasNext),
             new ButtonBuilder()
                 .setCustomId(`tk_a_${monthStr}_${userId}`)
-                .setLabel(t('📅 Dniowo', '📅 Daily'))
+                .setEmoji('📅').setLabel(t('Dniowo', 'Daily'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId(`tk_total_${userId}`)
-                .setLabel(t('📦 Całe zużycie', '📦 All-time Usage'))
+                .setEmoji('📦').setLabel(t('Całe zużycie', 'All-time Usage'))
                 .setStyle(ButtonStyle.Secondary),
         );
 
@@ -6676,7 +6676,7 @@ class InteractionHandler {
         const navRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`tk_m_${currentMonthRaw}_all_${userId}`)
-                .setLabel(t('🗂️ Zbiorczo', '🗂️ Summary'))
+                .setEmoji('🗂️').setLabel(t('Zbiorczo', 'Summary'))
                 .setStyle(ButtonStyle.Secondary),
         );
 
@@ -6746,12 +6746,12 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
             new ButtonBuilder().setCustomId(`tk_ui_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
             new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
-            new ButtonBuilder().setCustomId(chartId).setLabel(t('📊 Wykres', '📊 Chart')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(chartId).setEmoji('📊').setLabel(t('Wykres', 'Chart')).setStyle(ButtonStyle.Secondary),
         ];
         if (isSuperUser) {
             row1.push(new ButtonBuilder()
                 .setCustomId(`tk_u_${monthStr}_all_0_${userId}`)
-                .setLabel(t('🌐 Wszystkie', '🌐 All'))
+                .setEmoji('🌐').setLabel(t('Wszystkie', 'All'))
                 .setStyle(guildFilter === 'all' ? ButtonStyle.Primary : ButtonStyle.Secondary));
         }
 
@@ -6951,7 +6951,7 @@ class InteractionHandler {
                 .setTitle(t('🏆 Potwierdzenie', '🏆 Confirm'))
                 .setDescription(t(descPol, descEng))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(confirmId).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(confirmId).setEmoji('✅').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
@@ -7065,9 +7065,9 @@ class InteractionHandler {
             .setTitle(t('🧪 Testerzy OCR', '🧪 OCR Testers'))
             .setDescription(desc);
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_tester_add').setLabel(t('➕ Dodaj', '➕ Add')).setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('panel_tester_remove').setLabel(t('➖ Usuń', '➖ Remove')).setStyle(ButtonStyle.Danger).setDisabled(testers.length === 0),
-            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Wróć do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_tester_add').setEmoji('➕').setLabel(t('Dodaj', 'Add')).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('panel_tester_remove').setEmoji('➖').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger).setDisabled(testers.length === 0),
+            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [row] });
     }
@@ -7118,7 +7118,7 @@ class InteractionHandler {
             await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0xFF8C00).setDescription(t('Brak testerów do usunięcia.', 'No testers to remove.'))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_tester').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_tester').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary)
                 )],
             });
             return;
@@ -7136,7 +7136,7 @@ class InteractionHandler {
                 .addOptions(options)
         );
         const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_tester').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+            new ButtonBuilder().setCustomId('panel_tester').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary)
         );
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle(t('🧪 Usuń testera', '🧪 Remove Tester'))],
@@ -7207,9 +7207,9 @@ class InteractionHandler {
                 )
             );
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🚫 Zablokuj serwer', '🚫 Block Server')).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_unban_guild').setLabel(t('🔓 Odblokuj serwer', '🔓 Unblock Server')).setStyle(ButtonStyle.Secondary).setDisabled(bannedCount === 0),
-            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Wróć do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🚫').setLabel(t('Zablokuj serwer', 'Block Server')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unban_guild').setEmoji('🔓').setLabel(t('Odblokuj serwer', 'Unblock Server')).setStyle(ButtonStyle.Secondary).setDisabled(bannedCount === 0),
+            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [row] });
     }
@@ -7250,7 +7250,7 @@ class InteractionHandler {
                     .setDescription(t(`Brak aktywnego serwera z nazwą zawierającą "**${query}**".`, `No active server with name containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
                 )],
             });
             return;
@@ -7274,7 +7274,7 @@ class InteractionHandler {
                 ),
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
                 ),
             ],
         });
@@ -7304,8 +7304,8 @@ class InteractionHandler {
         if (guild?.iconURL()) embed.setThumbnail(guild.iconURL({ dynamic: true, size: 128 }));
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`panel_ban_guild_ok_${guildId}`).setLabel(t('✅ Tak, zbanuj', '✅ Yes, ban')).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('❌ Anuluj', '❌ Cancel')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId(`panel_ban_guild_ok_${guildId}`).setEmoji('✅').setLabel(t('Tak, zbanuj', 'Yes, ban')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('❌').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [row] });
     }
@@ -7342,7 +7342,7 @@ class InteractionHandler {
                     `Server **${guildName}** has been banned. The bot is leaving and cannot be re-added.`
                 ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
             )],
         });
     }
@@ -7355,7 +7355,7 @@ class InteractionHandler {
             await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0x57F287).setDescription(t('Brak zbanowanych serwerów.', 'No banned servers.'))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
                 )],
             });
             return;
@@ -7384,7 +7384,7 @@ class InteractionHandler {
                         .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
                 ),
             ],
         });
@@ -7406,7 +7406,7 @@ class InteractionHandler {
                 .setColor(0x57F287)
                 .setDescription(t(`✅ Serwer **${guildName}** został odblokowany.`, `✅ Server **${guildName}** has been unblocked.`))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
             )],
         });
     }
@@ -7489,7 +7489,7 @@ class InteractionHandler {
             const backRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('ach_vb')
-                    .setLabel(t('↩️ Wróć', '↩️ Back'))
+                    .setEmoji('↩️').setLabel(t('Wróć', 'Back'))
                     .setStyle(ButtonStyle.Secondary)
             );
 
@@ -7665,7 +7665,7 @@ class InteractionHandler {
                 .setDisabled(safePage >= totalPages - 1),
             new ButtonBuilder()
                 .setCustomId('ach_rank_global')
-                .setLabel(t('🌐 Global', '🌐 Global'))
+                .setEmoji('🌐').setLabel(t('Global', 'Global'))
                 .setStyle(ButtonStyle.Secondary)
         );
 
