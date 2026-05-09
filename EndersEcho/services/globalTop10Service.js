@@ -222,18 +222,13 @@ class GlobalTop10Service {
             const bossStr   = player.bossName || msgs.unknownBoss;
 
             if (position <= 3) {
-                // TOP 3 — blok z blockquote i paskiem postępu
-                const pct      = Math.round((player.scoreValue / top1Score) * 100);
-                const filled   = Math.round(pct / 5); // 20 kratek = 100%
-                const bar      = '█'.repeat(filled) + '░'.repeat(20 - filled);
-                const posLabel = medals[i];
-
-                lines += `\`${String(position).padStart(2, '0')}\` ${posLabel}  **${displayName}**  ·  **${scoreStr}**\n`;
-                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n`;
-                lines += `> ${bar}  \`${pct}%\`\n\n`;
+                // TOP 3 — blok z blockquote
+                lines += `\`${String(position).padStart(2, '0')}\` ${medals[i]}  **${displayName}**  ·  **${scoreStr}**\n`;
+                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
             } else {
-                // 4–10 — kompaktowa jednolinijkowa
-                lines += `\`${String(position).padStart(2, '0')}\`  ${changeStr}  **${displayName}**  —  ${scoreStr}  ·  ${bossStr}  *${shortDate}*${tagSuffix}\n`;
+                // 4–10 — dwie linie
+                lines += `\`${String(position).padStart(2, '0')}\`  ${changeStr}  **${displayName}**  ·  **${scoreStr}**\n`;
+                lines += `> ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
             }
         }
 
