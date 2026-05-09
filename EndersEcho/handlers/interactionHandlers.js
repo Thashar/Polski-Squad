@@ -3721,7 +3721,7 @@ class InteractionHandler {
             if (customId.startsWith('cfg_step_') || customId === 'cfg_back' || customId === 'cfg_tag_open' ||
                 customId === 'cfg_lang_pol' || customId === 'cfg_lang_eng' ||
                 customId === 'cfg_roles_start' || customId === 'cfg_roles_skip' || customId === 'cfg_tier_back' || customId === 'cfg_tier_accept' || customId === 'cfg_roles_enable' ||
-                customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') ||
+                customId.startsWith('cfg_roles_skip_') || customId.startsWith('cfg_roles_back_') || customId.startsWith('cfg_role_btn_') ||
                 /^cfg_tier_\d+$/.test(customId) || customId === 'cfg_tier_assign' || customId === 'cfg_tier_reset' || customId === 'cfg_tier_reset_ok' || customId === 'cfg_tier_reset_cancel' ||
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
