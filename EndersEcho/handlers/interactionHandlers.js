@@ -4876,6 +4876,33 @@ class InteractionHandler {
                 return;
             }
 
+            if (customId === 'panel_tester_remove_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_del_ps') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelPlayerSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_del_as') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelAchSelect(interaction);
+                return;
+            }
+
             if (customId === 'ee_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
@@ -4923,33 +4950,6 @@ class InteractionHandler {
             }
 
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
-
-            if (customId === 'panel_tester_remove_select') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelTesterRemoveSelect(interaction);
-                return;
-            }
-
-            if (customId === 'panel_ach_del_ps') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelAchDelPlayerSelect(interaction);
-                return;
-            }
-
-            if (customId === 'panel_ach_del_as') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelAchDelAchSelect(interaction);
-                return;
-            }
 
             if (customId === 'notif_server_select') {
                 await this._handleNotifServerSelect(interaction);
