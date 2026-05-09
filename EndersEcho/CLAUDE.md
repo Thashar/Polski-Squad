@@ -93,6 +93,7 @@
    - **Mutex per-guild** (`_locks` Map): jeśli aktualizacja dla danego serwera jest już w toku, kolejna zostaje oznaczona jako `hasPending`; po zakończeniu bieżącej uruchamiana jest automatycznie z najświeższym rankingiem (via `setImmediate`). Wyklucza race condition przy równoczesnych rekordach.
    - **Diff-based update**: zamiast resetować wszystkie role i przyznawać od nowa, oblicza różnicę między aktualnym stanem (z Discord cache `role.members`) a pożądanym (z rankingu). Tylko faktyczne zmiany trafiają do API. Jeśli gracz nie zmienił pozycji, zero API calls.
    - **Równoległe operacje**: usunięcia i dodania wykonywane przez `Promise.allSettled` — szybsze niż sekwencyjne `await`. Batch fetch wszystkich memberów wymagających roli naraz (`guild.members.fetch({ user: [...] })`).
+   - **Logowanie zmian per-guild**: `roleService` przyjmuje `logService` w konstruktorze i loguje przez `logService._gl(guildId)` szczegóły każdej zmiany: `➖ Usunięto rolę @NazwaRoli: nick1, nick2` i `➕ Przyznano rolę @NazwaRoli: nick1, nick2` — trafia do dedykowanego webhooka serwera.
    - **Ogłoszenie rekordu** (`rankingService.createRecordEmbed`):
      - Kolor embeda wg pozycji: 🥇 złoty (TOP1), 🥈 srebrny (TOP2), 🥉 brązowy (TOP3), niebieski (TOP4-10), zielony (TOP11+)
      - Tytuł: `🏆 GRATULACJE!` + opis z headerem markdown
