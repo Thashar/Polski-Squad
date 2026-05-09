@@ -6334,17 +6334,17 @@ class InteractionHandler {
             const hasNextPage = safePage < totalPages - 1;
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
-                    .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`)
-                    .setLabel('◀')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(!hasPrevPage),
-                new ButtonBuilder()
                     .setCustomId('panel_back')
                     .setLabel(t2('◀️ Powrót do panelu', '◀️ Back to Panel'))
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
+                    .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`)
+                    .setLabel(`◀ ${t2(`Str. ${safePage}`, `Page ${safePage}`)}`)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!hasPrevPage),
+                new ButtonBuilder()
                     .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`)
-                    .setLabel('▶')
+                    .setLabel(`▶ ${t2(`Str. ${safePage + 2}`, `Page ${safePage + 2}`)}`)
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(!hasNextPage),
             ));
