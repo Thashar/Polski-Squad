@@ -1641,6 +1641,25 @@ class InteractionHandler {
             try {
                 const isEng = (newData.lang || 'pol') === 'eng';
                 const tCfg = (p, e) => isEng ? e : p;
+
+                const formatTopRoles = (topRoles) => {
+                    if (!topRoles) return tCfg('❌ Brak', '❌ None');
+                    let tiers = topRoles.tiers;
+                    if (!tiers) {
+                        tiers = [];
+                        if (topRoles.top1)      tiers.push({ from: 1,  to: 1,  roleId: topRoles.top1 });
+                        if (topRoles.top2)      tiers.push({ from: 2,  to: 2,  roleId: topRoles.top2 });
+                        if (topRoles.top3)      tiers.push({ from: 3,  to: 3,  roleId: topRoles.top3 });
+                        if (topRoles.top4to10)  tiers.push({ from: 4,  to: 10, roleId: topRoles.top4to10 });
+                        if (topRoles.top11to30) tiers.push({ from: 11, to: 30, roleId: topRoles.top11to30 });
+                    }
+                    if (tiers.length === 0) return tCfg('❌ Brak progów', '❌ No tiers');
+                    return tiers.map(t => {
+                        const range = t.from === t.to ? `${t.from}` : `${t.from}–${t.to}`;
+                        return `${tCfg('Próg', 'Tier')} ${range}: <@&${t.roleId}>`;
+                    }).join('\n');
+                };
+
                 let configEmbed;
                 if (!wasAlreadyConfigured) {
                     // Pierwsza konfiguracja — pełny embed ze wszystkimi ustawieniami
@@ -1654,7 +1673,7 @@ class InteractionHandler {
                             { name: tCfg('Kanał bota', 'Bot channel'), value: `<#${newData.allowedChannelId}>` },
                             { name: tCfg('Język', 'Language'), value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
-                            { name: 'Role TOP', value: newData.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None') },
+                            { name: 'Role TOP', value: formatTopRoles(newData.topRoles) },
                             { name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: newData.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled') },
                             { name: tCfg('Kanał raportów', 'Reports channel'), value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
                             { name: tCfg('Weryfikacja społeczności', 'Community verification'), value: newData.communityVerification?.enabled ? `${tCfg('✅ Włączona', '✅ Enabled')} (${tCfg('próg', 'threshold')}: ${newData.communityVerification.threshold})` : tCfg('❌ Wyłączona', '❌ Disabled') }
@@ -1683,9 +1702,10 @@ class InteractionHandler {
                     const oldRolesJson = JSON.stringify(old?.topRoles || null);
                     const newRolesJson = JSON.stringify(newData.topRoles || null);
                     if (oldRolesJson !== newRolesJson) {
-                        const oldLabel = old?.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None');
-                        const newLabel = newData.topRoles ? tCfg('✅ Skonfigurowane', '✅ Configured') : tCfg('❌ Brak', '❌ None');
-                        diffFields.push({ name: 'Role TOP', value: `${oldLabel} → ${newLabel}` });
+                        const oldDetail = formatTopRoles(old?.topRoles || null);
+                        const newDetail = formatTopRoles(newData.topRoles || null);
+                        diffFields.push({ name: tCfg('Role TOP (poprzednie)', 'TOP Roles (previous)'), value: oldDetail });
+                        diffFields.push({ name: tCfg('Role TOP (nowe)', 'TOP Roles (new)'), value: newDetail });
                     }
                     if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
                         const oldVal = old?.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
