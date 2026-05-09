@@ -707,9 +707,17 @@ class InteractionHandler {
                         'The bot can periodically (every ~3 days) send a TOP10 global ranking report to your channel.\n\nThe report includes: top 10 players from all servers, their scores, position changes (▲/▼) since the last report, and the boss fought during that period.\n\nWould you like to receive these reports?'
                     ) + currentNotifLine
                 );
-            const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('Tak, włącz', 'Yes, enable')).setEmoji('✅').setStyle(ButtonStyle.Success);
-            const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('Nie', 'No')).setEmoji('❌').setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(yesBtn, noBtn, backBtn)] });
+            const step6Btns = [];
+            if (state.globalTop3Notifications !== true) {
+                step6Btns.push(new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success));
+            } else {
+                step6Btns.push(new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('Wyłącz', 'Disable')).setEmoji('❌').setStyle(ButtonStyle.Secondary));
+            }
+            if (state.globalTop3Notifications === null) {
+                step6Btns.push(new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary));
+            }
+            step6Btns.push(backBtn);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...step6Btns)] });
 
         } else if (step === 7) {
             const existing = await this.roleRankingConfigService.loadRoleRankings(guildId);
