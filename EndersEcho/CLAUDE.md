@@ -296,7 +296,7 @@
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
 - **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
-- **Krok 5:** Role TOP (opcjonalne) — do 10 w pełni konfigurowalnych progów per serwer:
+- **Krok 5:** Role TOP (opcjonalne) — do 20 w pełni konfigurowalnych progów per serwer:
   - Ekran progów: rząd 1-2: 10 przycisków zakresów (zielony=skonfigurowany, niebieski=następny aktywny, szary=nieaktywny); rząd 3-4: przyciski przypisania ról (Primary=rola przypisana, Secondary=brak roli); rząd 5: "Zaakceptuj zmiany", "Usuń konfigurację", "← Wstecz"
   - Kliknięcie przycisku zakresu → modal zakresu (np. `1-3` lub `4`); walidacja: ciągłość (brak luk), format, minimum = previous.to+1
   - Kliknięcie przycisku roli (`cfg_role_btn_N`) → ekran RoleSelectMenu dla tego progu; po wybraniu → powrót do ekranu progów; "Brak roli" czyści przypisanie; "← Wstecz" wraca bez zmian
