@@ -147,27 +147,18 @@ class RoleService {
             return;
         }
 
-        const removedLog = [];
-        const addedLog = [];
-
         // Usunięcia w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
         if (toRemove.length > 0) {
             const CHUNK = 10;
             for (let i = 0; i < toRemove.length; i += CHUNK) {
                 const chunk = toRemove.slice(i, i + CHUNK);
-                const results = await Promise.allSettled(
+                await Promise.allSettled(
                     chunk.map(({ member, role }) =>
-                        member.roles.remove(role)
-                            .then(() => ({ nick: member.displayName, roleName: role.name }))
-                            .catch(err => {
-                                gl.error(`Błąd usuwania roli "${role.name}" od "${member.displayName}": ${err.message}`);
-                                return null;
-                            })
+                        member.roles.remove(role).catch(err =>
+                            gl.error(`Błąd usuwania roli "${role.name}" od "${member.displayName}": ${err.message}`)
+                        )
                     )
                 );
-                for (const r of results) {
-                    if (r.status === 'fulfilled' && r.value) removedLog.push(r.value);
-                }
                 if (i + CHUNK < toRemove.length) {
                     await new Promise(r => setTimeout(r, 250));
                 }
@@ -189,7 +180,7 @@ class RoleService {
             const CHUNK = 10;
             for (let i = 0; i < toAdd.length; i += CHUNK) {
                 const chunk = toAdd.slice(i, i + CHUNK);
-                const results = await Promise.allSettled(
+                await Promise.allSettled(
                     chunk.map(async ({ userId, role }) => {
                         const member = members.get(userId);
                         if (!member) {
@@ -200,36 +191,17 @@ class RoleService {
                                 );
                                 removedFromRanking.push(userId);
                             }
-                            return null;
+                            return;
                         }
-                        await member.roles.add(role).catch(err => {
-                            gl.error(`Błąd przyznawania roli "${role.name}" użytkownikowi "${member.displayName}": ${err.message}`);
-                            throw err;
-                        });
-                        return { nick: member.displayName, roleName: role.name };
+                        await member.roles.add(role).catch(err =>
+                            gl.error(`Błąd przyznawania roli "${role.name}" użytkownikowi "${member.displayName}": ${err.message}`)
+                        );
                     })
                 );
-                for (const r of results) {
-                    if (r.status === 'fulfilled' && r.value) addedLog.push(r.value);
-                }
                 if (i + CHUNK < toAdd.length) {
                     await new Promise(r => setTimeout(r, 250));
                 }
             }
-        }
-
-        // Logowanie zmian pogrupowane po nazwie roli
-        const groupByRole = (arr) => arr.reduce((acc, { nick, roleName }) => {
-            if (!acc[roleName]) acc[roleName] = [];
-            acc[roleName].push(nick);
-            return acc;
-        }, {});
-
-        for (const [roleName, nicks] of Object.entries(groupByRole(removedLog))) {
-            gl.info(`➖ Usunięto rolę @${roleName}: ${nicks.join(', ')}`);
-        }
-        for (const [roleName, nicks] of Object.entries(groupByRole(addedLog))) {
-            gl.info(`➕ Przyznano rolę @${roleName}: ${nicks.join(', ')}`);
         }
 
         // Jeśli usunięto kogoś z rankingu, zaplanuj ponowny diff z odświeżonymi danymi
