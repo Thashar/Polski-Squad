@@ -23,13 +23,18 @@ function normalizeTiers(topRoles) {
 }
 
 class RoleService {
-    constructor(config, rankingService) {
+    constructor(config, rankingService, logService = null) {
         this.config = config;
         this.rankingService = rankingService;
+        this.logService = logService;
         // Per-guild mutex: zapobiega równoległym aktualizacjom ról dla tego samego serwera.
         // Jeśli aktualizacja jest w toku i przyjdzie kolejna, ustawia hasPending=true,
         // dzięki czemu po zakończeniu bieżącej zostanie uruchomiona ponowna z najświeższym rankingiem.
         this._locks = new Map();
+    }
+
+    _gl(guildId) {
+        return this.logService ? this.logService._gl(guildId) : logger;
     }
 
     /**
@@ -42,11 +47,11 @@ class RoleService {
      */
     async updateTopRoles(guild, _sortedPlayers, guildTopRoles = null) {
         if (!guildTopRoles || Object.keys(guildTopRoles).length === 0) {
-            logger.info(`ℹ️ Serwer ${guild.name} nie ma skonfigurowanych ról TOP — pomijam aktualizację`);
             return true;
         }
 
         const guildId = guild.id;
+        const gl = this._gl(guildId);
         let lock = this._locks.get(guildId);
         if (!lock) {
             lock = { running: false, hasPending: false, pendingGuild: null, pendingTopRoles: null };
@@ -57,7 +62,6 @@ class RoleService {
             lock.hasPending = true;
             lock.pendingGuild = guild;
             lock.pendingTopRoles = guildTopRoles;
-            logger.info(`⏳ Aktualizacja ról TOP dla ${guild.name} już w toku — zaplanowano ponowną po zakończeniu`);
             return true;
         }
 
@@ -66,9 +70,9 @@ class RoleService {
 
         try {
             const players = await this.rankingService.getSortedPlayers(guildId);
-            await this._applyRoleDiff(guild, players, guildTopRoles);
+            await this._applyRoleDiff(guild, players, guildTopRoles, gl);
         } catch (error) {
-            logger.error('❌ Błąd podczas aktualizacji ról TOP:', error);
+            gl.error(`❌ Błąd podczas aktualizacji ról TOP: ${error.message}`);
             return false;
         } finally {
             lock.running = false;
@@ -90,7 +94,7 @@ class RoleService {
      * Zamiast resetować wszystkie role i przyznawać od nowa, zmienia tylko to co faktycznie się różni.
      * Operacje usuwania i dodawania wykonywane są równolegle (Promise.allSettled).
      */
-    async _applyRoleDiff(guild, sortedPlayers, guildTopRoles) {
+    async _applyRoleDiff(guild, sortedPlayers, guildTopRoles, gl = logger) {
         const normalized = normalizeTiers(guildTopRoles);
         if (!normalized) return;
 
@@ -101,7 +105,7 @@ class RoleService {
 
         const allTopRoles = tierRoles.map(t => t.role);
         if (allTopRoles.length === 0) {
-            logger.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze ${guild.name}`);
+            gl.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze "${guild.name}"`);
             return;
         }
 
@@ -140,7 +144,6 @@ class RoleService {
         }
 
         if (toRemove.length === 0 && toAdd.length === 0) {
-            logger.info('✅ Role TOP bez zmian');
             return;
         }
 
@@ -152,7 +155,7 @@ class RoleService {
                 await Promise.allSettled(
                     chunk.map(({ member, role }) =>
                         member.roles.remove(role).catch(err =>
-                            logger.error(`Błąd usuwania roli ${role.name} od ${member.user.tag}:`, err.message)
+                            gl.error(`Błąd usuwania roli "${role.name}" od "${member.displayName}": ${err.message}`)
                         )
                     )
                 );
@@ -170,7 +173,7 @@ class RoleService {
             try {
                 members = await guild.members.fetch({ user: ids });
             } catch (err) {
-                logger.error('Błąd batch fetch members:', err.message);
+                gl.error(`Błąd batch fetch members: ${err.message}`);
             }
 
             // Dodania w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
@@ -181,17 +184,17 @@ class RoleService {
                     chunk.map(async ({ userId, role }) => {
                         const member = members.get(userId);
                         if (!member) {
-                            logger.warn(`⚠️ ${userId} nie jest na serwerze — usuwam z rankingu`);
+                            gl.warn(`⚠️ Użytkownik ${userId} nie jest na serwerze — usuwam z rankingu`);
                             if (this.rankingService) {
                                 await this.rankingService.removePlayerFromRanking(userId, guild.id).catch(e =>
-                                    logger.error(`Błąd usuwania z rankingu:`, e.message)
+                                    gl.error(`Błąd usuwania z rankingu: ${e.message}`)
                                 );
                                 removedFromRanking.push(userId);
                             }
                             return;
                         }
                         await member.roles.add(role).catch(err =>
-                            logger.error(`Błąd przyznawania roli ${role.name} użytkownikowi ${member.user.tag}:`, err.message)
+                            gl.error(`Błąd przyznawania roli "${role.name}" użytkownikowi "${member.displayName}": ${err.message}`)
                         );
                     })
                 );
@@ -200,8 +203,6 @@ class RoleService {
                 }
             }
         }
-
-        logger.info(`✅ Role TOP zaktualizowane — usunięto: ${toRemove.length}, dodano: ${toAdd.length}`);
 
         // Jeśli usunięto kogoś z rankingu, zaplanuj ponowny diff z odświeżonymi danymi
         if (removedFromRanking.length > 0) {
