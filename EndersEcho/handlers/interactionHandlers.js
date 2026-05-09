@@ -999,10 +999,10 @@ class InteractionHandler {
         let desc = t(
             'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w rankingu serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
             '**Jak to działa:**\nKażdy raz gdy wynik gracza zostanie zaktualizowany, bot automatycznie przelicza ranking i przypisuje role. Nie wymaga ręcznej pracy.\nGracze, którzy wypadną z danego progu, tracą rolę i mogą otrzymać niższą.\n\n' +
-            '**Konfiguracja:**\nMożesz zdefiniować do **10 progów** — każdy próg to zakres pozycji rankingowych i przypisana rola Discord.\nPrzykład: Próg 1 = miejsca 1–3 → rola Gold, Próg 2 = miejsca 4–10 → rola Silver.\n\nMożesz pominąć ten krok i skonfigurować role później przez `/configure`.',
+            '**Konfiguracja:**\nMożesz zdefiniować do **20 progów** — każdy próg to zakres pozycji rankingowych i przypisana rola Discord.\nPrzykład: Próg 1 = miejsca 1–3 → rola Gold, Próg 2 = miejsca 4–10 → rola Silver.\n\nMożesz pominąć ten krok i skonfigurować role później przez `/configure`.',
             'You can assign special Discord roles to players based on their position in the server ranking. This highlights your most active players.\n\n' +
             '**How it works:**\nEvery time a player\'s score is updated, the bot automatically recalculates the ranking and reassigns roles in real time. No manual work needed.\nPlayers who drop out of a tier lose the role and may receive a lower one.\n\n' +
-            '**Configuration:**\nYou can define up to **10 tiers** — each tier is a range of ranking positions with an assigned Discord role.\nExample: Tier 1 = positions 1–3 → Gold role, Tier 2 = positions 4–10 → Silver role.\n\nYou can skip this step and configure roles later by running `/configure` again.'
+            '**Configuration:**\nYou can define up to **20 tiers** — each tier is a range of ranking positions with an assigned Discord role.\nExample: Tier 1 = positions 1–3 → Gold role, Tier 2 = positions 4–10 → Silver role.\n\nYou can skip this step and configure roles later by running `/configure` again.'
         );
 
         if (hasTiers) {
@@ -1561,7 +1561,8 @@ class InteractionHandler {
         if (customId === 'cfg_roles_skip') {
             state.rolesSkipped = true;
             this._configWizard.set(key, state);
-            await this._showStep5Screen(interaction, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
             return;
         }
 
@@ -4876,6 +4877,33 @@ class InteractionHandler {
                 return;
             }
 
+            if (customId === 'panel_tester_remove_select') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelTesterRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_del_ps') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelPlayerSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_ach_del_as') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelAchSelect(interaction);
+                return;
+            }
+
             if (customId === 'ee_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
                 if (!interaction.member.permissions.has('Administrator')) {
@@ -4923,33 +4951,6 @@ class InteractionHandler {
             }
 
             if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) return;
-
-            if (customId === 'panel_tester_remove_select') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelTesterRemoveSelect(interaction);
-                return;
-            }
-
-            if (customId === 'panel_ach_del_ps') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelAchDelPlayerSelect(interaction);
-                return;
-            }
-
-            if (customId === 'panel_ach_del_as') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelAchDelAchSelect(interaction);
-                return;
-            }
 
             if (customId === 'notif_server_select') {
                 await this._handleNotifServerSelect(interaction);
