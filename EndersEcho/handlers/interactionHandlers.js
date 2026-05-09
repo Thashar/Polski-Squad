@@ -625,30 +625,11 @@ class InteractionHandler {
             return;
         }
 
-        await interaction.deferReply({ flags: ['Ephemeral'] });
+        await interaction.deferReply();
 
         try {
             const msgs  = this.msgs(interaction.guildId);
             const embed = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
-
-            // Wyślij na dozwolony kanał serwera
-            const guildCfg  = this.config.getAllGuilds().find(g => g.id === interaction.guildId)
-                           || this.guildConfigService?.getConfig(interaction.guildId);
-            const channelId = guildCfg?.allowedChannelId;
-
-            if (channelId) {
-                const channel = await interaction.client.channels.fetch(channelId).catch(() => null);
-                if (channel) {
-                    await channel.send({ embeds: [embed] });
-                    const lang  = this.guildConfigService?.getConfig(interaction.guildId)?.lang
-                               || this.config.getAllGuilds().find(g => g.id === interaction.guildId)?.lang
-                               || 'pol';
-                    await interaction.editReply({ content: lang === 'pol' ? `✅ Wysłano TOP 10 na <#${channelId}>` : `✅ TOP 10 sent to <#${channelId}>` });
-                    return;
-                }
-            }
-
-            // Fallback — wyślij ephemeral jeśli kanał niedostępny
             await interaction.editReply({ embeds: [embed] });
         } catch (err) {
             logger.error(`[/generate] Błąd: ${err.message}`);
