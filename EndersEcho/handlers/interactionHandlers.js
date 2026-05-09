@@ -420,7 +420,8 @@ class InteractionHandler {
 
         const btn = (n, labelPol, labelEng) => new ButtonBuilder()
             .setCustomId(`cfg_step_${n}`)
-            .setLabel((done[n] ? '✅ ' : '🔘 ') + t(labelPol, labelEng))
+            .setLabel(t(labelPol, labelEng))
+            .setEmoji(done[n] ? '✅' : '🔘')
             .setStyle(ButtonStyle.Secondary);
 
         const rows = [
@@ -449,7 +450,8 @@ class InteractionHandler {
             rows.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('cfg_accept')
-                    .setLabel(t('🔒  Zaakceptuj konfigurację!', '🔒  Accept Configuration!'))
+                    .setLabel(t('Zaakceptuj konfigurację!', 'Accept Configuration!'))
+                    .setEmoji('🔒')
                     .setStyle(ButtonStyle.Success),
                 cancelBtn
             ));
@@ -458,15 +460,20 @@ class InteractionHandler {
         }
 
 
+        const tier5Count = (state.topRolesTemp?.tierRanges?.length ?? 0) > 0
+            ? state.topRolesTemp.tierRanges.length
+            : (state.topRoles?.tiers?.length ?? 0);
+        const rankCount = state.roleRankingsCount ?? 0;
+
         const summaryLines = [
-            done[1] ? `🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polish' : '🇬🇧 English'}` : null,
-            done[2] ? `📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
-            done[3] ? `⚠️ ${t('Kanał raportów:', 'Report Channel:')} <#${state.invalidReportChannelId}>` : null,
-            done[4] ? `🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
-            done[5] ? `🏆 ${t('Role TOP:', 'TOP Roles:')} ${state.rolesSkipped ? t('Pominięte', 'Skipped') : t('Skonfigurowane', 'Configured')}` : null,
-            done[6] ? `🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${state.globalTop3Notifications ? t('Włączone', 'Enabled') : t('Wyłączone', 'Disabled')}` : null,
-            done[7] ? `🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')}` : null,
-            done[8] ? `🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${state.communityVerifEnabled ? t('Włączona (próg: ', 'Enabled (threshold: ') + (state.communityVerifThreshold || 5) + t(', kanał: ', ', channel: ') + (state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')) + ')' : t('Wyłączona', 'Disabled')}` : null,
+            done[1] ? `✅ 🌐 ${t('Język:', 'Language:')} ${state.lang === 'pol' ? '🇵🇱 Polski' : '🇬🇧 English'}` : null,
+            done[2] ? `✅ 📡 ${t('Kanał:', 'Channel:')} <#${state.allowedChannelId}>` : null,
+            done[3] ? `✅ ⚠️ ${t('Kanał raportów:', 'Report Channel:')} <#${state.invalidReportChannelId}>` : null,
+            done[4] ? `✅ 🏷️ ${t('Tag:', 'Tag:')} ${state.tag}` : null,
+            done[5] ? (state.rolesSkipped ? `❌ 🏆 ${t('Role TOP:', 'TOP Roles:')} ${t('Pominięte', 'Skipped')}` : `✅ 🏆 ${t('Role TOP:', 'TOP Roles:')} ${t('Skonfigurowane', 'Configured')} (${tier5Count})`) : null,
+            done[6] ? (state.globalTop3Notifications ? `✅ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Włączone', 'Enabled')}` : `❌ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Wyłączone', 'Disabled')}`) : null,
+            done[7] ? (rankCount > 0 ? `✅ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')} (${rankCount})` : `❌ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Pominięte', 'Skipped')}`) : null,
+            done[8] ? (state.communityVerifEnabled ? `✅ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Włączona (próg: ', 'Enabled (threshold: ')}${state.communityVerifThreshold || 5}${t(', kanał: ', ', channel: ')}${state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')})` : `❌ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Wyłączona', 'Disabled')}`) : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -550,6 +557,7 @@ class InteractionHandler {
             const existing = this.guildConfigService?.getConfig(interaction.guildId);
             if (existing?.configured) {
                 const existingCv = existing.communityVerification || {};
+                const existingRoleRankings = await this.roleRankingConfigService.loadRoleRankings(interaction.guildId);
                 this._configWizard.set(key, {
                     allowedChannelId: existing.allowedChannelId || null,
                     invalidReportChannelId: existing.invalidReportChannelId || null,
@@ -559,6 +567,7 @@ class InteractionHandler {
                     rolesSkipped: !existing.topRoles || existing.topRoles.disabled === true,
                     globalTop3Notifications: existing.globalTopNotifications ?? existing.globalTop3Notifications ?? true,
                     roleRankingsDone: true,
+                    roleRankingsCount: existingRoleRankings.length,
                     communityVerifDone: true,
                     communityVerifEnabled: existingCv.enabled === true,
                     communityVerifChannelId: existingCv.rejectedChannelId || null,
@@ -574,6 +583,7 @@ class InteractionHandler {
                     rolesSkipped: false,
                     globalTop3Notifications: null,
                     roleRankingsDone: false,
+                    roleRankingsCount: 0,
                     communityVerifDone: false,
                     communityVerifEnabled: false,
                     communityVerifChannelId: null,
@@ -612,19 +622,25 @@ class InteractionHandler {
         const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
 
         if (step === 1) {
+            const currentLangLine = state.lang
+                ? '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + (state.lang === 'pol' ? '🇵🇱 Polski' : '🇬🇧 English')
+                : '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + t('Nie ustawiono', 'Not set');
             const embed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('🌐 Krok 1 — Język', '🌐 Step 1 — Language'))
                 .setDescription(
                     t(
                         'Wybierz język interfejsu dla tego serwera.\nWszystkie wiadomości bota, powiadomienia i opisy komend będą wyświetlane w wybranym języku.',
                         'Choose the display language for this server.\nAll bot messages, notifications and command descriptions will appear in the selected language.'
-                    )
+                    ) + currentLangLine
                 );
-            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel(t('🇵🇱 Polski', '🇵🇱 Polish')).setStyle(ButtonStyle.Primary);
-            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel(t('🇬🇧 Angielski', '🇬🇧 English')).setStyle(ButtonStyle.Primary);
+            const polBtn = new ButtonBuilder().setCustomId('cfg_lang_pol').setLabel(t('Polski', 'Polish')).setEmoji('🇵🇱').setStyle(ButtonStyle.Primary);
+            const engBtn = new ButtonBuilder().setCustomId('cfg_lang_eng').setLabel(t('Angielski', 'English')).setEmoji('🇬🇧').setStyle(ButtonStyle.Primary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(polBtn, engBtn, backBtn)] });
 
         } else if (step === 2) {
+            const currentChLine = state.allowedChannelId
+                ? '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** <#' + state.allowedChannelId + '>'
+                : '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + t('Nie ustawiono', 'Not set');
             const embed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('📡 Krok 2 — Kanał bota', '📡 Step 2 — Bot Channel'))
                 .setDescription(
@@ -635,7 +651,7 @@ class InteractionHandler {
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
                         '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n• `/achievements` — view achievements\n\n' +
                         'Admin commands are available through `/manage` from any channel.'
-                    )
+                    ) + currentChLine
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
                 .setCustomId('cfg_channel_select')
@@ -644,13 +660,16 @@ class InteractionHandler {
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
 
         } else if (step === 3) {
+            const currentRepLine = state.invalidReportChannelId
+                ? '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** <#' + state.invalidReportChannelId + '>'
+                : '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + t('Nie ustawiono', 'Not set');
             const embed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('⚠️ Krok 3 — Kanał raportów', '⚠️ Step 3 — Report Channel'))
                 .setDescription(
                     t(
                         'Gdy użytkownik prześle screenshot, który zostanie odrzucony (podrobione zdjęcie, zły screen, brak Victory), raport jest generowany automatycznie.\n\nUstaw dedykowany kanał na swoim serwerze, na którym będą pojawiać się te raporty. Twoi moderatorzy będą mogli zatwierdzać lub blokować użytkowników bezpośrednio z serwera.',
                         'When a user submits a screenshot that is rejected (fake photo, wrong screen, no Victory found), a report is generated automatically.\n\nSet a dedicated channel on your server where these reports appear. Your moderators can then approve or block users directly from your server.'
-                    )
+                    ) + currentRepLine
                 );
             const channelSelect = new ChannelSelectMenuBuilder()
                 .setCustomId('cfg_report_channel_select')
@@ -659,13 +678,16 @@ class InteractionHandler {
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(channelSelect), new ActionRowBuilder().addComponents(backBtn)] });
 
         } else if (step === 4) {
+            const currentTagLine = (state.tag !== null && state.tag !== undefined)
+                ? '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + state.tag
+                : '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + t('Nie ustawiono', 'Not set');
             const embed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('🏷️ Krok 4 — Tag serwera', '🏷️ Step 4 — Server Tag'))
                 .setDescription(
                     t(
                         'Tag to krótki identyfikator (1–4 znaki) wyświetlany obok wyników Twojego serwera w globalnym rankingu.\n\nTag może być tekstem lub emoji.\nPrzykłady: 🇵🇱  ☆  Ӂ  US  PS  EU',
                         'The tag is a short identifier (1–4 characters) shown next to your server\'s players in the global ranking.\n\nThe tag can be text or an emoji.\nExamples: 🇵🇱  ☆  Ӂ  US  PS  EU'
-                    )
+                    ) + currentTagLine
                 );
             const tagBtn = new ButtonBuilder().setCustomId('cfg_tag_open').setLabel(t('Wprowadź tag', 'Enter Tag')).setStyle(ButtonStyle.Primary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(tagBtn, backBtn)] });
@@ -674,16 +696,19 @@ class InteractionHandler {
             await this._showStep5Screen(interaction, state);
 
         } else if (step === 6) {
+            const currentNotifLine = (state.globalTop3Notifications !== null && state.globalTop3Notifications !== undefined)
+                ? '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + (state.globalTop3Notifications ? t('✅ Włączone', '✅ Enabled') : t('❌ Wyłączone', '❌ Disabled'))
+                : '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + t('Nie ustawiono', 'Not set');
             const embed = new EmbedBuilder().setColor(0x5865F2)
                 .setTitle(t('🌐 Krok 6 — Raporty Global TOP10', '🌐 Step 6 — Global TOP10 Reports'))
                 .setDescription(
                     t(
                         'Bot może cyklicznie (co ~3 dni) wysyłać na Twój kanał raport TOP10 globalnego rankingu EndersEcho.\n\nRaport zawiera: 10 najlepszych graczy ze wszystkich serwerów, ich wyniki, zmiany pozycji (▲/▼) od poprzedniego raportu oraz bossa, z którym walczono w tym okresie.\n\nCzy chcesz otrzymywać te raporty?',
                         'The bot can periodically (every ~3 days) send a TOP10 global ranking report to your channel.\n\nThe report includes: top 10 players from all servers, their scores, position changes (▲/▼) since the last report, and the boss fought during that period.\n\nWould you like to receive these reports?'
-                    )
+                    ) + currentNotifLine
                 );
-            const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('✅ Tak, włącz', '✅ Yes, enable')).setStyle(ButtonStyle.Success);
-            const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('❌ Nie', '❌ No')).setStyle(ButtonStyle.Secondary);
+            const yesBtn = new ButtonBuilder().setCustomId('cfg_notif_yes').setLabel(t('Tak, włącz', 'Yes, enable')).setEmoji('✅').setStyle(ButtonStyle.Success);
+            const noBtn = new ButtonBuilder().setCustomId('cfg_notif_no').setLabel(t('Nie', 'No')).setEmoji('❌').setStyle(ButtonStyle.Secondary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(yesBtn, noBtn, backBtn)] });
 
         } else if (step === 7) {
@@ -752,9 +777,9 @@ class InteractionHandler {
                     : t('**Status:** ❌ Wyłączony', '**Status:** ❌ Disabled')
                 ));
 
-            const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('✅ Włącz', '✅ Enable')).setStyle(ButtonStyle.Success);
-            const disableBtn = new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('❌ Wyłącz / Pomiń', '❌ Disable / Skip')).setStyle(ButtonStyle.Secondary);
-            const thresholdBtn = new ButtonBuilder().setCustomId('cfg_cv_threshold').setLabel(t('🔢 Ustaw próg', '🔢 Set Threshold')).setStyle(ButtonStyle.Primary);
+            const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success);
+            const disableBtn = new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Wyłącz / Pomiń', 'Disable / Skip')).setEmoji('❌').setStyle(ButtonStyle.Secondary);
+            const thresholdBtn = new ButtonBuilder().setCustomId('cfg_cv_threshold').setLabel(t('Ustaw próg', 'Set Threshold')).setEmoji('🔢').setStyle(ButtonStyle.Primary);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(enableBtn, disableBtn, thresholdBtn, backBtn)] });
         }
     }
@@ -1534,6 +1559,8 @@ class InteractionHandler {
         // Krok 7 — pomiń / gotowe
         if (customId === 'cfg_role_ranking_skip') {
             state.roleRankingsDone = true;
+            const currentRankings = await this.roleRankingConfigService.loadRoleRankings(interaction.guildId);
+            state.roleRankingsCount = currentRankings.length;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -4578,6 +4605,8 @@ class InteractionHandler {
         }
 
         state.roleRankingsDone = true;
+        const afterAdd = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        state.roleRankingsCount = afterAdd.length;
         this._configWizard.set(key, state);
         await this._showConfigureStep(interaction, 7);
     }
@@ -4598,6 +4627,9 @@ class InteractionHandler {
         const roleName = roleCfg?.roleName || roleId;
 
         await this.roleRankingConfigService.removeRoleRanking(guildId, roleId);
+        const afterRemove = await this.roleRankingConfigService.loadRoleRankings(guildId);
+        state.roleRankingsCount = afterRemove.length;
+        this._configWizard.set(key, state);
         await this._showConfigureStep(interaction, 7);
     }
 
