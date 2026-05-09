@@ -575,6 +575,12 @@
           "requiredPermission": "administrator"
         },
         {
+          "name": "/generate",
+          "description": "Generuje raport Global TOP 10 na żądanie i wysyła go na kanał bota. Dostępna tylko dla head adminów (ENDERSECHO_BLOCK_OCR_USER_IDS), widoczna tylko dla administratorów.",
+          "usage": "/generate",
+          "requiredPermission": "administrator"
+        },
+        {
           "name": "/manage",
           "description": "Otwiera bezpośrednio Panel Administracyjny EndersEcho. Operacje: usuń gracza z rankingu, odblokuj gracza, tokeny AI, zablokuj gracza (head admin), OCR on/off (head admin), ustaw limity (head admin), wyślij info (head admin), testerzy (head admin).",
           "usage": "/manage",
