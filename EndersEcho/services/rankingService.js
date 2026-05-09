@@ -171,8 +171,8 @@ class RankingService {
             const medal = MEDALS[rank - 1] || `**#${rank}**`;
             const playersLabel = msgs.guildRankingPlayers || 'graczy';
             const bestLabel = msgs.guildRankingBest || 'najlepszy';
-            const tagSuffix = gs.tag ? ` • ${gs.tag}` : '';
-            return `${medal} **${gs.guildName}**${tagSuffix} — ${gs.totalScore}\n┗ ${gs.playerCount} ${playersLabel} • ${bestLabel}: ${gs.topScore}`;
+            const tagLine = gs.tag ? `\nTAG: ${gs.tag}` : '';
+            return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} ${playersLabel} • ${bestLabel}: ${gs.topScore}${tagLine}`;
         });
 
         const embed = new EmbedBuilder()
