@@ -1967,27 +1967,27 @@ class InteractionHandler {
         if (isHeadAdmin) {
             // Rząd 1 Head Admin (4 przyciski): Zablokuj, Odblokuj, Usuń gracza, Usuń osiągnięcia
             row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔒 Zablokuj gracza', '🔒 Block Player')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🏆 Usuń osiągnięcia', '🏆 Remove Achievements')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel(t('Zablokuj gracza', 'Block Player')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
             );
             // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy, Interwał TOP10
             row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔄 AI OCR', '🔄 AI OCR')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_limit').setLabel(t('⚙️ Ustaw limity', '⚙️ Set Limits')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_tester').setLabel(t('🧪 Testerzy', '🧪 Testers')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_top10_interval').setLabel(t('📅 Interwał TOP10', '📅 TOP10 Interval')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel(t('AI OCR', 'AI OCR')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel(t('Ustaw limity', 'Set Limits')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_tester').setEmoji('🧪').setLabel(t('Testerzy', 'Testers')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel(t('Interwał TOP10', 'TOP10 Interval')).setStyle(ButtonStyle.Primary),
             );
         } else {
             // Rząd 1 Admin: Usuń gracza, Odblokuj
             row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🗑️ Usuń gracza z rankingu', '🗑️ Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
             );
             // Rząd 2 Admin: Zużycie tokenów
             row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
             );
         }
 
@@ -1995,13 +1995,13 @@ class InteractionHandler {
         if (isHeadAdmin) {
             // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów, Nieskonfigurowane
             components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_info').setLabel(t('📢 Wyślij Info', '📢 Send Info')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_tokens').setLabel(t('📊 Zużycie tokenów', '📊 Token Usage')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_unconfigured').setLabel(t('⚠️ Nieskonfigurowane', '⚠️ Unconfigured')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_info').setEmoji('📢').setLabel(t('Wyślij Info', 'Send Info')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
             ));
             // Rząd 4 Head Admin: Zbanuj serwer
             components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('🚫 Zbanuj serwer', '🚫 Ban Server')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
             ));
         }
 
@@ -2059,8 +2059,8 @@ class InteractionHandler {
                         .setTitle(t('🗑️ Nie znaleziono gracza', '🗑️ Player Not Found'))
                         .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_remove').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
@@ -2086,8 +2086,8 @@ class InteractionHandler {
                             .addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_remove').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_remove').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
@@ -2116,7 +2116,7 @@ class InteractionHandler {
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetUserId}:${targetGuildId}`).setLabel(t('🏆 Usuń z osiągnięciami', '🏆 Remove with Achievements')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
@@ -2165,7 +2165,7 @@ class InteractionHandler {
                         `Player <@${targetUserId}> has been removed from the ranking${serverNote}${resetAllAchievements ? ' along with all achievements' : ''}.`
                     ))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
             });
         } catch (err) {
@@ -2185,7 +2185,7 @@ class InteractionHandler {
             await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('🔓 Odblokuj gracza', '🔓 Unblock Player')).setDescription(msgs.unblockNoBlocked)],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
@@ -2222,8 +2222,8 @@ class InteractionHandler {
                     .setTitle(t('🔓 Nie znaleziono', '🔓 Not Found'))
                     .setDescription(t(`Brak zablokowanego gracza z nickiem zawierającym "**${query}**".`, `No blocked player with nick containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )]
             });
             return;
@@ -2257,8 +2257,8 @@ class InteractionHandler {
                         .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_unblock').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )
             ]
         });
@@ -2319,8 +2319,8 @@ class InteractionHandler {
                         .setTitle(t('🔒 Nie znaleziono gracza', '🔒 Player Not Found'))
                         .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_block').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
@@ -2333,8 +2333,8 @@ class InteractionHandler {
                         .setTitle(t('🔒 Gracze już zablokowani', '🔒 Players Already Blocked'))
                         .setDescription(t(`Wszyscy znalezieni gracze są już zablokowani:\n${list}`, `All found players are already blocked:\n${list}`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_block').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
@@ -2361,8 +2361,8 @@ class InteractionHandler {
                             .addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_block').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
@@ -2392,8 +2392,8 @@ class InteractionHandler {
                     .setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`)
                     .setLabel(t('⏱️ Ustaw czas blokady', '⏱️ Set Block Duration'))
                     .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_block').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_block').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
@@ -2440,7 +2440,7 @@ class InteractionHandler {
                         `Player **${username}** (${guildName}) has been blocked.\nDuration: **${timeLabel}**`
                     ))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
             });
         } catch (err) {
@@ -2487,8 +2487,8 @@ class InteractionHandler {
                     .setTitle(t('🔄 Nie znaleziono serwera', '🔄 Server Not Found'))
                     .setDescription(t(`Brak skonfigurowanego serwera z nazwą zawierającą "**${query}**".`, `No configured server with name containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )]
             });
             return;
@@ -2517,8 +2517,8 @@ class InteractionHandler {
                         new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
@@ -2544,8 +2544,8 @@ class InteractionHandler {
                         .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ocr').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )
             ]
         });
@@ -2579,7 +2579,7 @@ class InteractionHandler {
                     new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setLabel(t('🔒 Wyłącz oba', '🔒 Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
                 )
             ]
         });
@@ -2600,7 +2600,7 @@ class InteractionHandler {
             await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('❌ Błąd', '❌ Error')).setDescription(t('Serwer nie jest skonfigurowany.', 'Server is not configured.'))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
                 )]
             });
             return;
@@ -2627,7 +2627,7 @@ class InteractionHandler {
                 .setTitle(`${actionLabel} OCR`)
                 .setDescription(`${cmdLabel} ${t('na serwerze', 'on server')} **${serverName}** — ${action === 'en' ? t('włączone', 'enabled') : t('wyłączone', 'disabled')}.`)],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
             )]
         });
     }
@@ -4781,7 +4781,7 @@ class InteractionHandler {
                                 `**${entry?.username || targetUserId}** is from a different server.\nYou can only unblock players blocked on this server.`
                             ))],
                         components: [new ActionRowBuilder().addComponents(
-                            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                         )]
                     });
                     return;
@@ -4796,7 +4796,7 @@ class InteractionHandler {
                                 `**${entry.username}** was blocked by a Head Admin.\nOnly a Head Admin can unblock them.`
                             ))],
                         components: [new ActionRowBuilder().addComponents(
-                            new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                         )]
                     });
                     return;
@@ -4808,7 +4808,7 @@ class InteractionHandler {
                         .setTitle(success === true ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
                         .setDescription(success === true ? formatMessage(msgs.unblockSuccess, { username }) : msgs.unblockNotFound)],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
                 return;
@@ -6813,8 +6813,8 @@ class InteractionHandler {
                         .setTitle(t('🏆 Nie znaleziono gracza', '🏆 Player Not Found'))
                         .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
@@ -6838,8 +6838,8 @@ class InteractionHandler {
                             .addOptions(options)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
@@ -6874,8 +6874,8 @@ class InteractionHandler {
                             `Player **${displayName}**${serverNote} has no unlocked achievements.`
                         ))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )]
                 });
                 return;
@@ -6908,8 +6908,8 @@ class InteractionHandler {
                             .addOptions(achOptions)
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_del').setLabel(t('🔍 Nowe wyszukiwanie', '🔍 New Search')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Do panelu', '◀️ To Panel')).setStyle(ButtonStyle.Secondary),
+                        new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Nowe wyszukiwanie', 'New Search')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
             });
@@ -6952,7 +6952,7 @@ class InteractionHandler {
                 .setDescription(t(descPol, descEng))],
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(confirmId).setLabel(t('✅ Usuń', '✅ Remove')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Anuluj', '◀️ Cancel')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
@@ -6995,7 +6995,7 @@ class InteractionHandler {
                             `All achievements of player <@${targetUserId}>${serverNote} have been removed.`
                         ))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
             } else {
@@ -7009,7 +7009,7 @@ class InteractionHandler {
                             `Achievement **${achId}** of player <@${targetUserId}>${serverNote} has been removed.`
                         ))],
                     components: [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
             }
@@ -7187,7 +7187,7 @@ class InteractionHandler {
                 .setTitle(t('⚠️ Nieskonfigurowane serwery', '⚠️ Unconfigured Servers'))
                 .setDescription(description)],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót', '◀️ Back')).setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
             )]
         });
     }
@@ -7249,7 +7249,7 @@ class InteractionHandler {
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
                     .setDescription(t(`Brak aktywnego serwera z nazwą zawierającą "**${query}**".`, `No active server with name containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
                 )],
             });
@@ -7273,7 +7273,7 @@ class InteractionHandler {
                         .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_guild').setLabel(t('🔍 Szukaj ponownie', '🔍 Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_ban_server').setLabel(t('◀️ Wróć', '◀️ Back')).setStyle(ButtonStyle.Secondary),
                 ),
             ],
