@@ -1051,7 +1051,11 @@ class InteractionHandler {
         if (raw === '') {
             if (!state.topRolesTemp) state.topRolesTemp = { tierRanges: [] };
             state.topRolesTemp.tierRanges = state.topRolesTemp.tierRanges.slice(0, tierIdx);
-            delete state.topRolesTemp.tierAssigning;
+            if (state.topRolesTemp.tierAssigning) {
+                for (const k of Object.keys(state.topRolesTemp.tierAssigning).map(Number)) {
+                    if (k >= tierIdx) delete state.topRolesTemp.tierAssigning[k];
+                }
+            }
             this._configWizard.set(key, state);
             await this._showTierConfigScreen(interaction, state, key);
             return;
@@ -1113,7 +1117,11 @@ class InteractionHandler {
         state.topRolesTemp.tierRanges[tierIdx] = { from, to };
         // Unieważnij późniejsze progi (mogły mieć zły zakres)
         state.topRolesTemp.tierRanges = state.topRolesTemp.tierRanges.slice(0, tierIdx + 1);
-        delete state.topRolesTemp.tierAssigning;
+        if (state.topRolesTemp.tierAssigning) {
+            for (const k of Object.keys(state.topRolesTemp.tierAssigning).map(Number)) {
+                if (k > tierIdx) delete state.topRolesTemp.tierAssigning[k];
+            }
+        }
         this._configWizard.set(key, state);
 
         await this._showTierConfigScreen(interaction, state, key);
