@@ -619,7 +619,7 @@ class InteractionHandler {
         const guildId = interaction.guildId;
         const isPol = state.lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
-        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
+        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Wstecz', '← Back')).setStyle(ButtonStyle.Secondary);
 
         if (step === 1) {
             const currentLangLine = state.lang
@@ -781,10 +781,19 @@ class InteractionHandler {
                     : t('**Status:** ❌ Wyłączony', '**Status:** ❌ Disabled')
                 ));
 
-            const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success);
-            const disableBtn = new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Wyłącz / Pomiń', 'Disable / Skip')).setEmoji('❌').setStyle(ButtonStyle.Secondary);
             const thresholdBtn = new ButtonBuilder().setCustomId('cfg_cv_threshold').setLabel(t('Ustaw próg', 'Set Threshold')).setEmoji('🔢').setStyle(ButtonStyle.Primary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(enableBtn, disableBtn, thresholdBtn, backBtn)] });
+            const step8Btns = [];
+            if (!state.communityVerifEnabled) {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success));
+            } else {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Wyłącz', 'Disable')).setEmoji('❌').setStyle(ButtonStyle.Secondary));
+            }
+            step8Btns.push(thresholdBtn);
+            if (!state.communityVerifDone) {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary));
+            }
+            step8Btns.push(backBtn);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...step8Btns)] });
         }
     }
 
