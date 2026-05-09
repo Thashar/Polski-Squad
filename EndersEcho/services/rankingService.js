@@ -139,6 +139,7 @@ class RankingService {
             results.push({
                 guildId: guildCfg.id,
                 guildName,
+                tag: guildCfg.tag || null,
                 totalScoreValue,
                 totalScore: this.formatScore(totalScoreValue),
                 playerCount: players.length,
@@ -170,7 +171,8 @@ class RankingService {
             const medal = MEDALS[rank - 1] || `**#${rank}**`;
             const playersLabel = msgs.guildRankingPlayers || 'graczy';
             const bestLabel = msgs.guildRankingBest || 'najlepszy';
-            return `${medal} **${gs.guildName}** — ${gs.totalScore}\n┗ ${gs.playerCount} ${playersLabel} • ${bestLabel}: ${gs.topScore}`;
+            const tagSuffix = gs.tag ? ` • ${gs.tag}` : '';
+            return `${medal} **${gs.guildName}**${tagSuffix} — ${gs.totalScore}\n┗ ${gs.playerCount} ${playersLabel} • ${bestLabel}: ${gs.topScore}`;
         });
 
         const embed = new EmbedBuilder()
@@ -409,7 +411,7 @@ class RankingService {
                     serverSuffix = guildTag ? ` • ${guildTag}` : '';
                 }
 
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**${serverSuffix}\n*(${shortDate})* • ${bossName}\n\n`;
+                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
 
                 rankingText += lineText;
 
