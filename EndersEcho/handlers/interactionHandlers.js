@@ -1561,7 +1561,8 @@ class InteractionHandler {
         if (customId === 'cfg_roles_skip') {
             state.rolesSkipped = true;
             this._configWizard.set(key, state);
-            await this._showStep5Screen(interaction, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
             return;
         }
 
