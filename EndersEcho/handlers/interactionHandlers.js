@@ -901,17 +901,10 @@ class InteractionHandler {
             .setDisabled(tierRanges.length === 0);
         const backBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_back')
-            .setLabel(t('← Wstecz', '← Back'))
+            .setLabel(t('← Powrót do konfiguracji', '← Back to Configuration'))
             .setStyle(ButtonStyle.Secondary);
 
-        const bottomBtns = [];
-        if (tierRanges.length > 0) {
-            bottomBtns.push(new ButtonBuilder()
-                .setCustomId('cfg_tier_accept')
-                .setLabel(t('Zaakceptuj zmiany ✅', 'Accept Changes ✅'))
-                .setStyle(ButtonStyle.Success));
-        }
-        bottomBtns.push(resetBtn, backBtn);
+        const bottomBtns = [resetBtn, backBtn];
 
         const components = [
             new ActionRowBuilder().addComponents(...tierBtns1),
@@ -1382,9 +1375,11 @@ class InteractionHandler {
             return;
         }
 
-        // Wstecz z ekranu progów → krok 5 landing (bez zmian w state)
+        // Powrót z ekranu progów → bezpośrednio do dashboardu
         if (customId === 'cfg_tier_back') {
-            await this._showStep5Screen(interaction, state);
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
             return;
         }
 
