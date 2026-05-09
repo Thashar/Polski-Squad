@@ -398,32 +398,36 @@ class AchievementService {
         const isOverview = activeKey === 'overview';
 
         const CATS = [
-            { key: 'score',    pol: '🏆 Wyniki',       eng: '🏆 Scores'    },
-            { key: 'records',  pol: '🔁 Rekordy',      eng: '🔁 Records'   },
-            { key: 'bosses',   pol: '🎯 Łowy',         eng: '🎯 The Hunt'  },
-            { key: 'prestige', pol: '💎 Prestiż',      eng: '💎 Prestige'  },
-            { key: 'explorer', pol: '🕵️ Eksplorator',  eng: '🕵️ Explorer'  },
+            { key: 'score',    pol: 'Wyniki',      eng: 'Scores',    emoji: '🏆' },
+            { key: 'records',  pol: 'Rekordy',     eng: 'Records',   emoji: '🔁' },
+            { key: 'bosses',   pol: 'Łowy',        eng: 'The Hunt',  emoji: '🎯' },
+            { key: 'prestige', pol: 'Prestiż',     eng: 'Prestige',  emoji: '💎' },
+            { key: 'explorer', pol: 'Eksplorator', eng: 'Explorer',  emoji: '🕵️' },
         ];
 
         const topRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ach_overview')
-                .setLabel(t('📊 Podsumowanie', '📊 Overview'))
+                .setEmoji('📊')
+                .setLabel(t('Podsumowanie', 'Overview'))
                 .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(isOverview),
             new ButtonBuilder()
                 .setCustomId('ach_check_player')
-                .setLabel(t('🔍 Sprawdź gracza', '🔍 Check Player'))
+                .setEmoji('🔍')
+                .setLabel(t('Sprawdź gracza', 'Check Player'))
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('ach_rank_start')
-                .setLabel(t('🏆 Ranking osiągnięć', '🏆 Achievement Ranking'))
+                .setEmoji('🏆')
+                .setLabel(t('Ranking osiągnięć', 'Achievement Ranking'))
                 .setStyle(ButtonStyle.Secondary)
         );
 
         const catRow = new ActionRowBuilder().addComponents(
             ...CATS.map(c => new ButtonBuilder()
                 .setCustomId(`ach_cat_${c.key}`)
+                .setEmoji(c.emoji)
                 .setLabel(isPol ? c.pol : c.eng)
                 .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(activeKey === c.key)
@@ -510,28 +514,31 @@ class AchievementService {
         const isOverview = activeKey === 'overview';
 
         const CATS = [
-            { key: 'score',    pol: '🏆 Wyniki',       eng: '🏆 Scores'    },
-            { key: 'records',  pol: '🔁 Rekordy',      eng: '🔁 Records'   },
-            { key: 'bosses',   pol: '🎯 Łowy',         eng: '🎯 The Hunt'  },
-            { key: 'prestige', pol: '💎 Prestiż',      eng: '💎 Prestige'  },
-            { key: 'explorer', pol: '🕵️ Eksplorator',  eng: '🕵️ Explorer'  },
+            { key: 'score',    pol: 'Wyniki',      eng: 'Scores',    emoji: '🏆' },
+            { key: 'records',  pol: 'Rekordy',     eng: 'Records',   emoji: '🔁' },
+            { key: 'bosses',   pol: 'Łowy',        eng: 'The Hunt',  emoji: '🎯' },
+            { key: 'prestige', pol: 'Prestiż',     eng: 'Prestige',  emoji: '💎' },
+            { key: 'explorer', pol: 'Eksplorator', eng: 'Explorer',  emoji: '🕵️' },
         ];
 
         const topRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`ach_vo_${targetUserId}_${targetGuildId}`)
-                .setLabel(t('📊 Podsumowanie', '📊 Overview'))
+                .setEmoji('📊')
+                .setLabel(t('Podsumowanie', 'Overview'))
                 .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(isOverview),
             new ButtonBuilder()
                 .setCustomId('ach_vb')
-                .setLabel(t('↩️ Moje osiągnięcia', '↩️ My Achievements'))
+                .setEmoji('↩️')
+                .setLabel(t('Moje osiągnięcia', 'My Achievements'))
                 .setStyle(ButtonStyle.Danger)
         );
 
         const catRow = new ActionRowBuilder().addComponents(
             ...CATS.map(c => new ButtonBuilder()
                 .setCustomId(`ach_vc_${c.key}_${targetUserId}_${targetGuildId}`)
+                .setEmoji(c.emoji)
                 .setLabel(isPol ? c.pol : c.eng)
                 .setStyle(activeKey === c.key ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(activeKey === c.key)
@@ -644,37 +651,50 @@ class AchievementService {
     createAchRankingButtons(page, totalPages, mode, guildId, guildName, roleRows, isPol, userPage = null, parentGuildId = null, parentGuildName = null) {
         const t = (pol, eng) => isPol ? pol : eng;
 
-        const switchBtn = (mode === 'server' || mode === 'role')
+        const switchBtnBase = (mode === 'server' || mode === 'role')
             ? new ButtonBuilder()
                 .setCustomId('ach_rank_global')
-                .setLabel(t('🌐 Global', '🌐 Global'))
+                .setEmoji('🌐')
+                .setLabel(t('Global', 'Global'))
                 .setStyle(ButtonStyle.Secondary)
-            : new ButtonBuilder()
-                .setCustomId(parentGuildId ? `ach_rank_srv_${parentGuildId}` : 'ach_rank_no_srv')
-                .setLabel(parentGuildName ? parentGuildName.substring(0, 80) : t('🏠 Serwer', '🏠 Server'))
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(!parentGuildId);
+            : (() => {
+                const b = new ButtonBuilder()
+                    .setCustomId(parentGuildId ? `ach_rank_srv_${parentGuildId}` : 'ach_rank_no_srv')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!parentGuildId);
+                if (parentGuildName) {
+                    b.setLabel(parentGuildName.substring(0, 80));
+                } else {
+                    b.setEmoji('🏠').setLabel(t('Serwer', 'Server'));
+                }
+                return b;
+            })();
+        const switchBtn = switchBtnBase;
 
         const navRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ach_rank_prev')
-                .setLabel(t('◀️ Poprzednia', '◀️ Previous'))
+                .setEmoji('◀️')
+                .setLabel(t('Poprzednia', 'Previous'))
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page === 0),
             new ButtonBuilder()
                 .setCustomId('ach_rank_mypos')
-                .setLabel(t('📍 Moja pozycja', '📍 My Position'))
+                .setEmoji('📍')
+                .setLabel(t('Moja pozycja', 'My Position'))
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(userPage === null),
             new ButtonBuilder()
                 .setCustomId('ach_rank_next')
-                .setLabel(t('▶️ Następna', '▶️ Next'))
+                .setEmoji('▶️')
+                .setLabel(t('Następna', 'Next'))
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1),
             switchBtn,
             new ButtonBuilder()
                 .setCustomId('ach_rank_back')
-                .setLabel(t('↩️ Wybór serwerów', '↩️ Server Selection'))
+                .setEmoji('↩️')
+                .setLabel(t('Wybór serwerów', 'Server Selection'))
                 .setStyle(ButtonStyle.Danger)
         );
 

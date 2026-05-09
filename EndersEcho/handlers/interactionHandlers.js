@@ -4738,10 +4738,12 @@ class InteractionHandler {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('notif_set')
+                .setEmoji('🔔')
                 .setLabel(msgs.notifSetButton)
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('notif_remove')
+                .setEmoji('🔕')
                 .setLabel(msgs.notifRemoveButton)
                 .setStyle(ButtonStyle.Danger)
         );
@@ -5012,10 +5014,12 @@ class InteractionHandler {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`notif_confirm_${selectedUserId}_${selectedGuildId}`)
+                .setEmoji('✅')
                 .setLabel(msgs.notifConfirmYes)
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('notif_cancel')
+                .setEmoji('❌')
                 .setLabel(msgs.notifConfirmNo)
                 .setStyle(ButtonStyle.Secondary)
         );
@@ -6454,7 +6458,7 @@ class InteractionHandler {
         const row1Buttons = [
             new ButtonBuilder()
                 .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
-                .setLabel('◀')
+                .setEmoji('◀️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
@@ -6463,7 +6467,7 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
-                .setLabel('▶')
+                .setEmoji('▶️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasNext),
         ];
@@ -6511,12 +6515,14 @@ class InteractionHandler {
                     .setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder()
                     .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`)
-                    .setLabel(`◀ ${t2(`Str. ${safePage}`, `Page ${safePage}`)}`)
+                    .setEmoji('◀️')
+                    .setLabel(t2(`Str. ${safePage}`, `Page ${safePage}`))
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(!hasPrevPage),
                 new ButtonBuilder()
                     .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`)
-                    .setLabel(`▶ ${t2(`Str. ${safePage + 2}`, `Page ${safePage + 2}`)}`)
+                    .setEmoji('▶️')
+                    .setLabel(t2(`Str. ${safePage + 2}`, `Page ${safePage + 2}`))
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(!hasNextPage),
             ));
@@ -6594,7 +6600,7 @@ class InteractionHandler {
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`tk_m_${prevMonthRaw}_all_${userId}_p`)
-                .setLabel('◀')
+                .setEmoji('◀️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
             new ButtonBuilder()
@@ -6604,7 +6610,7 @@ class InteractionHandler {
                 .setDisabled(true),
             new ButtonBuilder()
                 .setCustomId(`tk_m_${nextMonthRaw}_all_${userId}_n`)
-                .setLabel('▶')
+                .setEmoji('▶️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasNext),
             new ButtonBuilder()
@@ -6743,9 +6749,9 @@ class InteractionHandler {
             : `tk_g_${monthStr}_${guildFilter}_${userId}`;
 
         const row1 = [
-            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setLabel('◀').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`).setEmoji('◀️').setStyle(ButtonStyle.Secondary).setDisabled(!hasPrevPage),
             new ButtonBuilder().setCustomId(`tk_ui_${monthStr}_${guildFilter}_${safePage}_${userId}`).setLabel(`${safePage + 1} / ${totalPages}`).setStyle(ButtonStyle.Primary).setDisabled(true),
-            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setLabel('▶').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
+            new ButtonBuilder().setCustomId(`tk_u_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`).setEmoji('▶️').setStyle(ButtonStyle.Secondary).setDisabled(!hasNextPage),
             new ButtonBuilder().setCustomId(chartId).setEmoji('📊').setLabel(t('Wykres', 'Chart')).setStyle(ButtonStyle.Secondary),
         ];
         if (isSuperUser) {
@@ -7655,12 +7661,12 @@ class InteractionHandler {
                 .setDisabled(!safeHome),
             new ButtonBuilder()
                 .setCustomId(`ach_rank_srv_prev_${safePage}_${safeHome}`)
-                .setLabel('◀')
+                .setEmoji('◀️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(safePage === 0),
             new ButtonBuilder()
                 .setCustomId(`ach_rank_srv_next_${safePage}_${safeHome}`)
-                .setLabel('▶')
+                .setEmoji('▶️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(safePage >= totalPages - 1),
             new ButtonBuilder()

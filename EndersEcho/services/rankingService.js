@@ -517,19 +517,22 @@ class RankingService {
         if (mode === 'server') {
             switchBtn = new ButtonBuilder()
                 .setCustomId('ranking_select_global')
-                .setLabel(msgs.buttonGlobal || '🌐 Global')
+                .setEmoji('🌐')
+                .setLabel(msgs.buttonGlobal || 'Global')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled);
         } else if (mode === 'global') {
             switchBtn = new ButtonBuilder()
                 .setCustomId('ranking_guild_ranking')
-                .setLabel(msgs.buttonServerRanking || '🏛️ Ranking Serwerów')
+                .setEmoji('🏛️')
+                .setLabel(msgs.buttonServerRanking || 'Ranking Serwerów')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled);
         } else if (mode === 'guild_ranking') {
             switchBtn = new ButtonBuilder()
                 .setCustomId('ranking_select_global')
-                .setLabel(msgs.buttonIndividualRanking || '👤 Ranking Indywidualny')
+                .setEmoji('👤')
+                .setLabel(msgs.buttonIndividualRanking || 'Ranking Indywidualny')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled);
         } else {
@@ -549,17 +552,19 @@ class RankingService {
         let backBtn;
         if ((mode === 'global' || mode === 'guild_ranking') && parentGuildId) {
             const backLabel = parentGuildName
-                ? `↩️ ${parentGuildName.substring(0, 70)}`
-                : (msgs.buttonBack || '↩️ Powrót');
+                ? parentGuildName.substring(0, 70)
+                : (msgs.buttonBack || 'Powrót');
             backBtn = new ButtonBuilder()
                 .setCustomId(`ranking_select_server_${parentGuildId}`)
+                .setEmoji('↩️')
                 .setLabel(backLabel)
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(disabled);
         } else {
             backBtn = new ButtonBuilder()
                 .setCustomId('ranking_back')
-                .setLabel(msgs.buttonBack || '↩️ Wybór serwerów')
+                .setEmoji('↩️')
+                .setLabel(msgs.buttonBack || 'Wybór serwerów')
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(disabled);
         }
@@ -571,18 +576,21 @@ class RankingService {
         navRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
+                .setEmoji('◀️')
                 .setLabel(msgs.buttonPrev)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page === 0),
 
             new ButtonBuilder()
                 .setCustomId('ranking_mypos')
+                .setEmoji('🎯')
                 .setLabel(msgs.buttonMyPos)
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(myPosDisabled),
 
             new ButtonBuilder()
                 .setCustomId('ranking_next')
+                .setEmoji('▶️')
                 .setLabel(msgs.buttonNext)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
