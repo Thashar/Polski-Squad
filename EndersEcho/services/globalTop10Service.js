@@ -226,9 +226,9 @@ class GlobalTop10Service {
                 lines += `\`${String(position).padStart(2, '0')}\` ${medals[i]}  **${displayName}**  ·  **${scoreStr}**\n`;
                 lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
             } else {
-                // 4–10 — dwie linie
-                lines += `\`${String(position).padStart(2, '0')}\`  ${changeStr}  **${displayName}**  ·  **${scoreStr}**\n`;
-                lines += `> ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
+                // 4–10 — dwie linie, zmiana pozycji w 2. wierszu
+                lines += `\`${String(position).padStart(2, '0')}\`  **${displayName}**  ·  **${scoreStr}**\n`;
+                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
             }
         }
 
