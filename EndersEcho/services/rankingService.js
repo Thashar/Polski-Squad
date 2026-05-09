@@ -575,7 +575,6 @@ class RankingService {
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
                 .setEmoji('◀️')
-                .setLabel(msgs.buttonPrev)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page === 0),
 
@@ -589,7 +588,6 @@ class RankingService {
             new ButtonBuilder()
                 .setCustomId('ranking_next')
                 .setEmoji('▶️')
-                .setLabel(msgs.buttonNext)
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
