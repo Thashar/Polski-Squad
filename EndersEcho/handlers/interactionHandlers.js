@@ -831,18 +831,23 @@ class InteractionHandler {
         const isPol = state.lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
         const tierRanges = state.topRolesTemp?.tierRanges || [];
+        const assigning = state.topRolesTemp?.tierAssigning || {};
         const MAX_TIERS = 10;
         const nextActive = tierRanges.length < MAX_TIERS ? tierRanges.length : -1;
 
         let desc = t(
-            'Skonfiguruj progi rangowe dla ról TOP. Każdy próg definiuje zakres pozycji rankingowych, które otrzymują daną rolę.\n\nKlikaj kolejno przyciski aby ustawiać progi. Każdy kolejny musi zaczynać od miejsca gdzie poprzedni się skończył.\n\n**Przykład:** Próg 1 = `1-3`, Próg 2 = `4-10`, Próg 3 = `11-30`\n\nPo ustawieniu progów kliknij **Przydziel role** aby wybrać role dla każdego progu.\n\n**Legenda przycisków:**\n🟢 ostatni zielony = kliknij aby zmienić zakres (puste pole = usuń próg)\n🔵 niebieski = kliknij aby ustawić kolejny próg\n⚫ szary = niedostępny (ustaw poprzednie progi najpierw)',
-            'Configure rank thresholds for TOP roles. Each threshold defines a range of ranking positions that receive a specific role.\n\nClick buttons in order to set each threshold. Each next one must start where the previous ended.\n\n**Example:** Tier 1 = `1-3`, Tier 2 = `4-10`, Tier 3 = `11-30`\n\nAfter setting tiers, click **Assign Roles** to pick a role for each tier.\n\n**Button legend:**\n🟢 last green = click to change range (leave empty to remove tier)\n🔵 blue = click to set the next tier\n⚫ grey = unavailable (set previous tiers first)'
+            'Skonfiguruj progi rangowe dla ról TOP. Każdy próg definiuje zakres pozycji rankingowych, które otrzymują daną rolę.\n\nKlikaj kolejno przyciski aby ustawiać progi. Każdy kolejny musi zaczynać od miejsca gdzie poprzedni się skończył.\n\n**Przykład:** Próg 1 = `1-3`, Próg 2 = `4-10`, Próg 3 = `11-30`\n\nAby przypisać rolę do progu, kliknij odpowiedni przycisk w rzędzie **Przypisane role**.\n\n**Legenda przycisków progów:**\n🟢 ostatni zielony = kliknij aby zmienić zakres (puste pole = usuń próg)\n🔵 niebieski = kliknij aby ustawić kolejny próg\n⚫ szary = niedostępny (ustaw poprzednie progi najpierw)',
+            'Configure rank thresholds for TOP roles. Each threshold defines a range of ranking positions that receive a specific role.\n\nClick buttons in order to set each threshold. Each next one must start where the previous ended.\n\n**Example:** Tier 1 = `1-3`, Tier 2 = `4-10`, Tier 3 = `11-30`\n\nTo assign a role to a tier, click the corresponding button in the **Assigned Roles** row.\n\n**Tier button legend:**\n🟢 last green = click to change range (leave empty to remove tier)\n🔵 blue = click to set the next tier\n⚫ grey = unavailable (set previous tiers first)'
         );
         const fmtRange = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
 
         if (tierRanges.length > 0) {
-            const lines = tierRanges.map((r, i) => `**${t('Próg', 'Tier')} ${i + 1}:** ${fmtRange(r)}`).join('\n');
-            desc += `\n\n${t('**Skonfigurowane progi:**', '**Configured tiers:**')}\n${lines}`;
+            const lines = tierRanges.map((r, i) => {
+                const roleId = assigning[i];
+                const roleStr = roleId ? `<@&${roleId}>` : t('*(brak roli)*', '*(no role)*');
+                return `**${t('Próg', 'Tier')} ${i + 1}** (${fmtRange(r)}) → ${roleStr}`;
+            }).join('\n');
+            desc += `\n\n${t('**Konfiguracja:**', '**Configuration:**')}\n${lines}`;
         }
 
         const embed = new EmbedBuilder()
@@ -868,15 +873,22 @@ class InteractionHandler {
             else tierBtns2.push(btn);
         }
 
-        const assigning = state.topRolesTemp?.tierAssigning || {};
-        const hasRolesAssigned = Object.values(assigning).some(v => v !== null && v !== undefined);
-        const allTiersAssigned = tierRanges.length > 0 && Object.keys(assigning).length >= tierRanges.length;
+        // Przyciski przypisania ról — po jednym na każdy skonfigurowany próg
+        const roleBtns1 = [];
+        const roleBtns2 = [];
+        for (let i = 0; i < tierRanges.length; i++) {
+            const r = tierRanges[i];
+            const roleId = assigning[i];
+            const hasRole = !!roleId;
+            const label = `${t('Próg', 'Tier')} ${i + 1} (${fmtRange(r)})${hasRole ? ' ✅' : ''}`;
+            const btn = new ButtonBuilder()
+                .setCustomId(`cfg_role_btn_${i}`)
+                .setLabel(label)
+                .setStyle(hasRole ? ButtonStyle.Primary : ButtonStyle.Secondary);
+            if (i < 5) roleBtns1.push(btn);
+            else roleBtns2.push(btn);
+        }
 
-        const assignBtn = new ButtonBuilder()
-            .setCustomId('cfg_tier_assign')
-            .setLabel(hasRolesAssigned ? t('Przydziel role ✅', 'Assign Roles ✅') : t('Przydziel role', 'Assign Roles'))
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(tierRanges.length === 0);
         const resetBtn = new ButtonBuilder()
             .setCustomId('cfg_tier_reset')
             .setLabel(t('Usuń konfigurację progów i ról 🗑️', 'Clear Tier & Role Config 🗑️'))
@@ -887,8 +899,8 @@ class InteractionHandler {
             .setLabel(t('← Wstecz', '← Back'))
             .setStyle(ButtonStyle.Secondary);
 
-        const bottomBtns = [assignBtn];
-        if (allTiersAssigned) {
+        const bottomBtns = [];
+        if (tierRanges.length > 0) {
             bottomBtns.push(new ButtonBuilder()
                 .setCustomId('cfg_tier_accept')
                 .setLabel(t('Zaakceptuj zmiany ✅', 'Accept Changes ✅'))
@@ -896,14 +908,15 @@ class InteractionHandler {
         }
         bottomBtns.push(resetBtn, backBtn);
 
-        await interaction.update({
-            embeds: [embed],
-            components: [
-                new ActionRowBuilder().addComponents(...tierBtns1),
-                new ActionRowBuilder().addComponents(...tierBtns2),
-                new ActionRowBuilder().addComponents(...bottomBtns),
-            ]
-        });
+        const components = [
+            new ActionRowBuilder().addComponents(...tierBtns1),
+            new ActionRowBuilder().addComponents(...tierBtns2),
+        ];
+        if (roleBtns1.length > 0) components.push(new ActionRowBuilder().addComponents(...roleBtns1));
+        if (roleBtns2.length > 0) components.push(new ActionRowBuilder().addComponents(...roleBtns2));
+        components.push(new ActionRowBuilder().addComponents(...bottomBtns));
+
+        await interaction.update({ embeds: [embed], components });
     }
 
     async _showStep5Screen(interaction, state) {
@@ -978,39 +991,39 @@ class InteractionHandler {
         const isPol = state.lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
         const tierRanges = state.topRolesTemp?.tierRanges || [];
-        const totalTiers = tierRanges.length;
         const tier = tierRanges[tierIdx];
         const assigning = state.topRolesTemp?.tierAssigning || {};
 
         const fmtR = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
-        const selectedLines = tierRanges.slice(0, tierIdx).map((r, i) => {
-            const roleId = assigning[i];
-            return `**${t('Próg', 'Tier')} ${i + 1}** (${fmtR(r)}) — ${roleId ? `<@&${roleId}>` : t('*(pominięto)*', '*(skipped)*')}`;
-        });
+        const existingRoleId = assigning[tierIdx];
+        const currentStr = existingRoleId
+            ? t(`Aktualnie przypisana: <@&${existingRoleId}>`, `Currently assigned: <@&${existingRoleId}>`)
+            : t('Brak przypisanej roli.', 'No role assigned.');
 
-        let desc = t(
-            `Wybierz rolę Discord dla **Progu ${tierIdx + 1}** (miejsce${tier.from === tier.to ? '' : 'a'} ${fmtR(tier)}).\n\nMożesz pominąć jeśli nie chcesz przyznawać roli za te pozycje.`,
-            `Select a Discord role for **Tier ${tierIdx + 1}** (position${tier.from === tier.to ? '' : 's'} ${fmtR(tier)}).\n\nYou can skip if you don't want to assign a role for these positions.`
+        const desc = t(
+            `Wybierz rolę Discord dla **Progu ${tierIdx + 1}** (miejsce${tier.from === tier.to ? '' : 'a'} ${fmtR(tier)}).\n\n${currentStr}`,
+            `Select a Discord role for **Tier ${tierIdx + 1}** (position${tier.from === tier.to ? '' : 's'} ${fmtR(tier)}).\n\n${currentStr}`
         );
-        if (selectedLines.length > 0) {
-            desc += `\n\n${t('**Wybrane dotychczas:**', '**Selected so far:**')}\n${selectedLines.join('\n')}`;
-        }
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle(t(`🏆 Przydziel role — krok ${tierIdx + 1}/${totalTiers}`, `🏆 Assign Roles — step ${tierIdx + 1}/${totalTiers}`))
+            .setTitle(t(`🏆 Przydziel rolę — Próg ${tierIdx + 1} (${fmtR(tier)})`, `🏆 Assign Role — Tier ${tierIdx + 1} (${fmtR(tier)})`))
             .setDescription(desc);
 
-        const existingRoleId = assigning[tierIdx];
         const roleSelect = new RoleSelectMenuBuilder()
             .setCustomId(`cfg_roles_sel_${tierIdx}`)
-            .setPlaceholder(t(`Wybierz rolę dla Progu ${tierIdx + 1} (${fmtR(tier)})`, `Select role for Tier ${tierIdx + 1} (${fmtR(tier)})`))
+            .setPlaceholder(t(`Wybierz rolę dla Progu ${tierIdx + 1}`, `Select role for Tier ${tierIdx + 1}`))
             .setMinValues(1)
             .setMaxValues(1);
         if (existingRoleId && /^\d{17,20}$/.test(String(existingRoleId))) {
             try { roleSelect.setDefaultRoles([existingRoleId]); } catch { /* ignoruj */ }
         }
 
+        const clearBtn = new ButtonBuilder()
+            .setCustomId(`cfg_roles_skip_${tierIdx}`)
+            .setLabel(t('Brak roli', 'No Role'))
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(!existingRoleId);
         const backBtn = new ButtonBuilder()
             .setCustomId(`cfg_roles_back_${tierIdx}`)
             .setLabel(t('← Wstecz', '← Back'))
@@ -1020,7 +1033,7 @@ class InteractionHandler {
             embeds: [embed],
             components: [
                 new ActionRowBuilder().addComponents(roleSelect),
-                new ActionRowBuilder().addComponents(backBtn),
+                new ActionRowBuilder().addComponents(clearBtn, backBtn),
             ]
         });
     }
@@ -1116,16 +1129,7 @@ class InteractionHandler {
         if (!state.topRolesTemp.tierAssigning) state.topRolesTemp.tierAssigning = {};
         state.topRolesTemp.tierAssigning[tierIdx] = interaction.values[0];
         this._configWizard.set(key, state);
-
-        const tierRanges = state.topRolesTemp.tierRanges || [];
-        const nextIdx = tierIdx + 1;
-        this._configWizard.set(key, state);
-        if (nextIdx >= tierRanges.length) {
-            // Wróć do ekranu progów — "Zaakceptuj zmiany" zatwierdza do dashboardu
-            await this._showTierConfigScreen(interaction, state, key);
-        } else {
-            await this._showTierRoleAssign(interaction, state, key, nextIdx);
-        }
+        await this._showTierConfigScreen(interaction, state, key);
     }
 
     async _handleConfigureCvThresholdModal(interaction) {
@@ -1270,13 +1274,13 @@ class InteractionHandler {
             return;
         }
 
-        // Rozpocznij przydzielanie ról po skonfigurowaniu progów
-        if (customId === 'cfg_tier_assign') {
-            const tierRanges = state.topRolesTemp?.tierRanges || [];
-            if (tierRanges.length === 0) return;
+        // Otwórz select ról dla konkretnego progu
+        if (customId.startsWith('cfg_role_btn_')) {
+            const tierIdx = parseInt(customId.replace('cfg_role_btn_', ''), 10);
+            if (!state.topRolesTemp) state.topRolesTemp = { tierRanges: [] };
             if (!state.topRolesTemp.tierAssigning) state.topRolesTemp.tierAssigning = {};
             this._configWizard.set(key, state);
-            await this._showTierRoleAssign(interaction, state, key, 0);
+            await this._showTierRoleAssign(interaction, state, key, tierIdx);
             return;
         }
 
@@ -1320,36 +1324,22 @@ class InteractionHandler {
             return;
         }
 
-        // Przydzielanie ról — pomiń rolę dla progu N
+        // Przydzielanie ról — wyczyść rolę dla progu N i wróć do ekranu progów
         if (customId.startsWith('cfg_roles_skip_')) {
             const tierIdx = parseInt(customId.replace('cfg_roles_skip_', ''), 10);
             if (!state.topRolesTemp) state.topRolesTemp = { tierRanges: [] };
             if (!state.topRolesTemp.tierAssigning) state.topRolesTemp.tierAssigning = {};
             state.topRolesTemp.tierAssigning[tierIdx] = null;
-            const tierRanges = state.topRolesTemp.tierRanges || [];
-            const nextIdx = tierIdx + 1;
             this._configWizard.set(key, state);
-            if (nextIdx >= tierRanges.length) {
-                // Wróć do ekranu progów — "Zaakceptuj zmiany" zatwierdza do dashboardu
-                await this._showTierConfigScreen(interaction, state, key);
-            } else {
-                await this._showTierRoleAssign(interaction, state, key, nextIdx);
-            }
+            await this._showTierConfigScreen(interaction, state, key);
             return;
         }
 
-        // Przydzielanie ról — wróć do poprzedniego kroku (lub do ekranu progów)
+        // Przydzielanie ról — wróć do ekranu progów
         if (customId.startsWith('cfg_roles_back_')) {
-            const tierIdx = parseInt(customId.replace('cfg_roles_back_', ''), 10);
             if (!state.topRolesTemp) state.topRolesTemp = { tierRanges: [] };
-            if (tierIdx <= 0) {
-                delete state.topRolesTemp.tierAssigning;
-                this._configWizard.set(key, state);
-                await this._showTierConfigScreen(interaction, state, key);
-            } else {
-                this._configWizard.set(key, state);
-                await this._showTierRoleAssign(interaction, state, key, tierIdx - 1);
-            }
+            this._configWizard.set(key, state);
+            await this._showTierConfigScreen(interaction, state, key);
             return;
         }
 

@@ -295,13 +295,14 @@
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
 - **Krok 4:** Tag serwera (1–4 znaki lub emoji, modal) — wyświetlany w globalnym rankingu
 - **Krok 5:** Role TOP (opcjonalne) — do 10 w pełni konfigurowalnych progów per serwer:
-  - Ekran progów: 10 przycisków (zielony=skonfigurowany, niebieski=następny aktywny, szary=nieaktywny); pod nimi: "Przydziel role", "Usuń konfigurację progów", "Pomiń"
-  - Kliknięcie aktywnego przycisku → modal zakresu (np. `1-3` lub `4`); walidacja: ciągłość (brak luk), format, minimum = previous.to+1
+  - Ekran progów: rząd 1-2: 10 przycisków zakresów (zielony=skonfigurowany, niebieski=następny aktywny, szary=nieaktywny); rząd 3-4: przyciski przypisania ról (Primary=rola przypisana, Secondary=brak roli); rząd 5: "Zaakceptuj zmiany", "Usuń konfigurację", "← Wstecz"
+  - Kliknięcie przycisku zakresu → modal zakresu (np. `1-3` lub `4`); walidacja: ciągłość (brak luk), format, minimum = previous.to+1
+  - Kliknięcie przycisku roli (`cfg_role_btn_N`) → ekran RoleSelectMenu dla tego progu; po wybraniu → powrót do ekranu progów; "Brak roli" czyści przypisanie; "← Wstecz" wraca bez zmian
   - Unieważnienie późniejszych progów po zmianie zakresu
-  - "Przydziel role" → sekwencja RoleSelectMenu (jeden na próg); każdy można pominąć; "← Wstecz" wraca do poprzedniego progu lub do ekranu progów
-  - "Usuń konfigurację progów" → czyści wszystkie zakresy, reset do pustego ekranu
+  - "Zaakceptuj zmiany" widoczny gdy jest ≥1 skonfigurowany próg
+  - "Usuń konfigurację progów" → czyści wszystkie zakresy i role, reset do pustego ekranu
   - Backward compat: istniejące `{ top1, top2, top3, top4to10, top11to30 }` automatycznie pre-fillowane do nowego UI przy wejściu
-  - customIDs: `cfg_roles_start`, `cfg_tier_N` (N=0-9), `cfg_tier_modal_N` (modal), `cfg_tier_assign`, `cfg_tier_reset`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`, `cfg_roles_skip`
+  - customIDs: `cfg_roles_start`, `cfg_tier_N` (N=0-9), `cfg_tier_modal_N` (modal), `cfg_role_btn_N`, `cfg_tier_reset`, `cfg_tier_accept`, `cfg_roles_sel_N`, `cfg_roles_skip_N`, `cfg_roles_back_N`, `cfg_roles_skip`
 - **Krok 6:** Powiadomienia Global TOP10 (Tak/Nie) — per-guild flaga `globalTopNotifications` (backward compat: odczytuje też stare `globalTop3Notifications`)
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
