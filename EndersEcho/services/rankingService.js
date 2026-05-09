@@ -411,7 +411,7 @@ class RankingService {
                     serverSuffix = guildTag ? ` • ${guildTag}` : '';
                 }
 
-                const lineText = `${position} ${nickDisplay} • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
+                const lineText = `${position} ${nickDisplay}‎ • **${this.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}\n\n`;
 
                 rankingText += lineText;
 
