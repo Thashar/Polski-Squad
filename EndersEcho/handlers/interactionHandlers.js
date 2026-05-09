@@ -733,11 +733,15 @@ class InteractionHandler {
                 .setLabel(t('Usuń ranking roli', 'Remove Role Ranking'))
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(existing.length === 0);
-            const skipBtn = new ButtonBuilder()
-                .setCustomId('cfg_role_ranking_skip')
-                .setLabel(t('Gotowe / Pomiń', 'Done / Skip'))
-                .setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(addBtn, removeBtn, skipBtn, backBtn)] });
+            const rowBtns = [addBtn, removeBtn];
+            if (!state.roleRankingsDone) {
+                rowBtns.push(new ButtonBuilder()
+                    .setCustomId('cfg_role_ranking_skip')
+                    .setLabel(t('Pomiń', 'Skip'))
+                    .setStyle(ButtonStyle.Secondary));
+            }
+            rowBtns.push(backBtn);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...rowBtns)] });
 
         } else if (step === 8) {
             const cvCfg = this.guildConfigService?.getCommunityVerification(guildId) || {};
