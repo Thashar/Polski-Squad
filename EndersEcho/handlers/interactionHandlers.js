@@ -879,12 +879,14 @@ class InteractionHandler {
         for (let i = 0; i < tierRanges.length; i++) {
             const r = tierRanges[i];
             const roleId = assigning[i];
-            const hasRole = !!roleId;
-            const label = `${t('Próg', 'Tier')} ${i + 1} (${fmtRange(r)})${hasRole ? ' ✅' : ''}`;
+            const roleName = roleId ? (interaction.guild.roles.cache.get(roleId)?.name ?? roleId) : null;
+            const label = roleName
+                ? `${roleName} (${fmtRange(r)}) ✅`
+                : `${t('Brak roli', 'No role')} (${fmtRange(r)})`;
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_role_btn_${i}`)
                 .setLabel(label)
-                .setStyle(hasRole ? ButtonStyle.Primary : ButtonStyle.Secondary);
+                .setStyle(roleName ? ButtonStyle.Primary : ButtonStyle.Secondary);
             if (i < 5) roleBtns1.push(btn);
             else roleBtns2.push(btn);
         }
