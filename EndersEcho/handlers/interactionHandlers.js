@@ -411,7 +411,7 @@ class InteractionHandler {
             2: !!state.allowedChannelId,
             3: !!state.invalidReportChannelId,
             4: state.tag !== null && state.tag !== undefined,
-            5: state.topRoles !== null || state.rolesSkipped,
+            5: state.rolesSkipped || (state.topRolesTemp?.tierRanges?.length ?? 0) > 0 || state.topRoles !== null,
             6: state.globalTop3Notifications !== null,
             7: state.roleRankingsDone === true,
             8: state.communityVerifDone === true,
@@ -556,7 +556,7 @@ class InteractionHandler {
                     tag: existing.tag !== undefined ? existing.tag : null,
                     lang: existing.lang || null,
                     topRoles: existing.topRoles || null,
-                    rolesSkipped: !existing.topRoles,
+                    rolesSkipped: !existing.topRoles || existing.topRoles.disabled === true,
                     globalTop3Notifications: existing.globalTopNotifications ?? existing.globalTop3Notifications ?? true,
                     roleRankingsDone: true,
                     communityVerifDone: true,
@@ -924,9 +924,26 @@ class InteractionHandler {
         const t = (pol, eng) => isPol ? pol : eng;
         const fmtRange = (r) => r.from === r.to ? `${r.from}` : `${r.from}–${r.to}`;
 
-        const existingTopRoles = state.topRoles;
-        const hasTiers = existingTopRoles?.tiers?.length > 0;
-        const isDisabled = existingTopRoles?.disabled === true;
+        // topRolesTemp ma priorytet — dane edytowane ale jeszcze niezapisane
+        let effectiveTiers = null;
+        if ((state.topRolesTemp?.tierRanges?.length ?? 0) > 0) {
+            const assigningNow = state.topRolesTemp.tierAssigning || {};
+            effectiveTiers = state.topRolesTemp.tierRanges.map((r, i) => ({
+                from: r.from, to: r.to, roleId: assigningNow[i] || null
+            }));
+        } else if (state.topRoles?.tiers?.length > 0) {
+            effectiveTiers = state.topRoles.tiers;
+        } else if (state.topRoles && !state.topRoles.tiers) {
+            const nm = [];
+            if (state.topRoles.top1)      nm.push({ from: 1,  to: 1,  roleId: state.topRoles.top1 });
+            if (state.topRoles.top2)      nm.push({ from: 2,  to: 2,  roleId: state.topRoles.top2 });
+            if (state.topRoles.top3)      nm.push({ from: 3,  to: 3,  roleId: state.topRoles.top3 });
+            if (state.topRoles.top4to10)  nm.push({ from: 4,  to: 10, roleId: state.topRoles.top4to10 });
+            if (state.topRoles.top11to30) nm.push({ from: 11, to: 30, roleId: state.topRoles.top11to30 });
+            if (nm.length > 0) effectiveTiers = nm;
+        }
+        const hasTiers = (effectiveTiers?.length ?? 0) > 0;
+        const isDisabled = state.rolesSkipped === true;
 
         let desc = t(
             'Możesz przypisać specjalne role Discord graczom na podstawie ich pozycji w rankingu serwera. To świetny sposób na wyróżnienie najbardziej aktywnych graczy.\n\n' +
@@ -941,7 +958,7 @@ class InteractionHandler {
             const statusStr = isDisabled
                 ? t('🔴 **Wyłączone**', '🔴 **Disabled**')
                 : t('🟢 **Aktywne**', '🟢 **Active**');
-            const tierLines = existingTopRoles.tiers.map((tier, i) => {
+            const tierLines = effectiveTiers.map((tier, i) => {
                 const roleStr = tier.roleId ? `<@&${tier.roleId}>` : t('*(brak roli)*', '*(no role)*');
                 return `**${t('Próg', 'Tier')} ${i + 1}** (${fmtRange(tier)}) → ${roleStr}`;
             }).join('\n');
@@ -1351,19 +1368,9 @@ class InteractionHandler {
             return;
         }
 
-        // Pomiń cały krok 5 (role TOP)
-        // Zaakceptuj konfigurację progów i ról → zapisz do state i idź do dashboardu
+        // Zaakceptuj konfigurację progów — wróć do dashboardu, topRolesTemp zachowany do zapisu przy cfg_accept
         if (customId === 'cfg_tier_accept') {
-            const tierRangesNow = state.topRolesTemp?.tierRanges || [];
-            const assigningNow = state.topRolesTemp?.tierAssigning || {};
-            if (tierRangesNow.length > 0) {
-                const tiers = tierRangesNow.map((r, i) => ({
-                    from: r.from, to: r.to, roleId: assigningNow[i] || null
-                }));
-                state.topRoles = tiers.some(t => t.roleId) ? { tiers } : null;
-                state.rolesSkipped = !state.topRoles;
-                state.topRolesTemp = undefined;
-            }
+            state.rolesSkipped = false;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
@@ -1376,37 +1383,17 @@ class InteractionHandler {
             return;
         }
 
-        // Włącz role TOP (usunięcie flagi disabled)
+        // Włącz role TOP
         if (customId === 'cfg_roles_enable') {
-            if (state.topRoles?.tiers) {
-                const { disabled, ...enabledConfig } = state.topRoles;
-                state.topRoles = enabledConfig;
-                state.rolesSkipped = false;
-                this._configWizard.set(key, state);
-            }
+            state.rolesSkipped = false;
+            this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
             return;
         }
 
+        // Wyłącz/pomiń role TOP
         if (customId === 'cfg_roles_skip') {
-            // Jeśli topRolesTemp ma progi (edytowane w ekranie progów), użyj ich
-            // W przeciwnym razie zachowaj istniejące tiers z state.topRoles
-            const tierRangesNow = state.topRolesTemp?.tierRanges;
-            if (tierRangesNow?.length > 0) {
-                const assigningNow = state.topRolesTemp?.tierAssigning || {};
-                const tiers = tierRangesNow.map((r, i) => ({
-                    from: r.from,
-                    to: r.to,
-                    roleId: assigningNow[i] || null
-                }));
-                state.topRoles = { tiers, disabled: true };
-            } else if (state.topRoles?.tiers?.length > 0) {
-                // Brak topRolesTemp ale config istnieje — wyłącz bez kasowania
-                state.topRoles = { ...state.topRoles, disabled: true };
-            } else {
-                state.topRoles = null;
-            }
             state.rolesSkipped = true;
             this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
@@ -1559,7 +1546,30 @@ class InteractionHandler {
                 invalidReportChannelId: state.invalidReportChannelId || null,
                 lang: state.lang,
                 tag: state.tag || null,
-                topRoles: state.topRoles || null,
+                topRoles: (() => {
+                    const tierRanges = state.topRolesTemp?.tierRanges;
+                    if (tierRanges !== undefined) {
+                        // Użytkownik wszedł do konfiguracji progów — topRolesTemp jest źródłem prawdy
+                        if (tierRanges.length > 0) {
+                            const assigningNow = state.topRolesTemp.tierAssigning || {};
+                            const tiers = tierRanges.map((r, i) => ({ from: r.from, to: r.to, roleId: assigningNow[i] || null }));
+                            const hasRoles = tiers.some(t => t.roleId);
+                            if (state.rolesSkipped) return hasRoles ? { tiers, disabled: true } : null;
+                            return hasRoles ? { tiers } : null;
+                        }
+                        return null; // Użytkownik wyczyścił wszystkie progi
+                    }
+                    // Użytkownik nie wszedł do konfiguracji progów — zachowaj istniejący config
+                    if (state.rolesSkipped) {
+                        if (state.topRoles?.tiers?.length > 0 && !state.topRoles.disabled) return { ...state.topRoles, disabled: true };
+                        return state.topRoles || null;
+                    }
+                    if (state.topRoles?.disabled) {
+                        const { disabled, ...enabledConfig } = state.topRoles;
+                        return Object.keys(enabledConfig).length ? enabledConfig : null;
+                    }
+                    return state.topRoles || null;
+                })(),
                 globalTopNotifications: state.globalTop3Notifications !== false,
                 communityVerification: state.communityVerifEnabled ? {
                     enabled: true,
