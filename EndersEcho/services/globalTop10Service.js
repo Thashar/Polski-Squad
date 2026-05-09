@@ -256,17 +256,31 @@ class GlobalTop10Service {
 
     /**
      * Generuje embed TOP 10 na żądanie (komenda /generate).
+     * Używa losowego snapshootu żeby pokazać wszystkie typy wskaźników (▲▼=🆕).
      * Nie aktualizuje snapshootu ani harmonogramu.
      */
     async buildOnDemandEmbed(msgs, client) {
         const globalRanking = await this.rankingService.getGlobalRanking(
             new Set(client.guilds.cache.keys())
         );
-        const top10      = globalRanking.slice(0, 10);
-        const bossName   = await this._getMostFrequentBoss(10);
-        const lastSnapshot = this._cfg.lastSnapshot || {};
+        const top10    = globalRanking.slice(0, 10);
+        const bossName = await this._getMostFrequentBoss(10);
 
-        return this._buildTop10Embed(top10, lastSnapshot, bossName, msgs, null, client);
+        // Losowy snapshot: każdy gracz dostaje "poprzednią" pozycję z zakresu 1–13
+        // dając mix ▲ ▼ = i 🆕 (gdy brak wpisu)
+        const fakeSnapshot = {};
+        const positions = Array.from({ length: 13 }, (_, i) => i + 1);
+        // tasuj Fisher-Yates
+        for (let i = positions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [positions[i], positions[j]] = [positions[j], positions[i]];
+        }
+        top10.forEach((player, idx) => {
+            // ~20% graczy jako 🆕 (brak w snapshocie), reszta z losową poprzednią pozycją
+            if (Math.random() > 0.2) fakeSnapshot[player.userId] = positions[idx];
+        });
+
+        return this._buildTop10Embed(top10, fakeSnapshot, bossName, msgs, null, client);
     }
 
     // ── most frequent boss ─────────────────────────────────────────────────────
