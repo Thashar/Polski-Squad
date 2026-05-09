@@ -2103,13 +2103,7 @@ class InteractionHandler {
         const month = new Date().toISOString().slice(0, 7);
         const isSuperUser = this._isHeadAdmin(interaction.user.id);
         const guildFilter = isSuperUser ? 'all' : interaction.guildId;
-        const t = this._panelT(interaction.guildId);
-        const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser);
-        if (reply.components.length < 5) {
-            reply.components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel(t('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
-            ));
-        }
+        const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser, 0);
         await interaction.editReply(reply);
     }
 
@@ -6124,12 +6118,13 @@ class InteractionHandler {
 
     async _handleTokensButton(interaction, customId) {
         // Formy customId:
-        // tk_p_{YYYYMM}_{guildFilter}_{userId}          — poprzedni miesiąc (wykres per dzień)
-        // tk_n_{YYYYMM}_{guildFilter}_{userId}          — następny miesiąc (wykres per dzień)
-        // tk_m_{YYYYMM}_{guildFilter}_{userId}          — Zbiorczo: breakdown per serwer (tylko head admin)
-        // tk_g_{YYYYMM}_{guildId}_{userId}              — konkretny serwer (wykres per dzień)
-        // tk_a_{YYYYMM}_{userId}                        — wszystkie serwery (wykres per dzień)
-        // tk_u_{YYYYMM}_{guildFilter}_{page}_{userId}   — widok per user (paginacja strzałkami)
+        // tk_p_{YYYYMM}_{guildFilter}_{userId}            — poprzedni miesiąc (wykres per dzień)
+        // tk_n_{YYYYMM}_{guildFilter}_{userId}            — następny miesiąc (wykres per dzień)
+        // tk_m_{YYYYMM}_{guildFilter}_{userId}            — Zbiorczo: breakdown per serwer (tylko head admin)
+        // tk_g_{YYYYMM}_{guildId}_{userId}                — konkretny serwer (wykres per dzień)
+        // tk_a_{YYYYMM}_{userId}                          — wszystkie serwery (wykres per dzień)
+        // tk_u_{YYYYMM}_{guildFilter}_{page}_{userId}     — widok per user (paginacja strzałkami)
+        // tk_gp_{YYYYMM}_{guildFilter}_{page}_{userId}    — paginacja przycisków klanów
         const parts    = customId.split('_');
         const action   = parts[1];
         const monthRaw = parts[2];
@@ -6144,7 +6139,7 @@ class InteractionHandler {
             userId      = parts[2];
             guildFilter = 'all';
             page        = 0;
-        } else if (action === 'u') {
+        } else if (action === 'u' || action === 'gp') {
             guildFilter = parts[3];
             page        = parseInt(parts[4]) || 0;
             userId      = parts[5];
@@ -6218,16 +6213,13 @@ class InteractionHandler {
             if (action === 'n' && idx < available.length - 1) targetMonth = available[idx + 1];
         }
 
-        const reply = await this._buildTokensEmbed(interaction, targetMonth, effectiveFilter, isSuperUser);
-        if (reply.components.length < 5) {
-            reply.components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_back').setLabel(tTok('◀️ Powrót do panelu', '◀️ Back to Panel')).setStyle(ButtonStyle.Secondary)
-            ));
-        }
+        // Paginacja klanów: zachowaj stronę; przy zmianie miesiąca/serwera wróć do 0
+        const guildPage = action === 'gp' ? page : 0;
+        const reply = await this._buildTokensEmbed(interaction, targetMonth, effectiveFilter, isSuperUser, guildPage);
         await interaction.editReply(reply);
     }
 
-    async _buildTokensEmbed(interaction, month, guildFilter, isSuperUser = false) {
+    async _buildTokensEmbed(interaction, month, guildFilter, isSuperUser = false, guildPage = 0) {
         const { PRICING } = require('../services/tokenUsageService');
         const t = this._panelT(interaction.guildId);
 
@@ -6320,9 +6312,10 @@ class InteractionHandler {
         const navRow = new ActionRowBuilder().addComponents(...row1Buttons);
         const components = [navRow];
 
-        // Przyciski serwerów — tylko dla super użytkownika (blockOcrUserIds), bez Wszystkie
+        // Przyciski serwerów — tylko dla super użytkownika, max 10 per strona (wiersze 2 i 3)
+        const t2 = this._panelT(interaction.guildId);
         if (isSuperUser) {
-            const guildButtons = this.config.getAllGuilds()
+            const allGuildButtons = this.config.getAllGuilds()
                 .filter(gc => interaction.client.guilds.cache.has(gc.id))
                 .map(gc =>
                     new ButtonBuilder()
@@ -6330,9 +6323,38 @@ class InteractionHandler {
                         .setLabel((guildNames[gc.id] || gc.id).substring(0, 80))
                         .setStyle(guildFilter === gc.id ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 );
-            for (let i = 0; i < guildButtons.length; i += 5) {
-                components.push(new ActionRowBuilder().addComponents(guildButtons.slice(i, i + 5)));
+            const totalGuilds = allGuildButtons.length;
+            const totalPages  = Math.ceil(totalGuilds / 10);
+            const safePage    = Math.min(Math.max(guildPage, 0), Math.max(totalPages - 1, 0));
+            const pageButtons = allGuildButtons.slice(safePage * 10, safePage * 10 + 10);
+            for (let i = 0; i < pageButtons.length; i += 5) {
+                components.push(new ActionRowBuilder().addComponents(pageButtons.slice(i, i + 5)));
             }
+            const hasPrevPage = safePage > 0;
+            const hasNextPage = safePage < totalPages - 1;
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage - 1}_${userId}`)
+                    .setLabel('◀')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!hasPrevPage),
+                new ButtonBuilder()
+                    .setCustomId('panel_back')
+                    .setLabel(t2('◀️ Powrót do panelu', '◀️ Back to Panel'))
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`tk_gp_${monthStr}_${guildFilter}_${safePage + 1}_${userId}`)
+                    .setLabel('▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(!hasNextPage),
+            ));
+        } else {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('panel_back')
+                    .setLabel(t2('◀️ Powrót do panelu', '◀️ Back to Panel'))
+                    .setStyle(ButtonStyle.Secondary)
+            ));
         }
 
         return { embeds: [embed], components };
