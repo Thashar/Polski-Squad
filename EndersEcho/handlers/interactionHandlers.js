@@ -849,6 +849,7 @@ class InteractionHandler {
 
         const tag = interaction.fields.getTextInputValue('cfg_tag_input').trim();
         const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
         const msgs = this.msgs(interaction.guildId);
 
         if (!tag) {
@@ -858,6 +859,19 @@ class InteractionHandler {
         const visLen = [...new Intl.Segmenter().segment(tag)].length;
         if (visLen > 4) {
             await interaction.reply({ content: msgs.configureTagTooLong, flags: ['Ephemeral'] }); return;
+        }
+        // Sprawdź czy tag nie jest już zajęty przez inny serwer
+        const takenByGuild = this.guildConfigService?.getAllConfiguredGuilds()
+            .find(g => g.id !== interaction.guildId && g.tag && g.tag.toLowerCase() === tag.toLowerCase());
+        if (takenByGuild) {
+            await interaction.reply({
+                content: t(
+                    `❌ Tag **${tag}** jest już zajęty przez inny serwer. Wybierz inny tag.`,
+                    `❌ Tag **${tag}** is already taken by another server. Please choose a different tag.`
+                ),
+                flags: ['Ephemeral']
+            });
+            return;
         }
         state.tag = tag;
         this._configWizard.set(key, state);
