@@ -4738,10 +4738,12 @@ class InteractionHandler {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('notif_set')
+                .setEmoji('🔔')
                 .setLabel(msgs.notifSetButton)
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId('notif_remove')
+                .setEmoji('🔕')
                 .setLabel(msgs.notifRemoveButton)
                 .setStyle(ButtonStyle.Danger)
         );
@@ -5012,10 +5014,12 @@ class InteractionHandler {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`notif_confirm_${selectedUserId}_${selectedGuildId}`)
+                .setEmoji('✅')
                 .setLabel(msgs.notifConfirmYes)
                 .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId('notif_cancel')
+                .setEmoji('❌')
                 .setLabel(msgs.notifConfirmNo)
                 .setStyle(ButtonStyle.Secondary)
         );
