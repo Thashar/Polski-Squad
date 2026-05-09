@@ -619,7 +619,7 @@ class InteractionHandler {
         const guildId = interaction.guildId;
         const isPol = state.lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
-        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Powrót', '← Back')).setStyle(ButtonStyle.Secondary);
+        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Wstecz', '← Back')).setStyle(ButtonStyle.Secondary);
 
         if (step === 1) {
             const currentLangLine = state.lang
@@ -781,10 +781,19 @@ class InteractionHandler {
                     : t('**Status:** ❌ Wyłączony', '**Status:** ❌ Disabled')
                 ));
 
-            const enableBtn = new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success);
-            const disableBtn = new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Wyłącz / Pomiń', 'Disable / Skip')).setEmoji('❌').setStyle(ButtonStyle.Secondary);
             const thresholdBtn = new ButtonBuilder().setCustomId('cfg_cv_threshold').setLabel(t('Ustaw próg', 'Set Threshold')).setEmoji('🔢').setStyle(ButtonStyle.Primary);
-            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(enableBtn, disableBtn, thresholdBtn, backBtn)] });
+            const step8Btns = [];
+            if (!state.communityVerifEnabled) {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success));
+            } else {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Wyłącz', 'Disable')).setEmoji('❌').setStyle(ButtonStyle.Secondary));
+            }
+            step8Btns.push(thresholdBtn);
+            if (!state.communityVerifDone) {
+                step8Btns.push(new ButtonBuilder().setCustomId('cfg_cv_disable').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary));
+            }
+            step8Btns.push(backBtn);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...step8Btns)] });
         }
     }
 
@@ -1279,6 +1288,9 @@ class InteractionHandler {
 
         // Powrót do dashboardu
         if (customId === 'cfg_back') {
+            // Jeśli funkcja weryfikacji jest włączona, oznacz krok 8 jako zakończony
+            if (state.communityVerifEnabled === true) state.communityVerifDone = true;
+            this._configWizard.set(key, state);
             const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
             await interaction.update({ embeds: [embed], components: rows });
             return;
@@ -1574,23 +1586,25 @@ class InteractionHandler {
         // Krok 8 — weryfikacja społeczności
         if (customId === 'cfg_cv_enable') {
             if (!state.communityVerifThreshold) state.communityVerifThreshold = 5;
+            state.communityVerifEnabled = true;
+            state.communityVerifDone = true;
             this._configWizard.set(key, state);
-            // Pokaż wybór kanału raportów CV — enabled/done ustawiane dopiero po wyborze kanału
+            // Pokaż wybór kanału raportów CV — opcjonalne, krok jest już oznaczony jako zakończony
             const cvEmbed = new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('📢 Krok 8 — Kanał zgłoszeń społeczności', '📢 Step 8 — Community Report Channel'))
+                .setTitle(t('📢 Krok 8 — Kanał zgłoszeń społeczności (opcjonalne)', '📢 Step 8 — Community Report Channel (optional)'))
                 .setDescription(t(
-                    'Wybierz kanał, na który będą wysyłane raporty społeczności.\nAdmin zobaczy link do zgłoszonej wiadomości i będzie mógł zatwierdzić lub usunąć rekord.',
-                    'Select the channel where community reports will be sent.\nAn admin will see a link to the flagged message and be able to approve or remove the record.'
-                ));
+                    'Możesz wskazać dedykowany kanał, na który będą wysyłane raporty społeczności.\nJeśli pominiesz ten krok, raporty trafią wyłącznie na globalny kanał head admina.\n\nAdmin zobaczy link do zgłoszonej wiadomości i będzie mógł zatwierdzić lub usunąć rekord.',
+                    'You can specify a dedicated channel where community reports will be sent.\nIf you skip this, reports will only go to the global head admin channel.\n\nAn admin will see a link to the flagged message and be able to approve or remove the record.'
+                ) + (state.communityVerifChannelId ? '\n\n**' + t('Aktualny kanał:', 'Current channel:') + '** <#' + state.communityVerifChannelId + '>' : ''));
             const cvChannelSelect = new ChannelSelectMenuBuilder()
                 .setCustomId('cfg_cv_channel_select')
                 .setPlaceholder(t('Wybierz kanał zgłoszeń...', 'Choose a report channel...'))
                 .setChannelTypes(ChannelType.GuildText);
-            const cvCancelBtn = new ButtonBuilder()
-                .setCustomId('cfg_step_8')
-                .setLabel(t('← Anuluj', '← Cancel'))
+            const cvBackBtn = new ButtonBuilder()
+                .setCustomId('cfg_back')
+                .setLabel(t('← Wstecz', '← Back'))
                 .setStyle(ButtonStyle.Secondary);
-            await interaction.update({ embeds: [cvEmbed], components: [new ActionRowBuilder().addComponents(cvChannelSelect), new ActionRowBuilder().addComponents(cvCancelBtn)] });
+            await interaction.update({ embeds: [cvEmbed], components: [new ActionRowBuilder().addComponents(cvChannelSelect), new ActionRowBuilder().addComponents(cvBackBtn)] });
             return;
         }
         if (customId === 'cfg_cv_disable') {
