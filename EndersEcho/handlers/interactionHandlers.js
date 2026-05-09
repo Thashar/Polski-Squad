@@ -861,12 +861,14 @@ class InteractionHandler {
             const r = tierRanges[i];
             const isConfigured = !!r;
             const isNext = i === nextActive;
-            let label = `${isConfigured ? '' : '🔘 '}${t('Próg', 'Tier')} ${i + 1}`;
-            if (isConfigured) label += ` (${fmtRange(r)}) ✅`;
             const isLastConfigured = isConfigured && i === tierRanges.length - 1;
+            const label = isConfigured
+                ? `${t('Próg', 'Tier')} ${i + 1} (${fmtRange(r)})`
+                : `${t('Próg', 'Tier')} ${i + 1}`;
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_tier_${i}`)
                 .setLabel(label)
+                .setEmoji(isConfigured ? '✅' : '🔘')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!isNext && !isLastConfigured);
             if (i < 5) tierBtns1.push(btn);
@@ -881,11 +883,12 @@ class InteractionHandler {
             const roleId = assigning[i];
             const roleName = roleId ? (interaction.guild.roles.cache.get(roleId)?.name ?? roleId) : null;
             const label = roleName
-                ? `${roleName} (${fmtRange(r)}) ✅`
+                ? `${roleName} (${fmtRange(r)})`
                 : `${t('Brak roli', 'No role')} (${fmtRange(r)})`;
             const btn = new ButtonBuilder()
                 .setCustomId(`cfg_role_btn_${i}`)
                 .setLabel(label)
+                .setEmoji(roleName ? '✅' : '➕')
                 .setStyle(roleName ? ButtonStyle.Primary : ButtonStyle.Secondary);
             if (i < 5) roleBtns1.push(btn);
             else roleBtns2.push(btn);
