@@ -129,7 +129,8 @@ class RankingService {
 
         await Promise.all(configuredGuilds.map(async (guildCfg) => {
             const guild = client?.guilds?.cache?.get(guildCfg.id);
-            const guildName = guild?.name || guildCfg.tag || guildCfg.id;
+            if (!guild) return; // Bot usunięty z serwera — pomijamy w rankingu klanów
+            const guildName = guild.name;
             const players = await this.getSortedPlayers(guildCfg.id);
             if (players.length === 0) return;
 
