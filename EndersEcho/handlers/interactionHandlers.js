@@ -3110,12 +3110,7 @@ class InteractionHandler {
                     );
 
                     try {
-                        await interaction.editReply({ embeds: [resultEmbed] });
-                        await interaction.followUp({
-                            content: msgs.rankingImageCaption,
-                            files: [imageAttachment],
-                            flags: ['Ephemeral']
-                        });
+                        await interaction.editReply({ embeds: [resultEmbed], files: [imageAttachment] });
                         gl.info('✅ Wysłano embed z wynikiem (brak rekordu)');
                     } catch (editReplyError) {
                         gl.error(`❌ Błąd podczas wysyłania embed (brak rekordu): ${editReplyError.message}`);
