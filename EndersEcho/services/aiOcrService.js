@@ -334,14 +334,14 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         const reasonLang = isEng ? 'English' : 'Polish';
         const exampleReasons = isEng
             ? [
-                'NOK: No boss results screen, main menu visible',
-                'NOK: Panel has a close button (X)',
-                'NOK: No yellow button below the panel',
+                'NOK: No Victory screen after the boss fight',
+                'NOK: The image shows <describe what the image depicts>',
+                'NOK: The image is likely fake, key UI elements are missing',
               ]
             : [
-                'NOK: Brak ekranu wyników bossa, widoczny ekran menu głównego',
-                'NOK: Panel posiada ikonę zamknięcia (X)',
-                'NOK: Brak żółtego przycisku pod panelem',
+                'NOK: Brak ekranu Victory po walce z Bossem',
+                'NOK: Zdjęcie przedstawia <opis co przedstawia zdjęcie>',
+                'NOK: Zdjęcie prawdopodobnie jest fałszywe, brakuje kluczowych elementów UI',
               ];
         const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
 pasuje DO TEGO WZORCA.
@@ -353,17 +353,17 @@ poniższe sprawdzenie.
 
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - pełnoekranowe tło z gameplayem
-- centralny panel BEZ ikony X ani przycisku zamknięcia
+- centralny panel BEZ ikony X ani przycisku zamknięcia po prawej stronie u góry okienka
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
-- pod banerem: nazwa własna Bossa
 - w centrum panelu: JEDNA duża ikona z liczbą
-- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (np. Best: 25015.1Qi, Total: 103.2Sx) — to jest normalne
+- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (K/M/B/T/Q/Qi/Sx) — to jest normalne
 - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
-- pod panelem: jeden żółty przycisk
+- pod panelem: jeden żółty przycisk (nie jest wymagany, ale jeśli jest, to musi być pod panelem, a nie w jego obrębie)
 
 CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
-- Nazwa bossa — każdy gracz wgrywa INNEGO bossa niż wzorzec — NIE jest to powód do odrzucenia
-- Liczby wyników, jednostki (K/M/B/T/Q/Qi/Sx) — zawsze inne — NIE jest to powód do odrzucenia
+- Tekstu na banerze, w centrym panelu.
+- Liczb, wyników, jednostek (K/M/B/T/Q/Qi/Sx)
+
 Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
 
 Format odpowiedzi:
