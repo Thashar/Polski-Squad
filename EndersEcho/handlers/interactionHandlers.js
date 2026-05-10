@@ -6364,7 +6364,7 @@ class InteractionHandler {
             const ext = path.extname(imagePath) || '.png';
             const fileName = `rejected_${Date.now()}${ext}`;
 
-            const buildEmbed = (footerText) => {
+            const buildEmbed = (footerText, imageUrl = `attachment://${fileName}`) => {
                 const fields = [
                     { name: msgs.reportFieldNick, value: serverNick, inline: true },
                     { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
@@ -6380,7 +6380,7 @@ class InteractionHandler {
                     .setColor(color)
                     .setTitle(msgs.reportTitle)
                     .addFields(...fields)
-                    .setImage(`attachment://${fileName}`)
+                    .setImage(imageUrl)
                     .setFooter({ text: footerText });
             };
 
@@ -6406,6 +6406,22 @@ class InteractionHandler {
                 return new ActionRowBuilder().addComponents(approveBtn, blockBtn);
             };
 
+            // Pomocnik: wyślij raport bez podwójnego podglądu zdjęcia.
+            // Krok 1: wyślij sam plik → Discord nadaje CDN URL.
+            // Krok 2: edytuj wiadomość — ustaw embed z CDN URL i usuń załącznik (attachments: []).
+            // Dzięki temu zdjęcie widoczne jest tylko wewnątrz embeda, nie jako osobny podgląd.
+            const sendReport = async (channel, footerText) => {
+                const att = new AttachmentBuilder(imagePath, { name: fileName });
+                const msg = await channel.send({ files: [att] });
+                const imgUrl = msg.attachments.first()?.url;
+                const embed = buildEmbed(footerText, imgUrl || `attachment://${fileName}`);
+                return msg.edit({
+                    embeds: [embed],
+                    components: [buildButtons()],
+                    ...(imgUrl ? { attachments: [] } : {}),
+                });
+            };
+
             // Wyślij do globalnego kanału
             let globalMsgId = null;
             let sentGlobalMsg = null;
@@ -6413,9 +6429,7 @@ class InteractionHandler {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
                     if (globalChannel) {
-                        const fileAttachment = new AttachmentBuilder(imagePath, { name: fileName });
-                        const globalEmbed = buildEmbed(`uid:${interaction.user.id}|gid:${interaction.guildId}`);
-                        sentGlobalMsg = await globalChannel.send({ embeds: [globalEmbed], files: [fileAttachment], components: [buildButtons()] });
+                        sentGlobalMsg = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`);
                         globalMsgId = sentGlobalMsg.id;
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do globalnego kanału dla ${serverNick}`);
                     }
@@ -6429,12 +6443,10 @@ class InteractionHandler {
                 try {
                     const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
                     if (guildChannel) {
-                        const fileAttachment2 = new AttachmentBuilder(imagePath, { name: fileName });
                         const footerText = globalMsgId
                             ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}`
                             : `uid:${interaction.user.id}|gid:${interaction.guildId}`;
-                        const guildEmbed = buildEmbed(footerText);
-                        const sentPerGuild = await guildChannel.send({ embeds: [guildEmbed], files: [fileAttachment2], components: [buildButtons()] });
+                        const sentPerGuild = await sendReport(guildChannel, footerText);
                         // Zapisz referencję do per-guild wiadomości w footerze globalnego embeda
                         // żeby Analyze kliknięty na global mógł zaktualizować też per-guild
                         if (sentGlobalMsg) {
