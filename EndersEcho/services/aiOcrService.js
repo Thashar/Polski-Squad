@@ -18,7 +18,7 @@ const SAFETY_SETTINGS_OFF = [
  */
 const PROMPT_VERSIONS = {
     'extract-data-eng':  'v2',
-    'compare-template':  'v4',
+    'compare-template':  'v5',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -360,6 +360,12 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (np. Best: 25015.1Qi, Total: 103.2Sx) — to jest normalne
 - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
 - pod panelem: jeden żółty przycisk
+
+CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
+- Nazwa bossa — każdy gracz wgrywa INNEGO bossa niż wzorzec — NIE jest to powód do odrzucenia
+- Liczby wyników, jednostki (K/M/B/T/Q/Qi/Sx) — zawsze inne — NIE jest to powód do odrzucenia
+- Kolor tła, grafika gameplay — może wyglądać inaczej — NIE jest to powód do odrzucenia
+Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
 
 Format odpowiedzi:
 - Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
