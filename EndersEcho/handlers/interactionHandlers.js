@@ -6050,7 +6050,7 @@ class InteractionHandler {
             const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
             const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
 
-            const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
+            const { isNewRecord, currentScore, ranking: updatedRanking } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
@@ -6169,8 +6169,8 @@ class InteractionHandler {
                 this._analyzeRevertSessions.set(globalMsgId, {
                     targetUserId,
                     targetGuildId,
-                    prevScore: currentScore?.score ?? null,
-                    prevBoss: currentScore?.bossName ?? null,
+                    previousRecord: currentScore ?? null,
+                    newRecordTimestamp: isNewRecord ? (updatedRanking[targetUserId]?.timestamp ?? null) : null,
                     userName,
                     adminName,
                 });
@@ -6224,22 +6224,31 @@ class InteractionHandler {
 
         await interaction.deferUpdate();
 
-        const { targetUserId, targetGuildId, prevScore, prevBoss, userName, adminName } = session;
+        const { targetUserId, targetGuildId, previousRecord, newRecordTimestamp, userName, adminName } = session;
         const gl = this.logService._gl(targetGuildId);
         const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
         const reverterName = interaction.member?.displayName || interaction.user.username;
 
         try {
-            gl.info(`↩️ [Cofnij] ${reverterName} cofa wynik dla ${userName} (serwer: ${serverName}), poprzedni wynik: ${prevScore || 'brak'}`);
+            gl.info(`↩️ [Cofnij] ${reverterName} cofa wynik dla ${userName} (serwer: ${serverName}), poprzedni wynik: ${previousRecord?.score || 'brak'}`);
 
-            if (prevScore) {
-                await this.rankingService.updateUserRanking(targetGuildId, targetUserId, userName, prevScore, prevBoss);
-                gl.info(`↩️ [Cofnij] Przywrócono poprzedni wynik: ${prevScore}`);
-            } else {
-                await this.rankingService.removePlayerFromRanking(targetUserId, targetGuildId);
-                gl.info(`↩️ [Cofnij] Usunięto gracza z rankingu (brak poprzedniego wyniku)`);
+            // 1. Cofnij ranking (identycznie jak CV revert)
+            await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
+            gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
+
+            // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
+            if (this.scoreHistoryService && newRecordTimestamp) {
+                this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, newRecordTimestamp)
+                    .catch(e => gl.error(`↩️ [Cofnij] Błąd usuwania historii: ${e.message}`));
             }
 
+            // 3. Wyczyść osiągnięcia score/records (identycznie jak CV revert)
+            if (this.achievementService) {
+                await this.achievementService.clearUserAchievements(targetGuildId, targetUserId).catch(() => {});
+                gl.info('↩️ [Cofnij] Osiągnięcia score/records wyczyszczone');
+            }
+
+            // 4. Zaktualizuj role TOP
             try {
                 const guildConfig = this.config.getGuildConfig(targetGuildId);
                 const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
@@ -6259,8 +6268,8 @@ class InteractionHandler {
                 hour: '2-digit', minute: '2-digit', second: '2-digit',
                 hour12: false
             });
-            const revertInfo = prevScore
-                ? `↩️ Wynik cofnięty przez **${reverterName}** → przywrócono: **${prevScore}** | ${now}`
+            const revertInfo = previousRecord?.score
+                ? `↩️ Wynik cofnięty przez **${reverterName}** → przywrócono: **${previousRecord.score}** | ${now}`
                 : `↩️ Wynik cofnięty przez **${reverterName}** → gracz usunięty z rankingu | ${now}`;
 
             const updatedEmbeds = interaction.message.embeds.map(e => {
