@@ -166,21 +166,32 @@ class RankingService {
         const start = page * perPage;
         const pageItems = guildScores.slice(start, start + perPage);
 
-        const MEDALS = ['🥇', '🥈', '🥉'];
-        const lines = pageItems.map((gs, idx) => {
+        const MEDALS = ['👑', '🥈', '🥉'];
+        const playersLabel = msgs.guildRankingPlayers || 'graczy';
+        const bestLabel = msgs.guildRankingBest || 'najlepszy';
+
+        let rankingText = '';
+        for (const [idx, gs] of pageItems.entries()) {
             const rank = start + idx + 1;
-            const medal = MEDALS[rank - 1] || `**#${rank}**`;
-            const playersLabel = msgs.guildRankingPlayers || 'graczy';
-            const bestLabel = msgs.guildRankingBest || 'najlepszy';
-            const tagLine = gs.tag ? `\n┗ TAG: ${gs.tag}` : '';
-            return `${medal} **${gs.guildName}**\n┗ ${gs.playerCount} ${playersLabel} — ${bestLabel}: ${gs.topScore}${tagLine}`;
-        });
+            const posLabel = rank <= 3
+                ? `\`${String(rank).padStart(2, '0')}\` ${MEDALS[rank - 1]}`
+                : `\`${String(rank).padStart(2, '0')}\``;
+            const tagPart = gs.tag ? `  ·  ${gs.tag}` : '';
+            rankingText += `${posLabel}  **${gs.guildName}**  ·  **${gs.totalScore}**\n> ${gs.playerCount} ${playersLabel}  ·  ${bestLabel}: ${gs.topScore}${tagPart}\n\n`;
+        }
+
+        const statsValue = [
+            formatMessage(msgs.rankingServersCount || '🌍 Serwery: {count}', { count: guildScores.length }),
+            formatMessage(msgs.rankingHighestScore || '🏆 Najwyższy wynik: {score}', { score: guildScores[0]?.topScore || '—' }),
+        ].join('\n');
 
         const embed = new EmbedBuilder()
-            .setTitle(msgs.guildRankingTitle || '🏛️ Ranking Serwerów')
-            .setDescription(lines.join('\n\n') || (msgs.rankingEmpty || 'Brak danych'))
             .setColor(0x9b59b6)
-            .setFooter({ text: `${msgs.guildRankingFooter || 'Suma top 30 graczy per serwer'} • ${page + 1}/${totalPages}` });
+            .setTitle(msgs.guildRankingTitle || '🏛️ Ranking Serwerów')
+            .setDescription(rankingText.trim() || (msgs.rankingEmpty || 'Brak danych'))
+            .addFields({ name: msgs.rankingStats || 'Statystyki', value: statsValue, inline: false })
+            .setFooter({ text: formatMessage(msgs.rankingPage || 'Strona {current} z {total}', { current: page + 1, total: totalPages }) })
+            .setTimestamp();
 
         if (botIconUrl) embed.setThumbnail(botIconUrl);
         return embed;
