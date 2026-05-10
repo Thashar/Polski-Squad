@@ -364,7 +364,6 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
 - Nazwa bossa — każdy gracz wgrywa INNEGO bossa niż wzorzec — NIE jest to powód do odrzucenia
 - Liczby wyników, jednostki (K/M/B/T/Q/Qi/Sx) — zawsze inne — NIE jest to powód do odrzucenia
-- Kolor tła, grafika gameplay — może wyglądać inaczej — NIE jest to powód do odrzucenia
 Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
 
 Format odpowiedzi:
