@@ -75,6 +75,8 @@ class InteractionHandler {
         this._configWizard = new Map();
         // Cache rankingu osiągnięć (messageId -> { players, currentPage, totalPages, ... })
         this._achRankings = new Map();
+        // Sesje revert po manualnej analizie (globalMsgId -> { targetUserId, targetGuildId, prevScore, prevBoss, userName, adminName })
+        this._analyzeRevertSessions = new Map();
     }
 
     /**
@@ -3534,6 +3536,11 @@ class InteractionHandler {
                 return;
             }
 
+            if (customId.startsWith('ee_analyze_revert_')) {
+                await this._handleAnalyzeRevert(interaction, customId);
+                return;
+            }
+
             if (customId.startsWith('ee_analyze_yes_')) {
                 await this._handleAnalyzeConfirmed(interaction, customId);
                 return;
@@ -6043,7 +6050,7 @@ class InteractionHandler {
             const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
             const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
 
-            const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
+            const { isNewRecord, currentScore, ranking: updatedRanking } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
@@ -6155,6 +6162,38 @@ class InteractionHandler {
             });
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);
+
+            // Zapisz sesję revert i dodaj przycisk "Cofnij wynik" do globalnego raportu
+            const globalMsgId = footerInfo.globalMsgId || interaction.message.id;
+            if (this.config.invalidReportChannelId && globalMsgId) {
+                this._analyzeRevertSessions.set(globalMsgId, {
+                    targetUserId,
+                    targetGuildId,
+                    previousRecord: currentScore ?? null,
+                    newRecordTimestamp: isNewRecord ? (updatedRanking[targetUserId]?.timestamp ?? null) : null,
+                    userName,
+                    adminName,
+                });
+                try {
+                    const globalChan = await interaction.client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
+                    if (globalChan) {
+                        const globalMsg = await globalChan.messages.fetch(globalMsgId).catch(() => null);
+                        if (globalMsg) {
+                            const revertBtn = new ButtonBuilder()
+                                .setCustomId(`ee_analyze_revert_${globalMsgId}`)
+                                .setLabel('↩️ Cofnij wynik')
+                                .setStyle(ButtonStyle.Danger);
+                            await globalMsg.edit({
+                                embeds: globalMsg.embeds,
+                                components: [new ActionRowBuilder().addComponents(revertBtn)],
+                            });
+                        }
+                    }
+                } catch (revertErr) {
+                    gl.warn(`⚠️ [Analizuj] Nie można dodać przycisku cofnięcia: ${revertErr.message}`);
+                }
+            }
+
             gl.info(`✅ [Analizuj] Embedy zaktualizowane — analiza zakończona`);
 
         } catch (err) {
@@ -6166,6 +6205,84 @@ class InteractionHandler {
             }).catch(() => {});
         } finally {
             await fs.unlink(tempPath).catch(() => {});
+        }
+    }
+
+    async _handleAnalyzeRevert(interaction, customId) {
+        if (!interaction.member.permissions.has('Administrator') && !interaction.member.permissions.has('ModerateMembers')) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const globalMsgId = customId.slice('ee_analyze_revert_'.length);
+        const session = this._analyzeRevertSessions.get(globalMsgId);
+        if (!session) {
+            await interaction.reply({ content: '⚠️ Sesja cofnięcia wygasła lub nie istnieje.', flags: ['Ephemeral'] });
+            return;
+        }
+        this._analyzeRevertSessions.delete(globalMsgId);
+
+        await interaction.deferUpdate();
+
+        const { targetUserId, targetGuildId, previousRecord, newRecordTimestamp, userName, adminName } = session;
+        const gl = this.logService._gl(targetGuildId);
+        const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
+        const reverterName = interaction.member?.displayName || interaction.user.username;
+
+        try {
+            gl.info(`↩️ [Cofnij] ${reverterName} cofa wynik dla ${userName} (serwer: ${serverName}), poprzedni wynik: ${previousRecord?.score || 'brak'}`);
+
+            // 1. Cofnij ranking (identycznie jak CV revert)
+            await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
+            gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
+
+            // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
+            if (this.scoreHistoryService && newRecordTimestamp) {
+                this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, newRecordTimestamp)
+                    .catch(e => gl.error(`↩️ [Cofnij] Błąd usuwania historii: ${e.message}`));
+            }
+
+            // 3. Wyczyść osiągnięcia score/records (identycznie jak CV revert)
+            if (this.achievementService) {
+                await this.achievementService.clearUserAchievements(targetGuildId, targetUserId).catch(() => {});
+                gl.info('↩️ [Cofnij] Osiągnięcia score/records wyczyszczone');
+            }
+
+            // 4. Zaktualizuj role TOP
+            try {
+                const guildConfig = this.config.getGuildConfig(targetGuildId);
+                const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
+                await this.roleService.updateTopRoles(
+                    await interaction.client.guilds.fetch(targetGuildId),
+                    updatedPlayers,
+                    guildConfig?.topRoles || null
+                );
+                gl.success('✅ [Cofnij] Role TOP zaktualizowane po cofnięciu wyniku');
+            } catch (roleErr) {
+                gl.error(`❌ [Cofnij] Błąd aktualizacji ról TOP: ${roleErr.message}`);
+            }
+
+            const now = new Date().toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            });
+            const revertInfo = previousRecord?.score
+                ? `↩️ Wynik cofnięty przez **${reverterName}** → przywrócono: **${previousRecord.score}** | ${now}`
+                : `↩️ Wynik cofnięty przez **${reverterName}** → gracz usunięty z rankingu | ${now}`;
+
+            const updatedEmbeds = interaction.message.embeds.map(e => {
+                const builder = EmbedBuilder.from(e);
+                builder.addFields({ name: '↩️ Cofnięcie wyniku', value: revertInfo, inline: false });
+                return builder;
+            });
+
+            await interaction.editReply({ embeds: updatedEmbeds, components: [] });
+            gl.info(`↩️ [Cofnij] Embed zaktualizowany — cofnięcie zakończone`);
+        } catch (err) {
+            gl.error(`❌ [Cofnij] Błąd cofania wyniku: ${err.message}`);
+            await interaction.editReply({ components: [] }).catch(() => {});
         }
     }
 
