@@ -2926,7 +2926,12 @@ class InteractionHandler {
 
         // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR
         if (!dryRun && this.updateCooldownService) {
-            await this.updateCooldownService.setCooldown(interaction.user.id);
+            const appliedCooldownMs = await this.updateCooldownService.setCooldown(interaction.user.id);
+            const { formatCooldownDuration: fcd } = require('../services/updateCooldownService');
+            const base = this.updateCooldownService.getCooldownDuration();
+            if (appliedCooldownMs > base) {
+                logger.info(`⏫ Cooldown podwojony dla ${interaction.user.username}: ${fcd(appliedCooldownMs)}`);
+            }
         }
 
         let tempImagePath = null;

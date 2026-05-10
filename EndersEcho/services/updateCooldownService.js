@@ -6,7 +6,7 @@ const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minut
 class UpdateCooldownService {
     constructor(config) {
         this.filePath = path.join(config.ranking.dataDir, 'update_cooldowns.json');
-        this._cooldowns = new Map(); // userId -> expiresAt (timestamp ms)
+        this._cooldowns = new Map(); // userId -> { expiresAt, cooldownMs, lastSetAt }
         this._cooldownDurationMs = DEFAULT_COOLDOWN_MS;
     }
 
@@ -16,17 +16,31 @@ class UpdateCooldownService {
             const data = JSON.parse(raw);
             const now = Date.now();
             if (typeof data.cooldownDurationMs === 'number') {
-                // Nowy format: { cooldownDurationMs, cooldowns: {userId: expiresAt} }
                 this._cooldownDurationMs = data.cooldownDurationMs;
-                for (const [userId, expiresAt] of Object.entries(data.cooldowns || {})) {
-                    if (expiresAt > now) this._cooldowns.set(userId, expiresAt);
+                for (const [userId, val] of Object.entries(data.cooldowns || {})) {
+                    if (typeof val === 'number') {
+                        // Stary format: samo expiresAt — migruj do nowego
+                        if (val > now) {
+                            this._cooldowns.set(userId, {
+                                expiresAt: val,
+                                cooldownMs: this._cooldownDurationMs,
+                                lastSetAt: val - this._cooldownDurationMs,
+                            });
+                        }
+                    } else if (val && typeof val === 'object' && val.expiresAt > now) {
+                        this._cooldowns.set(userId, val);
+                    }
                 }
             } else {
-                // Stary format: { userId: expiresAt } — migracja
+                // Najstarszy format: { userId: expiresAt } — migracja
                 this._cooldownDurationMs = DEFAULT_COOLDOWN_MS;
                 for (const [userId, expiresAt] of Object.entries(data)) {
                     if (typeof expiresAt === 'number' && expiresAt > now) {
-                        this._cooldowns.set(userId, expiresAt);
+                        this._cooldowns.set(userId, {
+                            expiresAt,
+                            cooldownMs: this._cooldownDurationMs,
+                            lastSetAt: expiresAt - this._cooldownDurationMs,
+                        });
                     }
                 }
             }
@@ -38,8 +52,8 @@ class UpdateCooldownService {
     async save() {
         const now = Date.now();
         const cooldowns = {};
-        for (const [userId, expiresAt] of this._cooldowns) {
-            if (expiresAt > now) cooldowns[userId] = expiresAt;
+        for (const [userId, entry] of this._cooldowns) {
+            if (entry.expiresAt > now) cooldowns[userId] = entry;
         }
         await fs.mkdir(path.dirname(this.filePath), { recursive: true });
         await fs.writeFile(this.filePath, JSON.stringify({
@@ -50,9 +64,9 @@ class UpdateCooldownService {
 
     // Zwraca pozostały czas w ms, lub null jeśli brak cooldownu
     getRemainingMs(userId) {
-        const expiresAt = this._cooldowns.get(userId);
-        if (!expiresAt) return null;
-        const remaining = expiresAt - Date.now();
+        const entry = this._cooldowns.get(userId);
+        if (!entry) return null;
+        const remaining = entry.expiresAt - Date.now();
         if (remaining <= 0) {
             this._cooldowns.delete(userId);
             return null;
@@ -60,9 +74,38 @@ class UpdateCooldownService {
         return remaining;
     }
 
+    // Ustawia cooldown z logiką podwajania:
+    // Jeśli od poprzedniego setCooldown minęło <= 3x poprzedniego cooldownu → podwój.
+    // Jeśli minęło więcej → reset do bazy (_cooldownDurationMs).
     async setCooldown(userId) {
-        this._cooldowns.set(userId, Date.now() + this._cooldownDurationMs);
+        const now = Date.now();
+        const entry = this._cooldowns.get(userId);
+        const base = this._cooldownDurationMs;
+
+        let newCooldownMs;
+        if (entry && entry.lastSetAt) {
+            const timeSinceLastSet = now - entry.lastSetAt;
+            const windowMs = 3 * entry.cooldownMs;
+            newCooldownMs = timeSinceLastSet <= windowMs
+                ? entry.cooldownMs * 2
+                : base;
+        } else {
+            newCooldownMs = base;
+        }
+
+        this._cooldowns.set(userId, {
+            expiresAt: now + newCooldownMs,
+            cooldownMs: newCooldownMs,
+            lastSetAt: now,
+        });
         await this.save().catch(() => {});
+        return newCooldownMs;
+    }
+
+    // Zwraca aktualny efektywny cooldown danego usera (lub bazę jeśli brak wpisu)
+    getUserCooldownMs(userId) {
+        const entry = this._cooldowns.get(userId);
+        return entry ? entry.cooldownMs : this._cooldownDurationMs;
     }
 
     getCooldownDuration() {
