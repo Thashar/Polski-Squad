@@ -3529,6 +3529,16 @@ class InteractionHandler {
                 return;
             }
 
+            if (customId.startsWith('ee_analyze_yes_')) {
+                await this._handleAnalyzeConfirmed(interaction, customId);
+                return;
+            }
+
+            if (customId.startsWith('ee_analyze_no_')) {
+                await this._handleAnalyzeCancelled(interaction, customId);
+                return;
+            }
+
             if (customId.startsWith('ee_analyze_')) {
                 await this._handleAnalyzeButton(interaction, customId);
                 return;
@@ -5896,13 +5906,64 @@ class InteractionHandler {
             return;
         }
 
+        const parts = customId.split('_');
+        const targetUserId = parts[2];
+        const targetGuildId = parts[3];
+
+        const yesBtn = new ButtonBuilder()
+            .setCustomId(`ee_analyze_yes_${targetUserId}_${targetGuildId}`)
+            .setLabel(msgs.analyzeConfirmYes)
+            .setStyle(ButtonStyle.Success);
+        const noBtn = new ButtonBuilder()
+            .setCustomId(`ee_analyze_no_${targetUserId}_${targetGuildId}`)
+            .setLabel(msgs.analyzeConfirmNo)
+            .setStyle(ButtonStyle.Secondary);
+
+        await interaction.update({
+            content: msgs.analyzeConfirmQuestion,
+            embeds: interaction.message.embeds,
+            components: [new ActionRowBuilder().addComponents(yesBtn, noBtn)],
+        });
+    }
+
+    async _handleAnalyzeCancelled(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        const parts = customId.split('_');
+        const targetUserId = parts[3];
+        const targetGuildId = parts[4];
+
+        const analyzeBtn = new ButtonBuilder()
+            .setCustomId(`ee_analyze_${targetUserId}_${targetGuildId}`)
+            .setLabel(msgs.reportBtnAnalyze)
+            .setEmoji('🔍')
+            .setStyle(ButtonStyle.Primary);
+        const blockBtn = new ButtonBuilder()
+            .setCustomId(`ee_block_${targetUserId}_${targetGuildId}`)
+            .setLabel(msgs.reportBtnBlock)
+            .setEmoji('🔒')
+            .setStyle(ButtonStyle.Danger);
+
+        await interaction.update({
+            content: null,
+            embeds: interaction.message.embeds,
+            components: [new ActionRowBuilder().addComponents(analyzeBtn, blockBtn)],
+        });
+    }
+
+    async _handleAnalyzeConfirmed(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        if (!interaction.member.permissions.has('Administrator') && !interaction.member.permissions.has('ModerateMembers')) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
         const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
 
         await interaction.deferUpdate();
 
         const parts = customId.split('_');
-        const targetUserId = parts[2];
-        const targetGuildId = parts[3];
+        const targetUserId = parts[3];
+        const targetGuildId = parts[4];
 
         // Obraz jest w polu embed.image — Discord zwraca już pełny CDN URL po wysłaniu
         const imageUrl = interaction.message.embeds[0]?.image?.url;
@@ -5983,8 +6044,24 @@ class InteractionHandler {
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
 
+            let newAchievements = [];
             if (this.achievementService) {
                 this.achievementService.trackAiAnalyzed(targetGuildId, targetUserId).catch(() => {});
+                if (isNewRecord) {
+                    try {
+                        const sortedAfter = await this.rankingService.getSortedPlayers(targetGuildId);
+                        const currentPositionForAch = sortedAfter.findIndex(p => p.userId === targetUserId) + 1;
+                        const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
+                        const newScoreValue = this.rankingService.parseScoreValue(aiResult.score);
+                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetUserId, {
+                            scoreValue: newScoreValue,
+                            bossName: aiResult.bossName,
+                            isNewRecord: true,
+                            prevScoreValue,
+                            currentPosition: currentPositionForAch,
+                        });
+                    } catch {}
+                }
             }
 
             // Aktualizuj role TOP jeśli nowy rekord
@@ -6025,7 +6102,7 @@ class InteractionHandler {
                                 userName, aiResult.score, userAvatarUrl, announceName,
                                 currentScore?.score ?? null, targetUserId, targetGuildId,
                                 targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
-                                currentScore?.timestamp ?? null, []
+                                currentScore?.timestamp ?? null, newAchievements
                             );
                         } else {
                             resultEmbed = this.rankingService.createResultEmbed(
@@ -6039,12 +6116,26 @@ class InteractionHandler {
                             adminName,
                         });
 
-                        await announcementChannel.send({
+                        const publicMsg = await announcementChannel.send({
                             content: announcementContent,
                             embeds: [resultEmbed],
                             files: [fileAttachment],
                         });
                         gl.info(`✅ [Analizuj] Ogłoszenie wysłane na kanał ${announcementChannelId}`);
+
+                        // DM do subskrybentów
+                        if (isNewRecord && this.notificationService && publicMsg) {
+                            try {
+                                const subscribers = await this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId);
+                                for (const sub of subscribers) {
+                                    try {
+                                        const dmUser = await interaction.client.users.fetch(sub.subscriberId);
+                                        const dmEmbed = this.rankingService.createDmNotifEmbed(resultEmbed, targetMsgs);
+                                        await dmUser.send({ embeds: [dmEmbed], files: [new AttachmentBuilder(tempPath, { name: announceName })] });
+                                    } catch {}
+                                }
+                            } catch {}
+                        }
                     }
                 } catch (annErr) {
                     gl.error(`❌ [Analizuj] Błąd wysyłania ogłoszenia: ${annErr.message}`);
