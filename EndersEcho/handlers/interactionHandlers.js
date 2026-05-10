@@ -6041,7 +6041,7 @@ class InteractionHandler {
             const { isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
-            await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId);
+            await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
 
             let newAchievements = [];

@@ -34,9 +34,13 @@ class LogService {
      * @param {boolean} isNewRecord
      * @param {string|null} guildId
      */
-    async logScoreUpdate(userName, score, isNewRecord, guildId = null) {
+    async logScoreUpdate(userName, score, isNewRecord, guildId = null, { adminName } = {}) {
         const status = isNewRecord ? 'NOWY REKORD' : 'Bez rekordu';
-        this._gl(guildId).info(`Aktualizacja wyniku: ${userName} - ${score} [${status}]`);
+        if (adminName) {
+            this._gl(guildId).info(`🔬 MANUALNA ANALIZA ADMINA 🔬 | ${adminName} → ${userName} | ${score} [${status}]`);
+        } else {
+            this._gl(guildId).info(`Aktualizacja wyniku: ${userName} - ${score} [${status}]`);
+        }
     }
 
     /**
