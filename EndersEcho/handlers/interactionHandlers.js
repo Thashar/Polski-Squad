@@ -260,7 +260,8 @@ class InteractionHandler {
             // Pozostałe komendy — wymagają konfiguracji i dozwolonego kanału
             if (!this._checkConfigured(interaction)) return;
 
-            if (!this.isAllowedChannel(interaction.channel.id, guildId)) {
+            const isHeadAdminBypassCmd = ['ranking', 'achievements', 'subscribe'].includes(interaction.commandName);
+            if (!this.isAllowedChannel(interaction.channel.id, guildId) && !(this._isHeadAdmin(interaction.user.id) && isHeadAdminBypassCmd)) {
                 await interaction.reply({
                     content: this.msgs(guildId).channelNotAllowed,
                     flags: ['Ephemeral']
