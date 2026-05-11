@@ -7574,7 +7574,70 @@ class InteractionHandler {
             }
         }
 
-        // --- Kategoria 3: Hierarchia ról TOP ---
+        // --- Kategoria 3: Kanały raportów ---
+        const REPORT_CHANNEL_PERMS = [
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.SendMessages,
+            PermissionFlagsBits.EmbedLinks,
+            PermissionFlagsBits.AttachFiles,
+        ];
+        const checkReportChannel = (chId, label, useClientCache) => {
+            const ch = useClientCache
+                ? interaction.client.channels.cache.get(chId)
+                : guild.channels.cache.get(chId);
+            if (!ch) {
+                addIssue(`❌ ${label} — ` + t(`kanał \`${chId}\` nieznaleziony w cache`, `channel \`${chId}\` not found in cache`));
+                return;
+            }
+            const chPerms = botMember.permissionsIn(ch);
+            const missing = REPORT_CHANNEL_PERMS.filter(f => !chPerms.has(f));
+            if (missing.length) {
+                const names = missing.map(f => Object.keys(PermissionFlagsBits).find(k => PermissionFlagsBits[k] === f));
+                addIssue(`❌ ${label} #${ch.name} — ` + t(`brak: ${names.join(', ')}`, `missing: ${names.join(', ')}`));
+            } else {
+                lines.push(`✅ ${label} — #${ch.name}`);
+            }
+        };
+
+        lines.push('');
+        lines.push(t('📋 **Kanały raportów**', '📋 **Report Channels**'));
+
+        // Per-guild: kanał odrzuconych screenów
+        const invalidChId = guildConfig?.invalidReportChannelId;
+        if (!invalidChId) {
+            lines.push(t('ℹ️ Kanał odrzuconych screenów — nie skonfigurowany (opcjonalny)', 'ℹ️ Invalid screens channel — not configured (optional)'));
+        } else {
+            checkReportChannel(invalidChId, t('Odrzucone screeny (per-serwer)', 'Invalid screens (per-guild)'), false);
+        }
+
+        // Per-guild: kanał weryfikacji społeczności
+        const cvConfig = guildConfig?.communityVerification;
+        const cvChId = cvConfig?.rejectedChannelId;
+        if (!cvConfig?.enabled) {
+            lines.push(t('ℹ️ Weryfikacja społeczności — wyłączona', 'ℹ️ Community verification — disabled'));
+        } else if (!cvChId) {
+            lines.push(t('ℹ️ Kanał CV — nie skonfigurowany', 'ℹ️ CV channel — not configured'));
+        } else {
+            checkReportChannel(cvChId, t('Weryfikacja społeczności (per-serwer)', 'Community verification (per-guild)'), false);
+        }
+
+        // Globalny: kanał odrzuconych screenów (env)
+        const globalInvalidChId = this.config.invalidReportChannelId;
+        if (!globalInvalidChId) {
+            lines.push(t('ℹ️ Globalny kanał odrzuconych — nie skonfigurowany (opcjonalny)', 'ℹ️ Global invalid screens channel — not configured (optional)'));
+        } else {
+            checkReportChannel(globalInvalidChId, t('Odrzucone screeny (globalny)', 'Invalid screens (global)'), true);
+        }
+
+        // Globalny: kanał raportów społeczności (env)
+        const globalCvChId = this.config.communityReportChannelId;
+        if (!globalCvChId) {
+            lines.push(t('ℹ️ Globalny kanał CV — nie skonfigurowany (opcjonalny)', 'ℹ️ Global CV channel — not configured (optional)'));
+        } else {
+            checkReportChannel(globalCvChId, t('Weryfikacja społeczności (globalny)', 'Community verification (global)'), true);
+        }
+
+        // --- Kategoria 5: Hierarchia ról TOP ---
         lines.push('');
         lines.push(t('🏅 **Hierarchia ról TOP**', '🏅 **TOP Role Hierarchy**'));
         const botHighestPos = botMember.roles.highest.position;
