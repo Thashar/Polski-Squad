@@ -121,7 +121,8 @@ class InteractionHandler {
                 .setDescription('Add a new Ender\'s Echo score for analysis')
                 .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy'))
                 .addAttachmentOption(option =>
-                    option.setName('obraz')
+                    option.setName('image')
+                        .setNameLocalizations(pl('obraz'))
                         .setDescription('Screenshot of the boss result screen')
                         .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                         .setRequired(true)),
@@ -137,7 +138,8 @@ class InteractionHandler {
                 .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy (Test OCR)'))
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
                 .addAttachmentOption(option =>
-                    option.setName('obraz')
+                    option.setName('image')
+                        .setNameLocalizations(pl('obraz'))
                         .setDescription('Screenshot of the boss result screen')
                         .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                         .setRequired(true)),
@@ -2901,7 +2903,7 @@ class InteractionHandler {
             return;
         }
 
-        const attachment = interaction.options.getAttachment('obraz');
+        const attachment = interaction.options.getAttachment('image');
 
         const isImage = this.config.images.supportedExtensions.some(ext =>
             attachment.name.toLowerCase().endsWith(ext)
