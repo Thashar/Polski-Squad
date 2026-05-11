@@ -193,7 +193,7 @@
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
   - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`
   - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
-  - Rząd 4: `🚫 Zbanuj serwer`, `🔍 Diagnostyka`
+  - Rząd 4: `🚫 Zbanuj serwer`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -266,7 +266,7 @@
 | `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
 | `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
-| `panel_diagnostics` | Raport uprawnień bota: serwer, kanał OCR, hierarchia ról TOP, intenty (head admin) |
+| `panel_diagnostics` | Raport uprawnień bota: serwer, kanały raportów, hierarchia ról TOP, intenty — dostępny w `/configure` gdy wszystkie kroki ukończone (każdy admin) |
 | `panel_ban_server` | Panel zbanowania serwera (head admin) |
 | `panel_ban_guild` | Otwórz modal wyszukiwania serwera do bana |
 | `panel_ban_guild_modal` | Modal wyszukiwania (pole `ban_guild_query`) |
@@ -309,7 +309,7 @@
 - **Krok 6:** Powiadomienia Global TOP10 (Tak/Nie) — per-guild flaga `globalTopNotifications` (backward compat: odczytuje też stare `globalTop3Notifications`)
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
-- Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone
+- Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone; obok niego pojawia się wtedy też przycisk **🔍 Diagnostyka** (`panel_diagnostics`) — dostępny dla każdego administratora, sprawdza uprawnienia bota (serwer + kanały + hierarchia ról TOP)
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
 - Przy każdym zapisaniu konfiguracji zapisywane jest `configuredBy: { userId, username, configuredAt }` — używane do DM alertów uprawnień

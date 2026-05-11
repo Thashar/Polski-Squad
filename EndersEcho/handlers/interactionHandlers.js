@@ -469,6 +469,11 @@ class InteractionHandler {
                     .setLabel(t('Zaakceptuj konfigurację!', 'Accept Configuration!'))
                     .setEmoji('🔒')
                     .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('panel_diagnostics')
+                    .setEmoji('🔍')
+                    .setLabel(t('Diagnostyka', 'Diagnostics'))
+                    .setStyle(ButtonStyle.Secondary),
                 cancelBtn
             ));
         } else {
@@ -2035,10 +2040,9 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
             ));
-            // Rząd 4 Head Admin: Zbanuj serwer, Diagnostyka
+            // Rząd 4 Head Admin: Zbanuj serwer
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_diagnostics').setEmoji('🔍').setLabel(t('Diagnostyka', 'Diagnostics')).setStyle(ButtonStyle.Secondary),
             ));
         }
 
@@ -3911,10 +3915,6 @@ class InteractionHandler {
             }
 
             if (customId === 'panel_diagnostics') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
                 await this._handlePanelDiagnostics(interaction);
                 return;
             }
@@ -7693,7 +7693,7 @@ class InteractionHandler {
             .setTimestamp();
 
         const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_back_configure').setEmoji('◀️').setLabel(t('Wróć do konfiguracji', 'Back to Configuration')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [backRow] });
     }
