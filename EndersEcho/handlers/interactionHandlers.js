@@ -472,7 +472,7 @@ class InteractionHandler {
                 new ButtonBuilder()
                     .setCustomId('panel_diagnostics')
                     .setEmoji('🔍')
-                    .setLabel(t('Diagnostyka', 'Diagnostics'))
+                    .setLabel(t('Diagnostyka uprawnień', 'Permission Diagnostics'))
                     .setStyle(ButtonStyle.Secondary),
                 cancelBtn
             ));
