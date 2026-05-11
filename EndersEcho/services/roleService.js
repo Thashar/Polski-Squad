@@ -178,6 +178,7 @@ class RoleService {
 
             // Dodania w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
             const CHUNK = 10;
+            const addErrors = new Map(); // roleName -> { missing: string[], other: {name, msg}[] }
             for (let i = 0; i < toAdd.length; i += CHUNK) {
                 const chunk = toAdd.slice(i, i + CHUNK);
                 await Promise.allSettled(
@@ -193,14 +194,26 @@ class RoleService {
                             }
                             return;
                         }
-                        await member.roles.add(role).catch(err =>
-                            gl.error(`Błąd przyznawania roli "${role.name}" użytkownikowi "${member.displayName}": ${err.message}`)
-                        );
+                        await member.roles.add(role).catch(err => {
+                            if (!addErrors.has(role.name)) addErrors.set(role.name, { missing: [], other: [] });
+                            const bucket = addErrors.get(role.name);
+                            if (err.message.includes('Missing Permissions')) {
+                                bucket.missing.push(member.displayName);
+                            } else {
+                                bucket.other.push({ name: member.displayName, msg: err.message });
+                            }
+                        });
                     })
                 );
                 if (i + CHUNK < toAdd.length) {
                     await new Promise(r => setTimeout(r, 250));
                 }
+            }
+            for (const [roleName, { missing, other }] of addErrors) {
+                if (missing.length > 0)
+                    gl.warn(`⚠️ Brak uprawnień do przyznania roli "${roleName}": ${missing.join(', ')}`);
+                if (other.length > 0)
+                    gl.error(`❌ Błąd przyznawania roli "${roleName}": ${other.map(e => `"${e.name}" (${e.msg})`).join(', ')}`);
             }
         }
 
