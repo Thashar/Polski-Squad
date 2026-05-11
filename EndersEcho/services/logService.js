@@ -113,7 +113,10 @@ class LogService {
      * @param {import('discord.js').Guild|null} guildObj
      */
     sendOcrAnalysisEmbed(guildId, options = {}, guildObj = null) {
-        if (!this.guildLogger.webhookUrl) return;
+        if (!this.guildLogger.webhookUrl) {
+            this.logger.warn(`[OCR Embed] Brak ENDERSECHO_LOG_WEBHOOK_URL — embed pominięty (type: ${options.type})`);
+            return;
+        }
 
         try {
             const {
@@ -186,7 +189,9 @@ class LogService {
                 embed.addFields({ name: '🔐 Błąd uprawnień ról', value: roleError.substring(0, 512), inline: false });
             }
 
-            this.guildLogger.sendEmbed(embed);
+            // Używamy queueEmbed (HTTP webhook, nie channel.send) — identyczna ścieżka co logi tekstowe
+            this.logger.info(`[OCR Embed] Wysyłam embed type=${type} dla guildId=${guildId}`);
+            this.guildLogger.queueEmbed(embed, guildIcon);
         } catch (err) {
             this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
         }

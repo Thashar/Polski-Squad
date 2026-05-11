@@ -102,6 +102,22 @@ class GuildLogger {
         return true;
     }
 
+    /**
+     * Wysyła embed przez kolejkę HTTP webhooka (identyczna ścieżka co logi tekstowe).
+     * Nie wymaga uprawnień bota w kanale — używa tokenu webhooka bezpośrednio.
+     * @param {Object|import('discord.js').EmbedBuilder} embed
+     * @param {string|null} guildIcon - URL avatara webhooka (nadpisuje domyślny)
+     * @returns {boolean}
+     */
+    queueEmbed(embed, guildIcon = null) {
+        if (!this.webhookUrl) return false;
+        const embedData = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
+        const payload = { embeds: [embedData] };
+        if (guildIcon) payload.avatar_url = guildIcon;
+        this._enqueue(payload);
+        return true;
+    }
+
     _sendTestMessage() {
         const ts = getTimestamp();
         const content = `${SEPARATOR}\n${BOT_EMOJI} **${BOT_NAME}** [${ts}] ✅ GuildLogger online`;
