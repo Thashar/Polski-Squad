@@ -193,7 +193,7 @@
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
   - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`
   - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
-  - Rząd 4: `🚫 Zbanuj serwer`
+  - Rząd 4: `🚫 Zbanuj serwer`, `🔍 Diagnostyka`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -266,6 +266,7 @@
 | `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
 | `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
+| `panel_diagnostics` | Raport uprawnień bota: serwer, kanał OCR, hierarchia ról TOP, intenty (head admin) |
 | `panel_ban_server` | Panel zbanowania serwera (head admin) |
 | `panel_ban_guild` | Otwórz modal wyszukiwania serwera do bana |
 | `panel_ban_guild_modal` | Modal wyszukiwania (pole `ban_guild_query`) |

@@ -2035,9 +2035,10 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
             ));
-            // Rząd 4 Head Admin: Zbanuj serwer
+            // Rząd 4 Head Admin: Zbanuj serwer, Diagnostyka
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_diagnostics').setEmoji('🔍').setLabel(t('Diagnostyka', 'Diagnostics')).setStyle(ButtonStyle.Secondary),
             ));
         }
 
@@ -3459,6 +3460,7 @@ class InteractionHandler {
         if (customId.startsWith('panel_ocr_dis_')) return `Wyłącz AI OCR: ${customId.replace('panel_ocr_dis_', '')}`;
         if (customId === 'panel_limit') return 'Ustaw limity';
         if (customId === 'panel_unconfigured') return 'Nieskonfigurowane serwery';
+        if (customId === 'panel_diagnostics') return 'Diagnostyka uprawnień';
         if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
@@ -3905,6 +3907,15 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelUnconfigured(interaction);
+                return;
+            }
+
+            if (customId === 'panel_diagnostics') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelDiagnostics(interaction);
                 return;
             }
 
@@ -7499,6 +7510,127 @@ class InteractionHandler {
     }
 
     // =====================================================================
+
+    async _handlePanelDiagnostics(interaction) {
+        const { normalizeTiers } = require('../services/roleService');
+        const { PermissionFlagsBits } = require('discord.js');
+        const t = this._panelT(interaction.guildId);
+        const guild = interaction.guild;
+        const botMember = guild.members.me;
+        const guildId = guild.id;
+        const guildConfig = this.config.getGuildConfig(guildId);
+
+        const lines = [];
+
+        // --- Kategoria 1: Uprawnienia serwera ---
+        const SERVER_PERMS = [
+            [PermissionFlagsBits.ManageRoles,        'ManageRoles',        t('wymagane do przyznawania ról TOP', 'required to assign TOP roles')],
+            [PermissionFlagsBits.SendMessages,        'SendMessages',       t('wymagane do odpowiedzi na komendy', 'required to respond to commands')],
+            [PermissionFlagsBits.EmbedLinks,          'EmbedLinks',         t('wymagane do wyświetlania embedów', 'required to display embeds')],
+            [PermissionFlagsBits.ReadMessageHistory,  'ReadMessageHistory', t('wymagane do odczytu historii kanału', 'required to read channel history')],
+            [PermissionFlagsBits.ViewChannel,         'ViewChannel',        t('wymagane do widzenia kanałów', 'required to see channels')],
+            [PermissionFlagsBits.AttachFiles,         'AttachFiles',        t('wymagane do wysyłania plików', 'required to send files')],
+        ];
+
+        const serverPermsHeader = t('🔐 **Uprawnienia serwera**', '🔐 **Server Permissions**');
+        lines.push(serverPermsHeader);
+        for (const [flag, name, reason] of SERVER_PERMS) {
+            if (botMember.permissions.has(flag)) {
+                lines.push(`✅ ${name}`);
+            } else {
+                lines.push(`❌ ${name} — ${reason}`);
+            }
+        }
+
+        // --- Kategoria 2: Uprawnienia w kanale OCR ---
+        lines.push('');
+        const channelId = guildConfig?.allowedChannelId;
+        const channel = channelId ? guild.channels.cache.get(channelId) : null;
+        if (!channel) {
+            lines.push(t('📺 **Uprawnienia w kanale OCR**', '📺 **OCR Channel Permissions**'));
+            lines.push(t(`❌ Kanał OCR nieznaleziony w cache (ID: \`${channelId || 'brak'}\`)`, `❌ OCR channel not found in cache (ID: \`${channelId || 'none'}\`)`));
+        } else {
+            const channelPermsHeader = t(`📺 **Uprawnienia w kanale #${channel.name}**`, `📺 **Permissions in #${channel.name}**`);
+            lines.push(channelPermsHeader);
+            const CHANNEL_PERMS = [
+                [PermissionFlagsBits.ViewChannel,        'ViewChannel'],
+                [PermissionFlagsBits.SendMessages,       'SendMessages'],
+                [PermissionFlagsBits.EmbedLinks,         'EmbedLinks'],
+                [PermissionFlagsBits.ReadMessageHistory, 'ReadMessageHistory'],
+                [PermissionFlagsBits.AttachFiles,        'AttachFiles'],
+            ];
+            for (const [flag, name] of CHANNEL_PERMS) {
+                const hasGlobal = botMember.permissions.has(flag);
+                const hasChannel = botMember.permissionsIn(channel).has(flag);
+                if (hasChannel) {
+                    lines.push(`✅ ${name}`);
+                } else if (hasGlobal) {
+                    lines.push(`❌ ${name} — ` + t('zablokowane przez override kanału', 'blocked by channel override'));
+                } else {
+                    lines.push(`❌ ${name} — ` + t('brak uprawnienia', 'missing permission'));
+                }
+            }
+        }
+
+        // --- Kategoria 3: Hierarchia ról TOP ---
+        lines.push('');
+        lines.push(t('⚠️ **Hierarchia ról TOP**', '⚠️ **TOP Role Hierarchy**'));
+        const botHighestPos = botMember.roles.highest.position;
+        const botRoleName = botMember.roles.highest.name;
+        const rawTopRoles = guildConfig?.topRoles || guildConfig?.tiers || null;
+        if (!rawTopRoles) {
+            lines.push(t('ℹ️ Brak skonfigurowanych ról TOP', 'ℹ️ No TOP roles configured'));
+        } else {
+            const tiers = normalizeTiers(rawTopRoles);
+            if (!tiers.length) {
+                lines.push(t('ℹ️ Brak skonfigurowanych ról TOP', 'ℹ️ No TOP roles configured'));
+            } else {
+                for (const tier of tiers) {
+                    if (!tier.roleId) continue;
+                    const role = guild.roles.cache.get(tier.roleId);
+                    if (!role) {
+                        lines.push(`⚠️ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} — ` + t(`rola \`${tier.roleId}\` nie istnieje`, `role \`${tier.roleId}\` does not exist`));
+                    } else if (role.position >= botHighestPos) {
+                        lines.push(`❌ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} "${role.name}" ` + t(`(poz. ${role.position}) jest WYŻEJ niż "${botRoleName}" (poz. ${botHighestPos}) — bot nie może jej przyznać`, `(pos. ${role.position}) is ABOVE "${botRoleName}" (pos. ${botHighestPos}) — bot cannot assign it`));
+                    } else {
+                        lines.push(`✅ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} "${role.name}"`);
+                    }
+                }
+            }
+        }
+
+        // --- Intenty ---
+        lines.push('');
+        lines.push(t('🔧 **Intenty klienta**', '🔧 **Client Intents**'));
+        const intents = interaction.client.options.intents;
+        const { GatewayIntentBits } = require('discord.js');
+        const intentChecks = [
+            [GatewayIntentBits.GuildMembers,    t('GuildMembers (fetch memberów, rankingi ról)', 'GuildMembers (member fetch, role rankings)')],
+            [GatewayIntentBits.MessageContent,  t('MessageContent (odczyt treści wiadomości)', 'MessageContent (reading message content)')],
+        ];
+        for (const [bit, label] of intentChecks) {
+            lines.push(intents.has(bit) ? `✅ ${label}` : `❌ ${label}`);
+        }
+
+        // --- Podsumowanie ---
+        const hasIssues = lines.some(l => l.startsWith('❌') || l.startsWith('⚠️'));
+        const color = hasIssues ? 0xFF6B35 : 0x57F287;
+        const summary = hasIssues
+            ? t('Wykryto problemy — sprawdź szczegóły poniżej.', 'Issues detected — check details below.')
+            : t('✅ Wszystko wygląda poprawnie.', '✅ Everything looks correct.');
+
+        const embed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle(t(`🔍 Diagnostyka — ${guild.name}`, `🔍 Diagnostics — ${guild.name}`))
+            .setDescription(`${summary}\n\n${lines.join('\n')}`)
+            .setFooter({ text: t(`Rola bota: "${botRoleName}" · poz. ${botHighestPos}`, `Bot role: "${botRoleName}" · pos. ${botHighestPos}`) })
+            .setTimestamp();
+
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [backRow] });
+    }
 
     async _handlePanelBanServer(interaction) {
         const t = this._panelT(interaction.guildId);
