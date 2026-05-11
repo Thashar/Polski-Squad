@@ -2546,7 +2546,7 @@ class InteractionHandler {
     async _handlePanelOcrSearch(interaction) {
         const t = this._panelT(interaction.guildId);
         const query = interaction.fields.getTextInputValue('ocr_query').trim().toLowerCase();
-        await interaction.deferReply({ flags: ['Ephemeral'] });
+        await interaction.deferUpdate();
         const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
         const matches = [];
         for (const guildId of configuredIds) {
