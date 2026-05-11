@@ -7630,22 +7630,6 @@ class InteractionHandler {
             checkReportChannel(cvChId, t('Weryfikacja społeczności (per-serwer)', 'Community verification (per-guild)'), false);
         }
 
-        // Globalny: kanał odrzuconych screenów (env)
-        const globalInvalidChId = this.config.invalidReportChannelId;
-        if (!globalInvalidChId) {
-            lines.push(t('ℹ️ Globalny kanał odrzuconych — nie skonfigurowany (opcjonalny)', 'ℹ️ Global invalid screens channel — not configured (optional)'));
-        } else {
-            checkReportChannel(globalInvalidChId, t('Odrzucone screeny (globalny)', 'Invalid screens (global)'), true);
-        }
-
-        // Globalny: kanał raportów społeczności (env)
-        const globalCvChId = this.config.communityReportChannelId;
-        if (!globalCvChId) {
-            lines.push(t('ℹ️ Globalny kanał CV — nie skonfigurowany (opcjonalny)', 'ℹ️ Global CV channel — not configured (optional)'));
-        } else {
-            checkReportChannel(globalCvChId, t('Weryfikacja społeczności (globalny)', 'Community verification (global)'), true);
-        }
-
         // --- Kategoria 5: Hierarchia ról TOP ---
         lines.push('');
         lines.push(t('🏅 **Hierarchia ról TOP**', '🏅 **TOP Role Hierarchy**'));
