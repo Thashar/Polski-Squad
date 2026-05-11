@@ -2485,6 +2485,38 @@ class InteractionHandler {
 
     async _handlePanelOcr(interaction) {
         const t = this._panelT(interaction.guildId);
+        const guildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+
+        const updateBlocked = [];
+        const testEnabled = [];
+        for (const guildId of guildIds) {
+            const name = interaction.client.guilds.cache.get(guildId)?.name
+                || this.guildConfigService.getConfig(guildId)?.guildName
+                || guildId;
+            if (this.ocrBlockService.isBlocked(guildId, 'update')) updateBlocked.push(name);
+            if (!this.ocrBlockService.isBlocked(guildId, 'test')) testEnabled.push(name);
+        }
+
+        const none = t('*(brak)*', '*(none)*');
+        const embed = new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle(t('🔄 AI OCR — Stan serwerów', '🔄 AI OCR — Server Status'))
+            .addFields(
+                { name: t('🔒 /update wyłączone', '🔒 /update disabled'), value: updateBlocked.length ? updateBlocked.join('\n') : none, inline: true },
+                { name: t('🔓 /test włączone', '🔓 /test enabled'), value: testEnabled.length ? testEnabled.join('\n') : none, inline: true },
+            );
+
+        await interaction.update({
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Zarządzaj OCR', 'Manage OCR')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    async _openPanelOcrModal(interaction) {
+        const t = this._panelT(interaction.guildId);
         const modal = new ModalBuilder()
             .setCustomId('panel_ocr_search_modal')
             .setTitle(t('AI OCR on/off — wybierz serwer', 'AI OCR on/off — Select Server'));
@@ -2521,7 +2553,7 @@ class InteractionHandler {
                     .setTitle(t('🔄 Nie znaleziono serwera', '🔄 Server Not Found'))
                     .setDescription(t(`Brak skonfigurowanego serwera z nazwą zawierającą "**${query}**".`, `No configured server with name containing "**${query}**".`))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )]
             });
@@ -2551,7 +2583,7 @@ class InteractionHandler {
                         new ButtonBuilder().setCustomId(`panel_ocr_dis_both_${gid}`).setEmoji('🔒').setLabel(t('Wyłącz oba', 'Disable Both')).setStyle(ButtonStyle.Danger).setDisabled(updateBlocked && testBlocked),
                     ),
                     new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                         new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                     )
                 ]
@@ -2578,7 +2610,7 @@ class InteractionHandler {
                         .addOptions(options)
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
                 )
             ]
@@ -3788,6 +3820,14 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelOcr(interaction);
+                return;
+            }
+            if (customId === 'panel_ocr_manage') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._openPanelOcrModal(interaction);
                 return;
             }
             if (customId.startsWith('panel_ocr_en_') || customId.startsWith('panel_ocr_dis_')) {
