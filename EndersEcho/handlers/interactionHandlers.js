@@ -4018,7 +4018,8 @@ class InteractionHandler {
             if (rankingData.mode === 'guild_ranking') {
                 embed = this.rankingService.createGuildRankingEmbed(
                     rankingData.guildScores, newPage, rankingData.totalPages, msgs,
-                    interaction.client.user?.displayAvatarURL({ size: 128 })
+                    interaction.client.user?.displayAvatarURL({ size: 128 }),
+                    rankingData.callerGuildId || null
                 );
             } else {
                 // Re-fetch fresh player data for server and global modes so pagination
@@ -4677,11 +4678,12 @@ class InteractionHandler {
             const perPage = this.config.ranking.playersPerPage;
             const totalPages = Math.max(1, Math.ceil(guildScores.length / perPage));
 
-            const callerIdx = guildScores.findIndex(gs => gs.guildId === interaction.guildId);
+            const callerGuildId = interaction.guildId;
+            const callerIdx = guildScores.findIndex(gs => gs.guildId === callerGuildId);
             const userPage = callerIdx >= 0 ? Math.floor(callerIdx / perPage) : null;
 
             const embed = this.rankingService.createGuildRankingEmbed(guildScores, 0, totalPages, msgs,
-                interaction.client.user?.displayAvatarURL({ size: 128 }));
+                interaction.client.user?.displayAvatarURL({ size: 128 }), callerGuildId);
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, [], {
                 userPage,
                 mode: 'guild_ranking',
@@ -4704,6 +4706,7 @@ class InteractionHandler {
                 guildName: null,
                 parentGuildId,
                 parentGuildName,
+                callerGuildId,
                 callerStats: null,
                 roleRows: [],
                 userPage

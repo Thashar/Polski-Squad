@@ -160,7 +160,7 @@ class RankingService {
      * @param {object} messages
      * @returns {EmbedBuilder}
      */
-    createGuildRankingEmbed(guildScores, page, totalPages, messages, botIconUrl) {
+    createGuildRankingEmbed(guildScores, page, totalPages, messages, botIconUrl, callerGuildId = null) {
         const msgs = messages || this.config.messages;
         const perPage = this.config.ranking.playersPerPage;
         const start = page * perPage;
@@ -177,7 +177,9 @@ class RankingService {
                 ? `\`${String(rank).padStart(2, '0')}\` ${MEDALS[rank - 1]}`
                 : `\`${String(rank).padStart(2, '0')}\``;
             const tagPart = gs.tag ? `  ·  ${gs.tag}` : '';
-            rankingText += `${posLabel}  **${gs.guildName}**  ·  **${gs.totalScore}**\n> ${gs.playerCount} ${playersLabel}  ·  ${bestLabel}: ${gs.topScore}${tagPart}\n\n`;
+            const isCaller = callerGuildId && gs.guildId === callerGuildId;
+            const nameFormatted = isCaller ? `__**${gs.guildName}**__` : `**${gs.guildName}**`;
+            rankingText += `${posLabel}  ${nameFormatted}  ·  **${gs.totalScore}**\n> ${gs.playerCount} ${playersLabel}  ·  ${bestLabel}: ${gs.topScore}${tagPart}\n\n`;
         }
 
         const totalPlayers = guildScores.reduce((sum, gs) => sum + (gs.playerCount || 0), 0);
