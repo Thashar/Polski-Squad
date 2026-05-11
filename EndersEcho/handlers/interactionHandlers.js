@@ -2501,11 +2501,10 @@ class InteractionHandler {
         const updateBlocked = [];
         const testEnabled = [];
         for (const guildId of guildIds) {
-            const name = interaction.client.guilds.cache.get(guildId)?.name
-                || this.guildConfigService.getConfig(guildId)?.guildName
-                || guildId;
-            if (this.ocrBlockService.isBlocked(guildId, 'update')) updateBlocked.push(name);
-            if (!this.ocrBlockService.isBlocked(guildId, 'test')) testEnabled.push(name);
+            const guild = interaction.client.guilds.cache.get(guildId);
+            if (!guild) continue;
+            if (this.ocrBlockService.isBlocked(guildId, 'update')) updateBlocked.push(guild.name);
+            if (!this.ocrBlockService.isBlocked(guildId, 'test')) testEnabled.push(guild.name);
         }
 
         const none = t('*(brak)*', '*(none)*');
