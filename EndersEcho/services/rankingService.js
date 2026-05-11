@@ -180,8 +180,10 @@ class RankingService {
             rankingText += `${posLabel}  **${gs.guildName}**  ·  **${gs.totalScore}**\n> ${gs.playerCount} ${playersLabel}  ·  ${bestLabel}: ${gs.topScore}${tagPart}\n\n`;
         }
 
+        const totalPlayers = guildScores.reduce((sum, gs) => sum + (gs.playerCount || 0), 0);
         const statsValue = [
             formatMessage(msgs.rankingServersCount || '🌍 Serwery: {count}', { count: guildScores.length }),
+            formatMessage(msgs.rankingTotalPlayers || '👥 Łącznie graczy: {count}', { count: totalPlayers }),
             formatMessage(msgs.rankingHighestScore || '🏆 Najwyższy wynik: {score}', { score: guildScores[0]?.topScore || '—' }),
         ].join('\n');
 
@@ -579,8 +581,8 @@ class RankingService {
                 .setDisabled(disabled);
         }
 
-        // "Moja pozycja" nieaktywna w guild_ranking (ranking serwerów, nie indywidualny)
-        const myPosDisabled = disabled || userPage === null || mode === 'guild_ranking';
+        const isGuildRanking = mode === 'guild_ranking';
+        const myPosDisabled = disabled || userPage === null;
 
         const navRow = new ActionRowBuilder();
         navRow.addComponents(
@@ -593,7 +595,7 @@ class RankingService {
             new ButtonBuilder()
                 .setCustomId('ranking_mypos')
                 .setEmoji('🎯')
-                .setLabel(msgs.buttonMyPos)
+                .setLabel(isGuildRanking ? (msgs.buttonServerPos || 'Pozycja serwera') : (msgs.buttonMyPos || 'Moja pozycja'))
                 .setStyle(ButtonStyle.Primary)
                 .setDisabled(myPosDisabled),
 

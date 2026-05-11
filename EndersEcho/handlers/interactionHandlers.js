@@ -4677,10 +4677,13 @@ class InteractionHandler {
             const perPage = this.config.ranking.playersPerPage;
             const totalPages = Math.max(1, Math.ceil(guildScores.length / perPage));
 
+            const callerIdx = guildScores.findIndex(gs => gs.guildId === interaction.guildId);
+            const userPage = callerIdx >= 0 ? Math.floor(callerIdx / perPage) : null;
+
             const embed = this.rankingService.createGuildRankingEmbed(guildScores, 0, totalPages, msgs,
                 interaction.client.user?.displayAvatarURL({ size: 128 }));
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, [], {
-                userPage: null,
+                userPage,
                 mode: 'guild_ranking',
                 guildId: null,
                 guildName: null,
@@ -4703,7 +4706,7 @@ class InteractionHandler {
                 parentGuildName,
                 callerStats: null,
                 roleRows: [],
-                userPage: null
+                userPage
             });
 
         } catch (err) {
