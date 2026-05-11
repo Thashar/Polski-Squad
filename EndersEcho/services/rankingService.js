@@ -1064,6 +1064,7 @@ class RankingService {
                         bossName: bossName || this.config.messages.unknownBossLabel
                     }).catch(err => logger.error('Błąd zapisu historii wyników:', err));
                 }
+                await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
             }
 
             return { isNewRecord, ranking, currentScore };
