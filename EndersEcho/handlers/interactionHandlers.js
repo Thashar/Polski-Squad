@@ -7521,6 +7521,7 @@ class InteractionHandler {
         const guildConfig = this.config.getGuildConfig(guildId);
 
         const lines = [];
+        let issueCount = 0;
 
         // --- Kategoria 1: Uprawnienia serwera ---
         const SERVER_PERMS = [
@@ -7533,12 +7534,14 @@ class InteractionHandler {
         ];
 
         const serverPermsHeader = t('🔐 **Uprawnienia serwera**', '🔐 **Server Permissions**');
+        const addIssue = (line) => { issueCount++; lines.push(line); };
+
         lines.push(serverPermsHeader);
         for (const [flag, name, reason] of SERVER_PERMS) {
             if (botMember.permissions.has(flag)) {
                 lines.push(`✅ ${name}`);
             } else {
-                lines.push(`❌ ${name} — ${reason}`);
+                addIssue(`❌ ${name} — ${reason}`);
             }
         }
 
@@ -7548,10 +7551,9 @@ class InteractionHandler {
         const channel = channelId ? guild.channels.cache.get(channelId) : null;
         if (!channel) {
             lines.push(t('📺 **Uprawnienia w kanale OCR**', '📺 **OCR Channel Permissions**'));
-            lines.push(t(`❌ Kanał OCR nieznaleziony w cache (ID: \`${channelId || 'brak'}\`)`, `❌ OCR channel not found in cache (ID: \`${channelId || 'none'}\`)`));
+            addIssue(t(`❌ Kanał OCR nieznaleziony w cache (ID: \`${channelId || 'brak'}\`)`, `❌ OCR channel not found in cache (ID: \`${channelId || 'none'}\`)`));
         } else {
-            const channelPermsHeader = t(`📺 **Uprawnienia w kanale #${channel.name}**`, `📺 **Permissions in #${channel.name}**`);
-            lines.push(channelPermsHeader);
+            lines.push(t(`📺 **Uprawnienia w kanale #${channel.name}**`, `📺 **Permissions in #${channel.name}**`));
             const CHANNEL_PERMS = [
                 [PermissionFlagsBits.ViewChannel,        'ViewChannel'],
                 [PermissionFlagsBits.SendMessages,       'SendMessages'],
@@ -7565,36 +7567,33 @@ class InteractionHandler {
                 if (hasChannel) {
                     lines.push(`✅ ${name}`);
                 } else if (hasGlobal) {
-                    lines.push(`❌ ${name} — ` + t('zablokowane przez override kanału', 'blocked by channel override'));
+                    addIssue(`❌ ${name} — ` + t('zablokowane przez override kanału', 'blocked by channel override'));
                 } else {
-                    lines.push(`❌ ${name} — ` + t('brak uprawnienia', 'missing permission'));
+                    addIssue(`❌ ${name} — ` + t('brak uprawnienia', 'missing permission'));
                 }
             }
         }
 
         // --- Kategoria 3: Hierarchia ról TOP ---
         lines.push('');
-        lines.push(t('⚠️ **Hierarchia ról TOP**', '⚠️ **TOP Role Hierarchy**'));
+        lines.push(t('🏅 **Hierarchia ról TOP**', '🏅 **TOP Role Hierarchy**'));
         const botHighestPos = botMember.roles.highest.position;
         const botRoleName = botMember.roles.highest.name;
-        const rawTopRoles = guildConfig?.topRoles || guildConfig?.tiers || null;
-        if (!rawTopRoles) {
+        const normalized = normalizeTiers(guildConfig?.topRoles || null);
+        const tiers = normalized?.tiers || [];
+        if (!tiers.length) {
             lines.push(t('ℹ️ Brak skonfigurowanych ról TOP', 'ℹ️ No TOP roles configured'));
         } else {
-            const tiers = normalizeTiers(rawTopRoles);
-            if (!tiers.length) {
-                lines.push(t('ℹ️ Brak skonfigurowanych ról TOP', 'ℹ️ No TOP roles configured'));
-            } else {
-                for (const tier of tiers) {
-                    if (!tier.roleId) continue;
-                    const role = guild.roles.cache.get(tier.roleId);
-                    if (!role) {
-                        lines.push(`⚠️ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} — ` + t(`rola \`${tier.roleId}\` nie istnieje`, `role \`${tier.roleId}\` does not exist`));
-                    } else if (role.position >= botHighestPos) {
-                        lines.push(`❌ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} "${role.name}" ` + t(`(poz. ${role.position}) jest WYŻEJ niż "${botRoleName}" (poz. ${botHighestPos}) — bot nie może jej przyznać`, `(pos. ${role.position}) is ABOVE "${botRoleName}" (pos. ${botHighestPos}) — bot cannot assign it`));
-                    } else {
-                        lines.push(`✅ TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''} "${role.name}"`);
-                    }
+            for (const tier of tiers) {
+                if (!tier.roleId) continue;
+                const role = guild.roles.cache.get(tier.roleId);
+                const label = `TOP ${tier.from}${tier.to !== tier.from ? `–${tier.to}` : ''}`;
+                if (!role) {
+                    addIssue(`⚠️ ${label} — ` + t(`rola \`${tier.roleId}\` nie istnieje`, `role \`${tier.roleId}\` does not exist`));
+                } else if (role.position >= botHighestPos) {
+                    addIssue(`❌ ${label} "${role.name}" ` + t(`(poz. ${role.position}) jest WYŻEJ niż "${botRoleName}" (poz. ${botHighestPos}) — bot nie może jej przyznać`, `(pos. ${role.position}) is ABOVE "${botRoleName}" (pos. ${botHighestPos}) — bot cannot assign it`));
+                } else {
+                    lines.push(`✅ ${label} "${role.name}"`);
                 }
             }
         }
@@ -7609,11 +7608,15 @@ class InteractionHandler {
             [GatewayIntentBits.MessageContent,  t('MessageContent (odczyt treści wiadomości)', 'MessageContent (reading message content)')],
         ];
         for (const [bit, label] of intentChecks) {
-            lines.push(intents.has(bit) ? `✅ ${label}` : `❌ ${label}`);
+            if (intents.has(bit)) {
+                lines.push(`✅ ${label}`);
+            } else {
+                addIssue(`❌ ${label}`);
+            }
         }
 
         // --- Podsumowanie ---
-        const hasIssues = lines.some(l => l.startsWith('❌') || l.startsWith('⚠️'));
+        const hasIssues = issueCount > 0;
         const color = hasIssues ? 0xFF6B35 : 0x57F287;
         const summary = hasIssues
             ? t('Wykryto problemy — sprawdź szczegóły poniżej.', 'Issues detected — check details below.')
