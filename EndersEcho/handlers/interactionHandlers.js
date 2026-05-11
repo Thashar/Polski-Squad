@@ -2897,6 +2897,7 @@ class InteractionHandler {
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
+        let _ocrEmbedParams = null; // zbieramy przez cały flow, wysyłamy w finally
 
         if (await this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
@@ -3030,6 +3031,7 @@ class InteractionHandler {
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason };
                 await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 const notSimilarDesc = aiResult.rejectionReason
                     ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
@@ -3047,6 +3049,7 @@ class InteractionHandler {
 
             if (!aiResult.isValidVictory) {
                 gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED' };
                 await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
@@ -3093,6 +3096,7 @@ class InteractionHandler {
                 });
                 crossServerEmbed.setImage(`attachment://${imageAttachment.name}`);
                 await interaction.editReply({ embeds: [crossServerEmbed], files: [imageAttachment] });
+                _ocrEmbedParams = { type: 'cross_server', userName, userId, score: bestScore, bossName, commandName, previousScore: _prevGlobalUser.score };
                 gl.info(`✅ ${this.logService.nickLink(userName, userId)} Duplikat cross-server (nie zapisano) — serwer: "${sourceGuildName}"`);
                 return;
             }
@@ -3145,6 +3149,7 @@ class InteractionHandler {
             }
 
             if (!isNewRecord) {
+                _ocrEmbedParams = { type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -3339,6 +3344,7 @@ class InteractionHandler {
             if (dryRun) {
                 // W trybie testowym pomijamy aktualizację ról TOP,
                 // powiadomienia Global Top 3 oraz DM subskrybentów.
+                _ocrEmbedParams = { type: 'test_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                 return;
             }
 
@@ -3347,8 +3353,10 @@ class InteractionHandler {
                 const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
+                _ocrEmbedParams = { type: 'new_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
+                _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message };
             }
 
             // DM powiadomienia dla subskrybentów (lista pobrana wcześniej przy liczeniu obserwujących)
@@ -3392,6 +3400,12 @@ class InteractionHandler {
         } finally {
             if (tempImagePath) {
                 await fs.unlink(tempImagePath).catch(err => gl.error(`Błąd usuwania pliku tymczasowego: ${err.message}`));
+            }
+            // Wyślij dodatkowy embed do webhooka (nie zastępuje logowania tekstowego)
+            if (_ocrEmbedParams) {
+                try {
+                    this.logService.sendOcrAnalysisEmbed(interaction.guildId, _ocrEmbedParams, interaction.guild ?? null);
+                } catch {}
             }
         }
     }
@@ -6141,6 +6155,7 @@ class InteractionHandler {
             }
 
             // Aktualizuj role TOP jeśli nowy rekord
+            let _analyzeRoleErr = null;
             if (isNewRecord) {
                 try {
                     const guildConfig = this.config.getGuildConfig(targetGuildId);
@@ -6152,9 +6167,26 @@ class InteractionHandler {
                     );
                     gl.success('✅ [Analizuj] Role TOP zaktualizowane po nowym rekordzie');
                 } catch (roleErr) {
+                    _analyzeRoleErr = roleErr.message;
                     gl.error(`❌ [Analizuj] Błąd aktualizacji ról TOP: ${roleErr.message}`);
                 }
             }
+
+            // Embed do webhooka (dodatkowe, nie zastępuje logowania tekstowego)
+            try {
+                this.logService.sendOcrAnalysisEmbed(targetGuildId, {
+                    type: _analyzeRoleErr ? 'analyze_panel_role_error' : 'analyze_panel',
+                    userName,
+                    userId: targetUserId,
+                    score: aiResult.score,
+                    bossName: aiResult.bossName,
+                    previousScore: currentScore?.score,
+                    commandName: 'analyze',
+                    adminName,
+                    roleError: _analyzeRoleErr,
+                }, interaction.client.guilds.cache.get(targetGuildId) ?? null);
+            } catch {}
+
 
             // Ogłoszenie publiczne — tylko gdy wynik jest nowym rekordem
             const guildCfgAnnounce = this.config.getGuildConfig(targetGuildId);

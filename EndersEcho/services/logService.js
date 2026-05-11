@@ -1,4 +1,28 @@
+const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+
+// Konfiguracja typów embedów OCR — kolor, emoji, etykieta
+const OCR_EMBED_TYPES = {
+    new_record:              { color: 0x57F287, emoji: '🏆', label: 'NOWY REKORD' },
+    role_error:              { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY REKORD — błąd uprawnień ról' },
+    rejected:                { color: 0xED4245, emoji: '🚫', label: 'ANALIZA ODRZUCONA' },
+    no_record:               { color: 0x5865F2, emoji: '📊', label: 'REKORD NIE POBITY' },
+    test_record:             { color: 0x00B4D8, emoji: '🧪', label: 'TEST — nowy rekord' },
+    test_no_record:          { color: 0x7289DA, emoji: '🧪', label: 'TEST — brak rekordu' },
+    analyze_panel:           { color: 0xE67E22, emoji: '🔬', label: 'ANALIZA Z PANELU' },
+    analyze_panel_role_error:{ color: 0xFEE75C, emoji: '⚠️', label: 'ANALIZA Z PANELU — błąd ról' },
+    cross_server:            { color: 0x95A5A6, emoji: '🔄', label: 'DUPLIKAT CROSS-SERVER' },
+};
+
+const REJECTION_REASONS = {
+    NOT_SIMILAR:           '🔍 Screen niepodobny do wzorca',
+    FAKE_PHOTO:            '🎭 Podrobione zdjęcie',
+    INVALID_SCREENSHOT:    '❌ Nieprawidłowy screenshot',
+    NO_REQUIRED_WORDS:     '📝 Brak wymaganych słów',
+    INVALID_SCORE_FORMAT:  '🔢 Nieprawidłowy format wyniku',
+    BEST_EXCEEDS_TOTAL:    '📊 Best przekracza Total',
+    VALIDATION_FAILED:     '❌ Walidacja nieudana',
+};
 
 class LogService {
     constructor(config, guildLogger) {
@@ -69,6 +93,103 @@ class LogService {
      */
     sendEmbed(embed) {
         return this.guildLogger.sendEmbed(embed);
+    }
+
+    /**
+     * Wysyła dodatkowy embed OCR do webhooka — nie zastępuje istniejącego logowania tekstowego.
+     * @param {string} guildId
+     * @param {Object} options
+     * @param {string} options.type          - klucz z OCR_EMBED_TYPES
+     * @param {string} [options.userName]
+     * @param {string} [options.userId]
+     * @param {string} [options.score]
+     * @param {string} [options.bossName]
+     * @param {string} [options.previousScore]
+     * @param {string} [options.commandName]
+     * @param {string} [options.reason]       - kod odrzucenia np. NOT_SIMILAR
+     * @param {string} [options.rejectionReason] - szczegóły AI
+     * @param {string} [options.adminName]
+     * @param {string} [options.roleError]    - wiadomość błędu ról
+     * @param {import('discord.js').Guild|null} guildObj
+     */
+    sendOcrAnalysisEmbed(guildId, options = {}, guildObj = null) {
+        if (!this.guildLogger.webhookUrl) return;
+
+        try {
+            const {
+                type = 'no_record',
+                userName,
+                userId,
+                score,
+                bossName,
+                previousScore,
+                commandName,
+                reason,
+                rejectionReason,
+                adminName,
+                roleError,
+            } = options;
+
+            const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
+
+            const guildConfig = this.config.getGuildConfig(guildId);
+            const guildTag    = guildConfig?.tag || null;
+            const guildName   = guildObj?.name || guildConfig?.guildName || guildId;
+            const guildIcon   = guildObj?.iconURL({ dynamic: true, size: 64 })
+                             || guildConfig?.icon
+                             || null;
+
+            const embed = new EmbedBuilder()
+                .setColor(cfg.color)
+                .setTitle(`${cfg.emoji} ${cfg.label}`)
+                .setTimestamp();
+
+            const authorName = guildTag ? `${guildTag}  ${guildName}` : guildName;
+            embed.setAuthor({ name: authorName, iconURL: guildIcon || undefined });
+            if (guildIcon) embed.setThumbnail(guildIcon);
+
+            // Gracz
+            if (userName) {
+                const playerVal = userId
+                    ? `[${userName}](https://discord.com/users/${userId})`
+                    : userName;
+                embed.addFields({ name: '👤 Gracz', value: playerVal, inline: true });
+            }
+            // Komenda
+            if (commandName) {
+                embed.addFields({ name: '⌨️ Komenda', value: `/${commandName}`, inline: true });
+            }
+            // Admin (dla analizy z panelu)
+            if (adminName) {
+                embed.addFields({ name: '👑 Admin', value: adminName, inline: true });
+            }
+            // Nowy wynik
+            if (score) {
+                const scoreVal = bossName ? `${score}  •  ${bossName}` : score;
+                embed.addFields({ name: '🎯 Wynik', value: scoreVal, inline: false });
+            }
+            // Poprzedni rekord
+            if (previousScore) {
+                embed.addFields({ name: '📈 Poprzedni rekord', value: previousScore, inline: true });
+            }
+            // Powód odrzucenia
+            if (reason) {
+                const reasonText = REJECTION_REASONS[reason] || `🟠 ${reason}`;
+                embed.addFields({ name: '⛔ Powód odrzucenia', value: reasonText, inline: false });
+            }
+            // Szczegóły AI (rejectionReason)
+            if (rejectionReason) {
+                embed.addFields({ name: '🤖 Szczegóły AI', value: rejectionReason.substring(0, 1024), inline: false });
+            }
+            // Błąd ról
+            if (roleError) {
+                embed.addFields({ name: '🔐 Błąd uprawnień ról', value: roleError.substring(0, 512), inline: false });
+            }
+
+            this.guildLogger.sendEmbed(embed);
+        } catch (err) {
+            this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
+        }
     }
 
     /**
