@@ -7611,7 +7611,7 @@ class InteractionHandler {
         }
 
         // Per-guild: kanał weryfikacji społeczności
-        const cvConfig = guildConfig?.communityVerification;
+        const cvConfig = this.guildConfigService?.getCommunityVerification(guildId);
         const cvChId = cvConfig?.rejectedChannelId;
         if (!cvConfig?.enabled) {
             lines.push(t('ℹ️ Weryfikacja społeczności — wyłączona', 'ℹ️ Community verification — disabled'));
