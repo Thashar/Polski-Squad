@@ -535,6 +535,10 @@ class InteractionHandler {
                             `✅ Command \`/test\` is **enabled**. Command \`/update\` is disabled.`
                         ) + contactLine;
                     }
+                    const diagHint = allDone ? t(
+                        '\n🔍 Użyj przycisku **Diagnostyka uprawnień** poniżej, aby sprawdzić czy bot ma wszystkie wymagane uprawnienia na tym serwerze.',
+                        '\n🔍 Use the **Permission Diagnostics** button below to verify that the bot has all required permissions on this server.'
+                    ) : '';
                     return t(
                         '📋 **Przegląd kroków:**\n' +
                         '1️⃣  **Język** — interfejs po polsku lub angielsku\n' +
@@ -546,7 +550,7 @@ class InteractionHandler {
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
-                        ocrLine,
+                        ocrLine + diagHint,
                         '📋 **Steps overview:**\n' +
                         '1️⃣  **Language** — Polish or English interface\n' +
                         '2️⃣  **Bot Channel** — where `/update`, `/ranking`, `/subscribe` and `/achievements` work\n' +
@@ -557,7 +561,7 @@ class InteractionHandler {
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
-                        ocrLine
+                        ocrLine + diagHint
                     );
                 })() + (summaryLines.length > 0 ? '\n\n**' + t('Aktualne ustawienia:', 'Current settings:') + '**\n' + summaryLines.join('\n') : '')
             );
