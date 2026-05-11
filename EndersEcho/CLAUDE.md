@@ -118,7 +118,7 @@
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
    - Nazwy serwerów pobierane dynamicznie z `client.guilds.cache`
    - Po kliknięciu serwera → ranking z paginacją (10/strona, 1h timeout) + przyciski rankingów ról (jeśli skonfigurowane)
-   - **Wykres historii rekordów** (`scoreHistoryService` + `chartService`): jeśli wywołujący ma ≥ 2 wpisy w ciągu ostatnich 90 dni → PNG 800×280 dołączony do tej samej wiadomości rankingowej. Oś X: daty rzeczywiste (max 3 miesiące), oś Y: wyniki z jednostkami (K/M/B/T/Q/Qi/Sx), kropki z wynikiem nad każdym. Dane persystowane w `data/guilds/{guildId}/wyniki/{userId}.json` — każde pobicie rekordu to nowy wpis.
+   - **Wykres historii rekordów** (`scoreHistoryService` + `chartService`): jeśli wywołujący ma ≥ 2 wpisy w ciągu ostatnich 90 dni → PNG 800×280 dołączony do tej samej wiadomości rankingowej. Oś X: daty rzeczywiste (max 3 miesiące), oś Y: wyniki z jednostkami (K/M/B/T/Q/Qi/Sx), kropki z wynikiem nad każdym. Dane persystowane w `data/guilds/{guildId}/wyniki/{userId}.json` — każde pobicie rekordu to nowy wpis. **Wykres budowany z historii ze WSZYSTKICH serwerów** (`getUserHistoryAllGuilds`) — wyniki z różnych serwerów są scalane chronologicznie.
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
    - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)

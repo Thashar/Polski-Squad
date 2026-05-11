@@ -60,6 +60,16 @@ class ScoreHistoryService {
             .filter(e => new Date(e.timestamp).getTime() >= cutoff)
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
+
+    // Zwraca wpisy ze wszystkich serwerów, scalone i posortowane chronologicznie
+    async getUserHistoryAllGuilds(allGuildIds, userId, maxDaysBack = 90) {
+        const cutoff = Date.now() - maxDaysBack * 24 * 60 * 60 * 1000;
+        const allEntries = await Promise.all(allGuildIds.map(gid => this._load(gid, userId)));
+        return allEntries
+            .flat()
+            .filter(e => new Date(e.timestamp).getTime() >= cutoff)
+            .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    }
 }
 
 module.exports = ScoreHistoryService;

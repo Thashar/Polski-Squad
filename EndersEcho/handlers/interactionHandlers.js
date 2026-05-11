@@ -2742,7 +2742,8 @@ class InteractionHandler {
             let scoreHistoryAttachment = null;
             if (this.scoreHistoryService && this.chartService) {
                 try {
-                    const callerHistory = await this.scoreHistoryService.getUserHistory(guildId, interaction.user.id, 90);
+                    const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, interaction.user.id, 90);
                     if (callerHistory.length >= 2) {
                         const chartTitle = msgs.chartTitle;
                         const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
