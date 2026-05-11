@@ -44,12 +44,13 @@ const logger = createBotLogger('EndersEcho');
 let statusInterval = null;
 
 const STATUS_POOL = [
-    { type: ActivityType.Watching, text: n => `Watching ${n}'s results 🏆` },
-    { type: ActivityType.Watching, text: n => `Checking ${n}'s score 🔍` },
-    { type: ActivityType.Watching, text: n => `Comparing ${n}'s ranking 📊` },
-    { type: ActivityType.Watching, text: n => `Calculating ${n}'s stats 🧮` },
-    { type: ActivityType.Watching, text: n => `Reviewing ${n}'s progress 📈` },
-    { type: ActivityType.Watching, text: n => `Analyzing ${n}'s results 🎯` },
+    { type: ActivityType.Watching, text: (n, _g) => `Watching ${n}'s results 🏆` },
+    { type: ActivityType.Watching, text: (n, _g) => `Checking ${n}'s score 🔍` },
+    { type: ActivityType.Watching, text: (n, _g) => `Comparing ${n}'s ranking 📊` },
+    { type: ActivityType.Watching, text: (n, _g) => `Calculating ${n}'s stats 🧮` },
+    { type: ActivityType.Watching, text: (n, _g) => `Reviewing ${n}'s progress 📈` },
+    { type: ActivityType.Watching, text: (n, _g) => `Analyzing ${n}'s results 🎯` },
+    { type: ActivityType.Watching, text: (_n, g) => `${g}'s ranking 🏅` },
 ];
 
 async function _updateStatus() {
@@ -60,8 +61,9 @@ async function _updateStatus() {
         const guild = client.guilds.cache.get(player.sourceGuildId);
         const member = guild?.members.cache.get(player.userId);
         const displayName = member?.displayName || player.username;
+        const guildName = guild?.name || player.sourceGuildId;
         const template = STATUS_POOL[Math.floor(Math.random() * STATUS_POOL.length)];
-        client.user.setActivity(template.text(displayName), { type: template.type });
+        client.user.setActivity(template.text(displayName, guildName), { type: template.type });
     } catch { /* status to nice-to-have */ }
 }
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
