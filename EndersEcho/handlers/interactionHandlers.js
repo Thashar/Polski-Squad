@@ -3347,8 +3347,7 @@ class InteractionHandler {
                 currentScore ? currentScore.timestamp : null,
                 rolePositions,
                 achievementsFieldValue,
-                globalSnippetData,
-                globalPlayerCount
+                globalSnippetData
             );
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
@@ -3534,7 +3533,7 @@ class InteractionHandler {
                 try {
                     this.logService.sendOcrAnalysisEmbed(
                         interaction.guildId,
-                        { ..._ocrEmbedParams, userAvatar: interaction.user.displayAvatarURL() },
+                        { ..._ocrEmbedParams, userAvatar: interaction.user.displayAvatarURL(), globalPlayerCount },
                         interaction.guild ?? null
                     );
                 } catch {}

@@ -132,6 +132,7 @@ class LogService {
                 rejectionReason,
                 adminName,
                 roleError,
+                globalPlayerCount = null,
             } = options;
 
             const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
@@ -191,6 +192,10 @@ class LogService {
             // Błąd ról
             if (roleError) {
                 embed.addFields({ name: '🔐 Błąd uprawnień ról', value: roleError.substring(0, 512), inline: false });
+            }
+
+            if (globalPlayerCount !== null) {
+                embed.setFooter({ text: `👥 ${globalPlayerCount} unikalnych graczy globalnie` });
             }
 
             // Używamy queueEmbed (HTTP webhook, nie channel.send) — identyczna ścieżka co logi tekstowe
