@@ -2939,8 +2939,8 @@ class InteractionHandler {
             return;
         }
 
-        // Cooldown /update (nie dotyczy /test)
-        if (!dryRun && this.updateCooldownService) {
+        // Cooldown /update (nie dotyczy /test ani head admina)
+        if (!dryRun && this.updateCooldownService && !this._isHeadAdmin(interaction.user.id)) {
             const remainingMs = this.updateCooldownService.getRemainingMs(interaction.user.id);
             if (remainingMs !== null) {
                 await interaction.reply({
@@ -2971,8 +2971,8 @@ class InteractionHandler {
             lastMsgAt = Date.now();
         };
 
-        // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR
-        if (!dryRun && this.updateCooldownService) {
+        // Ustaw cooldown od razu — chroni przed spamem niezależnie od wyniku OCR (nie dotyczy head admina)
+        if (!dryRun && this.updateCooldownService && !this._isHeadAdmin(interaction.user.id)) {
             const appliedCooldownMs = await this.updateCooldownService.setCooldown(interaction.user.id);
             const { formatCooldownDuration: fcd } = require('../services/updateCooldownService');
             const base = this.updateCooldownService.getCooldownDuration();
@@ -6005,45 +6005,31 @@ class InteractionHandler {
         const parts = customId.split('_');
         const targetUserId = parts[2];
         const targetGuildId = parts[3];
+        // Zapamiętujemy ID oryginalnej wiadomości raportu — nie modyfikujemy jej, żeby Discord
+        // nie skasował CDN URL obrazu (attachment clearowany, URL przestaje być "własny" wiadomości).
+        const origMsgId = interaction.message.id;
 
         const yesBtn = new ButtonBuilder()
-            .setCustomId(`ee_analyze_yes_${targetUserId}_${targetGuildId}`)
+            .setCustomId(`ee_analyze_yes_${targetUserId}_${targetGuildId}_${origMsgId}`)
             .setLabel(msgs.analyzeConfirmYes)
             .setStyle(ButtonStyle.Success);
         const noBtn = new ButtonBuilder()
-            .setCustomId(`ee_analyze_no_${targetUserId}_${targetGuildId}`)
+            .setCustomId(`ee_analyze_no_${targetUserId}_${targetGuildId}_${origMsgId}`)
             .setLabel(msgs.analyzeConfirmNo)
             .setStyle(ButtonStyle.Secondary);
 
-        await interaction.update({
+        // deferUpdate nie modyfikuje oryginalnej wiadomości raportu — obraz zostaje
+        await interaction.deferUpdate();
+        await interaction.followUp({
             content: msgs.analyzeConfirmQuestion,
-            embeds: interaction.message.embeds,
             components: [new ActionRowBuilder().addComponents(yesBtn, noBtn)],
+            flags: ['Ephemeral'],
         });
     }
 
-    async _handleAnalyzeCancelled(interaction, customId) {
-        const msgs = this.msgs(interaction.guildId);
-        const parts = customId.split('_');
-        const targetUserId = parts[3];
-        const targetGuildId = parts[4];
-
-        const analyzeBtn = new ButtonBuilder()
-            .setCustomId(`ee_analyze_${targetUserId}_${targetGuildId}`)
-            .setLabel(msgs.reportBtnAnalyze)
-            .setEmoji('🔍')
-            .setStyle(ButtonStyle.Primary);
-        const blockBtn = new ButtonBuilder()
-            .setCustomId(`ee_block_${targetUserId}_${targetGuildId}`)
-            .setLabel(msgs.reportBtnBlock)
-            .setEmoji('🔒')
-            .setStyle(ButtonStyle.Danger);
-
-        await interaction.update({
-            content: null,
-            embeds: interaction.message.embeds,
-            components: [new ActionRowBuilder().addComponents(analyzeBtn, blockBtn)],
-        });
+    async _handleAnalyzeCancelled(interaction) {
+        // Zamykamy ephemeral z potwierdzeniem — oryginalna wiadomość raportu pozostaje bez zmian
+        await interaction.update({ content: this.msgs(interaction.guildId).analyzeConfirmNo, components: [] });
     }
 
     async _handleAnalyzeConfirmed(interaction, customId) {
@@ -6053,23 +6039,28 @@ class InteractionHandler {
             return;
         }
 
-        const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
-
         await interaction.deferUpdate();
 
         const parts = customId.split('_');
         const targetUserId = parts[3];
         const targetGuildId = parts[4];
+        const origMsgId = parts[5];
 
-        // Obraz jest w polu embed.image — Discord zwraca już pełny CDN URL po wysłaniu
-        const imageUrl = interaction.message.embeds[0]?.image?.url;
+        // Pobierz oryginalną wiadomość raportu (nie interaction.message — to ephemeral z potwierdzeniem)
+        let origMsg = null;
+        try {
+            origMsg = await interaction.channel.messages.fetch(origMsgId);
+        } catch {
+            await interaction.editReply({ content: msgs.analyzeNoImage, components: [] });
+            return;
+        }
+
+        const footerInfo = this._parseReportFooter(origMsg.embeds[0]?.footer?.text);
+
+        // Obraz jest w polu embed.image oryginalnej wiadomości raportu
+        const imageUrl = origMsg.embeds[0]?.image?.url;
         if (!imageUrl) {
-            await interaction.editReply({
-                content: msgs.analyzeNoImage,
-                embeds: interaction.message.embeds,
-                attachments: [],
-                components: [],
-            });
+            await interaction.editReply({ content: msgs.analyzeNoImage, components: [] });
             return;
         }
 
@@ -6079,12 +6070,12 @@ class InteractionHandler {
 
         const applyToCurrentMsg = async (extraInfo) => {
             const updatedEmbeds = this._buildActionEmbeds(
-                interaction.message.embeds, targetMsgs, serverName, 'analyzed', adminName, extraInfo
+                origMsg.embeds, targetMsgs, serverName, 'analyzed', adminName, extraInfo
             );
-            await interaction.editReply({
-                embeds: updatedEmbeds,
-                components: [],
-            });
+            // Edytuj oryginalną wiadomość raportu (nie ephemeral)
+            await origMsg.edit({ embeds: updatedEmbeds, components: [] }).catch(() => {});
+            // Zamknij ephemeral z potwierdzeniem
+            await interaction.editReply({ content: extraInfo, components: [] }).catch(() => {});
         };
 
         const applyToOtherMsg = async (extraInfo) => {
@@ -6130,7 +6121,7 @@ class InteractionHandler {
             gl.success(`✅ [Analizuj] AI OCR: wynik="${aiResult.score}", boss="${aiResult.bossName}"`);
 
             // Pobierz nick z embeda raportu (pole może być w języku serwera)
-            const embedFields = interaction.message.embeds[0]?.fields || [];
+            const embedFields = origMsg.embeds[0]?.fields || [];
             const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
             const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
 
@@ -6259,7 +6250,7 @@ class InteractionHandler {
             await applyToOtherMsg(extraInfo);
 
             // Zapisz sesję revert i dodaj przycisk "Cofnij wynik" do globalnego raportu
-            const globalMsgId = footerInfo.globalMsgId || interaction.message.id;
+            const globalMsgId = footerInfo.globalMsgId || origMsgId;
             if (this.config.invalidReportChannelId && globalMsgId) {
                 this._analyzeRevertSessions.set(globalMsgId, {
                     targetUserId,
@@ -6295,7 +6286,6 @@ class InteractionHandler {
             gl.error(`❌ [Analizuj] Błąd ee_analyze: ${err.message}`);
             await interaction.editReply({
                 content: formatMessage(msgs.analyzeError, { error: err.message }),
-                embeds: interaction.message.embeds,
                 components: [],
             }).catch(() => {});
         } finally {
