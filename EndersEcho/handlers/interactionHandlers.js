@@ -4380,14 +4380,17 @@ class InteractionHandler {
 
             const approveBtn = new ButtonBuilder()
                 .setCustomId(`cv_admin_approve_${messageId}`)
+                .setEmoji('✅')
                 .setLabel(msgs.cvReportBtnApprove)
                 .setStyle(ButtonStyle.Success);
             const removeBtn = new ButtonBuilder()
                 .setCustomId(`cv_admin_remove_${messageId}`)
+                .setEmoji('🗑️')
                 .setLabel(msgs.cvReportBtnRemove)
                 .setStyle(ButtonStyle.Danger);
             const blockBtn = new ButtonBuilder()
                 .setCustomId(`cv_admin_block_${messageId}`)
+                .setEmoji('🔒')
                 .setLabel(msgs.cvReportBtnBlock)
                 .setStyle(ButtonStyle.Danger);
             const components = [new ActionRowBuilder().addComponents(approveBtn, removeBtn, blockBtn)];
