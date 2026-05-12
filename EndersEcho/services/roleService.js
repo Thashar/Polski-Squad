@@ -68,9 +68,10 @@ class RoleService {
         lock.running = true;
         lock.hasPending = false;
 
+        let stats = null;
         try {
             const players = await this.rankingService.getSortedPlayers(guildId);
-            await this._applyRoleDiff(guild, players, guildTopRoles, gl);
+            stats = await this._applyRoleDiff(guild, players, guildTopRoles, gl);
         } catch (error) {
             gl.error(`❌ Błąd podczas aktualizacji ról TOP: ${error.message}`);
             return false;
@@ -86,17 +87,19 @@ class RoleService {
             }
         }
 
-        return true;
+        return stats || { added: [], removed: [] };
     }
 
     /**
      * Oblicza diff między aktualnym a pożądanym stanem ról i wykonuje tylko niezbędne zmiany.
      * Zamiast resetować wszystkie role i przyznawać od nowa, zmienia tylko to co faktycznie się różni.
      * Operacje usuwania i dodawania wykonywane są równolegle (Promise.allSettled).
+     * @returns {{ added: Array<{name, roleName}>, removed: Array<{name, roleName}> }}
      */
     async _applyRoleDiff(guild, sortedPlayers, guildTopRoles, gl = logger) {
+        const stats = { added: [], removed: [] };
         const normalized = normalizeTiers(guildTopRoles);
-        if (!normalized) return;
+        if (!normalized) return stats;
 
         const tierRoles = normalized.tiers
             .filter(t => t.roleId)
@@ -106,7 +109,7 @@ class RoleService {
         const allTopRoles = tierRoles.map(t => t.role);
         if (allTopRoles.length === 0) {
             gl.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze "${guild.name}"`);
-            return;
+            return stats;
         }
 
         // Pożądany stan: userId -> role (null = brak roli TOP)
@@ -148,7 +151,7 @@ class RoleService {
         }
 
         if (toRemove.length === 0 && toAdd.length === 0) {
-            return;
+            return stats;
         }
 
         // Usunięcia w chunkach po 10 z przerwą 250ms — zapobiega global rate limit Discord
@@ -166,6 +169,9 @@ class RoleService {
                 if (i + CHUNK < toRemove.length) {
                     await new Promise(r => setTimeout(r, 250));
                 }
+            }
+            for (const { member, role } of toRemove) {
+                if (member) stats.removed.push({ name: member.displayName, roleName: role.name });
             }
         }
 
@@ -198,15 +204,18 @@ class RoleService {
                             }
                             return;
                         }
-                        await member.roles.add(role).catch(err => {
+                        const addErr = await member.roles.add(role).then(() => null).catch(err => err);
+                        if (addErr) {
                             if (!addErrors.has(role.name)) addErrors.set(role.name, { missing: [], other: [] });
                             const bucket = addErrors.get(role.name);
-                            if (err.message.includes('Missing Permissions')) {
+                            if (addErr.message.includes('Missing Permissions')) {
                                 bucket.missing.push(member.displayName);
                             } else {
-                                bucket.other.push({ name: member.displayName, msg: err.message });
+                                bucket.other.push({ name: member.displayName, msg: addErr.message });
                             }
-                        });
+                        } else {
+                            stats.added.push({ name: member.displayName, roleName: role.name });
+                        }
                     })
                 );
                 if (i + CHUNK < toAdd.length) {
@@ -230,6 +239,8 @@ class RoleService {
                 lock.pendingTopRoles = guildTopRoles;
             }
         }
+
+        return stats;
     }
 
     /**

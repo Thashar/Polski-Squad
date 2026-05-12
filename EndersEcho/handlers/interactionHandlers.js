@@ -2357,18 +2357,32 @@ class InteractionHandler {
         gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${interaction.guild.name}"`);
 
         try {
-            await this.roleService.updateTopRoles(interaction.guild, null, topRoles);
-            gl.success(`✅ Przetworzono role TOP na serwerze "${interaction.guild.name}"`);
+            const result = await this.roleService.updateTopRoles(interaction.guild, null, topRoles);
+            const stats = (result && typeof result === 'object') ? result : { added: [], removed: [] };
+            gl.success(`✅ Przetworzono role TOP na "${interaction.guild.name}": +${stats.added.length} / -${stats.removed.length}`);
+
+            const MAX_LINES = 20;
+            const formatLines = (entries) => {
+                if (entries.length === 0) return null;
+                const lines = entries.slice(0, MAX_LINES).map(e => `**${e.name}** — ${e.roleName}`);
+                if (entries.length > MAX_LINES) lines.push(t(`... i ${entries.length - MAX_LINES} więcej`, `... and ${entries.length - MAX_LINES} more`));
+                return lines.join('\n');
+            };
+
+            const embed = new EmbedBuilder().setColor(0x00C851);
+            if (stats.added.length === 0 && stats.removed.length === 0) {
+                embed.setTitle(t('✅ Role TOP — wszystko OK', '✅ TOP Roles — All Good'));
+                embed.setDescription(t('Żadna rola nie wymagała zmiany. Role TOP są zgodne z aktualnym rankingiem.', 'No role changes were needed. TOP roles are in sync with the current ranking.'));
+            } else {
+                embed.setTitle(t('✅ Role TOP zaktualizowane', '✅ TOP Roles Updated'));
+                const addedText = formatLines(stats.added);
+                const removedText = formatLines(stats.removed);
+                if (addedText) embed.addFields({ name: t(`🏆 Przyznano (${stats.added.length})`, `🏆 Assigned (${stats.added.length})`), value: addedText });
+                if (removedText) embed.addFields({ name: t(`🗑️ Usunięto (${stats.removed.length})`, `🗑️ Removed (${stats.removed.length})`), value: removedText });
+            }
 
             await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setColor(0x00C851)
-                    .setTitle(t('✅ Role TOP przetworzone', '✅ TOP Roles Processed'))
-                    .setDescription(t(
-                        'Role TOP zostały sprawdzone i zaktualizowane na podstawie aktualnego rankingu serwera. Zmieniono tylko te, które były niezgodne.',
-                        'TOP roles have been checked and updated based on the current server ranking. Only those that were out of sync were changed.'
-                    ))
-                ],
+                embeds: [embed],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
