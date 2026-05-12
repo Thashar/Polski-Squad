@@ -2357,21 +2357,17 @@ class InteractionHandler {
         gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${interaction.guild.name}"`);
 
         try {
-            const { removed, assigned } = await this.roleService.forceResetTopRoles(interaction.guild, topRoles, gl);
-            gl.success(`✅ Przetworzono role TOP: usunięto od ${removed}, przyznano ${assigned} graczy`);
+            await this.roleService.updateTopRoles(interaction.guild, null, topRoles);
+            gl.success(`✅ Przetworzono role TOP na serwerze "${interaction.guild.name}"`);
 
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setColor(0x00C851)
                     .setTitle(t('✅ Role TOP przetworzone', '✅ TOP Roles Processed'))
                     .setDescription(t(
-                        'Role TOP zostały zdjęte wszystkim członkom serwera, a następnie przyznane ponownie na podstawie aktualnego rankingu.',
-                        'TOP roles have been removed from all server members, then reassigned based on the current ranking.'
+                        'Role TOP zostały sprawdzone i zaktualizowane na podstawie aktualnego rankingu serwera. Zmieniono tylko te, które były niezgodne.',
+                        'TOP roles have been checked and updated based on the current server ranking. Only those that were out of sync were changed.'
                     ))
-                    .addFields(
-                        { name: t('🗑️ Usunięto role od', '🗑️ Removed roles from'), value: `${removed} ${t('graczy', 'players')}`, inline: true },
-                        { name: t('🏆 Przyznano role', '🏆 Assigned roles'), value: `${assigned} ${t('graczom', 'players')}`, inline: true },
-                    )
                 ],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)

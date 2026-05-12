@@ -229,8 +229,8 @@
 - Etap 2: pobiera posortowany ranking serwera i przyznaje role zgodnie z progami konfiguracji
 - Operacje w chunkach po 10 z przerwami 250ms — zapobiega rate limitom Discord
 - Przydatne gdy role są niezsynchronizowane z rankingiem (np. po awarii, ręcznych zmianach, lub po usunięciu gracza bez aktualizacji)
-- Jeśli serwer nie ma skonfigurowanych ról TOP → ephemeral komunikat o braku konfiguracji z powrotem do panelu
-- `forceResetTopRoles(guild, topRoles, gl)` w `roleService.js`
+- Jeśli serwer nie ma skonfigurowanych ról TOP → komunikat o braku konfiguracji z powrotem do panelu
+- Używa `updateTopRoles` (diff-based) — zmienia tylko graczy, których rola jest niezgodna z rankingiem
 
 **📢 Wyślij Info** (Head Admin):
 - Otwiera modal z 4 polami: Tytuł, Opis PL, Opis ENG, Ikona URL, Obraz URL
