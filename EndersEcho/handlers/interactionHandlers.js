@@ -2873,7 +2873,11 @@ class InteractionHandler {
                     if (callerHistory.length >= 2) {
                         const chartTitle = msgs.chartTitle;
                         const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle);
+                        const guildTagMap = {};
+                        for (const g of (this.guildConfigService?.getAllConfiguredGuilds() || [])) {
+                            guildTagMap[g.id] = g.tag || interaction.client.guilds.cache.get(g.id)?.name?.slice(0, 14) || g.id.slice(-4);
+                        }
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle, guildTagMap);
                         if (chartBuffer) {
                             scoreHistoryAttachment = new AttachmentBuilder(chartBuffer, { name: 'score_history.png' });
                         }
