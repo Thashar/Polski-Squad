@@ -244,7 +244,7 @@ const pol = {
     notConfigured: '⚙️ EndersEcho nie jest jeszcze skonfigurowany na tym serwerze. Administrator musi użyć **/configure**.',
 
     // Embed odrzuconego screena
-    reportTitle: '⚠️ Odrzucony screen',
+    reportTitle: '🚫 ANALIZA ODRZUCONA',
     reportFieldNick: '👤 Nick na serwerze',
     reportFieldServer: 'Serwer',
     reportFieldTime: '🕐 Czas',
@@ -563,7 +563,7 @@ const eng = {
     notConfigured: '⚙️ EndersEcho is not configured yet on this server. An administrator must run **/configure**.',
 
     // Rejected screenshot embed
-    reportTitle: '⚠️ Rejected Screenshot',
+    reportTitle: '🚫 REJECTED ANALYSIS',
     reportFieldNick: '👤 Server Nickname',
     reportFieldServer: 'Server',
     reportFieldTime: '🕐 Time',

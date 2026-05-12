@@ -6130,20 +6130,34 @@ class InteractionHandler {
                 gl.info(`🪙 Tokeny AI: input=${promptTokens}, output=${outputTokens}`);
             }
 
+            // Pobierz nick z embeda raportu (pole może być w języku serwera)
+            // Wartość pola ma format "[Nick](link) (discordName)" — wyciągamy sam Nick
+            const embedFields = origMsg.embeds[0]?.fields || [];
+            const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
+            const nickRaw = nickField?.value || '';
+            const userName = nickRaw.match(/^\[([^\]]+)\]/)?.[1]
+                || await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany');
+
             if (!aiResult.isValidVictory || !aiResult.score) {
                 gl.warn(`⚠️ [Analizuj] Wynik OCR nieprawidłowy — isValidVictory=${aiResult.isValidVictory}, score=${aiResult.score}, error=${aiResult.error}`);
                 const extraInfo = formatMessage(targetMsgs.analyzeResultFail, { adminName, error: aiResult.error || targetMsgs.analyzeResultUnknown });
                 await applyToCurrentMsg(extraInfo);
                 await applyToOtherMsg(extraInfo);
+                try {
+                    this.logService.sendOcrAnalysisEmbed(targetGuildId, {
+                        type: 'rejected',
+                        userName,
+                        userId: targetUserId,
+                        userAvatar: interaction.user.displayAvatarURL(),
+                        commandName: 'analyze',
+                        reason: aiResult.error || 'VALIDATION_FAILED',
+                        adminName,
+                    }, interaction.client.guilds.cache.get(targetGuildId) ?? null);
+                } catch {}
                 return;
             }
 
             gl.success(`✅ [Analizuj] AI OCR: wynik="${aiResult.score}", boss="${aiResult.bossName}"`);
-
-            // Pobierz nick z embeda raportu (pole może być w języku serwera)
-            const embedFields = origMsg.embeds[0]?.fields || [];
-            const nickField = embedFields.find(f => f.name === targetMsgs.reportFieldNick);
-            const userName = nickField?.value || (await interaction.client.users.fetch(targetUserId).then(u => u.username).catch(() => 'Nieznany'));
 
             const { isNewRecord, currentScore, ranking: updatedRanking } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
