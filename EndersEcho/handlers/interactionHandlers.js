@@ -3032,7 +3032,8 @@ class InteractionHandler {
             if (aiResult.error === 'NOT_SIMILAR') {
                 gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
                 _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason };
-                await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
+                const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
+                if (_notSimilarImgUrl) _ocrEmbedParams.imageUrl = _notSimilarImgUrl;
                 const notSimilarDesc = aiResult.rejectionReason
                     ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
                     : null;
@@ -3050,7 +3051,8 @@ class InteractionHandler {
             if (!aiResult.isValidVictory) {
                 gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
                 _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED' };
-                await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+                const _validationImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+                if (_validationImgUrl) _ocrEmbedParams.imageUrl = _validationImgUrl;
                 await interaction.editReply(msgs.invalidScreenshot);
                 return;
             }
@@ -6423,7 +6425,8 @@ class InteractionHandler {
         const hasGlobal = !!this.config.invalidReportChannelId;
         const guildCfg = this.config.getGuildConfig(interaction.guildId);
         const perGuildChannelId = guildCfg?.invalidReportChannelId || null;
-        if (!hasGlobal && !perGuildChannelId) return;
+        if (!hasGlobal && !perGuildChannelId) return null;
+        let reportImgUrl = null;
 
         try {
             const msgs = this.config.getMessages(interaction.guildId);
@@ -6515,11 +6518,12 @@ class InteractionHandler {
                 const msg = await channel.send({ files: [att] });
                 const imgUrl = msg.attachments.first()?.url;
                 const embed = buildEmbed(footerText, imgUrl || `attachment://${fileName}`);
-                return msg.edit({
+                const edited = await msg.edit({
                     embeds: [embed],
                     components: [buildButtons()],
                     ...(imgUrl ? { attachments: [] } : {}),
                 });
+                return { msg: edited, imgUrl };
             };
 
             // Wyślij do globalnego kanału
@@ -6529,7 +6533,9 @@ class InteractionHandler {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
                     if (globalChannel) {
-                        sentGlobalMsg = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`);
+                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`);
+                        sentGlobalMsg = _gMsg;
+                        reportImgUrl = _gImgUrl;
                         globalMsgId = sentGlobalMsg.id;
                         gl.info(`🛑 📋 Wysłano raport (${reason}) do globalnego kanału dla ${serverNick}`);
                     }
@@ -6546,7 +6552,8 @@ class InteractionHandler {
                         const footerText = globalMsgId
                             ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}`
                             : `uid:${interaction.user.id}|gid:${interaction.guildId}`;
-                        const sentPerGuild = await sendReport(guildChannel, footerText);
+                        const { msg: sentPerGuild, imgUrl: _pgImgUrl } = await sendReport(guildChannel, footerText);
+                        if (!reportImgUrl) reportImgUrl = _pgImgUrl;
                         // Zapisz referencję do per-guild wiadomości w footerze globalnego embeda
                         // żeby Analyze kliknięty na global mógł zaktualizować też per-guild
                         if (sentGlobalMsg) {
@@ -6595,6 +6602,7 @@ class InteractionHandler {
         } catch (err) {
             gl.warn(`⚠️ Nie można wysłać raportu o odrzuconym screenie: ${err.message}`);
         }
+        return reportImgUrl;
     }
 
     /**
