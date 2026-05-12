@@ -4214,7 +4214,7 @@ class InteractionHandler {
                 newPage, rankingData.totalPages, false, msgs, rankingData.roleRows || [], btnOptions
             );
 
-            await interaction.editReply({ embeds: [embed], components: buttons });
+            await interaction.editReply({ embeds: [embed], components: buttons, attachments: [] });
 
         } catch (error) {
             logger.error('Błąd w handleButtonInteraction:', error);
@@ -4704,7 +4704,8 @@ class InteractionHandler {
             const reply = await interaction.editReply({
                 content: null,
                 embeds: [embed],
-                components: buttons
+                components: buttons,
+                attachments: []
             });
 
             this.rankingService.addActiveRanking(reply.id, {
@@ -4810,7 +4811,8 @@ class InteractionHandler {
                 await interaction.editReply({
                     content: formatMessage(msgs.roleRankingEmpty, { roleName }),
                     embeds: [],
-                    components: emptyButtons
+                    components: emptyButtons,
+                    attachments: []
                 });
                 const reply = await interaction.fetchReply();
                 this.rankingService.addActiveRanking(reply.id, {
@@ -4830,7 +4832,7 @@ class InteractionHandler {
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, btnOptions);
 
-            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons, attachments: [] });
             this.rankingService.addActiveRanking(reply.id, {
                 players, currentPage: 0, totalPages,
                 userId: parentUserId, messageId: reply.id,
@@ -4882,7 +4884,7 @@ class InteractionHandler {
                 parentGuildName
             });
 
-            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons, attachments: [] });
             this.rankingService.addActiveRanking(reply.id, {
                 guildScores,
                 players: [],
