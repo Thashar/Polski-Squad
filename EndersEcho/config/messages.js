@@ -58,7 +58,7 @@ const pol = {
     newRecordFallback: '🏆 **NOWY REKORD!**\n**Gracz:** {username}\n**Nowy rekord:** {score}\n**Poprzedni:** {previous}\n\n*Błąd wysyłania pełnego embed*',
     resultNotBeatenCrossServer: '❌ Nie pobito rekordu — taki sam wynik (**{score}**) widnieje już na serwerze **{guildName}**.',
     crossServerScoreRemovedField: '🗑️ Poprzedni wynik zostanie ukryty',
-    crossServerScoreRemovedValue: 'Wynik **{score}** na serwerze **{guildName}** nie będzie widoczny w rankingu. Historia rekordów gracza zostaje zachowana.',
+    crossServerScoreRemovedValue: 'Wynik **{score}** na serwerze **{guildName}** nie będzie widoczny w rankingu. Twoja historia wciąż będzie zachowana.',
     noRecordFallback: '❌ Nie pobito rekordu\n**Gracz:** {username}\n**Wynik:** {score}\n**Obecny rekord:** {current}\n\n*Błąd wysyłania embed z obrazem*',
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
 
@@ -378,7 +378,7 @@ const eng = {
     newRecordFallback: '🏆 **NEW RECORD!**\n**Player:** {username}\n**New record:** {score}\n**Previous:** {previous}\n\n*Error sending full embed*',
     resultNotBeatenCrossServer: '❌ Record not beaten — same score (**{score}**) already exists on server **{guildName}**.',
     crossServerScoreRemovedField: '🗑️ Previous score will be hidden',
-    crossServerScoreRemovedValue: 'Score **{score}** on server **{guildName}** will no longer be visible in the ranking. The player\'s record history is preserved.',
+    crossServerScoreRemovedValue: 'Score **{score}** on server **{guildName}** will no longer be visible in the ranking. Your history will still be preserved.',
     noRecordFallback: '❌ Record not beaten\n**Player:** {username}\n**Score:** {score}\n**Current record:** {current}\n\n*Error sending embed with image*',
     rankingImageCaption: '📎 **Original result image:**',
 
