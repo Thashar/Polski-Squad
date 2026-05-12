@@ -189,11 +189,11 @@
 - Dostęp: Administrator Discord
 - **Układ rzędów (Tryb Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
-  - Rząd 2: `📊 Zużycie tokenów`
+  - Rząd 2: `📊 Zużycie tokenów`, `🔁 Przetwórz role`
   - Rząd 3: `◀️ Wróć do konfiguracji`
 - **Układ rzędów (Tryb Head Admin):**
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
-  - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`
+  - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
   - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
   - Rząd 4: `🚫 Zbanuj serwer`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
@@ -222,6 +222,15 @@
 - Nawigacja `tk_*` zachowuje przycisk `◀️ Powrót do panelu`
 - Dane z `data/token_usage.json`, cennik: In $0.15, Out $0.60, Think $0.35 / 1M tokenów
 - **Dwujęzyczny:** wszystkie tytuły, pola, przyciski i stopki w embedach tokenów (`_buildTokensEmbed`, `_buildTokensMonthBreakdown`, `_buildTokensTotalBreakdown`, `_buildTokensUsersEmbed`) używają `t = this._panelT(interaction.guildId)` — nazwy miesięcy też mają obie wersje (`MONTH_NAMES_POL` / `MONTH_NAMES_ENG`)
+
+**🔁 Przetwórz role** (Admin/Head Admin):
+- Pełny reset ról TOP dla serwera, na którym wywołano komendę
+- Etap 1: usuwa wszystkie role TOP od wszystkich memberów serwera (na podstawie `role.members` z cache)
+- Etap 2: pobiera posortowany ranking serwera i przyznaje role zgodnie z progami konfiguracji
+- Operacje w chunkach po 10 z przerwami 250ms — zapobiega rate limitom Discord
+- Przydatne gdy role są niezsynchronizowane z rankingiem (np. po awarii, ręcznych zmianach, lub po usunięciu gracza bez aktualizacji)
+- Jeśli serwer nie ma skonfigurowanych ról TOP → ephemeral komunikat o braku konfiguracji z powrotem do panelu
+- `forceResetTopRoles(guild, topRoles, gl)` w `roleService.js`
 
 **📢 Wyślij Info** (Head Admin):
 - Otwiera modal z 4 polami: Tytuł, Opis PL, Opis ENG, Ikona URL, Obraz URL
@@ -262,6 +271,7 @@
 | `panel_unblock_search_modal` | Modal wyszukiwania (pole `unblock_query`) |
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
+| `panel_process_roles` | Pełny reset ról TOP: usuń wszystkie → przyznaj wg aktualnego rankingu (admin + head admin) |
 | `panel_info` | Otwórz modal /info (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |

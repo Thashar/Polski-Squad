@@ -1076,11 +1076,11 @@ class RankingService {
                         bossName: bossName || this.config.messages.unknownBossLabel
                     }).catch(err => logger.error('Błąd zapisu historii wyników:', err));
                 }
-                await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
-                return { isNewRecord, ranking, currentScore, newTimestamp: nowIso };
+                const affectedGuildIds = await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
+                return { isNewRecord, ranking, currentScore, newTimestamp: nowIso, affectedGuildIds };
             }
 
-            return { isNewRecord, ranking, currentScore, newTimestamp: null };
+            return { isNewRecord, ranking, currentScore, newTimestamp: null, affectedGuildIds: [] };
         });
     }
 
@@ -1152,9 +1152,11 @@ class RankingService {
 
     /**
      * Po nowym rekordzie na `currentGuildId` usuwa gorsze wyniki tego gracza z pozostałych serwerów.
+     * Zwraca listę guildId serwerów, z których usunięto wynik (do aktualizacji ról TOP).
      */
     async _removeWeakerScoresFromOtherGuilds(userId, newScoreValue, currentGuildId) {
         const otherGuilds = this.config.getAllGuilds().filter(g => g.id !== currentGuildId);
+        const affectedGuildIds = [];
         for (const guild of otherGuilds) {
             await this._enqueue(guild.id, async () => {
                 const ranking = await this.loadRanking(guild.id);
@@ -1164,9 +1166,11 @@ class RankingService {
                     logger.info(`🗑️ Usunięto gorszy wynik gracza "${playerName}" z serwera "${guild.tag || guild.id}" (pobity przez rekord na "${currentGuildTag || currentGuildId}")`);
                     delete ranking[userId];
                     await this.saveRanking(guild.id, ranking);
+                    affectedGuildIds.push(guild.id);
                 }
             });
         }
+        return affectedGuildIds;
     }
 
     /**

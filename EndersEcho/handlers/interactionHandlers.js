@@ -1974,6 +1974,8 @@ class InteractionHandler {
               '🔓 **Unblock Player** — unblocks a player blocked by an admin; cannot unblock players blocked by the Head Admin.'),
             t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
               '📊 **Token Usage** — AI OCR usage statistics for your server (requests, tokens).'),
+            t('🔁 **Przetwórz role** — usuwa wszystkie role TOP od wszystkich członków serwera, a następnie przyznaje je od nowa na podstawie aktualnego rankingu. Przydatne gdy role są nie zsynchronizowane.',
+              '🔁 **Process Roles** — removes all TOP roles from all server members, then reassigns them based on the current ranking. Useful when roles are out of sync.'),
         ];
         const headAdminOptions = [
             t('🔒 **Zablokuj gracza** — wyszukaj gracza cross-server i zablokuj mu dostęp do `/update`; tylko Head Admin może odblokować.',
@@ -2017,12 +2019,13 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
             );
-            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy, Interwał TOP10
+            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy, Interwał TOP10, Przetwórz role
             row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel(t('AI OCR', 'AI OCR')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel(t('Ustaw limity', 'Set Limits')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_tester').setEmoji('🧪').setLabel(t('Testerzy', 'Testers')).setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel(t('Interwał TOP10', 'TOP10 Interval')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
             );
         } else {
             // Rząd 1 Admin: Usuń gracza, Odblokuj
@@ -2030,9 +2033,10 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
             );
-            // Rząd 2 Admin: Zużycie tokenów
+            // Rząd 2 Admin: Zużycie tokenów, Przetwórz role
             row2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
             );
         }
 
@@ -2322,6 +2326,70 @@ class InteractionHandler {
         const guildFilter = isSuperUser ? 'all' : interaction.guildId;
         const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser, 0);
         await interaction.editReply(reply);
+    }
+
+    async _handlePanelProcessRoles(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const guildId = interaction.guildId;
+        const guildConfig = this.config.getGuildConfig(guildId);
+        const topRoles = guildConfig?.topRoles || null;
+
+        if (!topRoles || Object.keys(topRoles).length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder()
+                    .setColor(0xFF6B35)
+                    .setTitle(t('⚠️ Brak konfiguracji ról TOP', '⚠️ No TOP Role Configuration'))
+                    .setDescription(t(
+                        'Na tym serwerze nie skonfigurowano ról TOP. Skonfiguruj je przez `/configure` → Krok 5.',
+                        'This server has no TOP roles configured. Configure them via `/configure` → Step 5.'
+                    ))
+                ],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+            return;
+        }
+
+        await interaction.deferUpdate();
+        const gl = this.logService._gl(guildId);
+        const nick = interaction.member?.displayName || interaction.user.username;
+        gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${interaction.guild.name}"`);
+
+        try {
+            const { removed, assigned } = await this.roleService.forceResetTopRoles(interaction.guild, topRoles, gl);
+            gl.success(`✅ Przetworzono role TOP: usunięto od ${removed}, przyznano ${assigned} graczy`);
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(0x00C851)
+                    .setTitle(t('✅ Role TOP przetworzone', '✅ TOP Roles Processed'))
+                    .setDescription(t(
+                        'Role TOP zostały zdjęte wszystkim członkom serwera, a następnie przyznane ponownie na podstawie aktualnego rankingu.',
+                        'TOP roles have been removed from all server members, then reassigned based on the current ranking.'
+                    ))
+                    .addFields(
+                        { name: t('🗑️ Usunięto role od', '🗑️ Removed roles from'), value: `${removed} ${t('graczy', 'players')}`, inline: true },
+                        { name: t('🏆 Przyznano role', '🏆 Assigned roles'), value: `${assigned} ${t('graczom', 'players')}`, inline: true },
+                    )
+                ],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        } catch (err) {
+            gl.error(`❌ Błąd przetwarzania ról TOP: ${err.message}`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setTitle(t('❌ Błąd', '❌ Error'))
+                    .setDescription(t(`Błąd podczas przetwarzania ról: \`${err.message}\``, `Error processing roles: \`${err.message}\``))
+                ],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        }
     }
 
     async _handlePanelBlock(interaction) {
@@ -3128,6 +3196,7 @@ class InteractionHandler {
             let isNewRecord;
             let currentScore;
             let newRecordTimestamp = null;
+            let affectedGuildIds = [];
             if (dryRun) {
                 // Tryb testowy: porównanie bez zapisu do rankingu.
                 const ranking = await this.rankingService.loadRanking(guildId);
@@ -3141,7 +3210,7 @@ class InteractionHandler {
                 }
             } else {
                 await editReplyStep(msgs.updateSaving);
-                ({ isNewRecord, currentScore, newTimestamp: newRecordTimestamp } = await this.rankingService.updateUserRanking(
+                ({ isNewRecord, currentScore, newTimestamp: newRecordTimestamp, affectedGuildIds } = await this.rankingService.updateUserRanking(
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
@@ -3381,6 +3450,19 @@ class InteractionHandler {
                 _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message };
             }
 
+            // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza
+            if (affectedGuildIds.length > 0) {
+                for (const affectedGuildId of affectedGuildIds) {
+                    const affectedGuild = interaction.client.guilds.cache.get(affectedGuildId);
+                    if (!affectedGuild) continue;
+                    const affectedConfig = this.config.getGuildConfig(affectedGuildId);
+                    if (!affectedConfig?.topRoles) continue;
+                    this.roleService.updateTopRoles(affectedGuild, null, affectedConfig.topRoles).catch(err =>
+                        gl.warn(`⚠️ Błąd aktualizacji ról TOP na serwerze "${affectedGuild.name}": ${err.message}`)
+                    );
+                }
+            }
+
             // DM powiadomienia dla subskrybentów (lista pobrana wcześniej przy liczeniu obserwujących)
             try {
                 if (recordSubscribers.length > 0) {
@@ -3514,6 +3596,7 @@ class InteractionHandler {
         if (customId === 'panel_limit') return 'Ustaw limity';
         if (customId === 'panel_unconfigured') return 'Nieskonfigurowane serwery';
         if (customId === 'panel_diagnostics') return 'Diagnostyka uprawnień';
+        if (customId === 'panel_process_roles') return 'Przetwórz role TOP';
         if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
@@ -3820,6 +3903,10 @@ class InteractionHandler {
             }
             if (customId === 'panel_tokens') {
                 await this._handlePanelTokens(interaction);
+                return;
+            }
+            if (customId === 'panel_process_roles') {
+                await this._handlePanelProcessRoles(interaction);
                 return;
             }
             if (customId === 'panel_info') {
@@ -6201,7 +6288,7 @@ class InteractionHandler {
 
             gl.success(`✅ [Analizuj] AI OCR: wynik="${aiResult.score}", boss="${aiResult.bossName}"`);
 
-            const { isNewRecord, currentScore, ranking: updatedRanking } = await this.rankingService.updateUserRanking(
+            const { isNewRecord, currentScore, ranking: updatedRanking, affectedGuildIds: analyzeAffectedGuilds = [] } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
@@ -6242,6 +6329,19 @@ class InteractionHandler {
                 } catch (roleErr) {
                     _analyzeRoleErr = roleErr.message;
                     gl.error(`❌ [Analizuj] Błąd aktualizacji ról TOP: ${roleErr.message}`);
+                }
+
+                // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza
+                if (analyzeAffectedGuilds.length > 0) {
+                    for (const affectedGuildId of analyzeAffectedGuilds) {
+                        const affectedGuild = interaction.client.guilds.cache.get(affectedGuildId);
+                        if (!affectedGuild) continue;
+                        const affectedConfig = this.config.getGuildConfig(affectedGuildId);
+                        if (!affectedConfig?.topRoles) continue;
+                        this.roleService.updateTopRoles(affectedGuild, null, affectedConfig.topRoles).catch(err =>
+                            gl.warn(`⚠️ [Analizuj] Błąd aktualizacji ról TOP na serwerze "${affectedGuild.name}": ${err.message}`)
+                        );
+                    }
                 }
             }
 

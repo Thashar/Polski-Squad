@@ -276,6 +276,97 @@ class RoleService {
     }
 
     /**
+     * Pełny reset ról TOP: najpierw usuwa wszystkie role TOP od wszystkich memberów,
+     * potem przyznaje role na nowo na podstawie aktualnego rankingu serwera.
+     * Używane przez panel admina → "Przetwórz role".
+     * @param {Guild} guild
+     * @param {Object|null} guildTopRoles
+     * @param {Object} gl - Logger
+     * @returns {Promise<{removed: number, assigned: number}>}
+     */
+    async forceResetTopRoles(guild, guildTopRoles, gl = logger) {
+        const normalized = normalizeTiers(guildTopRoles);
+        if (!normalized) return { removed: 0, assigned: 0 };
+
+        const tierRoles = normalized.tiers
+            .filter(t => t.roleId)
+            .map(t => ({ ...t, role: guild.roles.cache.get(t.roleId) }))
+            .filter(t => t.role);
+
+        if (tierRoles.length === 0) {
+            gl.warn(`⚠️ Żadna skonfigurowana rola TOP nie istnieje na serwerze "${guild.name}"`);
+            return { removed: 0, assigned: 0 };
+        }
+
+        const allTopRoles = tierRoles.map(t => t.role);
+
+        // Zbierz wszystkich memberów posiadających jakąkolwiek rolę TOP
+        const membersWithTopRole = new Map();
+        for (const role of allTopRoles) {
+            for (const [memberId, member] of role.members) {
+                membersWithTopRole.set(memberId, member);
+            }
+        }
+
+        // Usuń WSZYSTKIE role TOP od wszystkich (chunk 10, przerwa 250ms)
+        let removed = 0;
+        const CHUNK = 10;
+        const membersArray = [...membersWithTopRole.values()];
+        for (let i = 0; i < membersArray.length; i += CHUNK) {
+            const chunk = membersArray.slice(i, i + CHUNK);
+            await Promise.allSettled(
+                chunk.map(async member => {
+                    const memberTopRoles = allTopRoles.filter(r => member.roles.cache.has(r.id));
+                    for (const role of memberTopRoles) {
+                        await member.roles.remove(role).catch(err =>
+                            gl.error(`Błąd usuwania roli "${role.name}" od "${member.displayName}": ${err.message}`)
+                        );
+                    }
+                    removed++;
+                })
+            );
+            if (i + CHUNK < membersArray.length) await new Promise(r => setTimeout(r, 250));
+        }
+
+        // Pobierz posortowanych graczy i zbuduj listę przydziałów
+        const players = await this.rankingService.getSortedPlayers(guild.id);
+        const toAdd = [];
+        for (let i = 0; i < players.length; i++) {
+            const pos = i + 1;
+            const tier = tierRoles.find(t => pos >= t.from && pos <= t.to);
+            if (tier) toAdd.push({ userId: players[i].userId, role: tier.role });
+        }
+
+        // Przyznaj role na nowo (batch fetch + chunk 10)
+        let assigned = 0;
+        if (toAdd.length > 0) {
+            const ids = toAdd.map(({ userId }) => userId);
+            let members = new Map();
+            try {
+                members = await guild.members.fetch({ user: ids });
+            } catch (err) {
+                gl.error(`Błąd batch fetch members: ${err.message}`);
+            }
+            for (let i = 0; i < toAdd.length; i += CHUNK) {
+                const chunk = toAdd.slice(i, i + CHUNK);
+                await Promise.allSettled(
+                    chunk.map(async ({ userId, role }) => {
+                        const member = members.get(userId);
+                        if (!member) return;
+                        await member.roles.add(role).catch(err =>
+                            gl.error(`Błąd przyznawania roli "${role.name}" dla "${member.displayName}": ${err.message}`)
+                        );
+                        assigned++;
+                    })
+                );
+                if (i + CHUNK < toAdd.length) await new Promise(r => setTimeout(r, 250));
+            }
+        }
+
+        return { removed, assigned };
+    }
+
+    /**
      * Loguje zmiany w rolach TOP
      */
     logRoleChanges(oldHolders, newHolders) {
