@@ -4134,13 +4134,15 @@ class InteractionHandler {
             return;
         }
 
-        // Sprawdź czy głosujący jest w rankingu
-        const inRanking = await this.communityVerificationService.isVoterInRanking(
-            this.rankingService, session.guildId, voterId
-        );
-        if (!inRanking) {
-            await interaction.reply({ content: msgs.cvVoteNotInRanking, flags: ['Ephemeral'] });
-            return;
+        // Sprawdź czy głosujący jest w rankingu (head admin omija ten check)
+        if (!this._isHeadAdmin(voterId)) {
+            const inRanking = await this.communityVerificationService.isVoterInRanking(
+                this.rankingService, session.guildId, voterId
+            );
+            if (!inRanking) {
+                await interaction.reply({ content: msgs.cvVoteNotInRanking, flags: ['Ephemeral'] });
+                return;
+            }
         }
 
         const result = await this.communityVerificationService.registerVote(messageId, voterId);

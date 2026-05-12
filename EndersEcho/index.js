@@ -117,8 +117,6 @@ async function initializeBot() {
     try {
         // Migracja struktury folderów data/ → data/guilds/{guildId}/
         await dataMigration.migrate(config.ranking.dataDir);
-        // Uzupełnij brakujące pliki historii wyników (wyniki/{userId}.json) z ranking.json
-        await dataMigration.backfillScoreHistory(config.ranking.dataDir);
 
         // Korekcja nazw bossów w istniejących danych (jednorazowe poprawki po starcie)
         const sharedDataDir = path.join(__dirname, '../shared_data');
