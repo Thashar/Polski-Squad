@@ -44,8 +44,9 @@ class RoleService {
      * @param {Guild} guild - Serwer Discord
      * @param {Array|null} _sortedPlayers - Nieużywane — metoda zawsze pobiera świeże dane
      * @param {Object|null} guildTopRoles - Konfiguracja ról dla tego serwera (lub null)
+     * @param {{ fullFetch?: boolean }} opts - fullFetch: pobierz wszystkich memberów serwera przed diffem
      */
-    async updateTopRoles(guild, _sortedPlayers, guildTopRoles = null) {
+    async updateTopRoles(guild, _sortedPlayers, guildTopRoles = null, { fullFetch = false } = {}) {
         if (!guildTopRoles || Object.keys(guildTopRoles).length === 0) {
             return true;
         }
@@ -71,7 +72,7 @@ class RoleService {
         let stats = null;
         try {
             const players = await this.rankingService.getSortedPlayers(guildId);
-            stats = await this._applyRoleDiff(guild, players, guildTopRoles, gl);
+            stats = await this._applyRoleDiff(guild, players, guildTopRoles, gl, { fullFetch });
         } catch (error) {
             gl.error(`❌ Błąd podczas aktualizacji ról TOP: ${error.message}`);
             return false;
@@ -94,9 +95,11 @@ class RoleService {
      * Oblicza diff między aktualnym a pożądanym stanem ról i wykonuje tylko niezbędne zmiany.
      * Zamiast resetować wszystkie role i przyznawać od nowa, zmienia tylko to co faktycznie się różni.
      * Operacje usuwania i dodawania wykonywane są równolegle (Promise.allSettled).
+     * @param {{ fullFetch?: boolean }} opts - fullFetch: pobierz WSZYSTKICH memberów serwera (pełna synchronizacja);
+     *   false: pobierz tylko graczy z rankingu (lekki tryb — do automatycznych aktualizacji po /update)
      * @returns {{ added: Array<{name, roleName}>, removed: Array<{name, roleName}> }}
      */
-    async _applyRoleDiff(guild, sortedPlayers, guildTopRoles, gl = logger) {
+    async _applyRoleDiff(guild, sortedPlayers, guildTopRoles, gl = logger, { fullFetch = false } = {}) {
         const stats = { added: [], removed: [] };
         const normalized = normalizeTiers(guildTopRoles);
         if (!normalized) return stats;
@@ -120,14 +123,19 @@ class RoleService {
             desired.set(sortedPlayers[i].userId, tier ? tier.role : null);
         }
 
-        // Wypełnij cache memberów z rankingu żeby role.members były aktualne po restarcie bota
-        const desiredIds = [...desired.keys()];
-        if (desiredIds.length > 0) {
-            try {
-                await guild.members.fetch({ user: desiredIds });
-            } catch (err) {
-                gl.warn(`⚠️ Nie udało się pobrać danych memberów przed diff ról: ${err.message}`);
+        // Wypełnij cache memberów żeby role.members były aktualne (szczególnie po restarcie bota).
+        // fullFetch=true: pobiera WSZYSTKICH memberów serwera → obejmuje też osoby spoza rankingu
+        //   które mają starą rolę TOP (np. usunięte z rankingu) — używane przez "Przetwórz role".
+        // fullFetch=false: pobiera tylko graczy z rankingu → lekki tryb dla automatycznych aktualizacji.
+        try {
+            if (fullFetch) {
+                await guild.members.fetch();
+            } else {
+                const desiredIds = [...desired.keys()];
+                if (desiredIds.length > 0) await guild.members.fetch({ user: desiredIds });
             }
+        } catch (err) {
+            gl.warn(`⚠️ Nie udało się pobrać danych memberów przed diff ról: ${err.message}`);
         }
 
         // Aktualny stan z cache Discorda: userId -> Set<role> (member może mieć wiele ról TOP jednocześnie)

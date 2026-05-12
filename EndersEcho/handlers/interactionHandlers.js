@@ -2357,7 +2357,7 @@ class InteractionHandler {
         gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${interaction.guild.name}"`);
 
         try {
-            const result = await this.roleService.updateTopRoles(interaction.guild, null, topRoles);
+            const result = await this.roleService.updateTopRoles(interaction.guild, null, topRoles, { fullFetch: true });
             const stats = (result && typeof result === 'object') ? result : { added: [], removed: [] };
             gl.success(`✅ Przetworzono role TOP na "${interaction.guild.name}": +${stats.added.length} / -${stats.removed.length}`);
 
