@@ -58,6 +58,12 @@ class RankingService {
         try {
             const data = await fs.readFile(file, 'utf8');
             const parsed = JSON.parse(data);
+            // Normalizuj stare wpisy bez scoreValue
+            for (const [uid, entry] of Object.entries(parsed)) {
+                if (typeof entry.scoreValue !== 'number' || isNaN(entry.scoreValue)) {
+                    parsed[uid].scoreValue = entry.score ? this.parseScoreValue(entry.score) : 0;
+                }
+            }
             this._rankingCache.set(guildId, parsed);
             return parsed;
         } catch {
@@ -315,6 +321,7 @@ class RankingService {
      * @returns {string}
      */
     formatScore(value) {
+        if (value == null || isNaN(value)) return '0';
         const units = [
             { name: 'Sx', value: 1000000000000000000000 },
             { name: 'Qi', value: 1000000000000000000 },
