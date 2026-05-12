@@ -3127,6 +3127,7 @@ class InteractionHandler {
 
             let isNewRecord;
             let currentScore;
+            let newRecordTimestamp = null;
             if (dryRun) {
                 // Tryb testowy: porównanie bez zapisu do rankingu.
                 const ranking = await this.rankingService.loadRanking(guildId);
@@ -3140,7 +3141,7 @@ class InteractionHandler {
                 }
             } else {
                 await editReplyStep(msgs.updateSaving);
-                ({ isNewRecord, currentScore } = await this.rankingService.updateUserRanking(
+                ({ isNewRecord, currentScore, newTimestamp: newRecordTimestamp } = await this.rankingService.updateUserRanking(
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
@@ -3337,7 +3338,7 @@ class InteractionHandler {
                                 channelId: publicMsg.channelId,
                                 messageUrl: msgUrl,
                                 previousRecord: previousRecordSnapshot,
-                                newRecord: { score: bestScore, bossName, timestamp: new Date().toISOString() },
+                                newRecord: { score: bestScore, bossName, timestamp: newRecordTimestamp || new Date().toISOString() },
                                 newAchievements,
                             });
                         } catch (cvErr) {
@@ -4429,16 +4430,18 @@ class InteractionHandler {
             logger.error(`CV _cvRemoveRecord revert ranking error: ${e.message}`);
         }
         // Usuń wszystkie wpisy historii od momentu zgłoszonego rekordu (A + B + C + ...)
+        let removedRecordCount = 0;
         if (this.scoreHistoryService && session.newRecord?.timestamp) {
-            this.scoreHistoryService.removeEntriesAfter(
+            removedRecordCount = await this.scoreHistoryService.removeEntriesAfter(
                 session.guildId, session.userId, session.newRecord.timestamp
-            ).catch(e => logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`));
+            ).catch(e => { logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`); return 0; });
         }
-        // Wyczyść osiągnięcia score/records — kolejne rekordy po A też mogły odblokować nowe
+        // Cofnij tylko osiągnięcia score/records zdobyte od momentu zgłoszonego rekordu — wcześniejsze zostają
         try {
-            if (this.achievementService) {
-                await this.achievementService.clearUserAchievements(
-                    session.guildId, session.userId
+            if (this.achievementService && session.newRecord?.timestamp) {
+                await this.achievementService.clearAchievementsAfter(
+                    session.guildId, session.userId, session.newRecord.timestamp,
+                    { removedRecordCount, previousRecord: session.previousRecord }
                 );
             }
         } catch (e) {
@@ -6395,15 +6398,17 @@ class InteractionHandler {
             gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
+            let removedRecordCount = 0;
             if (this.scoreHistoryService && newRecordTimestamp) {
-                this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, newRecordTimestamp)
-                    .catch(e => gl.error(`↩️ [Cofnij] Błąd usuwania historii: ${e.message}`));
+                removedRecordCount = await this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, newRecordTimestamp)
+                    .catch(e => { gl.error(`↩️ [Cofnij] Błąd usuwania historii: ${e.message}`); return 0; });
             }
 
-            // 3. Wyczyść osiągnięcia score/records (identycznie jak CV revert)
-            if (this.achievementService) {
-                await this.achievementService.clearUserAchievements(targetGuildId, targetUserId).catch(() => {});
-                gl.info('↩️ [Cofnij] Osiągnięcia score/records wyczyszczone');
+            // 3. Cofnij tylko osiągnięcia score/records zdobyte od momentu analizowanego rekordu — wcześniejsze zostają
+            if (this.achievementService && newRecordTimestamp) {
+                await this.achievementService.clearAchievementsAfter(targetGuildId, targetUserId, newRecordTimestamp,
+                    { removedRecordCount, previousRecord: previousRecord ?? null }).catch(() => {});
+                gl.info('↩️ [Cofnij] Osiągnięcia score/records zdobyte od cofniętego rekordu wyczyszczone');
             }
 
             // 4. Zaktualizuj role TOP

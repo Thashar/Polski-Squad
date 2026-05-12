@@ -169,6 +169,41 @@ class AchievementService {
     }
 
     /**
+     * Usuwa tylko osiągnięcia kategorii 'score' i 'records' odblokowane od momentu cofniętego rekordu
+     * (unlockedAt >= fromTimestamp). Osiągnięcia zdobyte WCZEŚNIEJ pozostają.
+     * Wywoływane przy cofaniu wyniku gracza (community verification / panel Analizuj → Cofnij).
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {string} fromTimestamp - timestamp cofniętego rekordu (ISO)
+     * @param {{ removedRecordCount?: number, previousRecord?: Object|null }} [opts]
+     */
+    async clearAchievementsAfter(guildId, userId, fromTimestamp, { removedRecordCount = 0, previousRecord = null } = {}) {
+        try {
+            const data = await this.loadData(guildId);
+            if (!data[userId]) return;
+            const userData = data[userId];
+            const cutoff = new Date(fromTimestamp).getTime();
+            const scoreAndRecordIds = new Set(
+                ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
+            );
+            for (const [id, info] of Object.entries(userData.unlocked || {})) {
+                if (!scoreAndRecordIds.has(id)) continue;
+                const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
+                if (ts >= cutoff) delete userData.unlocked[id];
+            }
+            if (userData.progress) {
+                userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 0) - removedRecordCount);
+                const prevTs = previousRecord?.timestamp || null;
+                userData.progress.lastRecordAt = prevTs;
+                userData.progress.lastRecordBeatAt = prevTs;
+            }
+            await this.saveData(guildId, data);
+        } catch (err) {
+            logger.error(`clearAchievementsAfter error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
+        }
+    }
+
+    /**
      * Usuwa WSZYSTKIE osiągnięcia i cały progress gracza na danym serwerze.
      * Wywoływane przez head admina z poziomu /manage → Reset osiągnięć.
      */
