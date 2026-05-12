@@ -2890,7 +2890,11 @@ class InteractionHandler {
                 }
             }
 
-            const replyOptions = { embeds: [embed], components: buttons };
+            const replyEmbeds = [embed];
+            if (scoreHistoryAttachment) {
+                replyEmbeds.push(new EmbedBuilder().setImage('attachment://score_history.png'));
+            }
+            const replyOptions = { embeds: replyEmbeds, components: buttons };
             if (scoreHistoryAttachment) replyOptions.files = [scoreHistoryAttachment];
             const reply = await interaction.editReply(replyOptions);
             this.rankingService.addActiveRanking(reply.id, {
