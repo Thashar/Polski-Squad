@@ -117,11 +117,12 @@ class RoleService {
             desired.set(sortedPlayers[i].userId, tier ? tier.role : null);
         }
 
-        // Aktualny stan z cache Discorda: userId -> role
-        const current = new Map();
+        // Aktualny stan z cache Discorda: userId -> Set<role> (member może mieć wiele ról TOP jednocześnie)
+        const current = new Map(); // userId -> Set<role>
         for (const role of allTopRoles) {
             for (const [memberId] of role.members) {
-                current.set(memberId, role);
+                if (!current.has(memberId)) current.set(memberId, new Set());
+                current.get(memberId).add(role);
             }
         }
 
@@ -129,16 +130,19 @@ class RoleService {
         const toRemove = []; // { member, role }
         const toAdd = [];    // { userId, role }
 
-        for (const [memberId, currentRole] of current) {
+        for (const [memberId, currentRoles] of current) {
             const desiredRole = desired.get(memberId) ?? null;
-            if (desiredRole !== currentRole) {
-                toRemove.push({ member: currentRole.members.get(memberId), role: currentRole });
+            for (const role of currentRoles) {
+                if (role !== desiredRole) {
+                    toRemove.push({ member: role.members.get(memberId), role });
+                }
             }
         }
 
         for (const [userId, desiredRole] of desired) {
             if (!desiredRole) continue;
-            if (current.get(userId) !== desiredRole) {
+            const currentRoles = current.get(userId);
+            if (!currentRoles || !currentRoles.has(desiredRole)) {
                 toAdd.push({ userId, role: desiredRole });
             }
         }
