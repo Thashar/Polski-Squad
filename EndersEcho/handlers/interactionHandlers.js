@@ -3077,6 +3077,7 @@ class InteractionHandler {
         }
 
         let tempImagePath = null;
+        let globalPlayerCount = null;
 
         try {
             await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
@@ -3316,7 +3317,6 @@ class InteractionHandler {
 
             // Snippet globalny — dla wszystkich graczy u których zmieniła się pozycja
             let globalSnippetData = null;
-            let globalPlayerCount = null;
             if (!dryRun) {
                 try {
                     const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
