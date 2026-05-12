@@ -6485,8 +6485,7 @@ class InteractionHandler {
                 const userAvatar = interaction.user.displayAvatarURL({ dynamic: true, size: 64 });
 
                 const fields = [
-                    { name: msgs.reportFieldNick, value: `[${serverNick}](https://discord.com/users/${interaction.user.id})`, inline: true },
-                    { name: 'Discord', value: discordUsername, inline: true },
+                    { name: msgs.reportFieldNick, value: `[${serverNick}](https://discord.com/users/${interaction.user.id}) (${discordUsername})`, inline: true },
                     { name: msgs.reportFieldTime, value: timestamp, inline: true },
                     { name: msgs.reportFieldCurrentRecord || '📊 Aktualny rekord', value: currentRecordText, inline: true },
                     { name: msgs.reportFieldReason, value: reasonText, inline: false },
