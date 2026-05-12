@@ -4129,7 +4129,7 @@ class InteractionHandler {
 
         const voterId = interaction.user.id;
 
-        if (session.userId === voterId) {
+        if (session.userId === voterId && !this._isHeadAdmin(voterId)) {
             await interaction.reply({ content: msgs.cvVoteSelf, flags: ['Ephemeral'] });
             return;
         }
