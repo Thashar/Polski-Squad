@@ -2173,7 +2173,9 @@ class InteractionHandler {
         await interaction.deferUpdate();
         try {
             const playersBefore = await this.rankingService.getSortedPlayers(targetGuildId).catch(() => []);
-            const playerName = playersBefore.find(p => p.userId === targetUserId)?.username || targetUserId;
+            const playerRecord = playersBefore.find(p => p.userId === targetUserId);
+            const playerName = playerRecord?.username || targetUserId;
+            const playerTimestamp = playerRecord?.timestamp || null;
             const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, targetGuildId);
             if (!wasRemoved) {
                 const { embed, components } = this._buildAdminPanel(interaction);
@@ -2194,6 +2196,10 @@ class InteractionHandler {
                     } else {
                         await this.achievementService.clearUserAchievements(targetGuildId, targetUserId);
                     }
+                }
+                if (this.scoreHistoryService && playerTimestamp) {
+                    this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, playerTimestamp)
+                        .catch(e => logger.warn(`Błąd czyszczenia historii po usunięciu z rankingu: ${e.message}`));
                 }
                 const guildNameLog = targetGuild?.name || targetGuildId;
                 await this.logService.logMessage('success', `Gracz ${playerName} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${guildNameLog}) przez panel admina`, interaction);
@@ -3449,6 +3455,8 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
         try {
+            const rankingBefore = await this.rankingService.loadRanking(guildId).catch(() => ({}));
+            const playerTimestamp = rankingBefore[targetUser.id]?.timestamp || null;
             const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUser.id, guildId);
 
             if (!wasRemoved) {
@@ -3462,6 +3470,10 @@ class InteractionHandler {
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 if (this.achievementService) {
                     await this.achievementService.clearUserAchievements(guildId, targetUser.id);
+                }
+                if (this.scoreHistoryService && playerTimestamp) {
+                    this.scoreHistoryService.removeEntriesAfter(guildId, targetUser.id, playerTimestamp)
+                        .catch(e => logger.warn(`Błąd czyszczenia historii po /remove: ${e.message}`));
                 }
                 await this.logService.logMessage('success', `Gracz ${targetUser.tag} został usunięty z rankingu i zaktualizowano role TOP`, interaction);
             } catch (roleError) {
