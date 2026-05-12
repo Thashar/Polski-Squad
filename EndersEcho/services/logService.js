@@ -132,7 +132,6 @@ class LogService {
                 rejectionReason,
                 adminName,
                 roleError,
-                imageUrl,
             } = options;
 
             const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
@@ -155,8 +154,6 @@ class LogService {
             // Thumbnail: awatar gracza wywołującego, fallback na ikonę serwera
             const thumbnailUrl = userAvatar || guildIcon;
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
-            // Zdjęcie odrzuconego screena (CDN URL z raportu)
-            if (imageUrl) embed.setImage(imageUrl);
 
             // Gracz
             if (userName) {

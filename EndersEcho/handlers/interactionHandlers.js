@@ -4206,12 +4206,19 @@ class InteractionHandler {
             const targetUser = await client.users.fetch(session.userId).catch(() => null);
             const msgs = this.config.getMessages(session.guildId);
 
+            const cvGuildConfig = this.config.getGuildConfig(session.guildId);
+            const cvGuildTag = cvGuildConfig?.tag || null;
+            const cvGuildIcon = sourceGuild?.iconURL({ dynamic: true, size: 64 }) || cvGuildConfig?.icon || null;
+            const cvAuthorName = cvGuildTag ? `${cvGuildTag}  ${sourceGuild?.name || session.guildId}` : (sourceGuild?.name || session.guildId);
+            const cvUserAvatar = targetUser?.displayAvatarURL({ dynamic: true, size: 64 }) || cvGuildIcon || null;
+
             const reportEmbed = new EmbedBuilder()
                 .setColor(0xFEE75C)
                 .setTitle(msgs.cvReportTitle)
+                .setAuthor({ name: cvAuthorName, iconURL: cvGuildIcon || undefined })
+                .setThumbnail(cvUserAvatar || undefined)
                 .addFields(
-                    { name: msgs.cvReportFieldUser, value: targetUser ? `<@${session.userId}> (${targetUser.username})` : `<@${session.userId}>`, inline: true },
-                    { name: msgs.cvReportFieldServer, value: sourceGuild?.name || session.guildId, inline: true },
+                    { name: msgs.cvReportFieldUser, value: targetUser ? `[${targetUser.username}](https://discord.com/users/${session.userId})` : `<@${session.userId}>`, inline: true },
                     { name: msgs.cvReportFieldBoss, value: session.newRecord?.bossName || '—', inline: true },
                     { name: msgs.cvReportFieldScore, value: session.newRecord?.score || '—', inline: true },
                     { name: msgs.cvReportFieldPrev, value: session.previousRecord?.score || '—', inline: true },
@@ -6470,11 +6477,16 @@ class InteractionHandler {
             const ext = path.extname(imagePath) || '.png';
             const fileName = `rejected_${Date.now()}${ext}`;
 
-            const buildEmbed = (footerText, imageUrl = `attachment://${fileName}`) => {
+            const buildEmbed = (footerText, imageUrl = null) => {
+                const guildConfig = this.config.getGuildConfig(interaction.guildId);
+                const guildTag = guildConfig?.tag || null;
+                const guildIcon = interaction.guild?.iconURL({ dynamic: true, size: 64 }) || guildConfig?.icon || null;
+                const authorName = guildTag ? `${guildTag}  ${serverName}` : serverName;
+                const userAvatar = interaction.user.displayAvatarURL({ dynamic: true, size: 64 });
+
                 const fields = [
-                    { name: msgs.reportFieldNick, value: serverNick, inline: true },
-                    { name: 'Discord', value: `${discordUsername} (<@${interaction.user.id}>)`, inline: true },
-                    { name: msgs.reportFieldServer, value: serverName, inline: true },
+                    { name: msgs.reportFieldNick, value: `[${serverNick}](https://discord.com/users/${interaction.user.id})`, inline: true },
+                    { name: 'Discord', value: discordUsername, inline: true },
                     { name: msgs.reportFieldTime, value: timestamp, inline: true },
                     { name: msgs.reportFieldCurrentRecord || '📊 Aktualny rekord', value: currentRecordText, inline: true },
                     { name: msgs.reportFieldReason, value: reasonText, inline: false },
@@ -6482,12 +6494,16 @@ class InteractionHandler {
                 if (rejectionReason) {
                     fields.push({ name: msgs.reportFieldAiDetails, value: rejectionReason, inline: false });
                 }
-                return new EmbedBuilder()
+                const embed = new EmbedBuilder()
                     .setColor(color)
                     .setTitle(msgs.reportTitle)
+                    .setAuthor({ name: authorName, iconURL: guildIcon || undefined })
+                    .setThumbnail(userAvatar)
                     .addFields(...fields)
-                    .setImage(imageUrl)
+                    .setTimestamp()
                     .setFooter({ text: footerText });
+                if (imageUrl) embed.setImage(imageUrl);
+                return embed;
             };
 
             const buildButtons = () => {
@@ -6520,7 +6536,7 @@ class InteractionHandler {
                 const att = new AttachmentBuilder(imagePath, { name: fileName });
                 const msg = await channel.send({ files: [att] });
                 const imgUrl = msg.attachments.first()?.url;
-                const embed = buildEmbed(footerText, imgUrl || `attachment://${fileName}`);
+                const embed = buildEmbed(footerText, imgUrl || null);
                 const edited = await msg.edit({
                     embeds: [embed],
                     components: [buildButtons()],
