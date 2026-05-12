@@ -195,7 +195,7 @@ class AchievementService {
                 userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 0) - removedRecordCount);
                 const prevTs = previousRecord?.timestamp || null;
                 userData.progress.lastRecordAt = prevTs;
-                userData.progress.lastRecordBeatAt = prevTs;
+                userData.progress.lastRecordBeatAt = fromTimestamp;
             }
             await this.saveData(guildId, data);
         } catch (err) {
