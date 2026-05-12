@@ -120,6 +120,16 @@ class RoleService {
             desired.set(sortedPlayers[i].userId, tier ? tier.role : null);
         }
 
+        // Wypełnij cache memberów z rankingu żeby role.members były aktualne po restarcie bota
+        const desiredIds = [...desired.keys()];
+        if (desiredIds.length > 0) {
+            try {
+                await guild.members.fetch({ user: desiredIds });
+            } catch (err) {
+                gl.warn(`⚠️ Nie udało się pobrać danych memberów przed diff ról: ${err.message}`);
+            }
+        }
+
         // Aktualny stan z cache Discorda: userId -> Set<role> (member może mieć wiele ról TOP jednocześnie)
         const current = new Map(); // userId -> Set<role>
         for (const role of allTopRoles) {
