@@ -123,6 +123,7 @@ class LogService {
                 type = 'no_record',
                 userName,
                 userId,
+                userAvatar,
                 score,
                 bossName,
                 previousScore,
@@ -147,9 +148,12 @@ class LogService {
                 .setTitle(`${cfg.emoji} ${cfg.label}`)
                 .setTimestamp();
 
+            // Nagłówek: ikona serwera + tag + nazwa
             const authorName = guildTag ? `${guildTag}  ${guildName}` : guildName;
             embed.setAuthor({ name: authorName, iconURL: guildIcon || undefined });
-            if (guildIcon) embed.setThumbnail(guildIcon);
+            // Thumbnail: awatar gracza wywołującego, fallback na ikonę serwera
+            const thumbnailUrl = userAvatar || guildIcon;
+            if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
 
             // Gracz
             if (userName) {

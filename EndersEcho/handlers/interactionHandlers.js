@@ -3404,7 +3404,11 @@ class InteractionHandler {
             // Wyślij dodatkowy embed do webhooka (nie zastępuje logowania tekstowego)
             if (_ocrEmbedParams) {
                 try {
-                    this.logService.sendOcrAnalysisEmbed(interaction.guildId, _ocrEmbedParams, interaction.guild ?? null);
+                    this.logService.sendOcrAnalysisEmbed(
+                        interaction.guildId,
+                        { ..._ocrEmbedParams, userAvatar: interaction.user.displayAvatarURL() },
+                        interaction.guild ?? null
+                    );
                 } catch {}
             }
         }
@@ -6178,6 +6182,7 @@ class InteractionHandler {
                     type: _analyzeRoleErr ? 'analyze_panel_role_error' : 'analyze_panel',
                     userName,
                     userId: targetUserId,
+                    userAvatar: interaction.user.displayAvatarURL(),
                     score: aiResult.score,
                     bossName: aiResult.bossName,
                     previousScore: currentScore?.score,
