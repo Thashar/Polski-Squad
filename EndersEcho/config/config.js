@@ -99,6 +99,7 @@ module.exports = {
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     blockOcrUserIds: (process.env.ENDERSECHO_BLOCK_OCR_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
+    ocrEmbedWebhookUrl: process.env.ENDERSECHO_OCR_EMBED_WEBHOOK_URL || null,
     invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
     communityReportChannelId: process.env.ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID || null,
     appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,

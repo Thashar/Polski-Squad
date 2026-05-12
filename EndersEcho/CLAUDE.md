@@ -456,6 +456,11 @@ ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 # Separator kreską pojawia się przy każdej zmianie serwera
 ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 
+# Osobny webhook dla embedów OCR analiz (opcjonalne)
+# Gdy ustawiony, sendOcrAnalysisEmbed wysyła embedy na TEN webhook zamiast ENDERSECHO_LOG_WEBHOOK_URL
+# Pozwala trzymać logi tekstowe i embedy OCR w osobnych kanałach
+ENDERSECHO_OCR_EMBED_WEBHOOK_URL=webhook_url
+
 # Kanał raportów odrzuconych screenów (opcjonalne)
 # Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
 # Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie

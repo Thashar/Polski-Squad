@@ -1,3 +1,4 @@
+const https = require('https');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -29,6 +30,12 @@ class LogService {
         this.config = config;
         this.logger = createBotLogger('EndersEcho');
         this.guildLogger = guildLogger;
+        this._ocrEmbedWebhookUrl = config.ocrEmbedWebhookUrl || null;
+        this._ocrEmbedQueue = [];
+        this._ocrEmbedProcessing = false;
+        if (this._ocrEmbedWebhookUrl) {
+            this.logger.info(`📋 LogService: osobny webhook OCR embedów skonfigurowany`);
+        }
     }
 
     /**
@@ -113,8 +120,9 @@ class LogService {
      * @param {import('discord.js').Guild|null} guildObj
      */
     sendOcrAnalysisEmbed(guildId, options = {}, guildObj = null) {
-        if (!this.guildLogger.webhookUrl) {
-            this.logger.warn(`[OCR Embed] Brak ENDERSECHO_LOG_WEBHOOK_URL — embed pominięty (type: ${options.type})`);
+        const targetWebhookUrl = this._ocrEmbedWebhookUrl || this.guildLogger.webhookUrl;
+        if (!targetWebhookUrl) {
+            this.logger.warn(`[OCR Embed] Brak webhooka (ENDERSECHO_OCR_EMBED_WEBHOOK_URL / ENDERSECHO_LOG_WEBHOOK_URL) — embed pominięty (type: ${options.type})`);
             return;
         }
 
@@ -198,12 +206,69 @@ class LogService {
                 embed.setFooter({ text: `👥 ${globalPlayerCount} unikalnych graczy globalnie` });
             }
 
-            // Używamy queueEmbed (HTTP webhook, nie channel.send) — identyczna ścieżka co logi tekstowe
             this.logger.info(`[OCR Embed] Wysyłam embed type=${type} dla guildId=${guildId}`);
-            this.guildLogger.queueEmbed(embed, guildIcon);
+            if (this._ocrEmbedWebhookUrl) {
+                const embedData = embed.toJSON();
+                const payload = { embeds: [embedData] };
+                if (guildIcon) payload.avatar_url = guildIcon;
+                this._enqueueOcrEmbed(targetWebhookUrl, payload);
+            } else {
+                this.guildLogger.queueEmbed(embed, guildIcon);
+            }
         } catch (err) {
             this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
         }
+    }
+
+    _enqueueOcrEmbed(webhookUrl, payload) {
+        this._ocrEmbedQueue.push({ webhookUrl, payload });
+        setImmediate(() => this._processOcrEmbedQueue());
+    }
+
+    async _processOcrEmbedQueue() {
+        if (this._ocrEmbedProcessing || this._ocrEmbedQueue.length === 0) return;
+        this._ocrEmbedProcessing = true;
+        while (this._ocrEmbedQueue.length > 0) {
+            const { webhookUrl, payload } = this._ocrEmbedQueue.shift();
+            try {
+                await this._sendOcrEmbedWebhook(webhookUrl, payload);
+                await new Promise(r => setTimeout(r, 1000));
+            } catch (err) {
+                this.logger.warn(`[OCR Embed] Błąd wysyłania webhooka: ${err.message}`);
+            }
+        }
+        this._ocrEmbedProcessing = false;
+    }
+
+    _sendOcrEmbedWebhook(webhookUrl, payload) {
+        return new Promise((resolve, reject) => {
+            const body = JSON.stringify(payload);
+            const url = new URL(webhookUrl);
+            const req = https.request(
+                {
+                    hostname: url.hostname,
+                    path: url.pathname + url.search,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': Buffer.byteLength(body),
+                    },
+                },
+                res => {
+                    res.resume();
+                    if (res.statusCode === 429) {
+                        setTimeout(() => this._sendOcrEmbedWebhook(webhookUrl, payload).then(resolve).catch(reject), 5000);
+                    } else if (res.statusCode >= 400) {
+                        this.logger.warn(`[OCR Embed] Webhook HTTP ${res.statusCode}`);
+                        resolve();
+                    } else {
+                        resolve();
+                    }
+                }
+            );
+            req.on('error', err => { this.logger.warn(`[OCR Embed] Request error: ${err.message}`); reject(err); });
+            req.end(body);
+        });
     }
 
     /**
