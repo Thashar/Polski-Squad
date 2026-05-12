@@ -3031,30 +3031,42 @@ class InteractionHandler {
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
-                // attachment.url jako natychmiastowy fallback — CDN URL z kanału raportów nadpisze jeśli dostępny
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason, imageUrl: attachment.url };
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason };
                 const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 if (_notSimilarImgUrl) _ocrEmbedParams.imageUrl = _notSimilarImgUrl;
                 const notSimilarDesc = aiResult.rejectionReason
                     ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
                     : null;
+                const _rejExt1 = path.extname(tempImagePath).slice(1) || 'png';
+                const _rejName1 = `rejected_${Date.now()}.${_rejExt1}`;
                 await interaction.editReply({
                     content: '',
                     embeds: [new EmbedBuilder()
                         .setColor(0xFF0000)
                         .setTitle(msgs.testNotSimilarTitle)
                         .setDescription(notSimilarDesc)
-                        .setTimestamp()]
+                        .setImage(`attachment://${_rejName1}`)
+                        .setTimestamp()],
+                    files: [new AttachmentBuilder(tempImagePath, { name: _rejName1 })],
                 });
                 return;
             }
 
             if (!aiResult.isValidVictory) {
                 gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED', imageUrl: attachment.url };
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED' };
                 const _validationImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                 if (_validationImgUrl) _ocrEmbedParams.imageUrl = _validationImgUrl;
-                await interaction.editReply(msgs.invalidScreenshot);
+                const _rejExt2 = path.extname(tempImagePath).slice(1) || 'png';
+                const _rejName2 = `rejected_${Date.now()}.${_rejExt2}`;
+                await interaction.editReply({
+                    content: msgs.invalidScreenshot,
+                    embeds: [new EmbedBuilder()
+                        .setColor(0xFF0000)
+                        .setImage(`attachment://${_rejName2}`)
+                        .setTimestamp()],
+                    files: [new AttachmentBuilder(tempImagePath, { name: _rejName2 })],
+                });
                 return;
             }
 
