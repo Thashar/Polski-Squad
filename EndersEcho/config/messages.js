@@ -84,6 +84,7 @@ const pol = {
     recordDateLocale: 'pl-PL',
     recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSKRYPCJE:',
+    recordFooterGlobalPlayers: '👥 {count} unikalnych graczy globalnie',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -404,6 +405,7 @@ const eng = {
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
+    recordFooterGlobalPlayers: '👥 {count} unique global players',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',

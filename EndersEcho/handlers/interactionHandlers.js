@@ -3316,9 +3316,11 @@ class InteractionHandler {
 
             // Snippet globalny — dla wszystkich graczy u których zmieniła się pozycja
             let globalSnippetData = null;
+            let globalPlayerCount = null;
             if (!dryRun) {
                 try {
                     const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+                    globalPlayerCount = newGlobalRanking.length;
                     globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
                         userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                     );
@@ -3345,7 +3347,8 @@ class InteractionHandler {
                 currentScore ? currentScore.timestamp : null,
                 rolePositions,
                 achievementsFieldValue,
-                globalSnippetData
+                globalSnippetData,
+                globalPlayerCount
             );
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
