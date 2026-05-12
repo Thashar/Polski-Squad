@@ -98,4 +98,73 @@ async function _migrateScoreHistory(src, wynikiDir, guildId) {
     logger.info(`  ↳ score_history_${guildId}.json → guilds/${guildId}/wyniki/ (${migrated} graczy)`);
 }
 
-module.exports = { migrate };
+/**
+ * Tworzy pliki historii wyników (wyniki/{userId}.json) dla graczy,
+ * którzy istnieją w ranking.json ale nie mają jeszcze pliku historii.
+ * Idempotentne — bezpieczne przy wielokrotnym uruchomieniu.
+ * @param {string} dataDir  np. EndersEcho/data
+ */
+async function backfillScoreHistory(dataDir) {
+    const guildsDir = path.join(dataDir, 'guilds');
+    let guildDirs;
+    try {
+        guildDirs = await fs.readdir(guildsDir);
+    } catch {
+        return; // brak folderu guilds — nic do robienia
+    }
+
+    let totalCreated = 0;
+    let totalSkipped = 0;
+
+    for (const guildId of guildDirs) {
+        const rankingFile = path.join(guildsDir, guildId, 'ranking.json');
+        let ranking;
+        try {
+            const raw = await fs.readFile(rankingFile, 'utf8');
+            ranking = JSON.parse(raw);
+        } catch {
+            continue; // brak pliku rankingu — pomiń
+        }
+
+        const wynikiDir = path.join(guildsDir, guildId, 'wyniki');
+        await fs.mkdir(wynikiDir, { recursive: true });
+
+        for (const [userId, entry] of Object.entries(ranking)) {
+            if (!entry || !entry.score) continue;
+
+            const historyFile = path.join(wynikiDir, `${userId}.json`);
+            try {
+                await fs.access(historyFile);
+                totalSkipped++;
+                continue; // plik już istnieje — pomiń
+            } catch { /* nie istnieje — utwórz */ }
+
+            const scoreValue = typeof entry.scoreValue === 'number' && !isNaN(entry.scoreValue)
+                ? entry.scoreValue
+                : (() => {
+                    // oblicz z tekstu jeśli brak pola
+                    const upper = entry.score.toUpperCase().trim();
+                    const m = upper.match(/^(\d+(?:\.\d+)?)(QI|SX|[KMBTQ])?$/);
+                    if (!m) return 0;
+                    const units = { K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15, QI: 1e18, SX: 1e21 };
+                    return parseFloat(m[1]) * (units[m[2]] || 1);
+                })();
+
+            const historyEntry = {
+                score:      entry.score,
+                scoreValue,
+                timestamp:  entry.timestamp || new Date().toISOString(),
+                bossName:   entry.bossName || null,
+            };
+
+            await fs.writeFile(historyFile, JSON.stringify([historyEntry], null, 2), 'utf8');
+            totalCreated++;
+        }
+    }
+
+    if (totalCreated > 0) {
+        logger.info(`📊 Historia wyników: utworzono ${totalCreated} brakujących pliku (${totalSkipped} już istniało)`);
+    }
+}
+
+module.exports = { migrate, backfillScoreHistory };
