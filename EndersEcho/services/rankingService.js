@@ -432,7 +432,7 @@ class RankingService {
                     tagSuffix = guildTag ? `  ·  ${guildTag}` : '';
                 }
 
-                const lineText = `${posLabel}  ${nickDisplay}  ·  **${this.formatScore(player.scoreValue)}**\n> ${bossName}  ·  *${shortDate}*${tagSuffix}\n\n`;
+                const lineText = `${posLabel}  ${nickDisplay}  ·  **${player.score || this.formatScore(player.scoreValue)}**\n> ${bossName}  ·  *${shortDate}*${tagSuffix}\n\n`;
 
                 rankingText += lineText;
 
@@ -460,7 +460,7 @@ class RankingService {
             formatMessage(msgs.rankingPlayersCount, { count: players.length })
         ];
         if (players.length > 0) {
-            statsLines.push(formatMessage(msgs.rankingHighestScore, { score: this.formatScore(players[0].scoreValue) }));
+            statsLines.push(formatMessage(msgs.rankingHighestScore, { score: players[0].score || this.formatScore(players[0].scoreValue) }));
         }
 
         const embed = new EmbedBuilder()

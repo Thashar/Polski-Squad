@@ -218,7 +218,7 @@ class GlobalTop10Service {
             const date      = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
             const tagSuffix = tag ? `  ·  ${tag}` : '';
-            const scoreStr  = this.rankingService.formatScore(player.scoreValue);
+            const scoreStr  = player.score || this.rankingService.formatScore(player.scoreValue);
             const bossStr   = player.bossName || msgs.unknownBoss;
 
             if (position <= 3) {
@@ -358,7 +358,7 @@ class GlobalTop10Service {
             const date = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
             const serverSuffix = tag ? ` • ${tag}` : '';
-            return `${posLabel} ${displayName} • **${this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}`;
+            return `${posLabel} ${displayName} • **${player.score || this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}`;
         };
 
         const prevLabel = prevGlobalPosition ? `#${prevGlobalPosition}` : '—';
