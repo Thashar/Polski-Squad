@@ -6524,7 +6524,6 @@ class InteractionHandler {
                 const edited = await msg.edit({
                     embeds: [embed],
                     components: [buildButtons()],
-                    ...(imgUrl ? { attachments: [] } : {}),
                 });
                 return { msg: edited, imgUrl };
             };
