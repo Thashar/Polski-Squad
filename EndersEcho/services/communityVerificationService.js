@@ -84,13 +84,16 @@ class CommunityVerificationService {
 
     /**
      * Rejestruje głos (zgłoszenie) od voterId.
-     * @returns {{ alreadyVoted: boolean, notInRanking: boolean, isSelf: boolean, count: number, triggered: boolean }}
+     * @param {string} messageId
+     * @param {string} voterId
+     * @param {{ allowSelf?: boolean }} [opts] allowSelf — pozwala właścicielowi rekordu zgłosić własny wynik (head admin, tryb testowy CV)
+     * @returns {{ invalid?: boolean, alreadyVoted?: boolean, isSelf?: boolean, count?: number, triggered?: boolean }}
      */
-    async registerVote(messageId, voterId) {
+    async registerVote(messageId, voterId, { allowSelf = false } = {}) {
         await this._loadPromise;
         const session = this._sessions[messageId];
         if (!session || session.status !== 'pending') return { invalid: true };
-        if (session.userId === voterId) return { isSelf: true };
+        if (session.userId === voterId && !allowSelf) return { isSelf: true };
         if (session.voters.includes(voterId)) return { alreadyVoted: true };
 
         session.voters.push(voterId);
