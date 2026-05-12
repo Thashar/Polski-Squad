@@ -1058,10 +1058,11 @@ class RankingService {
             }
 
             if (isNewRecord) {
+                const nowIso = new Date().toISOString();
                 ranking[userId] = {
                     score: bestScore,
                     username: userName,
-                    timestamp: new Date().toISOString(),
+                    timestamp: nowIso,
                     scoreValue: newScoreValue,
                     userId,
                     bossName: bossName || this.config.messages.unknownBossLabel
@@ -1071,14 +1072,15 @@ class RankingService {
                     this.scoreHistoryService.addEntry(guildId, userId, {
                         score: bestScore,
                         scoreValue: newScoreValue,
-                        timestamp: new Date().toISOString(),
+                        timestamp: nowIso,
                         bossName: bossName || this.config.messages.unknownBossLabel
                     }).catch(err => logger.error('Błąd zapisu historii wyników:', err));
                 }
                 await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
+                return { isNewRecord, ranking, currentScore, newTimestamp: nowIso };
             }
 
-            return { isNewRecord, ranking, currentScore };
+            return { isNewRecord, ranking, currentScore, newTimestamp: null };
         });
     }
 

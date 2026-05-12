@@ -41,15 +41,18 @@ class ScoreHistoryService {
         await this._save(guildId, userId, entries);
     }
 
-    // Usuwa wszystkie wpisy z timestamp >= fromTimestamp (przy cofaniu rekordu przez CV)
+    // Usuwa wszystkie wpisy z timestamp >= fromTimestamp (przy cofaniu rekordu przez CV).
+    // Zwraca liczbę usuniętych wpisów.
     async removeEntriesAfter(guildId, userId, fromTimestamp) {
         const entries = await this._load(guildId, userId);
-        if (entries.length === 0) return;
+        if (entries.length === 0) return 0;
         const cutoff = new Date(fromTimestamp).getTime();
         const filtered = entries.filter(e => new Date(e.timestamp).getTime() < cutoff);
-        if (filtered.length < entries.length) {
+        const removed = entries.length - filtered.length;
+        if (removed > 0) {
             await this._save(guildId, userId, filtered);
         }
+        return removed;
     }
 
     // Zwraca wpisy z ostatnich maxDaysBack dni, posortowane chronologicznie
