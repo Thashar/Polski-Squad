@@ -4114,6 +4114,17 @@ class InteractionHandler {
 
     async _handleCvVote(interaction) {
         const msgs = this.msgs(interaction.guildId);
+        try {
+            await this._handleCvVoteInner(interaction, msgs);
+        } catch (err) {
+            logger.error('Błąd obsługi głosu CV:', err);
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] }).catch(() => {});
+            }
+        }
+    }
+
+    async _handleCvVoteInner(interaction, msgs) {
         if (!this.communityVerificationService) {
             await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
             return;
@@ -4128,14 +4139,23 @@ class InteractionHandler {
         }
 
         const voterId = interaction.user.id;
+        const voterIsHeadAdmin = this._isHeadAdmin(voterId);
+        const ownerIsHeadAdmin = this._isHeadAdmin(session.userId);
 
-        if (session.userId === voterId && !this._isHeadAdmin(voterId)) {
+        // Rekord należący do head admina = tryb testowy CV — przycisk może kliknąć WYŁĄCZNIE jego właściciel
+        if (ownerIsHeadAdmin && voterId !== session.userId) {
+            await interaction.reply({ content: msgs.cvVoteHeadAdminOnly, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Zwykły gracz nie może zgłosić własnego wyniku (head admin może — tryb testowy)
+        if (session.userId === voterId && !voterIsHeadAdmin) {
             await interaction.reply({ content: msgs.cvVoteSelf, flags: ['Ephemeral'] });
             return;
         }
 
         // Sprawdź czy głosujący jest w rankingu (head admin omija ten check)
-        if (!this._isHeadAdmin(voterId)) {
+        if (!voterIsHeadAdmin) {
             const inRanking = await this.communityVerificationService.isVoterInRanking(
                 this.rankingService, session.guildId, voterId
             );
@@ -4145,10 +4165,14 @@ class InteractionHandler {
             }
         }
 
-        const result = await this.communityVerificationService.registerVote(messageId, voterId);
+        const result = await this.communityVerificationService.registerVote(messageId, voterId, { allowSelf: voterIsHeadAdmin });
 
         if (result.invalid) {
             await interaction.reply({ content: msgs.cvVoteInvalid, flags: ['Ephemeral'] });
+            return;
+        }
+        if (result.isSelf) {
+            await interaction.reply({ content: msgs.cvVoteSelf, flags: ['Ephemeral'] });
             return;
         }
         if (result.alreadyVoted) {
@@ -4157,14 +4181,15 @@ class InteractionHandler {
         }
 
         const cvCfg = this.guildConfigService?.getCommunityVerification(session.guildId);
-        const threshold = cvCfg?.threshold || 5;
+        // Rekord head admina = tryb testowy: jedno kliknięcie uruchamia pełny przepływ zgłoszenia
+        const threshold = ownerIsHeadAdmin ? 1 : (cvCfg?.threshold || 5);
         const count = result.count;
 
-        // Zaktualizuj etykietę przycisku na wiadomości
+        // Zaktualizuj etykietę przycisku na wiadomości (z licznikiem zgłoszeń)
         try {
             const voteBtn = new ButtonBuilder()
                 .setCustomId(`cv_vote_${messageId}`)
-                .setLabel(msgs.cvVoteButton)
+                .setLabel(`${msgs.cvVoteButton} (${count})`)
                 .setStyle(ButtonStyle.Secondary);
             await interaction.update({ components: [new ActionRowBuilder().addComponents(voteBtn)] });
         } catch {
