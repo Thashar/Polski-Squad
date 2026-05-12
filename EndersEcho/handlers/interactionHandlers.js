@@ -2869,15 +2869,18 @@ class InteractionHandler {
             if (this.scoreHistoryService && this.chartService) {
                 try {
                     const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
-                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, interaction.user.id, 90);
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, interaction.user.id, 365);
                     if (callerHistory.length >= 2) {
                         const chartTitle = msgs.chartTitle;
                         const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
                         const guildTagMap = {};
+                        const guildNameMap = {};
                         for (const g of (this.guildConfigService?.getAllConfiguredGuilds() || [])) {
-                            guildTagMap[g.id] = g.tag || interaction.client.guilds.cache.get(g.id)?.name?.slice(0, 14) || g.id.slice(-4);
+                            const discordName = interaction.client.guilds.cache.get(g.id)?.name;
+                            guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
+                            guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
                         }
-                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle, guildTagMap);
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle, guildTagMap, guildNameMap);
                         if (chartBuffer) {
                             scoreHistoryAttachment = new AttachmentBuilder(chartBuffer, { name: 'score_history.png' });
                         }

@@ -98,10 +98,11 @@ function buildAreaPath(points, baseY) {
  * @param {Array<{score:string, scoreValue:number, timestamp:string, bossName?:string, guildId?:string}>} history
  * @param {string} username
  * @param {string} chartTitle
- * @param {Object} guildTagMap  { guildId: 'PS' | 'CS' | ... }
+ * @param {Object} guildTagMap   { guildId: 'PS' | 'CS' | ... }  — krótki tag do badge'y przejść
+ * @param {Object} guildNameMap  { guildId: 'Polski Squad' | ... } — pełna nazwa do legendy
  * @returns {Promise<Buffer|null>}
  */
-async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}) {
+async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}, guildNameMap = {}) {
     const sharp = require('sharp');
 
     const sorted = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
@@ -267,7 +268,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
     const legendY = H - 36;
     const legendItems = guildOrder.map((gid, i) => {
         const color = guildColorMap[gid];
-        const tag = guildTagMap[gid] || '—';
+        const tag = guildNameMap[gid] || guildTagMap[gid] || '—';
         const guildPts = pts.filter(p => p.guildId === gid);
         const dateFrom = guildPts[0]?.lbl || '';
         const dateTo = guildPts[guildPts.length - 1]?.lbl || '';
