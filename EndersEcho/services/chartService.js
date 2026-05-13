@@ -105,7 +105,17 @@ function buildAreaPath(points, baseY) {
 async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}, guildNameMap = {}) {
     const sharp = require('sharp');
 
-    const sorted = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const raw = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+    // Deduplikacja per dzień UTC — jeden punkt per dzień (najwyższy wynik)
+    const dayBestMap = new Map();
+    for (const entry of raw) {
+        const d = new Date(entry.timestamp);
+        const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+        const prev = dayBestMap.get(key);
+        if (!prev || entry.scoreValue > prev.scoreValue) dayBestMap.set(key, entry);
+    }
+    const sorted = [...dayBestMap.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     if (sorted.length < 2) return null;
 
     const W = 900, H = 330;
@@ -257,13 +267,6 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
         ].join('\n    ');
     }).join('\n    ');
 
-    // --- Etykiety osi X (daty) ---
-    const showStep = pts.length > 20 ? 3 : pts.length > 10 ? 2 : 1;
-    const xLabels = pts
-        .filter((_, i) => i % showStep === 0 || i === pts.length - 1)
-        .map(p => `<text x="${p.x.toFixed(1)}" y="${(baseY + 15).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="middle">${p.lbl}</text>`)
-        .join('\n    ');
-
     // --- Legenda (dół wykresu) ---
     const legendY = H - 36;
     const legendItems = guildOrder.map((gid, i) => {
@@ -343,9 +346,6 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
   <!-- Kropki i etykiety -->
   ${dotsSvg}
 
-  <!-- Etykiety osi X -->
-  ${xLabels}
-
   <!-- Separator legendy + legenda -->
   ${legendSep}
   ${legendItems}
@@ -363,10 +363,13 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
 async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
     const sharp = require('sharp');
 
-    if (entries.length < 2) return null;
+    // Pokazuj dane tylko od 1 maja 2026
+    const growthCutoff = Date.UTC(2026, 4, 1);
+    const filtered = entries.filter(e => e.firstTimestamp >= growthCutoff);
+    if (filtered.length < 2) return null;
 
     const W = 900, H = 330;
-    const M = { top: 52, right: 40, bottom: 48, left: 70 };
+    const M = { top: 52, right: 40, bottom: 24, left: 70 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
     const baseY = M.top + cH;
@@ -374,7 +377,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
     // Grupuj graczy wg dnia (UTC) — budujemy kumulatywną serię
     const dayMap = new Map(); // 'YYYY-MM-DD' -> liczba graczy łącznie do tego dnia
     let cumulative = 0;
-    for (const entry of entries) {
+    for (const entry of filtered) {
         cumulative++;
         const d = new Date(entry.firstTimestamp);
         const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
@@ -415,17 +418,6 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
         return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
     }).join('\n    ');
-
-    // Etykiety osi X
-    const maxXLabels = 8;
-    const xStep = Math.max(1, Math.floor(series.length / maxXLabels));
-    const xLabels = pts
-        .filter((_, i) => i % xStep === 0 || i === pts.length - 1)
-        .map(p => {
-            const [, m2, d2] = p.dateStr.split('-');
-            const lbl = `${d2}.${m2}`;
-            return `<text x="${p.x.toFixed(1)}" y="${(baseY + 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="middle">${lbl}</text>`;
-        }).join('\n    ');
 
     // Ostatni punkt wyróżniony
     const last = pts[pts.length - 1];
@@ -479,9 +471,6 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${color}"/>
   <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${maxCount}</text>
-
-  <!-- Etykiety osi X -->
-  ${xLabels}
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
