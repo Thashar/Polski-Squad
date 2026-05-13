@@ -48,6 +48,7 @@ const pol = {
     updateNoScore: '❌ Nie udało się wyodrębnić wyniku z obrazu.\n💡 **Sprawdź czy:**\n• Obraz zawiera słowo "Best" z wynikiem\n• Tekst jest czytelny\n• Wynik ma jednostkę (K/M/B/T/Q/S) lub jest dużą liczbą',
     updateSuccess: '✅ Twój wynik został pomyślnie zapisany i ogłoszony!',
     updateError: '❌ Wystąpił błąd podczas przetwarzania obrazu. Spróbuj ponownie.',
+    updateAiOverloaded: '⚠️ Usługa AI jest aktualnie mocno obciążona. Spróbuj ponownie za chwilę.',
 
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...',
@@ -372,6 +373,7 @@ const eng = {
     updateNoScore: '❌ Could not extract a score from the image.\n💡 **Check that:**\n• The image contains the word "Best" with a score\n• The text is readable\n• The score has a unit (K/M/B/T/Q/S) or is a large number',
     updateSuccess: '✅ Your score has been successfully saved and announced!',
     updateError: '❌ An error occurred while processing the image. Please try again.',
+    updateAiOverloaded: '⚠️ The AI service is currently experiencing high demand. Please try again in a moment.',
 
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR unavailable, falling back to traditional OCR...',

@@ -3670,10 +3670,20 @@ class InteractionHandler {
             }
 
         } catch (error) {
-            await this.logService.logOCRError(error, `handle${commandName.charAt(0).toUpperCase() + commandName.slice(1)}Command`, interaction.guildId);
+            const is503 = error?.message?.includes('503') || error?.message?.includes('Service Unavailable');
+
+            if (is503 && !dryRun && this.updateCooldownService && !this._isHeadAdmin(interaction.user.id)) {
+                await this.updateCooldownService.clearCooldown(interaction.user.id);
+            }
+
+            if (!is503) {
+                await this.logService.logOCRError(error, `handle${commandName.charAt(0).toUpperCase() + commandName.slice(1)}Command`, interaction.guildId);
+            } else {
+                gl.warn(`⚠️ [/${commandName}] AI 503 Service Unavailable — cooldown wyczyszczony dla ${interaction.user.username}`);
+            }
 
             try {
-                await interaction.editReply(msgs.updateError);
+                await interaction.editReply(is503 ? msgs.updateAiOverloaded : msgs.updateError);
             } catch (replyError) {
                 gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
             }

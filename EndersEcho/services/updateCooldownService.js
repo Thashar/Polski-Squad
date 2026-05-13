@@ -102,6 +102,12 @@ class UpdateCooldownService {
         return newCooldownMs;
     }
 
+    // Usuwa cooldown użytkownika (np. gdy błąd po stronie AI, nie wina użytkownika)
+    async clearCooldown(userId) {
+        this._cooldowns.delete(userId);
+        await this.save().catch(() => {});
+    }
+
     // Zwraca aktualny efektywny cooldown danego usera (lub bazę jeśli brak wpisu)
     getUserCooldownMs(userId) {
         const entry = this._cooldowns.get(userId);
