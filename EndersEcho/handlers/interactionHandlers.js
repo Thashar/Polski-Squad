@@ -6589,11 +6589,15 @@ class InteractionHandler {
                         const announceName = `analyze_wynik_${Date.now()}${ext}`;
                         const fileAttachment = new AttachmentBuilder(tempPath, { name: announceName });
 
+                        const analyzeAchFieldValue = this.achievementService && newAchievements.length > 0
+                            ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, guildCfgAnnounce?.lang || 'eng')
+                            : null;
+
                         const resultEmbed = await this.rankingService.createRecordEmbed(
                             userName, aiResult.score, userAvatarUrl, announceName,
                             currentScore?.score ?? null, targetUserId, targetGuildId,
                             targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
-                            currentScore?.timestamp ?? null, newAchievements
+                            currentScore?.timestamp ?? null, [], analyzeAchFieldValue
                         );
 
                         const announcementContent = formatMessage(targetMsgs.analyzeManualAnnouncement, {
