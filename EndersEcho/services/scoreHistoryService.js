@@ -79,6 +79,18 @@ class ScoreHistoryService {
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
 
+    // Zwraca { guildId: liczba_graczy } — ile unikalnych plików wyników istnieje na danym serwerze.
+    async getGuildPlayerCounts(allGuildIds) {
+        const counts = {};
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files = [];
+            try { files = await fs.readdir(dir); } catch { /* brak wyników */ }
+            counts[guildId] = files.filter(f => f.endsWith('.json')).length;
+        }
+        return counts;
+    }
+
     // Zwraca tablicę { userId, firstTimestamp } dla każdego unikalnego gracza we wszystkich serwerach,
     // posortowaną chronologicznie. Używana do wykresu przyrostu unikalnych graczy globalnie.
     async getAllUsersFirstEntries(allGuildIds) {

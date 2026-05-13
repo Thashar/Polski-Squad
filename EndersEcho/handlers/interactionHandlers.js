@@ -1992,6 +1992,8 @@ class InteractionHandler {
               '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
             t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
               '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
+            t('📈 **Przyrost graczy** — statystyki i wykres kumulatywnego przyrostu unikalnych graczy globalnie w czasie.',
+              '📈 **Player Growth** — statistics and chart of cumulative unique player growth globally over time.'),
             t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
               '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
             t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
@@ -2048,9 +2050,10 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
             ));
-            // Rząd 4 Head Admin: Zbanuj serwer
+            // Rząd 4 Head Admin: Zbanuj serwer, Przyrost graczy
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel(t('Przyrost graczy', 'Player Growth')).setStyle(ButtonStyle.Secondary),
             ));
         }
 
@@ -3620,6 +3623,7 @@ class InteractionHandler {
         if (customId === 'panel_unconfigured') return 'Nieskonfigurowane serwery';
         if (customId === 'panel_diagnostics') return 'Diagnostyka uprawnień';
         if (customId === 'panel_process_roles') return 'Przetwórz role TOP';
+        if (customId === 'panel_player_growth') return 'Przyrost graczy (statystyki)';
         if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
@@ -4084,6 +4088,15 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBanServer(interaction);
+                return;
+            }
+
+            if (customId === 'panel_player_growth') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelPlayerGrowth(interaction);
                 return;
             }
             if (customId === 'panel_ban_guild') {
@@ -4706,37 +4719,12 @@ class InteractionHandler {
                 { userPage, mode, guildId, guildName, parentGuildId, parentGuildName }
             );
 
-            // Wykres przyrostu unikalnych graczy (tylko dla trybu global)
-            let growthChartAttachment = null;
-            if (mode === 'global' && this.scoreHistoryService && this.chartService) {
-                try {
-                    const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
-                    const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
-                    if (firstEntries.length >= 2) {
-                        const chartTitle = rankMsgs.globalPlayerGrowthChartTitle || '📊 Unique Player Growth';
-                        const chartBuffer = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle);
-                        if (chartBuffer) {
-                            growthChartAttachment = new AttachmentBuilder(chartBuffer, { name: 'player_growth.png' });
-                        }
-                    }
-                } catch (chartErr) {
-                    logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);
-                }
-            }
-
-            const replyEmbeds = [embed];
-            if (growthChartAttachment) {
-                replyEmbeds.push(new EmbedBuilder().setImage('attachment://player_growth.png'));
-            }
-            const replyOptions = {
+            const reply = await interaction.editReply({
                 content: null,
-                embeds: replyEmbeds,
+                embeds: [embed],
                 components: buttons,
-                attachments: [],
-            };
-            if (growthChartAttachment) replyOptions.files = [growthChartAttachment];
-
-            const reply = await interaction.editReply(replyOptions);
+                attachments: []
+            });
 
             this.rankingService.addActiveRanking(reply.id, {
                 players,
@@ -8179,6 +8167,88 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
             )],
         });
+    }
+
+    async _handlePanelPlayerGrowth(interaction) {
+        const t = this._panelT(interaction.guildId);
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        try {
+            const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
+            const [firstEntries, guildCounts] = await Promise.all([
+                this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
+                this.scoreHistoryService?.getGuildPlayerCounts(allGuildIds) || {},
+            ]);
+
+            const totalPlayers = firstEntries.length;
+            const now = Date.now();
+            const last7  = firstEntries.filter(e => e.firstTimestamp >= now - 7  * 86400000).length;
+            const last30 = firstEntries.filter(e => e.firstTimestamp >= now - 30 * 86400000).length;
+
+            // Daty pierwszego i ostatniego gracza
+            const fmtDate = (ts) => new Date(ts).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const firstDate = firstEntries.length > 0 ? fmtDate(firstEntries[0].firstTimestamp) : '—';
+            const lastDate  = firstEntries.length > 0 ? fmtDate(firstEntries[firstEntries.length - 1].firstTimestamp) : '—';
+
+            // Linie per serwer (liczba graczy którzy mają jakikolwiek wynik na danym serwerze)
+            const guildLines = allGuildIds.map(guildId => {
+                const guildName = interaction.client.guilds.cache.get(guildId)?.name || guildId;
+                const cfg = this.guildConfigService?.getAllConfiguredGuilds().find(g => g.id === guildId);
+                const tag = cfg?.tag ? ` \`${cfg.tag}\`` : '';
+                const count = guildCounts[guildId] || 0;
+                return `• **${guildName}**${tag} — **${count}** ${t('graczy', 'players')}`;
+            });
+
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle(t('📈 Przyrost Unikalnych Graczy', '📈 Unique Player Growth'))
+                .addFields(
+                    {
+                        name: t('📊 Łącznie', '📊 Total'),
+                        value: [
+                            `**${totalPlayers}** ${t('unikalnych graczy globalnie', 'unique players globally')}`,
+                            `+**${last7}** ${t('ostatnie 7 dni', 'last 7 days')}`,
+                            `+**${last30}** ${t('ostatnie 30 dni', 'last 30 days')}`,
+                        ].join('\n'),
+                        inline: true,
+                    },
+                    {
+                        name: t('📅 Zakres', '📅 Range'),
+                        value: [
+                            `${t('Pierwszy gracz:', 'First player:')} **${firstDate}**`,
+                            `${t('Ostatni gracz:', 'Latest player:')} **${lastDate}**`,
+                        ].join('\n'),
+                        inline: true,
+                    },
+                    {
+                        name: t('🌍 Per serwer', '🌍 Per server'),
+                        value: guildLines.length > 0 ? guildLines.join('\n') : t('Brak danych', 'No data'),
+                        inline: false,
+                    }
+                );
+
+            let chartAttachment = null;
+            if (this.chartService && firstEntries.length >= 2) {
+                try {
+                    const chartTitle = t('📊 Przyrost Unikalnych Graczy', '📊 Unique Player Growth');
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle);
+                    if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
+                } catch (chartErr) {
+                    logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);
+                }
+            }
+
+            const replyOpts = { embeds: [embed] };
+            if (chartAttachment) {
+                replyOpts.embeds.push(new EmbedBuilder().setImage('attachment://player_growth.png'));
+                replyOpts.files = [chartAttachment];
+            }
+
+            await interaction.editReply(replyOpts);
+        } catch (err) {
+            logger.error('Błąd _handlePanelPlayerGrowth:', err);
+            await interaction.editReply({ content: t('❌ Wystąpił błąd podczas generowania statystyk.', '❌ An error occurred while generating statistics.') });
+        }
     }
 
     async _handleTop10IntervalModal(interaction) {
