@@ -8180,10 +8180,11 @@ class InteractionHandler {
         try {
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
             const allGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-            const [firstEntries, guildCounts, guildFirstTs] = await Promise.all([
+            const [firstEntries, guildCounts, guildFirstTs, totalSubmissions] = await Promise.all([
                 this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
                 this.scoreHistoryService?.getGuildPlayerCounts(allGuildIds) || {},
                 this.scoreHistoryService?.getGuildFirstTimestamps(allGuildIds) || {},
+                this.scoreHistoryService?.getTotalSubmissionCount(allGuildIds) || 0,
             ]);
 
             const totalPlayers = firstEntries.length;
@@ -8248,7 +8249,7 @@ class InteractionHandler {
                             const name = interaction.client.guilds.cache.get(gid)?.name || gid;
                             return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
                         });
-                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers);
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions);
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
                 } catch (chartErr) {
                     logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);

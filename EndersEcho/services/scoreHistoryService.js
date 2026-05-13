@@ -114,6 +114,25 @@ class ScoreHistoryService {
         return counts;
     }
 
+    // Zwraca łączną liczbę wszystkich wpisów wyników (pobitych rekordów) we wszystkich serwerach.
+    async getTotalSubmissionCount(allGuildIds) {
+        let total = 0;
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files = [];
+            try { files = await fs.readdir(dir); } catch { continue; }
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                try {
+                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
+                    const entries = JSON.parse(raw);
+                    if (Array.isArray(entries)) total += entries.length;
+                } catch { /* pomiń */ }
+            }
+        }
+        return total;
+    }
+
     // Zwraca tablicę { userId, firstTimestamp } dla każdego unikalnego gracza we wszystkich serwerach,
     // posortowaną chronologicznie. Używana do wykresu przyrostu unikalnych graczy globalnie.
     async getAllUsersFirstEntries(allGuildIds) {
