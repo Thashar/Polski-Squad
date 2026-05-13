@@ -98,6 +98,7 @@ module.exports = {
     token: process.env.ENDERSECHO_TOKEN,
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     blockOcrUserIds: (process.env.ENDERSECHO_BLOCK_OCR_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
+    configureAdminOnly: process.env.ENDERSECHO_CONFIGURE_ADMIN_ONLY === 'true',
     logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
     ocrEmbedWebhookUrl: process.env.ENDERSECHO_OCR_EMBED_WEBHOOK_URL || null,
     invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,

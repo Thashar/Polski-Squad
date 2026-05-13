@@ -378,7 +378,7 @@
 - `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTopNotifications)
 
 **Uprawnienia komend:**
-- `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); błąd: `configureNotAdmin`
+- `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); gdy `ENDERSECHO_CONFIGURE_ADMIN_ONLY=true` → tylko Administrator; błąd: `configureNotAdmin`
 - `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
@@ -479,6 +479,10 @@ ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID=channel_id
 # Komenda włącza/wyłącza /update i/lub /test per-guild (parametry: action, target, guild z autocomplete)
 # Stan per-guild persystowany w data/guild_configs.json (ocrBlocked[])
 ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
+
+# Jeśli true, komenda /configure dostępna WYŁĄCZNIE dla administratora serwera (head admin traci dostęp)
+# Domyślnie false (head admin z ENDERSECHO_BLOCK_OCR_USER_IDS ma dostęp do /configure)
+ENDERSECHO_CONFIGURE_ADMIN_ONLY=false
 
 # Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
 APP_API_URL=https://api.polski-squad.example

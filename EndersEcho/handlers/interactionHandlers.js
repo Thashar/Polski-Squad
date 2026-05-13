@@ -579,7 +579,8 @@ class InteractionHandler {
     }
 
     async handleConfigureCommand(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !this._isHeadAdmin(interaction.user.id)) {
+        const configureHeadAdminAllowed = !this.config.configureAdminOnly;
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !(configureHeadAdminAllowed && this._isHeadAdmin(interaction.user.id))) {
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
             return;
