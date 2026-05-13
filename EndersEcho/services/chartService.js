@@ -384,7 +384,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
  * @param {string} chartTitle - tytuł wykresu (PL lub EN)
  * @returns {Promise<Buffer|null>}
  */
-async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
+async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = []) {
     const sharp = require('sharp');
 
     // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
@@ -447,6 +447,35 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
     // Ostatni punkt wyróżniony
     const last = pts[pts.length - 1];
 
+    // Markery dołączenia serwerów
+    const serverMarkersSvg = (() => {
+        const visible = guildMarkers
+            .filter(m => m.firstTimestamp >= tMin && m.firstTimestamp <= tMax)
+            .sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+        if (visible.length === 0) return '';
+
+        const lines = [];
+        // Stagger badge Y żeby nie nakładały się na siebie gdy serwery dołączyły blisko siebie
+        const usedX = [];
+        visible.forEach((m, i) => {
+            const x = toX(m.firstTimestamp);
+            const markerColor = CLAN_PALETTE[i % CLAN_PALETTE.length];
+            const tag = escapeXml(m.tag || m.name || '?');
+            const badgeW = Math.max(tag.length * 7 + 16, 28);
+            const badgeX = Math.max(M.left, Math.min(W - M.right - badgeW, x - badgeW / 2));
+
+            // Stagger: sprawdź kolizję z poprzednim badge'em po osi X
+            const stagger = usedX.some(px => Math.abs(px - x) < badgeW + 4) ? 1 : 0;
+            usedX.push(x);
+            const badgeY = M.top + 4 + stagger * 20;
+
+            lines.push(`<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${markerColor}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.7"/>`);
+            lines.push(`<rect x="${badgeX.toFixed(1)}" y="${badgeY}" width="${badgeW}" height="15" rx="7.5" fill="${markerColor}" opacity="0.90"/>`);
+            lines.push(`<text x="${(badgeX + badgeW / 2).toFixed(1)}" y="${(badgeY + 10.5).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${tag}</text>`);
+        });
+        return lines.join('\n  ');
+    })();
+
     // Daty nagłówka
     const fmtDate = (str) => {
         const [y2, m2, d2] = str.split('-');
@@ -491,6 +520,9 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
   <g clip-path="url(#chartClip)">
     <path d="${escapeXml(linePath)}" stroke="${color}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
+
+  <!-- Markery dołączenia serwerów -->
+  ${serverMarkersSvg}
 
   <!-- Wyróżnienie ostatniego punktu -->
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>

@@ -79,6 +79,29 @@ class ScoreHistoryService {
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
 
+    // Zwraca { guildId: firstTimestampMs } — kiedy na danym serwerze pojawił się pierwszy wynik.
+    async getGuildFirstTimestamps(allGuildIds) {
+        const result = {};
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files = [];
+            try { files = await fs.readdir(dir); } catch { continue; }
+            let earliest = null;
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                try {
+                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
+                    const entries = JSON.parse(raw);
+                    if (!Array.isArray(entries) || entries.length === 0) continue;
+                    const ts = Math.min(...entries.map(e => new Date(e.timestamp).getTime()));
+                    if (!isNaN(ts) && (earliest === null || ts < earliest)) earliest = ts;
+                } catch { /* pomiń */ }
+            }
+            if (earliest !== null) result[guildId] = earliest;
+        }
+        return result;
+    }
+
     // Zwraca { guildId: liczba_graczy } — ile unikalnych plików wyników istnieje na danym serwerze.
     async getGuildPlayerCounts(allGuildIds) {
         const counts = {};

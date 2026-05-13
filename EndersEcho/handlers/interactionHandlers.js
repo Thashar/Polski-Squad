@@ -8175,9 +8175,10 @@ class InteractionHandler {
 
         try {
             const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
-            const [firstEntries, guildCounts] = await Promise.all([
+            const [firstEntries, guildCounts, guildFirstTs] = await Promise.all([
                 this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
                 this.scoreHistoryService?.getGuildPlayerCounts(allGuildIds) || {},
+                this.scoreHistoryService?.getGuildFirstTimestamps(allGuildIds) || {},
             ]);
 
             const totalPlayers = firstEntries.length;
@@ -8234,7 +8235,15 @@ class InteractionHandler {
             if (this.chartService && firstEntries.length >= 2) {
                 try {
                     const chartTitle = t('📊 Przyrost Unikalnych Graczy', '📊 Unique Player Growth');
-                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle);
+                    const allCfgGuilds = this.guildConfigService?.getAllConfiguredGuilds() || [];
+                    const guildMarkers = allGuildIds
+                        .filter(gid => guildFirstTs[gid] != null)
+                        .map(gid => {
+                            const cfg = allCfgGuilds.find(g => g.id === gid);
+                            const name = interaction.client.guilds.cache.get(gid)?.name || gid;
+                            return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
+                        });
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers);
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
                 } catch (chartErr) {
                     logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);
