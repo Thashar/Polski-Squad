@@ -388,7 +388,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     const sharp = require('sharp');
 
     // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
-    const growthCutoff = Date.UTC(2026, 4, 1);
+    const growthCutoff = Date.UTC(2026, 3, 1);
     const baseline = entries.filter(e => e.firstTimestamp < growthCutoff).length;
     const filtered = entries.filter(e => e.firstTimestamp >= growthCutoff);
     if (filtered.length < 2) return null;
