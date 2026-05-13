@@ -173,11 +173,12 @@ class InteractionHandler {
         const rest = new REST().setToken(this.config.token);
         const allGuilds = this.config.getAllGuilds();
 
-        // Zbierz unikalne serwery (configured + unconfigured które bot zna)
+        // Zbierz unikalne serwery (configured + unconfigured które bot zna + wszystkie w cache)
         const guildIds = new Set(allGuilds.map(g => g.id));
         if (this.guildConfigService) {
             for (const id of this.guildConfigService.getAllConfiguredGuildIds()) guildIds.add(id);
         }
+        for (const id of client.guilds.cache.keys()) guildIds.add(id);
 
         const skipped = [];
         for (const guildId of guildIds) {
