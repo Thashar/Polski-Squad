@@ -3322,7 +3322,8 @@ class InteractionHandler {
             let globalSnippetData = null;
             if (!dryRun) {
                 try {
-                    const activeGuildIds = [...interaction.client.guilds.cache.keys()];
+                    const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                    const activeGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
                     const [newGlobalRanking, allFirstEntries] = await Promise.all([
                         this.rankingService.getGlobalRanking(new Set(activeGuildIds)),
                         this.scoreHistoryService?.getAllUsersFirstEntries(activeGuildIds) || [],
