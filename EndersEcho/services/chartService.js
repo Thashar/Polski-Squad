@@ -44,6 +44,27 @@ function formatDateYear(isoString) {
     return d.getFullYear();
 }
 
+// Skrócone nazwy miesięcy na oś X
+const MONTH_SHORT = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+
+// Buduje etykiety miesięcy na osi X (pionowa kreska + nazwa miesiąca przy każdej granicy miesiąca)
+function buildMonthAxisSvg(tMin, tMax, toX, baseY) {
+    const lines = [];
+    const start = new Date(tMin);
+    let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    while (cur.getTime() < tMax) {
+        const x = toX(cur.getTime());
+        const monthIdx = cur.getUTCMonth();
+        const label = monthIdx === 0
+            ? `${MONTH_SHORT[monthIdx]} '${String(cur.getUTCFullYear()).slice(2)}`
+            : MONTH_SHORT[monthIdx];
+        lines.push(`<line x1="${x.toFixed(1)}" y1="${baseY}" x2="${x.toFixed(1)}" y2="${(baseY + 4).toFixed(1)}" stroke="#3C3F45" stroke-width="1"/>`);
+        lines.push(`<text x="${x.toFixed(1)}" y="${(baseY + 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="middle">${label}</text>`);
+        cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
+    }
+    return lines.join('\n  ');
+}
+
 function escapeXml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -346,6 +367,9 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
   <!-- Kropki i etykiety -->
   ${dotsSvg}
 
+  <!-- Etykiety miesięcy na osi X -->
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+
   <!-- Separator legendy + legenda -->
   ${legendSep}
   ${legendItems}
@@ -370,7 +394,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
     if (filtered.length < 2) return null;
 
     const W = 900, H = 330;
-    const M = { top: 52, right: 40, bottom: 24, left: 70 };
+    const M = { top: 52, right: 40, bottom: 32, left: 70 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
     const baseY = M.top + cH;
@@ -472,6 +496,9 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${color}"/>
   <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${maxCount}</text>
+
+  <!-- Etykiety miesięcy na osi X -->
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
