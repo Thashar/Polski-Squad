@@ -8191,13 +8191,16 @@ class InteractionHandler {
             const lastDate  = firstEntries.length > 0 ? fmtDate(firstEntries[firstEntries.length - 1].firstTimestamp) : '—';
 
             // Linie per serwer (liczba graczy którzy mają jakikolwiek wynik na danym serwerze)
-            const guildLines = allGuildIds.map(guildId => {
-                const guildName = interaction.client.guilds.cache.get(guildId)?.name || guildId;
-                const cfg = this.guildConfigService?.getAllConfiguredGuilds().find(g => g.id === guildId);
-                const tag = cfg?.tag ? ` \`${cfg.tag}\`` : '';
-                const count = guildCounts[guildId] || 0;
-                return `• **${guildName}**${tag} — **${count}** ${t('graczy', 'players')}`;
-            });
+            const guildLines = allGuildIds
+                .map(guildId => ({
+                    guildId,
+                    count: guildCounts[guildId] || 0,
+                    guildName: interaction.client.guilds.cache.get(guildId)?.name || guildId,
+                    tag: this.guildConfigService?.getAllConfiguredGuilds().find(g => g.id === guildId)?.tag || '',
+                }))
+                .filter(g => g.count > 0)
+                .sort((a, b) => b.count - a.count)
+                .map(g => `• **${g.guildName}**${g.tag ? ` \`${g.tag}\`` : ''} — **${g.count}** ${t('graczy', 'players')}`);
 
             const embed = new EmbedBuilder()
                 .setColor(0x5865F2)
