@@ -22,6 +22,17 @@ const SCORE_UNITS = [
     { name: 'K',  value: 1e3  },
 ];
 
+// Usuwa znaki emoji z tekstu — librsvg (sharp SVG→PNG) nie obsługuje emoji kolorowych
+function stripEmoji(str) {
+    return String(str)
+        .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+        .replace(/[\u{2600}-\u{27BF}]/gu, '')
+        .replace(/[\u{FE00}-\u{FEFF}]/gu, '')
+        .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')
+        .replace(/[\uD800-\uDFFF]/gu, '')
+        .trim();
+}
+
 function formatYLabel(value) {
     for (const u of SCORE_UNITS) {
         if (value >= u.value) {
@@ -455,19 +466,30 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
         if (visible.length === 0) return '';
 
         const lines = [];
-        // Stagger badge Y żeby nie nakładały się na siebie gdy serwery dołączyły blisko siebie
-        const usedX = [];
+        // Śledzenie zajętych prostokątów badge'ów żeby nie nakładały się na siebie
+        const usedRects = []; // { x1, x2, y }
+        const BADGE_H = 15;
+        const Y_LEVELS = [M.top + 4, M.top + 24, M.top + 44]; // max 3 poziomy
+
         visible.forEach((m, i) => {
             const x = toX(m.firstTimestamp);
             const markerColor = CLAN_PALETTE[i % CLAN_PALETTE.length];
-            const tag = escapeXml(m.tag || m.name || '?');
+            const rawTag = stripEmoji(m.tag) || stripEmoji(m.name)?.slice(0, 4) || '?';
+            const tag = escapeXml(rawTag);
             const badgeW = Math.max(tag.length * 7 + 16, 28);
             const badgeX = Math.max(M.left, Math.min(W - M.right - badgeW, x - badgeW / 2));
 
-            // Stagger: sprawdź kolizję z poprzednim badge'em po osi X
-            const stagger = usedX.some(px => Math.abs(px - x) < badgeW + 4) ? 1 : 0;
-            usedX.push(x);
-            const badgeY = M.top + 4 + stagger * 20;
+            // Znajdź najniższy poziom Y, który nie koliduje z istniejącymi badge'ami
+            let badgeY = Y_LEVELS[0];
+            for (const yLevel of Y_LEVELS) {
+                const collides = usedRects.some(r =>
+                    r.y === yLevel &&
+                    badgeX < r.x2 + 4 &&
+                    badgeX + badgeW > r.x1 - 4
+                );
+                if (!collides) { badgeY = yLevel; break; }
+            }
+            usedRects.push({ x1: badgeX, x2: badgeX + badgeW, y: badgeY });
 
             lines.push(`<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${markerColor}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.7"/>`);
             lines.push(`<rect x="${badgeX.toFixed(1)}" y="${badgeY}" width="${badgeW}" height="15" rx="7.5" fill="${markerColor}" opacity="0.90"/>`);
