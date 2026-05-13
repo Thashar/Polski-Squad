@@ -3470,11 +3470,8 @@ class InteractionHandler {
                 try {
                     const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                     const activeGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-                    const [newGlobalRanking, allFirstEntries] = await Promise.all([
-                        this.rankingService.getGlobalRanking(new Set(activeGuildIds)),
-                        this.scoreHistoryService?.getAllUsersFirstEntries(activeGuildIds) || [],
-                    ]);
-                    globalPlayerCount = allFirstEntries.length;
+                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
+                    globalPlayerCount = newGlobalRanking.length;
                     globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
                         userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                     );
@@ -8350,14 +8347,18 @@ class InteractionHandler {
         try {
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
             const allGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-            const [firstEntries, guildCounts, guildFirstTs, totalSubmissions] = await Promise.all([
+            const [firstEntries, guildFirstTs, totalSubmissions, globalRanking, guildRankingCounts] = await Promise.all([
                 this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
-                this.scoreHistoryService?.getGuildPlayerCounts(allGuildIds) || {},
                 this.scoreHistoryService?.getGuildFirstTimestamps(allGuildIds) || {},
                 this.scoreHistoryService?.getTotalSubmissionCount(allGuildIds) || 0,
+                this.rankingService.getGlobalRanking(new Set(allGuildIds)),
+                Promise.all(allGuildIds.map(gid =>
+                    this.rankingService.loadRanking(gid).then(r => ({ gid, count: Object.keys(r).length }))
+                )),
             ]);
 
-            const totalPlayers = firstEntries.length;
+            const totalPlayers = globalRanking.length;
+            const guildCounts = Object.fromEntries(guildRankingCounts.map(r => [r.gid, r.count]));
             const now = Date.now();
             const last7  = firstEntries.filter(e => e.firstTimestamp >= now - 7  * 86400000).length;
             const last30 = firstEntries.filter(e => e.firstTimestamp >= now - 30 * 86400000).length;
@@ -8420,7 +8421,7 @@ class InteractionHandler {
                             const name = interaction.client.guilds.cache.get(gid)?.name || gid;
                             return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
                         });
-                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle);
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, totalPlayers);
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
                 } catch (chartErr) {
                     logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);

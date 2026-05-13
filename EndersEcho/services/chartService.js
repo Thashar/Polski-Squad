@@ -395,7 +395,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
  * @param {string} chartTitle - tytuł wykresu (PL lub EN)
  * @returns {Promise<Buffer|null>}
  */
-async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0, chartSubtitle = '') {
+async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0, chartSubtitle = '', displayTotal = null) {
     const sharp = require('sharp');
 
     // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
@@ -550,7 +550,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
   <!-- Wyróżnienie ostatniego punktu -->
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${color}"/>
-  <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${maxCount}</text>
+  <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${displayTotal ?? maxCount}</text>
 
   <!-- Etykiety miesięcy na osi X -->
   ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
