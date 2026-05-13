@@ -500,7 +500,7 @@ class InteractionHandler {
             done[6] ? (state.globalTop3Notifications ? `✅ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Włączone', 'Enabled')}` : `❌ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Wyłączone', 'Disabled')}`) : null,
             done[7] ? (rankCount > 0 ? `✅ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')} (${rankCount})` : `❌ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Pominięte', 'Skipped')}`) : null,
             done[8] ? (state.communityVerifEnabled ? `✅ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Włączona (próg: ', 'Enabled (threshold: ')}${state.communityVerifThreshold || 5}${t(', kanał: ', ', channel: ')}${state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')})` : `❌ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Wyłączona', 'Disabled')}`) : null,
-            done[9] ? ((state.moderators || []).length > 0 ? `✅ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${(state.moderators || []).map(m => `<@${m.userId}>`).join(', ')}` : `❌ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${t('Brak', 'None')}`) : null,
+            done[9] ? ((state.moderators || []).length > 0 ? `✅ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${(state.moderators || []).map(m => `<@${m.userId}>`).join(', ')}` : `✅ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${t('Brak', 'None')}`) : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
