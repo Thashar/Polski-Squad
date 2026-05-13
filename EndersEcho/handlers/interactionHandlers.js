@@ -8242,6 +8242,7 @@ class InteractionHandler {
             if (this.chartService && firstEntries.length >= 2) {
                 try {
                     const chartTitle = t('📊 Przyrost Unikalnych Graczy', '📊 Unique Player Growth');
+                    const chartSubtitle = `${totalPlayers} ${t('graczy', 'players')} · ${totalSubmissions} ${t('pobitych wyników', 'beaten records')}`;
                     const allCfgGuilds = this.guildConfigService?.getAllConfiguredGuilds() || [];
                     const guildMarkers = allGuildIds
                         .filter(gid => guildFirstTs[gid] != null)
@@ -8250,7 +8251,7 @@ class InteractionHandler {
                             const name = interaction.client.guilds.cache.get(gid)?.name || gid;
                             return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
                         });
-                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions);
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle);
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
                 } catch (chartErr) {
                     logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);

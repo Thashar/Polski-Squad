@@ -395,7 +395,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
  * @param {string} chartTitle - tytuł wykresu (PL lub EN)
  * @returns {Promise<Buffer|null>}
  */
-async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0) {
+async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0, chartSubtitle = '') {
     const sharp = require('sharp');
 
     // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
@@ -524,7 +524,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
 
   <!-- Nagłówek -->
   <text x="${W / 2}" y="22" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
-  <text x="${W / 2}" y="37" font-family="Arial,sans-serif" font-size="10" fill="#B5BAC1" text-anchor="middle">${maxCount} graczy · ${totalSubmissions} pobitych wynik&#xF3;w</text>
+  <text x="${W / 2}" y="37" font-family="Arial,sans-serif" font-size="10" fill="#B5BAC1" text-anchor="middle">${escapeXml(chartSubtitle || `${maxCount} · ${totalSubmissions}`)}</text>
   <text x="${W - M.right}" y="22" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(headerRight)}</text>
 
   <!-- Siatka -->
