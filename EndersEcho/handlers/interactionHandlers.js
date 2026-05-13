@@ -608,7 +608,7 @@ class InteractionHandler {
                     communityVerifChannelId: existingCv.rejectedChannelId || null,
                     communityVerifThreshold: existingCv.threshold || 5,
                     moderators: existing.moderators || [],
-                    moderatorsDone: existing.moderators !== undefined,
+                    moderatorsDone: true,
                 });
             } else {
                 this._configWizard.set(key, {
