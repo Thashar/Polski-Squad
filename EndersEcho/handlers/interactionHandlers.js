@@ -3322,8 +3322,12 @@ class InteractionHandler {
             let globalSnippetData = null;
             if (!dryRun) {
                 try {
-                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-                    globalPlayerCount = newGlobalRanking.length;
+                    const activeGuildIds = [...interaction.client.guilds.cache.keys()];
+                    const [newGlobalRanking, allFirstEntries] = await Promise.all([
+                        this.rankingService.getGlobalRanking(new Set(activeGuildIds)),
+                        this.scoreHistoryService?.getAllUsersFirstEntries(activeGuildIds) || [],
+                    ]);
+                    globalPlayerCount = allFirstEntries.length;
                     globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
                         userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                     );
