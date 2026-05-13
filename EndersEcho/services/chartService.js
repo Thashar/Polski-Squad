@@ -363,8 +363,9 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
 async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
     const sharp = require('sharp');
 
-    // Pokazuj dane tylko od 1 maja 2026
+    // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
     const growthCutoff = Date.UTC(2026, 4, 1);
+    const baseline = entries.filter(e => e.firstTimestamp < growthCutoff).length;
     const filtered = entries.filter(e => e.firstTimestamp >= growthCutoff);
     if (filtered.length < 2) return null;
 
@@ -376,7 +377,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
 
     // Grupuj graczy wg dnia (UTC) — budujemy kumulatywną serię
     const dayMap = new Map(); // 'YYYY-MM-DD' -> liczba graczy łącznie do tego dnia
-    let cumulative = 0;
+    let cumulative = baseline;
     for (const entry of filtered) {
         cumulative++;
         const d = new Date(entry.firstTimestamp);
