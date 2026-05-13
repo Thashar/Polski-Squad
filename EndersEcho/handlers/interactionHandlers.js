@@ -153,12 +153,14 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('configure')
                 .setDescription('Configure EndersEcho for this server (admins only)')
-                .setDescriptionLocalizations(pl('Skonfiguruj EndersEcho na tym serwerze (tylko dla adminów)')),
+                .setDescriptionLocalizations(pl('Skonfiguruj EndersEcho na tym serwerze (tylko dla adminów)'))
+                .setDefaultMemberPermissions(this.config.configureAdminOnly ? PermissionFlagsBits.Administrator : null),
 
             new SlashCommandBuilder()
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
-                .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
+                .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)'))
+                .setDefaultMemberPermissions(this.config.configureAdminOnly ? PermissionFlagsBits.Administrator : null),
 
             new SlashCommandBuilder()
                 .setName('generate')
