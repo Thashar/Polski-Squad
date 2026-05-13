@@ -78,6 +78,41 @@ class ScoreHistoryService {
             .filter(e => new Date(e.timestamp).getTime() >= cutoff)
             .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
+
+    // Zwraca tablicę { userId, firstTimestamp } dla każdego unikalnego gracza we wszystkich serwerach,
+    // posortowaną chronologicznie. Używana do wykresu przyrostu unikalnych graczy globalnie.
+    async getAllUsersFirstEntries(allGuildIds) {
+        const userFirstSeen = new Map(); // userId -> earliest timestamp ms
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files;
+            try {
+                files = await fs.readdir(dir);
+            } catch {
+                continue;
+            }
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                const userId = file.slice(0, -5);
+                try {
+                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
+                    const entries = JSON.parse(raw);
+                    if (!Array.isArray(entries) || entries.length === 0) continue;
+                    const earliest = Math.min(...entries.map(e => new Date(e.timestamp).getTime()));
+                    if (isNaN(earliest)) continue;
+                    const prev = userFirstSeen.get(userId);
+                    if (prev === undefined || earliest < prev) {
+                        userFirstSeen.set(userId, earliest);
+                    }
+                } catch {
+                    // pomiń uszkodzone pliki
+                }
+            }
+        }
+        return Array.from(userFirstSeen.entries())
+            .map(([userId, firstTimestamp]) => ({ userId, firstTimestamp }))
+            .sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+    }
 }
 
 module.exports = ScoreHistoryService;

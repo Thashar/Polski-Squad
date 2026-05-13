@@ -30,6 +30,7 @@ const pol = {
     rankingYourGlobalPos: 'Globalnie',
     rankingNotInRanking: 'Nie jesteś jeszcze w rankingu.',
     chartTitle: '📈 Historia Rekordów',
+    globalPlayerGrowthChartTitle: '📊 Przyrost Unikalnych Graczy',
 
     // Pozycja gracza w rankingu
     rankingPosition: 'Miejsce w rankingu: {pos}',
@@ -350,6 +351,7 @@ const eng = {
     rankingYourGlobalPos: 'Global',
     rankingNotInRanking: 'You are not in the ranking yet.',
     chartTitle: '📈 Score History',
+    globalPlayerGrowthChartTitle: '📊 Unique Player Growth',
 
     // Player ranking position
     rankingPosition: 'Ranking position: {pos}',

@@ -354,4 +354,137 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generateScoreHistoryChart };
+/**
+ * Generuje wykres przyrostu unikalnych graczy globalnie w czasie.
+ * @param {Array<{userId:string, firstTimestamp:number}>} entries - posortowana lista pierwszych wpisów per gracz
+ * @param {string} chartTitle - tytuł wykresu (PL lub EN)
+ * @returns {Promise<Buffer|null>}
+ */
+async function generateGlobalPlayerGrowthChart(entries, chartTitle) {
+    const sharp = require('sharp');
+
+    if (entries.length < 2) return null;
+
+    const W = 900, H = 330;
+    const M = { top: 52, right: 40, bottom: 48, left: 70 };
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+    const baseY = M.top + cH;
+
+    // Grupuj graczy wg dnia (UTC) — budujemy kumulatywną serię
+    const dayMap = new Map(); // 'YYYY-MM-DD' -> liczba graczy łącznie do tego dnia
+    let cumulative = 0;
+    for (const entry of entries) {
+        cumulative++;
+        const d = new Date(entry.firstTimestamp);
+        const dateStr = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+        dayMap.set(dateStr, cumulative);
+    }
+
+    const keys = Array.from(dayMap.keys()).sort();
+    const series = keys.map(k => {
+        const [y, m, day] = k.split('-').map(Number);
+        return { dateMs: Date.UTC(y, m - 1, day), count: dayMap.get(k), dateStr: k };
+    });
+
+    if (series.length < 2) return null;
+
+    const tMin = series[0].dateMs;
+    const tNow = Date.now();
+    const tMax = Math.max(tNow, series[series.length - 1].dateMs + 86400000);
+    const tRange = tMax - tMin || 1;
+    const maxCount = series[series.length - 1].count;
+    const yMax = maxCount * 1.18;
+
+    const toX = (t) => M.left + (0.02 + 0.96 * (t - tMin) / tRange) * cW;
+    const toY = (v) => M.top + cH - (v / yMax) * cH;
+
+    const color = '#5865F2'; // blurple
+
+    const pts = series.map(s => ({ x: toX(s.dateMs), y: toY(s.count), count: s.count, dateStr: s.dateStr }));
+
+    // Linia Catmull-Rom i wypełnienie gradientem
+    const linePath = buildCatmullRomPath(pts);
+    const areaPath = buildAreaPath(pts, baseY);
+
+    // Poziome linie siatki
+    const gridSteps = 4;
+    const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => {
+        const v = Math.round(yMax * i / gridSteps);
+        const y = toY(v);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
+    }).join('\n    ');
+
+    // Etykiety osi X
+    const maxXLabels = 8;
+    const xStep = Math.max(1, Math.floor(series.length / maxXLabels));
+    const xLabels = pts
+        .filter((_, i) => i % xStep === 0 || i === pts.length - 1)
+        .map(p => {
+            const [, m2, d2] = p.dateStr.split('-');
+            const lbl = `${d2}.${m2}`;
+            return `<text x="${p.x.toFixed(1)}" y="${(baseY + 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="middle">${lbl}</text>`;
+        }).join('\n    ');
+
+    // Ostatni punkt wyróżniony
+    const last = pts[pts.length - 1];
+
+    // Daty nagłówka
+    const fmtDate = (str) => {
+        const [y2, m2, d2] = str.split('-');
+        return `${d2}.${m2}.${y2}`;
+    };
+    const headerRight = `${fmtDate(series[0].dateStr)} – ${fmtDate(series[series.length - 1].dateStr)}`;
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="growthGrad" x1="0" y1="${M.top}" x2="0" y2="${baseY}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.30"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0.02"/>
+    </linearGradient>
+    <clipPath id="chartClip">
+      <rect x="${M.left}" y="${M.top}" width="${cW}" height="${cH}"/>
+    </clipPath>
+  </defs>
+
+  <!-- Tło -->
+  <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
+
+  <!-- Separator nagłówka -->
+  <line x1="${M.left}" y1="${M.top - 10}" x2="${W - M.right}" y2="${M.top - 10}" stroke="#2B2D31" stroke-width="1"/>
+
+  <!-- Nagłówek -->
+  <text x="${W / 2}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  <text x="${W - M.right}" y="32" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(headerRight)}</text>
+
+  <!-- Siatka -->
+  ${gridLines}
+
+  <!-- Osie -->
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+  <line x1="${M.left}" y1="${baseY}" x2="${W - M.right}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+
+  <!-- Wypełnienie gradient -->
+  <g clip-path="url(#chartClip)">
+    <path d="${escapeXml(areaPath)}" fill="url(#growthGrad)"/>
+  </g>
+
+  <!-- Linia wzrostu -->
+  <g clip-path="url(#chartClip)">
+    <path d="${escapeXml(linePath)}" stroke="${color}" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Wyróżnienie ostatniego punktu -->
+  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>
+  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${color}"/>
+  <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${maxCount}</text>
+
+  <!-- Etykiety osi X -->
+  ${xLabels}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart };

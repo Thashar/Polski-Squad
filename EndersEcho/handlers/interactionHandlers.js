@@ -4706,12 +4706,37 @@ class InteractionHandler {
                 { userPage, mode, guildId, guildName, parentGuildId, parentGuildName }
             );
 
-            const reply = await interaction.editReply({
+            // Wykres przyrostu unikalnych graczy (tylko dla trybu global)
+            let growthChartAttachment = null;
+            if (mode === 'global' && this.scoreHistoryService && this.chartService) {
+                try {
+                    const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
+                    const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
+                    if (firstEntries.length >= 2) {
+                        const chartTitle = rankMsgs.globalPlayerGrowthChartTitle || '📊 Unique Player Growth';
+                        const chartBuffer = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle);
+                        if (chartBuffer) {
+                            growthChartAttachment = new AttachmentBuilder(chartBuffer, { name: 'player_growth.png' });
+                        }
+                    }
+                } catch (chartErr) {
+                    logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);
+                }
+            }
+
+            const replyEmbeds = [embed];
+            if (growthChartAttachment) {
+                replyEmbeds.push(new EmbedBuilder().setImage('attachment://player_growth.png'));
+            }
+            const replyOptions = {
                 content: null,
-                embeds: [embed],
+                embeds: replyEmbeds,
                 components: buttons,
-                attachments: []
-            });
+                attachments: [],
+            };
+            if (growthChartAttachment) replyOptions.files = [growthChartAttachment];
+
+            const reply = await interaction.editReply(replyOptions);
 
             this.rankingService.addActiveRanking(reply.id, {
                 players,
