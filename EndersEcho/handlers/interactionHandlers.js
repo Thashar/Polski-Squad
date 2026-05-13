@@ -376,6 +376,10 @@ class InteractionHandler {
                 await this._handleConfigureCvThresholdModal(interaction);
                 return;
             }
+            if (interaction.customId === 'cfg_mod_add_modal') {
+                await this._handleCfgModAddModal(interaction);
+                return;
+            }
         }
     }
 
@@ -431,6 +435,7 @@ class InteractionHandler {
             6: state.globalTop3Notifications !== null,
             7: state.roleRankingsDone === true,
             8: state.communityVerifDone === true,
+            9: state.moderatorsDone === true,
         };
         const allDone = Object.values(done).every(Boolean);
 
@@ -454,6 +459,7 @@ class InteractionHandler {
             ),
             new ActionRowBuilder().addComponents(
                 btn(8, '8. Weryfikacja społeczności', '8. Community Verification'),
+                btn(9, '9. Moderatorzy gry', '9. Game Moderators'),
             ),
         ];
 
@@ -495,6 +501,7 @@ class InteractionHandler {
             done[6] ? (state.globalTop3Notifications ? `✅ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Włączone', 'Enabled')}` : `❌ 🔔 ${t('Powiadomienia TOP10:', 'TOP10 Notifications:')} ${t('Wyłączone', 'Disabled')}`) : null,
             done[7] ? (rankCount > 0 ? `✅ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')} (${rankCount})` : `❌ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Pominięte', 'Skipped')}`) : null,
             done[8] ? (state.communityVerifEnabled ? `✅ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Włączona (próg: ', 'Enabled (threshold: ')}${state.communityVerifThreshold || 5}${t(', kanał: ', ', channel: ')}${state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')})` : `❌ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Wyłączona', 'Disabled')}`) : null,
+            done[9] ? ((state.moderators || []).length > 0 ? `✅ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${(state.moderators || []).map(m => `<@${m.userId}>`).join(', ')}` : `❌ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${t('Brak', 'None')}`) : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -548,7 +555,8 @@ class InteractionHandler {
                         '5️⃣  **Role TOP** *(opcjonalne)* — konfigurowalne automatyczne role za pozycje w rankingu\n' +
                         '6️⃣  **Raporty Global TOP10** — publikowane po zmianie bossa\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
-                        '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n\n' +
+                        '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n' +
+                        '9️⃣  **Moderatorzy gry** *(opcjonalne)* — użytkownicy z dostępem do `/manage`\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
                         ocrLine + diagHint,
                         '📋 **Steps overview:**\n' +
@@ -559,7 +567,8 @@ class InteractionHandler {
                         '5️⃣  **TOP Roles** *(optional)* — configurable automatic roles based on ranking positions\n' +
                         '6️⃣  **Global TOP10 Reports** — published after boss change\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
-                        '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n\n' +
+                        '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n' +
+                        '9️⃣  **Game Moderators** *(optional)* — users with access to `/manage`\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
                         ocrLine + diagHint
                     );
@@ -570,7 +579,7 @@ class InteractionHandler {
     }
 
     async handleConfigureCommand(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator) && !this._isHeadAdmin(interaction.user.id)) {
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
             return;
@@ -597,6 +606,8 @@ class InteractionHandler {
                     communityVerifEnabled: existingCv.enabled === true,
                     communityVerifChannelId: existingCv.rejectedChannelId || null,
                     communityVerifThreshold: existingCv.threshold || 5,
+                    moderators: existing.moderators || [],
+                    moderatorsDone: existing.moderators !== undefined,
                 });
             } else {
                 this._configWizard.set(key, {
@@ -613,6 +624,8 @@ class InteractionHandler {
                     communityVerifEnabled: false,
                     communityVerifChannelId: null,
                     communityVerifThreshold: 5,
+                    moderators: [],
+                    moderatorsDone: false,
                 });
             }
         }
@@ -623,9 +636,12 @@ class InteractionHandler {
     }
 
     async handleManageCommand(interaction) {
-        if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+        const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const isModerator = this._isGameModerator(interaction.user.id, interaction.guildId);
+        if (!isAdmin && !isHeadAdmin && !isModerator) {
             const msgs = this.msgs(interaction.guildId);
-            await interaction.reply({ content: msgs.configureNotAdmin, flags: ['Ephemeral'] });
+            await interaction.reply({ content: msgs.manageNotAdmin, flags: ['Ephemeral'] });
             return;
         }
         const { embed, components } = this._buildAdminPanel(interaction);
@@ -846,6 +862,9 @@ class InteractionHandler {
             }
             step8Btns.push(backBtn);
             await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...step8Btns)] });
+
+        } else if (step === 9) {
+            await this._showModeratorStep(interaction, state, guildId);
         }
     }
 
@@ -1333,6 +1352,71 @@ class InteractionHandler {
         await this._showConfigureStep(interaction, 8);
     }
 
+    async _showModeratorStep(interaction, state, guildId) {
+        const isPol = state.lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const backBtn = new ButtonBuilder().setCustomId('cfg_back').setLabel(t('← Wstecz', '← Back')).setStyle(ButtonStyle.Secondary);
+
+        const mods = state.moderators || [];
+        const modList = mods.length > 0
+            ? '\n\n**' + t('Aktualni moderatorzy:', 'Current moderators:') + '**\n' + mods.map(m => `• <@${m.userId}>`).join('\n')
+            : '\n\n*' + t('Brak skonfigurowanych moderatorów.', 'No moderators configured.') + '*';
+
+        const embed = new EmbedBuilder().setColor(0x5865F2)
+            .setTitle(t('👮 Krok 9 — Moderatorzy gry (opcjonalne)', '👮 Step 9 — Game Moderators (optional)'))
+            .setDescription(
+                t(
+                    'Możesz dodać moderatorów gry, którzy będą mieli dostęp do panelu zarządzania przez komendę `/manage`.\n\nModerator może zarządzać graczami i rankingiem na tym serwerze, ale nie ma dostępu do ustawień bota ani funkcji head admina.',
+                    'You can add game moderators who will have access to the management panel through the `/manage` command.\n\nA moderator can manage players and rankings on this server, but does not have access to bot settings or head admin features.'
+                ) + modList
+            );
+
+        const addBtn = new ButtonBuilder().setCustomId('cfg_mod_add').setLabel(t('Dodaj', 'Add')).setStyle(ButtonStyle.Primary);
+        const removeBtn = new ButtonBuilder().setCustomId('cfg_mod_remove').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger).setDisabled(mods.length === 0);
+
+        const btns = [addBtn, removeBtn];
+        if (!state.moderatorsDone) {
+            btns.push(new ButtonBuilder().setCustomId('cfg_mod_skip').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary));
+        }
+        btns.push(backBtn);
+
+        await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...btns)] });
+    }
+
+    async _handleCfgModAddModal(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.reply({ content: '⚠️ Session expired. Run `/configure` again.', flags: ['Ephemeral'] }); return; }
+
+        const msgs = this.msgs(interaction.guildId);
+        const userId = interaction.fields.getTextInputValue('cfg_mod_user_id_input').trim();
+
+        if (!/^\d{17,20}$/.test(userId)) {
+            await interaction.reply({ content: msgs.modInvalidId, flags: ['Ephemeral'] }); return;
+        }
+
+        if (!state.moderators) state.moderators = [];
+        if (state.moderators.some(m => m.userId === userId)) {
+            await interaction.reply({ content: msgs.modAlreadyExists, flags: ['Ephemeral'] }); return;
+        }
+
+        state.moderators.push({ userId });
+        state.moderatorsDone = true;
+        this._configWizard.set(key, state);
+        await this._showModeratorStep(interaction, state, interaction.guildId);
+    }
+
+    async _handleCfgModRemoveSelect(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.update({ content: '⚠️ Session expired. Run `/configure` again.', embeds: [], components: [] }); return; }
+
+        const userId = interaction.values[0];
+        state.moderators = (state.moderators || []).filter(m => m.userId !== userId);
+        this._configWizard.set(key, state);
+        await this._showModeratorStep(interaction, state, interaction.guildId);
+    }
+
     async _handleConfigureButton(interaction, customId) {
         const key = this._wizardKey(interaction.user.id, interaction.guildId);
         const state = this._configWizard.get(key);
@@ -1699,6 +1783,61 @@ class InteractionHandler {
             return;
         }
 
+        // Krok 9 — moderatorzy gry: pomiń
+        if (customId === 'cfg_mod_skip') {
+            state.moderatorsDone = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
+        // Krok 9 — moderatorzy gry: dodaj (modal)
+        if (customId === 'cfg_mod_add') {
+            const modal = new ModalBuilder()
+                .setCustomId('cfg_mod_add_modal')
+                .setTitle(t('👮 Dodaj moderatora gry', '👮 Add Game Moderator'))
+                .addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('cfg_mod_user_id_input')
+                        .setLabel(t('ID użytkownika Discord', 'Discord User ID'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setPlaceholder('123456789012345678')
+                ));
+            await interaction.showModal(modal);
+            return;
+        }
+
+        // Krok 9 — moderatorzy gry: usuń (select menu)
+        if (customId === 'cfg_mod_remove') {
+            const mods = state.moderators || [];
+            if (mods.length === 0) return;
+
+            const options = await Promise.all(mods.map(async m => {
+                let label = m.userId;
+                try {
+                    const member = await interaction.guild.members.fetch(m.userId);
+                    label = (member.displayName || member.user.username).slice(0, 100);
+                } catch {}
+                return new StringSelectMenuOptionBuilder().setLabel(label).setValue(m.userId);
+            }));
+
+            const selectMenu = new StringSelectMenuBuilder()
+                .setCustomId('cfg_mod_remove_select')
+                .setPlaceholder(t('Wybierz moderatora do usunięcia...', 'Select moderator to remove...'))
+                .addOptions(options);
+            const backBtn = new ButtonBuilder().setCustomId('cfg_step_9').setLabel(t('← Wstecz', '← Back')).setStyle(ButtonStyle.Secondary);
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🗑️ Usuń moderatora gry', '🗑️ Remove Game Moderator'))
+                .setDescription(t('Wybierz moderatora do usunięcia z listy:', 'Select a moderator to remove from the list:'));
+            await interaction.update({ embeds: [embed], components: [
+                new ActionRowBuilder().addComponents(selectMenu),
+                new ActionRowBuilder().addComponents(backBtn),
+            ]});
+            return;
+        }
+
         // Anuluj konfigurację
         if (customId === 'cfg_cancel') {
             this._configWizard.delete(key);
@@ -1754,6 +1893,7 @@ class InteractionHandler {
                     return state.topRoles || null;
                 })(),
                 globalTopNotifications: state.globalTop3Notifications !== false,
+                moderators: state.moderators || [],
                 communityVerification: state.communityVerifEnabled ? {
                     enabled: true,
                     rejectedChannelId: state.communityVerifChannelId || null,
@@ -1957,6 +2097,11 @@ class InteractionHandler {
 
     _isHeadAdmin(userId) {
         return this.config.blockOcrUserIds.includes(userId);
+    }
+
+    _isGameModerator(userId, guildId) {
+        const config = this.guildConfigService?.getConfig(guildId);
+        return (config?.moderators || []).some(m => m.userId === userId);
     }
 
     _panelT(guildId) {
@@ -3658,6 +3803,9 @@ class InteractionHandler {
         if (customId === 'cfg_role_ranking_add') return 'Dodaj ranking roli';
         if (customId === 'cfg_role_ranking_remove') return 'Usuń ranking roli';
         if (customId === 'cfg_role_ranking_skip') return 'Pomiń ranking roli';
+        if (customId === 'cfg_mod_skip') return 'Pomiń moderatorów gry';
+        if (customId === 'cfg_mod_add') return 'Dodaj moderatora gry (modal)';
+        if (customId === 'cfg_mod_remove') return 'Usuń moderatora gry';
         if (customId === 'cfg_accept') return 'Zaakceptuj konfigurację';
         if (customId === 'cfg_cancel') return 'Anuluj konfigurację';
         if (customId.startsWith('cfg_step_')) return `Krok konfiguracji: ${customId.replace('cfg_step_', '')}`;
@@ -4140,6 +4288,7 @@ class InteractionHandler {
                 customId === 'cfg_notif_yes' || customId === 'cfg_notif_no' ||
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
+                customId === 'cfg_mod_skip' || customId === 'cfg_mod_add' || customId === 'cfg_mod_remove' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
                 this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} /configure → ${this._describeCfgButton(customId)}`);
@@ -5238,6 +5387,11 @@ class InteractionHandler {
 
             if (customId === 'cfg_role_ranking_remove_select') {
                 await this._handleCfgRoleRankingRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'cfg_mod_remove_select') {
+                await this._handleCfgModRemoveSelect(interaction);
                 return;
             }
 

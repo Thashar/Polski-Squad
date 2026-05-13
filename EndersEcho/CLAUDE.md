@@ -323,6 +323,7 @@
 - **Krok 6:** Powiadomienia Global TOP10 (Tak/Nie) — per-guild flaga `globalTopNotifications` (backward compat: odczytuje też stare `globalTop3Notifications`)
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
+- **Krok 9:** Moderatorzy gry (opcjonalne) — lista moderatorów z pingami + przyciski "Dodaj" (modal z ID) / "Usuń" (StringSelectMenu) / "Pomiń" (tylko gdy krok jeszcze nieukończony); stan `moderatorsDone` w RAM; lista persystowana w `guild_configs.json` jako `moderators: [{ userId }]`; moderatorzy mają dostęp do `/manage` (bez head admin funkcji)
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone; obok niego pojawia się wtedy też przycisk **🔍 Diagnostyka** (`panel_diagnostics`) — dostępny dla każdego administratora, sprawdza uprawnienia bota (serwer + kanały + hierarchia ról TOP)
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka
@@ -377,10 +378,11 @@
 - `getAllConfiguredGuilds()`: format kompatybilny z `config.guilds` (id, allowedChannelId, lang, tag, topRoles, globalTopNotifications)
 
 **Uprawnienia komend:**
-- Bez konfiguracji (zawsze): `/configure` (wizard), `/manage` (bezpośredni panel admina)
+- `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); błąd: `configureNotAdmin`
+- `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
-- Panel Admina (tryb Admin): Administrator Discord → usuń gracza, odblokuj, tokeny
+- Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
 **Struktura danych:**

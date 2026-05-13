@@ -285,7 +285,10 @@ const pol = {
     ocrGuildNotFound: '❌ Serwer nie znaleziony lub nie skonfigurowany.',
 
     // /configure — wspólne
-    configureNotAdmin: '❌ Wymagane uprawnienie **Administrator** do konfiguracji bota.',
+    configureNotAdmin: '❌ Ta komenda jest dostępna tylko dla administratora serwera oraz moderatorów.',
+    manageNotAdmin: '❌ Ta komenda jest dostępna tylko dla administratora serwera.',
+    modInvalidId: '❌ Podaj prawidłowe ID użytkownika Discord (17–20 cyfr).',
+    modAlreadyExists: '⚠️ Ten użytkownik jest już moderatorem gry na tym serwerze.',
     configureSaved: '✅ Konfiguracja została zapisana! Bot jest teraz aktywny na tym serwerze.\n\n⚠️ Komendy `/update` i `/test` są domyślnie **wyłączone**. Jeżeli to pierwsza konfiguracja serwera, skontaktuj się z @Thashar w celu odblokowania komend do analizy.',
     configureCancelled: '❌ Konfiguracja anulowana. Poprzednie ustawienia pozostają bez zmian.',
     configureTagTooLong: '❌ Tag może mieć maksymalnie 4 znaki.',
@@ -606,7 +609,10 @@ const eng = {
     ocrGuildNotFound: '❌ Server not found or not configured.',
 
     // /configure — common
-    configureNotAdmin: '❌ **Administrator** permission required to configure the bot.',
+    configureNotAdmin: '❌ This command is only available to server administrators and moderators.',
+    manageNotAdmin: '❌ This command is only available to server administrators.',
+    modInvalidId: '❌ Please provide a valid Discord user ID (17–20 digits).',
+    modAlreadyExists: '⚠️ This user is already a game moderator on this server.',
     configureSaved: '✅ Configuration saved! The bot is now active on this server.\n\n⚠️ Commands `/update` and `/test` are **disabled** by default. If this is the first time configuring this server, contact @Thashar to unlock the analysis commands.',
     configureCancelled: '❌ Configuration cancelled. Previous settings remain unchanged.',
     configureTagTooLong: '❌ The tag can have a maximum of 4 characters.',
