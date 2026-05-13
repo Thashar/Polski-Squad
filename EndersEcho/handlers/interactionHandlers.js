@@ -8174,7 +8174,8 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
         try {
-            const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
+            const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [...interaction.client.guilds.cache.keys()];
+            const allGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
             const [firstEntries, guildCounts, guildFirstTs] = await Promise.all([
                 this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
                 this.scoreHistoryService?.getGuildPlayerCounts(allGuildIds) || {},
