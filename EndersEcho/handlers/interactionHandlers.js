@@ -159,8 +159,7 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
-                .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)'))
-                .setDefaultMemberPermissions(this.config.configureAdminOnly ? PermissionFlagsBits.Administrator : null),
+                .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
 
             new SlashCommandBuilder()
                 .setName('generate')
