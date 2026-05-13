@@ -466,10 +466,14 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
         if (visible.length === 0) return '';
 
         const lines = [];
-        // Śledzenie zajętych prostokątów badge'ów żeby nie nakładały się na siebie
-        const usedRects = []; // { x1, x2, y }
         const BADGE_H = 15;
-        const Y_LEVELS = [M.top + 4, M.top + 24, M.top + 44]; // max 3 poziomy
+        const GAP = 4; // minimalna przerwa między badge'ami
+        // Poziomy na górze i dole wykresu — próbujemy górne najpierw, potem dolne
+        const Y_LEVELS = [
+            M.top + 4, M.top + 22, M.top + 40,          // górna strefa (3 poziomy)
+            baseY - 20, baseY - 38, baseY - 56,          // dolna strefa (3 poziomy)
+        ];
+        const usedRects = []; // { x1, x2, y }
 
         visible.forEach((m, i) => {
             const x = toX(m.firstTimestamp);
@@ -479,20 +483,20 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
             const badgeW = Math.max(tag.length * 7 + 16, 28);
             const badgeX = Math.max(M.left, Math.min(W - M.right - badgeW, x - badgeW / 2));
 
-            // Znajdź najniższy poziom Y, który nie koliduje z istniejącymi badge'ami
+            // Pierwszy poziom Y który nie koliduje (góra → dół)
             let badgeY = Y_LEVELS[0];
             for (const yLevel of Y_LEVELS) {
                 const collides = usedRects.some(r =>
                     r.y === yLevel &&
-                    badgeX < r.x2 + 4 &&
-                    badgeX + badgeW > r.x1 - 4
+                    badgeX < r.x2 + GAP &&
+                    badgeX + badgeW > r.x1 - GAP
                 );
                 if (!collides) { badgeY = yLevel; break; }
             }
             usedRects.push({ x1: badgeX, x2: badgeX + badgeW, y: badgeY });
 
             lines.push(`<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${markerColor}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.7"/>`);
-            lines.push(`<rect x="${badgeX.toFixed(1)}" y="${badgeY}" width="${badgeW}" height="15" rx="7.5" fill="${markerColor}" opacity="0.90"/>`);
+            lines.push(`<rect x="${badgeX.toFixed(1)}" y="${badgeY}" width="${badgeW}" height="${BADGE_H}" rx="7.5" fill="${markerColor}" opacity="0.90"/>`);
             lines.push(`<text x="${(badgeX + badgeW / 2).toFixed(1)}" y="${(badgeY + 10.5).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${tag}</text>`);
         });
         return lines.join('\n  ');
