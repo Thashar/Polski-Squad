@@ -617,6 +617,8 @@ async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTit
 
     if (guildSeries.length === 0) return null;
 
+    guildSeries.sort((a, b) => b.finalCount - a.finalCount);
+
     const tNow = Date.now();
     const tMin = sharedTMin ?? Math.min(...guildSeries.flatMap(gs => gs.series.map(s => s.dateMs)));
     const tMax = sharedTMax ?? Math.max(tNow, Math.max(...guildSeries.flatMap(gs => gs.series.map(s => s.dateMs))) + 86400000);
