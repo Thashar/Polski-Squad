@@ -848,7 +848,8 @@ async function generateGuildComparisonChart(guildScores, chartTitle) {
         const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
         const cy = M.top + i * ROW_H + ROW_H / 2;
         const barX = toX(gs.totalScoreValue);
-        const label = escapeXml(stripEmoji(gs.tag || gs.guildName || '?').slice(0, 22));
+        const strippedTag = stripEmoji(gs.tag || '').trim();
+        const label = escapeXml((strippedTag || stripEmoji(gs.guildName || '').trim() || gs.guildName || '?').slice(0, 22));
 
         const track = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${(M.left + cW)}" y2="${cy.toFixed(1)}" stroke="#2B2D31" stroke-width="2" stroke-linecap="round"/>`;
         const bar   = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${barX.toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round" opacity="0.55"/>`;

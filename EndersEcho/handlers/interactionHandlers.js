@@ -4404,7 +4404,9 @@ class InteractionHandler {
                 try {
                     const t = this._panelT(interaction.guildId);
                     const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
-                    const buf = await this.chartService.generateGuildComparisonChart(rankingData.guildScores, chartTitle);
+                    const perPage = this.config.ranking.playersPerPage;
+                    const pageGuildScores = rankingData.guildScores.slice(newPage * perPage, (newPage + 1) * perPage);
+                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle);
                     if (buf) {
                         paginationChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
                         paginationChartFilename = 'guild_comparison.png';
@@ -5142,7 +5144,8 @@ class InteractionHandler {
                 try {
                     const t = this._panelT(interaction.guildId);
                     const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
-                    const buf = await this.chartService.generateGuildComparisonChart(guildScores, chartTitle);
+                    const pageGuildScores = guildScores.slice(0, perPage);
+                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle);
                     if (buf) {
                         const { AttachmentBuilder } = require('discord.js');
                         guildChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
