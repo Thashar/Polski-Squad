@@ -435,8 +435,8 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     const tNow = Date.now(); // tylko do etykiety zakresu dat
     const lastDataMs = series[series.length - 1].dateMs;
     const lastMarkerMs = guildMarkers.length > 0 ? Math.max(...guildMarkers.map(m => m.firstTimestamp)) : lastDataMs;
-    // tMax = 2 dni po ostatnim realnym zdarzeniu (ostatni gracz lub ostatni badge serwera)
-    const tMax = Math.max(lastDataMs, lastMarkerMs) + 2 * 86400000;
+    // tMax = ostatnie realne zdarzenie (gracz lub badge serwera) — toX ma wbudowany 2% margines
+    const tMax = Math.max(lastDataMs, lastMarkerMs);
     const tRange = tMax - tMin || 1;
     const maxCount = series[series.length - 1].count;
     const yMax = maxCount * 1.18;
