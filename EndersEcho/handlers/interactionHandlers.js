@@ -8347,7 +8347,7 @@ class InteractionHandler {
         try {
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
             const allGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-            const [firstEntries, guildFirstTs, totalSubmissions, globalRanking, guildRankingCounts] = await Promise.all([
+            const [firstEntries, guildFirstTs, totalSubmissions, globalRanking, guildRankingCounts, perGuildEntries] = await Promise.all([
                 this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
                 this.scoreHistoryService?.getGuildFirstTimestamps(allGuildIds) || {},
                 this.scoreHistoryService?.getTotalSubmissionCount(allGuildIds) || 0,
@@ -8355,6 +8355,7 @@ class InteractionHandler {
                 Promise.all(allGuildIds.map(gid =>
                     this.rankingService.loadRanking(gid).then(r => ({ gid, count: Object.keys(r).length }))
                 )),
+                this.scoreHistoryService?.getPerGuildFirstEntries(allGuildIds) || {},
             ]);
 
             const totalPlayers = globalRanking.length;
@@ -8408,12 +8409,29 @@ class InteractionHandler {
                     }
                 );
 
+            // Wspólny zakres czasu dla obu wykresów (ta sama logika co w chartService)
+            const growthCutoff = Date.UTC(2026, 3, 1);
+            const filteredForRange = firstEntries.filter(e => e.firstTimestamp >= growthCutoff);
+            let sharedTMin = null, sharedTMax = null;
+            if (filteredForRange.length >= 2) {
+                const daySetMs = new Set(filteredForRange.map(e => {
+                    const d = new Date(e.firstTimestamp);
+                    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+                }));
+                const sortedDays = Array.from(daySetMs).sort((a, b) => a - b);
+                if (sortedDays.length >= 2) {
+                    sharedTMin = sortedDays[0];
+                    sharedTMax = Math.max(Date.now(), sortedDays[sortedDays.length - 1] + 86400000);
+                }
+            }
+
+            const allCfgGuilds = this.guildConfigService?.getAllConfiguredGuilds() || [];
+
             let chartAttachment = null;
             if (this.chartService && firstEntries.length >= 2) {
                 try {
                     const chartTitle = t('📊 Przyrost Unikalnych Graczy', '📊 Unique Player Growth');
                     const chartSubtitle = `${totalPlayers} ${t('graczy', 'players')} · ${totalSubmissions} ${t('pobitych wyników', 'beaten records')}`;
-                    const allCfgGuilds = this.guildConfigService?.getAllConfiguredGuilds() || [];
                     const guildMarkers = allGuildIds
                         .filter(gid => guildFirstTs[gid] != null)
                         .map(gid => {
@@ -8428,13 +8446,36 @@ class InteractionHandler {
                 }
             }
 
-            const replyOpts = { embeds: [embed] };
-            if (chartAttachment) {
-                replyOpts.embeds.push(new EmbedBuilder().setImage('attachment://player_growth.png'));
-                replyOpts.files = [chartAttachment];
+            let chart2Attachment = null;
+            if (this.chartService && perGuildEntries && Object.keys(perGuildEntries).length > 0 && sharedTMin !== null) {
+                try {
+                    const guildInfoForChart = allGuildIds.map(gid => {
+                        const cfg = allCfgGuilds.find(g => g.id === gid);
+                        const name = interaction.client.guilds.cache.get(gid)?.name || gid;
+                        return { guildId: gid, name, tag: cfg?.tag || name };
+                    });
+                    const chartTitle2 = t('📊 Przyrost Graczy per Serwer', '📊 Player Growth per Server');
+                    const buf2 = await this.chartService.generatePerServerGrowthChart(
+                        perGuildEntries, guildInfoForChart, chartTitle2, sharedTMin, sharedTMax
+                    );
+                    if (buf2) chart2Attachment = new AttachmentBuilder(buf2, { name: 'player_growth_per_server.png' });
+                } catch (chartErr) {
+                    logger.warn('Błąd generowania wykresu przyrostu graczy per serwer:', chartErr);
+                }
             }
 
-            await interaction.editReply(replyOpts);
+            const replyFiles = [];
+            const replyEmbeds = [embed];
+            if (chartAttachment) {
+                replyEmbeds.push(new EmbedBuilder().setImage('attachment://player_growth.png'));
+                replyFiles.push(chartAttachment);
+            }
+            if (chart2Attachment) {
+                replyEmbeds.push(new EmbedBuilder().setImage('attachment://player_growth_per_server.png'));
+                replyFiles.push(chart2Attachment);
+            }
+
+            await interaction.editReply({ embeds: replyEmbeds, files: replyFiles.length > 0 ? replyFiles : undefined });
         } catch (err) {
             logger.error('Błąd _handlePanelPlayerGrowth:', err);
             await interaction.editReply({ content: t('❌ Wystąpił błąd podczas generowania statystyk.', '❌ An error occurred while generating statistics.') });

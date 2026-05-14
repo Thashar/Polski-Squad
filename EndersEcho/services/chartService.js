@@ -563,4 +563,124 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart };
+/**
+ * Generuje wykres przyrostu graczy per serwer w czasie (multi-line).
+ * @param {{ [guildId: string]: Array<{userId:string, firstTimestamp:number}> }} perGuildEntries
+ * @param {Array<{guildId:string, name:string, tag:string}>} guildInfo
+ * @param {string} chartTitle
+ * @param {number|null} sharedTMin - wspólne tMin z wykresu globalnego
+ * @param {number|null} sharedTMax - wspólne tMax z wykresu globalnego
+ * @returns {Promise<Buffer|null>}
+ */
+async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTitle, sharedTMin = null, sharedTMax = null) {
+    const sharp = require('sharp');
+    const growthCutoff = Date.UTC(2026, 3, 1);
+
+    const guildSeries = [];
+    for (const { guildId, name, tag } of guildInfo) {
+        const rawEntries = (perGuildEntries[guildId] || []).sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+        const filtered = rawEntries.filter(e => e.firstTimestamp >= growthCutoff);
+        if (filtered.length === 0) continue;
+
+        const baseline = rawEntries.filter(e => e.firstTimestamp < growthCutoff).length;
+        const dayMap = new Map();
+        let cumulative = baseline;
+        for (const e of filtered) {
+            cumulative++;
+            const d = new Date(e.firstTimestamp);
+            const ds = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            dayMap.set(ds, cumulative);
+        }
+
+        const keys = Array.from(dayMap.keys()).sort();
+        const series = keys.map(k => {
+            const [y, m, day] = k.split('-').map(Number);
+            return { dateMs: Date.UTC(y, m - 1, day), count: dayMap.get(k) };
+        });
+
+        guildSeries.push({ guildId, name, tag, series, finalCount: series[series.length - 1].count });
+    }
+
+    if (guildSeries.length === 0) return null;
+
+    const tNow = Date.now();
+    const tMin = sharedTMin ?? Math.min(...guildSeries.flatMap(gs => gs.series.map(s => s.dateMs)));
+    const tMax = sharedTMax ?? Math.max(tNow, Math.max(...guildSeries.flatMap(gs => gs.series.map(s => s.dateMs))) + 86400000);
+    const tRange = tMax - tMin || 1;
+    const maxCount = Math.max(...guildSeries.map(gs => gs.finalCount), 1);
+    const yMax = maxCount * 1.18;
+
+    const LEGEND_ROWS = Math.ceil(guildSeries.length / 3);
+    const LEGEND_H = LEGEND_ROWS * 20 + 14;
+    const W = 900;
+    const M = { top: 52, right: 40, bottom: 32 + LEGEND_H, left: 70 };
+    const H = 330 + LEGEND_H;
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+    const baseY = M.top + cH;
+
+    const toX = (t) => M.left + (0.02 + 0.96 * (t - tMin) / tRange) * cW;
+    const toY = (v) => M.top + cH - (v / yMax) * cH;
+
+    const gradDefs = guildSeries.map((gs, i) => {
+        const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
+        return `<linearGradient id="psg${i}" x1="0" y1="${M.top}" x2="0" y2="${baseY}" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="${c}" stop-opacity="0.18"/><stop offset="100%" stop-color="${c}" stop-opacity="0.01"/></linearGradient>`;
+    }).join('\n    ');
+
+    const gridSteps = 4;
+    const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => {
+        const v = Math.round(yMax * i / gridSteps);
+        const y = toY(v);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
+    }).join('\n    ');
+
+    const curves = guildSeries.map((gs, i) => {
+        const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
+        const pts = gs.series.map(s => ({ x: toX(s.dateMs), y: toY(s.count) }));
+        if (pts.length < 2) {
+            const p = pts[0];
+            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="${c}"/>
+  <text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${gs.finalCount}</text>`;
+        }
+        const lp = buildCatmullRomPath(pts);
+        const ap = buildAreaPath(pts, baseY);
+        const last = pts[pts.length - 1];
+        return `<g clip-path="url(#psgClip)"><path d="${escapeXml(ap)}" fill="url(#psg${i})"/><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5" fill="${c}"/>
+  <text x="${last.x.toFixed(1)}" y="${(last.y - 10).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${gs.finalCount}</text>`;
+    }).join('\n  ');
+
+    const itemsPerRow = 3;
+    const legendStartY = baseY + 20;
+    const itemW = cW / itemsPerRow;
+    const legendItems = guildSeries.map((gs, i) => {
+        const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
+        const row = Math.floor(i / itemsPerRow);
+        const col = i % itemsPerRow;
+        const lx = M.left + col * itemW;
+        const ly = legendStartY + row * 20;
+        const label = escapeXml((stripEmoji(gs.tag) || stripEmoji(gs.name) || '?').slice(0, 24));
+        return `<rect x="${lx.toFixed(1)}" y="${(ly - 9).toFixed(1)}" width="12" height="12" rx="3" fill="${c}"/><text x="${(lx + 16).toFixed(1)}" y="${ly.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${label}</text>`;
+    }).join('\n  ');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    ${gradDefs}
+    <clipPath id="psgClip"><rect x="${M.left}" y="${M.top}" width="${cW}" height="${cH}"/></clipPath>
+  </defs>
+  <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
+  <line x1="${M.left}" y1="${M.top - 10}" x2="${W - M.right}" y2="${M.top - 10}" stroke="#2B2D31" stroke-width="1"/>
+  <text x="${W / 2}" y="22" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  ${gridLines}
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+  <line x1="${M.left}" y1="${baseY}" x2="${W - M.right}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+  ${curves}
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+  ${legendItems}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart };

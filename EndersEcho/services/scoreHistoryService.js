@@ -167,6 +167,30 @@ class ScoreHistoryService {
             .map(([userId, firstTimestamp]) => ({ userId, firstTimestamp }))
             .sort((a, b) => a.firstTimestamp - b.firstTimestamp);
     }
+
+    // Zwraca { guildId: [{userId, firstTimestamp}] } — dla każdego serwera lista pierwszych wpisów per gracz.
+    async getPerGuildFirstEntries(allGuildIds) {
+        const result = {};
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            const entries = [];
+            let files;
+            try { files = await fs.readdir(dir); } catch { result[guildId] = []; continue; }
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                try {
+                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
+                    const userEntries = JSON.parse(raw);
+                    if (!Array.isArray(userEntries) || userEntries.length === 0) continue;
+                    const earliest = Math.min(...userEntries.map(e => new Date(e.timestamp).getTime()));
+                    if (isNaN(earliest)) continue;
+                    entries.push({ userId: file.slice(0, -5), firstTimestamp: earliest });
+                } catch {}
+            }
+            result[guildId] = entries.sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+        }
+        return result;
+    }
 }
 
 module.exports = ScoreHistoryService;
