@@ -856,7 +856,7 @@ async function generateGuildComparisonChart(guildScores, chartTitle) {
         const endDot = `<circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
     <circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${c}" stroke="#1E1F22" stroke-width="1.5"/>`;
 
-        const rankName = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1" text-anchor="end"><tspan fill="#5C5F66" font-weight="bold">#${i + 1} </tspan>${label}</text>`;
+        const rankName = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1" text-anchor="end">${label}</text>`;
         const scoreText = `<text x="${(M.left + cW + 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" font-weight="bold">${escapeXml(gs.totalScore)}</text>`;
         const playerCount = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="end">${gs.playerCount} graczy</text>`;
 
