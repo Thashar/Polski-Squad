@@ -464,8 +464,8 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
     }).join('\n    ');
 
-    // Ostatni punkt wyróżniony
-    const last = pts[pts.length - 1];
+    // Ostatni punkt wyróżniony — na końcu rozszerzonej krzywej (phantom point jeśli dodany)
+    const last = ptsExtended[ptsExtended.length - 1];
 
     // Markery dołączenia serwerów
     const serverMarkersSvg = (() => {
