@@ -789,99 +789,26 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
             return `<g clip-path="url(#ppgClip)"><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
         }).join('\n  ');
 
-    // Buduj listę etykiet
-    const MIN_LABEL_GAP = 18; // px między środkami (font 11 + stroke 4 → ~14px wys. + 4px przerwa)
-    const X_LABEL_PROX  = 70; // px — etykiety bliższe niż to w osi X mogą się nakładać w pionie
-    const rawLabels = playerPts
+    const dotsLayer = playerPts
         .filter(({ pts }) => pts.length > 0)
         .map(({ c, pts }) => {
             const last = pts[pts.length - 1];
-            return {
-                dotX: last.x, dotY: last.y,
-                labelX: last.x, labelY: last.y - 13, origY: last.y - 13,
-                c, text: escapeXml(formatYLabel(last.scoreValue)),
-            };
-        });
-
-    // Deterministyczny algorytm rozłożenia etykiet — bez iteracyjnych oscylacji.
-    // 1. Grupuj etykiety przez bliskość w osi X (single-linkage clustering).
-    // 2. Dla każdej grupy sortuj po naturalnej pozycji Y i rozłóż z minimalną przerwą.
-    // 3. Przesuń grupę w górę jeśli wychodzi poza dolną krawędź wykresu.
-    {
-        const topBound    = M.top + 6;
-        const bottomBound = baseY - 5;
-
-        // Single-linkage clustering po osi X
-        const assigned = new Array(rawLabels.length).fill(false);
-        const groups   = [];
-        for (let i = 0; i < rawLabels.length; i++) {
-            if (assigned[i]) continue;
-            const group = [rawLabels[i]];
-            assigned[i] = true;
-            let expanded = true;
-            while (expanded) {
-                expanded = false;
-                for (let j = 0; j < rawLabels.length; j++) {
-                    if (assigned[j]) continue;
-                    if (group.some(m => Math.abs(m.labelX - rawLabels[j].labelX) <= X_LABEL_PROX)) {
-                        group.push(rawLabels[j]);
-                        assigned[j] = true;
-                        expanded = true;
-                    }
-                }
-            }
-            groups.push(group);
-        }
-
-        // Rozłóż każdą grupę
-        for (const group of groups) {
-            group.sort((a, b) => a.origY - b.origY);
-            const n = group.length;
-            if (n === 1) continue;
-
-            const available = bottomBound - topBound;
-            const gap = Math.min(MIN_LABEL_GAP, available / n);
-
-            // Przebieg w przód: zachowaj naturalną pozycję, pchaj w dół tylko gdy za blisko
-            for (let i = 1; i < n; i++) {
-                if (group[i].labelY - group[i - 1].labelY < gap) {
-                    group[i].labelY = group[i - 1].labelY + gap;
-                }
-            }
-
-            // Przesuń grupę w górę jeśli wychodzi poza dolną krawędź
-            const overflow = group[n - 1].labelY - bottomBound;
-            if (overflow > 0) {
-                for (const l of group) l.labelY -= overflow;
-            }
-
-            // Ogranicz każdą etykietę do obszaru wykresu (bezpieczeństwo)
-            for (const l of group) {
-                l.labelY = Math.max(topBound, Math.min(bottomBound, l.labelY));
-            }
-        }
-    }
-
-    const dotsLayer = rawLabels.map(({ dotX, dotY, labelX, labelY, origY, c, text }) => {
-        const shifted = Math.abs(labelY - origY) > 3;
-        const connector = shifted
-            ? `<line x1="${dotX.toFixed(1)}" y1="${(dotY - 7).toFixed(1)}" x2="${labelX.toFixed(1)}" y2="${(labelY + 6).toFixed(1)}" stroke="${c}" stroke-width="0.8" opacity="0.45" stroke-dasharray="2,2"/>`
-            : '';
-        return `${connector}<circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
-  <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>
-  <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${text}</text>`;
-    }).join('\n  ');
+            return `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
+  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>`;
+        }).join('\n  ');
 
     const itemsPerRow = 3;
     const legendStartY = baseY + 20;
     const itemW = cW / itemsPerRow;
-    const legendItems = playerPts.map(({ ph, c, i }) => {
+    const legendItems = playerPts.map(({ ph, c, i, pts }) => {
         const row = Math.floor(i / itemsPerRow);
         const col = i % itemsPerRow;
         const lx = M.left + col * itemW;
         const ly = legendStartY + row * 20;
-        const label = escapeXml(stripEmoji(ph.name).slice(0, 24) || '?');
-        return `<rect x="${lx.toFixed(1)}" y="${(ly - 9).toFixed(1)}" width="12" height="12" rx="3" fill="${c}"/><text x="${(lx + 16).toFixed(1)}" y="${ly.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${label}</text>`;
+        const name = escapeXml(stripEmoji(ph.name).slice(0, 18) || '?');
+        const lastScore = pts.length > 0 ? escapeXml(formatYLabel(pts[pts.length - 1].scoreValue)) : '';
+        const scoreText = lastScore ? ` — ${lastScore}` : '';
+        return `<rect x="${lx.toFixed(1)}" y="${(ly - 9).toFixed(1)}" width="12" height="12" rx="3" fill="${c}"/><text x="${(lx + 16).toFixed(1)}" y="${ly.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${name}<tspan fill="${c}" font-weight="bold">${scoreText}</tspan></text>`;
     }).join('\n  ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
