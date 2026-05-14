@@ -738,7 +738,16 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
 
     const playerPts = series.map((ph, i) => {
         const c = PLAYER_PALETTE[i % PLAYER_PALETTE.length];
-        const pts = ph.entries.map(e => ({
+        // Jeden punkt per dzień UTC — bierzemy najwyższy wynik z danego dnia
+        const dayMap = new Map();
+        for (const e of ph.entries) {
+            const d = new Date(e.timestamp);
+            const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            const prev = dayMap.get(day);
+            if (!prev || e.scoreValue > prev.scoreValue) dayMap.set(day, e);
+        }
+        const deduped = Array.from(dayMap.values()).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const pts = deduped.map(e => ({
             x: toX(new Date(e.timestamp).getTime()),
             y: toY(e.scoreValue),
             scoreValue: e.scoreValue,
