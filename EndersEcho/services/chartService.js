@@ -783,7 +783,8 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
 
     // Oblicz pozycje etykiet i rozwiąż kolizje iteracyjnie
     const MIN_LABEL_GAP = 15; // px między środkami etykiet w pionie
-    const X_PROXIMITY = 80;  // px — tylko etykiety blisko siebie w X mogą kolidować
+    const DOT_LABEL_GAP = 14; // px między etykietą a środkiem punktu innego gracza
+    const X_PROXIMITY = 80;   // px — tylko elementy blisko siebie w X mogą kolidować
     const rawLabels = playerPts
         .filter(({ pts }) => pts.length > 0)
         .map(({ c, pts }) => {
@@ -795,9 +796,11 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
             };
         });
 
-    // Iteracyjne rozwiązywanie kolizji (maks. 30 przebiegów, n ≤ 10 więc O(n²) OK)
-    for (let iter = 0; iter < 30; iter++) {
+    // Iteracyjne rozwiązywanie kolizji: etykieta vs etykieta AND etykieta vs kropka innego gracza
+    for (let iter = 0; iter < 50; iter++) {
         let changed = false;
+
+        // label vs label — obie strony się rozstępują
         for (let i = 0; i < rawLabels.length; i++) {
             for (let j = i + 1; j < rawLabels.length; j++) {
                 const a = rawLabels[i], b = rawLabels[j];
@@ -810,7 +813,28 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
                 changed = true;
             }
         }
+
+        // label vs dot innego gracza — przesuwa się tylko etykieta
+        for (let i = 0; i < rawLabels.length; i++) {
+            for (let j = 0; j < rawLabels.length; j++) {
+                if (i === j) continue;
+                const label = rawLabels[i], dot = rawLabels[j];
+                if (Math.abs(label.labelX - dot.dotX) > X_PROXIMITY) continue;
+                const dy = Math.abs(label.labelY - dot.dotY);
+                if (dy >= DOT_LABEL_GAP) continue;
+                const push = DOT_LABEL_GAP - dy + 0.5;
+                if (label.labelY <= dot.dotY) { label.labelY -= push; }
+                else                          { label.labelY += push; }
+                changed = true;
+            }
+        }
+
         if (!changed) break;
+    }
+
+    // Etykieta zawsze nad własną kropką (halo r=9 + margines)
+    for (const l of rawLabels) {
+        if (l.labelY > l.dotY - 11) l.labelY = l.dotY - 11;
     }
     // Ogranicz do obszaru wykresu
     for (const l of rawLabels) l.labelY = Math.max(M.top + 6, Math.min(baseY - 5, l.labelY));
