@@ -613,11 +613,9 @@ async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTit
     const maxCount = Math.max(...guildSeries.map(gs => gs.finalCount), 1);
     const yMax = maxCount * 1.18;
 
-    const LEGEND_ROWS = Math.ceil(guildSeries.length / 3);
-    const LEGEND_H = LEGEND_ROWS * 20 + 14;
     const W = 900;
-    const M = { top: 52, right: 40, bottom: 32 + LEGEND_H, left: 70 };
-    const H = 330 + LEGEND_H;
+    const M = { top: 52, right: 40, bottom: 32, left: 160 };
+    const H = 330;
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
     const baseY = M.top + cH;
@@ -668,17 +666,15 @@ async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTit
 
     const curves = `${areasLayer}\n  ${linesLayer}\n  ${dotsLayer}`;
 
-    const itemsPerRow = 3;
-    const legendStartY = baseY + 20;
-    const itemW = cW / itemsPerRow;
+    const legendItemH = 20;
+    const legendTotalH = guildSeries.length * legendItemH;
+    const legendStartY = M.top + (cH - legendTotalH) / 2;
     const legendItems = guildSeries.map((gs, i) => {
         const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
-        const row = Math.floor(i / itemsPerRow);
-        const col = i % itemsPerRow;
-        const lx = M.left + col * itemW;
-        const ly = legendStartY + row * 20;
-        const label = escapeXml((stripEmoji(gs.tag) || stripEmoji(gs.name) || '?').slice(0, 24));
-        return `<rect x="${lx.toFixed(1)}" y="${(ly - 9).toFixed(1)}" width="12" height="12" rx="3" fill="${c}"/><text x="${(lx + 16).toFixed(1)}" y="${ly.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${label}</text>`;
+        const ly = legendStartY + i * legendItemH + legendItemH / 2;
+        const strippedTag = stripEmoji(gs.tag || '').trim();
+        const label = escapeXml((strippedTag || stripEmoji(gs.name || '').trim() || gs.name || '?').slice(0, 18));
+        return `<rect x="8" y="${(ly - 8).toFixed(1)}" width="11" height="11" rx="2" fill="${c}"/><text x="24" y="${(ly + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${label}</text>`;
     }).join('\n  ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
