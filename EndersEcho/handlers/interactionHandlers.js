@@ -4391,7 +4391,25 @@ class InteractionHandler {
                 newPage, rankingData.totalPages, false, msgs, rankingData.roleRows || [], btnOptions
             );
 
-            await interaction.editReply({ embeds: [embed], components: buttons, attachments: [] });
+            let paginationChartAttachment = null;
+            if (rankingData.mode === 'global') {
+                const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                const t = this._panelT(interaction.guildId);
+                paginationChartAttachment = await this._buildGlobalRankingChartAttachment(
+                    rankingData.players, newPage, allGuildIds, t
+                );
+            }
+
+            const paginationEmbeds = paginationChartAttachment
+                ? [embed, new EmbedBuilder().setImage('attachment://ranking_progress.png')]
+                : [embed];
+            const paginationOpts = { embeds: paginationEmbeds, components: buttons, attachments: [] };
+            if (paginationChartAttachment) {
+                paginationOpts.files = [paginationChartAttachment];
+                delete paginationOpts.attachments;
+            }
+
+            await interaction.editReply(paginationOpts);
 
         } catch (error) {
             logger.error('Błąd w handleButtonInteraction:', error);
@@ -4760,6 +4778,36 @@ class InteractionHandler {
      * @param {ButtonInteraction} interaction
      * @param {string} customId
      */
+    /**
+     * Generuje wykres progresu graczy dla wskazanej strony rankingu globalnego.
+     * @returns {Promise<AttachmentBuilder|null>}
+     */
+    async _buildGlobalRankingChartAttachment(players, currentPage, allGuildIds, t) {
+        if (!this.chartService?.generatePlayersProgressChart || !this.scoreHistoryService) return null;
+        const perPage = this.config.ranking.playersPerPage;
+        const pagePlayers = players.slice(currentPage * perPage, (currentPage + 1) * perPage);
+        if (pagePlayers.length === 0) return null;
+        try {
+            const histories = await Promise.all(
+                pagePlayers.map(async (p) => {
+                    const entries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.userId);
+                    return {
+                        userId: p.userId,
+                        name: p.username || p.userId,
+                        entries: entries.filter(e => typeof e.scoreValue === 'number' && e.scoreValue > 0),
+                    };
+                })
+            );
+            const chartTitle = t('📊 Progres Graczy', '📊 Player Progress');
+            const buf = await this.chartService.generatePlayersProgressChart(histories, chartTitle);
+            if (!buf) return null;
+            return new AttachmentBuilder(buf, { name: 'ranking_progress.png' });
+        } catch (err) {
+            logger.warn('Błąd generowania wykresu progresu graczy:', err);
+            return null;
+        }
+    }
+
     async _handleRankingSelect(interaction, customId) {
         await interaction.deferUpdate();
 
@@ -4881,12 +4929,23 @@ class InteractionHandler {
                 { userPage, mode, guildId, guildName, parentGuildId, parentGuildName }
             );
 
-            const reply = await interaction.editReply({
-                content: null,
-                embeds: [embed],
-                components: buttons,
-                attachments: []
-            });
+            let chartAttachment = null;
+            if (mode === 'global') {
+                const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                const t = this._panelT(interaction.guildId);
+                chartAttachment = await this._buildGlobalRankingChartAttachment(players, currentPage, allGuildIds, t);
+            }
+
+            const replyEmbeds = chartAttachment
+                ? [embed, new EmbedBuilder().setImage('attachment://ranking_progress.png')]
+                : [embed];
+            const replyOpts = { content: null, embeds: replyEmbeds, components: buttons, attachments: [] };
+            if (chartAttachment) {
+                replyOpts.files = [chartAttachment];
+                delete replyOpts.attachments;
+            }
+
+            const reply = await interaction.editReply(replyOpts);
 
             this.rankingService.addActiveRanking(reply.id, {
                 players,
