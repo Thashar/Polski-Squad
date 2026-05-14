@@ -772,15 +772,49 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
             return `<g clip-path="url(#ppgClip)"><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
         }).join('\n  ');
 
-    const dotsLayer = playerPts
+    // Oblicz pozycje etykiet i rozwiąż kolizje iteracyjnie
+    const MIN_LABEL_GAP = 15; // px między środkami etykiet w pionie
+    const X_PROXIMITY = 80;  // px — tylko etykiety blisko siebie w X mogą kolidować
+    const rawLabels = playerPts
         .filter(({ pts }) => pts.length > 0)
-        .map(({ ph, c, pts }) => {
+        .map(({ c, pts }) => {
             const last = pts[pts.length - 1];
-            const scoreLabel = escapeXml(formatYLabel(last.scoreValue));
-            return `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
-  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>
-  <text x="${last.x.toFixed(1)}" y="${(last.y - 13).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${scoreLabel}</text>`;
-        }).join('\n  ');
+            return {
+                dotX: last.x, dotY: last.y,
+                labelX: last.x, labelY: last.y - 13, origY: last.y - 13,
+                c, text: escapeXml(formatYLabel(last.scoreValue)),
+            };
+        });
+
+    // Iteracyjne rozwiązywanie kolizji (maks. 30 przebiegów, n ≤ 10 więc O(n²) OK)
+    for (let iter = 0; iter < 30; iter++) {
+        let changed = false;
+        for (let i = 0; i < rawLabels.length; i++) {
+            for (let j = i + 1; j < rawLabels.length; j++) {
+                const a = rawLabels[i], b = rawLabels[j];
+                if (Math.abs(a.labelX - b.labelX) > X_PROXIMITY) continue;
+                const dy = Math.abs(a.labelY - b.labelY);
+                if (dy >= MIN_LABEL_GAP) continue;
+                const push = (MIN_LABEL_GAP - dy) / 2 + 0.5;
+                if (a.labelY <= b.labelY) { a.labelY -= push; b.labelY += push; }
+                else                      { a.labelY += push; b.labelY -= push; }
+                changed = true;
+            }
+        }
+        if (!changed) break;
+    }
+    // Ogranicz do obszaru wykresu
+    for (const l of rawLabels) l.labelY = Math.max(M.top + 6, Math.min(baseY - 5, l.labelY));
+
+    const dotsLayer = rawLabels.map(({ dotX, dotY, labelX, labelY, origY, c, text }) => {
+        const shifted = Math.abs(labelY - origY) > 3;
+        const connector = shifted
+            ? `<line x1="${dotX.toFixed(1)}" y1="${(dotY - 7).toFixed(1)}" x2="${labelX.toFixed(1)}" y2="${(labelY + 6).toFixed(1)}" stroke="${c}" stroke-width="0.8" opacity="0.45" stroke-dasharray="2,2"/>`
+            : '';
+        return `${connector}<circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
+  <circle cx="${dotX.toFixed(1)}" cy="${dotY.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>
+  <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${text}</text>`;
+    }).join('\n  ');
 
     const itemsPerRow = 3;
     const legendStartY = baseY + 20;
