@@ -50,7 +50,7 @@ const STATUS_POOL = [
     { type: ActivityType.Watching, text: n => `Calculating ${n}'s stats 🧮` },
     { type: ActivityType.Watching, text: n => `Reviewing ${n}'s progress 📈` },
     { type: ActivityType.Watching, text: n => `Analyzing ${n}'s results 🎯` },
-    { type: ActivityType.Watching, text: g => `${g}'s ranking 🏅`, needsGuild: true },
+    { type: ActivityType.Watching, text: g => `Watching ${g}'s ranking 🏅`, needsGuild: true },
 ];
 
 async function _updateStatus() {
