@@ -468,10 +468,10 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
         const lines = [];
         const BADGE_H = 15;
         const GAP = 4; // minimalna przerwa między badge'ami
-        // Poziomy na górze i dole wykresu — próbujemy górne najpierw, potem dolne
+        // 6 poziomów od góry wykresu w dół
         const Y_LEVELS = [
-            M.top + 4, M.top + 22, M.top + 40,          // górna strefa (3 poziomy)
-            baseY - 20, baseY - 38, baseY - 56,          // dolna strefa (3 poziomy)
+            M.top + 4, M.top + 22, M.top + 40,
+            M.top + 58, M.top + 76, M.top + 94,
         ];
         const usedRects = []; // { x1, x2, y }
 
