@@ -789,11 +789,9 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
             return `<g clip-path="url(#ppgClip)"><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
         }).join('\n  ');
 
-    // Oblicz pozycje etykiet i rozwiąż kolizje iteracyjnie
-    const MIN_LABEL_GAP = 18; // px między środkami etykiet w pionie (font 11 + stroke 4 → ~14px wys.)
-    const DOT_LABEL_GAP = 14; // px między etykietą a środkiem punktu innego gracza
-    const X_LABEL_PROX = 150; // px — etykiety bliższe niż to mogą kolidować poziomo
-    const X_DOT_PROX   = 80;  // px — punkt koliduje z etykietami w tym promieniu X
+    // Buduj listę etykiet
+    const MIN_LABEL_GAP = 18; // px między środkami (font 11 + stroke 4 → ~14px wys. + 4px przerwa)
+    const X_LABEL_PROX  = 70; // px — etykiety bliższe niż to w osi X mogą się nakładać w pionie
     const rawLabels = playerPts
         .filter(({ pts }) => pts.length > 0)
         .map(({ c, pts }) => {
@@ -805,51 +803,63 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
             };
         });
 
-    // Clampy i kolizje w jednej pętli — każda iteracja może reagować na poprzednie przesunięcia
-    for (let iter = 0; iter < 80; iter++) {
-        let changed = false;
+    // Deterministyczny algorytm rozłożenia etykiet — bez iteracyjnych oscylacji.
+    // 1. Grupuj etykiety przez bliskość w osi X (single-linkage clustering).
+    // 2. Dla każdej grupy sortuj po naturalnej pozycji Y i rozłóż z minimalną przerwą.
+    // 3. Przesuń grupę w górę jeśli wychodzi poza dolną krawędź wykresu.
+    {
+        const topBound    = M.top + 6;
+        const bottomBound = baseY - 5;
 
-        // label vs label — obie strony się rozstępują
+        // Single-linkage clustering po osi X
+        const assigned = new Array(rawLabels.length).fill(false);
+        const groups   = [];
         for (let i = 0; i < rawLabels.length; i++) {
-            for (let j = i + 1; j < rawLabels.length; j++) {
-                const a = rawLabels[i], b = rawLabels[j];
-                if (Math.abs(a.labelX - b.labelX) > X_LABEL_PROX) continue;
-                const dy = Math.abs(a.labelY - b.labelY);
-                if (dy >= MIN_LABEL_GAP) continue;
-                const push = (MIN_LABEL_GAP - dy) / 2 + 0.5;
-                if (a.labelY <= b.labelY) { a.labelY -= push; b.labelY += push; }
-                else                      { a.labelY += push; b.labelY -= push; }
-                changed = true;
+            if (assigned[i]) continue;
+            const group = [rawLabels[i]];
+            assigned[i] = true;
+            let expanded = true;
+            while (expanded) {
+                expanded = false;
+                for (let j = 0; j < rawLabels.length; j++) {
+                    if (assigned[j]) continue;
+                    if (group.some(m => Math.abs(m.labelX - rawLabels[j].labelX) <= X_LABEL_PROX)) {
+                        group.push(rawLabels[j]);
+                        assigned[j] = true;
+                        expanded = true;
+                    }
+                }
+            }
+            groups.push(group);
+        }
+
+        // Rozłóż każdą grupę
+        for (const group of groups) {
+            group.sort((a, b) => a.origY - b.origY);
+            const n = group.length;
+            if (n === 1) continue;
+
+            const available = bottomBound - topBound;
+            const gap = Math.min(MIN_LABEL_GAP, available / n);
+
+            // Przebieg w przód: zachowaj naturalną pozycję, pchaj w dół tylko gdy za blisko
+            for (let i = 1; i < n; i++) {
+                if (group[i].labelY - group[i - 1].labelY < gap) {
+                    group[i].labelY = group[i - 1].labelY + gap;
+                }
+            }
+
+            // Przesuń grupę w górę jeśli wychodzi poza dolną krawędź
+            const overflow = group[n - 1].labelY - bottomBound;
+            if (overflow > 0) {
+                for (const l of group) l.labelY -= overflow;
+            }
+
+            // Ogranicz każdą etykietę do obszaru wykresu (bezpieczeństwo)
+            for (const l of group) {
+                l.labelY = Math.max(topBound, Math.min(bottomBound, l.labelY));
             }
         }
-
-        // label vs dot innego gracza — przesuwa się tylko etykieta
-        for (let i = 0; i < rawLabels.length; i++) {
-            for (let j = 0; j < rawLabels.length; j++) {
-                if (i === j) continue;
-                const label = rawLabels[i], dot = rawLabels[j];
-                if (Math.abs(label.labelX - dot.dotX) > X_DOT_PROX) continue;
-                const dy = Math.abs(label.labelY - dot.dotY);
-                if (dy >= DOT_LABEL_GAP) continue;
-                const push = DOT_LABEL_GAP - dy + 0.5;
-                if (label.labelY <= dot.dotY) { label.labelY -= push; }
-                else                          { label.labelY += push; }
-                changed = true;
-            }
-        }
-
-        // Etykieta zawsze nad własną kropką
-        for (const l of rawLabels) {
-            if (l.labelY > l.dotY - 11) { l.labelY = l.dotY - 11; changed = true; }
-        }
-
-        // Ograniczenie do obszaru wykresu
-        for (const l of rawLabels) {
-            const clamped = Math.max(M.top + 6, Math.min(baseY - 5, l.labelY));
-            if (clamped !== l.labelY) { l.labelY = clamped; changed = true; }
-        }
-
-        if (!changed) break;
     }
 
     const dotsLayer = rawLabels.map(({ dotX, dotY, labelX, labelY, origY, c, text }) => {
