@@ -4392,16 +4392,30 @@ class InteractionHandler {
             );
 
             let paginationChartAttachment = null;
+            let paginationChartFilename = null;
             if (rankingData.mode === 'global') {
                 const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                 const t = this._panelT(interaction.guildId);
                 paginationChartAttachment = await this._buildGlobalRankingChartAttachment(
                     rankingData.players, newPage, allGuildIds, t
                 );
+                paginationChartFilename = 'ranking_progress.png';
+            } else if (rankingData.mode === 'guild_ranking' && this.chartService?.generateGuildComparisonChart) {
+                try {
+                    const t = this._panelT(interaction.guildId);
+                    const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
+                    const buf = await this.chartService.generateGuildComparisonChart(rankingData.guildScores, chartTitle);
+                    if (buf) {
+                        paginationChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
+                        paginationChartFilename = 'guild_comparison.png';
+                    }
+                } catch (err) {
+                    logger.warn('Błąd generowania wykresu porównania serwerów (paginacja):', err);
+                }
             }
 
             const paginationEmbeds = paginationChartAttachment
-                ? [embed, new EmbedBuilder().setImage('attachment://ranking_progress.png')]
+                ? [embed, new EmbedBuilder().setImage(`attachment://${paginationChartFilename}`)]
                 : [embed];
             const paginationOpts = { embeds: paginationEmbeds, components: buttons, attachments: [] };
             if (paginationChartAttachment) {
@@ -5123,7 +5137,28 @@ class InteractionHandler {
                 parentGuildName
             });
 
-            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons, attachments: [] });
+            let guildChartAttachment = null;
+            if (this.chartService?.generateGuildComparisonChart) {
+                try {
+                    const t = this._panelT(interaction.guildId);
+                    const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
+                    const buf = await this.chartService.generateGuildComparisonChart(guildScores, chartTitle);
+                    if (buf) {
+                        const { AttachmentBuilder } = require('discord.js');
+                        guildChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
+                    }
+                } catch (err) {
+                    logger.warn('Błąd generowania wykresu porównania serwerów:', err);
+                }
+            }
+
+            const embeds = guildChartAttachment
+                ? [embed, new (require('discord.js').EmbedBuilder)().setImage('attachment://guild_comparison.png')]
+                : [embed];
+            const replyOpts = { content: null, embeds, components: buttons, attachments: [] };
+            if (guildChartAttachment) replyOpts.files = [guildChartAttachment];
+
+            const reply = await interaction.editReply(replyOpts);
             this.rankingService.addActiveRanking(reply.id, {
                 guildScores,
                 players: [],

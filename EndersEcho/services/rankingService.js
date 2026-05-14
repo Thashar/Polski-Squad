@@ -140,8 +140,7 @@ class RankingService {
             const players = await this.getSortedPlayers(guildCfg.id);
             if (players.length === 0) return;
 
-            const top30 = players.slice(0, 30);
-            const totalScoreValue = top30.reduce((sum, p) => sum + (p.scoreValue || 0), 0);
+            const totalScoreValue = players.reduce((sum, p) => sum + (p.scoreValue || 0), 0);
 
             results.push({
                 guildId: guildCfg.id,

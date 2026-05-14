@@ -810,4 +810,72 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart };
+/**
+ * Generuje poziomy wykres porównania serwerów — identyczny styl jak porównanie graczy.
+ * Pasek = suma najlepszych wyników wszystkich graczy serwera.
+ * @param {Array<{guildId:string, guildName:string, tag:string|null, totalScoreValue:number, totalScore:string, playerCount:number}>} guildScores
+ * @param {string} chartTitle
+ * @returns {Promise<Buffer|null>}
+ */
+async function generateGuildComparisonChart(guildScores, chartTitle) {
+    const sharp = require('sharp');
+
+    const series = guildScores.filter(gs => gs.totalScoreValue > 0);
+    if (series.length === 0) return null;
+
+    const maxScore = Math.max(...series.map(gs => gs.totalScoreValue));
+    const xMax = maxScore * 1.04;
+
+    const ROW_H = 42;
+    const W = 900;
+    const M = { top: 44, right: 115, bottom: 44, left: 140 };
+    const cW = W - M.left - M.right;
+    const barAreaH = series.length * ROW_H;
+    const H = M.top + barAreaH + M.bottom;
+    const baseY = M.top + barAreaH;
+
+    const toX = (v) => M.left + (v / xMax) * cW;
+
+    const GRID_STEPS = 5;
+    const gridLines = Array.from({ length: GRID_STEPS + 1 }, (_, i) => {
+        const v = xMax * i / GRID_STEPS;
+        const x = toX(v);
+        return `<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${x.toFixed(1)}" y="${(baseY + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="middle">${escapeXml(formatYLabel(v))}</text>`;
+    }).join('\n    ');
+
+    const rows = series.map((gs, i) => {
+        const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
+        const cy = M.top + i * ROW_H + ROW_H / 2;
+        const barX = toX(gs.totalScoreValue);
+        const label = escapeXml(stripEmoji(gs.tag || gs.guildName || '?').slice(0, 22));
+
+        const track = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${(M.left + cW)}" y2="${cy.toFixed(1)}" stroke="#2B2D31" stroke-width="2" stroke-linecap="round"/>`;
+        const bar   = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${barX.toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round" opacity="0.55"/>`;
+        const endDot = `<circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
+    <circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${c}" stroke="#1E1F22" stroke-width="1.5"/>`;
+
+        const rankName = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1" text-anchor="end"><tspan fill="#5C5F66" font-weight="bold">#${i + 1} </tspan>${label}</text>`;
+        const scoreText = `<text x="${(M.left + cW + 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" font-weight="bold">${escapeXml(gs.totalScore)}</text>`;
+        const playerCount = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="end">${gs.playerCount} graczy</text>`;
+
+        const separator = i < series.length - 1
+            ? `<line x1="${M.left}" y1="${(cy + ROW_H / 2).toFixed(1)}" x2="${(M.left + cW)}" y2="${(cy + ROW_H / 2).toFixed(1)}" stroke="#25272B" stroke-width="1"/>`
+            : '';
+
+        return [track, bar, endDot, rankName, scoreText, playerCount, separator].join('\n    ');
+    }).join('\n    ');
+
+    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
+  <text x="${(W / 2).toFixed(1)}" y="28" font-family="Arial,sans-serif" font-size="14" fill="#DBDEE1" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  <line x1="${M.left}" y1="${M.top}" x2="${(M.left + cW)}" y2="${M.top}" stroke="#2B2D31" stroke-width="1"/>
+  <line x1="${M.left}" y1="${baseY}" x2="${(M.left + cW)}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+  ${gridLines}
+  ${rows}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
