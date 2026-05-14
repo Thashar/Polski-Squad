@@ -495,7 +495,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
             }
             usedRects.push({ x1: badgeX, x2: badgeX + badgeW, y: badgeY });
 
-            lines.push(`<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${markerColor}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.7"/>`);
+            lines.push(`<line x1="${x.toFixed(1)}" y1="${badgeY + BADGE_H}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="${markerColor}" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.7"/>`);
             lines.push(`<rect x="${badgeX.toFixed(1)}" y="${badgeY}" width="${badgeW}" height="${BADGE_H}" rx="7.5" fill="${markerColor}" opacity="0.90"/>`);
             lines.push(`<text x="${(badgeX + badgeW / 2).toFixed(1)}" y="${(badgeY + 10.5).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${tag}</text>`);
         });
