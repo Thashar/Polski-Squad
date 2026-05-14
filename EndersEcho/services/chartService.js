@@ -715,14 +715,22 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
     const series = playerHistories.filter(ph => ph.entries.length > 0);
     if (series.length === 0) return null;
 
+    // Oś X: maksymalnie 3 miesiące wstecz
+    const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
     const allTs = series.flatMap(ph => ph.entries.map(e => new Date(e.timestamp).getTime()));
-    const tMin = Math.min(...allTs);
+    const tMin = Math.max(Math.min(...allTs), threeMonthsAgo);
     const tMax = Math.max(Date.now(), Math.max(...allTs) + 86400000);
     const tRange = tMax - tMin || 1;
 
+    // Oś Y: zakres od minimalnego wyniku (z paddingiem), nie od zera
     const allScores = series.flatMap(ph => ph.entries.map(e => e.scoreValue));
+    const minScore = Math.min(...allScores);
     const maxScore = Math.max(...allScores, 1);
-    const yMax = maxScore * 1.15;
+    const scoreRange = maxScore - minScore;
+    const padding = Math.max(scoreRange * 0.08, maxScore * 0.02);
+    const yMin = Math.max(0, minScore - padding);
+    const yMax = maxScore + padding;
+    const yRange = yMax - yMin || 1;
 
     const LEGEND_ROWS = Math.ceil(series.length / 3);
     const LEGEND_H = LEGEND_ROWS * 20 + 14;
@@ -734,7 +742,7 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
     const baseY = M.top + cH;
 
     const toX = (t) => M.left + (0.02 + 0.96 * (t - tMin) / tRange) * cW;
-    const toY = (v) => M.top + cH - (v / yMax) * cH;
+    const toY = (v) => M.top + cH - ((v - yMin) / yRange) * cH;
 
     const playerPts = series.map((ph, i) => {
         const c = PLAYER_PALETTE[i % PLAYER_PALETTE.length];
@@ -761,7 +769,7 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
 
     const gridSteps = 4;
     const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => {
-        const v = yMax * i / gridSteps;
+        const v = yMin + yRange * i / gridSteps;
         const y = toY(v);
         return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(formatYLabel(v))}</text>`;
