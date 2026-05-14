@@ -445,9 +445,15 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
 
     const pts = series.map(s => ({ x: toX(s.dateMs), y: toY(s.count), count: s.count, dateStr: s.dateStr }));
 
+    // Dodaj phantom point na tMax z tym samym count — linia dotyka prawej krawędzi wykresu
+    const lastPt = pts[pts.length - 1];
+    const ptsExtended = lastPt.x < toX(tMax) - 1
+        ? [...pts, { x: toX(tMax), y: lastPt.y, count: lastPt.count, dateStr: lastPt.dateStr }]
+        : pts;
+
     // Linia Catmull-Rom i wypełnienie gradientem
-    const linePath = buildCatmullRomPath(pts);
-    const areaPath = buildAreaPath(pts, baseY);
+    const linePath = buildCatmullRomPath(ptsExtended);
+    const areaPath = buildAreaPath(ptsExtended, baseY);
 
     // Poziome linie siatki
     const gridSteps = 4;
