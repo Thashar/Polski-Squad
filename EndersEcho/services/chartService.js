@@ -707,129 +707,104 @@ const PLAYER_PALETTE = [
 ];
 
 /**
- * Generuje wykres progresu wyników graczy widocznych na stronie rankingu globalnego.
- * @param {Array<{userId:string, name:string, entries:Array<{timestamp:string, scoreValue:number}>}>} playerHistories
+ * Generuje poziomy wykres porównania wyników graczy — wszyscy na tej samej osi X.
+ * Pasek = najlepszy wynik, kropki = poprzednie wyniki (historia w ciągu 90 dni).
+ * Posortowani od najwyższego. Pozwala na natychmiastowe porównanie między graczami.
+ * @param {Array<{userId:string, name:string, entries:Array<{timestamp:string, scoreValue:number, score?:string}>}>} playerHistories
  * @param {string} chartTitle
  * @returns {Promise<Buffer|null>}
  */
 async function generatePlayersProgressChart(playerHistories, chartTitle) {
     const sharp = require('sharp');
 
-    const series = playerHistories.filter(ph => ph.entries.length > 0);
+    // Deduplikacja per dzień UTC (najwyższy wynik), sortowanie po aktualnym best desc
+    const series = playerHistories
+        .map((ph, idx) => {
+            const c = PLAYER_PALETTE[idx % PLAYER_PALETTE.length];
+            const dayMap = new Map();
+            for (const e of ph.entries) {
+                if (typeof e.scoreValue !== 'number' || e.scoreValue <= 0) continue;
+                const d = new Date(e.timestamp);
+                const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+                const prev = dayMap.get(day);
+                if (!prev || e.scoreValue > prev.scoreValue) dayMap.set(day, e);
+            }
+            const entries = Array.from(dayMap.values());
+            if (entries.length === 0) return null;
+            const best = entries.reduce((a, b) => b.scoreValue > a.scoreValue ? b : a);
+            const scoreStr = best.score || formatYLabel(best.scoreValue);
+            return { ph, c, entries, best, scoreStr };
+        })
+        .filter(Boolean)
+        .sort((a, b) => b.best.scoreValue - a.best.scoreValue);
+
     if (series.length === 0) return null;
 
-    // Oś X: maksymalnie 3 miesiące wstecz
-    const threeMonthsAgo = Date.now() - 90 * 24 * 60 * 60 * 1000;
-    const allTs = series.flatMap(ph => ph.entries.map(e => new Date(e.timestamp).getTime()));
-    const tMin = Math.max(Math.min(...allTs), threeMonthsAgo);
-    const tMax = Math.max(Date.now(), Math.max(...allTs) + 86400000);
-    const tRange = tMax - tMin || 1;
+    const maxScore = Math.max(...series.map(s => s.best.scoreValue));
+    const xMax = maxScore * 1.04;
 
-    // Oś Y: zakres od minimalnego wyniku (z paddingiem), nie od zera
-    const allScores = series.flatMap(ph => ph.entries.map(e => e.scoreValue));
-    const minScore = Math.min(...allScores);
-    const maxScore = Math.max(...allScores, 1);
-    const scoreRange = maxScore - minScore;
-    const padding = Math.max(scoreRange * 0.08, maxScore * 0.02);
-    const yMin = Math.max(0, minScore - padding);
-    const yMax = maxScore + padding;
-    const yRange = yMax - yMin || 1;
-
-    const LEGEND_ROWS = Math.ceil(series.length / 3);
-    const LEGEND_H = LEGEND_ROWS * 20 + 14;
+    const ROW_H = 40;
     const W = 900;
-    const M = { top: 52, right: 40, bottom: 32 + LEGEND_H, left: 80 };
-    const H = 330 + LEGEND_H;
+    const M = { top: 44, right: 115, bottom: 44, left: 140 };
     const cW = W - M.left - M.right;
-    const cH = H - M.top - M.bottom;
-    const baseY = M.top + cH;
+    const barAreaH = series.length * ROW_H;
+    const H = M.top + barAreaH + M.bottom;
+    const baseY = M.top + barAreaH;
 
-    const toX = (t) => M.left + (0.02 + 0.96 * (t - tMin) / tRange) * cW;
-    const toY = (v) => M.top + cH - ((v - yMin) / yRange) * cH;
+    const toX = (v) => M.left + (v / xMax) * cW;
 
-    const playerPts = series.map((ph, i) => {
-        const c = PLAYER_PALETTE[i % PLAYER_PALETTE.length];
-        // Jeden punkt per dzień UTC — bierzemy najwyższy wynik z danego dnia
-        const dayMap = new Map();
-        for (const e of ph.entries) {
-            const d = new Date(e.timestamp);
-            const day = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
-            const prev = dayMap.get(day);
-            if (!prev || e.scoreValue > prev.scoreValue) dayMap.set(day, e);
-        }
-        const deduped = Array.from(dayMap.values()).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
-        const pts = deduped.map(e => ({
-            x: toX(new Date(e.timestamp).getTime()),
-            y: toY(e.scoreValue),
-            scoreValue: e.scoreValue,
-        }));
-        return { ph, i, c, pts };
-    });
-
-    const gradDefs = playerPts.map(({ i, c }) =>
-        `<linearGradient id="ppg${i}" x1="0" y1="${M.top}" x2="0" y2="${baseY}" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="${c}" stop-opacity="0.18"/><stop offset="100%" stop-color="${c}" stop-opacity="0.01"/></linearGradient>`
-    ).join('\n    ');
-
-    const gridSteps = 4;
-    const gridLines = Array.from({ length: gridSteps + 1 }, (_, i) => {
-        const v = yMin + yRange * i / gridSteps;
-        const y = toY(v);
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
-    <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(formatYLabel(v))}</text>`;
+    // Pionowe linie siatki + etykiety osi X (dół)
+    const GRID_STEPS = 5;
+    const gridLines = Array.from({ length: GRID_STEPS + 1 }, (_, i) => {
+        const v = xMax * i / GRID_STEPS;
+        const x = toX(v);
+        return `<line x1="${x.toFixed(1)}" y1="${M.top}" x2="${x.toFixed(1)}" y2="${baseY}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${x.toFixed(1)}" y="${(baseY + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="middle">${escapeXml(formatYLabel(v))}</text>`;
     }).join('\n    ');
 
-    const areasLayer = playerPts
-        .filter(({ pts }) => pts.length >= 2)
-        .map(({ i, pts }) => {
-            const ap = buildAreaPath(pts, baseY);
-            return `<g clip-path="url(#ppgClip)"><path d="${escapeXml(ap)}" fill="url(#ppg${i})"/></g>`;
-        }).join('\n  ');
+    // Wiersze graczy
+    const rows = series.map(({ ph, c, entries, best, scoreStr }, i) => {
+        const cy = M.top + i * ROW_H + ROW_H / 2;
+        const barX = toX(best.scoreValue);
+        const name = escapeXml(stripEmoji(ph.name).slice(0, 22) || '?');
 
-    const linesLayer = playerPts
-        .filter(({ pts }) => pts.length >= 2)
-        .map(({ c, pts }) => {
-            const lp = buildCatmullRomPath(pts);
-            return `<g clip-path="url(#ppgClip)"><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
-        }).join('\n  ');
+        // Szara ścieżka (pełna szerokość)
+        const track = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${(M.left + cW)}" y2="${cy.toFixed(1)}" stroke="#2B2D31" stroke-width="2" stroke-linecap="round"/>`;
 
-    const dotsLayer = playerPts
-        .filter(({ pts }) => pts.length > 0)
-        .map(({ c, pts }) => {
-            const last = pts[pts.length - 1];
-            return `<circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
-  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>`;
-        }).join('\n  ');
+        // Kolorowy pasek do najlepszego wyniku
+        const bar = `<line x1="${M.left}" y1="${cy.toFixed(1)}" x2="${barX.toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${c}" stroke-width="5" stroke-linecap="round" opacity="0.55"/>`;
 
-    const itemsPerRow = 3;
-    const legendStartY = baseY + 20;
-    const itemW = cW / itemsPerRow;
-    const legendItems = playerPts.map(({ ph, c, i, pts }) => {
-        const row = Math.floor(i / itemsPerRow);
-        const col = i % itemsPerRow;
-        const lx = M.left + col * itemW;
-        const ly = legendStartY + row * 20;
-        const name = escapeXml(stripEmoji(ph.name).slice(0, 18) || '?');
-        const lastScore = pts.length > 0 ? escapeXml(formatYLabel(pts[pts.length - 1].scoreValue)) : '';
-        const scoreText = lastScore ? ` — ${lastScore}` : '';
-        return `<rect x="${lx.toFixed(1)}" y="${(ly - 9).toFixed(1)}" width="12" height="12" rx="3" fill="${c}"/><text x="${(lx + 16).toFixed(1)}" y="${ly.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${name}<tspan fill="${c}" font-weight="bold">${scoreText}</tspan></text>`;
-    }).join('\n  ');
+        // Kropki poprzednich wyników (mniejsze, półprzezroczyste)
+        const histDots = entries
+            .filter(e => e !== best)
+            .map(e => `<circle cx="${toX(e.scoreValue).toFixed(1)}" cy="${cy.toFixed(1)}" r="3" fill="${c}" opacity="0.45"/>`)
+            .join('\n    ');
+
+        // Duży dot na końcu paska (najlepszy wynik)
+        const endDot = `<circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
+    <circle cx="${barX.toFixed(1)}" cy="${cy.toFixed(1)}" r="4.5" fill="${c}" stroke="#1E1F22" stroke-width="1.5"/>`;
+
+        // Numer pozycji + nick (lewa strona)
+        const rankName = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1" text-anchor="end"><tspan fill="#5C5F66" font-weight="bold">#${i + 1} </tspan>${name}</text>`;
+
+        // Wynik (prawa strona, kolor gracza)
+        const scoreText = `<text x="${(M.left + cW + 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" font-weight="bold">${escapeXml(scoreStr)}</text>`;
+
+        // Pozioma linia oddzielająca wiersze (delikatna)
+        const separator = i < series.length - 1
+            ? `<line x1="${M.left}" y1="${(cy + ROW_H / 2).toFixed(1)}" x2="${(M.left + cW)}" y2="${(cy + ROW_H / 2).toFixed(1)}" stroke="#25272B" stroke-width="1"/>`
+            : '';
+
+        return [track, bar, histDots, endDot, rankName, scoreText, separator].join('\n    ');
+    }).join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    ${gradDefs}
-    <clipPath id="ppgClip"><rect x="${M.left}" y="${M.top}" width="${cW}" height="${cH}"/></clipPath>
-  </defs>
   <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
-  <line x1="${M.left}" y1="${M.top - 10}" x2="${W - M.right}" y2="${M.top - 10}" stroke="#2B2D31" stroke-width="1"/>
-  <text x="${W / 2}" y="22" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  <text x="${(W / 2).toFixed(1)}" y="28" font-family="Arial,sans-serif" font-size="14" fill="#DBDEE1" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  <line x1="${M.left}" y1="${M.top}" x2="${(M.left + cW)}" y2="${M.top}" stroke="#2B2D31" stroke-width="1"/>
+  <line x1="${M.left}" y1="${baseY}" x2="${(M.left + cW)}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
   ${gridLines}
-  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
-  <line x1="${M.left}" y1="${baseY}" x2="${W - M.right}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
-  ${areasLayer}
-  ${linesLayer}
-  ${dotsLayer}
-  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
-  ${legendItems}
+  ${rows}
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();

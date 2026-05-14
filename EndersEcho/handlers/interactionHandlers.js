@@ -4798,7 +4798,7 @@ class InteractionHandler {
                     };
                 })
             );
-            const chartTitle = t('📊 Progres Graczy', '📊 Player Progress');
+            const chartTitle = t('📊 Porównanie Wyników', '📊 Score Comparison');
             const buf = await this.chartService.generatePlayersProgressChart(histories, chartTitle);
             if (!buf) return null;
             return new AttachmentBuilder(buf, { name: 'ranking_progress.png' });
