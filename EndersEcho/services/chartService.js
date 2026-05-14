@@ -449,9 +449,16 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
 
     const pts = series.map(s => ({ x: toX(s.dateMs), y: toY(s.count), count: s.count, dateStr: s.dateStr }));
 
+    // Przedłuż krzywą do dokładnego timestampu ostatniego gracza (sub-dobowy gap między północą a lastExactTs)
+    const lastSeriesPt = pts[pts.length - 1];
+    const dotX = toX(lastExactTs);
+    const ptsForCurve = dotX > lastSeriesPt.x + 0.5
+        ? [...pts, { x: dotX, y: lastSeriesPt.y, count: lastSeriesPt.count, dateStr: lastSeriesPt.dateStr }]
+        : pts;
+
     // Linia Catmull-Rom i wypełnienie gradientem
-    const linePath = buildCatmullRomPath(pts);
-    const areaPath = buildAreaPath(pts, baseY);
+    const linePath = buildCatmullRomPath(ptsForCurve);
+    const areaPath = buildAreaPath(ptsForCurve, baseY);
 
     // Poziome linie siatki
     const gridSteps = 4;
