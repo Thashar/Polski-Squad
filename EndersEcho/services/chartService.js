@@ -635,21 +635,35 @@ async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTit
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
     }).join('\n    ');
 
-    const curves = guildSeries.map((gs, i) => {
+    // 3 osobne przebiegi: obszary → linie → punkty+etykiety (punkty zawsze na wierzchu)
+    const ptsPerGuild = guildSeries.map((gs, i) => {
         const c = CLAN_PALETTE[i % CLAN_PALETTE.length];
         const pts = gs.series.map(s => ({ x: toX(s.dateMs), y: toY(s.count) }));
-        if (pts.length < 2) {
-            const p = pts[0];
-            return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="${c}"/>
-  <text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${gs.finalCount}</text>`;
-        }
-        const lp = buildCatmullRomPath(pts);
-        const ap = buildAreaPath(pts, baseY);
-        const last = pts[pts.length - 1];
-        return `<g clip-path="url(#psgClip)"><path d="${escapeXml(ap)}" fill="url(#psg${i})"/><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
-  <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="5" fill="${c}"/>
-  <text x="${last.x.toFixed(1)}" y="${(last.y - 10).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${gs.finalCount}</text>`;
+        return { gs, i, c, pts };
+    });
+
+    const areasLayer = ptsPerGuild
+        .filter(({ pts }) => pts.length >= 2)
+        .map(({ i, ap: _ap, pts }) => {
+            const ap = buildAreaPath(pts, baseY);
+            return `<g clip-path="url(#psgClip)"><path d="${escapeXml(ap)}" fill="url(#psg${i})"/></g>`;
+        }).join('\n  ');
+
+    const linesLayer = ptsPerGuild
+        .filter(({ pts }) => pts.length >= 2)
+        .map(({ c, pts }) => {
+            const lp = buildCatmullRomPath(pts);
+            return `<g clip-path="url(#psgClip)"><path d="${escapeXml(lp)}" stroke="${c}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+        }).join('\n  ');
+
+    const dotsLayer = ptsPerGuild.map(({ gs, c, pts }) => {
+        const p = pts.length >= 2 ? pts[pts.length - 1] : pts[0];
+        return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${c}" opacity="0.18"/>
+  <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="${c}" stroke="#1E1F22" stroke-width="2"/>
+  <text x="${p.x.toFixed(1)}" y="${(p.y - 13).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${gs.finalCount}</text>`;
     }).join('\n  ');
+
+    const curves = `${areasLayer}\n  ${linesLayer}\n  ${dotsLayer}`;
 
     const itemsPerRow = 3;
     const legendStartY = baseY + 20;
