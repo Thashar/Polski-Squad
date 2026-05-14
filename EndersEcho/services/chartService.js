@@ -554,7 +554,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
   <!-- Wyróżnienie ostatniego punktu -->
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="8" fill="${color}" opacity="0.18"/>
   <circle cx="${last.x.toFixed(1)}" cy="${last.y.toFixed(1)}" r="4" fill="${color}"/>
-  <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold">${displayTotal ?? maxCount}</text>
+  <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${displayTotal ?? maxCount}</text>
 
   <!-- Etykiety miesięcy na osi X -->
   ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
