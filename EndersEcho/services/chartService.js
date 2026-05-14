@@ -432,8 +432,11 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     if (series.length < 2) return null;
 
     const tMin = series[0].dateMs;
-    const tNow = Date.now();
-    const tMax = Math.max(tNow, series[series.length - 1].dateMs + 86400000);
+    const tNow = Date.now(); // tylko do etykiety zakresu dat
+    const lastDataMs = series[series.length - 1].dateMs;
+    const lastMarkerMs = guildMarkers.length > 0 ? Math.max(...guildMarkers.map(m => m.firstTimestamp)) : lastDataMs;
+    // tMax = 2 dni po ostatnim realnym zdarzeniu (ostatni gracz lub ostatni badge serwera)
+    const tMax = Math.max(lastDataMs, lastMarkerMs) + 2 * 86400000;
     const tRange = tMax - tMin || 1;
     const maxCount = series[series.length - 1].count;
     const yMax = maxCount * 1.18;
@@ -445,15 +448,9 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
 
     const pts = series.map(s => ({ x: toX(s.dateMs), y: toY(s.count), count: s.count, dateStr: s.dateStr }));
 
-    // Dodaj phantom point na tMax z tym samym count — linia dotyka prawej krawędzi wykresu
-    const lastPt = pts[pts.length - 1];
-    const ptsExtended = lastPt.x < toX(tMax) - 1
-        ? [...pts, { x: toX(tMax), y: lastPt.y, count: lastPt.count, dateStr: lastPt.dateStr }]
-        : pts;
-
     // Linia Catmull-Rom i wypełnienie gradientem
-    const linePath = buildCatmullRomPath(ptsExtended);
-    const areaPath = buildAreaPath(ptsExtended, baseY);
+    const linePath = buildCatmullRomPath(pts);
+    const areaPath = buildAreaPath(pts, baseY);
 
     // Poziome linie siatki
     const gridSteps = 4;
@@ -464,8 +461,8 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
     }).join('\n    ');
 
-    // Ostatni punkt wyróżniony — na końcu rozszerzonej krzywej (phantom point jeśli dodany)
-    const last = ptsExtended[ptsExtended.length - 1];
+    // Ostatni punkt wyróżniony — ostatni realny gracz który oddał wynik
+    const last = pts[pts.length - 1];
 
     // Markery dołączenia serwerów
     const serverMarkersSvg = (() => {
