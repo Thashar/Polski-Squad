@@ -8534,11 +8534,7 @@ class InteractionHandler {
                         .map(gid => {
                             const cfg = allCfgGuilds.find(g => g.id === gid);
                             const name = interaction.client.guilds.cache.get(gid)?.name || gid;
-                            // Normalizuj do początku dnia UTC — seria danych też używa Date.UTC (północ)
-                            const raw = guildFirstTs[gid];
-                            const d = new Date(raw);
-                            const dayStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-                            return { firstTimestamp: dayStart, tag: cfg?.tag || name, name };
+                            return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
                         });
                     const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, totalPlayers);
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });

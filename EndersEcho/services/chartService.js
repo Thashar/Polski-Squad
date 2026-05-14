@@ -431,12 +431,13 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
 
     if (series.length < 2) return null;
 
+    // Dokładny timestamp ostatniego nowego gracza (filtered jest posortowany rosnąco)
+    const lastExactTs = filtered[filtered.length - 1].firstTimestamp;
+    const lastMarkerMs = guildMarkers.length > 0 ? Math.max(...guildMarkers.map(m => m.firstTimestamp)) : lastExactTs;
     const tMin = series[0].dateMs;
     const tNow = Date.now(); // tylko do etykiety zakresu dat
-    const lastDataMs = series[series.length - 1].dateMs;
-    const lastMarkerMs = guildMarkers.length > 0 ? Math.max(...guildMarkers.map(m => m.firstTimestamp)) : lastDataMs;
-    // tMax = ostatnie realne zdarzenie (gracz lub badge serwera) — toX ma wbudowany 2% margines
-    const tMax = Math.max(lastDataMs, lastMarkerMs);
+    // tMax = późniejsze z: dokładny czas ostatniego gracza lub ostatni badge serwera
+    const tMax = Math.max(lastExactTs, lastMarkerMs);
     const tRange = tMax - tMin || 1;
     const maxCount = series[series.length - 1].count;
     const yMax = maxCount * 1.18;
@@ -461,8 +462,8 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
     <text x="${M.left - 8}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${v}</text>`;
     }).join('\n    ');
 
-    // Ostatni punkt wyróżniony — ostatni realny gracz który oddał wynik
-    const last = pts[pts.length - 1];
+    // Dot na dokładnym timestampie ostatniego nowego gracza (nie zaokrąglony do dnia)
+    const last = { x: toX(lastExactTs), y: toY(maxCount), count: maxCount };
 
     // Markery dołączenia serwerów
     const serverMarkersSvg = (() => {
