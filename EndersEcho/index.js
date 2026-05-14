@@ -57,10 +57,11 @@ async function _updateStatus() {
     try {
         const template = STATUS_POOL[Math.floor(Math.random() * STATUS_POOL.length)];
         if (template.needsGuild) {
-            const guildIds = guildConfigService.getAllConfiguredGuildIds();
+            const guildIds = guildConfigService.getAllConfiguredGuildIds()
+                .filter(id => client.guilds.cache.has(id));
             if (!guildIds.length) return;
             const guildId = guildIds[Math.floor(Math.random() * guildIds.length)];
-            const guildName = client.guilds.cache.get(guildId)?.name || guildId;
+            const guildName = client.guilds.cache.get(guildId).name;
             client.user.setActivity(template.text(guildName), { type: template.type });
         } else {
             const players = await rankingService.getGlobalRanking();
