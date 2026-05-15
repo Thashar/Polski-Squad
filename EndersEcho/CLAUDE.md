@@ -183,6 +183,7 @@
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
    - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
+   - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
 
 **Komendy slash:** `/achievements`, `/configure`, `/generate`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
@@ -196,7 +197,7 @@
   - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
   - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
   - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
-  - Rząd 4: `🚫 Zbanuj serwer`, `📈 Przyrost graczy`
+  - Rząd 4: `🚫 Zbanuj serwer`, `📈 Przyrost graczy`, `🎯 Konfiguracja bossów`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -304,6 +305,43 @@
 | `panel_block_select` | StringSelectMenu — wybór gracza do zablokowania |
 | `panel_block_time_{userId}_{guildId}` | Otwórz modal czasu blokady |
 | `panel_block_modal_{userId}_{guildId}` | Modal czasu blokady (pole `block_duration`) |
+| `panel_boss_cfg` | Otwórz panel konfiguracji bossów (head admin) |
+| `boss_cfg_add_name` | Modal nowej angielskiej nazwy bossa |
+| `boss_cfg_add_name_modal` | Modal (pole `boss_en_name`) |
+| `boss_cfg_add_alias_start` | StringSelectMenu wyboru bossa do aliasu |
+| `boss_cfg_add_alias_sel` | StringSelectMenu — wybrany boss, otwiera modal aliasu |
+| `boss_cfg_add_alias_modal` | Modal aliasu (pole `alias_name`) |
+| `boss_cfg_add_lang_sel` | StringSelectMenu języka → zapis aliasu |
+| `boss_cfg_rm_start` | StringSelectMenu bossów z aliasami (usuwanie) |
+| `boss_cfg_rm_boss_sel` | StringSelectMenu — wybrany boss, pokazuje listę aliasów |
+| `boss_cfg_rm_alias_sel` | StringSelectMenu — wybrany alias → usunięcie |
+| `boss_mapm_{sessionKey}` | Przycisk "Dopasuj do nazwy angielskiej" (w embedzie nieznanego bossa) |
+| `boss_map_boss_modal` | Modal z odczytaną nazwą bossa (edytowalną) |
+| `boss_map_boss_sel` | StringSelectMenu — wybór angielskiej nazwy bossa |
+| `boss_map_lang_sel` | StringSelectMenu języka → zapis aliasu z flow mapowania |
+
+**9. System aliasów bossów** — `services/bossAliasService.js` + `data/boss_aliases.json`:
+- **Cel:** Normalizacja nazw bossów z różnych języków → jedna angielska nazwa (np. "Robak" PL → "Shardstone Bug" EN = jeden boss w osiągnięciach).
+- **Pliki:** `services/bossAliasService.js`, `data/boss_aliases.json`, `config/bossNames.js` (`correctBossNameFull`)
+- **Inicjalizacja:** przy starcie bota `bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES)` pre-seeduje plik z 13 hardcodowanymi bosami (idempotentne).
+- **Obsługiwane języki:** pl, de, fr, es, pt, ru, it, tr, ja, zh, vi (select menu w UI)
+- **Konfiguracja bossów (head admin):** `/manage` → 🎯 Konfiguracja bossów:
+  - Embed z listą wszystkich bossów (angielskie nazwy) + ich aliasami per język
+  - **➕ Nowy boss (EN):** modal → dodaje custom boss poza KNOWN_BOSS_NAMES → `englishNames[]` w JSON
+  - **🔤 Dodaj alias:** boss select → modal (alias) → language select → zapis do `aliases`
+  - **🗑️ Usuń alias:** boss select → alias select → usunięcie
+  - Sesje robocze: `_bossCfgSessions` Map (RAM, per userId)
+- **Wykrywanie nieznanej nazwy:** `correctBossNameFull(raw, bossAliasService)` zwraca `{ corrected, wasUnknown }`. Gdy `wasUnknown=true` i wynik OCR jest prawidłowy: `_runUpdateFlow` wywołuje `_sendUnknownBossEmbed` (fire-and-forget).
+- **Embed nieznanego bossa (czerwony):** wysyłany na `ENDERSECHO_BOSS_LOG_CHANNEL_ID` lub `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`. Zawiera: nazwę bossa (OCR), gracza (link Discord), komendę, serwer, screenshot. Przycisk: 🔗 Dopasuj do nazwy angielskiej (`boss_mapm_{sessionKey}`).
+- **Flow mapowania (po kliknięciu przycisku):**
+  1. Modal z oryginalną nazwą (edytowalna) → `boss_map_boss_modal`
+  2. Select angielskiej nazwy bossa → `boss_map_boss_sel`
+  3. Select języka → `boss_map_lang_sel` → zapis aliasu + potwierdzenie
+  - Sesje: `_unknownBossEmbeds` Map (sessionKey → rawBoss, TTL 48h) + `_bossMapSessions` Map (userId → dane robocze)
+- **Normalizacja w OCR:** `aiOcrService.parseAIResponse` używa `correctBossNameFull(rawBoss, this.bossAliasService)`. Jeśli alias dopasowany → wraca angielska nazwa. Jeśli nie → wraca surowa nazwa + `wasUnknownBoss: true`.
+- **Osiągnięcia:** `bossesEncountered` w achievementService przechowuje znormalizowaną (angielską) nazwę → "Robak PL" i "Shardstone Bug EN" to ten sam boss.
+- **Persistencja:** `data/boss_aliases.json`: `{ englishNames: [], aliases: { "BossEN": { "pl": ["Alias PL"] } } }`. Przeżywa restart bota.
+- **Env:** `ENDERSECHO_BOSS_LOG_CHANNEL_ID` (opcjonalne — fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku

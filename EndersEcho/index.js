@@ -32,6 +32,8 @@ const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
+const { BossAliasService } = require('./services/bossAliasService');
+const { KNOWN_BOSS_NAMES } = require('./config/bossNames');
 const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -89,8 +91,9 @@ const client = new Client({
     ]
 });
 
+const bossAliasService = new BossAliasService();
 const ocrService = new OCRService(config);
-const aiOcrService = new AIOCRService(config, llmAdapter);
+const aiOcrService = new AIOCRService(config, llmAdapter, bossAliasService);
 const scoreHistoryService = new ScoreHistoryService(config.ranking.dataDir);
 const chartService = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
 const rankingService = new RankingService(config, appSync, scoreHistoryService);
@@ -109,7 +112,7 @@ const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -126,6 +129,9 @@ async function initializeBot() {
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);
         config.setGuildConfigService(guildConfigService);
+
+        // Seed boss_aliases.json hardcodowanymi nazwami bossów (idempotentne)
+        await bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES);
 
         const guildCount = config.getAllGuilds().length;
         logger.success(`✅ EndersEcho gotowy - ranking z OCR, TOP role, ${guildCount} serwer(ów)`);

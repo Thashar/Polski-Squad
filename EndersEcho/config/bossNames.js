@@ -35,25 +35,40 @@ function levenshtein(a, b) {
 }
 
 /**
- * Próbuje dopasować odczytaną nazwę bossa do listy znanych nazw.
- * Zwraca poprawną nazwę jeśli znaleziono dopasowanie, lub oryginalną wartość gdy nie.
+ * Pełna korekcja nazwy bossa z obsługą aliasów.
+ * Zwraca { corrected, wasUnknown }.
+ * wasUnknown=true gdy nie znaleziono dopasowania (ani dokładnego, ani przez Levenshtein, ani przez alias).
+ *
+ * @param {string} raw
+ * @param {import('../services/bossAliasService').BossAliasService|null} bossAliasService
+ * @returns {{ corrected: string, wasUnknown: boolean }}
  */
-function correctBossName(raw) {
-    if (!raw || typeof raw !== 'string') return raw;
+function correctBossNameFull(raw, bossAliasService = null) {
+    if (!raw || typeof raw !== 'string') return { corrected: raw, wasUnknown: false };
+
+    // 1. Sprawdź aliasy (dokładne dopasowanie case-insensitive)
+    if (bossAliasService) {
+        const resolved = bossAliasService.resolveAlias(raw);
+        if (resolved) return { corrected: resolved, wasUnknown: false };
+    }
 
     const normalized = raw.trim().toLowerCase().replace(/\s+/g, ' ');
 
-    // Szukamy najlepszego trafienia
+    // 2. Zbuduj rozszerzoną listę angielskich nazw
+    const allKnown = bossAliasService
+        ? [...KNOWN_BOSS_NAMES, ...bossAliasService.getExtraEnglishNames()]
+        : KNOWN_BOSS_NAMES;
+
     let bestName = null;
     let bestDist = Infinity;
 
-    for (const known of KNOWN_BOSS_NAMES) {
+    for (const known of allKnown) {
         const knownNorm = known.toLowerCase();
 
         // Dokładne dopasowanie (case-insensitive)
-        if (normalized === knownNorm) return known;
+        if (normalized === knownNorm) return { corrected: known, wasUnknown: false };
 
-        // Zawieranie — OCR mógł dodać/uciąć kilka znaków
+        // Zawieranie
         if (knownNorm.includes(normalized) || normalized.includes(knownNorm)) {
             const dist = levenshtein(normalized, knownNorm);
             if (dist < bestDist) { bestDist = dist; bestName = known; }
@@ -64,11 +79,19 @@ function correctBossName(raw) {
         if (dist < bestDist) { bestDist = dist; bestName = known; }
     }
 
-    // Próg: max 3 znaki różnicy (wystarczy na 1-2 literówki OCR)
-    if (bestName && bestDist <= 3) return bestName;
+    // Próg: max 3 znaki różnicy
+    if (bestName && bestDist <= 3) return { corrected: bestName, wasUnknown: false };
 
-    // Brak dopasowania — zostawiamy co AI odczytał
-    return raw.trim();
+    return { corrected: raw.trim(), wasUnknown: true };
 }
 
-module.exports = { KNOWN_BOSS_NAMES, correctBossName };
+/**
+ * Próbuje dopasować odczytaną nazwę bossa do listy znanych nazw.
+ * Zwraca poprawną nazwę jeśli znaleziono dopasowanie, lub oryginalną wartość gdy nie.
+ * Wersja bez aliasów — zachowana dla kompatybilności wstecznej.
+ */
+function correctBossName(raw) {
+    return correctBossNameFull(raw, null).corrected;
+}
+
+module.exports = { KNOWN_BOSS_NAMES, correctBossName, correctBossNameFull };

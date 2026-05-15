@@ -22,7 +22,7 @@ const PROMPT_VERSIONS = {
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { correctBossName } = require('../config/bossNames');
+const { correctBossNameFull } = require('../config/bossNames');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -31,9 +31,10 @@ class AIOCRService {
      * @param {Object} config
      * @param {{ generate: Function }} llmAdapter — wspólny wrapper z utils/llmAdapter.js
      */
-    constructor(config, llmAdapter) {
+    constructor(config, llmAdapter, bossAliasService = null) {
         this.config = config;
         this.adapter = llmAdapter;
+        this.bossAliasService = bossAliasService;
 
         const apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
         this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
@@ -149,8 +150,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
 
         let rawBoss  = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
-        let bossName = correctBossName(rawBoss);
+        const { corrected: bossName, wasUnknown } = correctBossNameFull(rawBoss, this.bossAliasService);
         if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
+        else if (wasUnknown) log.warn(`[AI OCR] Nieznana nazwa bossa: "${rawBoss}" — brak dopasowania`);
         let score    = lines[1].replace(/^wynik[:\s]*/i, '').replace(/^score[:\s]*/i, '').replace(/^best[:\s]*/i, '').trim();
 
         let total = null;
@@ -185,10 +187,12 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
 
         return {
-            bossName: isValid ? bossName : null,
-            score:    isValid ? score    : null,
-            isValidVictory: isValid,
-            error: isValid ? undefined : 'VALIDATION_FAILED'
+            bossName:        isValid ? bossName : null,
+            score:           isValid ? score    : null,
+            isValidVictory:  isValid,
+            wasUnknownBoss:  isValid && wasUnknown,
+            rawBossName:     (isValid && wasUnknown) ? rawBoss : undefined,
+            error:           isValid ? undefined : 'VALIDATION_FAILED',
         };
     }
 
