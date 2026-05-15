@@ -312,9 +312,18 @@
 | `boss_cfg_add_alias_sel` | StringSelectMenu — wybrany boss, otwiera modal aliasu |
 | `boss_cfg_add_alias_modal` | Modal aliasu (pole `alias_name`) |
 | `boss_cfg_add_lang_sel` | StringSelectMenu języka → zapis aliasu |
-| `boss_cfg_rm_start` | StringSelectMenu bossów z aliasami (usuwanie) |
-| `boss_cfg_rm_boss_sel` | StringSelectMenu — wybrany boss, pokazuje listę aliasów |
+| `boss_cfg_rm_start` | StringSelectMenu bossów z aliasami (usuwanie aliasu) |
+| `boss_cfg_rm_boss_sel` | StringSelectMenu — wybrany boss, pokazuje listę aliasów (usuwanie) |
 | `boss_cfg_rm_alias_sel` | StringSelectMenu — wybrany alias → usunięcie |
+| `boss_cfg_rm_entry` | StringSelectMenu bossów do usunięcia (usuń bossa) |
+| `boss_cfg_rm_entry_sel` | StringSelectMenu — wybrany boss → usunięcie wraz z aliasami |
+| `boss_cfg_edit_entry` | StringSelectMenu bossów do edycji nazwy angielskiej |
+| `boss_cfg_edit_entry_sel` | StringSelectMenu — wybrany boss, otwiera modal zmiany nazwy |
+| `boss_cfg_edit_entry_modal` | Modal zmiany nazwy bossa (pole `boss_new_name`) |
+| `boss_cfg_edit_alias` | StringSelectMenu bossów z aliasami (edycja aliasu) |
+| `boss_cfg_edit_alias_boss_sel` | StringSelectMenu — wybrany boss, pokazuje listę aliasów (edycja) |
+| `boss_cfg_edit_alias_sel` | StringSelectMenu — wybrany alias, otwiera modal edycji |
+| `boss_cfg_edit_alias_modal` | Modal edycji aliasu (pole `alias_new_name`) |
 | `boss_mapm_{sessionKey}` | Przycisk "Dopasuj do nazwy angielskiej" (w embedzie nieznanego bossa) |
 | `boss_map_boss_modal` | Modal z odczytaną nazwą bossa (edytowalną) |
 | `boss_map_boss_sel` | StringSelectMenu — wybór angielskiej nazwy bossa |
@@ -323,9 +332,12 @@
 **9. System aliasów bossów** — `services/bossAliasService.js` + `data/boss_aliases.json`:
 - **Cel:** Normalizacja nazw bossów z różnych języków → jedna angielska nazwa (np. "Robak" PL → "Shardstone Bug" EN = jeden boss w osiągnięciach).
 - **Pliki:** `services/bossAliasService.js`, `data/boss_aliases.json`, `config/bossNames.js` (`correctBossNameFull`)
-- **Inicjalizacja:** przy starcie bota `bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES)` pre-seeduje plik z 13 hardcodowanymi bosami (idempotentne).
+- **Inicjalizacja:** plik `data/boss_aliases.json` jest jedynym źródłem prawdy — brak hardcodowanych nazw. Przy starcie bot wczytuje dane z pliku; jeśli nie istnieje → pusta lista.
+- **Backward compat:** stare pliki JSON przechowujące nazwy jako klucze `aliases{}` (z dawnego `initFromBaseNames`) są rozpoznawane przez `getExtraEnglishNames()` zwracające sumę `englishNames[]` + `Object.keys(aliases{})`.
 - **Obsługiwane języki:** pl, de, fr, es, pt, ru, it, tr, ja, zh, vi (select menu w UI)
-- **Konfiguracja bossów (head admin):** `/manage` → 🎯 Konfiguracja bossów:
+- **Konfiguracja bossów (head admin):** `/manage` → 🎯 Konfiguracja bossów — dwa rzędy przycisków:
+  - **Rząd 1 (boss):** ➕ Dodaj bossa · 🗑️ Usuń bossa · ✏️ Edytuj bossa
+  - **Rząd 2 (alias):** ➕ Dodaj alias · 🗑️ Usuń alias · ✏️ Edytuj alias
   - Embed z listą wszystkich bossów (angielskie nazwy) + ich aliasami per język
   - **➕ Nowy boss (EN):** modal → dodaje custom boss poza KNOWN_BOSS_NAMES → `englishNames[]` w JSON
   - **🔤 Dodaj alias:** boss select → modal (alias) → language select → zapis do `aliases`

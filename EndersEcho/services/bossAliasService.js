@@ -106,6 +106,29 @@ class BossAliasService {
     }
 
     /**
+     * Zmienia treść aliasu (zachowuje bossa i język).
+     * @param {string} englishName
+     * @param {string} language
+     * @param {string} oldAlias
+     * @param {string} newAlias
+     */
+    async renameAlias(englishName, language, oldAlias, newAlias) {
+        const trimmed = newAlias.trim();
+        if (!trimmed || trimmed === oldAlias) return;
+        const langArr = this._data.aliases?.[englishName]?.[language];
+        if (!langArr) return;
+        const idx = langArr.indexOf(oldAlias);
+        if (idx === -1) return;
+        if (langArr.includes(trimmed)) {
+            // nowa nazwa już istnieje — usuń tylko starą
+            langArr.splice(idx, 1);
+        } else {
+            langArr[idx] = trimmed;
+        }
+        await this._save();
+    }
+
+    /**
      * Próbuje dopasować surową nazwę (z OCR) do angielskiej nazwy przez aliasy.
      * Zwraca angielską nazwę lub null jeśli nie znaleziono.
      * @param {string} raw
