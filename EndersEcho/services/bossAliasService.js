@@ -43,8 +43,15 @@ class BossAliasService {
 
     getData() { return this._data; }
 
-    /** Zwraca listę wszystkich angielskich nazw bossów zarządzanych przez plik. */
-    getExtraEnglishNames() { return this._data.englishNames || []; }
+    /**
+     * Zwraca listę wszystkich angielskich nazw bossów.
+     * Łączy englishNames[] z kluczami aliases{} (backward-compat z initFromBaseNames).
+     */
+    getExtraEnglishNames() {
+        const fromList = this._data.englishNames || [];
+        const fromKeys = Object.keys(this._data.aliases || {});
+        return [...new Set([...fromList, ...fromKeys])];
+    }
 
     getAllAliases() { return this._data.aliases || {}; }
 
