@@ -122,16 +122,16 @@ async function initializeBot() {
         // Migracja struktury folderów data/ → data/guilds/{guildId}/
         await dataMigration.migrate(config.ranking.dataDir);
 
-        // Korekcja nazw bossów w istniejących danych (jednorazowe poprawki po starcie)
+        // Seed boss_aliases.json hardcodowanymi nazwami bossów (idempotentne)
+        await bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES);
+
+        // Korekcja nazw bossów w istniejących danych (uwzględnia aliasy z boss_aliases.json)
         const sharedDataDir = path.join(__dirname, '../shared_data');
-        await fixBossNamesInData(config.ranking.dataDir, sharedDataDir, false, logger);
+        await fixBossNamesInData(config.ranking.dataDir, sharedDataDir, false, logger, bossAliasService);
 
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);
         config.setGuildConfigService(guildConfigService);
-
-        // Seed boss_aliases.json hardcodowanymi nazwami bossów (idempotentne)
-        await bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES);
 
         const guildCount = config.getAllGuilds().length;
         logger.success(`✅ EndersEcho gotowy - ranking z OCR, TOP role, ${guildCount} serwer(ów)`);
