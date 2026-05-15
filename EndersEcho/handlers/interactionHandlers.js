@@ -399,6 +399,14 @@ class InteractionHandler {
                 await this._handleBossCfgAddAliasModal(interaction);
                 return;
             }
+            if (interaction.customId === 'boss_cfg_edit_entry_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgEditEntryModal(interaction);
+                return;
+            }
             if (interaction.customId === 'boss_map_boss_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -4340,6 +4348,22 @@ class InteractionHandler {
                 await this._handleBossCfgRmStart(interaction);
                 return;
             }
+            if (customId === 'boss_cfg_rm_entry') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgRmEntry(interaction);
+                return;
+            }
+            if (customId === 'boss_cfg_edit_entry') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgEditEntry(interaction);
+                return;
+            }
             if (customId.startsWith('boss_mapm_')) {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -5459,6 +5483,24 @@ class InteractionHandler {
                     return;
                 }
                 await this._handleBossCfgRmAliasSel(interaction);
+                return;
+            }
+
+            if (customId === 'boss_cfg_rm_entry_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgRmEntrySel(interaction);
+                return;
+            }
+
+            if (customId === 'boss_cfg_edit_entry_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgEditEntrySel(interaction);
                 return;
             }
 
@@ -9157,11 +9199,9 @@ class InteractionHandler {
 
     // ─── BOSS ALIAS — panel konfiguracji bossów ───────────────────────────────
 
-    /** Zwraca nazwy angielskie (bazowe + custom) posortowane alfabetycznie */
+    /** Zwraca angielskie nazwy bossów z pliku boss_aliases.json, posortowane alfabetycznie */
     _getAllEnglishBossNames() {
-        const { KNOWN_BOSS_NAMES } = require('../config/bossNames');
-        const extra = this.bossAliasService?.getExtraEnglishNames() || [];
-        return [...KNOWN_BOSS_NAMES, ...extra].sort();
+        return (this.bossAliasService?.getExtraEnglishNames() || []).slice().sort();
     }
 
     /** Buduje embed + komponenty panelu "Konfiguracja bossów" */
@@ -9169,6 +9209,8 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const aliases = this.bossAliasService?.getAllAliases() || {};
         const allNames = this._getAllEnglishBossNames();
+        const hasNames = allNames.length > 0;
+        const hasAliases = !!(this.bossAliasService?.getFlatAliases().length);
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
@@ -9180,34 +9222,42 @@ class InteractionHandler {
                 )
             );
 
-        // Jedno pole per boss (max 25 pól embedu — jak przekroczymy, skracamy)
-        const maxFields = 24;
-        const shown = allNames.slice(0, maxFields);
-        for (const bossName of shown) {
-            const langMap = aliases[bossName] || {};
-            const lines = [];
-            for (const [lang, aliasArr] of Object.entries(langMap)) {
-                if (aliasArr.length > 0)
-                    lines.push(`**${lang}:** ${aliasArr.join(', ')}`);
+        if (!hasNames) {
+            embed.addFields({ name: t('Brak bossów', 'No bosses'), value: t('Dodaj pierwszego bossa przyciskiem ➕', 'Add the first boss using the ➕ button'), inline: false });
+        } else {
+            // Jedno pole per boss (max 24 pola embedu)
+            const maxFields = 24;
+            const shown = allNames.slice(0, maxFields);
+            for (const bossName of shown) {
+                const langMap = aliases[bossName] || {};
+                const lines = [];
+                for (const [lang, aliasArr] of Object.entries(langMap)) {
+                    if (aliasArr.length > 0)
+                        lines.push(`**${lang}:** ${aliasArr.join(', ')}`);
+                }
+                embed.addFields({
+                    name: bossName,
+                    value: lines.length > 0 ? lines.join('\n') : t('*(brak aliasów)*', '*(no aliases)*'),
+                    inline: false,
+                });
             }
-            embed.addFields({
-                name: bossName,
-                value: lines.length > 0 ? lines.join('\n') : t('*(brak aliasów)*', '*(no aliases)*'),
-                inline: false,
-            });
-        }
-        if (allNames.length > maxFields) {
-            embed.setFooter({ text: t(`Pokazano ${maxFields} z ${allNames.length} bossów.`, `Showing ${maxFields} of ${allNames.length} bosses.`) });
+            if (allNames.length > maxFields) {
+                embed.setFooter({ text: t(`Pokazano ${maxFields} z ${allNames.length} bossów.`, `Showing ${maxFields} of ${allNames.length} bosses.`) });
+            }
         }
 
         const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('boss_cfg_add_name').setEmoji('➕').setLabel(t('Nowy boss (EN)', 'New Boss (EN)')).setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('boss_cfg_add_alias_start').setEmoji('🔤').setLabel(t('Dodaj alias', 'Add Alias')).setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('boss_cfg_rm_start').setEmoji('🗑️').setLabel(t('Usuń alias', 'Remove Alias')).setStyle(ButtonStyle.Danger).setDisabled(!this.bossAliasService?.getFlatAliases().length),
+            new ButtonBuilder().setCustomId('boss_cfg_add_name').setEmoji('➕').setLabel(t('Nowy boss', 'New Boss')).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('boss_cfg_add_alias_start').setEmoji('🔤').setLabel(t('Dodaj alias', 'Add Alias')).setStyle(ButtonStyle.Primary).setDisabled(!hasNames),
+            new ButtonBuilder().setCustomId('boss_cfg_edit_entry').setEmoji('✏️').setLabel(t('Edytuj', 'Rename')).setStyle(ButtonStyle.Primary).setDisabled(!hasNames),
+            new ButtonBuilder().setCustomId('boss_cfg_rm_start').setEmoji('🗑️').setLabel(t('Usuń alias', 'Remove Alias')).setStyle(ButtonStyle.Danger).setDisabled(!hasAliases),
+            new ButtonBuilder().setCustomId('boss_cfg_rm_entry').setEmoji('❌').setLabel(t('Usuń bossa', 'Remove Boss')).setStyle(ButtonStyle.Danger).setDisabled(!hasNames),
+        );
+        const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
         );
 
-        return { embed, components: [row1] };
+        return { embed, components: [row1, row2] };
     }
 
     async _handlePanelBossConfig(interaction) {
@@ -9438,6 +9488,125 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
             )],
         });
+    }
+
+    /** Wyświetla select menu do wyboru bossa do usunięcia */
+    async _handleBossCfgRmEntry(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const allNames = this._getAllEnglishBossNames();
+        if (!allNames.length) {
+            await interaction.reply({ content: t('❌ Brak bossów do usunięcia.', '❌ No bosses to remove.'), flags: ['Ephemeral'] });
+            return;
+        }
+        const options = allNames.slice(0, 25).map(n =>
+            new StringSelectMenuOptionBuilder().setValue(n).setLabel(n.substring(0, 100))
+        );
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('boss_cfg_rm_entry_sel')
+            .setPlaceholder(t('Wybierz bossa do usunięcia...', 'Select boss to remove...'))
+            .addOptions(options);
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xED4245)
+                .setTitle(t('❌ Usuń bossa', '❌ Remove Boss'))
+                .setDescription(t('Wybierz bossa do usunięcia. Zostaną usunięte WSZYSTKIE jego aliasy.', 'Select a boss to remove. ALL its aliases will be deleted.'))],
+            components: [
+                new ActionRowBuilder().addComponents(select),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                ),
+            ],
+        });
+    }
+
+    /** Po wybraniu bossa do usunięcia — usuwa i odświeża panel */
+    async _handleBossCfgRmEntrySel(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const bossName = interaction.values[0];
+        await this.bossAliasService.removeEnglishName(bossName);
+        const { embed, components } = this._buildBossConfigPanel(interaction);
+        const confirmEmbed = new EmbedBuilder().setColor(0x57F287)
+            .setTitle(t('✅ Boss usunięty', '✅ Boss Removed'))
+            .setDescription(t(`Usunięto bossa **${bossName}** wraz ze wszystkimi aliasami.`, `Removed boss **${bossName}** with all its aliases.`));
+        await interaction.update({ embeds: [confirmEmbed, embed], components });
+    }
+
+    /** Wyświetla select menu do wyboru bossa do edycji (zmiany nazwy) */
+    async _handleBossCfgEditEntry(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const allNames = this._getAllEnglishBossNames();
+        if (!allNames.length) {
+            await interaction.reply({ content: t('❌ Brak bossów do edycji.', '❌ No bosses to edit.'), flags: ['Ephemeral'] });
+            return;
+        }
+        const options = allNames.slice(0, 25).map(n =>
+            new StringSelectMenuOptionBuilder().setValue(n).setLabel(n.substring(0, 100))
+        );
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('boss_cfg_edit_entry_sel')
+            .setPlaceholder(t('Wybierz bossa do edycji...', 'Select boss to rename...'))
+            .addOptions(options);
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('✏️ Edytuj nazwę bossa', '✏️ Rename Boss'))
+                .setDescription(t('Wybierz bossa, którego nazwę chcesz zmienić.', 'Select a boss you want to rename.'))],
+            components: [
+                new ActionRowBuilder().addComponents(select),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                ),
+            ],
+        });
+    }
+
+    /** Po wyborze bossa do edycji — otwiera modal z aktualną nazwą */
+    async _handleBossCfgEditEntrySel(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const oldName = interaction.values[0];
+        this._bossCfgSessions.set(interaction.user.id, { pendingBoss: oldName });
+        const modal = new ModalBuilder()
+            .setCustomId('boss_cfg_edit_entry_modal')
+            .setTitle(t('Zmień nazwę bossa', 'Rename Boss'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('boss_new_name')
+                .setLabel(t('Nowa nazwa angielska', 'New English Name'))
+                .setStyle(TextInputStyle.Short)
+                .setValue(oldName)
+                .setMinLength(1)
+                .setMaxLength(100)
+                .setRequired(true)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    /** Po modalu zmiany nazwy — zapisuje nową nazwę i odświeża panel */
+    async _handleBossCfgEditEntryModal(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const session = this._bossCfgSessions.get(interaction.user.id);
+        if (!session?.pendingBoss) {
+            await interaction.reply({ content: t('❌ Sesja wygasła.', '❌ Session expired.'), flags: ['Ephemeral'] });
+            return;
+        }
+        const oldName = session.pendingBoss;
+        const newName = interaction.fields.getTextInputValue('boss_new_name').trim();
+        this._bossCfgSessions.delete(interaction.user.id);
+        if (!newName) {
+            await interaction.reply({ content: t('❌ Nazwa nie może być pusta.', '❌ Name cannot be empty.'), flags: ['Ephemeral'] });
+            return;
+        }
+        if (newName === oldName) {
+            await interaction.deferUpdate();
+            const { embed, components } = this._buildBossConfigPanel(interaction);
+            await interaction.editReply({ embeds: [embed], components });
+            return;
+        }
+        await this.bossAliasService.renameEnglishName(oldName, newName);
+        await interaction.deferUpdate();
+        const { embed, components } = this._buildBossConfigPanel(interaction);
+        const confirmEmbed = new EmbedBuilder().setColor(0x57F287)
+            .setTitle(t('✅ Nazwa zmieniona', '✅ Boss Renamed'))
+            .setDescription(t(`Zmieniono: **${oldName}** → **${newName}**`, `Renamed: **${oldName}** → **${newName}**`));
+        await interaction.editReply({ embeds: [confirmEmbed, embed], components });
     }
 
     // ─── BOSS ALIAS — nieznana nazwa bossa → embed + flow mapowania ──────────

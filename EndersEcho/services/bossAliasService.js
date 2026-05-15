@@ -43,6 +43,7 @@ class BossAliasService {
 
     getData() { return this._data; }
 
+    /** Zwraca listę wszystkich angielskich nazw bossów zarządzanych przez plik. */
     getExtraEnglishNames() { return this._data.englishNames || []; }
 
     getAllAliases() { return this._data.aliases || {}; }
@@ -50,7 +51,7 @@ class BossAliasService {
     getSupportedLanguages() { return SUPPORTED_LANGUAGES; }
 
     /**
-     * Dodaje nową angielską nazwę bossa do listy customowej (poza KNOWN_BOSS_NAMES).
+     * Dodaje nową angielską nazwę bossa.
      * @param {string} name
      * @returns {string} znormalizowana nazwa
      */
@@ -143,19 +144,35 @@ class BossAliasService {
     }
 
     /**
-     * Inicjalizuje aliases dla hardcodowanych nazw bossów jeśli jeszcze ich nie ma.
-     * Wywoływane raz przy starcie bota — idempotentne.
-     * @param {string[]} baseNames  KNOWN_BOSS_NAMES z bossNames.js
+     * Usuwa angielską nazwę bossa wraz ze wszystkimi jej aliasami.
+     * @param {string} name
      */
-    async initFromBaseNames(baseNames) {
-        let changed = false;
-        for (const name of baseNames) {
-            if (!(name in this._data.aliases)) {
-                this._data.aliases[name] = {};
-                changed = true;
-            }
+    async removeEnglishName(name) {
+        this._data.englishNames = (this._data.englishNames || []).filter(n => n !== name);
+        if (this._data.aliases) delete this._data.aliases[name];
+        await this._save();
+    }
+
+    /**
+     * Zmienia nazwę angielską bossa (klucz w aliases + wpis w englishNames).
+     * @param {string} oldName
+     * @param {string} newName
+     * @returns {string} nowa nazwa (po trimie)
+     */
+    async renameEnglishName(oldName, newName) {
+        const trimmed = newName.trim();
+        if (!trimmed || trimmed === oldName) return oldName;
+
+        const idx = (this._data.englishNames || []).indexOf(oldName);
+        if (idx !== -1) this._data.englishNames[idx] = trimmed;
+
+        if (this._data.aliases && oldName in this._data.aliases) {
+            this._data.aliases[trimmed] = this._data.aliases[oldName];
+            delete this._data.aliases[oldName];
         }
-        if (changed) await this._save();
+
+        await this._save();
+        return trimmed;
     }
 }
 

@@ -1,21 +1,5 @@
 'use strict';
 
-const KNOWN_BOSS_NAMES = [
-    'Gigabrute Chief',
-    'Raging Steel Fang',
-    'Tech Tyrant',
-    'Osidian Mecha',
-    'Zapstinger',
-    'Bouncy Bear',
-    'Gigabrute',
-    'Ancient Megalodon',
-    'Shardrock Bug',
-    'Killer Shaun',
-    'Ratatoxic',
-    'Shardstone Bug',
-    'Leviathan',
-];
-
 function levenshtein(a, b) {
     const m = a.length, n = b.length;
     const dp = [];
@@ -53,11 +37,9 @@ function correctBossNameFull(raw, bossAliasService = null) {
     }
 
     const normalized = raw.trim().toLowerCase().replace(/\s+/g, ' ');
+    const allKnown = bossAliasService ? bossAliasService.getExtraEnglishNames() : [];
 
-    // 2. Zbuduj rozszerzoną listę angielskich nazw
-    const allKnown = bossAliasService
-        ? [...KNOWN_BOSS_NAMES, ...bossAliasService.getExtraEnglishNames()]
-        : KNOWN_BOSS_NAMES;
+    if (!allKnown.length) return { corrected: raw.trim(), wasUnknown: true };
 
     let bestName = null;
     let bestDist = Infinity;
@@ -65,10 +47,8 @@ function correctBossNameFull(raw, bossAliasService = null) {
     for (const known of allKnown) {
         const knownNorm = known.toLowerCase();
 
-        // Dokładne dopasowanie (case-insensitive)
         if (normalized === knownNorm) return { corrected: known, wasUnknown: false };
 
-        // Zawieranie
         if (knownNorm.includes(normalized) || normalized.includes(knownNorm)) {
             const dist = levenshtein(normalized, knownNorm);
             if (dist < bestDist) { bestDist = dist; bestName = known; }
@@ -79,19 +59,16 @@ function correctBossNameFull(raw, bossAliasService = null) {
         if (dist < bestDist) { bestDist = dist; bestName = known; }
     }
 
-    // Próg: max 3 znaki różnicy
     if (bestName && bestDist <= 3) return { corrected: bestName, wasUnknown: false };
 
     return { corrected: raw.trim(), wasUnknown: true };
 }
 
 /**
- * Próbuje dopasować odczytaną nazwę bossa do listy znanych nazw.
- * Zwraca poprawną nazwę jeśli znaleziono dopasowanie, lub oryginalną wartość gdy nie.
- * Wersja bez aliasów — zachowana dla kompatybilności wstecznej.
+ * Uproszczona wersja bez aliasów — zachowana dla kompatybilności wstecznej.
  */
 function correctBossName(raw) {
     return correctBossNameFull(raw, null).corrected;
 }
 
-module.exports = { KNOWN_BOSS_NAMES, correctBossName, correctBossNameFull };
+module.exports = { correctBossName, correctBossNameFull };

@@ -18,7 +18,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { correctBossNameFull, KNOWN_BOSS_NAMES } = require('./config/bossNames');
+const { correctBossNameFull } = require('./config/bossNames');
 const { BossAliasService } = require('./services/bossAliasService');
 const { createBotLogger } = require('../utils/consoleLogger');
 
@@ -174,8 +174,7 @@ if (require.main === module) {
 
     console.log(`\n🔍 fix-boss-names — tryb: ${dryRun ? 'DRY RUN' : '⚠️  FIX'}\n`);
 
-    bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES).then(() =>
-    fixBossNamesInData(dataDir, sharedDataDir, dryRun, log, bossAliasService)).then(stats => {
+    fixBossNamesInData(dataDir, sharedDataDir, dryRun, log, bossAliasService).then(stats => {
         console.log(`\nPliki: ${stats.files} | Zmiany: ${stats.changedFiles} | Korekty: ${stats.fixes}`);
         if (stats.unrecognized.size > 0) {
             console.log(`Nierozpoznane: ${[...stats.unrecognized].sort().join(', ')}`);

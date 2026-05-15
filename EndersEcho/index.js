@@ -33,7 +33,6 @@ const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
 const { BossAliasService } = require('./services/bossAliasService');
-const { KNOWN_BOSS_NAMES } = require('./config/bossNames');
 const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -121,9 +120,6 @@ async function initializeBot() {
     try {
         // Migracja struktury folderów data/ → data/guilds/{guildId}/
         await dataMigration.migrate(config.ranking.dataDir);
-
-        // Seed boss_aliases.json hardcodowanymi nazwami bossów (idempotentne)
-        await bossAliasService.initFromBaseNames(KNOWN_BOSS_NAMES);
 
         // Korekcja nazw bossów w istniejących danych (uwzględnia aliasy z boss_aliases.json)
         const sharedDataDir = path.join(__dirname, '../shared_data');
