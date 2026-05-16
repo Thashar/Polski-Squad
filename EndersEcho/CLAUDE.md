@@ -202,9 +202,9 @@
   - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
   - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Admin):**
-  - Rząd 1: `📊 Zużycie tokenów`, `◀️ Wróć`
+  - Rząd 1: `📊 Zużycie tokenów`, `🎯 Success Rate`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Head Admin):**
-  - Rząd 1: `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`, `📈 Przyrost graczy`, `◀️ Wróć`
+  - Rząd 1: `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`, `📈 Przyrost graczy`, `🎯 Success Rate`, `◀️ Wróć`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -275,6 +275,9 @@
 | `panel_cat_users` | Otwórz sub-panel "Zarządzaj użytkownikami" |
 | `panel_cat_server` | Otwórz sub-panel "Zarządzaj serwerem" |
 | `panel_cat_stats` | Otwórz sub-panel "Statystyki" |
+| `panel_ocr_stats` | Wyświetl Success Rate (embed z licznikami) |
+| `panel_ocr_stats_reset_{guildId}` | Potwierdź reset licznika resettable dla danego serwera |
+| `panel_ocr_stats_reset_ok_{guildId}` | Wykonaj reset licznika resettable dla danego serwera |
 | `panel_remove` | Otwórz modal wyszukiwania gracza |
 | `panel_remove_search_modal` | Modal wyszukiwania (pole `remove_query`) |
 | `panel_remove_select` | StringSelectMenu — wybór gracza z wyników |
