@@ -2352,96 +2352,38 @@ class InteractionHandler {
     }
 
     _buildOcrStatsEmbed(interaction) {
-        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
-        const allStats = this.ocrStatsService?.getAllStats() || {};
-
-        const guildIds = isHeadAdmin
-            ? Object.keys(allStats)
-            : [interaction.guildId];
-
+        const stats = this.ocrStatsService?.getStats();
         const embed = new EmbedBuilder()
-            .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
-            .setTitle(t('🎯 Success Rate — Analizy OCR', '🎯 Success Rate — OCR Analyses'));
+            .setColor(0xFF6B35)
+            .setTitle(t('🎯 Success Rate — Analizy OCR (globalnie)', '🎯 Success Rate — OCR Analyses (global)'));
 
-        if (guildIds.length === 0 || guildIds.every(id => !allStats[id])) {
+        if (!stats || stats.allTime.total === 0) {
             embed.setDescription(t('Brak danych — żadna analiza OCR jeszcze nie została wykonana.', 'No data — no OCR analysis has been performed yet.'));
             return embed;
         }
 
-        const lines = [];
-        let globalAllTotal = 0, globalAllSuccess = 0;
-        let globalResTotal = 0, globalResSuccess = 0;
-        let oldestResetAt = null;
+        const at = stats.allTime;
+        const rs = stats.resettable;
+        const resetInfo = rs.resetAt
+            ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(rs.resetAt).getTime() / 1000)}:R>`
+            : '';
 
-        for (const guildId of guildIds) {
-            const stats = allStats[guildId];
-            if (!stats) continue;
-            const guildName = interaction.client.guilds.cache.get(guildId)?.name || guildId;
-
-            const at = stats.allTime;
-            const rs = stats.resettable;
-            globalAllTotal += at.total;
-            globalAllSuccess += at.success;
-            globalResTotal += rs.total;
-            globalResSuccess += rs.success;
-            if (rs.resetAt && (!oldestResetAt || rs.resetAt < oldestResetAt)) oldestResetAt = rs.resetAt;
-
-            if (isHeadAdmin) {
-                lines.push(
-                    `**${guildName}**\n` +
-                    `${t('Od zawsze', 'All time')}: **${at.success}/${at.total}** (${this._formatRate(at.success, at.total)})\n` +
-                    `${t('Licznik', 'Counter')}: **${rs.success}/${rs.total}** (${this._formatRate(rs.success, rs.total)})`
-                );
-            }
-        }
-
-        if (isHeadAdmin && guildIds.length > 1) {
-            const resetInfo = oldestResetAt
-                ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(oldestResetAt).getTime() / 1000)}:R>`
-                : '';
-            embed.setDescription(
-                `**${t('Łącznie (wszystkie serwery)', 'Total (all servers)')}**\n` +
-                `${t('Od zawsze', 'All time')}: **${globalAllSuccess}/${globalAllTotal}** (${this._formatRate(globalAllSuccess, globalAllTotal)})\n` +
-                `${t('Licznik', 'Counter')}: **${globalResSuccess}/${globalResTotal}** (${this._formatRate(globalResSuccess, globalResTotal)})` +
-                resetInfo +
-                '\n\n' +
-                lines.join('\n\n')
-            );
-        } else {
-            const guildId = guildIds[0];
-            const stats = allStats[guildId] || { allTime: { total: 0, success: 0 }, resettable: { total: 0, success: 0, resetAt: null } };
-            const at = stats.allTime;
-            const rs = stats.resettable;
-            const resetInfo = rs.resetAt
-                ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(rs.resetAt).getTime() / 1000)}:R>`
-                : '';
-            embed.setDescription(
-                `**${t('Od zawsze', 'All time')}**\n` +
-                `${t('Poprawnych', 'Successful')}: **${at.success}** / ${at.total} → **${this._formatRate(at.success, at.total)}**\n\n` +
-                `**${t('Licznik (resetowalny)', 'Counter (resettable)')}**\n` +
-                `${t('Poprawnych', 'Successful')}: **${rs.success}** / ${rs.total} → **${this._formatRate(rs.success, rs.total)}**` +
-                resetInfo
-            );
-        }
-
+        embed.setDescription(
+            `**${t('Od zawsze', 'All time')}**\n` +
+            `${t('Poprawnych', 'Successful')}: **${at.success}** / ${at.total} → **${this._formatRate(at.success, at.total)}**\n\n` +
+            `**${t('Licznik (resetowalny)', 'Counter (resettable)')}**\n` +
+            `${t('Poprawnych', 'Successful')}: **${rs.success}** / ${rs.total} → **${this._formatRate(rs.success, rs.total)}**` +
+            resetInfo
+        );
         return embed;
     }
 
     _buildOcrStatsComponents(interaction) {
-        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
-        const back = new ButtonBuilder().setCustomId('panel_cat_stats').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
-
-        if (isHeadAdmin) {
-            return [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_ocr_stats_reset_${interaction.guildId}`).setEmoji('🔄').setLabel(t('Resetuj licznik (ten serwer)', 'Reset counter (this server)')).setStyle(ButtonStyle.Danger),
-                back,
-            )];
-        }
         return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`panel_ocr_stats_reset_${interaction.guildId}`).setEmoji('🔄').setLabel(t('Resetuj licznik', 'Reset counter')).setStyle(ButtonStyle.Danger),
-            back,
+            new ButtonBuilder().setCustomId('panel_ocr_stats_reset').setEmoji('🔄').setLabel(t('Resetuj licznik', 'Reset counter')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_cat_stats').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
         )];
     }
 
@@ -2451,32 +2393,30 @@ class InteractionHandler {
         await interaction.update({ embeds: [embed], components });
     }
 
-    async _handlePanelOcrStatsReset(interaction, guildId) {
+    async _handlePanelOcrStatsReset(interaction) {
         const t = this._panelT(interaction.guildId);
-        const guildName = interaction.client.guilds.cache.get(guildId)?.name || guildId;
         const embed = new EmbedBuilder()
             .setColor(0xFF6B35)
             .setTitle(t('🔄 Potwierdź reset licznika', '🔄 Confirm counter reset'))
             .setDescription(t(
-                `Czy na pewno chcesz zresetować **licznik Success Rate** dla serwera **${guildName}**?\n\nLicznik "od zawsze" pozostanie nienaruszony.`,
-                `Are you sure you want to reset the **Success Rate counter** for server **${guildName}**?\n\nThe all-time counter will remain unchanged.`
+                'Czy na pewno chcesz zresetować **globalny licznik Success Rate**?\n\nLicznik "od zawsze" pozostanie nienaruszony.',
+                'Are you sure you want to reset the **global Success Rate counter**?\n\nThe all-time counter will remain unchanged.'
             ));
         const components = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId(`panel_ocr_stats_reset_ok_${guildId}`).setEmoji('✅').setLabel(t('Tak, resetuj', 'Yes, reset')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ocr_stats_reset_ok').setEmoji('✅').setLabel(t('Tak, resetuj', 'Yes, reset')).setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_ocr_stats').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
         )];
         await interaction.update({ embeds: [embed], components });
     }
 
-    async _handlePanelOcrStatsResetConfirm(interaction, guildId) {
+    async _handlePanelOcrStatsResetConfirm(interaction) {
         const t = this._panelT(interaction.guildId);
         if (this.ocrStatsService) {
-            await this.ocrStatsService.resetResettable(guildId);
+            await this.ocrStatsService.resetResettable();
         }
         const embed = this._buildOcrStatsEmbed(interaction);
         const components = this._buildOcrStatsComponents(interaction);
-        const guildName = interaction.client.guilds.cache.get(guildId)?.name || guildId;
-        embed.setFooter({ text: t(`Licznik dla "${guildName}" zresetowany.`, `Counter for "${guildName}" has been reset.`) });
+        embed.setFooter({ text: t('Globalny licznik zresetowany.', 'Global counter has been reset.') });
         await interaction.update({ embeds: [embed], components });
     }
 
@@ -4046,9 +3986,9 @@ class InteractionHandler {
         if (customId === 'panel_cat_users') return 'Zarządzaj użytkownikami';
         if (customId === 'panel_cat_server') return 'Zarządzaj serwerem';
         if (customId === 'panel_cat_stats') return 'Statystyki';
-        if (customId === 'panel_ocr_stats') return 'Success Rate (statystyki OCR)';
-        if (customId.startsWith('panel_ocr_stats_reset_ok_')) return `Potwierdzono reset licznika OCR (${customId.replace('panel_ocr_stats_reset_ok_', '')})`;
-        if (customId.startsWith('panel_ocr_stats_reset_')) return `Reset licznika OCR (${customId.replace('panel_ocr_stats_reset_', '')})`;
+        if (customId === 'panel_ocr_stats') return 'Success Rate (globalnie)';
+        if (customId === 'panel_ocr_stats_reset_ok') return 'Potwierdzono reset globalnego licznika OCR';
+        if (customId === 'panel_ocr_stats_reset') return 'Reset globalnego licznika OCR';
 
         if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
@@ -4347,14 +4287,12 @@ class InteractionHandler {
                 await this._handlePanelOcrStats(interaction);
                 return;
             }
-            if (customId.startsWith('panel_ocr_stats_reset_ok_')) {
-                const guildId = customId.replace('panel_ocr_stats_reset_ok_', '');
-                await this._handlePanelOcrStatsResetConfirm(interaction, guildId);
+            if (customId === 'panel_ocr_stats_reset_ok') {
+                await this._handlePanelOcrStatsResetConfirm(interaction);
                 return;
             }
-            if (customId.startsWith('panel_ocr_stats_reset_')) {
-                const guildId = customId.replace('panel_ocr_stats_reset_', '');
-                await this._handlePanelOcrStatsReset(interaction, guildId);
+            if (customId === 'panel_ocr_stats_reset') {
+                await this._handlePanelOcrStatsReset(interaction);
                 return;
             }
             if (customId === 'panel_back_configure') {
