@@ -189,15 +189,22 @@
 
 **Panel Admina** — dostępny przez `/manage`:
 - Dostęp: Administrator Discord
-- **Układ rzędów (Tryb Admin):**
-  - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`
-  - Rząd 2: `📊 Zużycie tokenów`, `🔁 Przetwórz role`
-  - Rząd 3: `◀️ Wróć do konfiguracji`
-- **Układ rzędów (Tryb Head Admin):**
-  - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`
-  - Rząd 2: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
-  - Rząd 3: `📢 Wyślij Info`, `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`
-  - Rząd 4: `🚫 Zbanuj serwer`, `📈 Przyrost graczy`, `🎯 Konfiguracja bossów`
+- **Układ rzędów — Główny panel (Admin i Head Admin):**
+  - Rząd 1: `👥 Zarządzaj użytkownikami`, `🖥️ Zarządzaj serwerem`, `📊 Statystyki` (szare)
+  - Rząd 2 (tylko Head Admin): `📢 Wyślij Info`
+- **Sub-panel "Zarządzaj użytkownikami" (Admin):**
+  - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`, `◀️ Wróć`
+- **Sub-panel "Zarządzaj użytkownikami" (Head Admin):**
+  - Rząd 1: `🔒 Zablokuj gracza`, `🔓 Odblokuj gracza`, `🗑️ Usuń gracza z rankingu`, `🏆 Usuń osiągnięcia`, `◀️ Wróć`
+- **Sub-panel "Zarządzaj serwerem" (Admin):**
+  - Rząd 1: `🔁 Przetwórz role`, `◀️ Wróć`
+- **Sub-panel "Zarządzaj serwerem" (Head Admin):**
+  - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
+  - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `◀️ Wróć`
+- **Sub-panel "Statystyki" (Admin):**
+  - Rząd 1: `📊 Zużycie tokenów`, `◀️ Wróć`
+- **Sub-panel "Statystyki" (Head Admin):**
+  - Rząd 1: `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`, `📈 Przyrost graczy`, `◀️ Wróć`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -263,8 +270,11 @@
 **CustomIDs Panelu Admina:**
 | CustomId | Opis |
 |---|---|
-| `panel_back` | Wróć do panelu (z dowolnej operacji) |
+| `panel_back` | Wróć do głównego panelu (z dowolnej operacji) |
 | `panel_back_configure` | Wróć do wizarda /configure (pokazywany tylko gdy sesja wizarda aktywna) |
+| `panel_cat_users` | Otwórz sub-panel "Zarządzaj użytkownikami" |
+| `panel_cat_server` | Otwórz sub-panel "Zarządzaj serwerem" |
+| `panel_cat_stats` | Otwórz sub-panel "Statystyki" |
 | `panel_remove` | Otwórz modal wyszukiwania gracza |
 | `panel_remove_search_modal` | Modal wyszukiwania (pole `remove_query`) |
 | `panel_remove_select` | StringSelectMenu — wybór gracza z wyników |
