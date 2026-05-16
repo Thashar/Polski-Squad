@@ -13,49 +13,50 @@ class OcrStatsService {
     async load() {
         try {
             const raw = await fs.readFile(this.dataPath, 'utf8');
-            this._data = JSON.parse(raw);
+            const parsed = JSON.parse(raw);
+            // Migracja starej struktury per-guild → globalna
+            if (parsed.guilds && !parsed.allTime) {
+                this._data = {
+                    allTime:    { total: 0, success: 0 },
+                    resettable: { total: 0, success: 0, resetAt: null },
+                };
+                for (const g of Object.values(parsed.guilds)) {
+                    this._data.allTime.total    += g.allTime?.total    || 0;
+                    this._data.allTime.success  += g.allTime?.success  || 0;
+                    this._data.resettable.total   += g.resettable?.total   || 0;
+                    this._data.resettable.success += g.resettable?.success || 0;
+                }
+            } else {
+                this._data = parsed;
+            }
         } catch {
-            this._data = { guilds: {} };
-        }
-    }
-
-    _guild(guildId) {
-        if (!this._data.guilds[guildId]) {
-            this._data.guilds[guildId] = {
+            this._data = {
                 allTime:    { total: 0, success: 0 },
                 resettable: { total: 0, success: 0, resetAt: null },
             };
         }
-        return this._data.guilds[guildId];
     }
 
-    async record(guildId, isSuccess) {
+    async record(_guildId, isSuccess) {
         if (!this._data) await this.load();
-        const g = this._guild(guildId);
-        g.allTime.total++;
-        g.resettable.total++;
+        this._data.allTime.total++;
+        this._data.resettable.total++;
         if (isSuccess) {
-            g.allTime.success++;
-            g.resettable.success++;
+            this._data.allTime.success++;
+            this._data.resettable.success++;
         }
         this._save().catch(() => {});
     }
 
-    async resetResettable(guildId) {
+    async resetResettable() {
         if (!this._data) await this.load();
-        const g = this._guild(guildId);
-        g.resettable = { total: 0, success: 0, resetAt: new Date().toISOString() };
+        this._data.resettable = { total: 0, success: 0, resetAt: new Date().toISOString() };
         await this._save();
     }
 
-    getStats(guildId) {
+    getStats() {
         if (!this._data) return null;
-        return this._guild(guildId);
-    }
-
-    getAllStats() {
-        if (!this._data) return {};
-        return this._data.guilds;
+        return this._data;
     }
 
     async _save() {
