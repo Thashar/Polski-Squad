@@ -2207,49 +2207,18 @@ class InteractionHandler {
                 optionLines.join('\n\n')
             );
 
-        let row1, row2;
-        if (isHeadAdmin) {
-            // Rząd 1 Head Admin (4 przyciski): Zablokuj, Odblokuj, Usuń gracza, Usuń osiągnięcia
-            row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel(t('Zablokuj gracza', 'Block Player')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
-            );
-            // Rząd 2 Head Admin: AI OCR, Ustaw limity, Testerzy, Interwał TOP10, Przetwórz role
-            row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel(t('AI OCR', 'AI OCR')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel(t('Ustaw limity', 'Set Limits')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_tester').setEmoji('🧪').setLabel(t('Testerzy', 'Testers')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel(t('Interwał TOP10', 'TOP10 Interval')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
-            );
-        } else {
-            // Rząd 1 Admin: Usuń gracza, Odblokuj
-            row1 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
-            );
-            // Rząd 2 Admin: Zużycie tokenów, Przetwórz role
-            row2 = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
-            );
-        }
+        // Rząd 1: 3 szare przyciski kategorii (Admin i Head Admin)
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_cat_users').setEmoji('👥').setLabel(t('Zarządzaj użytkownikami', 'Manage Users')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_cat_server').setEmoji('🖥️').setLabel(t('Zarządzaj serwerem', 'Manage Server')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_cat_stats').setEmoji('📊').setLabel(t('Statystyki', 'Statistics')).setStyle(ButtonStyle.Secondary),
+        );
 
-        const components = [row1, row2];
+        const components = [row1];
         if (isHeadAdmin) {
-            // Rząd 3 Head Admin: Wyślij Info, Zużycie tokenów, Nieskonfigurowane
+            // Rząd 2 Head Admin: Wyślij Info (zostaje w głównym panelu)
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setEmoji('📢').setLabel(t('Wyślij Info', 'Send Info')).setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
-            ));
-            // Rząd 4 Head Admin: Zbanuj serwer, Przyrost graczy, Konfiguracja bossów
-            components.push(new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel(t('Przyrost graczy', 'Player Growth')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
             ));
         }
 
@@ -2259,6 +2228,97 @@ class InteractionHandler {
     async _handleAdminPanelOpen(interaction) {
         const { embed, components } = this._buildAdminPanel(interaction);
         await interaction.update({ embeds: [embed], components });
+    }
+
+    _buildUsersSubPanel(interaction) {
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const t = this._panelT(interaction.guildId);
+        const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
+        if (isHeadAdmin) {
+            return [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel(t('Zablokuj gracza', 'Block Player')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
+                back,
+            )];
+        }
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
+            back,
+        )];
+    }
+
+    _buildServerSubPanel(interaction) {
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const t = this._panelT(interaction.guildId);
+        const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
+        if (isHeadAdmin) {
+            return [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel(t('AI OCR', 'AI OCR')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel(t('Ustaw limity', 'Set Limits')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_tester').setEmoji('🧪').setLabel(t('Testerzy', 'Testers')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel(t('Interwał TOP10', 'TOP10 Interval')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
+                    back,
+                ),
+            ];
+        }
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
+            back,
+        )];
+    }
+
+    _buildStatsSubPanel(interaction) {
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const t = this._panelT(interaction.guildId);
+        const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
+        if (isHeadAdmin) {
+            return [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel(t('Przyrost graczy', 'Player Growth')).setStyle(ButtonStyle.Secondary),
+                back,
+            )];
+        }
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+            back,
+        )];
+    }
+
+    async _handlePanelCatUsers(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const embed = new EmbedBuilder()
+            .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
+            .setTitle(t('👥 Zarządzaj użytkownikami', '👥 Manage Users'));
+        await interaction.update({ embeds: [embed], components: this._buildUsersSubPanel(interaction) });
+    }
+
+    async _handlePanelCatServer(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const embed = new EmbedBuilder()
+            .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
+            .setTitle(t('🖥️ Zarządzaj serwerem', '🖥️ Manage Server'));
+        await interaction.update({ embeds: [embed], components: this._buildServerSubPanel(interaction) });
+    }
+
+    async _handlePanelCatStats(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const embed = new EmbedBuilder()
+            .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
+            .setTitle(t('📊 Statystyki', '📊 Statistics'));
+        await interaction.update({ embeds: [embed], components: this._buildStatsSubPanel(interaction) });
     }
 
     async _handlePanelRemove(interaction) {
@@ -3821,6 +3881,9 @@ class InteractionHandler {
 
     _describePanelButton(customId) {
         if (customId === 'panel_back' || customId === 'cfg_admin_panel') return 'Otwarto panel';
+        if (customId === 'panel_cat_users') return 'Zarządzaj użytkownikami';
+        if (customId === 'panel_cat_server') return 'Zarządzaj serwerem';
+        if (customId === 'panel_cat_stats') return 'Statystyki';
         if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
         if (customId.startsWith('panel_remove_confirm_')) return 'Potwierdzenie usunięcia gracza';
@@ -4100,6 +4163,18 @@ class InteractionHandler {
 
             if (customId === 'cfg_admin_panel' || customId === 'panel_back') {
                 await this._handleAdminPanelOpen(interaction);
+                return;
+            }
+            if (customId === 'panel_cat_users') {
+                await this._handlePanelCatUsers(interaction);
+                return;
+            }
+            if (customId === 'panel_cat_server') {
+                await this._handlePanelCatServer(interaction);
+                return;
+            }
+            if (customId === 'panel_cat_stats') {
+                await this._handlePanelCatStats(interaction);
                 return;
             }
             if (customId === 'panel_back_configure') {
