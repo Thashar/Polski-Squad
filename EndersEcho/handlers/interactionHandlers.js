@@ -2264,7 +2264,6 @@ class InteractionHandler {
         }
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
-            successRateBtn,
             back,
         )];
     }
@@ -2329,11 +2328,11 @@ class InteractionHandler {
         const lines = [
             t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
               '📊 **Token Usage** — AI OCR usage statistics for your server (requests, tokens).'),
-            t('🎯 **Success Rate** — procent poprawnych analiz OCR (screeny zaakceptowane przez AI); licznik od zawsze i licznik z możliwością resetowania.',
-              '🎯 **Success Rate** — percentage of successful OCR analyses (screenshots accepted by AI); all-time counter and resettable counter.'),
         ];
         if (isHeadAdmin) {
             lines.push(
+                t('🎯 **Success Rate** — procent poprawnych analiz OCR (screeny zaakceptowane przez AI); licznik od zawsze i licznik z możliwością resetowania.',
+                  '🎯 **Success Rate** — percentage of successful OCR analyses (screenshots accepted by AI); all-time counter and resettable counter.'),
                 t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
                   '⚠️ **Unconfigured** — list of servers where the bot is present but has not yet been configured via /configure.'),
                 t('📈 **Przyrost graczy** — statystyki i wykres kumulatywnego przyrostu unikalnych graczy globalnie w czasie.',

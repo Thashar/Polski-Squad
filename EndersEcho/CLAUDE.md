@@ -202,7 +202,7 @@
   - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
   - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Admin):**
-  - Rząd 1: `📊 Zużycie tokenów`, `🎯 Success Rate`, `◀️ Wróć`
+  - Rząd 1: `📊 Zużycie tokenów`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Head Admin):**
   - Rząd 1: `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`, `📈 Przyrost graczy`, `🎯 Success Rate`, `◀️ Wróć`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
