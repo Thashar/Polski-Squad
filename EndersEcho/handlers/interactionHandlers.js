@@ -2160,51 +2160,22 @@ class InteractionHandler {
     _buildAdminPanel(interaction) {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
-        const adminOptions = [
-            t('🗑️ **Usuń gracza z rankingu** — wyszukaj gracza i usuń go z rankingu serwera; automatycznie aktualizuje role TOP.',
-              '🗑️ **Remove Player from Ranking** — search for a player and remove them from the server ranking; automatically updates TOP roles.'),
-            t('🔓 **Odblokuj gracza** — odblokowuje gracza zablokowanego przez admina; nie można odblokować graczy zablokowanych przez Head Admina.',
-              '🔓 **Unblock Player** — unblocks a player blocked by an admin; cannot unblock players blocked by the Head Admin.'),
-            t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
-              '📊 **Token Usage** — AI OCR usage statistics for your server (requests, tokens).'),
-            t('🔁 **Przetwórz role** — usuwa wszystkie role TOP od wszystkich członków serwera, a następnie przyznaje je od nowa na podstawie aktualnego rankingu. Przydatne gdy role są nie zsynchronizowane.',
-              '🔁 **Process Roles** — removes all TOP roles from all server members, then reassigns them based on the current ranking. Useful when roles are out of sync.'),
-        ];
-        const headAdminOptions = [
-            t('🔒 **Zablokuj gracza** — wyszukaj gracza cross-server i zablokuj mu dostęp do `/update`; tylko Head Admin może odblokować.',
-              '🔒 **Block Player** — search for a player cross-server and block their access to `/update`; only the Head Admin can unblock.'),
-            t('🔄 **AI OCR on/off** — włącz lub wyłącz OCR (`/update`, `/test`) per serwer.',
-              '🔄 **AI OCR on/off** — enable or disable OCR (`/update`, `/test`) per server.'),
-            t('⚙️ **Ustaw limity** — skonfiguruj cooldown po `/update` i dzienny limit użyć.',
-              '⚙️ **Set Limits** — configure cooldown after `/update` and daily usage limit.'),
-            t('📢 **Wyślij Info** — skomponuj wiadomość i wyślij ją na kanały wszystkich skonfigurowanych serwerów.',
-              '📢 **Send Info** — compose a message and send it to all configured servers\' channels.'),
-            t('🧪 **Testerzy** — zarządzaj listą testerów uprawnionych do `/test`.',
-              '🧪 **Testers** — manage the list of testers authorized to use `/test`.'),
-            t('🏆 **Usuń osiągnięcia** — usuń wybrane osiągnięcie lub wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
-              '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
-            t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
-              '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
-            t('📈 **Przyrost graczy** — statystyki i wykres kumulatywnego przyrostu unikalnych graczy globalnie w czasie.',
-              '📈 **Player Growth** — statistics and chart of cumulative unique player growth globally over time.'),
-            t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
-              '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
-            t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
-              '⚠️ **Unconfigured** — list of servers where the bot is present but has not yet been configured via /configure.'),
-            t('🎯 **Konfiguracja bossów** — zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach (automatyczna normalizacja OCR).',
-              '🎯 **Boss Configuration** — manage English boss names and their aliases in other languages (automatic OCR normalization).'),
-        ];
 
-        const optionLines = isHeadAdmin
-            ? [...adminOptions, ...headAdminOptions]
-            : adminOptions;
+        const descLines = [
+            `👥 **${t('Zarządzaj użytkownikami', 'Manage Users')}** — ${t('blokowanie, odblokowanie, usuwanie graczy z rankingu', 'blocking, unblocking, removing players from ranking')}`,
+            `🖥️ **${t('Zarządzaj serwerem', 'Manage Server')}** — ${t('OCR, limity, role, konfiguracja bossów', 'OCR, limits, roles, boss configuration')}`,
+            `📊 **${t('Statystyki', 'Statistics')}** — ${t('zużycie tokenów, przyrost graczy, nieskonfigurowane serwery', 'token usage, player growth, unconfigured servers')}`,
+        ];
+        if (isHeadAdmin) {
+            descLines.push(`\n📢 **${t('Wyślij Info', 'Send Info')}** — ${t('skomponuj wiadomość i wyślij ją na kanały wszystkich skonfigurowanych serwerów.', 'compose a message and send it to all configured servers\' channels.')}`);
+        }
 
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
             .setTitle(t('⚙️ Panel Administracyjny', '⚙️ Admin Panel'))
             .setDescription(
                 `**${t('Tryb', 'Mode')}: ${isHeadAdmin ? 'Head Admin' : 'Admin'}**\n\n` +
-                optionLines.join('\n\n')
+                descLines.join('\n')
             );
 
         // Rząd 1: 3 szare przyciski kategorii (Admin i Head Admin)
@@ -2297,27 +2268,76 @@ class InteractionHandler {
     async _handlePanelCatUsers(interaction) {
         const t = this._panelT(interaction.guildId);
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const lines = [
+            t('🗑️ **Usuń gracza z rankingu** — wyszukaj gracza i usuń go z rankingu serwera; automatycznie aktualizuje role TOP.',
+              '🗑️ **Remove Player from Ranking** — search for a player and remove them from the server ranking; automatically updates TOP roles.'),
+            t('🔓 **Odblokuj gracza** — odblokowuje gracza zablokowanego przez admina; nie można odblokować graczy zablokowanych przez Head Admina.',
+              '🔓 **Unblock Player** — unblocks a player blocked by an admin; cannot unblock players blocked by the Head Admin.'),
+        ];
+        if (isHeadAdmin) {
+            lines.push(
+                t('🔒 **Zablokuj gracza** — wyszukaj gracza cross-server i zablokuj mu dostęp do `/update`; tylko Head Admin może odblokować.',
+                  '🔒 **Block Player** — search for a player cross-server and block their access to `/update`; only the Head Admin can unblock.'),
+                t('🏆 **Usuń osiągnięcia** — usuń wybrane osiągnięcie lub wszystkie osiągnięcia i progress wybranego gracza na wybranym serwerze.',
+                  '🏆 **Remove Achievements** — remove a selected achievement or all achievements and progress of a selected player on a selected server.'),
+            );
+        }
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
-            .setTitle(t('👥 Zarządzaj użytkownikami', '👥 Manage Users'));
+            .setTitle(t('👥 Zarządzaj użytkownikami', '👥 Manage Users'))
+            .setDescription(lines.join('\n\n'));
         await interaction.update({ embeds: [embed], components: this._buildUsersSubPanel(interaction) });
     }
 
     async _handlePanelCatServer(interaction) {
         const t = this._panelT(interaction.guildId);
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const lines = [
+            t('🔁 **Przetwórz role** — usuwa wszystkie role TOP od wszystkich członków serwera, a następnie przyznaje je od nowa na podstawie aktualnego rankingu. Przydatne gdy role są nie zsynchronizowane.',
+              '🔁 **Process Roles** — removes all TOP roles from all server members, then reassigns them based on the current ranking. Useful when roles are out of sync.'),
+        ];
+        if (isHeadAdmin) {
+            lines.push(
+                t('🔄 **AI OCR on/off** — włącz lub wyłącz OCR (`/update`, `/test`) per serwer.',
+                  '🔄 **AI OCR on/off** — enable or disable OCR (`/update`, `/test`) per server.'),
+                t('⚙️ **Ustaw limity** — skonfiguruj cooldown po `/update` i dzienny limit użyć.',
+                  '⚙️ **Set Limits** — configure cooldown after `/update` and daily usage limit.'),
+                t('🧪 **Testerzy** — zarządzaj listą testerów uprawnionych do `/test`.',
+                  '🧪 **Testers** — manage the list of testers authorized to use `/test`.'),
+                t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
+                  '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
+                t('🎯 **Konfiguracja bossów** — zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach (automatyczna normalizacja OCR).',
+                  '🎯 **Boss Configuration** — manage English boss names and their aliases in other languages (automatic OCR normalization).'),
+                t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
+                  '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
+            );
+        }
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
-            .setTitle(t('🖥️ Zarządzaj serwerem', '🖥️ Manage Server'));
+            .setTitle(t('🖥️ Zarządzaj serwerem', '🖥️ Manage Server'))
+            .setDescription(lines.join('\n\n'));
         await interaction.update({ embeds: [embed], components: this._buildServerSubPanel(interaction) });
     }
 
     async _handlePanelCatStats(interaction) {
         const t = this._panelT(interaction.guildId);
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const lines = [
+            t('📊 **Zużycie tokenów** — statystyki zużycia AI OCR dla Twojego serwera (zapytania, tokeny).',
+              '📊 **Token Usage** — AI OCR usage statistics for your server (requests, tokens).'),
+        ];
+        if (isHeadAdmin) {
+            lines.push(
+                t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
+                  '⚠️ **Unconfigured** — list of servers where the bot is present but has not yet been configured via /configure.'),
+                t('📈 **Przyrost graczy** — statystyki i wykres kumulatywnego przyrostu unikalnych graczy globalnie w czasie.',
+                  '📈 **Player Growth** — statistics and chart of cumulative unique player growth globally over time.'),
+            );
+        }
         const embed = new EmbedBuilder()
             .setColor(isHeadAdmin ? 0xFF6B35 : 0x5865F2)
-            .setTitle(t('📊 Statystyki', '📊 Statistics'));
+            .setTitle(t('📊 Statystyki', '📊 Statistics'))
+            .setDescription(lines.join('\n\n'));
         await interaction.update({ embeds: [embed], components: this._buildStatsSubPanel(interaction) });
     }
 
