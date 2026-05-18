@@ -1,17 +1,29 @@
-const puppeteer = require('puppeteer');
+const axios = require('axios');
 const path = require('path');
 const fs = require('fs').promises;
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-const HABBY_GAME_ID = 3;
-const HABBY_BASE_URL = 'https://store.habby.com';
-const DELAY_BETWEEN_UIDS_MS = 3000;
+const HABBY_API_BASE = 'https://prod-mail.habbyservice.com/Survivor/api/v1';
+const DELAY_BETWEEN_UIDS_MS = 2000;
+const MAX_CAPTCHA_ATTEMPTS = 3;
 
 class GiftcodeService {
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
         this.uidsFile = path.join(__dirname, '../data/habby_uids.json');
+
+        if (config.ocr?.googleAiApiKey) {
+            const genAI = new GoogleGenerativeAI(config.ocr.googleAiApiKey);
+            this.geminiModel = genAI.getGenerativeModel({
+                model: config.ocr.googleAiModel || 'gemini-2.5-flash-preview-05-20'
+            });
+        } else {
+            this.geminiModel = null;
+        }
     }
+
+    // ===== STORAGE =====
 
     async loadData() {
         try {
@@ -58,193 +70,134 @@ class GiftcodeService {
         return data.uids[discordId] || null;
     }
 
+    // ===== HABBY API =====
+
+    async _generateCaptcha() {
+        const res = await axios.post(
+            `${HABBY_API_BASE}/captcha/generate`,
+            {},
+            { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
+        );
+        // Odpowiedź może być w res.data.data.captchaId lub res.data.captchaId
+        const captchaId = res.data?.data?.captchaId ?? res.data?.captchaId;
+        if (!captchaId) throw new Error(`Brak captchaId w odpowiedzi: ${JSON.stringify(res.data)}`);
+        return captchaId;
+    }
+
+    async _getCaptchaImageBuffer(captchaId) {
+        const res = await axios.get(
+            `${HABBY_API_BASE}/captcha/image/${captchaId}`,
+            { responseType: 'arraybuffer', timeout: 10000 }
+        );
+        return Buffer.from(res.data);
+    }
+
+    async _solveCaptchaWithAI(imageBuffer) {
+        if (!this.geminiModel) {
+            throw new Error('Brak klucza Google AI (STALKER_GOOGLE_AI_API_KEY) — captcha nie może być rozwiązana automatycznie');
+        }
+
+        const base64 = imageBuffer.toString('base64');
+        const result = await this.geminiModel.generateContent([
+            {
+                inlineData: {
+                    data: base64,
+                    mimeType: 'image/png'
+                }
+            },
+            'This is a CAPTCHA image with digits. Reply with ONLY the digits you see, nothing else. No spaces, no punctuation.'
+        ]);
+
+        const text = result.response.text().trim().replace(/\D/g, '');
+        this.logger.info(`[GIFTCODE] Captcha rozwiązana przez AI: "${text}"`);
+        return text;
+    }
+
+    async _claimCode(userId, giftCode, captchaId, captcha) {
+        const res = await axios.post(
+            `${HABBY_API_BASE}/giftcode/claim`,
+            { userId, giftCode, captchaId, captcha },
+            { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+        );
+        return res.data;
+    }
+
+    // ===== REDEMPTION =====
+
     async redeemAll(giftcode, progressCallback) {
         const data = await this.loadData();
         const entries = Object.entries(data.uids);
         if (entries.length === 0) return [];
 
         const results = [];
-        let browser;
 
-        try {
-            browser = await puppeteer.launch({
-                headless: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--no-first-run',
-                    '--no-zygote'
-                ]
+        for (let i = 0; i < entries.length; i++) {
+            const [discordId, userData] = entries[i];
+            this.logger.info(`[GIFTCODE] Aktywuję dla ${userData.nick} (UID: ${userData.uid}) [${i + 1}/${entries.length}]`);
+
+            const result = await this._redeemForUid(userData.uid, giftcode, userData.nick);
+            results.push({
+                discordId,
+                uid: userData.uid,
+                nick: userData.nick,
+                ...result
             });
 
-            for (let i = 0; i < entries.length; i++) {
-                const [discordId, userData] = entries[i];
-                this.logger.info(`[GIFTCODE] Aktywuję kod dla ${userData.nick} (UID: ${userData.uid}) [${i + 1}/${entries.length}]`);
-
-                const result = await this._redeemForUid(browser, userData.uid, giftcode, userData.nick);
-                results.push({
-                    discordId,
-                    uid: userData.uid,
-                    nick: userData.nick,
-                    ...result
-                });
-
-                if (progressCallback) {
-                    await progressCallback(i + 1, entries.length, results[results.length - 1]);
-                }
-
-                if (i < entries.length - 1) {
-                    await new Promise(r => setTimeout(r, DELAY_BETWEEN_UIDS_MS));
-                }
+            if (progressCallback) {
+                await progressCallback(i + 1, entries.length, results[results.length - 1]);
             }
-        } finally {
-            if (browser) {
-                try { await browser.close(); } catch { /* ignore */ }
+
+            if (i < entries.length - 1) {
+                await new Promise(r => setTimeout(r, DELAY_BETWEEN_UIDS_MS));
             }
         }
 
         return results;
     }
 
-    async _redeemForUid(browser, uid, giftcode, nick) {
-        const url = `${HABBY_BASE_URL}/game/${HABBY_GAME_ID}?page=giftcode&giftcode=${encodeURIComponent(giftcode)}`;
-        const page = await browser.newPage();
+    async _redeemForUid(uid, giftCode, nick) {
+        for (let attempt = 1; attempt <= MAX_CAPTCHA_ATTEMPTS; attempt++) {
+            try {
+                // 1. Generuj captchę
+                const captchaId = await this._generateCaptcha();
 
-        try {
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-            await page.setViewport({ width: 1280, height: 720 });
+                // 2. Pobierz obrazek captchy
+                const imageBuffer = await this._getCaptchaImageBuffer(captchaId);
 
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+                // 3. Rozwiąż captchę AI
+                const captchaSolution = await this._solveCaptchaWithAI(imageBuffer);
 
-            // Czekaj na pole tekstowe (UID input)
-            await page.waitForSelector('input[type="text"], input[type="number"]', { timeout: 15000 });
-            await new Promise(r => setTimeout(r, 1000));
-
-            // Wypełnij pole UID
-            const inputSelector = await page.evaluate(() => {
-                const inputs = Array.from(document.querySelectorAll('input'));
-                const uidInput = inputs.find(i =>
-                    i.type === 'text' || i.type === 'number' ||
-                    (i.placeholder && (
-                        i.placeholder.toLowerCase().includes('uid') ||
-                        i.placeholder.toLowerCase().includes('player') ||
-                        i.placeholder.toLowerCase().includes('id')
-                    ))
-                );
-                if (!uidInput) return null;
-                // Nadaj tymczasowy id żeby móc go potem targetować
-                uidInput.setAttribute('data-giftcode-target', 'true');
-                return '[data-giftcode-target="true"]';
-            });
-
-            if (!inputSelector) {
-                return { success: false, message: 'Nie znaleziono pola UID na stronie' };
-            }
-
-            await page.click(inputSelector, { clickCount: 3 });
-            await page.type(inputSelector, uid, { delay: 50 });
-
-            // Kliknij submit
-            const clicked = await page.evaluate(() => {
-                const buttons = Array.from(document.querySelectorAll('button'));
-                const btn = buttons.find(b =>
-                    b.type === 'submit' ||
-                    /submit|redeem|confirm|exchange|兑换|領取|get|claim/i.test(b.textContent)
-                ) || buttons[buttons.length - 1];
-
-                if (btn) {
-                    btn.click();
-                    return true;
+                if (!captchaSolution || captchaSolution.length < 1) {
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: AI nie rozwiązała captchy dla ${nick}`);
+                    continue;
                 }
-                return false;
-            });
 
-            if (!clicked) {
-                return { success: false, message: 'Nie znaleziono przycisku submit' };
-            }
+                // 4. Aktywuj kod
+                const result = await this._claimCode(uid, giftCode, captchaId, captchaSolution);
 
-            // Czekaj na odpowiedź strony
-            const responseText = await this._waitForResponse(page);
+                if (result.code === 0) {
+                    return { success: true, message: 'Kod aktywowany pomyślnie' };
+                } else if (result.code === 20402) {
+                    // Kod już użyty — nie ma sensu próbować ponownie
+                    return { success: false, message: 'Kod już wykorzystany lub limit osiągnięty' };
+                } else {
+                    // Prawdopodobnie zła captcha — próbuj ponownie
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${result.msg}) dla ${nick}`);
+                }
 
-            const isSuccess = this._isSuccessMessage(responseText);
-            return { success: isSuccess, message: responseText };
-
-        } catch (error) {
-            this.logger.error(`[GIFTCODE] ❌ Błąd dla ${nick} (${uid}): ${error.message}`);
-            return { success: false, message: `Błąd połączenia: ${error.message.split('\n')[0]}` };
-        } finally {
-            try { await page.close(); } catch { /* ignore */ }
-        }
-    }
-
-    async _waitForResponse(page) {
-        // Czekaj na pojawienie się komunikatu odpowiedzi
-        try {
-            await page.waitForFunction(() => {
-                const candidates = [
-                    ...document.querySelectorAll('[class*="result"]'),
-                    ...document.querySelectorAll('[class*="message"]'),
-                    ...document.querySelectorAll('[class*="success"]'),
-                    ...document.querySelectorAll('[class*="error"]'),
-                    ...document.querySelectorAll('[class*="dialog"]'),
-                    ...document.querySelectorAll('[class*="toast"]'),
-                    ...document.querySelectorAll('[class*="tip"]'),
-                    ...document.querySelectorAll('[class*="modal"]'),
-                    ...document.querySelectorAll('.el-message'),
-                    ...document.querySelectorAll('.el-dialog__body')
-                ];
-                return candidates.some(el => {
-                    const text = el.textContent.trim();
-                    return text.length > 5 && !el.hidden && el.offsetHeight > 0;
-                });
-            }, { timeout: 10000 });
-        } catch {
-            // Timeout - spróbuj odczytać cokolwiek
-        }
-
-        await new Promise(r => setTimeout(r, 500));
-
-        return page.evaluate(() => {
-            const prioritySelectors = [
-                '.el-dialog__body p',
-                '.el-dialog__body',
-                '.el-message span',
-                '[class*="result"] p',
-                '[class*="result"]',
-                '[class*="success"]',
-                '[class*="error"]',
-                '[class*="tip"]',
-                '[class*="toast"]',
-                '[class*="dialog"] p',
-                '[class*="modal"] p'
-            ];
-
-            for (const sel of prioritySelectors) {
-                const el = document.querySelector(sel);
-                if (el) {
-                    const text = el.textContent.trim();
-                    if (text.length > 3) return text.substring(0, 200);
+            } catch (error) {
+                this.logger.error(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS} dla ${nick}: ${error.message}`);
+                if (attempt === MAX_CAPTCHA_ATTEMPTS) {
+                    return { success: false, message: `Błąd: ${error.message.split('\n')[0]}` };
                 }
             }
 
-            return 'Brak odpowiedzi od serwera';
-        });
-    }
+            if (attempt < MAX_CAPTCHA_ATTEMPTS) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
 
-    _isSuccessMessage(msg) {
-        if (!msg) return false;
-        const lower = msg.toLowerCase();
-        return (
-            lower.includes('success') ||
-            lower.includes('claimed') ||
-            lower.includes('received') ||
-            lower.includes('congratu') ||
-            lower.includes('reward') ||
-            lower.includes('redeemed') ||
-            lower.includes('ok') && lower.length < 10
-        );
+        return { success: false, message: `Nieudana aktywacja po ${MAX_CAPTCHA_ATTEMPTS} próbach (captcha)` };
     }
 }
 
