@@ -59,7 +59,7 @@ class KingBumChatService {
             }
         }
 
-        this.cooldownMinutes = 1;
+        this.cooldownSeconds = 20;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'king_bum_cooldowns.json');
         this.cooldowns = new Map();
@@ -106,10 +106,10 @@ class KingBumChatService {
         const last = this.cooldowns.get(userId);
         if (!last) return { allowed: true };
         const elapsed = Date.now() - last;
-        const cooldownMs = this.cooldownMinutes * 60 * 1000;
+        const cooldownMs = this.cooldownSeconds * 1000;
         if (elapsed >= cooldownMs) return { allowed: true };
         const remainingMs = cooldownMs - elapsed;
-        return { allowed: false, remainingMinutes: Math.ceil(remainingMs / 60000) };
+        return { allowed: false, remainingSeconds: Math.ceil(remainingMs / 1000) };
     }
 
     recordAsk(userId, member) {
