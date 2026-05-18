@@ -389,7 +389,10 @@ client.on('guildMemberUpdate', async (_oldMember, newMember) => {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-    if (!message.guildId) return;
+    if (!message.guildId) {
+        await message.reply('👑 The King does not do private audiences. Find me on the server.').catch(() => {});
+        return;
+    }
     if (!kingBumChatService.isEnabledForGuild(message.guildId)) return;
 
     const isBotMentioned = message.mentions.has(client.user.id);
