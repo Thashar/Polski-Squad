@@ -36,6 +36,7 @@ const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
+const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { createAppSync } = require('../utils/appSync');
 const { createBotOperations } = require('../utils/operationRunner');
@@ -113,6 +114,7 @@ const communityVerificationService = new CommunityVerificationService(config.ran
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
+const kingBumChatService = new KingBumChatService(config);
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService);
 
 /**
@@ -382,6 +384,68 @@ client.on('guildMemberUpdate', async (_oldMember, newMember) => {
         await appSync.memberSeen(payload);
     } catch (err) {
         logger.error(`Błąd memberSeen update (serwer "${newMember?.guild?.name}", użytkownik "${newMember?.displayName || newMember?.user?.username || newMember?.user?.id}"):`, err);
+    }
+});
+
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (!message.guildId) return;
+    if (!kingBumChatService.isEnabledForGuild(message.guildId)) return;
+
+    const isBotMentioned = message.mentions.has(client.user.id);
+    const isEveryoneMention = message.mentions.everyone;
+    const isReplyToBot = message.reference && message.mentions.repliedUser?.id === client.user.id;
+
+    if (!isBotMentioned || isEveryoneMention || isReplyToBot) return;
+
+    try {
+        const question = message.content.replace(/<@!?\d+>/g, '').trim();
+
+        if (!question) {
+            await message.reply('👑 *adjusts crown lazily* ...You rang? Ask me something.');
+            return;
+        }
+
+        if (question.length > 500) {
+            await message.reply('👑 King BUM does not read walls of text. Keep it short, subject.');
+            return;
+        }
+
+        const canAskResult = kingBumChatService.canAsk(message.author.id, message.member);
+        if (!canAskResult.allowed) {
+            await message.reply(`⏳ The King needs a moment of peace. Try again in **${canAskResult.remainingMinutes} min**.`);
+            return;
+        }
+
+        await message.channel.sendTyping();
+
+        const answer = await kingBumChatService.ask(message, question);
+        kingBumChatService.recordAsk(message.author.id, message.member);
+
+        const splitMessage = (text, maxLen = 2000) => {
+            if (text.length <= maxLen) return [text];
+            const parts = [];
+            let remaining = text;
+            while (remaining.length > 0) {
+                if (remaining.length <= maxLen) { parts.push(remaining); break; }
+                let splitAt = remaining.lastIndexOf('\n\n', maxLen);
+                if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf('\n', maxLen);
+                if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf('. ', maxLen);
+                if (splitAt < maxLen * 0.3) splitAt = remaining.lastIndexOf(' ', maxLen);
+                if (splitAt < maxLen * 0.3) splitAt = maxLen;
+                parts.push(remaining.substring(0, splitAt + 1).trimEnd());
+                remaining = remaining.substring(splitAt + 1).trimStart();
+            }
+            return parts;
+        };
+
+        const parts = splitMessage(answer);
+        await message.reply({ content: parts[0] });
+        for (let i = 1; i < parts.length; i++) {
+            await message.channel.send({ content: parts[i] });
+        }
+    } catch (err) {
+        logger.error(`Błąd King BUM MessageCreate (guildId=${message.guildId}): ${err.message}`);
     }
 });
 

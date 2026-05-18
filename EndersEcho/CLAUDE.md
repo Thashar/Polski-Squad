@@ -483,6 +483,30 @@ Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreV
 
 ---
 
+## King BUM AI Chat
+
+**Mention @EndersEcho** na serwerze z listy `ENDERSECHO_AI_CHAT_GUILD_IDS` → bot odpowiada jako King BUM.
+
+- **Dostępność per-serwer:** lista guild ID rozdzielona przecinkami w `ENDERSECHO_AI_CHAT_GUILD_IDS`. Pusty env = chat wyłączony wszędzie.
+- **Przełączanie providera:** `ENDERSECHO_AI_CHAT_PROVIDER` → `anthropic` (domyślny) lub `grok`
+- **Cooldown:** 1 min per użytkownik; administratorzy bez limitu
+- **Persistencja:** cooldowny w `data/king_bum_cooldowns.json` (auto-czyszczenie po 48h)
+- **Max długość pytania:** 500 znaków
+- **Persona:** King BUM — leniwy, ironiczny władca serwera, Discord markdown, krótkie odpowiedzi
+
+### Provider: Anthropic (domyślny)
+- **Model:** `ENDERSECHO_AI_CHAT_MODEL` (domyślnie `claude-3-haiku-20240307`)
+- **Klucz:** wspólny `ANTHROPIC_API_KEY`
+
+### Provider: Grok (xAI)
+- **Model:** `ENDERSECHO_GROK_CHAT_MODEL` (domyślnie `grok-3-mini`)
+- **API:** `https://api.x.ai/v1/chat/completions` (Chat Completions)
+- **Klucz:** `XAI_API_KEY`
+
+**Serwis:** `services/kingBumChatService.js`
+
+---
+
 ## Zmienne Środowiskowe
 
 ```env
@@ -512,6 +536,15 @@ ENDERSECHO_GUILD_2_ICON=https://...  # URL ikony serwera (opcjonalny)
 # Role TOP serwera 2 (opcjonalne)
 ENDERSECHO_GUILD_2_TOP1_ROLE=role_id
 # ... itd.
+
+# King BUM AI Chat (opcjonalne)
+# Lista guild ID (przecinkami) gdzie @EndersEcho odpowiada jako King BUM
+ENDERSECHO_AI_CHAT_GUILD_IDS=guild_id_1,guild_id_2
+ENDERSECHO_AI_CHAT_PROVIDER=anthropic          # "anthropic" (domyślny) lub "grok"
+# Anthropic (gdy provider=anthropic) — wspólny klucz ANTHROPIC_API_KEY
+ENDERSECHO_AI_CHAT_MODEL=claude-3-haiku-20240307
+# Grok (gdy provider=grok) — wspólny klucz XAI_API_KEY
+ENDERSECHO_GROK_CHAT_MODEL=grok-3-mini
 
 # AI OCR (opcjonalne)
 USE_ENDERSECHO_AI_OCR=false

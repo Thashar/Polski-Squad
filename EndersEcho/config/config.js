@@ -181,6 +181,11 @@ module.exports = {
     // Domyślne wiadomości (eng) — fallback dla nowych/nieznanym serwerów
     messages: allMessages['eng'],
 
+    // King BUM AI Chat — aktywny tylko na wybranych serwerach (ENDERSECHO_AI_CHAT_GUILD_IDS)
+    aiChat: {
+        guildIds: (process.env.ENDERSECHO_AI_CHAT_GUILD_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
+    },
+
     // Konfiguracja rankingu
     ranking: {
         dataDir: path.join(__dirname, '../data'),
