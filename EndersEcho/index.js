@@ -399,13 +399,21 @@ client.on('messageCreate', async (message) => {
     const isEveryoneMention = message.mentions.everyone;
     const isReplyToBot = message.reference && message.mentions.repliedUser?.id === client.user.id;
 
-    if (!isBotMentioned || isEveryoneMention || isReplyToBot) return;
+    if ((!isBotMentioned && !isReplyToBot) || isEveryoneMention) return;
 
     if (message.author.id === '398983446812295168') {
         const role = message.guild?.roles.cache.get('1438280945387049141');
         if (role) {
             await message.member?.roles.remove(role).catch(err => logger.warn(`Błąd usuwania roli King BUM: ${err.message}`));
         }
+    }
+
+    let previousBotMessage = null;
+    if (isReplyToBot && message.reference?.messageId) {
+        try {
+            const ref = await message.channel.messages.fetch(message.reference.messageId);
+            if (ref.author.id === client.user.id) previousBotMessage = ref.content;
+        } catch { /* ignoruj jeśli nie da się pobrać */ }
     }
 
     try {
@@ -429,7 +437,7 @@ client.on('messageCreate', async (message) => {
 
         await message.channel.sendTyping();
 
-        const answer = await kingBumChatService.ask(message, question);
+        const answer = await kingBumChatService.ask(message, question, previousBotMessage);
         kingBumChatService.recordAsk(message.author.id, message.member);
 
         const splitMessage = (text, maxLen = 2000) => {

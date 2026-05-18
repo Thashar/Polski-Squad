@@ -126,13 +126,16 @@ class KingBumChatService {
         return guildIds.includes(guildId);
     }
 
-    async ask(message, question) {
+    async ask(message, question, previousBotMessage = null) {
         if (!this.enabled) {
             return '⚠️ King BUM is currently napping... (AI Chat is disabled — missing API key)';
         }
 
         const displayName = message.member?.displayName || message.author.username;
-        const userPrompt = `User: ${displayName}\nMessage: ${question}`;
+        const context = previousBotMessage
+            ? `[Previous King BUM message]: ${previousBotMessage}\n\n`
+            : '';
+        const userPrompt = `${context}User: ${displayName}\nMessage: ${question}`;
 
         if (this.provider === 'grok') {
             return this._askGrok(userPrompt, question, message.author.username);
