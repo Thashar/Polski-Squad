@@ -78,7 +78,7 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking'];
+    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'add-id', 'remove-id'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -166,6 +166,18 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'msg':
             await handleMsgCommand(interaction, config, sharedState.broadcastMessageService, sharedState.client);
+            break;
+        case 'add-id':
+            await handleAddIdCommand(interaction, sharedState);
+            break;
+        case 'remove-id':
+            await handleRemoveIdCommand(interaction, sharedState);
+            break;
+        case 'list-ids':
+            await handleListIdsCommand(interaction, sharedState);
+            break;
+        case 'giftcode':
+            await handleGiftcodeCommand(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -2156,6 +2168,161 @@ async function unregisterCommand(client, commandName) {
     }
 }
 
+// ===== GIFTCODE HANDLERS =====
+
+function _hasAnyClanRole(member, config) {
+    return Object.values(config.targetRoles).some(roleId => roleId && member.roles.cache.has(roleId));
+}
+
+async function handleAddIdCommand(interaction, sharedState) {
+    const { config, giftcodeService } = sharedState;
+
+    if (!_hasAnyClanRole(interaction.member, config)) {
+        return interaction.reply({
+            content: '❌ Ta komenda jest dostępna tylko dla klanowiczów.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    const uid = interaction.options.getString('uid');
+    if (!/^\d{5,20}$/.test(uid)) {
+        return interaction.reply({
+            content: '❌ Nieprawidłowy UID — powinien zawierać wyłącznie cyfry (5–20 znaków).',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    const existed = await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
+    const verb = existed ? 'zaktualizowane' : 'zapisane';
+
+    await interaction.reply({
+        content: `✅ Twoje ID Habby zostało ${verb}.\n**UID:** \`${uid}\``,
+        flags: MessageFlags.Ephemeral
+    });
+    logger.info(`[GIFTCODE] ${interaction.member.displayName} ${verb} UID: ${uid}`);
+}
+
+async function handleRemoveIdCommand(interaction, sharedState) {
+    const { giftcodeService } = sharedState;
+
+    const removed = await giftcodeService.removeUid(interaction.user.id);
+    if (!removed) {
+        return interaction.reply({
+            content: '❌ Nie masz zapisanego ID Habby.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    await interaction.reply({
+        content: `✅ Twoje ID Habby (\`${removed.uid}\`) zostało usunięte.`,
+        flags: MessageFlags.Ephemeral
+    });
+    logger.info(`[GIFTCODE] ${interaction.member.displayName} usunął UID: ${removed.uid}`);
+}
+
+async function handleListIdsCommand(interaction, sharedState) {
+    const { giftcodeService } = sharedState;
+
+    const uids = await giftcodeService.listUids();
+    const entries = Object.entries(uids);
+
+    if (entries.length === 0) {
+        return interaction.reply({
+            content: '📋 Brak zapisanych ID Habby.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    const lines = entries.map(([, u]) => `• **${u.nick}** — \`${u.uid}\``);
+    const embed = new EmbedBuilder()
+        .setTitle(`🎁 Zapisane ID Habby (${entries.length})`)
+        .setDescription(lines.join('\n').substring(0, 4096))
+        .setColor('#5865F2')
+        .setTimestamp();
+
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+async function handleGiftcodeCommand(interaction, sharedState) {
+    const { giftcodeService } = sharedState;
+
+    const code = interaction.options.getString('kod');
+    const uids = await giftcodeService.listUids();
+    const total = Object.keys(uids).length;
+
+    if (total === 0) {
+        return interaction.reply({
+            content: '❌ Brak zapisanych ID Habby. Klanowicze muszą najpierw dodać swoje ID przez `/add-id`.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+
+    await interaction.deferReply({ ephemeral: false });
+
+    const startEmbed = new EmbedBuilder()
+        .setTitle('🎁 Aktywacja kodu Habby')
+        .setDescription(`**Kod:** \`${code}\`\n**Graczy:** ${total}\n\n⏳ Przetwarzam...`)
+        .setColor('#FFA500')
+        .setTimestamp();
+
+    await interaction.editReply({ embeds: [startEmbed] });
+
+    const results = [];
+
+    const progressCallback = async (done, total, lastResult) => {
+        if (done % 3 === 0 || done === total) {
+            const successCount = results.filter(r => r.success).length;
+            const failCount = results.filter(r => !r.success).length;
+            const progressEmbed = new EmbedBuilder()
+                .setTitle('🎁 Aktywacja kodu Habby — w toku')
+                .setDescription(
+                    `**Kod:** \`${code}\`\n` +
+                    `**Postęp:** ${done}/${total}\n` +
+                    `✅ ${successCount} | ❌ ${failCount}\n\n` +
+                    `⏳ Ostatnio: **${lastResult.nick}** — ${lastResult.success ? '✅' : '❌'} ${lastResult.message.substring(0, 80)}`
+                )
+                .setColor('#FFA500');
+            try {
+                await interaction.editReply({ embeds: [progressEmbed] });
+            } catch { /* wygasła interakcja, nie przerywaj */ }
+        }
+    };
+
+    try {
+        const allResults = await giftcodeService.redeemAll(code, (done, tot, last) => {
+            results.push(last);
+            return progressCallback(done, tot, last);
+        });
+
+        const successCount = allResults.filter(r => r.success).length;
+        const failCount = allResults.filter(r => !r.success).length;
+
+        const lines = allResults.map(r =>
+            `${r.success ? '✅' : '❌'} **${r.nick}** (\`${r.uid}\`) — ${r.message.substring(0, 80)}`
+        );
+
+        const finalEmbed = new EmbedBuilder()
+            .setTitle('🎁 Aktywacja kodu Habby — zakończona')
+            .setDescription(
+                `**Kod:** \`${code}\`\n` +
+                `**Wyniki:** ✅ ${successCount} sukces | ❌ ${failCount} błąd\n\n` +
+                lines.join('\n').substring(0, 3800)
+            )
+            .setColor(failCount === 0 ? '#57F287' : successCount === 0 ? '#ED4245' : '#FFA500')
+            .setTimestamp();
+
+        await interaction.editReply({ embeds: [finalEmbed] });
+        logger.info(`[GIFTCODE] Kod \`${code}\` aktywowany dla ${successCount}/${total} graczy`);
+
+    } catch (error) {
+        logger.error(`[GIFTCODE] ❌ Błąd redeemAll: ${error.message}`);
+        await interaction.editReply({
+            content: `❌ Błąd podczas aktywacji kodu: ${error.message}`,
+            embeds: []
+        });
+    }
+}
+
 // Funkcja do rejestracji komend slash
 async function registerSlashCommands(client) {
     const commands = [
@@ -2310,6 +2477,32 @@ async function registerSlashCommands(client) {
                 option.setName('tekst')
                     .setDescription('Treść wiadomości (puste = usuń wszystkie poprzednie wiadomości)')
                     .setRequired(false)
+            ),
+
+        new SlashCommandBuilder()
+            .setName('add-id')
+            .setDescription('Zapisz swoje ID gracza Habby (do aktywacji kodów podarunkowych)')
+            .addStringOption(option =>
+                option.setName('uid')
+                    .setDescription('Twoje ID gracza z gry Habby (same cyfry)')
+                    .setRequired(true)
+            ),
+
+        new SlashCommandBuilder()
+            .setName('remove-id')
+            .setDescription('Usuń swoje zapisane ID gracza Habby'),
+
+        new SlashCommandBuilder()
+            .setName('list-ids')
+            .setDescription('Wyświetl wszystkie zapisane ID graczy Habby (tylko moderatorzy)'),
+
+        new SlashCommandBuilder()
+            .setName('giftcode')
+            .setDescription('Aktywuj kod podarunkowy Habby dla wszystkich zapisanych graczy (tylko moderatorzy)')
+            .addStringOption(option =>
+                option.setName('kod')
+                    .setDescription('Kod podarunkowy do aktywacji')
+                    .setRequired(true)
             )
     ];
 

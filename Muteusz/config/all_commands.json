@@ -436,6 +436,30 @@
           "usage": "/msg tekst:[tekst wiadomości] (puste = usuń wszystkie)",
           "requiredPermission": "moderator"
         },
+        {
+          "name": "/add-id",
+          "description": "Zapisz swoje ID gracza Habby do systemu automatycznej aktywacji kodów podarunkowych",
+          "usage": "/add-id uid:[twoje ID gracza]",
+          "requiredPermission": "clan_member"
+        },
+        {
+          "name": "/remove-id",
+          "description": "Usuń swoje zapisane ID gracza Habby",
+          "usage": "/remove-id",
+          "requiredPermission": "clan_member"
+        },
+        {
+          "name": "/list-ids",
+          "description": "Wyświetl listę wszystkich zapisanych ID graczy Habby",
+          "usage": "/list-ids",
+          "requiredPermission": "moderator"
+        },
+        {
+          "name": "/giftcode",
+          "description": "Aktywuj kod podarunkowy Habby dla wszystkich zapisanych graczy przez automatyzację przeglądarki",
+          "usage": "/giftcode kod:[kod podarunkowy]",
+          "requiredPermission": "moderator"
+        }
       ]
     },
     {

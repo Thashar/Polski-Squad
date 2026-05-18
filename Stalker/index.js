@@ -108,6 +108,8 @@ const GaryCombatIngestionService = require('./services/garyCombatIngestionServic
 const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger, appSync);
 const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
+const GiftcodeService = require('./services/giftcodeService');
+const giftcodeService = new GiftcodeService(config, logger);
 
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
 ocrService.setServices(reminderService, punishmentService, phaseService);
@@ -139,7 +141,8 @@ const sharedState = {
     aiChatService,
     phaseService,
     garyCombatIngestionService,
-    kalkulatorEmbedService
+    kalkulatorEmbedService,
+    giftcodeService
 };
 
 client.once(Events.ClientReady, async () => {
