@@ -2317,9 +2317,78 @@ async function handleGiftcodeCommand(interaction, sharedState) {
     const abortKey = `gc_${Date.now()}`;
     client._giftcodeAbort = client._giftcodeAbort ?? new Map();
     client._giftcodeAbort.set(abortKey, false);
+    const shouldAbort = () => client._giftcodeAbort?.get(abortKey) === true;
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+    // ===== TRYB MULTI-CODE (brak parametru) =====
+    if (!code) {
+        const recentCodes = await giftcodeService.getRecentCodes(30);
+        if (recentCodes.length === 0) {
+            client._giftcodeAbort?.delete(abortKey);
+            return interaction.editReply({ content: '❌ Brak kodów z ostatniego miesiąca. Użyj `/giftcode kod:KOD` aby aktywować konkretny kod.', embeds: [], components: [] });
+        }
+
+        const codeResultsMap = {};
+        for (let ci = 0; ci < recentCodes.length; ci++) {
+            if (shouldAbort()) break;
+            const curCode = recentCodes[ci];
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
+                    .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
+                    .setColor('#FFA500')],
+                components: [_buildStopRow(abortKey)]
+            });
+
+            const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0, noRole: skippedEntries.length };
+            try {
+                codeResultsMap[curCode] = await giftcodeService.redeemEntries(eligibleEntries, curCode, async (done, tot, last) => {
+                    if (last.success) liveStats.succeeded++;
+                    else if (last.skippedClaimed) liveStats.skippedClaimed++;
+                    else if (last.claimed) liveStats.claimed++;
+                    else if (!last.aborted) liveStats.permFailed++;
+                    try {
+                        await interaction.editReply({
+                            embeds: [new EmbedBuilder()
+                                .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
+                                .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n\n${_buildLiveDesc(curCode, done, tot, liveStats, last, giftcodeService)}`)
+                                .setColor('#FFA500')],
+                            components: [_buildStopRow(abortKey)]
+                        });
+                    } catch { /* interakcja wygasła */ }
+                }, shouldAbort);
+            } catch (error) {
+                logger.error(`[GIFTCODE] ❌ Błąd kodu ${curCode}: ${error.message}`);
+                codeResultsMap[curCode] = [];
+            }
+        }
+
+        client._giftcodeAbort?.delete(abortKey);
+
+        const summaryLines = Object.entries(codeResultsMap).map(([c, results]) => {
+            const s = results.filter(r => r.success).length;
+            const sk = results.filter(r => r.skippedClaimed).length;
+            const cl = results.filter(r => !r.success && r.claimed).length;
+            const cf = results.filter(r => !r.success && r.retryable).length;
+            const e = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted).length;
+            return `\`${c}\`: ✅${s} ⏭️${sk} 🎫${cl} 🔄${cf} ❌${e}`;
+        });
+
+        const tokenLine = _buildTokenLine(giftcodeService);
+        return interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('🎁 Kody z ostatniego miesiąca — zakończone')
+                .setDescription([...summaryLines, '', tokenLine].filter(Boolean).join('\n'))
+                .setFooter({ text: `Pominięto (brak roli): ${skippedEntries.length}` })
+                .setColor('#57F287')
+                .setTimestamp()],
+            components: []
+        });
+    }
+
+    // ===== TRYB SINGLE-CODE (podano parametr) =====
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🎁 Aktywacja kodu Habby')
@@ -2345,7 +2414,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
                     components: [_buildStopRow(abortKey)]
                 });
             } catch { /* interakcja wygasła */ }
-        }, () => client._giftcodeAbort?.get(abortKey) === true);
+        }, shouldAbort);
     } catch (error) {
         logger.error(`[GIFTCODE] ❌ Błąd redeemEntries: ${error.message}`);
         client._giftcodeAbort?.delete(abortKey);
@@ -2729,11 +2798,11 @@ async function registerSlashCommands(client) {
 
         new SlashCommandBuilder()
             .setName('giftcode')
-            .setDescription('Aktywuj kod podarunkowy Habby dla wszystkich klanowiczów (tylko administrator)')
+            .setDescription('Aktywuj kod(y) podarunkowe Habby dla wszystkich klanowiczów (tylko administrator)')
             .addStringOption(option =>
                 option.setName('kod')
-                    .setDescription('Kod podarunkowy do aktywacji')
-                    .setRequired(true)
+                    .setDescription('Kod podarunkowy do aktywacji (pomiń, aby sprawdzić kody z ostatniego miesiąca)')
+                    .setRequired(false)
             )
     ];
 
