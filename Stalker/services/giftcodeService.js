@@ -1,15 +1,11 @@
 const axios = require('axios');
 const path = require('path');
 const fs = require('fs').promises;
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const sharp = require('sharp');
 const { delay } = require('../utils/helpers');
 
 const HABBY_API_BASE = 'https://prod-mail.habbyservice.com/Survivor/api/v1';
-const DELAY_BETWEEN_UIDS_MS = 2000;
-const MAX_CAPTCHA_ATTEMPTS = 10;
+const DELAY_BETWEEN_UIDS_MS = 500;
 
-// Set dla O(1) — kody błędów które nie znikną po ponownej próbie z inną captchą
 const PERMANENT_ERROR_CODES = new Set([
     20402, // Kod już wykorzystany / limit osiągnięty
     20403, // Kod wygasł
@@ -19,7 +15,6 @@ const PERMANENT_ERROR_CODES = new Set([
     20407, // Giftcode self claimed (już odebrano)
 ]);
 
-// Kody oznaczające że gracz już odebrał ten kod
 const CLAIMED_ERROR_CODES = new Set([20402, 20407]);
 
 class GiftcodeService {
@@ -28,25 +23,13 @@ class GiftcodeService {
         this.logger = logger;
         this.uidsFile = path.join(__dirname, '../data/habby_uids.json');
         this.claimedFile = path.join(__dirname, '../data/giftcode_claimed.json');
-        this._debugDirReady = false;
-        this.captchaTokens = { input: 0, output: 0, calls: 0 };
-
-        if (config.ocr?.googleAiApiKey) {
-            const genAI = new GoogleGenerativeAI(config.ocr.googleAiApiKey);
-            this.geminiModel = genAI.getGenerativeModel({
-                model: config.ocr.captchaAiModel || 'gemini-2.5-flash-preview-05-20'
-            });
-        } else {
-            this.geminiModel = null;
-        }
     }
 
     // ===== STORAGE =====
 
     async loadData() {
         try {
-            const raw = await fs.readFile(this.uidsFile, 'utf8');
-            return JSON.parse(raw);
+            return JSON.parse(await fs.readFile(this.uidsFile, 'utf8'));
         } catch {
             return { uids: {} };
         }
@@ -60,11 +43,7 @@ class GiftcodeService {
     async addUid(discordId, uid, displayName) {
         const data = await this.loadData();
         const existed = !!data.uids[discordId];
-        data.uids[discordId] = {
-            uid: uid.trim(),
-            nick: displayName,
-            addedAt: new Date().toISOString()
-        };
+        data.uids[discordId] = { uid: uid.trim(), nick: displayName, addedAt: new Date().toISOString() };
         await this.saveData(data);
         return existed;
     }
@@ -103,7 +82,6 @@ class GiftcodeService {
         await fs.writeFile(this.claimedFile, JSON.stringify(data, null, 2));
     }
 
-    // Normalizuje wpis kodu — obsługuje stary format (tablica) i nowy ({ firstUsed, claimed })
     _normalizeEntry(entry) {
         if (!entry) return { firstUsed: null, claimed: [] };
         if (Array.isArray(entry)) return { firstUsed: null, claimed: entry };
@@ -115,17 +93,16 @@ class GiftcodeService {
         return new Set(this._normalizeEntry(data[code]).claimed);
     }
 
-    async recordSuccess(discordId, code) {
+    async recordSuccess(uid, code) {
         const data = await this._loadClaimed();
         const entry = this._normalizeEntry(data[code]);
-        if (!entry.claimed.includes(discordId)) {
-            entry.claimed.push(discordId);
+        if (!entry.claimed.includes(uid)) {
+            entry.claimed.push(uid);
             data[code] = entry;
             await this._saveClaimed(data);
         }
     }
 
-    // Ustawia datę pierwszego użycia kodu (idempotentne — nie nadpisuje jeśli już ustawione)
     async setCodeFirstUsed(code) {
         const data = await this._loadClaimed();
         const entry = this._normalizeEntry(data[code]);
@@ -136,7 +113,6 @@ class GiftcodeService {
         }
     }
 
-    // Zwraca kody użyte w ciągu ostatnich `days` dni
     async getRecentCodes(days = 30) {
         const data = await this._loadClaimed();
         const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -148,155 +124,37 @@ class GiftcodeService {
             .map(([code]) => code);
     }
 
-    // Migracja startowa — ustawia dzisiejszą datę dla wszystkich kodów bez firstUsed
-    async migrateClaimedData() {
-        const data = await this._loadClaimed();
-        let changed = false;
-        const today = new Date().toISOString();
-        for (const [code, raw] of Object.entries(data)) {
-            const entry = this._normalizeEntry(raw);
-            if (!entry.firstUsed) {
-                entry.firstUsed = today;
-                data[code] = entry;
-                changed = true;
-            }
-        }
-        if (changed) {
-            await this._saveClaimed(data);
-            this.logger.info(`[GIFTCODE] Migracja claimed: ustawiono dzisiejszą datę dla istniejących kodów`);
-        }
-    }
-
-    // Aktywuje kody z ostatniego miesiąca dla nowo dodanego użytkownika
-    async redeemForNewUser(discordId, userData) {
-        const recentCodes = await this.getRecentCodes(30);
-        if (recentCodes.length === 0) return [];
-
-        this.captchaTokens = { input: 0, output: 0, calls: 0 };
-        this.totalCaptchaFails = 0;
-        const results = [];
-
-        for (let i = 0; i < recentCodes.length; i++) {
-            const code = recentCodes[i];
-            const claimedSet = await this.getClaimedForCode(code);
-            if (claimedSet.has(discordId)) {
-                results.push({ code, skipped: true, message: 'Już aktywowano' });
-                continue;
-            }
-
-            const result = await this._redeemForUid(userData.uid, code, userData.nick);
-            this.totalCaptchaFails += result.captchaFails ?? 0;
-
-            if (result.success || result.claimed) {
-                this.recordSuccess(discordId, code).catch(() => {});
-            }
-
-            const statusIcon = result.success ? '✅' : result.claimed ? '🎫' : '❌';
-            const attemptInfo = result.captchaFails > 0 ? ` (próba ${result.captchaFails + 1})` : '';
-            this.logger.info(`[GIFTCODE] ${userData.nick} ${statusIcon} ${code}${result.success ? attemptInfo : `: ${result.message}`}`);
-
-            results.push({ code, ...result });
-            if (i < recentCodes.length - 1) await delay(DELAY_BETWEEN_UIDS_MS);
-        }
-
-        return results;
-    }
-
-    // Usuwa pliki debug starsze niż 24h
-    async cleanupDebugImages() {
-        try {
-            const debugDir = path.join(__dirname, '../temp/captcha_debug');
-            const files = await fs.readdir(debugDir).catch(() => []);
-            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-            for (const file of files) {
-                const fp = path.join(debugDir, file);
-                const stat = await fs.stat(fp).catch(() => null);
-                if (stat && stat.mtimeMs < cutoff) await fs.unlink(fp).catch(() => {});
-            }
-        } catch { /* ignoruj */ }
-    }
-
     // ===== HABBY API =====
 
-    async _generateCaptcha() {
-        const res = await axios.post(
-            `${HABBY_API_BASE}/captcha/generate`,
-            {},
-            { headers: { 'Content-Type': 'application/json' }, timeout: 10000 }
-        );
-        // API może zwrócić captchaId w res.data.data.captchaId lub res.data.captchaId
-        const captchaId = res.data?.data?.captchaId ?? res.data?.captchaId;
-        if (!captchaId) throw new Error(`Brak captchaId w odpowiedzi: ${JSON.stringify(res.data)}`);
-        return captchaId;
-    }
+    async _redeemForUid(uid, giftCode, nick, shouldAbort) {
+        if (shouldAbort?.()) {
+            return { success: false, aborted: true, message: 'Przerwano przez użytkownika' };
+        }
 
-    async _getCaptchaImageBuffer(captchaId) {
-        const res = await axios.get(
-            `${HABBY_API_BASE}/captcha/image/${captchaId}`,
-            { responseType: 'arraybuffer', timeout: 10000 }
-        );
-        return Buffer.from(res.data);
-    }
-
-    async _preprocessCaptcha(imageBuffer) {
-        return sharp(imageBuffer)
-            .flatten({ background: { r: 255, g: 255, b: 255 } })
-            .greyscale()
-            .threshold(200)
-            .resize({ width: 720, kernel: sharp.kernel.lanczos3 })
-            .png()
-            .toBuffer();
-    }
-
-    async _saveCaptchaDebug(original, processed, attempt) {
         try {
-            const debugDir = path.join(__dirname, '../temp/captcha_debug');
-            if (!this._debugDirReady) {
-                await fs.mkdir(debugDir, { recursive: true });
-                this._debugDirReady = true;
+            const res = await axios.post(
+                `${HABBY_API_BASE}/giftcode/redeem`,
+                { userId: uid, giftCode },
+                { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
+            );
+            const apiMsg = res.data?.message ?? res.data?.msg ?? null;
+
+            if (res.data?.code === 0) {
+                return { success: true, message: 'Kod aktywowany pomyślnie' };
+            } else if (PERMANENT_ERROR_CODES.has(res.data?.code)) {
+                return {
+                    success: false,
+                    claimed: CLAIMED_ERROR_CODES.has(res.data.code),
+                    message: apiMsg ?? `Błąd API (kod: ${res.data.code})`
+                };
+            } else {
+                this.logger.warn(`[GIFTCODE] ${nick}: API ${res.data?.code} ${apiMsg ?? ''}`);
+                return { success: false, retryable: true, message: apiMsg ?? `Błąd API (kod: ${res.data?.code})` };
             }
-            const ts = Date.now();
-            await Promise.all([
-                fs.writeFile(path.join(debugDir, `captcha_${ts}_${attempt}_original.png`), original),
-                fs.writeFile(path.join(debugDir, `captcha_${ts}_${attempt}_processed.png`), processed),
-            ]);
-        } catch { /* nie przerywaj jeśli zapis się nie uda */ }
-    }
-
-    async _solveCaptchaWithAI(imageBuffer, attempt) {
-        if (!this.geminiModel) {
-            throw new Error('Brak klucza Google AI (STALKER_GOOGLE_AI_API_KEY) — captcha nie może być rozwiązana automatycznie');
+        } catch (error) {
+            this.logger.error(`[GIFTCODE] ${nick}: ${error.message.split('\n')[0]}`);
+            return { success: false, retryable: true, message: `Błąd: ${error.message.split('\n')[0]}` };
         }
-
-        const processed = await this._preprocessCaptcha(imageBuffer);
-        await this._saveCaptchaDebug(imageBuffer, processed, attempt);
-
-        const result = await this.geminiModel.generateContent([
-            { inlineData: { data: processed.toString('base64'), mimeType: 'image/png' } },
-            'This image contains a CAPTCHA with exactly 4 digits. Look carefully and read all 4 digits. Reply with ONLY those 4 digits — no letters, no spaces, no punctuation, nothing else.'
-        ]);
-
-        const text = result.response.text().trim().replace(/\D/g, '');
-        const usage = result.response.usageMetadata;
-        if (usage) {
-            this.captchaTokens.input += usage.promptTokenCount ?? 0;
-            this.captchaTokens.output += usage.candidatesTokenCount ?? 0;
-            this.captchaTokens.calls += 1;
-        }
-        return text;
-    }
-
-    async _claimCode(userId, giftCode, captchaId, captcha) {
-        const res = await axios.post(
-            `${HABBY_API_BASE}/giftcode/claim`,
-            { userId, giftCode, captchaId, captcha },
-            { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
-        );
-        return res.data;
-    }
-
-    _extractMsg(result) {
-        return result.msg ?? result.message ?? result.data?.msg ?? result.data?.message ?? null;
     }
 
     // ===== REDEMPTION =====
@@ -308,8 +166,6 @@ class GiftcodeService {
 
     async redeemEntries(entries, giftcode, progressCallback, shouldAbort) {
         if (entries.length === 0) return [];
-        this.captchaTokens = { input: 0, output: 0, calls: 0 };
-        this.totalCaptchaFails = 0;
         await this.setCodeFirstUsed(giftcode);
         const claimedSet = await this.getClaimedForCode(giftcode);
         const results = [];
@@ -319,8 +175,8 @@ class GiftcodeService {
 
             const [discordId, userData] = entries[i];
 
-            if (claimedSet.has(discordId)) {
-                const skipped = { discordId, uid: userData.uid, nick: userData.nick, success: false, skippedClaimed: true, message: 'Już aktywowano w poprzedniej sesji', captchaFails: 0 };
+            if (claimedSet.has(userData.uid)) {
+                const skipped = { discordId, uid: userData.uid, nick: userData.nick, success: false, skippedClaimed: true, message: 'Już aktywowano w poprzedniej sesji' };
                 results.push(skipped);
                 if (progressCallback) {
                     try { await progressCallback(i + 1, entries.length, skipped); } catch { /* nie blokuj */ }
@@ -329,16 +185,14 @@ class GiftcodeService {
             }
 
             const result = await this._redeemForUid(userData.uid, giftcode, userData.nick, shouldAbort);
-            this.totalCaptchaFails += result.captchaFails ?? 0;
 
             if (result.success || result.claimed) {
-                claimedSet.add(discordId);
-                this.recordSuccess(discordId, giftcode).catch(() => {});
+                claimedSet.add(userData.uid);
+                this.recordSuccess(userData.uid, giftcode).catch(() => {});
             }
 
-            const statusIcon = result.success ? '✅' : result.claimed ? '🎫' : result.aborted ? '⏹️' : '❌';
-            const attemptInfo = result.captchaFails > 0 ? ` (próba ${result.captchaFails + 1})` : '';
-            this.logger.info(`[GIFTCODE] [${i + 1}/${entries.length}] ${userData.nick} ${statusIcon}${result.success ? attemptInfo : `: ${result.message}`}`);
+            const icon = result.success ? '✅' : result.claimed ? '🎫' : result.aborted ? '⏹️' : '❌';
+            this.logger.info(`[GIFTCODE] [${i + 1}/${entries.length}] ${userData.nick} ${icon}${result.success ? '' : `: ${result.message}`}`);
 
             results.push({ discordId, uid: userData.uid, nick: userData.nick, ...result });
 
@@ -352,50 +206,33 @@ class GiftcodeService {
         return results;
     }
 
-    async _redeemForUid(uid, giftCode, nick, shouldAbort) {
-        let captchaFails = 0;
+    async redeemForNewUser(discordId, userData) {
+        const recentCodes = await this.getRecentCodes(30);
+        if (recentCodes.length === 0) return [];
 
-        for (let attempt = 1; attempt <= MAX_CAPTCHA_ATTEMPTS; attempt++) {
-            if (shouldAbort?.()) {
-                return { success: false, aborted: true, message: 'Przerwano przez użytkownika', captchaFails };
+        const results = [];
+        for (let i = 0; i < recentCodes.length; i++) {
+            const code = recentCodes[i];
+            const claimedSet = await this.getClaimedForCode(code);
+            if (claimedSet.has(userData.uid)) {
+                results.push({ code, skipped: true, message: 'Już aktywowano' });
+                continue;
             }
 
-            try {
-                const captchaId = await this._generateCaptcha();
-                const imageBuffer = await this._getCaptchaImageBuffer(captchaId);
-                const captchaSolution = await this._solveCaptchaWithAI(imageBuffer, attempt);
+            const result = await this._redeemForUid(userData.uid, code, userData.nick);
 
-                if (!captchaSolution || captchaSolution.length !== 4) {
-                    captchaFails++;
-                    this.logger.warn(`[GIFTCODE] ${nick} p.${attempt}: zła captcha "${captchaSolution}"`);
-                    if (attempt < MAX_CAPTCHA_ATTEMPTS) await delay(1000);
-                    continue;
-                }
-
-                const result = await this._claimCode(uid, giftCode, captchaId, captchaSolution);
-                const apiMsg = this._extractMsg(result);
-
-                if (result.code === 0) {
-                    return { success: true, message: 'Kod aktywowany pomyślnie', captchaFails };
-                } else if (PERMANENT_ERROR_CODES.has(result.code)) {
-                    return { success: false, claimed: CLAIMED_ERROR_CODES.has(result.code), message: apiMsg ?? `Błąd API (kod: ${result.code})`, captchaFails };
-                } else {
-                    captchaFails++;
-                    this.logger.warn(`[GIFTCODE] ${nick} p.${attempt}: API ${result.code} ${apiMsg ?? ''}`);
-                }
-
-            } catch (error) {
-                captchaFails++;
-                this.logger.error(`[GIFTCODE] ${nick} p.${attempt}: ${error.message.split('\n')[0]}`);
-                if (attempt === MAX_CAPTCHA_ATTEMPTS) {
-                    return { success: false, retryable: true, message: `Błąd: ${error.message.split('\n')[0]}`, captchaFails };
-                }
+            if (result.success || result.claimed) {
+                this.recordSuccess(userData.uid, code).catch(() => {});
             }
 
-            if (attempt < MAX_CAPTCHA_ATTEMPTS) await delay(1000);
+            const icon = result.success ? '✅' : result.claimed ? '🎫' : '❌';
+            this.logger.info(`[GIFTCODE] ${userData.nick} ${icon} ${code}${result.success ? '' : `: ${result.message}`}`);
+
+            results.push({ code, ...result });
+            if (i < recentCodes.length - 1) await delay(DELAY_BETWEEN_UIDS_MS);
         }
 
-        return { success: false, retryable: true, message: `Nieudana aktywacja po ${MAX_CAPTCHA_ATTEMPTS} próbach`, captchaFails };
+        return results;
     }
 }
 
