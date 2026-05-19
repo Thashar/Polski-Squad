@@ -192,7 +192,8 @@ class GiftcodeService {
             }
 
             const statusIcon = result.success ? '✅' : result.claimed ? '🎫' : '❌';
-            this.logger.info(`[GIFTCODE] ${userData.nick} ${statusIcon} ${code}${result.success ? '' : `: ${result.message}`}`);
+            const attemptInfo = result.captchaFails > 0 ? ` (próba ${result.captchaFails + 1})` : '';
+            this.logger.info(`[GIFTCODE] ${userData.nick} ${statusIcon} ${code}${result.success ? attemptInfo : `: ${result.message}`}`);
 
             results.push({ code, ...result });
             if (i < recentCodes.length - 1) await delay(DELAY_BETWEEN_UIDS_MS);
@@ -321,8 +322,6 @@ class GiftcodeService {
                 continue;
             }
 
-            this.logger.info(`[GIFTCODE] [${i + 1}/${entries.length}] ${userData.nick}`);
-
             const result = await this._redeemForUid(userData.uid, giftcode, userData.nick, shouldAbort);
             this.totalCaptchaFails += result.captchaFails ?? 0;
 
@@ -330,6 +329,10 @@ class GiftcodeService {
                 claimedSet.add(discordId);
                 this.recordSuccess(discordId, giftcode).catch(() => {});
             }
+
+            const statusIcon = result.success ? '✅' : result.claimed ? '🎫' : result.aborted ? '⏹️' : '❌';
+            const attemptInfo = result.captchaFails > 0 ? ` (próba ${result.captchaFails + 1})` : '';
+            this.logger.info(`[GIFTCODE] [${i + 1}/${entries.length}] ${userData.nick} ${statusIcon}${result.success ? attemptInfo : `: ${result.message}`}`);
 
             results.push({ discordId, uid: userData.uid, nick: userData.nick, ...result });
 
