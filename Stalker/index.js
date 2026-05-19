@@ -131,7 +131,7 @@ function buildGiftcodeButtonMessage() {
     const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
     const embed = new EmbedBuilder()
         .setTitle('🎁 Kody podarunkowe Habby')
-        .setDescription('Kliknij przycisk poniżej, aby zapisać swoje ID gracza.\nOtrzymasz nagrody z kodów automatycznie, gdy kod pojawi się na kanale.')
+        .setDescription('Kliknij przycisk poniżej, aby zapisać swoje ID gracza.\nNagrody z kodów otrzymasz automatycznie, gdy kod pojawi się na kanale.')
         .setColor('#57F287');
 
     const row = new ActionRowBuilder().addComponents(
