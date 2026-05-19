@@ -239,7 +239,13 @@ class GiftcodeService {
     }
 
     async _preprocessCaptcha(imageBuffer) {
-        return imageBuffer;
+        return sharp(imageBuffer)
+            .flatten({ background: { r: 255, g: 255, b: 255 } })
+            .greyscale()
+            .threshold(200)
+            .resize({ width: 720, kernel: sharp.kernel.lanczos3 })
+            .png()
+            .toBuffer();
     }
 
     async _saveCaptchaDebug(original, processed, attempt) {
