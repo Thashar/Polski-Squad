@@ -247,7 +247,7 @@ async function autoRedeemFromMessage(code, message) {
         tokenLine,
     ].filter(Boolean).join('\n');
 
-    const color = retryable.length + permFailed.length === 0 ? 0x57F287 : succeeded.length === 0 ? 0xED4245 : 0xFFA500;
+    const color = retryable.length + otherFailed.length === 0 ? 0x57F287 : succeeded.length === 0 ? 0xED4245 : 0xFFA500;
 
     const components = [];
     if (retryable.length > 0) {
@@ -268,7 +268,7 @@ async function autoRedeemFromMessage(code, message) {
         components
     }).catch(() => {});
 
-    logger.info(`[GIFTCODE-AUTO] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} 🔄${retryable.length} ⏭️${skippedCount.count}`);
+    logger.info(`[GIFTCODE-AUTO] Kod \`${code}\`: ✅${succeeded.length} ❌${otherFailed.length} 🔄${retryable.length} ⏭️${skippedCount.count}`);
 }
 
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
