@@ -2272,41 +2272,29 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         }
     }
 
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🎁 Aktywacja kodu Habby')
-            .setDescription(`**Kod:** \`${code}\`\n**Klanowiczów do przetworzenia:** ${eligibleEntries.length}\n**Pominiętych (brak roli):** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
-            .setColor('#FFA500')
-            .setTimestamp()]
+            .setDescription(`**Kod:** \`${code}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
+            .setColor('#FFA500')]
     });
 
-    const collectedResults = [];
-
-    const progressCallback = async (done, tot, lastResult) => {
-        if (done % 3 === 0 || done === tot) {
-            const ok = collectedResults.filter(r => r.success).length;
-            const fail = collectedResults.filter(r => !r.success).length;
+    let allResults = [];
+    try {
+        allResults = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
             try {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
-                        .setTitle('🎁 Aktywacja kodu Habby — w toku')
+                        .setTitle('🎁 Aktywacja kodu Habby')
                         .setDescription(
-                            `**Kod:** \`${code}\`\n**Postęp:** ${done}/${tot}\n✅ ${ok} | ❌ ${fail}\n\n` +
-                            `⏳ Ostatnio: **${lastResult.nick}** — ${lastResult.success ? '✅' : '❌'} ${lastResult.message.substring(0, 80)}`
+                            `**Kod:** \`${code}\`\n**Postęp:** ${done}/${tot}\n\n` +
+                            `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`
                         )
                         .setColor('#FFA500')]
                 });
             } catch { /* interakcja wygasła */ }
-        }
-    };
-
-    let allResults = [];
-    try {
-        allResults = await giftcodeService.redeemEntries(eligibleEntries, code, (done, tot, last) => {
-            collectedResults.push(last);
-            return progressCallback(done, tot, last);
         });
     } catch (error) {
         logger.error(`[GIFTCODE] ❌ Błąd redeemEntries: ${error.message}`);
@@ -2317,38 +2305,12 @@ async function handleGiftcodeCommand(interaction, sharedState) {
     const captchaFailed = allResults.filter(r => !r.success && r.retryable);
     const permFailed = allResults.filter(r => !r.success && !r.retryable);
 
-    const resultLines = allResults.map(r =>
-        `${r.success ? '✅' : '❌'} **${r.nick}** (\`${r.uid}\`) — ${r.message.substring(0, 80)}`
-    );
-
-    await interaction.editReply({
-        embeds: [new EmbedBuilder()
-            .setTitle('🎁 Aktywacja kodu Habby — zakończona')
-            .setDescription(
-                `**Kod:** \`${code}\`\n` +
-                `✅ ${succeeded.length} sukces | ❌ ${permFailed.length} błąd | 🔄 ${captchaFailed.length} captcha fail | ⏭️ ${skippedEntries.length} pominięto\n\n` +
-                resultLines.join('\n').substring(0, 3800)
-            )
-            .setColor(captchaFailed.length + permFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
-            .setTimestamp()]
-    });
-
-    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} 🔄${captchaFailed.length} ⏭️${skippedEntries.length}`);
-
-    // Ephemeral podsumowanie z przyciskiem retry
-    const summaryLines = [
-        `✅ **Sukces:** ${succeeded.length}`,
-        `❌ **Błąd (permanent):** ${permFailed.length}`,
-        `🔄 **Captcha fail (do retry):** ${captchaFailed.length}`,
-        `⏭️ **Pominięto (brak roli klanowej):** ${skippedEntries.length}`,
-    ];
-
-    const summaryComponents = [];
+    const components = [];
     if (captchaFailed.length > 0) {
         const sessionId = Date.now().toString();
         client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
         client._giftcodeRetryData.set(sessionId, { code, entries: captchaFailed.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
-        summaryComponents.push(new ActionRowBuilder().addComponents(
+        components.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`giftcode_retry_${sessionId}`)
                 .setLabel(`Ponów dla ${captchaFailed.length} nieudanych (captcha)`)
@@ -2357,14 +2319,26 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         ));
     }
 
-    await interaction.followUp({
+    const color = captchaFailed.length + permFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
+    const desc = [
+        `**Kod:** \`${code}\``,
+        '',
+        `✅ **Sukces:** ${succeeded.length}`,
+        `❌ **Błąd (permanent):** ${permFailed.length}`,
+        `🔄 **Captcha fail:** ${captchaFailed.length}`,
+        `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
+    ].join('\n');
+
+    await interaction.editReply({
         embeds: [new EmbedBuilder()
-            .setTitle('📊 Podsumowanie')
-            .setDescription(summaryLines.join('\n'))
-            .setColor('#5865F2')],
-        components: summaryComponents,
-        flags: MessageFlags.Ephemeral
+            .setTitle('🎁 Aktywacja kodu Habby — zakończona')
+            .setDescription(desc)
+            .setColor(color)
+            .setTimestamp()],
+        components
     });
+
+    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} 🔄${captchaFailed.length} ⏭️${skippedEntries.length}`);
 }
 
 async function handleGiftcodeAddIdButton(interaction, sharedState) {
@@ -2434,44 +2408,37 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
 
     client._giftcodeRetryData.delete(sessionId);
 
-    await interaction.deferReply({ ephemeral: false });
+    await interaction.deferUpdate();
+
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja (captcha retry)')
             .setDescription(`**Kod:** \`${retryData.code}\`\n**Graczy do retry:** ${retryData.entries.length}\n\n⏳ Przetwarzam...`)
-            .setColor('#FFA500')]
+            .setColor('#FFA500')],
+        components: []
     });
 
-    const collectedResults = [];
-    const progressCallback = async (done, tot, last) => {
-        if (done % 3 === 0 || done === tot) {
-            const ok = collectedResults.filter(r => r.success).length;
-            try {
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('🔄 Ponowna aktywacja — w toku')
-                        .setDescription(`**Kod:** \`${retryData.code}\`\n**Postęp:** ${done}/${tot}\n✅ ${ok}\n\n⏳ **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`)
-                        .setColor('#FFA500')]
-                });
-            } catch { /* ignore */ }
-        }
-    };
-
-    const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, (done, tot, last) => {
-        collectedResults.push(last);
-        return progressCallback(done, tot, last);
+    const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, async (done, tot, last) => {
+        try {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setTitle('🔄 Ponowna aktywacja — w toku')
+                    .setDescription(`**Kod:** \`${retryData.code}\`\n**Postęp:** ${done}/${tot}\n\n⏳ **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`)
+                    .setColor('#FFA500')],
+                components: []
+            });
+        } catch { /* ignore */ }
     });
 
     const succeeded = results.filter(r => r.success);
     const captchaFailed = results.filter(r => !r.success && r.retryable);
-    const lines = results.map(r => `${r.success ? '✅' : '❌'} **${r.nick}** — ${r.message.substring(0, 80)}`);
 
-    const newRetryComponents = [];
+    const newComponents = [];
     if (captchaFailed.length > 0) {
         const newSessionId = Date.now().toString();
         client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
         client._giftcodeRetryData.set(newSessionId, { code: retryData.code, entries: captchaFailed.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
-        newRetryComponents.push(new ActionRowBuilder().addComponents(
+        newComponents.push(new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`giftcode_retry_${newSessionId}`)
                 .setLabel(`Ponów dla ${captchaFailed.length} nieudanych`)
@@ -2483,14 +2450,15 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja — zakończona')
-            .setDescription(`**Kod:** \`${retryData.code}\`\n✅ ${succeeded.length} | 🔄 ${captchaFailed.length} nadal nieudanych\n\n${lines.join('\n').substring(0, 3800)}`)
+            .setDescription(
+                `**Kod:** \`${retryData.code}\`\n\n` +
+                `✅ **Sukces:** ${succeeded.length}\n` +
+                `🔄 **Captcha fail:** ${captchaFailed.length}`
+            )
             .setColor(captchaFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
-            .setTimestamp()]
+            .setTimestamp()],
+        components: newComponents
     });
-
-    if (newRetryComponents.length > 0) {
-        await interaction.followUp({ content: 'Nadal są nieudane aktywacje:', components: newRetryComponents, flags: MessageFlags.Ephemeral });
-    }
 }
 
 // Funkcja do rejestracji komend slash
