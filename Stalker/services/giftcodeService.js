@@ -7,6 +7,7 @@ const { delay } = require('../utils/helpers');
 
 const HABBY_API_BASE = 'https://prod-mail.habbyservice.com/Survivor/api/v1';
 const DELAY_BETWEEN_UIDS_MS = 2000;
+const MAX_CAPTCHA_ATTEMPTS = 10;
 
 // Set dla O(1) — kody błędów które nie znikną po ponownej próbie z inną captchą
 const PERMANENT_ERROR_CODES = new Set([
@@ -220,14 +221,12 @@ class GiftcodeService {
 
     async _redeemForUid(uid, giftCode, nick, shouldAbort) {
         let captchaFails = 0;
-        let attempt = 0;
 
-        while (true) {
+        for (let attempt = 1; attempt <= MAX_CAPTCHA_ATTEMPTS; attempt++) {
             if (shouldAbort?.()) {
                 return { success: false, aborted: true, message: 'Przerwano przez użytkownika', captchaFails };
             }
 
-            attempt++;
             try {
                 const captchaId = await this._generateCaptcha();
                 const imageBuffer = await this._getCaptchaImageBuffer(captchaId);
@@ -235,8 +234,8 @@ class GiftcodeService {
 
                 if (!captchaSolution || captchaSolution.length !== 4) {
                     captchaFails++;
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}: AI zwróciła "${captchaSolution}" (oczekiwano 4 cyfr) dla ${nick}`);
-                    await delay(1000);
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: AI zwróciła "${captchaSolution}" dla ${nick}`);
+                    if (attempt < MAX_CAPTCHA_ATTEMPTS) await delay(1000);
                     continue;
                 }
 
@@ -249,16 +248,21 @@ class GiftcodeService {
                     return { success: false, message: apiMsg ?? `Błąd API (kod: ${result.code})`, captchaFails };
                 } else {
                     captchaFails++;
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}: API zwróciło ${result.code} (${apiMsg}) dla ${nick}`);
-                    await delay(1000);
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${apiMsg}) dla ${nick}`);
                 }
 
             } catch (error) {
                 captchaFails++;
-                this.logger.error(`[GIFTCODE] Próba ${attempt} dla ${nick}: ${error.message}`);
-                await delay(1000);
+                this.logger.error(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS} dla ${nick}: ${error.message}`);
+                if (attempt === MAX_CAPTCHA_ATTEMPTS) {
+                    return { success: false, retryable: true, message: `Błąd: ${error.message.split('\n')[0]}`, captchaFails };
+                }
             }
+
+            if (attempt < MAX_CAPTCHA_ATTEMPTS) await delay(1000);
         }
+
+        return { success: false, retryable: true, message: `Nieudana aktywacja po ${MAX_CAPTCHA_ATTEMPTS} próbach`, captchaFails };
     }
 }
 

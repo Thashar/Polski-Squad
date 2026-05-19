@@ -112,6 +112,7 @@ const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
 
 const GIFTCODE_CHANNEL_ID = '1191791557607690442';
+const GIFTCODE_REPORT_CHANNEL_ID = '1263240344871370804';
 const giftcodeButtonFile = path.join(__dirname, 'data', 'giftcode_button.json');
 
 async function loadGiftcodeButtonMessageId() {
@@ -160,6 +161,105 @@ async function ensureGiftcodeButtonIsLast(channel) {
     const newMsg = await channel.send(messagePayload);
     await saveGiftcodeButtonMessageId(newMsg.id);
     logger.info(`[GIFTCODE] Przycisk "Dodaj swoje ID" umieszczony na kanale ${channel.name}`);
+}
+
+async function autoRedeemFromMessage(code, message) {
+    const guild = message.guild;
+    const reportChannel = await client.channels.fetch(GIFTCODE_REPORT_CHANNEL_ID).catch(() => null);
+    if (!reportChannel) {
+        logger.error(`[GIFTCODE-AUTO] Nie znaleziono kanału raportowego ${GIFTCODE_REPORT_CHANNEL_ID}`);
+        return;
+    }
+
+    const allUids = await giftcodeService.listUids();
+    const allEntries = Object.entries(allUids);
+
+    if (allEntries.length === 0) {
+        await reportChannel.send({ embeds: [{ title: '🎁 Auto-aktywacja kodu Habby', description: `**Kod:** \`${code}\`\n\n❌ Brak zapisanych ID Habby.`, color: 0xED4245 }] });
+        return;
+    }
+
+    const targetRoleIds = Object.values(config.targetRoles).filter(Boolean);
+    const eligibleEntries = [];
+    const skippedCount = { count: 0 };
+    for (const [discordId, userData] of allEntries) {
+        const member = await guild.members.fetch(discordId).catch(() => null);
+        if (member && targetRoleIds.some(id => member.roles.cache.has(id))) {
+            eligibleEntries.push([discordId, userData]);
+        } else {
+            skippedCount.count++;
+        }
+    }
+
+    const { EmbedBuilder } = require('discord.js');
+
+    const reportMsg = await reportChannel.send({
+        embeds: [new EmbedBuilder()
+            .setTitle('🎁 Auto-aktywacja kodu Habby')
+            .setDescription(`**Kod:** \`${code}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedCount.count}\n\n⏳ Przetwarzam...`)
+            .setColor(0xFFA500)]
+    });
+
+    const liveStats = { succeeded: 0, permFailed: 0 };
+
+    const results = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
+        if (last.success) liveStats.succeeded++;
+        else if (!last.aborted) liveStats.permFailed++;
+        const ct = giftcodeService.captchaTokens;
+        const cost = ct.calls > 0 ? `$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}` : null;
+        const descLines = [
+            `**Kod:** \`${code}\` — **${done}/${tot}**`,
+            '',
+            `✅ **Sukces:** ${liveStats.succeeded}`,
+            `❌ **Błąd:** ${liveStats.permFailed}`,
+            `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
+            cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
+            '',
+            `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 60)}`,
+        ].filter(l => l !== '').join('\n');
+        await reportMsg.edit({ embeds: [new EmbedBuilder().setTitle('🎁 Auto-aktywacja kodu Habby').setDescription(descLines).setColor(0xFFA500)] }).catch(() => {});
+    });
+
+    const succeeded = results.filter(r => r.success);
+    const retryable = results.filter(r => !r.success && r.retryable);
+    const permFailed = results.filter(r => !r.success && !r.retryable && !r.aborted);
+    const ct = giftcodeService.captchaTokens;
+    const tokenLine = ct.calls > 0
+        ? `\n🪙 **Tokeny:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
+        : '';
+
+    const finalDesc = [
+        `**Kod:** \`${code}\``,
+        '',
+        `✅ **Sukces:** ${succeeded.length}`,
+        `❌ **Błąd (permanent):** ${permFailed.length}`,
+        `🔄 **Captcha fail (do retry):** ${retryable.length}`,
+        `⏭️ **Pominięto (brak roli):** ${skippedCount.count}`,
+        tokenLine,
+    ].filter(Boolean).join('\n');
+
+    const color = retryable.length + permFailed.length === 0 ? 0x57F287 : succeeded.length === 0 ? 0xED4245 : 0xFFA500;
+
+    const components = [];
+    if (retryable.length > 0) {
+        const sessionId = Date.now().toString();
+        client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
+        client._giftcodeRetryData.set(sessionId, { code, entries: retryable.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
+        components.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`giftcode_retry_${sessionId}`)
+                .setLabel(`Ponów dla ${retryable.length} nieudanych (captcha)`)
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('🔄')
+        ));
+    }
+
+    await reportMsg.edit({
+        embeds: [new EmbedBuilder().setTitle('🎁 Auto-aktywacja kodu Habby — zakończona').setDescription(finalDesc).setColor(color).setTimestamp()],
+        components
+    }).catch(() => {});
+
+    logger.info(`[GIFTCODE-AUTO] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} 🔄${retryable.length} ⏭️${skippedCount.count}`);
 }
 
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
@@ -350,8 +450,13 @@ client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
 
-    // ============ GIFTCODE: przycisk zawsze na dole kanału ============
+    // ============ GIFTCODE: wykrywanie kodu + przycisk zawsze na dole ============
     if (message.channel.id === GIFTCODE_CHANNEL_ID) {
+        const lastLine = message.content.trim().split('\n').filter(l => l.trim()).at(-1)?.trim() ?? '';
+        if (/^[A-Za-z0-9_-]{3,30}$/.test(lastLine)) {
+            logger.info(`[GIFTCODE-AUTO] Wykryto kod w wiadomości: "${lastLine}" od ${message.author.tag}`);
+            autoRedeemFromMessage(lastLine, message).catch(err => logger.error(`[GIFTCODE-AUTO] ${err.message}`));
+        }
         try {
             await ensureGiftcodeButtonIsLast(message.channel);
         } catch (err) {
