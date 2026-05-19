@@ -2,6 +2,7 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs').promises;
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const sharp = require('sharp');
 
 const HABBY_API_BASE = 'https://prod-mail.habbyservice.com/Survivor/api/v1';
 const DELAY_BETWEEN_UIDS_MS = 2000;
@@ -92,12 +93,36 @@ class GiftcodeService {
         return Buffer.from(res.data);
     }
 
-    async _solveCaptchaWithAI(imageBuffer) {
+    async _preprocessCaptcha(imageBuffer) {
+        return await sharp(imageBuffer)
+            .greyscale()
+            .normalize()
+            .sharpen()
+            .threshold(140)
+            .resize({ width: 300, kernel: sharp.kernel.nearest })
+            .png()
+            .toBuffer();
+    }
+
+    async _saveCaptchaDebug(original, processed, attempt) {
+        try {
+            const debugDir = path.join(__dirname, '../temp/captcha_debug');
+            await fs.mkdir(debugDir, { recursive: true });
+            const ts = Date.now();
+            await fs.writeFile(path.join(debugDir, `captcha_${ts}_${attempt}_original.png`), original);
+            await fs.writeFile(path.join(debugDir, `captcha_${ts}_${attempt}_processed.png`), processed);
+        } catch { /* nie przerywaj jeśli zapis się nie uda */ }
+    }
+
+    async _solveCaptchaWithAI(imageBuffer, attempt) {
         if (!this.geminiModel) {
             throw new Error('Brak klucza Google AI (STALKER_GOOGLE_AI_API_KEY) — captcha nie może być rozwiązana automatycznie');
         }
 
-        const base64 = imageBuffer.toString('base64');
+        const processed = await this._preprocessCaptcha(imageBuffer);
+        await this._saveCaptchaDebug(imageBuffer, processed, attempt);
+
+        const base64 = processed.toString('base64');
         const result = await this.geminiModel.generateContent([
             {
                 inlineData: {
@@ -105,11 +130,11 @@ class GiftcodeService {
                     mimeType: 'image/png'
                 }
             },
-            'This is a CAPTCHA image with digits. Reply with ONLY the digits you see, nothing else. No spaces, no punctuation.'
+            'This image contains a CAPTCHA with exactly 4 digits. Look carefully and read all 4 digits. Reply with ONLY those 4 digits — no letters, no spaces, no punctuation, nothing else.'
         ]);
 
         const text = result.response.text().trim().replace(/\D/g, '');
-        this.logger.info(`[GIFTCODE] Captcha rozwiązana przez AI: "${text}"`);
+        this.logger.info(`[GIFTCODE] Captcha rozwiązana przez AI (próba ${attempt}): "${text}"`);
         return text;
     }
 
@@ -182,10 +207,10 @@ class GiftcodeService {
                 const imageBuffer = await this._getCaptchaImageBuffer(captchaId);
 
                 // 3. Rozwiąż captchę AI
-                const captchaSolution = await this._solveCaptchaWithAI(imageBuffer);
+                const captchaSolution = await this._solveCaptchaWithAI(imageBuffer, attempt);
 
-                if (!captchaSolution || captchaSolution.length < 1) {
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: AI nie rozwiązała captchy dla ${nick}`);
+                if (!captchaSolution || captchaSolution.length !== 4) {
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: AI zwróciła "${captchaSolution}" (oczekiwano 4 cyfr) dla ${nick}`);
                     continue;
                 }
 
