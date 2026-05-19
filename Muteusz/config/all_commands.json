@@ -437,28 +437,22 @@
           "requiredPermission": "moderator"
         },
         {
-          "name": "/add-id",
-          "description": "Zapisz swoje ID gracza Habby do systemu automatycznej aktywacji kodów podarunkowych",
-          "usage": "/add-id uid:[twoje ID gracza]",
-          "requiredPermission": "clan_member"
-        },
-        {
           "name": "/remove-id",
-          "description": "Usuń swoje zapisane ID gracza Habby",
-          "usage": "/remove-id",
-          "requiredPermission": "clan_member"
+          "description": "Usuń zapisane ID gracza Habby dla siebie lub wybranego użytkownika",
+          "usage": "/remove-id user:[użytkownik (opcjonalnie)]",
+          "requiredPermission": "administrator"
         },
         {
           "name": "/list-ids",
           "description": "Wyświetl listę wszystkich zapisanych ID graczy Habby",
           "usage": "/list-ids",
-          "requiredPermission": "moderator"
+          "requiredPermission": "administrator"
         },
         {
           "name": "/giftcode",
-          "description": "Aktywuj kod podarunkowy Habby dla wszystkich zapisanych graczy przez automatyzację przeglądarki",
+          "description": "Aktywuj kod podarunkowy Habby dla wszystkich klanowiczów ze zapisanym ID (Gemini rozwiązuje captchę)",
           "usage": "/giftcode kod:[kod podarunkowy]",
-          "requiredPermission": "moderator"
+          "requiredPermission": "administrator"
         }
       ]
     },

@@ -38,14 +38,18 @@
    - Persistencja: `data/kalkulator_embed.json` (messageId + requests[] + helpers[])
 10. **Borixoning** - Auto-odpowiedź na reply "zbij bossa" na kanałach WARNING → komunikat "Wykryto zaawansowany Borixoning" z przyciskami Tak/Nie (ephemeral), cooldown raz dziennie per kanał (kasuje się o północy, persistencja w `data/boroxoning_cooldowns.json`)
 11. **Reakcja Stalker** - Gdy ktoś napisze słowo "stalker" (case-insensitive) w wiadomości na serwerze → bot dodaje reakcję `<a:PepeEvil2:1280068960787632130>` (bez cooldownu)
-14. **Kody Podarunkowe Habby** - `giftcodeService.js`: System zbierania ID graczy i masowej aktywacji kodów podarunkowych na stronie Habby store (game/3).
-   - `/add-id <uid>` — klanowicz zapisuje swoje ID gracza Habby (walidacja: same cyfry 5-20 znaków). Dostępna dla wszystkich klanowiczów (targetRoles).
-   - `/remove-id` — klanowicz usuwa swoje ID. Dostępna dla wszystkich klanowiczów.
-   - `/list-ids` — moderator widzi listę wszystkich zapisanych ID (ephemeral).
-   - `/giftcode <kod>` — moderator uruchamia masową aktywację dla wszystkich zapisanych UIDs. Puppeteer otwiera stronę `https://store.habby.com/game/3?page=giftcode&giftcode=KOD` dla każdego UID, wypełnia formularz i raportuje wyniki w embedzie z aktualizacją postępu co 3 itemy.
+14. **Kody Podarunkowe Habby** - `giftcodeService.js`: System zbierania ID graczy i masowej aktywacji kodów podarunkowych przez Habby API.
+   - **Zbieranie ID przez przycisk:** Na kanale `1191791557607690442` zawsze na samym dole widnieje zielony przycisk "🎮 Dodaj swoje ID". Po kliknięciu otwiera modal z polem tekstowym. Każdy użytkownik może zapisać tylko jedno ID. Wymagana rola klanowa (targetRoles).
+   - **Aktualizacja przycisku:** Przy każdej nowej wiadomości na kanale bot sprawdza czy ostatnia wiadomość to jego przycisk — jeśli nie, usuwa stary i postuje nowy na dole. MessageId zapisywany w `data/giftcode_button.json`.
+   - `/remove-id` — administrator usuwa własne lub cudze ID (opcjonalny parametr `user`). Tylko administrator.
+   - `/list-ids` — administrator widzi listę wszystkich zapisanych ID (ephemeral). Tylko administrator.
+   - `/giftcode <kod>` — administrator uruchamia masową aktywację dla wszystkich zapisanych UIDs posiadających rolę klanową. Pomija graczy bez roli klanowej. Tylko administrator.
+   - **Mechanizm API:** Habby Store API (`prod-mail.habbyservice.com/Survivor/api/v1`): generuje captchę (POST `/captcha/generate`), pobiera obraz (GET `/captcha/image/{id}`), rozwiązuje przez Google Gemini Vision, wywołuje (POST `/giftcode/claim`).
+   - **Captcha AI:** sharp preprocessing (greyscale → normalize → threshold(140) → sharpen → resize 300px) → Gemini Vision odczytuje 4 cyfry. Max 3 próby per UID, 2s opóźnienie między UIDs.
+   - **Klasyfikacja błędów:** Permanent errors (kody 20402–20407, np. "kod już wykorzystany") → bez retry. Pozostałe błędy → `retryable: true`.
+   - **Podsumowanie i retry:** Ephemeral po `/giftcode` z licznikami: sukces / captcha-fail (retry) / permanent-fail / pominięci bez roli. Przycisk "🔄 Ponów dla nieudanych" dla retryable failures. Dane retry przechowywane w `client._giftcodeRetryData` Map (per sesja, klucz = timestamp).
    - Persistencja: `data/habby_uids.json` — dane przeżywają restart bota.
-   - Opóźnienie 3s między UIDs (rate limiting). Jeden browser Puppeteer na cały batch.
-   - Wynik końcowy: embed z ✅/❌ per gracz, kolor zielony/pomarańczowy/czerwony wg sukcesu.
+   - Debug obrazów captcha: `temp/captcha_debug/` — auto-cleanup plików starszych niż 24h przy starcie.
 11. **Historia Walk Gary** - `garyCombatIngestionService.js`: Co środę o 18:55 (9 min po snapshocie Gary) agreguje pliki z `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień), dopasowuje fuzzy nicki graczy do Discord userId (threshold 0.82, ALL 4 role klanowe), zapisuje do `data/player_combat_discord.json`. Przy starcie bota: automatyczna próba ingestion (po 15s). Komendy `/player-status` i `/player-compare` czytają historię RC+TC i ataku po userId (2 dodatkowe wykresy + dane tekstowe ostatniego tygodnia w sekcji STATYSTYKI i Best — atak wyświetlany jako dokładna liczba z separatorem polskim, nie K/M). Ręcznie: `/lme-snapshot` (admin) — uruchamia ingestion natychmiast i wyświetla **szczegółowy raport**:
     - ✅ Dopasowanych / 📊 Łącznie w Gary / ⚠️ Nieprzypisane (Gary)
     - 🔍 Wpisy Gary z za niskim podobieństwem nicku (< 0.82) → pokazuje najbliższy Discord nick z procentem

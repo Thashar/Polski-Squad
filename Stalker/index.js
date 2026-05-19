@@ -111,6 +111,57 @@ const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseServic
 const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
 
+const GIFTCODE_CHANNEL_ID = '1191791557607690442';
+const giftcodeButtonFile = path.join(__dirname, 'data', 'giftcode_button.json');
+
+async function loadGiftcodeButtonMessageId() {
+    try {
+        const raw = await fs.readFile(giftcodeButtonFile, 'utf8');
+        return JSON.parse(raw).messageId ?? null;
+    } catch { return null; }
+}
+
+async function saveGiftcodeButtonMessageId(messageId) {
+    await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
+    await fs.writeFile(giftcodeButtonFile, JSON.stringify({ messageId }));
+}
+
+function buildGiftcodeButtonMessage() {
+    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+    const embed = new EmbedBuilder()
+        .setTitle('🎁 Kody podarunkowe Habby')
+        .setDescription('Kliknij przycisk poniżej, aby zapisać swoje ID gracza.\nOtrzymasz kody podarunkowe automatycznie, gdy administrator je aktywuje.')
+        .setColor('#57F287');
+
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('giftcode_add_id')
+            .setLabel('Dodaj swoje ID')
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('🆔')
+    );
+
+    return { embeds: [embed], components: [row] };
+}
+
+async function ensureGiftcodeButtonIsLast(channel) {
+    const savedId = await loadGiftcodeButtonMessageId();
+    const messagePayload = buildGiftcodeButtonMessage();
+
+    // Sprawdź czy ostatnia wiadomość to już nasz przycisk
+    const lastMessages = await channel.messages.fetch({ limit: 1 }).catch(() => null);
+    if (lastMessages && savedId && lastMessages.first()?.id === savedId) return;
+
+    // Usuń starą wiadomość
+    if (savedId) {
+        await channel.messages.delete(savedId).catch(() => {});
+    }
+
+    const newMsg = await channel.send(messagePayload);
+    await saveGiftcodeButtonMessageId(newMsg.id);
+    logger.info(`[GIFTCODE] Przycisk "Dodaj swoje ID" umieszczony na kanale ${channel.name}`);
+}
+
 // Połącz serwisy - daj ocrService dostęp do reminderService, punishmentService i phaseService
 ocrService.setServices(reminderService, punishmentService, phaseService);
 
@@ -173,6 +224,17 @@ client.once(Events.ClientReady, async () => {
     } catch (error) {
         logger.error(`❌ Błąd inicjalizacji embeda kalkulatora: ${error.message}`);
     }
+
+    // Przycisk "Dodaj swoje ID" na kanale giftcode
+    try {
+        const giftcodeChannel = await client.channels.fetch(GIFTCODE_CHANNEL_ID).catch(() => null);
+        if (giftcodeChannel) await ensureGiftcodeButtonIsLast(giftcodeChannel);
+    } catch (error) {
+        logger.error(`❌ Błąd inicjalizacji przycisku giftcode: ${error.message}`);
+    }
+
+    // Cleanup starych debug obrazków captchy (>24h)
+    giftcodeService.cleanupDebugImages().catch(() => {});
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
@@ -287,6 +349,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 client.on(Events.MessageCreate, async (message) => {
     // Ignoruj wiadomości od botów
     if (message.author.bot) return;
+
+    // ============ GIFTCODE: przycisk zawsze na dole kanału ============
+    if (message.channel.id === GIFTCODE_CHANNEL_ID) {
+        try {
+            await ensureGiftcodeButtonIsLast(message.channel);
+        } catch (err) {
+            logger.error(`[GIFTCODE] Błąd przesuwania przycisku: ${err.message}`);
+        }
+    }
 
     // ============ OBSŁUGA WIADOMOŚCI DM OD UŻYTKOWNIKÓW Z AKTYWNYMI SESJAMI PRZYPOMNIENIA ============
     if (message.channel.type === ChannelType.DM) {
