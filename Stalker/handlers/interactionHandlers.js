@@ -2374,7 +2374,8 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         _buildTokenLine(giftcodeService),
     ].filter(Boolean).join('\n');
 
-    const color = permFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
+    const anyFailed = otherFailed.length + captchaFailed.length;
+    const color = anyFailed === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
@@ -2385,7 +2386,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: []
     });
 
-    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} ⏭️${skippedEntries.length} captchaFail=${giftcodeService.totalCaptchaFails}`);
+    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} 🔄${captchaFailed.length} ❌${otherFailed.length} ⏭️${skippedEntries.length} captchaFail=${giftcodeService.totalCaptchaFails}`);
 }
 
 async function handleGiftcodeAddIdButton(interaction, sharedState) {
