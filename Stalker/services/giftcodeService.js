@@ -27,6 +27,7 @@ class GiftcodeService {
         this.config = config;
         this.logger = logger;
         this.uidsFile = path.join(__dirname, '../data/habby_uids.json');
+        this.claimedFile = path.join(__dirname, '../data/giftcode_claimed.json');
         this._debugDirReady = false;
         this.captchaTokens = { input: 0, output: 0, calls: 0 };
 
@@ -85,6 +86,31 @@ class GiftcodeService {
     async getUserUid(discordId) {
         const data = await this.loadData();
         return data.uids[discordId] || null;
+    }
+
+    // ===== CLAIMED (per kod) =====
+
+    async _loadClaimed() {
+        try {
+            return JSON.parse(await fs.readFile(this.claimedFile, 'utf8'));
+        } catch {
+            return {};
+        }
+    }
+
+    async getClaimedForCode(code) {
+        const data = await this._loadClaimed();
+        return new Set(data[code] ?? []);
+    }
+
+    async recordSuccess(discordId, code) {
+        const data = await this._loadClaimed();
+        if (!data[code]) data[code] = [];
+        if (!data[code].includes(discordId)) {
+            data[code].push(discordId);
+            await fs.mkdir(path.dirname(this.claimedFile), { recursive: true });
+            await fs.writeFile(this.claimedFile, JSON.stringify(data, null, 2));
+        }
     }
 
     // Usuwa pliki debug starsze niż 24h
@@ -200,16 +226,34 @@ class GiftcodeService {
         if (entries.length === 0) return [];
         this.captchaTokens = { input: 0, output: 0, calls: 0 };
         this.totalCaptchaFails = 0;
+        const claimedSet = await this.getClaimedForCode(giftcode);
         const results = [];
 
         for (let i = 0; i < entries.length; i++) {
             if (shouldAbort?.()) break;
 
             const [discordId, userData] = entries[i];
+
+            if (claimedSet.has(discordId)) {
+                this.logger.info(`[GIFTCODE] Pomijam ${userData.nick} — już odebrał kod ${giftcode}`);
+                const skipped = { discordId, uid: userData.uid, nick: userData.nick, success: false, skippedClaimed: true, message: 'Już aktywowano w poprzedniej sesji', captchaFails: 0 };
+                results.push(skipped);
+                if (progressCallback) {
+                    try { await progressCallback(i + 1, entries.length, skipped); } catch { /* nie blokuj */ }
+                }
+                continue;
+            }
+
             this.logger.info(`[GIFTCODE] Aktywuję dla ${userData.nick} (UID: ${userData.uid}) [${i + 1}/${entries.length}]`);
 
             const result = await this._redeemForUid(userData.uid, giftcode, userData.nick, shouldAbort);
             this.totalCaptchaFails += result.captchaFails ?? 0;
+
+            if (result.success) {
+                claimedSet.add(discordId);
+                this.recordSuccess(discordId, giftcode).catch(() => {});
+            }
+
             results.push({ discordId, uid: userData.uid, nick: userData.nick, ...result });
 
             if (progressCallback) {

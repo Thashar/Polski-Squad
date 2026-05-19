@@ -2250,12 +2250,13 @@ function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
         `**Kod:** \`${code}\` — **${done}/${tot}**`,
         '',
         `✅ **Sukces:** ${stats.succeeded}`,
-        `🎫 **Już odebrano:** ${stats.claimed}`,
+        `⏭️ **Pominięto (już aktywowano):** ${stats.skippedClaimed}`,
+        `🎫 **Już odebrano (API):** ${stats.claimed}`,
         `❌ **Inne błędy:** ${stats.permFailed}`,
         `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
         cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
         '',
-        `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 60)}`,
+        `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '⏭️' } ${last.message.substring(0, 60)}`,
     ].filter(l => l !== '').join('\n');
 }
 
@@ -2326,11 +2327,12 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
-    const liveStats = { succeeded: 0, claimed: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0 };
     let allResults = [];
     try {
         allResults = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
             if (last.success) liveStats.succeeded++;
+            else if (last.skippedClaimed) liveStats.skippedClaimed++;
             else if (last.claimed) liveStats.claimed++;
             else if (!last.aborted) liveStats.permFailed++;
             try {
@@ -2353,16 +2355,18 @@ async function handleGiftcodeCommand(interaction, sharedState) {
 
     const aborted = allResults.some(r => r.aborted);
     const succeeded = allResults.filter(r => r.success);
+    const skippedClaimed = allResults.filter(r => r.skippedClaimed);
     const claimed = allResults.filter(r => !r.success && r.claimed);
     const captchaFailed = allResults.filter(r => !r.success && r.retryable);
-    const otherFailed = allResults.filter(r => !r.success && !r.claimed && !r.retryable && !r.aborted);
+    const otherFailed = allResults.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted);
 
     const desc = [
         `**Kod:** \`${code}\``,
         aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
         '',
         `✅ **Sukces:** ${succeeded.length}`,
-        `🎫 **Już odebrano:** ${claimed.length}`,
+        `⏭️ **Pominięto (już aktywowano):** ${skippedClaimed.length}`,
+        `🎫 **Już odebrano (API):** ${claimed.length}`,
         `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `❌ **Inne błędy:** ${otherFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
@@ -2464,7 +2468,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
-    const liveStats = { succeeded: 0, claimed: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0 };
     const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, async (done, tot, last) => {
         if (last.success) liveStats.succeeded++;
         else if (!last.aborted) liveStats.permFailed++;
@@ -2483,16 +2487,18 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
 
     const aborted = results.some(r => r.aborted);
     const succeeded = results.filter(r => r.success);
+    const skippedClaimedR = results.filter(r => r.skippedClaimed);
     const claimed = results.filter(r => !r.success && r.claimed);
     const captchaFailed = results.filter(r => !r.success && r.retryable);
-    const otherFailed = results.filter(r => !r.success && !r.claimed && !r.retryable && !r.aborted);
+    const otherFailed = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted);
 
     const retryDesc = [
         `**Kod:** \`${retryData.code}\``,
         aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
         '',
         `✅ **Sukces:** ${succeeded.length}`,
-        `🎫 **Już odebrano:** ${claimed.length}`,
+        `⏭️ **Pominięto (już aktywowano):** ${skippedClaimedR.length}`,
+        `🎫 **Już odebrano (API):** ${claimed.length}`,
         `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `❌ **Inne błędy:** ${otherFailed.length}`,
         _buildTokenLine(giftcodeService),
