@@ -72,7 +72,7 @@
        - **Brak snippeta globalnego rankingu**
        - **Brak powiadomień DM** do subskrybentów
        - **Brak `logScoreUpdate`** (log rekordu do webhooka)
-     - Nadal działa: `logCommandUsage('test')`, `usageLimitService` (zlicza dzienny limit), `tokenUsageService` (rejestruje koszty AI), `_sendInvalidScreenReport` dla NOT_SIMILAR/FAKE_PHOTO, Operations Gateway z `hints.command='test'`
+     - Nadal działa: `logCommandUsage('test')`, `usageLimitService` (zlicza dzienny limit), `tokenUsageService` (rejestruje koszty AI), `_sendInvalidScreenReport` dla NOT_SIMILAR/FAKE_PHOTO
      - Respektuje `isAllowedChannel`, blokadę użytkownika (`userBlockService`) oraz globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
@@ -80,8 +80,6 @@
    - **Globalny:** `getGlobalRanking()` — najlepszy wynik gracza ze wszystkich serwerów (z adnotacją skąd pochodzi)
    - Eksport do `shared_data/endersecho_ranking.json` (globalny, format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp, sourceGuildId}]}`)
    - Eksport przy każdym zapisie i przy starcie bota
-   - **Sync do Web API:** Po eksporcie `saveSharedRanking()` wypycha każdego gracza do `/api/bot/endersecho-snapshot` (upsert po `discordId+snapshotDate`). `snapshotDate` jest przycinany do doby UTC (00:00Z) — restart bota i wielokrotne zapisy w ciągu dnia aktualizują ten sam wiersz zamiast tworzyć duplikaty. Gracze bez prawidłowego `scoreValue` (NaN/undefined/ujemne) są pomijani. `scoreNumeric` jest formatowany przez `toFixed(0)` (nie `String()`), żeby wartości >= 1e21 (jednostki Sx, duże Qi) nie lądowały w notacji wykładniczej `"1.65e+21"` odrzucanej przez walidację API (`/^\d+$/`). Cicho no-op gdy brak `APP_API_URL`/`BOT_API_KEY`. Zobacz shared `utils/appSync.js`.
-   - **Pomijanie sync na starcie:** `saveSharedRanking({ syncToApi: false })` — wywoływane z `index.js` przy `ready`, żeby restart bota nie spamował API rankingiem, który się nie zmienił. Lokalny eksport `shared_data/endersecho_ranking.json` nadal wykonuje się zawsze. Sync do API uruchamia się dopiero przy nowym wyniku OCR (przez `saveRanking()` → `saveSharedRanking()` bez argumentów, default `syncToApi: true`).
    - **Migracja:** Przy pierwszym starcie stary `ranking.json` jest automatycznie migrowany do `ranking_{guild1Id}.json`
 
 3. **Role TOP (opcjonalne)** - `roleService.js`:
@@ -474,13 +472,6 @@ Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreV
 
 **Rejestracja komend:** Komendy slash rejestrowane per-serwer przez `registerSlashCommands()` (start) i `registerCommandsForGuild()` (guildCreate / po /configure).
 
-**Sync identity → Polski Squad admin API** — wpięcie `guildCreate`, `guildDelete`, `guildMemberAdd`, `guildMemberUpdate` w [index.js](index.js), każdy fire-and-forget przez `appSync.guildJoined/guildLeft/memberSeen/membersBulkSeen`. Uniwersalny kontrakt (projekcja, endpointy, intenty, polityka błędów) opisany w głównym [CLAUDE.md § 6](../CLAUDE.md). EndersEcho-specyfika:
-
-- `guildCreate` ma **dwa** listenery — onboarding (default guild config, rejestracja komend, welcome message) i osobno appSync.
-- Listener appSync woła `bootstrapGuildSync(guild)` → `guildJoined` + `guild.members.fetch()` + `membersBulkSeen` chunkami po 1000. Pal-uje przy realnym dołączeniu **i** każdym reconnect gatewaya — replay-safe, idempotentne po stronie API. Bez tego cold start (restart bota / reconnect po awarii) zostawiałby roster w API niezsynchronizowany, bo `guildMemberAdd` nie pal-uje retroaktywnie dla istniejących członków.
-- `guildMemberAdd` / `guildMemberUpdate` zostają na single-row `appSync.memberSeen` — bulk obsługuje cold start, single-row obsługuje delty.
-- **Wymaga włączonego "Server Members Intent" w Discord Developer Portal** dla aplikacji EndersEcho — sam `GatewayIntentBits.GuildMembers` w kodzie ([index.js:42](index.js#L42)) nie wystarczy, `members.fetch()` zwróciłoby pustą kolekcję milcząco.
-
 ---
 
 ## King BUM AI Chat
@@ -580,59 +571,11 @@ ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 # Domyślnie false (head admin z ENDERSECHO_BLOCK_OCR_USER_IDS ma dostęp do /configure)
 ENDERSECHO_CONFIGURE_ADMIN_ONLY=false
 
-# Sync do Polski Squad web API (opcjonalne, wspólne bot-wide)
-APP_API_URL=https://api.polski-squad.example
-BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Per-bot override (opcjonalne) — wygrywa nad BOT_API_KEY dla EndersEcho.
-# Używane przez rankingService (createAppSync({ botSlug: 'endersecho' })) oraz
-# handlery OCR (createBotOperations({ botSlug: 'endersecho' })). Brak wpisu →
-# EndersEcho spada na BOT_API_KEY. Szczegóły: główny CLAUDE.md → sekcja 6.
-ENDERSECHO_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Operations Metering Gateway — używa tej samej pary APP_API_URL + klucz co sync
-# (ENDERSECHO_API_KEY z fallbackiem na BOT_API_KEY).
-# Operation type: ocr.analyze (szczegóły w głównym CLAUDE.md → sekcja 7)
-
 # Langfuse — LLM tracing (opcjonalne, niezależne od gateway-a)
 LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxx
 LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxx
 LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 ```
-
-## Operations Gateway + LLM Telemetry
-
-Wspólny wzorzec opisany w głównym [CLAUDE.md § 7](../CLAUDE.md). Tutaj tylko to co specyficzne dla EndersEcho.
-
-**Operation type:** `ocr.analyze` — jeden typ dla `/test` i `/update`, różnicowane przez `hints.command`. Unikalny w ramach `BotOperation` per bot (nie musi nieść prefiksu `endersecho` — bot jest identyfikowany przez Bearer token).
-
-### Punkty wpięcia w kodzie
-
-| Plik | Rola |
-|---|---|
-| [index.js](index.js) | `telemetry.init('endersecho-bot')` jest pierwszym requirem w pliku (przed Discord.js i Gemini SDK) |
-| [index.js](index.js) | `createLlmAdapter`, `createAppSync({ apiKey: config.appApiKey }).sync`, `createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey })` budowane w launcherze i wstrzykiwane przez konstruktory (DI) do `AIOCRService`, `RankingService`, `InteractionHandler` |
-| [services/aiOcrService.js](services/aiOcrService.js) | `llmAdapter` wymagany w konstruktorze — bez niego `enabled=false` |
-| [services/rankingService.js](services/rankingService.js) | `appSync` wstrzykiwany przez konstruktor, używany jako `this.appSync.endersEchoSnapshot(...)` |
-| [handlers/interactionHandlers.js](handlers/interactionHandlers.js) | `botOps` wstrzykiwany przez konstruktor (przedostatni → ostatni arg to `globalTop10Service`); wspólne ciało `/update` i `/test` to `_runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey })` — `dryRun:true` wyłącza zapis do rankingu, role TOP, snippet globalny i DM |
-
-### Specyfika bota
-
-- **`/test` jako dry-run `/update`.** Oba handlery delegują do `_runUpdateFlow`; różnice wyłącznie w `dryRun` (ephemeral output, brak zapisu/ról/powiadomień), `commandName` (→ `hints.command`, logi, klucz blokady OCR) i uprawnieniach wejściowych (`/test` wymaga wpisu w `ENDERSECHO_BLOCK_OCR_USER_IDS`). Ten sam prompt wzorca (`compare-template`), ten sam `analyzeTestImage()`, ten sam Operations Gateway, ten sam `tokenUsageService` i `usageLimitService`. Padnięcie Gemini w obu komendach = błąd dla usera (brak fallbacku na Tesseract).
-- **`usageLimitService`** — lokalny dzienny limit per user (`data/usage_limits.json`), działa równolegle do quota w API.
-- **`PROMPT_VERSIONS`** w [services/aiOcrService.js](services/aiOcrService.js) — 2 wpisy: `extract-data-eng`, `compare-template`. Po zmianie treści promptu bump wersji (`'v1'` → `'v2'`) — stare trace zostają w Langfuse do porównania.
-- **Model Gemini** dla wszystkich promptów ten sam: z `ENDERSECHO_GOOGLE_AI_MODEL` (default: `gemini-2.5-flash-preview-05-20`).
-
-### A/B testing
-
-Atrybuty na spanach generation: `llm.model.name`, `llm.prompt.name`, `llm.prompt.version`, `llm.step`, plus `user.id`, `guild.id`, `operation.type` na root spanie.
-
-Przykłady zapytań:
-- Porównanie modeli dla ekstrakcji: filter `llm.prompt.name="extract-data-eng"`, group by `llm.model.name`
-- Porównanie wersji promptu porównania wzorca: filter `llm.prompt.name="compare-template"`, group by `llm.prompt.version`, metryka `% status='NOT_SIMILAR'`
-- Historia konkretnego usera: filter `user.id=<discordId>` → failed generations → prompt + response
-
-Rzetelne porównania: [Langfuse Datasets](https://langfuse.com/docs/datasets/get-started) — zestaw referencyjnych screenów puszczany przez różne warianty.
 
 ## Najlepsze Praktyki
 

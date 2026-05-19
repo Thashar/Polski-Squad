@@ -13,7 +13,7 @@
      - Retry 3× z exponential backoff (1s/2s/4s) dla błędów 429/503/500/sieciowych
      - Weryfikacja wersji promptów przez `PROMPT_VERSIONS` (Langfuse telemetria)
      - Inicjalizacja przez `llmAdapter` (wspólny wrapper `utils/llmAdapter.js`) + DI z `index.js`
-2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto); przy częściowym usunięciu → `lifetime_points` zmniejszane o tę samą liczbę. `appSync.punishmentEvent` wysyła `lifetimeDelta` do web API — web app aktualizuje `lifetimePoints` na podstawie tej wartości. Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
+2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto); przy częściowym usunięciu → `lifetime_points` zmniejszane o tę samą liczbę. Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
 4. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora, dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
 13. **Skan Ekwipunku (Core Stock)** - Przycisk "🎒 Skanuj ekwipunek" na kanale `1491801320602992690`:
@@ -236,17 +236,7 @@
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
 - Max 30 pozycji w rankingu (z informacją o liczbie pozostałych)
 
-**Sync do Web API (opcjonalny)** - `../utils/appSync.js` (współdzielony helper bot-wide): HTTP client wypychający zapisy do Polski Squad web API (`polski-squad/app`). W Stalkerze `appSync` budowany w `index.js` przez `createAppSync()` i wstrzykiwany przez konstruktory do `DatabaseService`, `ReminderService`, `GaryCombatIngestionService` oraz przez `sharedState` do handlerów. Integracja wywoływana bezpośrednio w serwisach:
-- `databaseService.updatePlayerIndex()` → `POST /api/bot/player-identity` + `/nick-observation`
-- `databaseService.savePhase1Result()` / `savePhase2Result()` / `savePhase2Results()` → `POST /api/bot/phase-result` (per gracz, idempotent po `guildId+discordId+phase+year+weekNumber`)
-- `databaseService.addPunishmentPoints()` / `removePunishmentPoints()` / `cleanupWeeklyPoints()` → `POST /api/bot/punishment-event` (deterministyczne `eventId` — bezpieczne powtórki)
-- `garyCombatIngestionService.ingest()` → `POST /api/bot/combat-weekly` (wszystkie gracz×tydzień po zapisie lokalnego pliku)
-- `reminderService` → `POST /api/bot/reminder-event` typu `SENT` (wysyłka DM) i `CONFIRMED` (kliknięcie przycisku potwierdzenia)
-- **Fire-and-forget:** Każdy push jest asynchroniczny z retry 3× (backoff 2s/4s/6s). Błędy są logowane, ale **nigdy nie blokują ani nie przerywają** głównej logiki bota — lokalne JSON pozostają źródłem prawdy.
-- **Disabled mode:** Gdy brak `APP_API_URL` lub `BOT_API_KEY`, wszystkie wywołania są cicho pomijane (no-op). Bezpieczne w dev/test.
-- **Idempotentność:** Endpointy upsertowe (phase-result, combat-weekly, player-identity, nick-observation) używają kluczy naturalnych po stronie API. Eventy (punishment-event, reminder-event) wymagają deterministycznego `id` generowanego przez `eventId(...)` — powtórne wysłanie to no-op.
-
-**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID, **APP_API_URL, BOT_API_KEY** (opcjonalne — sync do web API)
+**Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
 
@@ -297,10 +287,6 @@ USE_STALKER_AI_OCR=false
 STALKER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 
-# Sync do Polski Squad web API (opcjonalne)
-# Gdy puste — wszystkie wywołania appSync są no-op (bezpieczne w dev).
-APP_API_URL=https://api.polski-squad.example
-BOT_API_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 ## Najlepsze Praktyki
