@@ -6,13 +6,10 @@ const { downloadDiscordImage } = require('../utils/helpers');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { eventId } = require('../../utils/appSync');
-
 const logger = createBotLogger('Stalker');
 class ReminderService {
-    constructor(config, appSync) {
+    constructor(config) {
         this.config = config;
-        this.appSync = appSync;
         this.activeSessions = new Map(); // sessionId → session
         this.activeReminderDMs = new Map(); // userId → { roleId, guildId, confirmationChannelId, sentAt }
         this.tempDir = './Stalker/temp';
@@ -112,16 +109,6 @@ class ReminderService {
                                 });
                                 // Zapisz do pliku
                                 await this.saveActiveReminderDMs();
-
-                                const occurredAt = new Date(sentAt).toISOString();
-                                this.appSync.reminderEvent({
-                                    id: eventId('reminder_sent', member.id, guild.id, roleId, occurredAt),
-                                    guildId: guild.id,
-                                    discordId: member.id,
-                                    type: 'SENT',
-                                    channelId: confirmationChannelId || null,
-                                    occurredAt,
-                                });
 
                                 dmsSent++;
                                 logger.info(`📨 Wysłano DM do ${member.user.tag}`);
@@ -1002,17 +989,6 @@ class ReminderService {
             logger.info(`[REMINDER-DM] 🗑️ Usunięto aktywną sesję DM dla użytkownika ${userId}`);
             await this.saveActiveReminderDMs();
 
-            if (dmData) {
-                const occurredAt = new Date().toISOString();
-                this.appSync.reminderEvent({
-                    id: eventId('reminder_confirmed', userId, dmData.guildId || '', occurredAt),
-                    guildId: dmData.guildId || 'unknown',
-                    discordId: userId,
-                    type: 'CONFIRMED',
-                    channelId: dmData.confirmationChannelId || null,
-                    occurredAt,
-                });
-            }
         }
         return removed;
     }

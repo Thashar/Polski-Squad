@@ -1,24 +1,12 @@
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeParse } = require('../../utils/safeJSON');
-const { eventId, isoWeekStartUTC } = require('../../utils/appSync');
-
 const logger = createBotLogger('Stalker');
 const path = require('path');
 
-function classifyPunishmentReason(reason, defaultKind = 'MANUAL') {
-    if (!reason) return { kind: defaultKind, note: null };
-    const r = String(reason).toLowerCase();
-    if (r.includes('niepokonanie')) return { kind: 'BOSS_FAIL', note: reason };
-    if (r.includes('tygodniowe')) return { kind: 'WEEKLY_RESET', note: reason };
-    if (r.includes('ręczne')) return { kind: 'MANUAL_REMOVAL', note: reason };
-    return { kind: defaultKind, note: reason };
-}
-
 class DatabaseService {
-    constructor(config, appSync) {
+    constructor(config) {
         this.config = config;
-        this.appSync = appSync;
         this.punishmentsFile = config.database.punishments;
         this.weeklyRemovalFile = config.database.weeklyRemoval;
 
@@ -227,17 +215,6 @@ class DatabaseService {
 
         await this.savePlayerIndex(guildId, index);
 
-        this.appSync.playerIdentity({
-            discordId: userId,
-            guildId,
-            currentNick: displayName,
-            lastSeenAt: timestamp,
-        });
-        this.appSync.nickObservation({
-            discordId: userId,
-            nick: displayName,
-            observedAt: timestamp,
-        });
     }
 
     /**
@@ -484,18 +461,6 @@ class DatabaseService {
         await this.savePunishments(punishments);
         logger.info('✅ Pomyślnie zapisano zmiany w bazie');
 
-        const occurredAt = new Date().toISOString();
-        const { kind, note } = classifyPunishmentReason(reason, 'BOSS_FAIL');
-        this.appSync.punishmentEvent({
-            id: eventId('punish', guildId, userId, occurredAt, points, reason),
-            guildId,
-            discordId: userId,
-            delta: points,
-            reasonKind: kind,
-            reasonNote: note,
-            occurredAt,
-        });
-
         return punishments[guildId][userId];
     }
 
@@ -536,18 +501,6 @@ class DatabaseService {
         }
 
         await this.savePunishments(punishments);
-
-        const occurredAt = new Date().toISOString();
-        this.appSync.punishmentEvent({
-            id: eventId('unpunish', guildId, userId, occurredAt, points),
-            guildId,
-            discordId: userId,
-            delta: -Math.abs(points),
-            newLifetimePoints,
-            reasonKind: 'MANUAL_REMOVAL',
-            reasonNote: 'Ręczne usunięcie punktów',
-            occurredAt,
-        });
 
         return punishments[guildId][userId];
     }
@@ -634,19 +587,6 @@ class DatabaseService {
         await this.savePunishments(punishments);
         await this.saveWeeklyRemoval(weeklyRemoval);
 
-        const occurredAt = now.toISOString();
-        for (const { guildId, userId, delta } of cleanedEvents) {
-            this.appSync.punishmentEvent({
-                id: eventId('weekly_reset', guildId, userId, occurredAt, delta),
-                guildId,
-                discordId: userId,
-                delta,
-                reasonKind: 'WEEKLY_RESET',
-                reasonNote: 'Automatyczne tygodniowe usuwanie punktu',
-                occurredAt,
-            });
-        }
-        
         logger.info('Podsumowanie tygodniowego usuwania:');
         logger.info(`🏰 Serwerów przetworzonych: ${guildsProcessed}`);
         logger.info(`👥 Użytkowników wyczyszczonych: ${totalCleaned}`);
@@ -788,19 +728,6 @@ class DatabaseService {
         // Wewnętrznie pushuje też playerIdentity + nickObservation do web API.
         await this.updatePlayerIndex(guildId, userId, displayName, weekData.updatedAt);
 
-        this.appSync.phaseResult({
-            guildId,
-            discordId: userId,
-            phase: 'PHASE_1',
-            year,
-            weekNumber,
-            weekStartsAt: isoWeekStartUTC(year, weekNumber),
-            clan,
-            score,
-            displayNameAtTime: displayName,
-            recordedAt: weekData.updatedAt,
-            recordedBy: createdBy || null,
-        });
     }
 
     /**
@@ -1101,36 +1028,6 @@ class DatabaseService {
             }
         }
 
-        for (const player of summaryPlayers || []) {
-            const rounds = roundScoresMap.get(player.userId) || {};
-            this.appSync.phaseResult({
-                guildId,
-                discordId: player.userId,
-                phase: 'PHASE_2',
-                year,
-                weekNumber,
-                weekStartsAt,
-                clan,
-                score: player.score,
-                round1Score: rounds.r1 ?? null,
-                round2Score: rounds.r2 ?? null,
-                round3Score: rounds.r3 ?? null,
-                displayNameAtTime: player.displayName,
-                recordedAt: now,
-                recordedBy: createdBy || null,
-            });
-            this.appSync.playerIdentity({
-                discordId: player.userId,
-                guildId,
-                currentNick: player.displayName,
-                lastSeenAt: now,
-            });
-            this.appSync.nickObservation({
-                discordId: player.userId,
-                nick: player.displayName,
-                observedAt: now,
-            });
-        }
     }
 
     async savePhase2Result(guildId, userId, displayName, score, weekNumber, year, clan) {
@@ -1177,30 +1074,6 @@ class DatabaseService {
         await this.savePhase2Data(data);
         logger.info(`[PHASE2] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan})`);
 
-        this.appSync.phaseResult({
-            guildId,
-            discordId: userId,
-            phase: 'PHASE_2',
-            year,
-            weekNumber,
-            weekStartsAt: isoWeekStartUTC(year, weekNumber),
-            clan,
-            score,
-            displayNameAtTime: displayName,
-            recordedAt: now,
-            recordedBy: null,
-        });
-        this.appSync.playerIdentity({
-            discordId: userId,
-            guildId,
-            currentNick: displayName,
-            lastSeenAt: now,
-        });
-        this.appSync.nickObservation({
-            discordId: userId,
-            nick: displayName,
-            observedAt: now,
-        });
     }
 
     async getPhase2Summary(guildId, weekNumber, year, clan) {

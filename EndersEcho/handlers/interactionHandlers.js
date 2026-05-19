@@ -10,26 +10,6 @@ const path = require('path');
 const OPERATIONS_TYPE = 'ocr.analyze';
 
 /**
- * Mapuje gatewayError z runOperation na komunikat ephemeral dla usera.
- * Wołane gdy `op.gatewayError` jest truthy (authorize odrzucił 4xx).
- */
-function mapGatewayErrorMessage(gwError, msgs) {
-    switch (gwError.code) {
-        case 'QUOTA_EXCEEDED':
-            return formatMessage(msgs.dailyLimitExceeded, { limit: gwError.retryAfter || '' });
-        case 'RATE_LIMITED':
-            return formatMessage(msgs.gatewayRateLimited, { retry: gwError.retryAfter ? ` ${gwError.retryAfter}s` : '' });
-        case 'OPERATION_NOT_ENTITLED':
-            return msgs.gatewayNotEntitled;
-        case 'VALIDATION_FAILED':
-        case 'GATEWAY_UNAVAILABLE':
-            return msgs.updateError;
-        default:
-            return `❌ ${gwError.message || msgs.gatewayDefault}`;
-    }
-}
-
-/**
  * Buduje usage payload do `/record` z `aiResult.tokenUsage` zwracanego przez
  * `aiOcrService`. Zwraca null gdy brak danych (np. AI OCR wyłączony).
  */
@@ -44,7 +24,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -56,7 +36,6 @@ class InteractionHandler {
         this.roleRankingConfigService = roleRankingConfigService;
         this.usageLimitService = usageLimitService;
         this.tokenUsageService = tokenUsageService;
-        this.botOps = botOps;
         this.guildConfigService = guildConfigService;
         this.ocrBlockService = ocrBlockService;
         this.updateCooldownService = updateCooldownService;
@@ -3454,27 +3433,8 @@ class InteractionHandler {
                 }
             };
 
-            // ── Operations Gateway (authorize + root span + record) ───────────
-            const op = await this.botOps.run({
-                type:  OPERATIONS_TYPE,
-                actor: { discordId: interaction.user.id },
-                scope: { guildId: interaction.guildId, channelId: interaction.channelId },
-                hints: { command: commandName },
-            }, async (ctx) => {
-                const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-                const ai = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, ctx.telemetryMeta, guildLang, onProgress);
-                const usage = buildGeminiUsage(ai);
-                if (ai.error === 'NOT_SIMILAR' || !ai.isValidVictory) {
-                    return { result: ai, status: 'REJECTED', errorCode: ai.error || 'VALIDATION_FAILED', usage };
-                }
-                return { result: ai, usage };
-            });
-
-            if (op.gatewayError) {
-                await interaction.editReply({ content: mapGatewayErrorMessage(op.gatewayError, msgs) });
-                return;
-            }
-            const aiResult = op.result;
+            const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
 
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 

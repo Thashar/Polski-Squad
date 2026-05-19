@@ -38,8 +38,6 @@ const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerS
 const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
-const { createAppSync } = require('../utils/appSync');
-const { createBotOperations } = require('../utils/operationRunner');
 const cron = require('node-cron');
 
 const logger = createBotLogger('EndersEcho');
@@ -78,8 +76,6 @@ async function _updateStatus() {
     } catch { /* status to nice-to-have */ }
 }
 const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'endersecho-bot' });
-const { sync: appSync, isEnabled: appSyncEnabled } = createAppSync({ apiKey: config.appApiKey });
-const botOps = createBotOperations({ botSlug: 'endersecho', apiKey: config.appApiKey });
 
 const guildConfigService = new GuildConfigService(config.ranking.dataDir);
 
@@ -97,7 +93,7 @@ const ocrService = new OCRService(config);
 const aiOcrService = new AIOCRService(config, llmAdapter, bossAliasService);
 const scoreHistoryService = new ScoreHistoryService(config.ranking.dataDir);
 const chartService = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
-const rankingService = new RankingService(config, appSync, scoreHistoryService);
+const rankingService = new RankingService(config, scoreHistoryService);
 const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
 const roleService = new RoleService(config, rankingService, logService);
@@ -115,7 +111,7 @@ const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const kingBumChatService = new KingBumChatService(config);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -286,74 +282,8 @@ async function sendAdminNotification(discordClient, embed) {
     }
 }
 
-function projectGuildMember(member) {
-    const username = member?.user?.username;
-    if (!username) return null;
-
-    const globalName = member.user.globalName?.trim() ? member.user.globalName : null;
-    const nickname = member.nickname?.trim() ? member.nickname : null;
-
-    return {
-        guildId: member.guild.id,
-        discordId: member.user.id,
-        username,
-        globalName,
-        nickname,
-        avatarHash: member.user.avatar ?? null,
-        roleIds: member.roles.cache.map(r => r.id),
-        joinedAt: member.joinedAt?.toISOString() ?? new Date().toISOString(),
-    };
-}
-
-async function bootstrapGuildSync(guild) {
-    if (!appSyncEnabled()) return;
-
-    try {
-        await appSync.guildJoined({ guildId: guild.id, guildName: guild.name });
-
-        let fetched;
-        try {
-            fetched = await guild.members.fetch();
-        } catch (err) {
-            logger.warn(`members.fetch() fail (serwer "${guild.name}"): ${err.message}`);
-            return;
-        }
-
-        const members = [];
-        for (const member of fetched.values()) {
-            const projected = projectGuildMember(member);
-            if (!projected) continue;
-            const { guildId: _omit, ...item } = projected;
-            members.push(item);
-        }
-        if (members.length === 0) return;
-
-        const CHUNK = 1000;
-        let totalCount = 0;
-        for (let i = 0; i < members.length; i += CHUNK) {
-            const chunk = members.slice(i, i + CHUNK);
-            const res = await appSync.membersBulkSeen({ guildId: guild.id, members: chunk });
-            if (res && typeof res === 'object' && typeof res.count === 'number') {
-                totalCount += res.count;
-            }
-        }
-        logger.info(`appSync bootstrap "${guild.name}": wysłano ${members.length}, API potwierdziło count=${totalCount}`);
-    } catch (err) {
-        logger.error(`Błąd bootstrap appSync (serwer "${guild.name}"): ${err.message}`);
-    }
-}
-
-client.on('guildCreate', async (guild) => {
-    await bootstrapGuildSync(guild);
-});
-
 client.on('guildDelete', async (guild) => {
     if (guild.available === false) return;
-    try {
-        await appSync.guildLeft({ guildId: guild.id });
-    } catch (err) {
-        logger.error(`Błąd guildLeft (serwer "${guild.name}"):`, err);
-    }
     const guildLangDel = guildConfigService.getConfig(guild.id)?.lang || 'pol';
     const tGD = guildLangDel === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
     await sendAdminNotification(client, new EmbedBuilder()
@@ -365,26 +295,6 @@ client.on('guildDelete', async (guild) => {
         )
         .setTimestamp()
     );
-});
-
-client.on('guildMemberAdd', async (member) => {
-    try {
-        const payload = projectGuildMember(member);
-        if (!payload) return;
-        await appSync.memberSeen(payload);
-    } catch (err) {
-        logger.error(`Błąd memberSeen add (serwer "${member?.guild?.name}", użytkownik "${member?.displayName || member?.user?.username || member?.user?.id}"):`, err);
-    }
-});
-
-client.on('guildMemberUpdate', async (_oldMember, newMember) => {
-    try {
-        const payload = projectGuildMember(newMember);
-        if (!payload) return;
-        await appSync.memberSeen(payload);
-    } catch (err) {
-        logger.error(`Błąd memberSeen update (serwer "${newMember?.guild?.name}", użytkownik "${newMember?.displayName || newMember?.user?.username || newMember?.user?.id}"):`, err);
-    }
 });
 
 client.on('messageCreate', async (message) => {

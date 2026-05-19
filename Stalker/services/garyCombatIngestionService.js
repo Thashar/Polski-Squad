@@ -1,8 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
-const { isoWeekStartUTC } = require('../../utils/appSync');
-
 const WEEKLY_DIR      = path.join(__dirname, '../../shared_data/lme_weekly');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
 
@@ -18,12 +16,11 @@ const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.js
  * 3. Komendy /player-status i /player-compare czytają z lokalnej bazy po userId.
  */
 class GaryCombatIngestionService {
-    constructor(client, config, databaseService, logger, appSync) {
+    constructor(client, config, databaseService, logger) {
         this.client = client;
         this.config = config;
         this.databaseService = databaseService;
         this.logger = logger;
-        this.appSync = appSync;
     }
 
     /** Usuwa prefiks klanowy z nicku z gry (np. "PLㅣPuddi" → "Puddi", "PL|Pushok" → "Pushok") */
@@ -320,23 +317,6 @@ class GaryCombatIngestionService {
             await fs.mkdir(path.dirname(LOCAL_COMBAT_FILE), { recursive: true });
             await fs.writeFile(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
 
-            // Po zapisie lokalnej bazy, mirroruj wszystkie (gracz × tydzień) do web API.
-            // Endpoint jest idempotentny (natural key: discordId+year+weekNumber),
-            // więc bezpiecznie wypychamy całą historię przy każdym ingestion.
-            for (const [userId, info] of Object.entries(localData.players || {})) {
-                for (const week of info.weeks || []) {
-                    if (!week.weekNumber || !week.year) continue;
-                    this.appSync.combatWeekly({
-                        discordId: userId,
-                        year: week.year,
-                        weekNumber: week.weekNumber,
-                        weekStartsAt: isoWeekStartUTC(week.year, week.weekNumber),
-                        rc: week.relicCores || 0,
-                        tc: week.transmuteCores || 0, // Gary obecnie nie dostarcza TC — zarezerwowane
-                        attack: String(week.attack || 0),
-                    });
-                }
-            }
 
             // Klanowcy którzy NIE otrzymali danych w tej ingestion
             const clanMembersWithoutData = [];

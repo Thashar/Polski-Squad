@@ -21,11 +21,9 @@ const AIChatService = require('./services/aiChatService');
 const { exportClanThresholds } = require('./services/clanThresholdsExportService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
-const { createAppSync } = require('../utils/appSync');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 
 const logger = createBotLogger('Stalker');
-const { sync: appSync } = createAppSync();
 const llmAdapter = createLlmAdapter({ botSlug: 'stalker', tracerName: 'stalker-bot', apiKey: config.ocr.googleAiApiKey });
 
 // Cooldown kalkulatora - raz na godzinę per kanał (persistencja w pliku)
@@ -82,10 +80,10 @@ const client = new Client({
     ]
 });
 
-const databaseService = new DatabaseService(config, appSync);
+const databaseService = new DatabaseService(config);
 const ocrService = new OCRService(config, null, llmAdapter);
 const punishmentService = new PunishmentService(config, databaseService);
-const reminderService = new ReminderService(config, appSync);
+const reminderService = new ReminderService(config);
 const reminderUsageService = new ReminderUsageService(config);
 const reminderStatusTrackingService = new ReminderStatusTrackingService(config);
 const vacationService = new VacationService(config, logger);
@@ -105,7 +103,7 @@ const aiChatService = new AIChatService(
 const PhaseService = require('./services/phaseService');
 const phaseService = new PhaseService(config, databaseService, ocrService, client);
 const GaryCombatIngestionService = require('./services/garyCombatIngestionService');
-const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger, appSync);
+const garyCombatIngestionService = new GaryCombatIngestionService(client, config, databaseService, logger);
 const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 const GiftcodeService = require('./services/giftcodeService');
@@ -262,7 +260,6 @@ client.databaseService = databaseService;
 const sharedState = {
     client,
     config,
-    appSync,
     databaseService,
     ocrService,
     punishmentService,

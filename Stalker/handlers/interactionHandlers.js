@@ -12407,13 +12407,6 @@ async function handleEquipmentSave(interaction, sharedState) {
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
         await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
 
-        sharedState.appSync.coreStock({
-            discordId: userId,
-            guildId: interaction.guildId,
-            takenAt: scannedAt,
-            items: pending.items,
-        });
-
         interaction.client._equipmentPending.delete(userId);
 
         const itemLines = Object.entries(pending.items)

@@ -7,9 +7,8 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { formatMessage } = require('../utils/helpers');
 
 class RankingService {
-    constructor(config, appSync, scoreHistoryService = null) {
+    constructor(config, scoreHistoryService = null) {
         this.config = config;
-        this.appSync = appSync;
         this.scoreHistoryService = scoreHistoryService;
         this.activeRankings = new Map();
         this._writeQueues = new Map();
@@ -271,30 +270,6 @@ class RankingService {
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
 
-            // Mirror do web API — endpoint upsertowy po discordId.
-            // snapshotDate przycinamy do doby UTC.
-            // scoreNumeric: toFixed(0) zamiast String(), bo String() dla wartości
-            // >= 1e21 (Sx, duże Qi) daje notację wykładniczą "1.65e+21", którą API
-            // odrzuca walidacją /^\d+$/.
-            if (syncToApi) {
-                const now = new Date();
-                const snapshotDate = new Date(Date.UTC(
-                    now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()
-                )).toISOString();
-                for (const player of players) {
-                    const score = Number(player.scoreValue);
-                    if (!Number.isFinite(score) || score < 0) continue;
-                    this.appSync.endersEchoSnapshot({
-                        discordId: player.userId,
-                        snapshotDate,
-                        rank: player.rank,
-                        scoreNumeric: score.toFixed(0),
-                        totalPlayers: players.length,
-                        serverRank: player.serverRank,
-                        serverTotalPlayers: player.serverTotalPlayers,
-                    });
-                }
-            }
         } catch (error) {
             logger.error('Błąd eksportu rankingu do shared_data:', error);
         }
