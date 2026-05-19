@@ -452,10 +452,11 @@ client.on(Events.MessageCreate, async (message) => {
 
     // ============ GIFTCODE: wykrywanie kodu + przycisk zawsze na dole ============
     if (message.channel.id === GIFTCODE_CHANNEL_ID) {
-        const lastLine = message.content.trim().split('\n').filter(l => l.trim()).at(-1)?.trim() ?? '';
-        if (/^[A-Za-z0-9_-]{3,30}$/.test(lastLine)) {
-            logger.info(`[GIFTCODE-AUTO] Wykryto kod w wiadomości: "${lastLine}" od ${message.author.tag}`);
-            autoRedeemFromMessage(lastLine, message).catch(err => logger.error(`[GIFTCODE-AUTO] ${err.message}`));
+        const codeMatch = message.content.match(/[?&]giftcode=([A-Za-z0-9_-]+)/i);
+        if (codeMatch) {
+            const code = codeMatch[1];
+            logger.info(`[GIFTCODE-AUTO] Wykryto kod z linku: "${code}" od ${message.author.tag}`);
+            autoRedeemFromMessage(code, message).catch(err => logger.error(`[GIFTCODE-AUTO] ${err.message}`));
         }
         try {
             await ensureGiftcodeButtonIsLast(message.channel);
