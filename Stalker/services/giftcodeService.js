@@ -249,7 +249,7 @@ class GiftcodeService {
             const result = await this._redeemForUid(userData.uid, giftcode, userData.nick, shouldAbort);
             this.totalCaptchaFails += result.captchaFails ?? 0;
 
-            if (result.success) {
+            if (result.success || result.claimed) {
                 claimedSet.add(discordId);
                 this.recordSuccess(discordId, giftcode).catch(() => {});
             }
