@@ -119,7 +119,24 @@ class GiftcodeService {
             { userId, giftCode, captchaId, captcha },
             { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
         );
+        this.logger.info(`[GIFTCODE] Odpowiedź API: ${JSON.stringify(res.data)}`);
         return res.data;
+    }
+
+    _extractMsg(result) {
+        return result.msg ?? result.message ?? result.data?.msg ?? result.data?.message ?? null;
+    }
+
+    _isPermanentError(code) {
+        // Kody które nie znikną po ponownej próbie z inną captchą
+        return [
+            20402, // Kod już wykorzystany / limit osiągnięty
+            20403, // Kod wygasł
+            20404, // Nieprawidłowy kod
+            20405, // Gracz nie kwalifikuje się
+            20406, // Gracz nie znaleziony
+            20407, // Rate limit / zbyt wiele prób
+        ].includes(code);
     }
 
     // ===== REDEMPTION =====
@@ -174,15 +191,16 @@ class GiftcodeService {
 
                 // 4. Aktywuj kod
                 const result = await this._claimCode(uid, giftCode, captchaId, captchaSolution);
+                const apiMsg = this._extractMsg(result);
 
                 if (result.code === 0) {
                     return { success: true, message: 'Kod aktywowany pomyślnie' };
-                } else if (result.code === 20402) {
-                    // Kod już użyty — nie ma sensu próbować ponownie
-                    return { success: false, message: 'Kod już wykorzystany lub limit osiągnięty' };
+                } else if (this._isPermanentError(result.code)) {
+                    // Błąd nie do naprawienia ponowną próbą
+                    return { success: false, message: apiMsg ?? `Błąd API (kod: ${result.code})` };
                 } else {
                     // Prawdopodobnie zła captcha — próbuj ponownie
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${result.msg}) dla ${nick}`);
+                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${apiMsg}) dla ${nick}`);
                 }
 
             } catch (error) {
