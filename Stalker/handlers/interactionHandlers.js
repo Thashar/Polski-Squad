@@ -692,6 +692,12 @@ async function handleButton(interaction, sharedState) {
         await handleGiftcodeRetryButton(interaction, sharedState);
         return;
     }
+    if (interaction.customId.startsWith('giftcode_stop_')) {
+        const sessionId = interaction.customId.replace('giftcode_stop_', '');
+        sharedState.client._giftcodeAbort?.set(sessionId, true);
+        await interaction.deferUpdate();
+        return;
+    }
 
     // ============ KALKULATOR EMBED - system dzielenia obliczeniami ============
     if (interaction.customId === 'kalkulator_request') {
@@ -2235,6 +2241,16 @@ async function handleListIdsCommand(interaction, sharedState) {
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
+function _buildStopRow(abortKey) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`giftcode_stop_${abortKey}`)
+            .setLabel('Przerwij')
+            .setStyle(ButtonStyle.Danger)
+            .setEmoji('⏹️')
+    );
+}
+
 async function handleGiftcodeCommand(interaction, sharedState) {
     const { config, giftcodeService, client } = sharedState;
 
@@ -2272,13 +2288,18 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         }
     }
 
+    const abortKey = `gc_${Date.now()}`;
+    client._giftcodeAbort = client._giftcodeAbort ?? new Map();
+    client._giftcodeAbort.set(abortKey, false);
+
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🎁 Aktywacja kodu Habby')
             .setDescription(`**Kod:** \`${code}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
-            .setColor('#FFA500')]
+            .setColor('#FFA500')],
+        components: [_buildStopRow(abortKey)]
     });
 
     let allResults = [];
@@ -2292,48 +2313,39 @@ async function handleGiftcodeCommand(interaction, sharedState) {
                             `**Kod:** \`${code}\`\n**Postęp:** ${done}/${tot}\n\n` +
                             `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`
                         )
-                        .setColor('#FFA500')]
+                        .setColor('#FFA500')],
+                    components: [_buildStopRow(abortKey)]
                 });
             } catch { /* interakcja wygasła */ }
-        });
+        }, () => client._giftcodeAbort?.get(abortKey) === true);
     } catch (error) {
         logger.error(`[GIFTCODE] ❌ Błąd redeemEntries: ${error.message}`);
-        return interaction.editReply({ content: `❌ Błąd podczas aktywacji: ${error.message}`, embeds: [] });
+        client._giftcodeAbort?.delete(abortKey);
+        return interaction.editReply({ content: `❌ Błąd podczas aktywacji: ${error.message}`, embeds: [], components: [] });
     }
 
+    client._giftcodeAbort?.delete(abortKey);
+
+    const aborted = allResults.some(r => r.aborted);
     const succeeded = allResults.filter(r => r.success);
-    const captchaFailed = allResults.filter(r => !r.success && r.retryable);
-    const permFailed = allResults.filter(r => !r.success && !r.retryable);
+    const permFailed = allResults.filter(r => !r.success && !r.aborted);
 
-    const components = [];
-    if (captchaFailed.length > 0) {
-        const sessionId = Date.now().toString();
-        client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
-        client._giftcodeRetryData.set(sessionId, { code, entries: captchaFailed.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
-        components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`giftcode_retry_${sessionId}`)
-                .setLabel(`Ponów dla ${captchaFailed.length} nieudanych (captcha)`)
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔄')
-        ));
-    }
-
-    const color = captchaFailed.length + permFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
     const ct = giftcodeService.captchaTokens;
     const tokenLine = ct.calls > 0
-        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań)`
+        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
         : '';
 
     const desc = [
         `**Kod:** \`${code}\``,
+        aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
         '',
         `✅ **Sukces:** ${succeeded.length}`,
         `❌ **Błąd (permanent):** ${permFailed.length}`,
-        `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
         tokenLine,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
+
+    const color = permFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
@@ -2341,10 +2353,10 @@ async function handleGiftcodeCommand(interaction, sharedState) {
             .setDescription(desc)
             .setColor(color)
             .setTimestamp()],
-        components
+        components: []
     });
 
-    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} 🔄${captchaFailed.length} ⏭️${skippedEntries.length}`);
+    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${permFailed.length} ⏭️${skippedEntries.length} captchaFail=${giftcodeService.totalCaptchaFails}`);
 }
 
 async function handleGiftcodeAddIdButton(interaction, sharedState) {
@@ -2414,6 +2426,10 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
 
     client._giftcodeRetryData.delete(sessionId);
 
+    const abortKey = `gc_${Date.now()}`;
+    client._giftcodeAbort = client._giftcodeAbort ?? new Map();
+    client._giftcodeAbort.set(abortKey, false);
+
     await interaction.deferUpdate();
 
     await interaction.editReply({
@@ -2421,7 +2437,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
             .setTitle('🔄 Ponowna aktywacja (captcha retry)')
             .setDescription(`**Kod:** \`${retryData.code}\`\n**Graczy do retry:** ${retryData.entries.length}\n\n⏳ Przetwarzam...`)
             .setColor('#FFA500')],
-        components: []
+        components: [_buildStopRow(abortKey)]
     });
 
     const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, async (done, tot, last) => {
@@ -2431,41 +2447,38 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
                     .setTitle('🔄 Ponowna aktywacja — w toku')
                     .setDescription(`**Kod:** \`${retryData.code}\`\n**Postęp:** ${done}/${tot}\n\n⏳ **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`)
                     .setColor('#FFA500')],
-                components: []
+                components: [_buildStopRow(abortKey)]
             });
         } catch { /* ignore */ }
-    });
+    }, () => client._giftcodeAbort?.get(abortKey) === true);
 
+    client._giftcodeAbort?.delete(abortKey);
+
+    const aborted = results.some(r => r.aborted);
     const succeeded = results.filter(r => r.success);
-    const captchaFailed = results.filter(r => !r.success && r.retryable);
+    const permFailed = results.filter(r => !r.success && !r.aborted);
 
-    const newComponents = [];
-    if (captchaFailed.length > 0) {
-        const newSessionId = Date.now().toString();
-        client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
-        client._giftcodeRetryData.set(newSessionId, { code: retryData.code, entries: captchaFailed.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
-        newComponents.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`giftcode_retry_${newSessionId}`)
-                .setLabel(`Ponów dla ${captchaFailed.length} nieudanych`)
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔄')
-        ));
-    }
+    const ct = giftcodeService.captchaTokens;
+    const tokenLine = ct.calls > 0
+        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
+        : '';
+
+    const retryDesc = [
+        `**Kod:** \`${retryData.code}\``,
+        aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
+        '',
+        `✅ **Sukces:** ${succeeded.length}`,
+        `❌ **Błąd (permanent):** ${permFailed.length}`,
+        tokenLine,
+    ].filter(Boolean).join('\n');
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja — zakończona')
-            .setDescription((() => {
-                const ct = giftcodeService.captchaTokens;
-                const tokenLine = ct.calls > 0
-                    ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań)`
-                    : '';
-                return `**Kod:** \`${retryData.code}\`\n\n✅ **Sukces:** ${succeeded.length}\n🔄 **Captcha fail:** ${captchaFailed.length}${tokenLine}`;
-            })())
-            .setColor(captchaFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
+            .setDescription(retryDesc)
+            .setColor(permFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
             .setTimestamp()],
-        components: newComponents
+        components: []
     });
 }
 
