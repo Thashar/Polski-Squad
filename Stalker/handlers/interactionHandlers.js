@@ -2368,32 +2368,24 @@ async function handleGiftcodeCommand(interaction, sharedState) {
 }
 
 async function handleGiftcodeAddIdButton(interaction, sharedState) {
-    const { config, giftcodeService } = sharedState;
-
-    if (!_hasAnyClanRole(interaction.member, config)) {
-        return interaction.reply({ content: '❌ Tylko klanowicze mogą dodać swoje ID.', flags: MessageFlags.Ephemeral });
-    }
+    const { giftcodeService } = sharedState;
 
     const existing = await giftcodeService.getUserUid(interaction.user.id);
-    if (existing) {
-        return interaction.reply({
-            content: `❌ Masz już zapisane ID: \`${existing.uid}\`. Skontaktuj się z administratorem, jeśli chcesz je zmienić.`,
-            flags: MessageFlags.Ephemeral
-        });
-    }
 
     const modal = new ModalBuilder()
         .setCustomId(GIFTCODE_MODAL_ID)
-        .setTitle('Dodaj swoje ID gracza Habby');
+        .setTitle(existing ? 'Zmień swoje ID gracza Habby' : 'Dodaj swoje ID gracza Habby');
 
     const uidInput = new TextInputBuilder()
         .setCustomId(GIFTCODE_INPUT_ID)
-        .setLabel('ID gracza (same cyfry)')
+        .setLabel('Działa tylko dla członków klanu!')
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder('np. 48676567')
+        .setPlaceholder('np. 48676567 (same cyfry, 5–20 znaków)')
         .setMinLength(5)
         .setMaxLength(20)
         .setRequired(true);
+
+    if (existing) uidInput.setValue(existing.uid);
 
     modal.addComponents(new ActionRowBuilder().addComponents(uidInput));
     await interaction.showModal(modal);
@@ -2415,22 +2407,15 @@ async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
         });
     }
 
-    // Double-check: upewnij się że nie ma jeszcze ID (race condition)
-    const existing = await giftcodeService.getUserUid(interaction.user.id);
-    if (existing) {
-        return interaction.reply({
-            content: `❌ Masz już zapisane ID: \`${existing.uid}\`. Skontaktuj się z administratorem.`,
-            flags: MessageFlags.Ephemeral
-        });
-    }
-
-    await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
+    const existed = await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
 
     await interaction.reply({
-        content: `✅ Twoje ID Habby zostało zapisane: \`${uid}\`\nOtrzymasz kody podarunkowe automatycznie gdy admin je aktywuje.`,
+        content: existed
+            ? `✅ Twoje ID Habby zostało zaktualizowane: \`${uid}\``
+            : `✅ Twoje ID Habby zostało zapisane: \`${uid}\`\nOtrzymasz kody podarunkowe automatycznie gdy admin je aktywuje.`,
         flags: MessageFlags.Ephemeral
     });
-    logger.info(`[GIFTCODE] ${interaction.member.displayName} zapisał UID: ${uid}`);
+    logger.info(`[GIFTCODE] ${interaction.member.displayName} ${existed ? 'zaktualizował' : 'zapisał'} UID: ${uid}`);
 }
 
 async function handleGiftcodeRetryButton(interaction, sharedState) {
