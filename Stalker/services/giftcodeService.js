@@ -150,12 +150,11 @@ class GiftcodeService {
     }
 
     async _preprocessCaptcha(imageBuffer) {
+        // Tylko flatten (biały bg zamiast przezroczystości) + umiarkowane powiększenie.
+        // Agresywna binaryzacja (threshold) niszczyła kształty cyfr i pogaszała Gemini.
         return sharp(imageBuffer)
-            .greyscale()
-            .normalize()
-            .threshold(140)
-            .sharpen()
-            .resize({ width: 300, kernel: sharp.kernel.nearest })
+            .flatten({ background: { r: 255, g: 255, b: 255 } })
+            .resize({ width: 400, kernel: sharp.kernel.lanczos3 })
             .png()
             .toBuffer();
     }
