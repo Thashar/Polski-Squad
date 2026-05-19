@@ -345,8 +345,6 @@ client.once(Events.ClientReady, async () => {
     // Cleanup starych debug obrazków captchy (>24h)
     giftcodeService.cleanupDebugImages().catch(() => {});
 
-    // TYMCZASOWA MIGRACJA: ustaw dzisiejszą datę dla kodów bez firstUsed
-    giftcodeService.migrateClaimedData().catch(() => {});
 
     // Rejestracja komend slash
     await registerSlashCommands(client);
