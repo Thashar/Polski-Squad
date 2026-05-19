@@ -184,13 +184,15 @@ class GiftcodeService {
                 continue;
             }
 
-            this.logger.info(`[GIFTCODE] Nowy użytkownik ${userData.nick}: aktywuję kod ${code}`);
             const result = await this._redeemForUid(userData.uid, code, userData.nick);
             this.totalCaptchaFails += result.captchaFails ?? 0;
 
             if (result.success || result.claimed) {
                 this.recordSuccess(discordId, code).catch(() => {});
             }
+
+            const statusIcon = result.success ? '✅' : result.claimed ? '🎫' : '❌';
+            this.logger.info(`[GIFTCODE] ${userData.nick} ${statusIcon} ${code}${result.success ? '' : `: ${result.message}`}`);
 
             results.push({ code, ...result });
             if (i < recentCodes.length - 1) await delay(DELAY_BETWEEN_UIDS_MS);
