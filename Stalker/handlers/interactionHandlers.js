@@ -688,6 +688,16 @@ async function handleButton(interaction, sharedState) {
         await handleGiftcodeAddIdButton(interaction, sharedState);
         return;
     }
+    if (interaction.customId.startsWith('giftcode_activate_all_')) {
+        await handleGiftcodeActivateAllButton(interaction, sharedState);
+        return;
+    }
+    if (interaction.customId.startsWith('giftcode_cancel_all_')) {
+        const sessionKey = interaction.customId.replace('giftcode_cancel_all_', '');
+        sharedState.client._giftcodeActivateAll?.delete(sessionKey);
+        await interaction.update({ content: '❌ Anulowano.', embeds: [], components: [] });
+        return;
+    }
     if (interaction.customId.startsWith('giftcode_retry_')) {
         await handleGiftcodeRetryButton(interaction, sharedState);
         return;
@@ -2302,78 +2312,52 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         }
     }
 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    // ===== TRYB MULTI-CODE (brak parametru) — podgląd przed aktywacją =====
+    if (!code) {
+        const recentCodes = await giftcodeService.getRecentCodes(30);
+        if (recentCodes.length === 0) {
+            return interaction.editReply({ content: '❌ Brak kodów z ostatniego miesiąca. Użyj `/giftcode kod:KOD` aby aktywować konkretny kod.', embeds: [], components: [] });
+        }
+
+        const eligibleUids = new Set(eligibleEntries.map(([, u]) => u.uid));
+        const codeLines = [];
+        for (const c of recentCodes) {
+            const claimedSet = await giftcodeService.getClaimedForCode(c);
+            const alreadyClaimed = [...claimedSet].filter(uid => eligibleUids.has(uid)).length;
+            const remaining = eligibleEntries.length - alreadyClaimed;
+            codeLines.push(`\`${c}\` — ${alreadyClaimed}/${eligibleEntries.length} aktywowanych${remaining > 0 ? `, **${remaining} do aktywacji**` : ' ✅'}`);
+        }
+
+        const sessionKey = Date.now().toString();
+        client._giftcodeActivateAll = client._giftcodeActivateAll ?? new Map();
+        client._giftcodeActivateAll.set(sessionKey, { eligibleEntries, skippedEntries, recentCodes });
+
+        return interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('🎁 Kody z ostatniego miesiąca')
+                .setDescription(codeLines.join('\n'))
+                .setFooter({ text: `Uprawnionych: ${eligibleEntries.length} | Pominięto (brak roli): ${skippedEntries.length}` })
+                .setColor('#5865F2')],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`giftcode_activate_all_${sessionKey}`)
+                    .setLabel('Aktywuj wszystkie')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('🎁'),
+                new ButtonBuilder()
+                    .setCustomId(`giftcode_cancel_all_${sessionKey}`)
+                    .setLabel('Anuluj')
+                    .setStyle(ButtonStyle.Secondary)
+            )]
+        });
+    }
+
     const abortKey = `gc_${Date.now()}`;
     client._giftcodeAbort = client._giftcodeAbort ?? new Map();
     client._giftcodeAbort.set(abortKey, false);
     const shouldAbort = () => client._giftcodeAbort?.get(abortKey) === true;
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    // ===== TRYB MULTI-CODE (brak parametru) =====
-    if (!code) {
-        const recentCodes = await giftcodeService.getRecentCodes(30);
-        if (recentCodes.length === 0) {
-            client._giftcodeAbort?.delete(abortKey);
-            return interaction.editReply({ content: '❌ Brak kodów z ostatniego miesiąca. Użyj `/giftcode kod:KOD` aby aktywować konkretny kod.', embeds: [], components: [] });
-        }
-
-        const codeResultsMap = {};
-        for (let ci = 0; ci < recentCodes.length; ci++) {
-            if (shouldAbort()) break;
-            const curCode = recentCodes[ci];
-
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
-                    .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
-                    .setColor('#FFA500')],
-                components: [_buildStopRow(abortKey)]
-            });
-
-            const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0, noRole: skippedEntries.length };
-            try {
-                codeResultsMap[curCode] = await giftcodeService.redeemEntries(eligibleEntries, curCode, async (done, tot, last) => {
-                    if (last.success) liveStats.succeeded++;
-                    else if (last.skippedClaimed) liveStats.skippedClaimed++;
-                    else if (last.claimed) liveStats.claimed++;
-                    else if (!last.aborted) liveStats.permFailed++;
-                    try {
-                        await interaction.editReply({
-                            embeds: [new EmbedBuilder()
-                                .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
-                                .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n\n${_buildLiveDesc(curCode, done, tot, liveStats, last)}`)
-                                .setColor('#FFA500')],
-                            components: [_buildStopRow(abortKey)]
-                        });
-                    } catch { /* interakcja wygasła */ }
-                }, shouldAbort);
-            } catch (error) {
-                logger.error(`[GIFTCODE] ❌ Błąd kodu ${curCode}: ${error.message}`);
-                codeResultsMap[curCode] = [];
-            }
-        }
-
-        client._giftcodeAbort?.delete(abortKey);
-
-        const summaryLines = Object.entries(codeResultsMap).map(([c, results]) => {
-            const s = results.filter(r => r.success).length;
-            const sk = results.filter(r => r.skippedClaimed).length;
-            const cl = results.filter(r => !r.success && r.claimed).length;
-            const cf = results.filter(r => !r.success && r.retryable).length;
-            const e = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted).length;
-            return `\`${c}\`: ✅${s} ⏭️${sk} 🎫${cl} 🔄${cf} ❌${e}`;
-        });
-
-        return interaction.editReply({
-            embeds: [new EmbedBuilder()
-                .setTitle('🎁 Kody z ostatniego miesiąca — zakończone')
-                .setDescription(summaryLines.join('\n'))
-                .setFooter({ text: `Pominięto (brak roli): ${skippedEntries.length}` })
-                .setColor('#57F287')
-                .setTimestamp()],
-            components: []
-        });
-    }
 
     // ===== TRYB SINGLE-CODE (podano parametr) =====
     await interaction.editReply({
@@ -2532,6 +2516,87 @@ async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
             .setColor(color)
             .setTimestamp()
         ]
+    });
+}
+
+async function handleGiftcodeActivateAllButton(interaction, sharedState) {
+    const { giftcodeService, client } = sharedState;
+
+    if (!_isAdmin(interaction.member)) {
+        return interaction.reply({ content: '❌ Ta komenda jest dostępna tylko dla administratorów.', flags: MessageFlags.Ephemeral });
+    }
+
+    const sessionKey = interaction.customId.replace('giftcode_activate_all_', '');
+    const sessionData = client._giftcodeActivateAll?.get(sessionKey);
+
+    if (!sessionData) {
+        return interaction.update({ content: '❌ Sesja wygasła. Użyj `/giftcode` ponownie.', embeds: [], components: [] });
+    }
+
+    client._giftcodeActivateAll.delete(sessionKey);
+    const { eligibleEntries, skippedEntries, recentCodes } = sessionData;
+
+    const abortKey = `gc_${Date.now()}`;
+    client._giftcodeAbort = client._giftcodeAbort ?? new Map();
+    client._giftcodeAbort.set(abortKey, false);
+    const shouldAbort = () => client._giftcodeAbort?.get(abortKey) === true;
+
+    await interaction.deferUpdate();
+
+    const codeResultsMap = {};
+    for (let ci = 0; ci < recentCodes.length; ci++) {
+        if (shouldAbort()) break;
+        const curCode = recentCodes[ci];
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
+                .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n**Do przetworzenia:** ${eligibleEntries.length} | **Pominięto:** ${skippedEntries.length}\n\n⏳ Przetwarzam...`)
+                .setColor('#FFA500')],
+            components: [_buildStopRow(abortKey)]
+        });
+
+        const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0, noRole: skippedEntries.length };
+        try {
+            codeResultsMap[curCode] = await giftcodeService.redeemEntries(eligibleEntries, curCode, async (done, tot, last) => {
+                if (last.success) liveStats.succeeded++;
+                else if (last.skippedClaimed) liveStats.skippedClaimed++;
+                else if (last.claimed) liveStats.claimed++;
+                else if (!last.aborted) liveStats.permFailed++;
+                try {
+                    await interaction.editReply({
+                        embeds: [new EmbedBuilder()
+                            .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
+                            .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n\n${_buildLiveDesc(curCode, done, tot, liveStats, last)}`)
+                            .setColor('#FFA500')],
+                        components: [_buildStopRow(abortKey)]
+                    });
+                } catch { /* interakcja wygasła */ }
+            }, shouldAbort);
+        } catch (error) {
+            logger.error(`[GIFTCODE] ❌ Błąd kodu ${curCode}: ${error.message}`);
+            codeResultsMap[curCode] = [];
+        }
+    }
+
+    client._giftcodeAbort?.delete(abortKey);
+
+    const summaryLines = Object.entries(codeResultsMap).map(([c, results]) => {
+        const s = results.filter(r => r.success).length;
+        const sk = results.filter(r => r.skippedClaimed).length;
+        const cl = results.filter(r => !r.success && r.claimed).length;
+        const e = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted).length;
+        return `\`${c}\`: ✅${s} ⏭️${sk} 🎫${cl} ❌${e}`;
+    });
+
+    await interaction.editReply({
+        embeds: [new EmbedBuilder()
+            .setTitle('🎁 Kody z ostatniego miesiąca — zakończone')
+            .setDescription(summaryLines.join('\n'))
+            .setFooter({ text: `Pominięto (brak roli): ${skippedEntries.length}` })
+            .setColor('#57F287')
+            .setTimestamp()],
+        components: []
     });
 }
 
