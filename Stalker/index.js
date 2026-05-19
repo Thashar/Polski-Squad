@@ -456,15 +456,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
-    // Ignoruj wiadomości od botów
-    if (message.author.bot) return;
+    const isWebhook = !!message.webhookId;
+
+    // Ignoruj wiadomości od botów (ale webhookowe wiadomości przepuszczamy dla kanału giftcode)
+    if (message.author.bot && !isWebhook) return;
 
     // ============ GIFTCODE: wykrywanie kodu + przycisk zawsze na dole ============
     if (message.channel.id === GIFTCODE_CHANNEL_ID) {
         const codeMatch = message.content.match(/[?&]giftcode=([A-Za-z0-9_-]+)/i);
         if (codeMatch) {
             const code = codeMatch[1];
-            logger.info(`[GIFTCODE-AUTO] Wykryto kod z linku: "${code}" od ${message.author.tag}`);
+            const sender = isWebhook ? `webhook (${message.author.username})` : message.author.tag;
+            logger.info(`[GIFTCODE-AUTO] Wykryto kod z linku: "${code}" od ${sender}`);
             autoRedeemFromMessage(code, message).catch(err => logger.error(`[GIFTCODE-AUTO] ${err.message}`));
         }
         try {
@@ -473,6 +476,9 @@ client.on(Events.MessageCreate, async (message) => {
             logger.error(`[GIFTCODE] Błąd przesuwania przycisku: ${err.message}`);
         }
     }
+
+    // Webhooks obsługiwane tylko dla giftcode — reszta handlerów tylko dla ludzi
+    if (isWebhook) return;
 
     // ============ OBSŁUGA WIADOMOŚCI DM OD UŻYTKOWNIKÓW Z AKTYWNYMI SESJAMI PRZYPOMNIENIA ============
     if (message.channel.type === ChannelType.DM) {
