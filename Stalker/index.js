@@ -200,10 +200,11 @@ async function autoRedeemFromMessage(code, message) {
             .setColor(0xFFA500)]
     });
 
-    const liveStats = { succeeded: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, claimed: 0, permFailed: 0 };
 
     const results = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
         if (last.success) liveStats.succeeded++;
+        else if (last.claimed) liveStats.claimed++;
         else if (!last.aborted) liveStats.permFailed++;
         const ct = giftcodeService.captchaTokens;
         const cost = ct.calls > 0 ? `$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}` : null;
@@ -211,7 +212,8 @@ async function autoRedeemFromMessage(code, message) {
             `**Kod:** \`${code}\` — **${done}/${tot}**`,
             '',
             `✅ **Sukces:** ${liveStats.succeeded}`,
-            `❌ **Błąd:** ${liveStats.permFailed}`,
+            `🎫 **Już odebrano:** ${liveStats.claimed}`,
+            `❌ **Inne błędy:** ${liveStats.permFailed}`,
             `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
             cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
             '',
@@ -221,8 +223,9 @@ async function autoRedeemFromMessage(code, message) {
     });
 
     const succeeded = results.filter(r => r.success);
+    const claimed = results.filter(r => !r.success && r.claimed);
     const retryable = results.filter(r => !r.success && r.retryable);
-    const permFailed = results.filter(r => !r.success && !r.retryable && !r.aborted);
+    const otherFailed = results.filter(r => !r.success && !r.claimed && !r.retryable && !r.aborted);
     const ct = giftcodeService.captchaTokens;
     const tokenLine = ct.calls > 0
         ? `\n🪙 **Tokeny:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
@@ -232,8 +235,9 @@ async function autoRedeemFromMessage(code, message) {
         `**Kod:** \`${code}\``,
         '',
         `✅ **Sukces:** ${succeeded.length}`,
-        `❌ **Błąd (permanent):** ${permFailed.length}`,
+        `🎫 **Już odebrano:** ${claimed.length}`,
         `🔄 **Captcha fail (do retry):** ${retryable.length}`,
+        `❌ **Inne błędy:** ${otherFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedCount.count}`,
         tokenLine,
     ].filter(Boolean).join('\n');

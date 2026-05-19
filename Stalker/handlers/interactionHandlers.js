@@ -2250,12 +2250,19 @@ function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
         `**Kod:** \`${code}\` — **${done}/${tot}**`,
         '',
         `✅ **Sukces:** ${stats.succeeded}`,
-        `❌ **Błąd:** ${stats.permFailed}`,
+        `🎫 **Już odebrano:** ${stats.claimed}`,
+        `❌ **Inne błędy:** ${stats.permFailed}`,
         `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
         cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
         '',
         `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 60)}`,
     ].filter(l => l !== '').join('\n');
+}
+
+function _buildTokenLine(giftcodeService) {
+    const ct = giftcodeService.captchaTokens;
+    if (!ct.calls) return '';
+    return `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`;
 }
 
 function _buildStopRow(abortKey) {
@@ -2319,11 +2326,12 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
-    const liveStats = { succeeded: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, claimed: 0, permFailed: 0 };
     let allResults = [];
     try {
         allResults = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
             if (last.success) liveStats.succeeded++;
+            else if (last.claimed) liveStats.claimed++;
             else if (!last.aborted) liveStats.permFailed++;
             try {
                 await interaction.editReply({
@@ -2345,21 +2353,20 @@ async function handleGiftcodeCommand(interaction, sharedState) {
 
     const aborted = allResults.some(r => r.aborted);
     const succeeded = allResults.filter(r => r.success);
-    const permFailed = allResults.filter(r => !r.success && !r.aborted);
-
-    const ct = giftcodeService.captchaTokens;
-    const tokenLine = ct.calls > 0
-        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
-        : '';
+    const claimed = allResults.filter(r => !r.success && r.claimed);
+    const captchaFailed = allResults.filter(r => !r.success && r.retryable);
+    const otherFailed = allResults.filter(r => !r.success && !r.claimed && !r.retryable && !r.aborted);
 
     const desc = [
         `**Kod:** \`${code}\``,
         aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
         '',
         `✅ **Sukces:** ${succeeded.length}`,
-        `❌ **Błąd (permanent):** ${permFailed.length}`,
+        `🎫 **Już odebrano:** ${claimed.length}`,
+        `🔄 **Captcha fail:** ${captchaFailed.length}`,
+        `❌ **Inne błędy:** ${otherFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
-        tokenLine,
+        _buildTokenLine(giftcodeService),
     ].filter(Boolean).join('\n');
 
     const color = permFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
@@ -2457,7 +2464,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
-    const liveStats = { succeeded: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, claimed: 0, permFailed: 0 };
     const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, async (done, tot, last) => {
         if (last.success) liveStats.succeeded++;
         else if (!last.aborted) liveStats.permFailed++;
@@ -2476,27 +2483,26 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
 
     const aborted = results.some(r => r.aborted);
     const succeeded = results.filter(r => r.success);
-    const permFailed = results.filter(r => !r.success && !r.aborted);
-
-    const ct = giftcodeService.captchaTokens;
-    const tokenLine = ct.calls > 0
-        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
-        : '';
+    const claimed = results.filter(r => !r.success && r.claimed);
+    const captchaFailed = results.filter(r => !r.success && r.retryable);
+    const otherFailed = results.filter(r => !r.success && !r.claimed && !r.retryable && !r.aborted);
 
     const retryDesc = [
         `**Kod:** \`${retryData.code}\``,
         aborted ? '⏹️ **Przerwano przez użytkownika**' : '',
         '',
         `✅ **Sukces:** ${succeeded.length}`,
-        `❌ **Błąd (permanent):** ${permFailed.length}`,
-        tokenLine,
+        `🎫 **Już odebrano:** ${claimed.length}`,
+        `🔄 **Captcha fail:** ${captchaFailed.length}`,
+        `❌ **Inne błędy:** ${otherFailed.length}`,
+        _buildTokenLine(giftcodeService),
     ].filter(Boolean).join('\n');
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja — zakończona')
             .setDescription(retryDesc)
-            .setColor(permFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
+            .setColor(captchaFailed.length + otherFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
             .setTimestamp()],
         components: []
     });

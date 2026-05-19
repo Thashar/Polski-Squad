@@ -16,8 +16,11 @@ const PERMANENT_ERROR_CODES = new Set([
     20404, // Nieprawidłowy kod
     20405, // Gracz nie kwalifikuje się
     20406, // Gracz nie znaleziony
-    20407, // Rate limit / zbyt wiele prób
+    20407, // Giftcode self claimed (już odebrano)
 ]);
+
+// Kody oznaczające że gracz już odebrał ten kod
+const CLAIMED_ERROR_CODES = new Set([20402, 20407]);
 
 class GiftcodeService {
     constructor(config, logger) {
@@ -245,7 +248,7 @@ class GiftcodeService {
                 if (result.code === 0) {
                     return { success: true, message: 'Kod aktywowany pomyślnie', captchaFails };
                 } else if (PERMANENT_ERROR_CODES.has(result.code)) {
-                    return { success: false, message: apiMsg ?? `Błąd API (kod: ${result.code})`, captchaFails };
+                    return { success: false, claimed: CLAIMED_ERROR_CODES.has(result.code), message: apiMsg ?? `Błąd API (kod: ${result.code})`, captchaFails };
                 } else {
                     captchaFails++;
                     this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${apiMsg}) dla ${nick}`);
