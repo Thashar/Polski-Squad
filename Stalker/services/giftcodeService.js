@@ -274,7 +274,6 @@ class GiftcodeService {
             this.captchaTokens.output += usage.candidatesTokenCount ?? 0;
             this.captchaTokens.calls += 1;
         }
-        this.logger.info(`[GIFTCODE] Captcha rozwiązana przez AI (próba ${attempt}): "${text}"`);
         return text;
     }
 
@@ -284,9 +283,6 @@ class GiftcodeService {
             { userId, giftCode, captchaId, captcha },
             { headers: { 'Content-Type': 'application/json' }, timeout: 15000 }
         );
-        if (res.data?.code !== 0) {
-            this.logger.info(`[GIFTCODE] Odpowiedź API: ${JSON.stringify(res.data)}`);
-        }
         return res.data;
     }
 
@@ -315,7 +311,6 @@ class GiftcodeService {
             const [discordId, userData] = entries[i];
 
             if (claimedSet.has(discordId)) {
-                this.logger.info(`[GIFTCODE] Pomijam ${userData.nick} — już odebrał kod ${giftcode}`);
                 const skipped = { discordId, uid: userData.uid, nick: userData.nick, success: false, skippedClaimed: true, message: 'Już aktywowano w poprzedniej sesji', captchaFails: 0 };
                 results.push(skipped);
                 if (progressCallback) {
@@ -324,7 +319,7 @@ class GiftcodeService {
                 continue;
             }
 
-            this.logger.info(`[GIFTCODE] Aktywuję dla ${userData.nick} (UID: ${userData.uid}) [${i + 1}/${entries.length}]`);
+            this.logger.info(`[GIFTCODE] [${i + 1}/${entries.length}] ${userData.nick}`);
 
             const result = await this._redeemForUid(userData.uid, giftcode, userData.nick, shouldAbort);
             this.totalCaptchaFails += result.captchaFails ?? 0;
@@ -361,7 +356,7 @@ class GiftcodeService {
 
                 if (!captchaSolution || captchaSolution.length !== 4) {
                     captchaFails++;
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: AI zwróciła "${captchaSolution}" dla ${nick}`);
+                    this.logger.warn(`[GIFTCODE] ${nick} p.${attempt}: zła captcha "${captchaSolution}"`);
                     if (attempt < MAX_CAPTCHA_ATTEMPTS) await delay(1000);
                     continue;
                 }
@@ -375,12 +370,12 @@ class GiftcodeService {
                     return { success: false, claimed: CLAIMED_ERROR_CODES.has(result.code), message: apiMsg ?? `Błąd API (kod: ${result.code})`, captchaFails };
                 } else {
                     captchaFails++;
-                    this.logger.warn(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS}: API zwróciło ${result.code} (${apiMsg}) dla ${nick}`);
+                    this.logger.warn(`[GIFTCODE] ${nick} p.${attempt}: API ${result.code} ${apiMsg ?? ''}`);
                 }
 
             } catch (error) {
                 captchaFails++;
-                this.logger.error(`[GIFTCODE] Próba ${attempt}/${MAX_CAPTCHA_ATTEMPTS} dla ${nick}: ${error.message}`);
+                this.logger.error(`[GIFTCODE] ${nick} p.${attempt}: ${error.message.split('\n')[0]}`);
                 if (attempt === MAX_CAPTCHA_ATTEMPTS) {
                     return { success: false, retryable: true, message: `Błąd: ${error.message.split('\n')[0]}`, captchaFails };
                 }
