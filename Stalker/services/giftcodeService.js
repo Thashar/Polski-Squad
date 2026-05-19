@@ -29,7 +29,7 @@ class GiftcodeService {
         if (config.ocr?.googleAiApiKey) {
             const genAI = new GoogleGenerativeAI(config.ocr.googleAiApiKey);
             this.geminiModel = genAI.getGenerativeModel({
-                model: config.ocr.googleAiModel || 'gemini-2.5-flash-preview-05-20'
+                model: config.ocr.captchaAiModel || 'gemini-2.5-flash-preview-05-20'
             });
         } else {
             this.geminiModel = null;
