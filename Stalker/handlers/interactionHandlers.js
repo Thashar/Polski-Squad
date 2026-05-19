@@ -2320,6 +2320,11 @@ async function handleGiftcodeCommand(interaction, sharedState) {
     }
 
     const color = captchaFailed.length + permFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
+    const ct = giftcodeService.captchaTokens;
+    const tokenLine = ct.calls > 0
+        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out (${ct.calls} wywołań)`
+        : '';
+
     const desc = [
         `**Kod:** \`${code}\``,
         '',
@@ -2327,6 +2332,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         `❌ **Błąd (permanent):** ${permFailed.length}`,
         `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
+        tokenLine,
     ].join('\n');
 
     await interaction.editReply({
@@ -2450,11 +2456,13 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja — zakończona')
-            .setDescription(
-                `**Kod:** \`${retryData.code}\`\n\n` +
-                `✅ **Sukces:** ${succeeded.length}\n` +
-                `🔄 **Captcha fail:** ${captchaFailed.length}`
-            )
+            .setDescription((() => {
+                const ct = giftcodeService.captchaTokens;
+                const tokenLine = ct.calls > 0
+                    ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out (${ct.calls} wywołań)`
+                    : '';
+                return `**Kod:** \`${retryData.code}\`\n\n✅ **Sukces:** ${succeeded.length}\n🔄 **Captcha fail:** ${captchaFailed.length}${tokenLine}`;
+            })())
             .setColor(captchaFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
             .setTimestamp()],
         components: newComponents

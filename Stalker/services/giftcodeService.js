@@ -25,6 +25,7 @@ class GiftcodeService {
         this.logger = logger;
         this.uidsFile = path.join(__dirname, '../data/habby_uids.json');
         this._debugDirReady = false;
+        this.captchaTokens = { input: 0, output: 0, calls: 0 };
 
         if (config.ocr?.googleAiApiKey) {
             const genAI = new GoogleGenerativeAI(config.ocr.googleAiApiKey);
@@ -159,6 +160,12 @@ class GiftcodeService {
         ]);
 
         const text = result.response.text().trim().replace(/\D/g, '');
+        const usage = result.response.usageMetadata;
+        if (usage) {
+            this.captchaTokens.input += usage.promptTokenCount ?? 0;
+            this.captchaTokens.output += usage.candidatesTokenCount ?? 0;
+            this.captchaTokens.calls += 1;
+        }
         this.logger.info(`[GIFTCODE] Captcha rozwiązana przez AI (próba ${attempt}): "${text}"`);
         return text;
     }
@@ -188,6 +195,7 @@ class GiftcodeService {
 
     async redeemEntries(entries, giftcode, progressCallback) {
         if (entries.length === 0) return [];
+        this.captchaTokens = { input: 0, output: 0, calls: 0 };
         const results = [];
 
         for (let i = 0; i < entries.length; i++) {
