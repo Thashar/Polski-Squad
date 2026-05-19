@@ -2241,11 +2241,7 @@ async function handleListIdsCommand(interaction, sharedState) {
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
-function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
-    const ct = giftcodeService.captchaTokens;
-    const cost = ct.calls > 0
-        ? `$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}`
-        : null;
+function _buildLiveDesc(code, done, tot, stats, last) {
     return [
         `**Kod:** \`${code}\` — **${done}/${tot}**`,
         '',
@@ -2254,17 +2250,9 @@ function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
         `⏭️ **Pominięto (już aktywowano):** ${stats.skippedClaimed}`,
         `🎫 **Już odebrano (API):** ${stats.claimed}`,
         `❌ **Inne błędy:** ${stats.permFailed}`,
-        `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
-        cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
         '',
-        `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '⏭️' } ${last.message.substring(0, 60)}`,
+        `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '⏭️'} ${last.message.substring(0, 60)}`,
     ].filter(l => l !== '').join('\n');
-}
-
-function _buildTokenLine(giftcodeService) {
-    const ct = giftcodeService.captchaTokens;
-    if (!ct.calls) return '';
-    return `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`;
 }
 
 function _buildStopRow(abortKey) {
@@ -2353,7 +2341,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
                         await interaction.editReply({
                             embeds: [new EmbedBuilder()
                                 .setTitle('🎁 Aktywacja kodów z ostatniego miesiąca')
-                                .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n\n${_buildLiveDesc(curCode, done, tot, liveStats, last, giftcodeService)}`)
+                                .setDescription(`Kod [${ci + 1}/${recentCodes.length}]: \`${curCode}\`\n\n${_buildLiveDesc(curCode, done, tot, liveStats, last)}`)
                                 .setColor('#FFA500')],
                             components: [_buildStopRow(abortKey)]
                         });
@@ -2376,11 +2364,10 @@ async function handleGiftcodeCommand(interaction, sharedState) {
             return `\`${c}\`: ✅${s} ⏭️${sk} 🎫${cl} 🔄${cf} ❌${e}`;
         });
 
-        const tokenLine = _buildTokenLine(giftcodeService);
         return interaction.editReply({
             embeds: [new EmbedBuilder()
                 .setTitle('🎁 Kody z ostatniego miesiąca — zakończone')
-                .setDescription([...summaryLines, '', tokenLine].filter(Boolean).join('\n'))
+                .setDescription(summaryLines.join('\n'))
                 .setFooter({ text: `Pominięto (brak roli): ${skippedEntries.length}` })
                 .setColor('#57F287')
                 .setTimestamp()],
@@ -2409,7 +2396,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('🎁 Aktywacja kodu Habby')
-                        .setDescription(_buildLiveDesc(code, done, tot, liveStats, last, giftcodeService))
+                        .setDescription(_buildLiveDesc(code, done, tot, liveStats, last))
                         .setColor('#FFA500')],
                     components: [_buildStopRow(abortKey)]
                 });
@@ -2427,7 +2414,6 @@ async function handleGiftcodeCommand(interaction, sharedState) {
     const succeeded = allResults.filter(r => r.success);
     const skippedClaimed = allResults.filter(r => r.skippedClaimed);
     const claimed = allResults.filter(r => !r.success && r.claimed);
-    const captchaFailed = allResults.filter(r => !r.success && r.retryable);
     const otherFailed = allResults.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted);
 
     const desc = [
@@ -2437,13 +2423,11 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         `✅ **Sukces:** ${succeeded.length}`,
         `⏭️ **Pominięto (już aktywowano):** ${skippedClaimed.length}`,
         `🎫 **Już odebrano (API):** ${claimed.length}`,
-        `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `❌ **Inne błędy:** ${otherFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedEntries.length}`,
-        _buildTokenLine(giftcodeService),
     ].filter(Boolean).join('\n');
 
-    const anyFailed = otherFailed.length + captchaFailed.length;
+    const anyFailed = otherFailed.length;
     const color = anyFailed === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
 
     await interaction.editReply({
@@ -2455,7 +2439,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: []
     });
 
-    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} 🔄${captchaFailed.length} ❌${otherFailed.length} ⏭️${skippedEntries.length} captchaFail=${giftcodeService.totalCaptchaFails}`);
+    logger.info(`[GIFTCODE] Kod \`${code}\`: ✅${succeeded.length} ❌${otherFailed.length} ⏭️${skippedEntries.length}`);
 }
 
 async function handleGiftcodeAddIdButton(interaction, sharedState) {
@@ -2575,7 +2559,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
-            .setTitle('🔄 Ponowna aktywacja (captcha retry)')
+            .setTitle('🔄 Ponowna aktywacja')
             .setDescription(`**Kod:** \`${retryData.code}\`\n**Graczy do retry:** ${retryData.entries.length}\n\n⏳ Przetwarzam...`)
             .setColor('#FFA500')],
         components: [_buildStopRow(abortKey)]
@@ -2589,7 +2573,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setTitle('🔄 Ponowna aktywacja — w toku')
-                    .setDescription(_buildLiveDesc(retryData.code, done, tot, liveStats, last, giftcodeService))
+                    .setDescription(_buildLiveDesc(retryData.code, done, tot, liveStats, last))
                     .setColor('#FFA500')],
                 components: [_buildStopRow(abortKey)]
             });
@@ -2602,7 +2586,6 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
     const succeeded = results.filter(r => r.success);
     const skippedClaimedR = results.filter(r => r.skippedClaimed);
     const claimed = results.filter(r => !r.success && r.claimed);
-    const captchaFailed = results.filter(r => !r.success && r.retryable);
     const otherFailed = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted);
 
     const retryDesc = [
@@ -2612,16 +2595,14 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
         `✅ **Sukces:** ${succeeded.length}`,
         `⏭️ **Pominięto (już aktywowano):** ${skippedClaimedR.length}`,
         `🎫 **Już odebrano (API):** ${claimed.length}`,
-        `🔄 **Captcha fail:** ${captchaFailed.length}`,
         `❌ **Inne błędy:** ${otherFailed.length}`,
-        _buildTokenLine(giftcodeService),
     ].filter(Boolean).join('\n');
 
     await interaction.editReply({
         embeds: [new EmbedBuilder()
             .setTitle('🔄 Ponowna aktywacja — zakończona')
             .setDescription(retryDesc)
-            .setColor(captchaFailed.length + otherFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
+            .setColor(otherFailed.length === 0 && !aborted ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500')
             .setTimestamp()],
         components: []
     });

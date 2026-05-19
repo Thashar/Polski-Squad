@@ -207,8 +207,6 @@ async function autoRedeemFromMessage(code, message) {
         else if (last.skippedClaimed) liveStats.skippedClaimed++;
         else if (last.claimed) liveStats.claimed++;
         else if (!last.aborted) liveStats.permFailed++;
-        const ct = giftcodeService.captchaTokens;
-        const cost = ct.calls > 0 ? `$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}` : null;
         const descLines = [
             `**Kod:** \`${code}\` — **${done}/${tot}**`,
             '',
@@ -217,8 +215,6 @@ async function autoRedeemFromMessage(code, message) {
             `⏭️ **Pominięto (już aktywowano):** ${liveStats.skippedClaimed}`,
             `🎫 **Już odebrano (API):** ${liveStats.claimed}`,
             `❌ **Inne błędy:** ${liveStats.permFailed}`,
-            `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
-            cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
             '',
             `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 60)}`,
         ].filter(l => l !== '').join('\n');
@@ -228,12 +224,7 @@ async function autoRedeemFromMessage(code, message) {
     const succeeded = results.filter(r => r.success);
     const skippedClaimedR = results.filter(r => r.skippedClaimed);
     const claimed = results.filter(r => !r.success && r.claimed);
-    const retryable = results.filter(r => !r.success && r.retryable);
     const otherFailed = results.filter(r => !r.success && !r.skippedClaimed && !r.claimed && !r.retryable && !r.aborted);
-    const ct = giftcodeService.captchaTokens;
-    const tokenLine = ct.calls > 0
-        ? `\n🪙 **Tokeny:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań, ${giftcodeService.totalCaptchaFails} fail)`
-        : '';
 
     const finalDesc = [
         `**Kod:** \`${code}\``,
@@ -241,31 +232,15 @@ async function autoRedeemFromMessage(code, message) {
         `✅ **Sukces:** ${succeeded.length}`,
         `⏭️ **Pominięto (już aktywowano):** ${skippedClaimedR.length}`,
         `🎫 **Już odebrano (API):** ${claimed.length}`,
-        `🔄 **Captcha fail (do retry):** ${retryable.length}`,
         `❌ **Inne błędy:** ${otherFailed.length}`,
         `⏭️ **Pominięto (brak roli):** ${skippedCount.count}`,
-        tokenLine,
     ].filter(Boolean).join('\n');
 
-    const color = retryable.length + otherFailed.length === 0 ? 0x57F287 : succeeded.length === 0 ? 0xED4245 : 0xFFA500;
-
-    const components = [];
-    if (retryable.length > 0) {
-        const sessionId = Date.now().toString();
-        client._giftcodeRetryData = client._giftcodeRetryData ?? new Map();
-        client._giftcodeRetryData.set(sessionId, { code, entries: retryable.map(r => [r.discordId, { uid: r.uid, nick: r.nick }]) });
-        components.push(new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`giftcode_retry_${sessionId}`)
-                .setLabel(`Ponów dla ${retryable.length} nieudanych (captcha)`)
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji('🔄')
-        ));
-    }
+    const color = otherFailed.length === 0 ? 0x57F287 : succeeded.length === 0 ? 0xED4245 : 0xFFA500;
 
     await reportMsg.edit({
         embeds: [new EmbedBuilder().setTitle('🎁 Auto-aktywacja kodu Habby — zakończona').setDescription(finalDesc).setColor(color).setTimestamp()],
-        components
+        components: []
     }).catch(() => {});
 
     logger.info(`[GIFTCODE-AUTO] Kod \`${code}\`: ✅${succeeded.length} ❌${otherFailed.length} 🔄${retryable.length} ⏭️${skippedCount.count}`);
@@ -342,8 +317,6 @@ client.once(Events.ClientReady, async () => {
         logger.error(`❌ Błąd inicjalizacji przycisku giftcode: ${error.message}`);
     }
 
-    // Cleanup starych debug obrazków captchy (>24h)
-    giftcodeService.cleanupDebugImages().catch(() => {});
 
 
     // Rejestracja komend slash
