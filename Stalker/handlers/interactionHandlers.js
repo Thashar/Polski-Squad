@@ -2386,7 +2386,7 @@ async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
     await interaction.reply({
         content: existed
             ? `✅ Twoje ID Habby zostało zaktualizowane: \`${uid}\``
-            : `✅ Twoje ID Habby zostało zapisane: \`${uid}\`\nOtrzymasz kody podarunkowe automatycznie gdy admin je aktywuje.`,
+            : `✅ Twoje ID Habby zostało zapisane: \`${uid}\`\nOtrzymasz nagrody w grze automatycznie, gdy tylko pojawi się nowy kod.`,
         flags: MessageFlags.Ephemeral
     });
     logger.info(`[GIFTCODE] ${interaction.member.displayName} ${existed ? 'zaktualizował' : 'zapisał'} UID: ${uid}`);
