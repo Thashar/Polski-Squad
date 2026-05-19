@@ -2322,7 +2322,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
     const color = captchaFailed.length + permFailed.length === 0 ? '#57F287' : succeeded.length === 0 ? '#ED4245' : '#FFA500';
     const ct = giftcodeService.captchaTokens;
     const tokenLine = ct.calls > 0
-        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out (${ct.calls} wywołań)`
+        ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań)`
         : '';
 
     const desc = [
@@ -2459,7 +2459,7 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
             .setDescription((() => {
                 const ct = giftcodeService.captchaTokens;
                 const tokenLine = ct.calls > 0
-                    ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out (${ct.calls} wywołań)`
+                    ? `\n🪙 **Tokeny captcha:** ${ct.input.toLocaleString('pl-PL')} in / ${ct.output.toLocaleString('pl-PL')} out — **$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}** (${ct.calls} wywołań)`
                     : '';
                 return `**Kod:** \`${retryData.code}\`\n\n✅ **Sukces:** ${succeeded.length}\n🔄 **Captcha fail:** ${captchaFailed.length}${tokenLine}`;
             })())
