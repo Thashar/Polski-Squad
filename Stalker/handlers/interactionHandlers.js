@@ -2241,6 +2241,23 @@ async function handleListIdsCommand(interaction, sharedState) {
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
 
+function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
+    const ct = giftcodeService.captchaTokens;
+    const cost = ct.calls > 0
+        ? `$${((ct.input / 1_000_000) * 0.5 + (ct.output / 1_000_000) * 3).toFixed(4)}`
+        : null;
+    return [
+        `**Kod:** \`${code}\` — **${done}/${tot}**`,
+        '',
+        `✅ **Sukces:** ${stats.succeeded}`,
+        `❌ **Błąd:** ${stats.permFailed}`,
+        `🔄 **Captcha fail:** ${giftcodeService.totalCaptchaFails}`,
+        cost ? `🪙 **Koszt:** ${cost} (${ct.calls} wywołań)` : '',
+        '',
+        `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 60)}`,
+    ].filter(l => l !== '').join('\n');
+}
+
 function _buildStopRow(abortKey) {
     return new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -2302,17 +2319,17 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
+    const liveStats = { succeeded: 0, permFailed: 0 };
     let allResults = [];
     try {
         allResults = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
+            if (last.success) liveStats.succeeded++;
+            else if (!last.aborted) liveStats.permFailed++;
             try {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder()
                         .setTitle('🎁 Aktywacja kodu Habby')
-                        .setDescription(
-                            `**Kod:** \`${code}\`\n**Postęp:** ${done}/${tot}\n\n` +
-                            `⏳ Ostatnio: **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`
-                        )
+                        .setDescription(_buildLiveDesc(code, done, tot, liveStats, last, giftcodeService))
                         .setColor('#FFA500')],
                     components: [_buildStopRow(abortKey)]
                 });
@@ -2440,12 +2457,15 @@ async function handleGiftcodeRetryButton(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
+    const liveStats = { succeeded: 0, permFailed: 0 };
     const results = await giftcodeService.redeemEntries(retryData.entries, retryData.code, async (done, tot, last) => {
+        if (last.success) liveStats.succeeded++;
+        else if (!last.aborted) liveStats.permFailed++;
         try {
             await interaction.editReply({
                 embeds: [new EmbedBuilder()
                     .setTitle('🔄 Ponowna aktywacja — w toku')
-                    .setDescription(`**Kod:** \`${retryData.code}\`\n**Postęp:** ${done}/${tot}\n\n⏳ **${last.nick}** — ${last.success ? '✅' : '❌'} ${last.message.substring(0, 80)}`)
+                    .setDescription(_buildLiveDesc(retryData.code, done, tot, liveStats, last, giftcodeService))
                     .setColor('#FFA500')],
                 components: [_buildStopRow(abortKey)]
             });
