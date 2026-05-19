@@ -2429,15 +2429,57 @@ async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
         });
     }
 
-    const existed = await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
+    await interaction.deferReply({ ephemeral: true });
 
-    await interaction.reply({
-        content: existed
-            ? `✅ Twoje ID Habby zostało zaktualizowane: \`${uid}\``
-            : `✅ Twoje ID Habby zostało zapisane: \`${uid}\`\nOtrzymasz nagrody w grze automatycznie, gdy tylko pojawi się nowy kod.`,
-        flags: MessageFlags.Ephemeral
-    });
+    const existed = await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
     logger.info(`[GIFTCODE] ${interaction.member.displayName} ${existed ? 'zaktualizował' : 'zapisał'} UID: ${uid}`);
+
+    const uidMsg = existed
+        ? `✅ Twoje ID Habby zostało zaktualizowane: \`${uid}\``
+        : `✅ Twoje ID Habby zostało zapisane: \`${uid}\``;
+
+    const recentCodes = await giftcodeService.getRecentCodes(30);
+
+    if (recentCodes.length === 0) {
+        return interaction.editReply({
+            content: `${uidMsg}\nOtrzymasz nagrody w grze automatycznie, gdy tylko pojawi się nowy kod.`
+        });
+    }
+
+    await interaction.editReply({
+        content: uidMsg,
+        embeds: [new EmbedBuilder()
+            .setTitle('🎁 Sprawdzam kody z ostatniego miesiąca...')
+            .setDescription(`Znaleziono ${recentCodes.length} kod${recentCodes.length === 1 ? '' : 'ów'}. Trwa aktywacja, poczekaj chwilę...`)
+            .setColor('#FFA500')
+        ]
+    });
+
+    const userData = { uid, nick: interaction.member.displayName };
+    const results = await giftcodeService.redeemForNewUser(interaction.user.id, userData);
+
+    const lines = results.map(r => {
+        if (r.skipped) return `⏭️ \`${r.code}\` — już aktywowano wcześniej`;
+        if (r.success) return `✅ \`${r.code}\` — aktywowano pomyślnie`;
+        if (r.claimed) return `🎫 \`${r.code}\` — już odebrano (konto API)`;
+        return `❌ \`${r.code}\` — ${r.message ?? 'błąd'}`;
+    });
+
+    const succeeded = results.filter(r => r.success).length;
+    const alreadyHad = results.filter(r => r.skipped || r.claimed).length;
+    const failed = results.filter(r => !r.success && !r.skipped && !r.claimed).length;
+    const color = succeeded > 0 ? '#57F287' : failed > 0 ? '#ED4245' : '#99AAB5';
+
+    await interaction.editReply({
+        content: uidMsg,
+        embeds: [new EmbedBuilder()
+            .setTitle('🎁 Kody z ostatniego miesiąca')
+            .setDescription(lines.join('\n'))
+            .addFields({ name: 'Podsumowanie', value: `✅ ${succeeded} aktywowanych · 🎫 ${alreadyHad} już odebranych · ❌ ${failed} błędów` })
+            .setColor(color)
+            .setTimestamp()
+        ]
+    });
 }
 
 async function handleGiftcodeRetryButton(interaction, sharedState) {

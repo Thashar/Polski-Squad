@@ -98,19 +98,105 @@ class GiftcodeService {
         }
     }
 
+    async _saveClaimed(data) {
+        await fs.mkdir(path.dirname(this.claimedFile), { recursive: true });
+        await fs.writeFile(this.claimedFile, JSON.stringify(data, null, 2));
+    }
+
+    // Normalizuje wpis kodu — obsługuje stary format (tablica) i nowy ({ firstUsed, claimed })
+    _normalizeEntry(entry) {
+        if (!entry) return { firstUsed: null, claimed: [] };
+        if (Array.isArray(entry)) return { firstUsed: null, claimed: entry };
+        return { firstUsed: entry.firstUsed ?? null, claimed: entry.claimed ?? [] };
+    }
+
     async getClaimedForCode(code) {
         const data = await this._loadClaimed();
-        return new Set(data[code] ?? []);
+        return new Set(this._normalizeEntry(data[code]).claimed);
     }
 
     async recordSuccess(discordId, code) {
         const data = await this._loadClaimed();
-        if (!data[code]) data[code] = [];
-        if (!data[code].includes(discordId)) {
-            data[code].push(discordId);
-            await fs.mkdir(path.dirname(this.claimedFile), { recursive: true });
-            await fs.writeFile(this.claimedFile, JSON.stringify(data, null, 2));
+        const entry = this._normalizeEntry(data[code]);
+        if (!entry.claimed.includes(discordId)) {
+            entry.claimed.push(discordId);
+            data[code] = entry;
+            await this._saveClaimed(data);
         }
+    }
+
+    // Ustawia datę pierwszego użycia kodu (idempotentne — nie nadpisuje jeśli już ustawione)
+    async setCodeFirstUsed(code) {
+        const data = await this._loadClaimed();
+        const entry = this._normalizeEntry(data[code]);
+        if (!entry.firstUsed) {
+            entry.firstUsed = new Date().toISOString();
+            data[code] = entry;
+            await this._saveClaimed(data);
+        }
+    }
+
+    // Zwraca kody użyte w ciągu ostatnich `days` dni
+    async getRecentCodes(days = 30) {
+        const data = await this._loadClaimed();
+        const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        return Object.entries(data)
+            .filter(([, entry]) => {
+                const { firstUsed } = this._normalizeEntry(entry);
+                return firstUsed && new Date(firstUsed) >= cutoff;
+            })
+            .map(([code]) => code);
+    }
+
+    // Migracja startowa — ustawia dzisiejszą datę dla wszystkich kodów bez firstUsed
+    async migrateClaimedData() {
+        const data = await this._loadClaimed();
+        let changed = false;
+        const today = new Date().toISOString();
+        for (const [code, raw] of Object.entries(data)) {
+            const entry = this._normalizeEntry(raw);
+            if (!entry.firstUsed) {
+                entry.firstUsed = today;
+                data[code] = entry;
+                changed = true;
+            }
+        }
+        if (changed) {
+            await this._saveClaimed(data);
+            this.logger.info(`[GIFTCODE] Migracja claimed: ustawiono dzisiejszą datę dla istniejących kodów`);
+        }
+    }
+
+    // Aktywuje kody z ostatniego miesiąca dla nowo dodanego użytkownika
+    async redeemForNewUser(discordId, userData) {
+        const recentCodes = await this.getRecentCodes(30);
+        if (recentCodes.length === 0) return [];
+
+        this.captchaTokens = { input: 0, output: 0, calls: 0 };
+        this.totalCaptchaFails = 0;
+        const results = [];
+
+        for (let i = 0; i < recentCodes.length; i++) {
+            const code = recentCodes[i];
+            const claimedSet = await this.getClaimedForCode(code);
+            if (claimedSet.has(discordId)) {
+                results.push({ code, skipped: true, message: 'Już aktywowano' });
+                continue;
+            }
+
+            this.logger.info(`[GIFTCODE] Nowy użytkownik ${userData.nick}: aktywuję kod ${code}`);
+            const result = await this._redeemForUid(userData.uid, code, userData.nick);
+            this.totalCaptchaFails += result.captchaFails ?? 0;
+
+            if (result.success || result.claimed) {
+                this.recordSuccess(discordId, code).catch(() => {});
+            }
+
+            results.push({ code, ...result });
+            if (i < recentCodes.length - 1) await delay(DELAY_BETWEEN_UIDS_MS);
+        }
+
+        return results;
     }
 
     // Usuwa pliki debug starsze niż 24h
@@ -225,6 +311,7 @@ class GiftcodeService {
         if (entries.length === 0) return [];
         this.captchaTokens = { input: 0, output: 0, calls: 0 };
         this.totalCaptchaFails = 0;
+        await this.setCodeFirstUsed(giftcode);
         const claimedSet = await this.getClaimedForCode(giftcode);
         const results = [];
 
