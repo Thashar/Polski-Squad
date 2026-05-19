@@ -213,6 +213,7 @@ async function autoRedeemFromMessage(code, message) {
             `**Kod:** \`${code}\` — **${done}/${tot}**`,
             '',
             `✅ **Sukces:** ${liveStats.succeeded}`,
+            skippedCount.count ? `⏭️ **Pominięto (brak roli):** ${skippedCount.count}` : '',
             `⏭️ **Pominięto (już aktywowano):** ${liveStats.skippedClaimed}`,
             `🎫 **Już odebrano (API):** ${liveStats.claimed}`,
             `❌ **Inne błędy:** ${liveStats.permFailed}`,

@@ -2250,6 +2250,7 @@ function _buildLiveDesc(code, done, tot, stats, last, giftcodeService) {
         `**Kod:** \`${code}\` — **${done}/${tot}**`,
         '',
         `✅ **Sukces:** ${stats.succeeded}`,
+        stats.noRole ? `⏭️ **Pominięto (brak roli):** ${stats.noRole}` : '',
         `⏭️ **Pominięto (już aktywowano):** ${stats.skippedClaimed}`,
         `🎫 **Już odebrano (API):** ${stats.claimed}`,
         `❌ **Inne błędy:** ${stats.permFailed}`,
@@ -2327,7 +2328,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
         components: [_buildStopRow(abortKey)]
     });
 
-    const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0 };
+    const liveStats = { succeeded: 0, skippedClaimed: 0, claimed: 0, permFailed: 0, noRole: skippedEntries.length };
     let allResults = [];
     try {
         allResults = await giftcodeService.redeemEntries(eligibleEntries, code, async (done, tot, last) => {
