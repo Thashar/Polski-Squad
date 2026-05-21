@@ -56,18 +56,16 @@ class MemberNotificationService {
                 return;
             }
 
-            // Czytelny tekst jako główna informacja + <@id> jako klikalny link do profilu
-            const mention = `<@${member.user.id}>`;
-            const nickname = member.nickname;
-            const discordName = member.user.displayName || member.user.username;
+            // Link do profilu z nickiem Discord jako etykieta
+            const profileLink = `[${discordName}](https://discord.com/users/${member.user.id})`;
 
             let leaveMessage;
             if (nickname && nickname !== discordName) {
                 // Nick serwerowy różni się od nazwy Discord - pokaż oba
-                leaveMessage = `**${nickname}** (${mention} · \`${discordName}\`) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
+                leaveMessage = `**${nickname}** (${profileLink}) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
             } else {
                 // Nick taki sam lub brak nicku serwerowego
-                leaveMessage = `**${discordName}** (${mention}) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
+                leaveMessage = `**${discordName}** (${profileLink}) odszedł ${this.config.memberNotifications.emojis.leave} Będziemy tęsknić...`;
             }
 
             await channel.send(leaveMessage);
