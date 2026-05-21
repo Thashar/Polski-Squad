@@ -64,6 +64,8 @@ class InteractionHandler {
         this._bossMapSessions = new Map();
         // Sesje robocze panelu konfiguracji bossów (userId -> { pendingBoss? })
         this._bossCfgSessions = new Map();
+        // Sesje cofnięcia wyniku OCR (userId_guildId -> { guildId, userId, previousRecord, newRecord })
+        this._ocrRevertSessions = new Map();
     }
 
     /**
@@ -3804,10 +3806,40 @@ class InteractionHandler {
                 const updatedPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
-                _ocrEmbedParams = { type: 'new_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
+                const revertKey = `${userId}_${guildId}`;
+                this._ocrRevertSessions.set(revertKey, {
+                    guildId,
+                    userId,
+                    previousRecord: previousRecordSnapshot ?? null,
+                    newRecord: { timestamp: newRecordTimestamp }
+                });
+                setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
+                const revertRow = [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ocr_revert_${userId}_${guildId}`)
+                        .setLabel('↩️ Cofnij wynik')
+                        .setStyle(ButtonStyle.Danger)
+                ).toJSON()];
+                _ocrEmbedParams = { type: 'new_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
-                _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message };
+                // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
+                const revertKey = `${userId}_${guildId}`;
+                this._ocrRevertSessions.set(revertKey, {
+                    guildId,
+                    userId,
+                    previousRecord: previousRecordSnapshot ?? null,
+                    newRecord: { timestamp: newRecordTimestamp }
+                });
+                setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
+                const revertRow = [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`ocr_revert_${userId}_${guildId}`)
+                        .setLabel('↩️ Cofnij wynik')
+                        .setStyle(ButtonStyle.Danger)
+                ).toJSON()];
+                _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
             }
 
             // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza
@@ -3881,7 +3913,8 @@ class InteractionHandler {
                     this.logService.sendOcrAnalysisEmbed(
                         interaction.guildId,
                         { ..._ocrEmbedParams, userAvatar: interaction.user.displayAvatarURL(), globalPlayerCount },
-                        interaction.guild ?? null
+                        interaction.guild ?? null,
+                        _ocrEmbedParams.revertComponents ?? null
                     );
                 } catch {}
             }
@@ -4108,6 +4141,37 @@ class InteractionHandler {
 
             if (customId.startsWith('ee_analyze_')) {
                 await this._handleAnalyzeButton(interaction, customId);
+                return;
+            }
+
+            // === Cofnięcie wyniku OCR (przycisk w embedzie analizy) ===
+            if (customId.startsWith('ocr_revert_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const parts = customId.replace('ocr_revert_', '').split('_');
+                const [targetUserId, targetGuildId] = parts;
+                const revertKey = `${targetUserId}_${targetGuildId}`;
+                const session = this._ocrRevertSessions.get(revertKey);
+                if (!session) {
+                    await interaction.reply({ content: '❌ Sesja wygasła lub wynik został już cofnięty.', flags: ['Ephemeral'] });
+                    return;
+                }
+                await interaction.deferUpdate();
+                this._ocrRevertSessions.delete(revertKey);
+                await this._cvRemoveRecord(session);
+                try {
+                    const guild = interaction.client.guilds.cache.get(targetGuildId);
+                    if (guild) {
+                        const guildCfg = this.config.getGuildConfig(targetGuildId);
+                        await this.roleService.updateTopRoles(guild, null, guildCfg?.topRoles || null).catch(() => {});
+                    }
+                } catch {}
+                const adminName = interaction.member?.displayName || interaction.user.username;
+                const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .addFields({ name: '↩️ Cofnięto', value: `przez **${adminName}**`, inline: false });
+                await interaction.message.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
                 return;
             }
 
