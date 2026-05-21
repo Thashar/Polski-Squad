@@ -3450,7 +3450,7 @@ class InteractionHandler {
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason };
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason, revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
                 const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 if (_notSimilarImgUrl) _ocrEmbedParams.imageUrl = _notSimilarImgUrl;
                 const notSimilarDesc = aiResult.rejectionReason
@@ -3473,7 +3473,7 @@ class InteractionHandler {
 
             if (!aiResult.isValidVictory) {
                 gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED' };
+                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED', revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
                 const _validationImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
                 if (_validationImgUrl) _ocrEmbedParams.imageUrl = _validationImgUrl;
                 const _rejExt2 = path.extname(tempImagePath).slice(1) || 'png';
@@ -7021,7 +7021,8 @@ class InteractionHandler {
                         commandName: 'analyze',
                         reason: aiResult.error || 'VALIDATION_FAILED',
                         adminName,
-                    }, interaction.client.guilds.cache.get(targetGuildId) ?? null);
+                    }, interaction.client.guilds.cache.get(targetGuildId) ?? null,
+                    [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()]);
                 } catch {}
                 return;
             }
