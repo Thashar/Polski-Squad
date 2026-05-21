@@ -3819,7 +3819,7 @@ class InteractionHandler {
                     new ButtonBuilder()
                         .setCustomId(`ocr_revert_${userId}_${guildId}`)
                         .setLabel('↩️ Cofnij wynik')
-                        .setStyle(ButtonStyle.Danger)
+                        .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
                 _ocrEmbedParams = { type: 'new_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
             } catch (roleError) {
@@ -3837,7 +3837,7 @@ class InteractionHandler {
                     new ButtonBuilder()
                         .setCustomId(`ocr_revert_${userId}_${guildId}`)
                         .setLabel('↩️ Cofnij wynik')
-                        .setStyle(ButtonStyle.Danger)
+                        .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
                 _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
             }
@@ -7191,7 +7191,7 @@ class InteractionHandler {
                             const revertBtn = new ButtonBuilder()
                                 .setCustomId(`ee_analyze_revert_${globalMsgId}`)
                                 .setLabel('↩️ Cofnij wynik')
-                                .setStyle(ButtonStyle.Danger);
+                                .setStyle(ButtonStyle.Secondary);
                             await globalMsg.edit({
                                 embeds: globalMsg.embeds,
                                 components: [new ActionRowBuilder().addComponents(revertBtn)],
