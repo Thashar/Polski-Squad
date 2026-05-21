@@ -3914,7 +3914,8 @@ class InteractionHandler {
                         interaction.guildId,
                         { ..._ocrEmbedParams, userAvatar: interaction.user.displayAvatarURL(), globalPlayerCount },
                         interaction.guild ?? null,
-                        _ocrEmbedParams.revertComponents ?? null
+                        _ocrEmbedParams.revertComponents ?? null,
+                        interaction.client
                     );
                 } catch {}
             }
@@ -7022,7 +7023,8 @@ class InteractionHandler {
                         reason: aiResult.error || 'VALIDATION_FAILED',
                         adminName,
                     }, interaction.client.guilds.cache.get(targetGuildId) ?? null,
-                    [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()]);
+                    [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${targetUserId}_${targetGuildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()],
+                    interaction.client);
                 } catch {}
                 return;
             }

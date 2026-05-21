@@ -103,6 +103,28 @@ class GuildLogger {
     }
 
     /**
+     * Wysyła embed z komponentami (przyciski) przez bota — Incoming Webhook ignoruje komponenty.
+     * Fallback na queueEmbed (bez komponentów) gdy brak klienta lub channelId.
+     * @param {Object|import('discord.js').EmbedBuilder} embed
+     * @param {Array} components - ActionRow JSON array
+     * @param {string|null} guildIcon
+     * @returns {boolean}
+     */
+    sendEmbedWithComponents(embed, components, guildIcon = null) {
+        const embedData = typeof embed?.toJSON === 'function' ? embed.toJSON() : embed;
+        if (this._client && this._channelId) {
+            this._client.channels.fetch(this._channelId)
+                .then(ch => ch?.send({ embeds: [embedData], components }))
+                .catch(err => logger.warn(`GuildLogger sendEmbedWithComponents błąd: ${err.message}`));
+            return true;
+        }
+        // Fallback: brak klienta — wyślij bez komponentów przez webhook
+        return this.queueEmbed(embed, guildIcon);
+    }
+
+    getChannelId() { return this._channelId; }
+
+    /**
      * Wysyła embed przez kolejkę HTTP webhooka (identyczna ścieżka co logi tekstowe).
      * Nie wymaga uprawnień bota w kanale — używa tokenu webhooka bezpośrednio.
      * @param {Object|import('discord.js').EmbedBuilder} embed
