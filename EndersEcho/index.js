@@ -195,6 +195,37 @@ async function initializeBot() {
         // Przekaż klienta do GuildLogger — embedy admin wysyłane przez bota (nie webhook HTTP)
         await guildLogger.setClient(client);
 
+        // Przekaż klienta do LogService — embedy OCR z komponentami wysyłane przez bota
+        logService.setClient(client);
+
+        // Jeśli ustawiony osobny webhook OCR embedów, pobierz channel_id z webhooka
+        if (process.env.ENDERSECHO_OCR_EMBED_WEBHOOK_URL) {
+            const ocrWebhookUrl = process.env.ENDERSECHO_OCR_EMBED_WEBHOOK_URL;
+            const https = require('https');
+            const fetchOcrWebhookInfo = () => new Promise((resolve, reject) => {
+                const url = new URL(ocrWebhookUrl);
+                const req = https.request(
+                    { hostname: url.hostname, path: url.pathname, method: 'GET',
+                      headers: { 'Content-Type': 'application/json' } },
+                    res => {
+                        let body = '';
+                        res.on('data', d => body += d);
+                        res.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve(null); } });
+                    }
+                );
+                req.on('error', reject);
+                req.end();
+            });
+            fetchOcrWebhookInfo()
+                .then(info => {
+                    if (info?.channel_id) {
+                        logService.setOcrEmbedChannelId(info.channel_id);
+                        logger.info(`📋 LogService: channel_id OCR embed webhooka pobrano (ID: ${info.channel_id})`);
+                    }
+                })
+                .catch(() => {});
+        }
+
         // Status rotacji — "Watching [nick]'s results" co 30 sekund
         await _updateStatus();
         statusInterval = setInterval(_updateStatus, 30_000);
