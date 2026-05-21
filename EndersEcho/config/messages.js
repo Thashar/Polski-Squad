@@ -225,7 +225,7 @@ const pol = {
 
     // Modal blokady użytkownika
     blockUserModalTitle: 'Zablokuj użytkownika',
-    blockUserTimeLabel: 'Czas blokady (np. 1h, 7d, 30m) — puste = permanentnie',
+    blockUserTimeLabel: 'Czas blokady (np. 1h, 7d, 30m)',
 
     // /achievements
     achievementsTitle: '🏆 Twoje Osiągnięcia',
@@ -550,7 +550,7 @@ const eng = {
 
     // User block modal
     blockUserModalTitle: 'Block user',
-    blockUserTimeLabel: 'Block duration (e.g. 1h, 7d, 30m) — empty = permanent',
+    blockUserTimeLabel: 'Block duration (e.g. 1h, 7d, 30m)',
 
     // /achievements
     achievementsTitle: '🏆 Your Achievements',

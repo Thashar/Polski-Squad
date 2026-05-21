@@ -2872,7 +2872,7 @@ class InteractionHandler {
         modal.addComponents(new ActionRowBuilder().addComponents(
             new TextInputBuilder()
                 .setCustomId('block_duration')
-                .setLabel(t('Czas blokady (30m, 2h, 7d, 2w — puste = permanentnie)', 'Duration (30m, 2h, 7d, 2w — empty = permanent)'))
+                .setLabel(t('Czas blokady (30m, 2h, 7d, 2w)', 'Duration (30m, 2h, 7d, 2w)'))
                 .setStyle(TextInputStyle.Short)
                 .setPlaceholder(t('Puste = permanentna blokada', 'Empty = permanent block'))
                 .setRequired(false)
