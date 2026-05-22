@@ -2359,9 +2359,15 @@ class InteractionHandler {
         const analyzeResetInfo = ar?.resetAt
             ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(ar.resetAt).getTime() / 1000)}:R>`
             : '';
+
+        const atTotal = (stats?.allTime?.total ?? 0) + (aa?.count ?? 0);
+        const rsTotal = (stats?.resettable?.total ?? 0) + (ar?.count ?? 0);
+        const atPct = atTotal > 0 ? ((aa?.count ?? 0) / atTotal * 100).toFixed(1) : '0.0';
+        const rsPct = rsTotal > 0 ? ((ar?.count ?? 0) / rsTotal * 100).toFixed(1) : '0.0';
+
         embed.addFields({ name: t('🔬 Analizy manualne (admin)', '🔬 Manual analyses (admin)'), value:
-            `**${t('Od zawsze', 'All time')}**: **${aa?.count ?? 0}**\n` +
-            `**${t('Resetowalny', 'Resettable')}**: **${ar?.count ?? 0}**` +
+            `**${t('Od zawsze', 'All time')}**: **${aa?.count ?? 0}** / ${atTotal} → **${atPct}%**\n` +
+            `**${t('Resetowalny', 'Resettable')}**: **${ar?.count ?? 0}** / ${rsTotal} → **${rsPct}%**` +
             analyzeResetInfo,
         });
 
