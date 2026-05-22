@@ -12,10 +12,8 @@ class OcrStatsService {
 
     _defaultData() {
         return {
-            allTime:         { total: 0, success: 0 },
-            resettable:      { total: 0, success: 0, resetAt: null },
-            analyzeAllTime:  { count: 0 },
-            analyzeResettable: { count: 0, resetAt: null },
+            allTime:    { total: 0, success: 0, adminFixed: 0 },
+            resettable: { total: 0, success: 0, adminFixed: 0, resetAt: null },
         };
     }
 
@@ -34,9 +32,14 @@ class OcrStatsService {
                 }
             } else {
                 this._data = { ...this._defaultData(), ...parsed };
-                // Migracja — uzupełnij brakujące pola analyze
-                if (!this._data.analyzeAllTime)   this._data.analyzeAllTime   = { count: 0 };
-                if (!this._data.analyzeResettable) this._data.analyzeResettable = { count: 0, resetAt: null };
+                // Migracja — przenieś stare liczniki analyze → adminFixed
+                if (this._data.allTime.adminFixed === undefined)
+                    this._data.allTime.adminFixed = parsed.analyzeAllTime?.count || 0;
+                if (this._data.resettable.adminFixed === undefined)
+                    this._data.resettable.adminFixed = parsed.analyzeResettable?.count || 0;
+                // Usuń przestarzałe pola
+                delete this._data.analyzeAllTime;
+                delete this._data.analyzeResettable;
             }
         } catch {
             this._data = this._defaultData();
@@ -56,21 +59,24 @@ class OcrStatsService {
 
     async resetResettable() {
         if (!this._data) await this.load();
-        this._data.resettable = { total: 0, success: 0, resetAt: new Date().toISOString() };
+        this._data.resettable = { total: 0, success: 0, adminFixed: 0, resetAt: new Date().toISOString() };
         await this._save();
     }
 
+    // Admin ręcznie zanalizował odrzucony screen → liczy się jako fail w success rate
     async recordAnalyze() {
         if (!this._data) await this.load();
-        this._data.analyzeAllTime.count++;
-        this._data.analyzeResettable.count++;
+        this._data.allTime.adminFixed++;
+        this._data.resettable.adminFixed++;
         this._save().catch(() => {});
     }
 
-    async resetAnalyzeResettable() {
+    // Rekord cofnięty w jakikolwiek sposób (CV remove/block, revert button, analyze revert) → fail
+    async recordReverted() {
         if (!this._data) await this.load();
-        this._data.analyzeResettable = { count: 0, resetAt: new Date().toISOString() };
-        await this._save();
+        this._data.allTime.adminFixed++;
+        this._data.resettable.adminFixed++;
+        this._save().catch(() => {});
     }
 
     getStats() {

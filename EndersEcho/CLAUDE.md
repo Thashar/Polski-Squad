@@ -273,9 +273,9 @@
 | `panel_cat_users` | Otwórz sub-panel "Zarządzaj użytkownikami" |
 | `panel_cat_server` | Otwórz sub-panel "Zarządzaj serwerem" |
 | `panel_cat_stats` | Otwórz sub-panel "Statystyki" |
-| `panel_ocr_stats` | Wyświetl globalny Success Rate (dwa liczniki: od zawsze + resetowalny) |
-| `panel_ocr_stats_reset` | Potwierdź reset globalnego licznika resetowalnego |
-| `panel_ocr_stats_reset_ok` | Wykonaj reset globalnego licznika resetowalnego |
+| `panel_ocr_stats` | Wyświetl globalny Success Rate + licznik interwencji admina (Fail) |
+| `panel_ocr_stats_reset` | Potwierdź reset resetowalnych liczników (success + fail) |
+| `panel_ocr_stats_reset_ok` | Wykonaj reset resetowalnych liczników |
 | `panel_remove` | Otwórz modal wyszukiwania gracza |
 | `panel_remove_search_modal` | Modal wyszukiwania (pole `remove_query`) |
 | `panel_remove_select` | StringSelectMenu — wybór gracza z wyników |

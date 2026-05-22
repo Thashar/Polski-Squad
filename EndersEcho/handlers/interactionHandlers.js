@@ -2312,8 +2312,8 @@ class InteractionHandler {
         ];
         if (isHeadAdmin) {
             lines.push(
-                t('🎯 **Success Rate** — procent poprawnych analiz OCR (screeny zaakceptowane przez AI); licznik od zawsze i licznik z możliwością resetowania.',
-                  '🎯 **Success Rate** — percentage of successful OCR analyses (screenshots accepted by AI); all-time counter and resettable counter.'),
+                t('🎯 **Success Rate** — procent analiz OCR bez interwencji admina (zatwierdzone + odrzucone, ale nienaprawiane); drugi licznik pokazuje ile razy admin musiał interweniować (ręczna analiza lub cofnięcie wyniku).',
+                  '🎯 **Success Rate** — percentage of OCR analyses without admin intervention (approved + rejected but untouched); second counter shows how many times admin had to intervene (manual analysis or record reversion).'),
                 t('⚠️ **Nieskonfigurowane** — lista serwerów, na których bot jest obecny, ale nie został jeszcze skonfigurowany przez /configure.',
                   '⚠️ **Unconfigured** — list of servers where the bot is present but has not yet been configured via /configure.'),
                 t('📈 **Przyrost graczy** — statystyki i wykres kumulatywnego przyrostu unikalnych graczy globalnie w czasie.',
@@ -2344,32 +2344,29 @@ class InteractionHandler {
         } else {
             const at = stats.allTime;
             const rs = stats.resettable;
+
+            // Success rate = (total - adminFixed) / total
+            // "Sukces" = poprawna analiza LUB odrzucona, ale nieprzeanalizowana przez admina
+            const atSuccessCount = at.total - (at.adminFixed || 0);
+            const rsSuccessCount = rs.total - (rs.adminFixed || 0);
             const resetInfo = rs.resetAt
                 ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(rs.resetAt).getTime() / 1000)}:R>`
                 : '';
-            embed.addFields({ name: t('📊 Analizy automatyczne', '📊 Automatic analyses'), value:
-                `**${t('Od zawsze', 'All time')}**: **${at.success}** / ${at.total} → **${this._formatRate(at.success, at.total)}**\n` +
-                `**${t('Resetowalny', 'Resettable')}**: **${rs.success}** / ${rs.total} → **${this._formatRate(rs.success, rs.total)}**` +
+
+            embed.addFields({ name: t('✅ Success Rate', '✅ Success Rate'), value:
+                `**${t('Od zawsze', 'All time')}**: **${atSuccessCount}** / ${at.total} → **${this._formatRate(atSuccessCount, at.total)}**\n` +
+                `**${t('Resetowalny', 'Resettable')}**: **${rsSuccessCount}** / ${rs.total} → **${this._formatRate(rsSuccessCount, rs.total)}**` +
                 resetInfo,
             });
+
+            // Fail counter = adminFixed (ręczna analiza admina + cofnięcia)
+            embed.addFields({ name: t('❌ Interwencje admina (Fail)', '❌ Admin interventions (Fail)'), value:
+                t(
+                    `**Od zawsze**: **${at.adminFixed || 0}** (analizy manualne + cofnięcia)\n**Resetowalny**: **${rs.adminFixed || 0}**`,
+                    `**All time**: **${at.adminFixed || 0}** (manual analyses + reversions)\n**Resettable**: **${rs.adminFixed || 0}**`
+                ),
+            });
         }
-
-        const aa = stats?.analyzeAllTime;
-        const ar = stats?.analyzeResettable;
-        const analyzeResetInfo = ar?.resetAt
-            ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(ar.resetAt).getTime() / 1000)}:R>`
-            : '';
-
-        const atTotal = (stats?.allTime?.total ?? 0) + (aa?.count ?? 0);
-        const rsTotal = (stats?.resettable?.total ?? 0) + (ar?.count ?? 0);
-        const atPct = atTotal > 0 ? ((aa?.count ?? 0) / atTotal * 100).toFixed(1) : '0.0';
-        const rsPct = rsTotal > 0 ? ((ar?.count ?? 0) / rsTotal * 100).toFixed(1) : '0.0';
-
-        embed.addFields({ name: t('🔬 Analizy manualne (admin)', '🔬 Manual analyses (admin)'), value:
-            `**${t('Od zawsze', 'All time')}**: **${aa?.count ?? 0}** / ${atTotal} → **${atPct}%**\n` +
-            `**${t('Resetowalny', 'Resettable')}**: **${ar?.count ?? 0}** / ${rsTotal} → **${rsPct}%**` +
-            analyzeResetInfo,
-        });
 
         return embed;
     }
@@ -2377,8 +2374,7 @@ class InteractionHandler {
     _buildOcrStatsComponents(interaction) {
         const t = this._panelT(interaction.guildId);
         return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_ocr_stats_reset').setEmoji('🔄').setLabel(t('Resetuj OCR', 'Reset OCR')).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_analyze_stats_reset').setEmoji('🔄').setLabel(t('Resetuj manualne', 'Reset manual')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ocr_stats_reset').setEmoji('🔄').setLabel(t('Resetuj liczniki', 'Reset counters')).setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_cat_stats').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
         )];
     }
@@ -2393,10 +2389,10 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const embed = new EmbedBuilder()
             .setColor(0xFF6B35)
-            .setTitle(t('🔄 Potwierdź reset licznika', '🔄 Confirm counter reset'))
+            .setTitle(t('🔄 Potwierdź reset liczników', '🔄 Confirm counter reset'))
             .setDescription(t(
-                'Czy na pewno chcesz zresetować **globalny licznik Success Rate**?\n\nLicznik "od zawsze" pozostanie nienaruszony.',
-                'Are you sure you want to reset the **global Success Rate counter**?\n\nThe all-time counter will remain unchanged.'
+                'Czy na pewno chcesz zresetować **resetowalne liczniki Success Rate i Fail**?\n\nLiczniki "od zawsze" pozostaną nienaruszony.',
+                'Are you sure you want to reset the **resettable Success Rate and Fail counters**?\n\nThe all-time counters will remain unchanged.'
             ));
         const components = [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_ocr_stats_reset_ok').setEmoji('✅').setLabel(t('Tak, resetuj', 'Yes, reset')).setStyle(ButtonStyle.Danger),
@@ -2412,34 +2408,7 @@ class InteractionHandler {
         }
         const embed = this._buildOcrStatsEmbed(interaction);
         const components = this._buildOcrStatsComponents(interaction);
-        embed.setFooter({ text: t('Globalny licznik zresetowany.', 'Global counter has been reset.') });
-        await interaction.update({ embeds: [embed], components });
-    }
-
-    async _handlePanelAnalyzeStatsReset(interaction) {
-        const t = this._panelT(interaction.guildId);
-        const embed = new EmbedBuilder()
-            .setColor(0xFF6B35)
-            .setTitle(t('🔄 Potwierdź reset licznika', '🔄 Confirm counter reset'))
-            .setDescription(t(
-                'Czy na pewno chcesz zresetować **licznik analiz manualnych**?\n\nLicznik "od zawsze" pozostanie nienaruszony.',
-                'Are you sure you want to reset the **manual analyses counter**?\n\nThe all-time counter will remain unchanged.'
-            ));
-        const components = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_analyze_stats_reset_ok').setEmoji('✅').setLabel(t('Tak, resetuj', 'Yes, reset')).setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('panel_ocr_stats').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
-        )];
-        await interaction.update({ embeds: [embed], components });
-    }
-
-    async _handlePanelAnalyzeStatsResetConfirm(interaction) {
-        const t = this._panelT(interaction.guildId);
-        if (this.ocrStatsService) {
-            await this.ocrStatsService.resetAnalyzeResettable();
-        }
-        const embed = this._buildOcrStatsEmbed(interaction);
-        const components = this._buildOcrStatsComponents(interaction);
-        embed.setFooter({ text: t('Licznik analiz manualnych zresetowany.', 'Manual analyses counter has been reset.') });
+        embed.setFooter({ text: t('Resetowalne liczniki zresetowane.', 'Resettable counters have been reset.') });
         await interaction.update({ embeds: [embed], components });
     }
 
@@ -4023,10 +3992,8 @@ class InteractionHandler {
         if (customId === 'panel_cat_server') return 'Zarządzaj serwerem';
         if (customId === 'panel_cat_stats') return 'Statystyki';
         if (customId === 'panel_ocr_stats') return 'Success Rate (globalnie)';
-        if (customId === 'panel_ocr_stats_reset_ok') return 'Potwierdzono reset globalnego licznika OCR';
-        if (customId === 'panel_ocr_stats_reset') return 'Reset globalnego licznika OCR';
-        if (customId === 'panel_analyze_stats_reset_ok') return 'Potwierdzono reset licznika analiz manualnych';
-        if (customId === 'panel_analyze_stats_reset') return 'Reset licznika analiz manualnych';
+        if (customId === 'panel_ocr_stats_reset_ok') return 'Potwierdzono reset liczników OCR';
+        if (customId === 'panel_ocr_stats_reset') return 'Reset liczników OCR';
 
         if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
@@ -4206,6 +4173,7 @@ class InteractionHandler {
                 await interaction.deferUpdate();
                 this._ocrRevertSessions.delete(revertKey);
                 await this._cvRemoveRecord(session);
+                if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
                 try {
                     const guild = interaction.client.guilds.cache.get(targetGuildId);
                     if (guild) {
@@ -4362,14 +4330,6 @@ class InteractionHandler {
             }
             if (customId === 'panel_ocr_stats_reset') {
                 await this._handlePanelOcrStatsReset(interaction);
-                return;
-            }
-            if (customId === 'panel_analyze_stats_reset_ok') {
-                await this._handlePanelAnalyzeStatsResetConfirm(interaction);
-                return;
-            }
-            if (customId === 'panel_analyze_stats_reset') {
-                await this._handlePanelAnalyzeStatsReset(interaction);
                 return;
             }
             if (customId === 'panel_back_configure') {
@@ -5089,6 +5049,7 @@ class InteractionHandler {
 
         } else if (action === 'remove') {
             await this._cvRemoveRecord(session);
+            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'removed');
             if (this.userBlockService) {
                 await this.userBlockService.unblockUser(session.userId, true).catch(() => {});
@@ -5104,6 +5065,7 @@ class InteractionHandler {
                 );
             }
             await this._cvRemoveRecord(session);
+            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'blocked');
             await this._updateOriginalRecordButton(interaction.client, session, 'blocked');
             await this._updateAllCvReportMsgs(interaction.client, session,
@@ -7295,6 +7257,7 @@ class InteractionHandler {
 
             // 1. Cofnij ranking (identycznie jak CV revert)
             await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
+            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
