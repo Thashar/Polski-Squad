@@ -10,16 +10,22 @@ class OcrStatsService {
         this._pendingSave = false;
     }
 
+    _defaultData() {
+        return {
+            allTime:         { total: 0, success: 0 },
+            resettable:      { total: 0, success: 0, resetAt: null },
+            analyzeAllTime:  { count: 0 },
+            analyzeResettable: { count: 0, resetAt: null },
+        };
+    }
+
     async load() {
         try {
             const raw = await fs.readFile(this.dataPath, 'utf8');
             const parsed = JSON.parse(raw);
             // Migracja starej struktury per-guild → globalna
             if (parsed.guilds && !parsed.allTime) {
-                this._data = {
-                    allTime:    { total: 0, success: 0 },
-                    resettable: { total: 0, success: 0, resetAt: null },
-                };
+                this._data = this._defaultData();
                 for (const g of Object.values(parsed.guilds)) {
                     this._data.allTime.total    += g.allTime?.total    || 0;
                     this._data.allTime.success  += g.allTime?.success  || 0;
@@ -27,13 +33,13 @@ class OcrStatsService {
                     this._data.resettable.success += g.resettable?.success || 0;
                 }
             } else {
-                this._data = parsed;
+                this._data = { ...this._defaultData(), ...parsed };
+                // Migracja — uzupełnij brakujące pola analyze
+                if (!this._data.analyzeAllTime)   this._data.analyzeAllTime   = { count: 0 };
+                if (!this._data.analyzeResettable) this._data.analyzeResettable = { count: 0, resetAt: null };
             }
         } catch {
-            this._data = {
-                allTime:    { total: 0, success: 0 },
-                resettable: { total: 0, success: 0, resetAt: null },
-            };
+            this._data = this._defaultData();
         }
     }
 
@@ -51,6 +57,19 @@ class OcrStatsService {
     async resetResettable() {
         if (!this._data) await this.load();
         this._data.resettable = { total: 0, success: 0, resetAt: new Date().toISOString() };
+        await this._save();
+    }
+
+    async recordAnalyze() {
+        if (!this._data) await this.load();
+        this._data.analyzeAllTime.count++;
+        this._data.analyzeResettable.count++;
+        this._save().catch(() => {});
+    }
+
+    async resetAnalyzeResettable() {
+        if (!this._data) await this.load();
+        this._data.analyzeResettable = { count: 0, resetAt: new Date().toISOString() };
         await this._save();
     }
 
