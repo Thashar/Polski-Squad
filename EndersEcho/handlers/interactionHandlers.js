@@ -2341,29 +2341,38 @@ class InteractionHandler {
 
         if (!stats || stats.allTime.total === 0) {
             embed.setDescription(t('Brak danych — żadna analiza OCR jeszcze nie została wykonana.', 'No data — no OCR analysis has been performed yet.'));
-            return embed;
+        } else {
+            const at = stats.allTime;
+            const rs = stats.resettable;
+            const resetInfo = rs.resetAt
+                ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(rs.resetAt).getTime() / 1000)}:R>`
+                : '';
+            embed.addFields({ name: t('📊 Analizy automatyczne', '📊 Automatic analyses'), value:
+                `**${t('Od zawsze', 'All time')}**: **${at.success}** / ${at.total} → **${this._formatRate(at.success, at.total)}**\n` +
+                `**${t('Resetowalny', 'Resettable')}**: **${rs.success}** / ${rs.total} → **${this._formatRate(rs.success, rs.total)}**` +
+                resetInfo,
+            });
         }
 
-        const at = stats.allTime;
-        const rs = stats.resettable;
-        const resetInfo = rs.resetAt
-            ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(rs.resetAt).getTime() / 1000)}:R>`
+        const aa = stats?.analyzeAllTime;
+        const ar = stats?.analyzeResettable;
+        const analyzeResetInfo = ar?.resetAt
+            ? `\n${t('Ostatni reset', 'Last reset')}: <t:${Math.floor(new Date(ar.resetAt).getTime() / 1000)}:R>`
             : '';
+        embed.addFields({ name: t('🔬 Analizy manualne (admin)', '🔬 Manual analyses (admin)'), value:
+            `**${t('Od zawsze', 'All time')}**: **${aa?.count ?? 0}**\n` +
+            `**${t('Resetowalny', 'Resettable')}**: **${ar?.count ?? 0}**` +
+            analyzeResetInfo,
+        });
 
-        embed.setDescription(
-            `**${t('Od zawsze', 'All time')}**\n` +
-            `${t('Poprawnych', 'Successful')}: **${at.success}** / ${at.total} → **${this._formatRate(at.success, at.total)}**\n\n` +
-            `**${t('Licznik (resetowalny)', 'Counter (resettable)')}**\n` +
-            `${t('Poprawnych', 'Successful')}: **${rs.success}** / ${rs.total} → **${this._formatRate(rs.success, rs.total)}**` +
-            resetInfo
-        );
         return embed;
     }
 
     _buildOcrStatsComponents(interaction) {
         const t = this._panelT(interaction.guildId);
         return [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_ocr_stats_reset').setEmoji('🔄').setLabel(t('Resetuj licznik', 'Reset counter')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ocr_stats_reset').setEmoji('🔄').setLabel(t('Resetuj OCR', 'Reset OCR')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_analyze_stats_reset').setEmoji('🔄').setLabel(t('Resetuj manualne', 'Reset manual')).setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_cat_stats').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
         )];
     }
@@ -2398,6 +2407,33 @@ class InteractionHandler {
         const embed = this._buildOcrStatsEmbed(interaction);
         const components = this._buildOcrStatsComponents(interaction);
         embed.setFooter({ text: t('Globalny licznik zresetowany.', 'Global counter has been reset.') });
+        await interaction.update({ embeds: [embed], components });
+    }
+
+    async _handlePanelAnalyzeStatsReset(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const embed = new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle(t('🔄 Potwierdź reset licznika', '🔄 Confirm counter reset'))
+            .setDescription(t(
+                'Czy na pewno chcesz zresetować **licznik analiz manualnych**?\n\nLicznik "od zawsze" pozostanie nienaruszony.',
+                'Are you sure you want to reset the **manual analyses counter**?\n\nThe all-time counter will remain unchanged.'
+            ));
+        const components = [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_analyze_stats_reset_ok').setEmoji('✅').setLabel(t('Tak, resetuj', 'Yes, reset')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ocr_stats').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
+        )];
+        await interaction.update({ embeds: [embed], components });
+    }
+
+    async _handlePanelAnalyzeStatsResetConfirm(interaction) {
+        const t = this._panelT(interaction.guildId);
+        if (this.ocrStatsService) {
+            await this.ocrStatsService.resetAnalyzeResettable();
+        }
+        const embed = this._buildOcrStatsEmbed(interaction);
+        const components = this._buildOcrStatsComponents(interaction);
+        embed.setFooter({ text: t('Licznik analiz manualnych zresetowany.', 'Manual analyses counter has been reset.') });
         await interaction.update({ embeds: [embed], components });
     }
 
@@ -3983,6 +4019,8 @@ class InteractionHandler {
         if (customId === 'panel_ocr_stats') return 'Success Rate (globalnie)';
         if (customId === 'panel_ocr_stats_reset_ok') return 'Potwierdzono reset globalnego licznika OCR';
         if (customId === 'panel_ocr_stats_reset') return 'Reset globalnego licznika OCR';
+        if (customId === 'panel_analyze_stats_reset_ok') return 'Potwierdzono reset licznika analiz manualnych';
+        if (customId === 'panel_analyze_stats_reset') return 'Reset licznika analiz manualnych';
 
         if (customId === 'panel_back_configure') return 'Wróć do kreatora /configure';
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
@@ -4318,6 +4356,14 @@ class InteractionHandler {
             }
             if (customId === 'panel_ocr_stats_reset') {
                 await this._handlePanelOcrStatsReset(interaction);
+                return;
+            }
+            if (customId === 'panel_analyze_stats_reset_ok') {
+                await this._handlePanelAnalyzeStatsResetConfirm(interaction);
+                return;
+            }
+            if (customId === 'panel_analyze_stats_reset') {
+                await this._handlePanelAnalyzeStatsReset(interaction);
                 return;
             }
             if (customId === 'panel_back_configure') {
@@ -7036,6 +7082,7 @@ class InteractionHandler {
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
+            if (this.ocrStatsService) this.ocrStatsService.recordAnalyze().catch(() => {});
 
             let newAchievements = [];
             if (this.achievementService) {
