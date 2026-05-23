@@ -297,6 +297,10 @@ class InteractionHandler {
                 .setDescription('Tworzy manualną archiwizację wszystkich danych botów do Google Drive (niezależną)'),
 
             new SlashCommandBuilder()
+                .setName('przywroc-backup')
+                .setDescription('Skanuje pliki 0B i przywraca je z ostatniego backupu na Google Drive (tylko administrator)'),
+
+            new SlashCommandBuilder()
                 .setName('msg')
                 .setDescription('Wysyła wiadomość botem na wybrany kanał (tylko administrator)')
                 .addStringOption(option =>
@@ -428,6 +432,9 @@ class InteractionHandler {
                     break;
                 case 'data-archive':
                     await this.handleDataArchiveCommand(interaction);
+                    break;
+                case 'przywroc-backup':
+                    await this.handlePrzywrocBackupCommand(interaction);
                     break;
                 case 'msg':
                     await this.handleMsgCommand(interaction);
@@ -3291,6 +3298,66 @@ class InteractionHandler {
                 `Błąd manualnego backupu przez ${interaction.user.tag}: ${error.message}`,
                 interaction
             );
+        }
+    }
+
+    /**
+     * Obsługuje komendę /przywroc-backup - skanuje pliki 0B i przywraca z backupu
+     * @param {ChatInputCommandInteraction} interaction - Interakcja Discord
+     */
+    async handlePrzywrocBackupCommand(interaction) {
+        const { MessageFlags } = require('discord.js');
+
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Nie masz uprawnień do użycia tej komendy. Wymaga uprawnień Administratora.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        try {
+            const BackupManager = require('../../utils/backupManager');
+            const backupManager = new BackupManager();
+
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            const { restored, failed } = await backupManager.restoreEmptyFiles();
+
+            let msg;
+            if (restored.length === 0 && failed.length === 0) {
+                msg = '✅ **Brak uszkodzonych plików (0B)** — wszystkie dane są poprawne.';
+            } else {
+                msg = `🔄 **Przywracanie z backupu zakończone**\n\n`;
+                msg += `**${restored.length} przywrócono, ${failed.length} błędów**\n\n`;
+
+                if (restored.length > 0) {
+                    msg += restored.map(r => `✅ \`${r.bot}/${r.file}\``).join('\n');
+                    msg += '\n';
+                }
+                if (failed.length > 0) {
+                    if (restored.length > 0) msg += '\n';
+                    msg += failed.map(f => `❌ \`${f.bot}/${f.file}\` — ${f.reason}`).join('\n');
+                }
+
+                if (msg.length > 2000) msg = msg.substring(0, 1950) + '\n…(skrócono)';
+            }
+
+            await interaction.editReply({ content: msg, flags: MessageFlags.Ephemeral });
+
+            await this.logService.logMessage('info',
+                `${interaction.user.tag} użył /przywroc-backup: ${restored.length} przywrócono, ${failed.length} błędów`,
+                interaction
+            );
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas przywracania backupu:', error);
+            await interaction.editReply({
+                content: `❌ Błąd podczas przywracania:\n\`\`\`${error.message}\`\`\``,
+                flags: MessageFlags.Ephemeral
+            });
         }
     }
 

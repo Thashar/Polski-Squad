@@ -32,7 +32,7 @@
 
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---
