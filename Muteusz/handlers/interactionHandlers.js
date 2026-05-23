@@ -17,6 +17,8 @@ class InteractionHandler {
         this.warningService = new WarningService(config, logger);
         this.reportStatsService = new ReportStatsService();
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
+        // Mapa oczekujących potwierdzeń przywracania backupu (userId → dane)
+        this.pendingRestores = new Map();
     }
 
     /**
@@ -502,6 +504,10 @@ class InteractionHandler {
         } else if (interaction.customId.startsWith('automod_delete_') ||
                    interaction.customId.startsWith('automod_warn_')) {
             await this.handleAutoModButton(interaction);
+        } else if (interaction.customId === 'przywroc_confirm') {
+            await this.handlePrzywrocConfirm(interaction);
+        } else if (interaction.customId === 'przywroc_cancel') {
+            await this.handlePrzywrocCancel(interaction);
         }
     }
 
@@ -3305,8 +3311,11 @@ class InteractionHandler {
      * Obsługuje komendę /przywroc-backup - skanuje pliki 0B i przywraca z backupu
      * @param {ChatInputCommandInteraction} interaction - Interakcja Discord
      */
+    /**
+     * Etap 1: Skanuje, pobiera i wypakuje backupy, pokazuje podgląd z przyciskami potwierdzenia.
+     */
     async handlePrzywrocBackupCommand(interaction) {
-        const { MessageFlags } = require('discord.js');
+        const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
@@ -3321,44 +3330,144 @@ class InteractionHandler {
         try {
             const BackupManager = require('../../utils/backupManager');
             const backupManager = new BackupManager();
-
             await new Promise(resolve => setTimeout(resolve, 2000));
 
-            const { restored, failed } = await backupManager.restoreEmptyFiles();
+            const preparedData = await backupManager.prepareRestore();
 
-            let msg;
-            if (restored.length === 0 && failed.length === 0) {
-                msg = '✅ **Brak uszkodzonych plików (0B)** — wszystkie dane są poprawne.';
-            } else {
-                msg = `🔄 **Przywracanie z backupu zakończone**\n\n`;
-                msg += `**${restored.length} przywrócono, ${failed.length} błędów**\n\n`;
-
-                if (restored.length > 0) {
-                    msg += restored.map(r => `✅ \`${r.bot}/${r.file}\``).join('\n');
-                    msg += '\n';
-                }
-                if (failed.length > 0) {
-                    if (restored.length > 0) msg += '\n';
-                    msg += failed.map(f => `❌ \`${f.bot}/${f.file}\` — ${f.reason}`).join('\n');
-                }
-
-                if (msg.length > 2000) msg = msg.substring(0, 1950) + '\n…(skrócono)';
+            if (preparedData.totalEmpty === 0) {
+                await interaction.editReply({
+                    content: '✅ **Brak uszkodzonych plików (0B)** — wszystkie dane są poprawne.',
+                    flags: MessageFlags.Ephemeral
+                });
+                return;
             }
 
-            await interaction.editReply({ content: msg, flags: MessageFlags.Ephemeral });
+            // Podgląd co zostanie przywrócone
+            let msg = `🔍 **Skanowanie zakończone**\n\n`;
+            msg += `📦 **Łączny rozmiar pobranych backupów:** ${preparedData.totalBackupSizeMB} MB\n`;
+            msg += `⚠️ **Uszkodzonych plików (0B):** ${preparedData.totalEmpty}\n\n`;
 
-            await this.logService.logMessage('info',
-                `${interaction.user.tag} użył /przywroc-backup: ${restored.length} przywrócono, ${failed.length} błędów`,
-                interaction
+            for (const botData of preparedData.bots) {
+                msg += `**${botData.botName}** _(backup: ${botData.backupSizeMB} MB)_\n`;
+                if (botData.error) {
+                    msg += `  ⚠️ ${botData.error}\n`;
+                } else {
+                    botData.recoverableFiles.forEach(f => { msg += `  ✅ \`${f.relativePath}\`\n`; });
+                    botData.unrecoverableFiles.forEach(f => { msg += `  ❌ \`${f.relativePath}\` — brak w backupie lub też 0B\n`; });
+                }
+                msg += '\n';
+            }
+
+            msg += `Czy przywrócić zaznaczone pliki?`;
+            if (msg.length > 1900) msg = msg.substring(0, 1860) + '\n…_(lista skrócona)_\n\nCzy przywrócić zaznaczone pliki?';
+
+            // Zapisz dane oczekujące — auto-cleanup po 10 minutach
+            const pendingKey = interaction.user.id;
+            if (this.pendingRestores.has(pendingKey)) {
+                const old = this.pendingRestores.get(pendingKey);
+                clearTimeout(old.timeout);
+                old.backupManager.cleanupRestore(old.preparedData);
+            }
+            const timeout = setTimeout(() => {
+                if (this.pendingRestores.has(pendingKey)) {
+                    const data = this.pendingRestores.get(pendingKey);
+                    data.backupManager.cleanupRestore(data.preparedData);
+                    this.pendingRestores.delete(pendingKey);
+                    logger.info(`🧹 Auto-cleanup przywracania dla ${interaction.user.tag} (timeout 10 min)`);
+                }
+            }, 10 * 60 * 1000);
+            this.pendingRestores.set(pendingKey, { preparedData, backupManager, timeout });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('przywroc_confirm')
+                    .setLabel('Przywróć')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('✅'),
+                new ButtonBuilder()
+                    .setCustomId('przywroc_cancel')
+                    .setLabel('Anuluj')
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji('❌')
             );
 
+            await interaction.editReply({ content: msg, components: [row], flags: MessageFlags.Ephemeral });
+
         } catch (error) {
-            logger.error('❌ Błąd podczas przywracania backupu:', error);
+            logger.error('❌ Błąd podczas skanowania backupu:', error);
             await interaction.editReply({
-                content: `❌ Błąd podczas przywracania:\n\`\`\`${error.message}\`\`\``,
+                content: `❌ Błąd:\n\`\`\`${error.message}\`\`\``,
                 flags: MessageFlags.Ephemeral
             });
         }
+    }
+
+    /**
+     * Etap 2: Potwierdź przywracanie — kopiuje pliki z temp i czyści.
+     */
+    async handlePrzywrocConfirm(interaction) {
+        const { MessageFlags } = require('discord.js');
+        const pendingKey = interaction.user.id;
+
+        if (!this.pendingRestores.has(pendingKey)) {
+            await interaction.reply({
+                content: '❌ Sesja wygasła (10 min). Uruchom `/przywroc-backup` ponownie.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const { preparedData, backupManager, timeout } = this.pendingRestores.get(pendingKey);
+        clearTimeout(timeout);
+        this.pendingRestores.delete(pendingKey);
+
+        await interaction.deferUpdate();
+
+        try {
+            const { restored, failed } = await backupManager.executeRestore(preparedData);
+            backupManager.cleanupRestore(preparedData);
+
+            let msg = `🔄 **Przywracanie zakończone**\n\n`;
+            msg += `**${restored.length} przywrócono, ${failed.length} błędów**\n\n`;
+            if (restored.length > 0) msg += restored.map(r => `✅ \`${r.bot}/${r.file}\``).join('\n') + '\n';
+            if (failed.length > 0) {
+                if (restored.length > 0) msg += '\n';
+                msg += failed.map(f => `❌ \`${f.bot}/${f.file}\` — ${f.reason}`).join('\n');
+            }
+            if (msg.length > 2000) msg = msg.substring(0, 1950) + '\n…(skrócono)';
+
+            await interaction.editReply({ content: msg, components: [] });
+            await backupManager.sendRestoreSummaryToWebhook(restored, failed);
+
+            await this.logService.logMessage('info',
+                `${interaction.user.tag} potwierdził /przywroc-backup: ${restored.length} przywrócono, ${failed.length} błędów`,
+                interaction
+            );
+        } catch (error) {
+            backupManager.cleanupRestore(preparedData);
+            logger.error('❌ Błąd podczas przywracania:', error);
+            await interaction.editReply({
+                content: `❌ Błąd:\n\`\`\`${error.message}\`\`\``,
+                components: []
+            });
+        }
+    }
+
+    /**
+     * Anuluj przywracanie — czyści foldery tymczasowe.
+     */
+    async handlePrzywrocCancel(interaction) {
+        const pendingKey = interaction.user.id;
+        if (this.pendingRestores.has(pendingKey)) {
+            const { preparedData, backupManager, timeout } = this.pendingRestores.get(pendingKey);
+            clearTimeout(timeout);
+            backupManager.cleanupRestore(preparedData);
+            this.pendingRestores.delete(pendingKey);
+        }
+        await interaction.update({
+            content: '❌ **Przywracanie anulowane.** Foldery tymczasowe usunięte.',
+            components: []
+        });
     }
 
     /**

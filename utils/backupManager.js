@@ -904,18 +904,19 @@ class BackupManager {
      * @returns {Promise<{restored: string[], notFound: string[]}>}
      */
     /**
-     * Skanuje wszystkie foldery data botów, wykrywa pliki 0B i przywraca je z ostatniego backupu.
-     * Dla każdego bota: pobiera cały ZIP → wypakuje do temp → przywraca uszkodzone pliki → czyści temp.
+     * Etap 1: Skanuje 0B pliki, pobiera backupy i wypakuje je do folderów tymczasowych.
+     * Nie modyfikuje żadnych plików produkcyjnych — tylko przygotowuje dane do podglądu.
+     * @returns {{ bots, totalEmpty, totalBackupSizeMB }}
      */
-    async restoreEmptyFiles() {
+    async prepareRestore() {
         const { spawnSync } = require('child_process');
         const os = require('os');
 
         logger.info('🔍 Skanowanie folderów data pod kątem uszkodzonych plików (0B)...');
 
-        const allRestored = [];
-        const allFailed = [];
+        const bots = [];
         let totalEmpty = 0;
+        let totalBackupSizeBytes = 0;
 
         for (const botName of this.bots) {
             const dataFolder = botName === 'shared_data'
@@ -931,65 +932,117 @@ class BackupManager {
             logger.warn(`⚠️  ${botName}: znaleziono ${emptyFiles.length} uszkodzonych plików`);
             emptyFiles.forEach(f => logger.warn(`   📄 ${f.relativePath}`));
 
-            // Pobierz cały backup bota
             const archivePath = await this.downloadLatestBackupFromDrive(botName);
             if (!archivePath) {
-                emptyFiles.forEach(f => allFailed.push({ bot: botName, file: f.relativePath, reason: 'Brak backupu na Google Drive' }));
+                bots.push({ botName, tempDir: null, emptyFiles, recoverableFiles: [], unrecoverableFiles: emptyFiles, backupSizeMB: '0.00', error: 'Brak backupu na Google Drive' });
                 continue;
             }
 
-            // Wypakuj cały backup do folderu tymczasowego
+            const archiveSizeBytes = fs.statSync(archivePath).size;
+            totalBackupSizeBytes += archiveSizeBytes;
+            const backupSizeMB = (archiveSizeBytes / 1024 / 1024).toFixed(2);
+
             const tempDir = path.join(os.tmpdir(), `restore_${botName}_${Date.now()}`);
             fs.mkdirSync(tempDir, { recursive: true });
 
-            try {
-                logger.info(`📦 Wypakowuję backup ${botName} do ${tempDir}...`);
-                const result = spawnSync('unzip', ['-o', archivePath, '-d', tempDir], { encoding: 'utf8' });
+            logger.info(`📦 Wypakowuję backup ${botName} (${backupSizeMB} MB) do ${tempDir}...`);
+            const result = spawnSync('unzip', ['-o', archivePath, '-d', tempDir], { encoding: 'utf8' });
+            try { fs.unlinkSync(archivePath); } catch {}
 
-                if (result.error) throw new Error(`unzip niedostępny: ${result.error.message}`);
-                if (result.status !== 0 && result.status !== 1) {
-                    throw new Error(`unzip kod ${result.status}: ${result.stderr}`);
-                }
-
-                // Przywróć każdy uszkodzony plik z wypakowanego backupu
-                for (const fileInfo of emptyFiles) {
-                    const backupFilePath = path.join(tempDir, fileInfo.relativePath);
-
-                    if (!fs.existsSync(backupFilePath)) {
-                        allFailed.push({ bot: botName, file: fileInfo.relativePath, reason: 'Nie znaleziony w backupie' });
-                        continue;
-                    }
-
-                    const backupSize = fs.statSync(backupFilePath).size;
-                    if (backupSize === 0) {
-                        allFailed.push({ bot: botName, file: fileInfo.relativePath, reason: 'Plik w backupie też jest pusty (0B)' });
-                        continue;
-                    }
-
-                    await fs.promises.mkdir(path.dirname(fileInfo.fullPath), { recursive: true });
-                    fs.copyFileSync(backupFilePath, fileInfo.fullPath);
-                    allRestored.push({ bot: botName, file: fileInfo.relativePath });
-                    logger.info(`✅ Przywrócono: ${botName}/${fileInfo.relativePath} (${(backupSize / 1024).toFixed(1)} KB)`);
-                }
-
-            } catch (error) {
-                logger.error(`❌ Błąd podczas przywracania ${botName}:`, error.message);
-                emptyFiles.forEach(f => allFailed.push({ bot: botName, file: f.relativePath, reason: error.message }));
-            } finally {
+            if (result.error || (result.status !== 0 && result.status !== 1)) {
                 try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
-                try { fs.unlinkSync(archivePath); } catch {}
+                bots.push({ botName, tempDir: null, emptyFiles, recoverableFiles: [], unrecoverableFiles: emptyFiles, backupSizeMB, error: `unzip błąd (kod ${result.status})` });
+                continue;
+            }
+
+            // Ustal które pliki można przywrócić
+            const recoverableFiles = [];
+            const unrecoverableFiles = [];
+            for (const fileInfo of emptyFiles) {
+                const backupFilePath = path.join(tempDir, fileInfo.relativePath);
+                if (fs.existsSync(backupFilePath) && fs.statSync(backupFilePath).size > 0) {
+                    recoverableFiles.push(fileInfo);
+                } else {
+                    unrecoverableFiles.push(fileInfo);
+                }
+            }
+
+            bots.push({ botName, tempDir, emptyFiles, recoverableFiles, unrecoverableFiles, backupSizeMB });
+        }
+
+        return {
+            bots,
+            totalEmpty,
+            totalBackupSizeMB: (totalBackupSizeBytes / 1024 / 1024).toFixed(2)
+        };
+    }
+
+    /**
+     * Etap 2: Kopiuje pliki z wypakowanych folderów tymczasowych na ich oryginalne miejsca.
+     * Wywołaj po prepareRestore() i po potwierdzeniu przez użytkownika.
+     */
+    async executeRestore(preparedData) {
+        const restored = [];
+        const failed = [];
+
+        for (const botData of preparedData.bots) {
+            if (botData.error || !botData.tempDir) {
+                botData.emptyFiles.forEach(f => failed.push({ bot: botData.botName, file: f.relativePath, reason: botData.error || 'Brak backupu' }));
+                continue;
+            }
+
+            for (const fileInfo of botData.recoverableFiles) {
+                try {
+                    await fs.promises.mkdir(path.dirname(fileInfo.fullPath), { recursive: true });
+                    fs.copyFileSync(path.join(botData.tempDir, fileInfo.relativePath), fileInfo.fullPath);
+                    restored.push({ bot: botData.botName, file: fileInfo.relativePath });
+                    logger.info(`✅ Przywrócono: ${botData.botName}/${fileInfo.relativePath}`);
+                } catch (error) {
+                    failed.push({ bot: botData.botName, file: fileInfo.relativePath, reason: error.message });
+                }
+            }
+
+            for (const fileInfo of botData.unrecoverableFiles) {
+                failed.push({ bot: botData.botName, file: fileInfo.relativePath, reason: 'Nie w backupie lub też 0B' });
             }
         }
 
-        if (totalEmpty === 0) {
+        return { restored, failed };
+    }
+
+    /**
+     * Usuwa wszystkie foldery tymczasowe utworzone przez prepareRestore().
+     */
+    cleanupRestore(preparedData) {
+        for (const botData of preparedData.bots) {
+            if (botData.tempDir) {
+                try { fs.rmSync(botData.tempDir, { recursive: true, force: true }); } catch {}
+            }
+        }
+        logger.info('🧹 Usunięto foldery tymczasowe przywracania');
+    }
+
+    /**
+     * Automatyczne przywracanie (używane przez restoreEmptyFiles bez interakcji użytkownika).
+     * Wywołuje prepareRestore → executeRestore → cleanupRestore bez pytania o potwierdzenie.
+     */
+    async restoreEmptyFiles() {
+        const preparedData = await this.prepareRestore();
+
+        if (preparedData.totalEmpty === 0) {
             logger.info('✅ Brak uszkodzonych plików (0B) — wszystko OK');
             return { restored: [], failed: [] };
         }
 
-        logger.info(`✅ Przywracanie zakończone: ${allRestored.length} przywrócono, ${allFailed.length} błędów`);
-        await this.sendRestoreSummaryToWebhook(allRestored, allFailed);
+        logger.warn(`⚠️  Łącznie ${preparedData.totalEmpty} uszkodzonych plików — przywracam automatycznie...`);
 
-        return { restored: allRestored, failed: allFailed };
+        const { restored, failed } = await this.executeRestore(preparedData);
+        this.cleanupRestore(preparedData);
+
+        logger.info(`✅ Zakończono: ${restored.length} przywrócono, ${failed.length} błędów`);
+        await this.sendRestoreSummaryToWebhook(restored, failed);
+
+        return { restored, failed };
     }
 
     /**
