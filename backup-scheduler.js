@@ -48,6 +48,16 @@ class BackupScheduler {
 
         logger.info('✅ Scheduler backupów aktywny');
 
+        // Zawsze skanuj uszkodzone pliki (0B) przy starcie i przywracaj z backupu
+        setTimeout(async () => {
+            try {
+                await this.backupManager.restoreEmptyFiles();
+            } catch (error) {
+                logger.error('❌ Błąd podczas skanowania uszkodzonych plików:', error.message);
+                if (error.stack) logger.error(`   Stack trace: ${error.stack}`);
+            }
+        }, 15000); // 15 sekund po starcie — boty mają czas się uruchomić
+
         // Jeśli ustawiono BACKUP_ON_START=true, wykonaj backup zaraz po starcie
         if (process.env.BACKUP_ON_START === 'true') {
             logger.info('🚀 BACKUP_ON_START=true - wykonuję backup...');

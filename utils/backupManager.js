@@ -806,6 +806,257 @@ class BackupManager {
             return null;
         }
     }
+
+    // ─────────────────────────────────────────────
+    // PRZYWRACANIE USZKODZONYCH PLIKÓW (0B)
+    // ─────────────────────────────────────────────
+
+    /**
+     * Rekurencyjnie skanuje folder i zwraca pliki o rozmiarze 0 bajtów
+     */
+    findEmptyFilesSync(folder, baseFolder) {
+        const emptyFiles = [];
+        const scanDir = (dir) => {
+            try {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dir, entry.name);
+                    if (entry.isDirectory()) {
+                        scanDir(fullPath);
+                    } else if (entry.isFile()) {
+                        const stat = fs.statSync(fullPath);
+                        if (stat.size === 0) {
+                            emptyFiles.push({
+                                fullPath,
+                                relativePath: path.relative(baseFolder, fullPath).replace(/\\/g, '/')
+                            });
+                        }
+                    }
+                }
+            } catch {}
+        };
+        scanDir(folder);
+        return emptyFiles;
+    }
+
+    /**
+     * Pobiera najnowszy backup danego bota z Google Drive do pliku tymczasowego
+     * @returns {Promise<string|null>} Ścieżka do tymczasowego archiwum lub null
+     */
+    async downloadLatestBackupFromDrive(botName) {
+        if (!this.drive) {
+            logger.warn('⚠️  Google Drive nie jest zainicjalizowany — nie można pobrać backupu');
+            return null;
+        }
+
+        try {
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
+            const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
+
+            const response = await this.drive.files.list({
+                q: `'${botFolderId}' in parents and trashed=false`,
+                fields: 'files(id, name, createdTime)',
+                orderBy: 'createdTime desc',
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+                pageSize: 1
+            });
+
+            if (!response.data.files.length) {
+                logger.warn(`⚠️  Brak backupów dla ${botName} na Google Drive`);
+                return null;
+            }
+
+            const latestFile = response.data.files[0];
+            logger.info(`📥 Pobieranie backupu ${latestFile.name} dla ${botName}...`);
+
+            this.ensureBackupsFolder();
+            const tempPath = path.join(this.backupsFolder, `_restore_${botName}_temp.zip`);
+
+            const dest = fs.createWriteStream(tempPath);
+            const res = await this.drive.files.get(
+                { fileId: latestFile.id, alt: 'media', supportsAllDrives: true },
+                { responseType: 'stream' }
+            );
+
+            await new Promise((resolve, reject) => {
+                res.data.pipe(dest);
+                dest.on('finish', resolve);
+                dest.on('error', reject);
+                res.data.on('error', reject);
+            });
+
+            logger.info(`✅ Pobrano backup: ${latestFile.name}`);
+            return tempPath;
+
+        } catch (error) {
+            logger.error(`❌ Błąd pobierania backupu dla ${botName}:`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Wyodrębnia wskazane pliki z archiwum ZIP i przywraca je na oryginalne ścieżki
+     * @param {string} archivePath - Ścieżka do archiwum ZIP
+     * @param {Array<{fullPath, relativePath}>} filesToRestore
+     * @returns {Promise<{restored: string[], notFound: string[]}>}
+     */
+    async extractFilesFromZip(archivePath, filesToRestore) {
+        const unzipper = require('unzipper');
+
+        const targetMap = new Map(filesToRestore.map(f => [f.relativePath, f]));
+        const restored = [];
+        const notFound = [];
+
+        const directory = await unzipper.Open.file(archivePath);
+
+        for (const [relPath, fileInfo] of targetMap) {
+            const entry = directory.files.find(f =>
+                f.path === relPath || f.path.replace(/\\/g, '/') === relPath
+            );
+
+            if (!entry) {
+                notFound.push(relPath);
+                continue;
+            }
+
+            await fs.promises.mkdir(path.dirname(fileInfo.fullPath), { recursive: true });
+            const content = await entry.buffer();
+            await fs.promises.writeFile(fileInfo.fullPath, content);
+            restored.push(relPath);
+            logger.info(`✅ Przywrócono: ${fileInfo.relativePath}`);
+        }
+
+        return { restored, notFound };
+    }
+
+    /**
+     * Skanuje wszystkie foldery data botów, wykrywa pliki 0B i przywraca je z ostatniego backupu.
+     * Na końcu wysyła podsumowanie na webhook backupu.
+     */
+    async restoreEmptyFiles() {
+        logger.info('🔍 Skanowanie folderów data pod kątem uszkodzonych plików (0B)...');
+
+        const botEmptyFiles = {};
+        let totalEmpty = 0;
+
+        for (const botName of this.bots) {
+            const dataFolder = botName === 'shared_data'
+                ? path.join(this.botsFolder, 'shared_data')
+                : path.join(this.botsFolder, botName, 'data');
+
+            if (!fs.existsSync(dataFolder)) continue;
+
+            const emptyFiles = this.findEmptyFilesSync(dataFolder, dataFolder);
+            if (emptyFiles.length > 0) {
+                botEmptyFiles[botName] = emptyFiles;
+                totalEmpty += emptyFiles.length;
+                logger.warn(`⚠️  ${botName}: znaleziono ${emptyFiles.length} uszkodzonych plików`);
+                emptyFiles.forEach(f => logger.warn(`   📄 ${f.relativePath}`));
+            }
+        }
+
+        if (totalEmpty === 0) {
+            logger.info('✅ Brak uszkodzonych plików (0B) — wszystko OK');
+            return { restored: [], failed: [] };
+        }
+
+        logger.warn(`⚠️  Łącznie ${totalEmpty} uszkodzonych plików — rozpoczynam przywracanie z backupu...`);
+
+        const allRestored = [];
+        const allFailed = [];
+
+        for (const [botName, emptyFiles] of Object.entries(botEmptyFiles)) {
+            logger.info(`🔄 Przywracam pliki dla ${botName} (${emptyFiles.length} szt.)...`);
+
+            const archivePath = await this.downloadLatestBackupFromDrive(botName);
+
+            if (!archivePath) {
+                emptyFiles.forEach(f => allFailed.push({
+                    bot: botName,
+                    file: f.relativePath,
+                    reason: 'Brak backupu na Google Drive'
+                }));
+                continue;
+            }
+
+            try {
+                const { restored, notFound } = await this.extractFilesFromZip(archivePath, emptyFiles);
+                restored.forEach(r => allRestored.push({ bot: botName, file: r }));
+                notFound.forEach(r => allFailed.push({ bot: botName, file: r, reason: 'Nie znaleziony w archiwum' }));
+            } catch (error) {
+                logger.error(`❌ Błąd ekstrakcji dla ${botName}:`, error.message);
+                emptyFiles.forEach(f => allFailed.push({ bot: botName, file: f.relativePath, reason: error.message }));
+            } finally {
+                try { fs.unlinkSync(archivePath); } catch {}
+            }
+        }
+
+        logger.info(`✅ Przywracanie zakończone: ${allRestored.length} przywrócono, ${allFailed.length} błędów`);
+        await this.sendRestoreSummaryToWebhook(allRestored, allFailed);
+
+        return { restored: allRestored, failed: allFailed };
+    }
+
+    /**
+     * Wysyła podsumowanie przywracania plików na webhook backupu
+     */
+    async sendRestoreSummaryToWebhook(restored, failed) {
+        const webhookUrl = process.env.DISCORD_LOG_WEBHOOK_URL_BACKUP || process.env.DISCORD_LOG_WEBHOOK_URL;
+        if (!webhookUrl) return;
+
+        const OWNER_PING = '<@398983446812295168>';
+
+        const timestamp = new Date().toLocaleString('pl-PL', {
+            timeZone: 'Europe/Warsaw',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+        });
+
+        let msg = `${OWNER_PING}\n🔄 **AUTO-PRZYWRACANIE Z BACKUPU**\n\n`;
+        msg += `**${restored.length} przywrócono, ${failed.length} błędów**\n\n`;
+
+        if (restored.length > 0) {
+            msg += restored.map(r => `✅ \`${r.bot}/${r.file}\``).join('\n');
+            msg += '\n';
+        }
+
+        if (failed.length > 0) {
+            if (restored.length > 0) msg += '\n';
+            msg += failed.map(f => `❌ \`${f.bot}/${f.file}\` — ${f.reason}`).join('\n');
+            msg += '\n';
+        }
+
+        msg += `\n🕐 ${timestamp}`;
+
+        // Discord limit 2000 znaków
+        if (msg.length > 2000) {
+            msg = msg.substring(0, 1950) + '\n…(lista skrócona)\n\n🕐 ' + timestamp;
+        }
+
+        try {
+            const data = JSON.stringify({ content: msg });
+            const url = new URL(webhookUrl);
+            const options = {
+                hostname: url.hostname,
+                path: url.pathname,
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
+            };
+
+            await new Promise((resolve, reject) => {
+                const req = https.request(options, (res) => {
+                    res.statusCode >= 200 && res.statusCode < 300 ? resolve() : reject(new Error(`Status: ${res.statusCode}`));
+                });
+                req.on('error', reject);
+                req.write(data);
+                req.end();
+            });
+        } catch (error) {
+            logger.error('❌ Błąd wysyłania podsumowania przywracania na webhook:', error.message);
+        }
+    }
 }
 
 module.exports = BackupManager;

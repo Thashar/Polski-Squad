@@ -25,6 +25,7 @@ const logger = createBotLogger('Launcher');
                 const webhookUrl = process.env.DISCORD_LOG_WEBHOOK_URL;
                 if (webhookUrl) {
                     const body = JSON.stringify({
+                        content: '<@398983446812295168>',
                         embeds: [{
                             title: '🚨 ENOSPC — plik uszkodzony (zapisany jako pusty)',
                             description: `Brak miejsca na dysku podczas zapisu.\n\n📄 **Plik:** \`${shortPath}\`\n⏰ **Czas:** ${new Date().toLocaleString('pl-PL')}`,
