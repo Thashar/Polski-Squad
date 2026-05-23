@@ -178,9 +178,13 @@ async function initializeBot() {
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);
 
-        // Zapisz nazwy serwerów do guild_configs.json (fallback gdy bot wyjdzie z serwera)
+        // Aktualizuj nazwy serwerów w guild_configs.json — tylko dla istniejących wpisów
+        // (nie twórz nowych wpisów z samym guildName gdy plik jest pusty/uszkodzony)
         for (const [guildId, guild] of client.guilds.cache) {
-            await guildConfigService.saveConfig(guildId, { guildName: guild.name }).catch(() => {});
+            const existing = guildConfigService.getConfig(guildId);
+            if (existing) {
+                await guildConfigService.saveConfig(guildId, { guildName: guild.name }).catch(() => {});
+            }
         }
 
         // Eksportuj aktualny globalny ranking do shared_data przy starcie.
