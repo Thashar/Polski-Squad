@@ -164,14 +164,24 @@ class LogService {
                              || guildConfig?.icon
                              || null;
 
+            // Wyciągnij ikonę z custom emoji w tagu (np. <:BUMS:1506042018944778250> lub <a:name:id>)
+            let tagEmojiIconUrl = null;
+            if (guildTag) {
+                const emojiMatch = guildTag.match(/<a?:[\w]+:(\d+)>/);
+                if (emojiMatch) {
+                    tagEmojiIconUrl = `https://cdn.discordapp.com/emojis/${emojiMatch[1]}.png`;
+                }
+            }
+            const authorIconUrl = tagEmojiIconUrl || guildIcon || undefined;
+
             const embed = new EmbedBuilder()
                 .setColor(cfg.color)
                 .setTitle(`${cfg.emoji} ${cfg.label}`)
                 .setTimestamp();
 
-            // Nagłówek: ikona serwera + tag + nazwa
+            // Nagłówek: ikona emoji z tagu (lub ikona serwera) + tag + nazwa
             const authorName = guildTag ? `${guildTag}  ${guildName}` : guildName;
-            embed.setAuthor({ name: authorName, iconURL: guildIcon || undefined });
+            embed.setAuthor({ name: authorName, iconURL: authorIconUrl });
             // Thumbnail: awatar gracza wywołującego, fallback na ikonę serwera
             const thumbnailUrl = userAvatar || guildIcon;
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
