@@ -897,38 +897,51 @@ class BackupManager {
     }
 
     /**
-     * Wyodrębnia wskazane pliki z archiwum ZIP i przywraca je na oryginalne ścieżki
+     * Wyodrębnia wskazane pliki z archiwum ZIP i przywraca je na oryginalne ścieżki.
+     * Używa systemowego polecenia `unzip` (dostępnego na serwerach Linux) — brak zewnętrznych zależności.
      * @param {string} archivePath - Ścieżka do archiwum ZIP
      * @param {Array<{fullPath, relativePath}>} filesToRestore
      * @returns {Promise<{restored: string[], notFound: string[]}>}
      */
     async extractFilesFromZip(archivePath, filesToRestore) {
-        const unzipper = require('unzipper');
+        const { spawnSync } = require('child_process');
+        const os = require('os');
 
-        const targetMap = new Map(filesToRestore.map(f => [f.relativePath, f]));
-        const restored = [];
-        const notFound = [];
+        const tempDir = path.join(os.tmpdir(), `restore_${Date.now()}`);
+        fs.mkdirSync(tempDir, { recursive: true });
 
-        const directory = await unzipper.Open.file(archivePath);
+        try {
+            // Wyodrębnij całe archiwum do folderu tymczasowego
+            const result = spawnSync('unzip', ['-o', archivePath, '-d', tempDir], { encoding: 'utf8' });
 
-        for (const [relPath, fileInfo] of targetMap) {
-            const entry = directory.files.find(f =>
-                f.path === relPath || f.path.replace(/\\/g, '/') === relPath
-            );
-
-            if (!entry) {
-                notFound.push(relPath);
-                continue;
+            if (result.error) {
+                throw new Error(`Nie można uruchomić unzip: ${result.error.message}`);
+            }
+            if (result.status !== 0 && result.status !== 1) {
+                // status 1 = "warning" (np. istnieją nowsze pliki) — akceptowalny
+                throw new Error(`unzip zakończył się kodem ${result.status}: ${result.stderr}`);
             }
 
-            await fs.promises.mkdir(path.dirname(fileInfo.fullPath), { recursive: true });
-            const content = await entry.buffer();
-            await fs.promises.writeFile(fileInfo.fullPath, content);
-            restored.push(relPath);
-            logger.info(`✅ Przywrócono: ${fileInfo.relativePath}`);
-        }
+            const restored = [];
+            const notFound = [];
 
-        return { restored, notFound };
+            for (const fileInfo of filesToRestore) {
+                const extractedPath = path.join(tempDir, fileInfo.relativePath);
+                if (fs.existsSync(extractedPath) && fs.statSync(extractedPath).size > 0) {
+                    await fs.promises.mkdir(path.dirname(fileInfo.fullPath), { recursive: true });
+                    fs.copyFileSync(extractedPath, fileInfo.fullPath);
+                    restored.push(fileInfo.relativePath);
+                    logger.info(`✅ Przywrócono: ${fileInfo.relativePath}`);
+                } else {
+                    notFound.push(fileInfo.relativePath);
+                }
+            }
+
+            return { restored, notFound };
+        } finally {
+            // Usuń folder tymczasowy
+            try { spawnSync('rm', ['-rf', tempDir]); } catch {}
+        }
     }
 
     /**
