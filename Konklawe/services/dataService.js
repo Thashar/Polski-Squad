@@ -20,6 +20,20 @@ class DataService {
     }
 
     /**
+     * Bezpieczny odczyt JSON — zwraca fallback gdy plik pusty lub uszkodzony (np. po ENOSPC)
+     */
+    _safeReadJSON(filePath, fallback) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            if (!raw.trim()) return fallback;
+            return JSON.parse(raw);
+        } catch {
+            logger.warn(`⚠️ Uszkodzony plik JSON (pusty lub błędny): ${path.basename(filePath)} — używam wartości domyślnej`);
+            return fallback;
+        }
+    }
+
+    /**
      * Zapisuje podpowiedzi do pliku
      * @param {Array} hints - Tablica podpowiedzi
      * @param {Date} lastHintTimestamp - Timestamp ostatniej podpowiedzi
@@ -39,17 +53,13 @@ class DataService {
     loadHints() {
         const hintsPath = path.join(this.dataPath, 'hints.json');
         if (fs.existsSync(hintsPath)) {
-            const hintsData = JSON.parse(fs.readFileSync(hintsPath));
+            const hintsData = this._safeReadJSON(hintsPath, {});
             return {
                 hints: hintsData.hints || [],
                 lastHintTimestamp: hintsData.lastHintTimestamp ? new Date(hintsData.lastHintTimestamp) : null
             };
-        } else {
-            return {
-                hints: [],
-                lastHintTimestamp: null
-            };
         }
+        return { hints: [], lastHintTimestamp: null };
     }
 
     /**
@@ -67,7 +77,7 @@ class DataService {
     loadScoreboard() {
         const scoreboardPath = path.join(this.dataPath, 'scoreboard.json');
         if (fs.existsSync(scoreboardPath)) {
-            return JSON.parse(fs.readFileSync(scoreboardPath));
+            return this._safeReadJSON(scoreboardPath, {});
         }
         return {};
     }
@@ -87,7 +97,7 @@ class DataService {
     loadVirtuttiMedals() {
         const virtuttiMedalsPath = path.join(this.dataPath, 'virtuttiMedals.json');
         if (fs.existsSync(virtuttiMedalsPath)) {
-            return JSON.parse(fs.readFileSync(virtuttiMedalsPath));
+            return this._safeReadJSON(virtuttiMedalsPath, {});
         }
         return {};
     }
@@ -107,7 +117,7 @@ class DataService {
     loadAttempts() {
         const attemptsPath = path.join(this.dataPath, 'attempts.json');
         if (fs.existsSync(attemptsPath)) {
-            return JSON.parse(fs.readFileSync(attemptsPath));
+            return this._safeReadJSON(attemptsPath, {});
         }
         return {};
     }
@@ -170,16 +180,11 @@ class DataService {
      */
     loadGameHistory() {
         const historyPath = path.join(this.dataPath, 'gameHistory.json');
+        const fallback = { completedGames: [], totalGames: 0, totalAttempts: 0, averageAttempts: 0, averageTime: 0 };
         if (fs.existsSync(historyPath)) {
-            return JSON.parse(fs.readFileSync(historyPath));
+            return this._safeReadJSON(historyPath, fallback);
         }
-        return {
-            completedGames: [], // Historia ukończonych gier
-            totalGames: 0,
-            totalAttempts: 0,
-            averageAttempts: 0,
-            averageTime: 0
-        };
+        return fallback;
     }
 
     /**
@@ -235,7 +240,7 @@ class DataService {
     loadPlayerAttempts() {
         const attemptsPath = path.join(this.dataPath, 'playerAttempts.json');
         if (fs.existsSync(attemptsPath)) {
-            return JSON.parse(fs.readFileSync(attemptsPath));
+            return this._safeReadJSON(attemptsPath, {});
         }
         return {};
     }
@@ -260,7 +265,7 @@ class DataService {
         if (!fs.existsSync(filePath)) {
             return { activeSelectionMessageId: null };
         }
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return this._safeReadJSON(filePath, { activeSelectionMessageId: null });
     }
 
     /**
@@ -283,7 +288,7 @@ class DataService {
         if (!fs.existsSync(filePath)) {
             return { activeSelectionMessageId: null };
         }
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return this._safeReadJSON(filePath, { activeSelectionMessageId: null });
     }
 
     /**
@@ -306,7 +311,7 @@ class DataService {
         if (!fs.existsSync(filePath)) {
             return {};
         }
-        return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        return this._safeReadJSON(filePath, {});
     }
 }
 
