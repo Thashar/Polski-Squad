@@ -3440,32 +3440,19 @@ class InteractionHandler {
             const displayNameForLog = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             gl.info(`🤖 [/${commandName}] Uruchamiam analizę z weryfikacją wzorca dla ${this.logService.nickLink(displayNameForLog, interaction.user.id)}${dryRun ? ' (tryb testowy)' : ''}`);
 
-            const onProgress = async (step) => {
+            const onProgress = async (step, attempt, max) => {
                 if (step === 'extracting') {
                     await editReplyStep(msgs.updateExtractingData);
+                } else if (step === 'retry_503') {
+                    const retryMsg = msgs.updateAiRetrying
+                        .replace('{attempt}', attempt)
+                        .replace('{max}', max);
+                    await editReplyStep(retryMsg);
                 }
             };
 
             const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-
-            // Retry loop dla błędów 503 — max 3 próby z 5s przerwą między nimi
-            const AI_MAX_RETRIES = 3;
-            let aiResult;
-            for (let aiAttempt = 1; aiAttempt <= AI_MAX_RETRIES; aiAttempt++) {
-                try {
-                    aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
-                    break;
-                } catch (err) {
-                    const is503 = err?.message?.includes('503') || err?.message?.includes('Service Unavailable');
-                    if (!is503 || aiAttempt === AI_MAX_RETRIES) throw err;
-                    gl.warn(`⚠️ [/${commandName}] AI 503 — retry ${aiAttempt}/${AI_MAX_RETRIES - 1}, czekam 5s`);
-                    const retryMsg = msgs.updateAiRetrying
-                        .replace('{attempt}', aiAttempt)
-                        .replace('{max}', AI_MAX_RETRIES);
-                    await editReplyStep(retryMsg);
-                    await new Promise(r => setTimeout(r, 5000));
-                }
-            }
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
 
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 

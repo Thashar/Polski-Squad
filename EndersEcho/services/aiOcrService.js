@@ -294,6 +294,25 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
     async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol', onProgress = null) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
+        const MAX_STEP_RETRIES = 3;
+        const RETRY_DELAY_MS   = 5000;
+
+        const is503 = (err) =>
+            err?.message?.includes('503') || err?.message?.includes('Service Unavailable');
+
+        const withRetry = async (label, stepFn) => {
+            for (let attempt = 1; attempt <= MAX_STEP_RETRIES; attempt++) {
+                try {
+                    return await stepFn();
+                } catch (err) {
+                    if (!is503(err) || attempt === MAX_STEP_RETRIES) throw err;
+                    log.warn(`[AI Test] 503 ${label} — retry ${attempt}/${MAX_STEP_RETRIES - 1}, czekam ${RETRY_DELAY_MS / 1000}s`);
+                    if (onProgress) await onProgress('retry_503', attempt, MAX_STEP_RETRIES);
+                    await new Promise(r => setTimeout(r, RETRY_DELAY_MS));
+                }
+            }
+        };
+
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
         const wzorPath = path.join(__dirname, '../files/Wzór.jpg');
 
@@ -307,7 +326,11 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const wzorBase64 = wzorBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang);
+            // Krok 1: porównanie z wzorcem — do 3 prób przy 503
+            const { isSimilar, rejectionReason, usage: u1 } = await withRetry(
+                'porównanie wzorca',
+                () => this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang)
+            );
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
@@ -318,7 +341,11 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
             if (onProgress) await onProgress('extracting');
 
-            const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta);
+            // Krok 2: ekstrakcja danych — do 3 prób przy 503
+            const extractRes = await withRetry(
+                'ekstrakcja danych',
+                () => this._extractData(uploadedBase64, mediaType, telemetryMeta)
+            );
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
