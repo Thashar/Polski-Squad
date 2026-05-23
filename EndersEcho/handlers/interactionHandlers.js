@@ -3832,7 +3832,7 @@ class InteractionHandler {
                         .setLabel('↩️ Cofnij wynik')
                         .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
-                _ocrEmbedParams = { type: 'new_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
+                _ocrEmbedParams = { type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
@@ -3850,7 +3850,7 @@ class InteractionHandler {
                         .setLabel('↩️ Cofnij wynik')
                         .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
-                _ocrEmbedParams = { type: 'role_error', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
+                _ocrEmbedParams = { type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
             }
 
             // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza

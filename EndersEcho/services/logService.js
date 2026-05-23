@@ -5,7 +5,9 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 // Konfiguracja typów embedów OCR — kolor, emoji, etykieta
 const OCR_EMBED_TYPES = {
     new_record:              { color: 0x57F287, emoji: '🏆', label: 'NOWY REKORD' },
+    new_player:              { color: 0x57F287, emoji: '🆕', label: 'NOWY GRACZ' },
     role_error:              { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY REKORD — błąd uprawnień ról' },
+    role_error_new_player:   { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY GRACZ — błąd uprawnień ról' },
     rejected:                { color: 0xED4245, emoji: '🚫', label: 'ANALIZA ODRZUCONA' },
     no_record:               { color: 0x5865F2, emoji: '📊', label: 'REKORD NIE POBITY' },
     test_record:             { color: 0x00B4D8, emoji: '🧪', label: 'TEST — nowy rekord' },
