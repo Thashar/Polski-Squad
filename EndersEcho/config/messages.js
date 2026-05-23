@@ -49,6 +49,7 @@ const pol = {
     updateSuccess: '✅ Twój wynik został pomyślnie zapisany i ogłoszony!',
     updateError: '❌ Wystąpił błąd podczas przetwarzania obrazu. Spróbuj ponownie.',
     updateAiOverloaded: '⚠️ Usługa AI jest aktualnie mocno obciążona. Spróbuj ponownie za chwilę.',
+    updateAiRetrying: '⏳ Usługa AI jest przeciążona — ponawiam próbę {attempt}/{max}...',
 
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...',
@@ -374,6 +375,7 @@ const eng = {
     updateSuccess: '✅ Your score has been successfully saved and announced!',
     updateError: '❌ An error occurred while processing the image. Please try again.',
     updateAiOverloaded: '⚠️ The AI service is currently experiencing high demand. Please try again in a moment.',
+    updateAiRetrying: '⏳ AI service is overloaded — retrying {attempt}/{max}...',
 
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR unavailable, falling back to traditional OCR...',

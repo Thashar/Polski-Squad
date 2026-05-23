@@ -3447,7 +3447,25 @@ class InteractionHandler {
             };
 
             const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
+
+            // Retry loop dla błędów 503 — max 3 próby z 5s przerwą między nimi
+            const AI_MAX_RETRIES = 3;
+            let aiResult;
+            for (let aiAttempt = 1; aiAttempt <= AI_MAX_RETRIES; aiAttempt++) {
+                try {
+                    aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
+                    break;
+                } catch (err) {
+                    const is503 = err?.message?.includes('503') || err?.message?.includes('Service Unavailable');
+                    if (!is503 || aiAttempt === AI_MAX_RETRIES) throw err;
+                    gl.warn(`⚠️ [/${commandName}] AI 503 — retry ${aiAttempt}/${AI_MAX_RETRIES - 1}, czekam 5s`);
+                    const retryMsg = msgs.updateAiRetrying
+                        .replace('{attempt}', aiAttempt)
+                        .replace('{max}', AI_MAX_RETRIES);
+                    await editReplyStep(retryMsg);
+                    await new Promise(r => setTimeout(r, 5000));
+                }
+            }
 
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
