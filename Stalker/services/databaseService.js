@@ -1013,21 +1013,6 @@ class DatabaseService {
 
         await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
         logger.info(`[PHASE2] 💾 Zapisano dane dla ${summaryPlayers.length} graczy (3 rundy + suma, klan: ${clan}, tydzień: ${weekNumber}/${year})`);
-
-        const now = weekData.updatedAt;
-        const weekStartsAt = isoWeekStartUTC(year, weekNumber);
-
-        // Buduj mapę userId -> {r1, r2, r3} z danych rund
-        const roundScoresMap = new Map();
-        for (const roundData of roundsData || []) {
-            for (const player of roundData.players || []) {
-                if (!roundScoresMap.has(player.userId)) {
-                    roundScoresMap.set(player.userId, {});
-                }
-                roundScoresMap.get(player.userId)[`r${roundData.round}`] = player.score;
-            }
-        }
-
     }
 
     async savePhase2Result(guildId, userId, displayName, score, weekNumber, year, clan) {
