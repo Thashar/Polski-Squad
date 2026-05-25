@@ -369,7 +369,7 @@ client.on('messageCreate', async (message) => {
 
         const canAskResult = kingBumChatService.canAsk(message.author.id, message.member);
         if (!canAskResult.allowed) {
-            await message.reply(`⏳ The King needs a moment of peace. Try again in **${canAskResult.remainingSeconds}s**.`);
+            await message.reply(`⏳ Still processing the last one. Come back in **${canAskResult.remainingSeconds}s**.`);
             return;
         }
 
