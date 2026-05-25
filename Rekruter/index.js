@@ -173,7 +173,7 @@ client.once(Events.ClientReady, async () => {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId('not_polish')
-                        .setLabel('Nie, nie jestem Polakiem')
+                        .setLabel('No, I\'m not Polish')
                         .setStyle(ButtonStyle.Primary)
                         .setEmoji('<:PepeNie:1185134768464076831>'),
                     new ButtonBuilder()
