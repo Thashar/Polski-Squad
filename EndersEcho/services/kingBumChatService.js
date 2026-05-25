@@ -78,7 +78,7 @@ class KingBumChatService {
             }
         }
 
-        this.cooldownSeconds = 20;
+        this.cooldownSeconds = 60;
         this.dataDir = path.join(__dirname, '../data');
         this.cooldownsFile = path.join(this.dataDir, 'king_bum_cooldowns.json');
         this.cooldowns = new Map();
