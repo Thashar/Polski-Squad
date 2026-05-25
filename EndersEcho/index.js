@@ -110,7 +110,7 @@ const communityVerificationService = new CommunityVerificationService(config.ran
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
-const kingBumChatService = new KingBumChatService(config);
+const kingBumChatService = new KingBumChatService(config, rankingService);
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService);
 
 /**
