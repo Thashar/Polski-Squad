@@ -918,7 +918,7 @@ client.on(Events.MessageCreate, async (message) => {
 
         if (now - lastUsed >= COOLDOWN_MS) {
             try {
-                await message.channel.send('https://sio-tools.vercel.app/ <:PFrogMaszRacje:1341894087598669985>');
+                await message.channel.send('https://sio-tools.exp0.dev/?migrate=1 <:PFrogMaszRacje:1341894087598669985>');
                 calculatorCooldowns.set(message.channelId, now);
                 await saveCalculatorCooldowns();
                 logger.info(`[KALKULATOR] 🧮 Odpowiedź na kanale #${message.channel.name} (trigger: ${message.author.tag})`);
