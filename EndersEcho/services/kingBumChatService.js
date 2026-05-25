@@ -142,16 +142,35 @@ class KingBumChatService {
         return guildIds.includes(guildId);
     }
 
-    async _buildRankingContext(guildId) {
+    async _buildRankingContext(guildId, userId) {
         if (!this.rankingService || !guildId) return '';
         try {
             const ranking = await this.rankingService.loadRanking(guildId);
             const players = Object.values(ranking)
                 .filter(p => p.username && p.score)
                 .sort((a, b) => (b.scoreValue || 0) - (a.scoreValue || 0));
-            if (players.length === 0) return '';
-            const lines = players.map((p, i) => `${i + 1}. ${p.username} - ${p.score}`).join('\n');
-            return `[Server ranking]\n${lines}`;
+
+            const lines = players.length > 0
+                ? players.map((p, i) => `${i + 1}. ${p.username} - ${p.score}`).join('\n')
+                : '(no entries yet)';
+
+            let userScoreLine = '';
+            if (userId) {
+                const localEntry = ranking[userId];
+                if (localEntry?.score) {
+                    userScoreLine = `\n[Asking user's score on this server: ${localEntry.username} - ${localEntry.score}]`;
+                } else {
+                    const globalRanking = await this.rankingService.getGlobalRanking();
+                    const globalEntry = globalRanking.find(p => p.userId === userId);
+                    if (globalEntry?.score) {
+                        userScoreLine = `\n[Asking user's best score (on another server): ${globalEntry.username} - ${globalEntry.score}]`;
+                    } else {
+                        userScoreLine = `\n[Asking user has no score recorded yet]`;
+                    }
+                }
+            }
+
+            return `[Server ranking]\n${lines}${userScoreLine}`;
         } catch {
             return '';
         }
@@ -163,7 +182,7 @@ class KingBumChatService {
         }
 
         const displayName = message.member?.displayName || message.author.username;
-        const rankingContext = await this._buildRankingContext(message.guildId);
+        const rankingContext = await this._buildRankingContext(message.guildId, message.author.id);
         const context = previousBotMessage
             ? `[Previous Ender's Echo message]: ${previousBotMessage}\n\n`
             : '';
