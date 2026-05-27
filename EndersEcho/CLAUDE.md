@@ -345,7 +345,7 @@
 - **Pliki:** `services/bossAliasService.js`, `data/boss_aliases.json`, `config/bossNames.js` (`correctBossNameFull`)
 - **Inicjalizacja:** plik `data/boss_aliases.json` jest jedynym źródłem prawdy — brak hardcodowanych nazw. Przy starcie bot wczytuje dane z pliku; jeśli nie istnieje → pusta lista.
 - **Backward compat:** stare pliki JSON przechowujące nazwy jako klucze `aliases{}` (z dawnego `initFromBaseNames`) są rozpoznawane przez `getExtraEnglishNames()` zwracające sumę `englishNames[]` + `Object.keys(aliases{})`.
-- **Obsługiwane języki:** pl, de, fr, es, pt, ru, it, tr, ja, zh, vi (select menu w UI)
+- **Obsługiwane języki:** pl, de, fr, es, pt, ru, it, tr, ja, zh, vi, ko (select menu w UI)
 - **Konfiguracja bossów (head admin):** `/manage` → 🎯 Konfiguracja bossów — dwa rzędy przycisków:
   - **Rząd 1 (boss):** ➕ Dodaj bossa · 🗑️ Usuń bossa · ✏️ Edytuj bossa
   - **Rząd 2 (alias):** ➕ Dodaj alias · 🗑️ Usuń alias · ✏️ Edytuj alias
