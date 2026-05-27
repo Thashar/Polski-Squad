@@ -164,15 +164,7 @@ class LogService {
                              || guildConfig?.icon
                              || null;
 
-            // Wyciągnij ikonę z custom emoji w tagu (np. <:BUMS:1506042018944778250> lub <a:name:id>)
-            let tagEmojiIconUrl = null;
-            if (guildTag) {
-                const emojiMatch = guildTag.match(/<a?:[\w]+:(\d+)>/);
-                if (emojiMatch) {
-                    tagEmojiIconUrl = `https://cdn.discordapp.com/emojis/${emojiMatch[1]}.png`;
-                }
-            }
-            const authorIconUrl = tagEmojiIconUrl || guildIcon || undefined;
+            const authorIconUrl = guildIcon || undefined;
 
             const embed = new EmbedBuilder()
                 .setColor(cfg.color)
