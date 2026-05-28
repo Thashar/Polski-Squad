@@ -10184,7 +10184,7 @@ class InteractionHandler {
      * Zawiera przycisk "Dopasuj do nazwy angielskiej" z unikalnym sessionKey.
      */
     async _sendUnknownBossEmbed(client, guildId, { rawBoss, userName, userId, userAvatarUrl, imagePath, imageExt, commandName, guild }) {
-        const channelId = this.config.bossLogChannelId || this.config.invalidReportChannelId;
+        const channelId = this.config.bossLogChannelId || this.config.guildLogChannelId || this.config.invalidReportChannelId;
         if (!channelId) return;
         const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
         if (!channel) return;
