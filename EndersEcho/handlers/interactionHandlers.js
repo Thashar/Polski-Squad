@@ -4898,6 +4898,7 @@ class InteractionHandler {
         // Rekord head admina = tryb testowy: jedno kliknięcie uruchamia pełny przepływ zgłoszenia
         const threshold = ownerIsHeadAdmin ? 1 : (cvCfg?.threshold || 5);
         const count = result.count;
+        session.count = count; // zaktualizuj snapshot — getSession() zwraca kopię sprzed registerVote
 
         // Zaktualizuj etykietę przycisku na wiadomości (z licznikiem zgłoszeń)
         try {
