@@ -275,9 +275,6 @@ client.on('guildCreate', async (guild) => {
 });
 
 async function sendAdminNotification(discordClient, embed) {
-    // Webhook logów (opcjonalne — wysyła równolegle z kanałem)
-    guildLogger.sendEmbed(embed);
-
     // Dedykowany kanał logów serwerowych
     const channelId = config.serverLogChannelId;
     if (!channelId) return;

@@ -2116,9 +2116,6 @@ class InteractionHandler {
                         .setTimestamp();
                 }
 
-                // Webhook logów (opcjonalne)
-                this.logService.sendEmbed(configEmbed);
-
                 // Dedykowany kanał logów serwerowych
                 if (this.config.serverLogChannelId) {
                     const serverLogChannel = await interaction.client.channels.fetch(this.config.serverLogChannelId).catch(() => null);
