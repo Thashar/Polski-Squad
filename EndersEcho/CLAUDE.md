@@ -658,3 +658,19 @@ const label = this.config.getAllGuilds().find(g => g.id === guildId)?.tag || gui
 - Jeśli nic się nie zmieniło → pomijamy wysyłanie embeda
 - Wysyłaj przez `logService.sendEmbed(embed)` lub `guildLogger.sendEmbed(embed)` — nie przez kanał Discord
 - Fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
+
+### Ogłoszenie nowego serwera (cfg_announce_new_*)
+
+Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) pod embedem sukcesu pojawia się przycisk 📣 **Ogłoś dołączenie nowego serwera**.
+
+**Flow:**
+1. Klik `cfg_announce_new_{guildId}` → `_handleAnnounceNewServer()` → ephemeral z podglądem (PL + EN) i przyciskami
+2. Klik `cfg_announce_send_{guildId}` → `_handleAnnounceNewServerSend()` → broadcast na `allowedChannelId` wszystkich serwerów, embed w języku serwera (`pol`/`eng`)
+3. Klik `cfg_announce_cancel` → `interaction.update()` z "Anulowano."
+
+**Zawartość embeda** (kolor `0xFFD700` — złoty, uroczysty):
+- Nazwa serwera, liczba członków, numer kolejny skonfigurowanego serwera w rywalizacji
+- PL: "N. skonfigurowany serwer" · EN: "Nth configured server" (sufiks ordinalny przez `_enOrdinal()`)
+- Thumbnail: ikona serwera Discord
+
+**Metody:** `_buildNewServerAnnouncementEmbeds(guild, serverNumber)`, `_enOrdinal(n)`, `_handleAnnounceNewServer()`, `_handleAnnounceNewServerSend()`

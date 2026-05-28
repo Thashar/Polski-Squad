@@ -1988,6 +1988,16 @@ class InteractionHandler {
                 `✅ Configuration saved! The bot is now active on this server.\n\n${ocrLine}`
             );
 
+            const cfgSavedComponents = [];
+            if (!wasAlreadyConfigured) {
+                cfgSavedComponents.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`cfg_announce_new_${interaction.guildId}`)
+                        .setEmoji('📣')
+                        .setLabel(t('Ogłoś dołączenie nowego serwera', 'Announce new server joining'))
+                        .setStyle(ButtonStyle.Primary)
+                ));
+            }
             await interaction.update({
                 embeds: [
                     new EmbedBuilder()
@@ -1995,7 +2005,7 @@ class InteractionHandler {
                         .setTitle(t('✅ Konfiguracja zapisana!', '✅ Configuration saved!'))
                         .setDescription(savedDesc)
                 ],
-                components: []
+                components: cfgSavedComponents
             });
 
             // Powiadomienie o skonfigurowanym serwerze — webhook logów lub fallback na kanał raportów
@@ -4185,6 +4195,20 @@ class InteractionHandler {
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .addFields({ name: '↩️ Cofnięto', value: `przez **${adminName}**`, inline: false });
                 await interaction.message.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
+                return;
+            }
+
+            // === Przyciski ogłoszenia nowego serwera ===
+            if (customId.startsWith('cfg_announce_new_')) {
+                await this._handleAnnounceNewServer(interaction, customId);
+                return;
+            }
+            if (customId.startsWith('cfg_announce_send_')) {
+                await this._handleAnnounceNewServerSend(interaction, customId);
+                return;
+            }
+            if (customId === 'cfg_announce_cancel') {
+                await interaction.update({ content: this._panelT(interaction.guildId)('Anulowano.', 'Cancelled.'), embeds: [], components: [] });
                 return;
             }
 
@@ -6468,6 +6492,147 @@ class InteractionHandler {
         } catch {
             // DM zablokowane lub inny błąd — ignoruj cicho
         }
+    }
+
+    /**
+     * Zwraca suffix ordinalny dla liczby angielskiej (1→st, 2→nd, 3→rd, N→th).
+     */
+    _enOrdinal(n) {
+        const mod100 = n % 100;
+        if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+        switch (n % 10) {
+            case 1: return `${n}st`;
+            case 2: return `${n}nd`;
+            case 3: return `${n}rd`;
+            default: return `${n}th`;
+        }
+    }
+
+    /**
+     * Buduje uroczyste embedy ogłoszenia (PL + EN) dla nowego serwera.
+     */
+    _buildNewServerAnnouncementEmbeds(guild, serverNumber) {
+        const guildName = guild?.name || '???';
+        const memberCount = guild?.memberCount ?? 0;
+        const icon = guild?.iconURL({ dynamic: true, size: 256 }) || null;
+
+        const embedPL = new EmbedBuilder()
+            .setColor(0xFFD700)
+            .setTitle('🎉 Nowy serwer dołącza do rywalizacji!')
+            .setDescription(
+                `Witajcie, Mistrzowie **Ender's Echo**!\n\n` +
+                `Z wielką radością ogłaszamy, że do grona serwerów uczestniczących w globalnej rywalizacji dołącza:\n\n` +
+                `🏰 **${guildName}**\n` +
+                `👥 **${memberCount.toLocaleString('pl-PL')}** członków\n` +
+                `🔢 **${serverNumber}.** skonfigurowany serwer w rywalizacji!\n\n` +
+                `Powitajcie nowych rywali serdecznie — niech najlepsi zwyciężą! ⚔️🏆`
+            )
+            .setTimestamp()
+            .setFooter({ text: "Ender's Echo — Rywalizacja Międzyserwerowa" });
+        if (icon) embedPL.setThumbnail(icon);
+
+        const embedEN = new EmbedBuilder()
+            .setColor(0xFFD700)
+            .setTitle('🎉 A new server joins the competition!')
+            .setDescription(
+                `Greetings, **Ender's Echo** Champions!\n\n` +
+                `We are thrilled to announce that a new server is joining the global competition:\n\n` +
+                `🏰 **${guildName}**\n` +
+                `👥 **${memberCount.toLocaleString('en-US')}** members\n` +
+                `🔢 The **${this._enOrdinal(serverNumber)}** configured server in the competition!\n\n` +
+                `Welcome our new rivals — may the best competitors win! ⚔️🏆`
+            )
+            .setTimestamp()
+            .setFooter({ text: "Ender's Echo — Cross-Server Competition" });
+        if (icon) embedEN.setThumbnail(icon);
+
+        return { embedPL, embedEN };
+    }
+
+    /**
+     * Obsługuje przycisk "Ogłoś dołączenie nowego serwera" — pokazuje ephemeral z podglądem.
+     */
+    async _handleAnnounceNewServer(interaction, customId) {
+        const targetGuildId = customId.replace('cfg_announce_new_', '');
+        const targetGuild = interaction.client.guilds.cache.get(targetGuildId) || interaction.guild;
+
+        const configuredIds = this.guildConfigService.getAllConfiguredGuildIds();
+        const serverNumber = configuredIds.length;
+
+        const { embedPL, embedEN } = this._buildNewServerAnnouncementEmbeds(targetGuild, serverNumber);
+
+        const otherGuilds = this.config.getAllGuilds().filter(g => g.id !== targetGuildId);
+        const t = this._panelT(interaction.guildId);
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`cfg_announce_send_${targetGuildId}`)
+                .setEmoji('📣')
+                .setLabel(t('Wysyłam', 'Send'))
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('cfg_announce_cancel')
+                .setLabel(t('Anuluj', 'Cancel'))
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await interaction.reply({
+            content: t(
+                `📣 **Podgląd ogłoszenia** — zostanie wysłane na **${otherGuilds.length}** serwer${otherGuilds.length === 1 ? '' : otherGuilds.length < 5 ? 'y' : 'ów'}\n🇵🇱 **Wersja polska** (powyżej) • 🇬🇧 **Wersja angielska** (poniżej)`,
+                `📣 **Announcement preview** — will be sent to **${otherGuilds.length}** server${otherGuilds.length === 1 ? '' : 's'}\n🇵🇱 **Polish version** (above) • 🇬🇧 **English version** (below)`
+            ),
+            embeds: [embedPL, embedEN],
+            components: [row],
+            flags: ['Ephemeral']
+        });
+    }
+
+    /**
+     * Obsługuje przycisk "Wysyłam" — broadcastuje ogłoszenie na kanały wszystkich serwerów.
+     */
+    async _handleAnnounceNewServerSend(interaction, customId) {
+        const targetGuildId = customId.replace('cfg_announce_send_', '');
+        const targetGuild = interaction.client.guilds.cache.get(targetGuildId) || interaction.guild;
+
+        await interaction.deferUpdate();
+
+        const configuredIds = this.guildConfigService.getAllConfiguredGuildIds();
+        const serverNumber = configuredIds.length;
+        const { embedPL, embedEN } = this._buildNewServerAnnouncementEmbeds(targetGuild, serverNumber);
+
+        let sent = 0;
+        let failed = 0;
+
+        for (const guildCfg of this.config.getAllGuilds()) {
+            const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
+            if (!guildObj) continue;
+
+            const lang = guildCfg.lang || 'pol';
+            const embed = lang === 'eng' ? embedEN : embedPL;
+
+            try {
+                const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
+                if (!channel) { failed++; continue; }
+                await channel.send({ embeds: [embed] });
+                sent++;
+            } catch (err) {
+                logger.error(`Błąd wysyłania ogłoszenia nowego serwera do "${guildObj.name}": ${err.message}`);
+                failed++;
+            }
+        }
+
+        const t = this._panelT(interaction.guildId);
+        const color = failed === 0 ? 0x57F287 : sent === 0 ? 0xFF4444 : 0xFEE75C;
+        const resultEmbed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle(t('📋 Wyniki wysyłania ogłoszenia', '📋 Announcement delivery report'))
+            .setDescription(
+                `✅ ${t('Wysłano', 'Sent')}: **${sent}**` +
+                (failed > 0 ? ` · ❌ ${t('Błędy', 'Errors')}: **${failed}**` : '')
+            )
+            .setTimestamp();
+
+        await interaction.editReply({ content: '', embeds: [resultEmbed], components: [] });
     }
 
     /**
