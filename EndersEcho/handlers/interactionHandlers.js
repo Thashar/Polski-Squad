@@ -2116,13 +2116,14 @@ class InteractionHandler {
                         .setTimestamp();
                 }
 
-                const sentViaWebhook = this.logService.sendEmbed(configEmbed);
-                if (!sentViaWebhook) {
-                    const reportChannelId = this.config.invalidReportChannelId;
-                    if (reportChannelId) {
-                        const reportChannel = await interaction.client.channels.fetch(reportChannelId);
-                        if (reportChannel) await reportChannel.send({ embeds: [configEmbed] });
-                    }
+                // Webhook logów (opcjonalne)
+                this.logService.sendEmbed(configEmbed);
+
+                // Dedykowany kanał logów serwerowych
+                const guildLogChannelId = this.config.guildLogChannelId || this.config.invalidReportChannelId;
+                if (guildLogChannelId) {
+                    const guildLogChannel = await interaction.client.channels.fetch(guildLogChannelId).catch(() => null);
+                    if (guildLogChannel) await guildLogChannel.send({ embeds: [configEmbed] });
                 }
             } catch (err) {
                 logger.error(`Błąd wysyłania powiadomienia cfg_accept (serwer "${interaction.guild?.name || interaction.guildId}"):`, err.message);

@@ -303,11 +303,11 @@ client.on('guildCreate', async (guild) => {
 });
 
 async function sendAdminNotification(discordClient, embed) {
-    // Webhook logów — preferowane
-    if (guildLogger.sendEmbed(embed)) return;
+    // Webhook logów (opcjonalne — wysyła równolegle z kanałem)
+    guildLogger.sendEmbed(embed);
 
-    // Fallback: kanał Discord (gdy brak webhooka)
-    const channelId = config.invalidReportChannelId;
+    // Dedykowany kanał logów serwerowych
+    const channelId = config.guildLogChannelId || config.invalidReportChannelId;
     if (!channelId) return;
     try {
         const channel = await discordClient.channels.fetch(channelId);

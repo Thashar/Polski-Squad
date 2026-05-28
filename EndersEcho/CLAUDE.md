@@ -552,6 +552,12 @@ ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
 # Pozwala trzymać logi tekstowe i embedy OCR w osobnych kanałach
 ENDERSECHO_OCR_EMBED_WEBHOOK_URL=webhook_url
 
+# Kanał logów serwerowych (opcjonalne)
+# Wysyła embedy: bot dodany do serwera (guildCreate), bot usunięty z serwera (guildDelete),
+# pierwsza konfiguracja serwera i rekonfiguracja (cfg_accept)
+# Jeśli nieustawiony — fallback na ENDERSECHO_INVALID_REPORT_CHANNEL_ID
+ENDERSECHO_GUILD_LOG_CHANNEL_ID=channel_id
+
 # Kanał raportów odrzuconych screenów (opcjonalne)
 # Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
 # Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
@@ -583,7 +589,9 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 - **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera. Metoda `sendEmbed(embed)` wysyła embed przez webhook (powiadomienia o dołączeniu serwera, usunięciu, zmianie konfiguracji); zwraca `true` jeśli webhook skonfigurowany
-- **Embedy administracyjne przez webhook:** `guildLogger.sendEmbed(embed)` lub `logService.sendEmbed(embed)` — używane dla powiadomień guildCreate/guildDelete (`index.js`) i konfiguracji `/configure` (`interactionHandlers`). Fallback na kanał `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
+- **Embedy administracyjne (guildCreate/guildDelete/cfg_accept):** Wysyłane na dwa miejsca równolegle:
+  1. Webhook przez `guildLogger.sendEmbed(embed)` / `logService.sendEmbed(embed)` (opcjonalne)
+  2. Kanał Discord: `ENDERSECHO_GUILD_LOG_CHANNEL_ID` → fallback `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`
 - **Embedy OCR analiz (dodatkowe):** `logService.sendOcrAnalysisEmbed(guildId, options, guildObj, components)` — wysyła embed po każdej analizie OCR (/update, /test, panel Analizuj). Nie zastępuje logowania tekstowego. Typy i kolory: 🏆 `new_record` zielony, ⚠️ `role_error` żółty (rekord OK, błąd ról), 🚫 `rejected` czerwony, 📊 `no_record` niebieski, 🧪 `test_record`/`test_no_record` cyan/blurple, 🔬 `analyze_panel` pomarańczowy, 🔄 `cross_server` szary. Thumbnail = ikona serwera Discord (lub ICON z env). Embed zawiera: gracza, komendę, admina (panel), wynik, boss, poprzedni rekord, powód odrzucenia, szczegóły AI, błąd ról. W `_runUpdateFlow` — parametry zbierane w `_ocrEmbedParams`, embed wysyłany w bloku `finally`. W `_handleAnalyzeConfirmed` — wysyłany bezpośrednio po role update. Parametr `components` (JSON array) dołączany do payload gdy używany jest `ENDERSECHO_OCR_EMBED_WEBHOOK_URL`.
 - **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{userId}_{guildId}`) — dołączany do embedów `new_record` i `role_error` (nie dotyczy `dryRun`/`/test`). Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i usuwa przyciski. Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId` — nadpisywany przy nowym rekordzie, co unieważnia poprzedni przycisk). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
@@ -657,7 +665,7 @@ const label = this.config.getAllGuilds().find(g => g.id === guildId)?.tag || gui
 - **Rekonfiguracja** → embed tylko ze zmienionymi polami format `stara wartość → nowa wartość` (kolor `0xFEE75C`)
 - Jeśli nic się nie zmieniło → pomijamy wysyłanie embeda
 - Wysyłaj przez `logService.sendEmbed(embed)` lub `guildLogger.sendEmbed(embed)` — nie przez kanał Discord
-- Fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID` gdy brak webhooka
+- Kanał Discord: `ENDERSECHO_GUILD_LOG_CHANNEL_ID` (dedykowany) → fallback `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`
 
 ### Ogłoszenie nowego serwera (cfg_announce_new_*)
 
