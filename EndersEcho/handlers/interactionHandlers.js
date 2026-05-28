@@ -4953,6 +4953,22 @@ class InteractionHandler {
             const cvAuthorName = cvGuildTag ? `${cvGuildTag}  ${sourceGuild?.name || session.guildId}` : (sourceGuild?.name || session.guildId);
             const cvUserAvatar = targetUser?.displayAvatarURL({ dynamic: true, size: 64 }) || cvGuildIcon || null;
 
+            // Pobierz screenshota z oryginalnej wiadomości (embed.image lub attachment)
+            let cvScreenImageUrl = null;
+            if (session.channelId) {
+                try {
+                    const origCh = await client.channels.fetch(session.channelId).catch(() => null);
+                    if (origCh) {
+                        const origMsg = await origCh.messages.fetch(messageId).catch(() => null);
+                        if (origMsg) {
+                            cvScreenImageUrl = origMsg.embeds?.[0]?.image?.url
+                                || origMsg.attachments?.first()?.url
+                                || null;
+                        }
+                    }
+                } catch {}
+            }
+
             const reportEmbed = new EmbedBuilder()
                 .setColor(0xFEE75C)
                 .setTitle(msgs.cvReportTitle)
@@ -4968,6 +4984,8 @@ class InteractionHandler {
                 )
                 .setTimestamp()
                 .setFooter({ text: `cv:${messageId}|uid:${session.userId}|gid:${session.guildId}` });
+
+            if (cvScreenImageUrl) reportEmbed.setImage(cvScreenImageUrl);
 
             const approveBtn = new ButtonBuilder()
                 .setCustomId(`cv_admin_approve_${messageId}`)
