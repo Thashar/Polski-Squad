@@ -99,12 +99,11 @@ module.exports = {
     clientId: process.env.ENDERSECHO_CLIENT_ID,
     blockOcrUserIds: (process.env.ENDERSECHO_BLOCK_OCR_USER_IDS || '').split(',').map(id => id.trim()).filter(Boolean),
     configureAdminOnly: process.env.ENDERSECHO_CONFIGURE_ADMIN_ONLY === 'true',
-    logWebhookUrl: process.env.ENDERSECHO_LOG_WEBHOOK_URL || null,
-    ocrEmbedWebhookUrl: process.env.ENDERSECHO_OCR_EMBED_WEBHOOK_URL || null,
-    invalidReportChannelId: process.env.ENDERSECHO_INVALID_REPORT_CHANNEL_ID || null,
-    guildLogChannelId: process.env.ENDERSECHO_GUILD_LOG_CHANNEL_ID || null,
-    communityReportChannelId: process.env.ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID || null,
-    bossLogChannelId: process.env.ENDERSECHO_BOSS_LOG_CHANNEL_ID || null,
+    logsWebhookUrl: process.env.ENDERSECHO_LOGS_WEBHOOK_URL || null,
+    serverLogChannelId: process.env.ENDERSECHO_SERVER_LOG_CHANNEL_ID || null,
+    ocrLogChannelId: process.env.ENDERSECHO_OCR_LOG_CHANNEL_ID || null,
+    rejectedChannelId: process.env.ENDERSECHO_REJECTED_CHANNEL_ID || null,
+    communityChannelId: process.env.ENDERSECHO_COMMUNITY_CHANNEL_ID || null,
     appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,
 
     // Lista serwerów z .env (fallback gdy guildConfigService niedostępny)

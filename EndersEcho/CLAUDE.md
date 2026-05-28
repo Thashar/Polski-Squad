@@ -355,7 +355,7 @@
   - **🗑️ Usuń alias:** boss select → alias select → usunięcie
   - Sesje robocze: `_bossCfgSessions` Map (RAM, per userId)
 - **Wykrywanie nieznanej nazwy:** `correctBossNameFull(raw, bossAliasService)` zwraca `{ corrected, wasUnknown }`. Gdy `wasUnknown=true` i wynik OCR jest prawidłowy: `_runUpdateFlow` wywołuje `_sendUnknownBossEmbed` (fire-and-forget).
-- **Embed nieznanego bossa (czerwony):** wysyłany na `ENDERSECHO_BOSS_LOG_CHANNEL_ID` lub `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`. Zawiera: nazwę bossa (OCR), gracza (link Discord), komendę, serwer, screenshot. Przycisk: 🔗 Dopasuj do nazwy angielskiej (`boss_mapm_{sessionKey}`).
+- **Embed nieznanego bossa (czerwony):** wysyłany na `ENDERSECHO_SERVER_LOG_CHANNEL_ID`. Zawiera: nazwę bossa (OCR), gracza (link Discord), komendę, serwer, screenshot. Przycisk: 🔗 Dopasuj do nazwy angielskiej (`boss_mapm_{sessionKey}`).
 - **Flow mapowania (po kliknięciu przycisku):**
   1. Modal z oryginalną nazwą (edytowalna) → `boss_map_boss_modal`
   2. Select angielskiej nazwy bossa → `boss_map_boss_sel`
@@ -364,7 +364,7 @@
 - **Normalizacja w OCR:** `aiOcrService.parseAIResponse` używa `correctBossNameFull(rawBoss, this.bossAliasService)`. Jeśli alias dopasowany → wraca angielska nazwa. Jeśli nie → wraca surowa nazwa + `wasUnknownBoss: true`.
 - **Osiągnięcia:** `bossesEncountered` w achievementService przechowuje znormalizowaną (angielską) nazwę → "Robak PL" i "Shardstone Bug EN" to ten sam boss.
 - **Persistencja:** `data/boss_aliases.json`: `{ englishNames: [], aliases: { "BossEN": { "pl": ["Alias PL"] } } }`. Przeżywa restart bota.
-- **Env:** `ENDERSECHO_BOSS_LOG_CHANNEL_ID` (opcjonalne — fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
+- **Env:** `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
@@ -399,7 +399,7 @@
 - **Tryb testowy CV (rekord head admina):** gdy właściciel rekordu (`session.userId`) jest head adminem, przycisk `⚠️ Zgłoś` może kliknąć **WYŁĄCZNIE on sam** (inni → `cvVoteHeadAdminOnly`), a próg zgłoszeń wynosi **1** — jedno kliknięcie head admina od razu uruchamia pełny przepływ zgłoszenia (`_triggerCvReport`: blokada 24h na head adminie + raporty na kanały rejected). Pozwala head adminowi przetestować CV end-to-end na własnym wyniku. `_handleCvVote` opakowany w try/catch (`_handleCvVoteInner`) — błąd nie zostawia interakcji bez odpowiedzi.
 - **Licznik:** etykieta przycisku aktualizuje się po każdym głosie: `⚠️ Zgłoś (N)` (`setLabel(\`${msgs.cvVoteButton} (${count})\`)` w `_handleCvVote`)
 - **Próg zgłoszeń:** konfigurowalne 1–25 (domyślnie 5; dla rekordu head admina zawsze 1). Po osiągnięciu progu: użytkownik blokowany na **24h** (`userBlockService.blockUser(..., '24h', false)`) + przycisk usuwany z oryginalnej wiadomości + raporty wysyłane na kanały rejected
-- **Raporty:** wysyłane jednocześnie na **per-guild kanał** (`communityVerification.rejectedChannelId`) i **globalny kanał** (`ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID`). Jeśli oba kanały mają to samo ID — wysyłana jest tylko jedna wiadomość (brak duplikatu). Embed zawiera: nick, serwer, boss, nowy/poprzedni wynik, liczbę zgłoszeń, link do zgłoszonej wiadomości (w polu embeda, nie w przycisku). Footer: `cv:{messageId}|uid:{userId}|gid:{guildId}`
+- **Raporty:** wysyłane jednocześnie na **per-guild kanał** (`communityVerification.rejectedChannelId`) i **globalny kanał** (`ENDERSECHO_COMMUNITY_CHANNEL_ID`). Jeśli oba kanały mają to samo ID — wysyłana jest tylko jedna wiadomość (brak duplikatu). Embed zawiera: nick, serwer, boss, nowy/poprzedni wynik, liczbę zgłoszeń, link do zgłoszonej wiadomości (w polu embeda, nie w przycisku). Footer: `cv:{messageId}|uid:{userId}|gid:{guildId}`
 - **Przyciski admina w raporcie:**
   - `cv_admin_approve_{messageId}` → **Zatwierdź**: odblokuj użytkownika + zaktualizuj embedy raportów (usuń przyciski, dodaj info o akcji)
   - `cv_admin_remove_{messageId}` → **Usuń rekord i osiągnięcia** (`_cvRemoveRecord`): przywróć poprzedni rekord (lub usuń wpis przez `revertUserRecord()`) + usuń wpisy historii wyników (`wyniki/{userId}.json`) od momentu zgłoszonego rekordu w górę (zgłoszony rekord A + wszystkie pobite po nim B, C — `scoreHistoryService.removeEntriesAfter(session.newRecord.timestamp)`, zwraca liczbę usuniętych) + cofnij **tylko** osiągnięcia score/records odblokowane od momentu zgłoszonego rekordu (`achievementService.clearAchievementsAfter(timestamp, { removedRecordCount, previousRecord })` — osiągnięcia zdobyte WCZEŚNIEJ zostają, `recordCount` dekrementowany o liczbę usuniętych wpisów, `lastRecordAt/lastRecordBeatAt` cofnięte do poprzedniego rekordu) + odblokuj użytkownika
@@ -416,7 +416,7 @@
 
 **System raportów odrzuconych screenów** (per-guild + global):
 - Raport w języku serwera źródłowego (`config.getMessages(guildId)`) — klucze `reportTitle`, `reportField*`, `reportReason*`
-- Raport wysyłany do GLOBAL channel (`ENDERSECHO_INVALID_REPORT_CHANNEL_ID`) oraz opcjonalnie do per-guild kanału
+- Raport wysyłany do GLOBAL channel (`ENDERSECHO_REJECTED_CHANNEL_ID`) oraz opcjonalnie do per-guild kanału
 - Footer globalnego raportu: `uid:{userId}|gid:{guildId}`
 - Footer per-guild raportu: `ref:{globalMsgId}|uid:{userId}|gid:{guildId}`
 - Gdy admin klika przycisk na per-guild embeddzie → globalny raport aktualizowany (pole akcji + usunięcie przycisków)
@@ -424,7 +424,7 @@
 - Metody pomocnicze: `_parseReportFooter(text)` i `_updateGlobalReportMsg(client, globalMsgId, guildId, action, admin, extra)`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
-- Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
+- Raport odrzuconego screena zawiera przyciski **Zatwierdź** i **Zablokuj użytkownika** (widoczne na kanale `ENDERSECHO_REJECTED_CHANNEL_ID`)
 - **Zablokuj** otwiera modal z polem czasu (np. `1h`, `7d`, `30m` — puste = permanentnie); jeśli klikający jest Head Adminem, blokada zapisywana z flagą `blockedByHeadAdmin: true`
 - Zablokowany użytkownik przy próbie `/update` widzi komunikat o blokadzie i konieczności kontaktu z adminem
 - `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania; jeśli `blockedByHeadAdmin: true` — zwykły Admin nie może odblokować
@@ -542,31 +542,30 @@ USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 
-# Dedykowany kanał logów EndersEcho (opcjonalne — jeśli ustawiony, logi NIE trafiają do głównego webhooka)
-# Każdy serwer pojawia się z własnym avatarem (ENDERSECHO_GUILD_N_ICON) i nazwą (TAG)
-# Separator kreską pojawia się przy każdej zmianie serwera
-ENDERSECHO_LOG_WEBHOOK_URL=webhook_url
+# 1. Tekstowe logi bota — webhook (opcjonalne)
+# Format: [timestamp] ✅/⚠️/❌ message, każdy serwer z własnym avatarem i tagiem
+# Separator kreską pojawia się przy zmianie serwera
+ENDERSECHO_LOGS_WEBHOOK_URL=webhook_url
 
-# Osobny webhook dla embedów OCR analiz (opcjonalne)
-# Gdy ustawiony, sendOcrAnalysisEmbed wysyła embedy na TEN webhook zamiast ENDERSECHO_LOG_WEBHOOK_URL
-# Pozwala trzymać logi tekstowe i embedy OCR w osobnych kanałach
-ENDERSECHO_OCR_EMBED_WEBHOOK_URL=webhook_url
+# 2. Logi zdarzeń serwerowych — kanał Discord (opcjonalne)
+# Wysyła embedy: bot dodany do serwera, bot usunięty z serwera,
+# pierwsza konfiguracja serwera, rekonfiguracja, wykrycie nieznanej nazwy bossa
+ENDERSECHO_SERVER_LOG_CHANNEL_ID=channel_id
 
-# Kanał logów serwerowych (opcjonalne)
-# Wysyła embedy: bot dodany do serwera (guildCreate), bot usunięty z serwera (guildDelete),
-# pierwsza konfiguracja serwera i rekonfiguracja (cfg_accept)
-# Jeśli nieustawiony — fallback na ENDERSECHO_INVALID_REPORT_CHANNEL_ID
-ENDERSECHO_GUILD_LOG_CHANNEL_ID=channel_id
+# 3. Logi analiz OCR — kanał Discord (opcjonalne)
+# Wysyła embedy po każdym /update i /test: nowy rekord, brak rekordu, odrzucenie,
+# duplikat cross-server, błąd ról, analiza z panelu admina
+ENDERSECHO_OCR_LOG_CHANNEL_ID=channel_id
 
-# Kanał raportów odrzuconych screenów (opcjonalne)
-# Wysyła embed gdy screen jest odrzucony (podrobione zdjęcie, brak Victory, brak Best/Total)
-# Embed zawiera: nick na serwerze, Discord username, serwer, czas, powód, zdjęcie
-ENDERSECHO_INVALID_REPORT_CHANNEL_ID=channel_id
+# 4. Odrzucone screeny z przyciskami — kanał Discord (opcjonalne)
+# Wysyła embed gdy screen jest odrzucony (NOT_SIMILAR, FAKE_PHOTO, błędy walidacji)
+# Embed zawiera: gracza, serwer, czas, powód, zdjęcie — przyciski Zatwierdź/Zablokuj
+ENDERSECHO_REJECTED_CHANNEL_ID=channel_id
 
-# Globalny kanał zgłoszeń społeczności (opcjonalne)
-# Wysyła embed gdy gracz osiągnie próg zgłoszeń weryfikacji społeczności (CV system)
-# Jeśli ten sam ID co per-guild rejectedChannelId → wysyłany tylko jeden raport (bez duplikatu)
-ENDERSECHO_COMMUNITY_REPORT_CHANNEL_ID=channel_id
+# 5. Raporty weryfikacji społeczności — kanał Discord (opcjonalne)
+# Wysyła embed gdy gracz osiągnie próg zgłoszeń CV (community verification)
+# Jeśli ten sam ID co per-guild rejectedChannelId → jeden raport (bez duplikatu)
+ENDERSECHO_COMMUNITY_CHANNEL_ID=channel_id
 
 # Użytkownicy uprawnieni do /ocr-on-off (ID rozdzielone przecinkami)
 # Komenda włącza/wyłącza /update i/lub /test per-guild (parametry: action, target, guild z autocomplete)
@@ -586,13 +585,13 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 ## Najlepsze Praktyki
 
 - **Alerty uprawnień:** `_dmPermissionAlert(client, guildId, { channelId, missingPerms, context })` — wysyła DM do `configuredBy` + właściciela serwera gdy bot nie może zapisać do kanału (50001/50013). `_sendChannelErrorDm({ guildObj, ... })` — analogicznie dla /info. Oba fire-and-forget, nie przerywają głównego flow.
-- **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOG_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
+- **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOGS_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
 - **GuildLogger:** `services/guildLogger.js` — zarządza kolejką webhooka, avatarem (ICON) i separatorem przy zmianie serwera. Metoda `sendEmbed(embed)` wysyła embed przez webhook (powiadomienia o dołączeniu serwera, usunięciu, zmianie konfiguracji); zwraca `true` jeśli webhook skonfigurowany
 - **Embedy administracyjne (guildCreate/guildDelete/cfg_accept):** Wysyłane na dwa miejsca równolegle:
-  1. Webhook przez `guildLogger.sendEmbed(embed)` / `logService.sendEmbed(embed)` (opcjonalne)
-  2. Kanał Discord: `ENDERSECHO_GUILD_LOG_CHANNEL_ID` → fallback `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`
-- **Embedy OCR analiz (dodatkowe):** `logService.sendOcrAnalysisEmbed(guildId, options, guildObj, components)` — wysyła embed po każdej analizie OCR (/update, /test, panel Analizuj). Nie zastępuje logowania tekstowego. Typy i kolory: 🏆 `new_record` zielony, ⚠️ `role_error` żółty (rekord OK, błąd ról), 🚫 `rejected` czerwony, 📊 `no_record` niebieski, 🧪 `test_record`/`test_no_record` cyan/blurple, 🔬 `analyze_panel` pomarańczowy, 🔄 `cross_server` szary. Thumbnail = ikona serwera Discord (lub ICON z env). Embed zawiera: gracza, komendę, admina (panel), wynik, boss, poprzedni rekord, powód odrzucenia, szczegóły AI, błąd ról. W `_runUpdateFlow` — parametry zbierane w `_ocrEmbedParams`, embed wysyłany w bloku `finally`. W `_handleAnalyzeConfirmed` — wysyłany bezpośrednio po role update. Parametr `components` (JSON array) dołączany do payload gdy używany jest `ENDERSECHO_OCR_EMBED_WEBHOOK_URL`.
+  1. Webhook przez `guildLogger.sendEmbed(embed)` / `logService.sendEmbed(embed)` (`ENDERSECHO_LOGS_WEBHOOK_URL` — opcjonalne)
+  2. Kanał Discord: `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
+- **Embedy OCR analiz:** `logService.sendOcrAnalysisEmbed(guildId, options, guildObj, components)` — wysyła embed po każdej analizie OCR (/update, /test, panel Analizuj) na `ENDERSECHO_OCR_LOG_CHANNEL_ID`. Typy i kolory: 🏆 `new_record` zielony, ⚠️ `role_error` żółty, 🚫 `rejected` czerwony, 📊 `no_record` niebieski, 🧪 `test_record`/`test_no_record` cyan/blurple, 🔬 `analyze_panel` pomarańczowy, 🔄 `cross_server` szary. Embed zawiera: gracza, komendę, admina (panel), wynik, boss, poprzedni rekord, powód odrzucenia, szczegóły AI, błąd ról. Komponenty (np. przycisk ↩️ Cofnij) dołączane przez `components` array.
 - **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{userId}_{guildId}`) — dołączany do embedów `new_record` i `role_error` (nie dotyczy `dryRun`/`/test`). Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i usuwa przyciski. Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId` — nadpisywany przy nowym rekordzie, co unieważnia poprzedni przycisk). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
 - **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli zmiana pozycji globalnej)
@@ -665,7 +664,7 @@ const label = this.config.getAllGuilds().find(g => g.id === guildId)?.tag || gui
 - **Rekonfiguracja** → embed tylko ze zmienionymi polami format `stara wartość → nowa wartość` (kolor `0xFEE75C`)
 - Jeśli nic się nie zmieniło → pomijamy wysyłanie embeda
 - Wysyłaj przez `logService.sendEmbed(embed)` lub `guildLogger.sendEmbed(embed)` — nie przez kanał Discord
-- Kanał Discord: `ENDERSECHO_GUILD_LOG_CHANNEL_ID` (dedykowany) → fallback `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`
+- Kanał Discord: `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
 
 ### Ogłoszenie nowego serwera (cfg_announce_new_*)
 

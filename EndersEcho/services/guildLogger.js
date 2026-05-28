@@ -21,7 +21,7 @@ const LEVEL_EMOJI = { error: '❌', warn: '⚠️', success: '✅', info: '•' 
 class GuildLogger {
     constructor(config) {
         this.config = config;
-        this.webhookUrl = config.logWebhookUrl;
+        this.webhookUrl = config.logsWebhookUrl;
         this._lastGuildId = null;
         this._queue = [];
         this._processing = false;
@@ -32,7 +32,7 @@ class GuildLogger {
             logger.info(`📋 GuildLogger: dedykowany webhook skonfigurowany`);
             this._sendTestMessage();
         } else {
-            logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOG_WEBHOOK_URL — logi tylko w konsoli`);
+            logger.warn(`⚠️ GuildLogger: brak ENDERSECHO_LOGS_WEBHOOK_URL — logi tylko w konsoli`);
         }
     }
 

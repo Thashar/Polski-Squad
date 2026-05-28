@@ -2120,10 +2120,9 @@ class InteractionHandler {
                 this.logService.sendEmbed(configEmbed);
 
                 // Dedykowany kanał logów serwerowych
-                const guildLogChannelId = this.config.guildLogChannelId || this.config.invalidReportChannelId;
-                if (guildLogChannelId) {
-                    const guildLogChannel = await interaction.client.channels.fetch(guildLogChannelId).catch(() => null);
-                    if (guildLogChannel) await guildLogChannel.send({ embeds: [configEmbed] });
+                if (this.config.serverLogChannelId) {
+                    const serverLogChannel = await interaction.client.channels.fetch(this.config.serverLogChannelId).catch(() => null);
+                    if (serverLogChannel) await serverLogChannel.send({ embeds: [configEmbed] });
                 }
             } catch (err) {
                 logger.error(`Błąd wysyłania powiadomienia cfg_accept (serwer "${interaction.guild?.name || interaction.guildId}"):`, err.message);
@@ -5012,7 +5011,7 @@ class InteractionHandler {
 
             // Wyślij na globalny kanał zgłoszeń społeczności (head admin)
             // Pomijamy jeśli to ten sam kanał co per-guild (żeby nie duplikować)
-            const globalCvChannelId = this.config.communityReportChannelId;
+            const globalCvChannelId = this.config.communityChannelId;
             const skipGlobal = globalCvChannelId && cvCfg?.rejectedChannelId && globalCvChannelId === cvCfg.rejectedChannelId;
             if (globalCvChannelId && !skipGlobal) {
                 try {
@@ -7061,8 +7060,8 @@ class InteractionHandler {
 
     /** Aktualizuje globalny kanał raportu — deleguje do _applyActionToAnyReport */
     async _updateGlobalReportMsg(client, globalMsgId, sourceGuildId, actionType, adminName, extraInfo = '') {
-        if (!this.config.invalidReportChannelId || !globalMsgId) return;
-        await this._applyActionToAnyReport(client, this.config.invalidReportChannelId, globalMsgId, sourceGuildId, actionType, adminName, extraInfo);
+        if (!this.config.rejectedChannelId || !globalMsgId) return;
+        await this._applyActionToAnyReport(client, this.config.rejectedChannelId, globalMsgId, sourceGuildId, actionType, adminName, extraInfo);
     }
 
     async _handleAnalyzeButton(interaction, customId) {
@@ -7355,7 +7354,7 @@ class InteractionHandler {
 
             // Zapisz sesję revert i dodaj przycisk "Cofnij wynik" do globalnego raportu
             const globalMsgId = footerInfo.globalMsgId || origMsgId;
-            if (this.config.invalidReportChannelId && globalMsgId) {
+            if (this.config.rejectedChannelId && globalMsgId) {
                 this._analyzeRevertSessions.set(globalMsgId, {
                     targetUserId,
                     targetGuildId,
@@ -7365,7 +7364,7 @@ class InteractionHandler {
                     adminName,
                 });
                 try {
-                    const globalChan = await interaction.client.channels.fetch(this.config.invalidReportChannelId).catch(() => null);
+                    const globalChan = await interaction.client.channels.fetch(this.config.rejectedChannelId).catch(() => null);
                     if (globalChan) {
                         const globalMsg = await globalChan.messages.fetch(globalMsgId).catch(() => null);
                         if (globalMsg) {
@@ -7519,7 +7518,7 @@ class InteractionHandler {
     }
 
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
-        const hasGlobal = !!this.config.invalidReportChannelId;
+        const hasGlobal = !!this.config.rejectedChannelId;
         const guildCfg = this.config.getGuildConfig(interaction.guildId);
         const perGuildChannelId = guildCfg?.invalidReportChannelId || null;
         if (!hasGlobal && !perGuildChannelId) return null;
@@ -7635,7 +7634,7 @@ class InteractionHandler {
             let sentGlobalMsg = null;
             if (hasGlobal) {
                 try {
-                    const globalChannel = await interaction.client.channels.fetch(this.config.invalidReportChannelId);
+                    const globalChannel = await interaction.client.channels.fetch(this.config.rejectedChannelId);
                     if (globalChannel) {
                         const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`);
                         sentGlobalMsg = _gMsg;
@@ -7649,7 +7648,7 @@ class InteractionHandler {
             }
 
             // Wyślij do per-guild kanału (jeśli skonfigurowany i różny od globalnego)
-            if (perGuildChannelId && perGuildChannelId !== this.config.invalidReportChannelId) {
+            if (perGuildChannelId && perGuildChannelId !== this.config.rejectedChannelId) {
                 try {
                     const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
                     if (guildChannel) {
@@ -10184,7 +10183,7 @@ class InteractionHandler {
      * Zawiera przycisk "Dopasuj do nazwy angielskiej" z unikalnym sessionKey.
      */
     async _sendUnknownBossEmbed(client, guildId, { rawBoss, userName, userId, userAvatarUrl, imagePath, imageExt, commandName, guild }) {
-        const channelId = this.config.bossLogChannelId || this.config.invalidReportChannelId;
+        const channelId = this.config.serverLogChannelId;
         if (!channelId) return;
         const channel = client.channels.cache.get(channelId) || await client.channels.fetch(channelId).catch(() => null);
         if (!channel) return;

@@ -1,4 +1,3 @@
-const https = require('https');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -32,22 +31,17 @@ class LogService {
         this.config = config;
         this.logger = createBotLogger('EndersEcho');
         this.guildLogger = guildLogger;
-        this._ocrEmbedWebhookUrl = config.ocrEmbedWebhookUrl || null;
-        this._ocrEmbedQueue = [];
-        this._ocrEmbedProcessing = false;
+        this._ocrLogChannelId = config.ocrLogChannelId || null;
+        this._ocrQueue = [];
+        this._ocrProcessing = false;
         this._client = null;
-        this._ocrEmbedChannelId = null;
-        if (this._ocrEmbedWebhookUrl) {
-            this.logger.info(`📋 LogService: osobny webhook OCR embedów skonfigurowany`);
+        if (this._ocrLogChannelId) {
+            this.logger.info(`📋 LogService: kanał OCR logów skonfigurowany (ID: ${this._ocrLogChannelId})`);
         }
     }
 
     setClient(discordClient) {
         this._client = discordClient;
-    }
-
-    setOcrEmbedChannelId(channelId) {
-        this._ocrEmbedChannelId = channelId;
     }
 
     /**
@@ -132,9 +126,9 @@ class LogService {
      * @param {import('discord.js').Guild|null} guildObj
      */
     sendOcrAnalysisEmbed(guildId, options = {}, guildObj = null, components = null, client = null) {
-        const targetWebhookUrl = this._ocrEmbedWebhookUrl || this.guildLogger.webhookUrl;
-        if (!targetWebhookUrl) {
-            this.logger.warn(`[OCR Embed] Brak webhooka (ENDERSECHO_OCR_EMBED_WEBHOOK_URL / ENDERSECHO_LOG_WEBHOOK_URL) — embed pominięty (type: ${options.type})`);
+        const targetChannelId = this._ocrLogChannelId;
+        if (!targetChannelId) {
+            this.logger.warn(`[OCR Log] Brak ENDERSECHO_OCR_LOG_CHANNEL_ID — embed pominięty (type: ${options.type})`);
             return;
         }
 
@@ -164,148 +158,78 @@ class LogService {
                              || guildConfig?.icon
                              || null;
 
-            const authorIconUrl = guildIcon || undefined;
-
             const embed = new EmbedBuilder()
                 .setColor(cfg.color)
                 .setTitle(`${cfg.emoji} ${cfg.label}`)
                 .setTimestamp();
 
-            // Nagłówek: ikona emoji z tagu (lub ikona serwera) + tag + nazwa
             const authorName = guildTag ? `${guildTag}  ${guildName}` : guildName;
-            embed.setAuthor({ name: authorName, iconURL: authorIconUrl });
-            // Thumbnail: awatar gracza wywołującego, fallback na ikonę serwera
+            embed.setAuthor({ name: authorName, iconURL: guildIcon || undefined });
             const thumbnailUrl = userAvatar || guildIcon;
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
 
-            // Gracz
             if (userName) {
                 const playerVal = userId
                     ? `[${userName}](https://discord.com/users/${userId})`
                     : userName;
                 embed.addFields({ name: '👤 Gracz', value: playerVal, inline: true });
             }
-            // Komenda
             if (commandName) {
                 embed.addFields({ name: '⌨️ Komenda', value: `/${commandName}`, inline: true });
             }
-            // Admin (dla analizy z panelu)
             if (adminName) {
                 embed.addFields({ name: '👑 Admin', value: adminName, inline: true });
             }
-            // Nowy wynik
             if (score) {
                 const scoreVal = bossName ? `${score}  •  ${bossName}` : score;
                 embed.addFields({ name: '🎯 Wynik', value: scoreVal, inline: false });
             }
-            // Poprzedni rekord
             if (previousScore) {
                 embed.addFields({ name: '📈 Poprzedni rekord', value: previousScore, inline: true });
             }
-            // Powód odrzucenia
             if (reason) {
                 const reasonText = REJECTION_REASONS[reason] || `🟠 ${reason}`;
                 embed.addFields({ name: '⛔ Powód odrzucenia', value: reasonText, inline: false });
             }
-            // Szczegóły AI (rejectionReason)
             if (rejectionReason) {
                 embed.addFields({ name: '🤖 Szczegóły AI', value: rejectionReason.substring(0, 1024), inline: false });
             }
-            // Błąd ról
             if (roleError) {
                 embed.addFields({ name: '🔐 Błąd uprawnień ról', value: roleError.substring(0, 512), inline: false });
             }
-
             if (globalPlayerCount !== null) {
                 embed.setFooter({ text: `👥 ${globalPlayerCount} unikalnych graczy globalnie` });
             }
 
-            this.logger.info(`[OCR Embed] Wysyłam embed type=${type} dla guildId=${guildId}`);
-
-            if (components) {
-                // Gdy są komponenty — MUSI iść przez bota (Incoming Webhook ignoruje komponenty)
-                const activeClient = client || this._client;
-                const targetChannelId = this._ocrEmbedChannelId || this.guildLogger.getChannelId();
-                if (activeClient && targetChannelId) {
-                    const embedData = embed.toJSON();
-                    activeClient.channels.fetch(targetChannelId)
-                        .then(ch => ch?.send({ embeds: [embedData], components }))
-                        .catch(err => this.logger.warn(`[OCR Embed] Błąd wysyłania z komponentami: ${err.message}`));
-                } else {
-                    // Fallback bez komponentów gdy brak klienta/kanału
-                    if (this._ocrEmbedWebhookUrl) {
-                        const embedData = embed.toJSON();
-                        const payload = { embeds: [embedData] };
-                        if (guildIcon) payload.avatar_url = guildIcon;
-                        this._enqueueOcrEmbed(targetWebhookUrl, payload);
-                    } else {
-                        this.guildLogger.queueEmbed(embed, guildIcon);
-                    }
-                }
-            } else {
-                if (this._ocrEmbedWebhookUrl) {
-                    const embedData = embed.toJSON();
-                    const payload = { embeds: [embedData] };
-                    if (guildIcon) payload.avatar_url = guildIcon;
-                    this._enqueueOcrEmbed(targetWebhookUrl, payload);
-                } else {
-                    this.guildLogger.queueEmbed(embed, guildIcon);
-                }
-            }
+            this._enqueueOcr(client || this._client, targetChannelId, embed, components || null);
         } catch (err) {
             this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
         }
     }
 
-    _enqueueOcrEmbed(webhookUrl, payload) {
-        this._ocrEmbedQueue.push({ webhookUrl, payload });
-        setImmediate(() => this._processOcrEmbedQueue());
+    _enqueueOcr(activeClient, channelId, embed, components) {
+        this._ocrQueue.push({ activeClient, channelId, embed, components });
+        setImmediate(() => this._processOcrQueue());
     }
 
-    async _processOcrEmbedQueue() {
-        if (this._ocrEmbedProcessing || this._ocrEmbedQueue.length === 0) return;
-        this._ocrEmbedProcessing = true;
-        while (this._ocrEmbedQueue.length > 0) {
-            const { webhookUrl, payload } = this._ocrEmbedQueue.shift();
+    async _processOcrQueue() {
+        if (this._ocrProcessing || this._ocrQueue.length === 0) return;
+        this._ocrProcessing = true;
+        while (this._ocrQueue.length > 0) {
+            const { activeClient, channelId, embed, components } = this._ocrQueue.shift();
             try {
-                await this._sendOcrEmbedWebhook(webhookUrl, payload);
-                await new Promise(r => setTimeout(r, 1000));
+                if (!activeClient) { this.logger.warn('[OCR Log] Brak klienta Discord — embed pominięty'); continue; }
+                const ch = await activeClient.channels.fetch(channelId).catch(() => null);
+                if (!ch) { this.logger.warn(`[OCR Log] Nie znaleziono kanału ${channelId}`); continue; }
+                const payload = { embeds: [embed] };
+                if (components) payload.components = components;
+                await ch.send(payload);
+                await new Promise(r => setTimeout(r, 500));
             } catch (err) {
-                this.logger.warn(`[OCR Embed] Błąd wysyłania webhooka: ${err.message}`);
+                this.logger.warn(`[OCR Log] Błąd wysyłania embeda: ${err.message}`);
             }
         }
-        this._ocrEmbedProcessing = false;
-    }
-
-    _sendOcrEmbedWebhook(webhookUrl, payload) {
-        return new Promise((resolve, reject) => {
-            const body = JSON.stringify(payload);
-            const url = new URL(webhookUrl);
-            const req = https.request(
-                {
-                    hostname: url.hostname,
-                    path: url.pathname + url.search,
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Content-Length': Buffer.byteLength(body),
-                    },
-                },
-                res => {
-                    res.resume();
-                    if (res.statusCode === 429) {
-                        setTimeout(() => this._sendOcrEmbedWebhook(webhookUrl, payload).then(resolve).catch(reject), 5000);
-                    } else if (res.statusCode >= 400) {
-                        this.logger.warn(`[OCR Embed] Webhook HTTP ${res.statusCode}`);
-                        resolve();
-                    } else {
-                        resolve();
-                    }
-                }
-            );
-            req.on('error', err => { this.logger.warn(`[OCR Embed] Request error: ${err.message}`); reject(err); });
-            req.end(body);
-        });
+        this._ocrProcessing = false;
     }
 
     /**
