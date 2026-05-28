@@ -542,6 +542,11 @@ USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
 
+# Serwer administracyjny (opcjonalne)
+# Bot jest na tym serwerze ale go ignoruje: brak zapisu do guild_configs, brak przypomnień o /configure,
+# brak w liście nieskonfigurowanych serwerów, komendy działają normalnie dla head admina
+ENDERSECHO_ADMIN_GUILD_ID=guild_id
+
 # 1. Tekstowe logi bota — webhook (opcjonalne)
 # Format: [timestamp] ✅/⚠️/❌ message, każdy serwer z własnym avatarem i tagiem
 # Separator kreską pojawia się przy zmianie serwera

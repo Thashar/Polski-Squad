@@ -150,6 +150,7 @@ async function initializeBot() {
         cron.schedule('0 10 * * *', async () => {
             try {
                 for (const [guildId, guild] of client.guilds.cache) {
+                    if (config.adminGuildId && guildId === config.adminGuildId) continue;
                     if (guildConfigService.isConfigured(guildId)) continue;
 
                     const channel = guild.systemChannel ||
@@ -243,6 +244,11 @@ client.on('guildCreate', async (guild) => {
         if (guildBanService.isBanned(guild.id)) {
             logger.warn(`🚫 Próba dodania do zbanowanego serwera "${guild.name}" (${guild.id}) — wychodzę`);
             await guild.leave().catch(() => {});
+            return;
+        }
+        if (config.adminGuildId && guild.id === config.adminGuildId) {
+            logger.info(`🛡️ Serwer administracyjny dodany: ${guild.name} (${guild.id}) — pomijam zapis i powiadomienia`);
+            await interactionHandler.registerCommandsForGuild(client, guild.id);
             return;
         }
         logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);

@@ -416,6 +416,7 @@ class InteractionHandler {
      * Sprawdza czy serwer jest skonfigurowany, jeśli nie — odpowiada ephemeral i zwraca false
      */
     _checkConfigured(interaction) {
+        if (this.config.adminGuildId && interaction.guildId === this.config.adminGuildId) return true;
         if (!this.guildConfigService || this.guildConfigService.isConfigured(interaction.guildId)) return true;
         const msgs = this.msgs(interaction.guildId);
         interaction.reply({ content: msgs.notConfigured, flags: ['Ephemeral'] }).catch(() => {});
@@ -8655,6 +8656,7 @@ class InteractionHandler {
 
         const unconfigured = [];
         for (const [guildId, guild] of allGuilds) {
+            if (this.config.adminGuildId && guildId === this.config.adminGuildId) continue;
             if (!this.guildConfigService.isConfigured(guildId)) {
                 unconfigured.push({ id: guildId, name: guild.name, memberCount: guild.memberCount });
             }
