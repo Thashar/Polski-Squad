@@ -2119,7 +2119,7 @@ class InteractionHandler {
                 // Dedykowany kanał logów serwerowych
                 if (this.config.serverLogChannelId) {
                     const serverLogChannel = await interaction.client.channels.fetch(this.config.serverLogChannelId).catch(() => null);
-                    if (serverLogChannel) await serverLogChannel.send({ embeds: [configEmbed] });
+                    if (serverLogChannel) await serverLogChannel.send({ content: '<@398983446812295168>', embeds: [configEmbed] });
                 }
             } catch (err) {
                 logger.error(`Błąd wysyłania powiadomienia cfg_accept (serwer "${interaction.guild?.name || interaction.guildId}"):`, err.message);
@@ -5033,7 +5033,7 @@ class InteractionHandler {
                 try {
                     const globalCh = await client.channels.fetch(globalCvChannelId).catch(() => null);
                     if (globalCh) {
-                        const sent = await globalCh.send({ embeds: [reportEmbed], components });
+                        const sent = await globalCh.send({ content: '<@398983446812295168>', embeds: [reportEmbed], components });
                         rejectedMsgIds.push(`global:${globalCvChannelId}:${sent.id}`);
                     }
                 } catch (e) {
@@ -7633,9 +7633,9 @@ class InteractionHandler {
             // Krok 1: wyślij sam plik → Discord nadaje CDN URL.
             // Krok 2: edytuj wiadomość — ustaw embed z CDN URL i usuń załącznik (attachments: []).
             // Dzięki temu zdjęcie widoczne jest tylko wewnątrz embeda, nie jako osobny podgląd.
-            const sendReport = async (channel, footerText) => {
+            const sendReport = async (channel, footerText, addPing = false) => {
                 const att = new AttachmentBuilder(imagePath, { name: fileName });
-                const msg = await channel.send({ files: [att] });
+                const msg = await channel.send({ content: addPing ? '<@398983446812295168>' : undefined, files: [att] });
                 const imgUrl = msg.attachments.first()?.url;
                 const embed = buildEmbed(footerText, imgUrl || null);
                 const edited = await msg.edit({
@@ -7652,7 +7652,7 @@ class InteractionHandler {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.rejectedChannelId);
                     if (globalChannel) {
-                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`);
+                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`, true);
                         sentGlobalMsg = _gMsg;
                         reportImgUrl = _gImgUrl;
                         globalMsgId = sentGlobalMsg.id;
@@ -10239,7 +10239,7 @@ class InteractionHandler {
         const { AttachmentBuilder: AB } = require('discord.js');
         const file = new AB(imagePath, { name: fileName });
 
-        const msg = await channel.send({ embeds: [embed], files: [file], components: [row] }).catch(() => null);
+        const msg = await channel.send({ content: '<@398983446812295168>', embeds: [embed], files: [file], components: [row] }).catch(() => null);
         if (msg) {
             // Zapisz sesję (TTL 48h)
             this._unknownBossEmbeds.set(sessionKey, { rawBoss, guildId, userId });

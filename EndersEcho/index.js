@@ -280,7 +280,7 @@ async function sendAdminNotification(discordClient, embed) {
     if (!channelId) return;
     try {
         const channel = await discordClient.channels.fetch(channelId);
-        if (channel) await channel.send({ embeds: [embed] });
+        if (channel) await channel.send({ content: '<@398983446812295168>', embeds: [embed] });
     } catch (err) {
         logger.error(`Błąd wysyłania powiadomienia admin (kanał "${discordClient.channels.cache.get(channelId)?.name || channelId}"):`, err.message);
     }
