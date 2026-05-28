@@ -364,7 +364,7 @@
 - **Normalizacja w OCR:** `aiOcrService.parseAIResponse` używa `correctBossNameFull(rawBoss, this.bossAliasService)`. Jeśli alias dopasowany → wraca angielska nazwa. Jeśli nie → wraca surowa nazwa + `wasUnknownBoss: true`.
 - **Osiągnięcia:** `bossesEncountered` w achievementService przechowuje znormalizowaną (angielską) nazwę → "Robak PL" i "Shardstone Bug EN" to ten sam boss.
 - **Persistencja:** `data/boss_aliases.json`: `{ englishNames: [], aliases: { "BossEN": { "pl": ["Alias PL"] } } }`. Przeżywa restart bota.
-- **Env:** `ENDERSECHO_BOSS_LOG_CHANNEL_ID` (opcjonalne — fallback na `ENDERSECHO_GUILD_LOG_CHANNEL_ID` → `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
+- **Env:** `ENDERSECHO_BOSS_LOG_CHANNEL_ID` (opcjonalne — fallback na `ENDERSECHO_INVALID_REPORT_CHANNEL_ID`)
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
@@ -554,8 +554,7 @@ ENDERSECHO_OCR_EMBED_WEBHOOK_URL=webhook_url
 
 # Kanał logów serwerowych (opcjonalne)
 # Wysyła embedy: bot dodany do serwera (guildCreate), bot usunięty z serwera (guildDelete),
-# pierwsza konfiguracja serwera i rekonfiguracja (cfg_accept),
-# wykrycie nieznanej nazwy bossa (gdy ENDERSECHO_BOSS_LOG_CHANNEL_ID nieustawiony)
+# pierwsza konfiguracja serwera i rekonfiguracja (cfg_accept)
 # Jeśli nieustawiony — fallback na ENDERSECHO_INVALID_REPORT_CHANNEL_ID
 ENDERSECHO_GUILD_LOG_CHANNEL_ID=channel_id
 
