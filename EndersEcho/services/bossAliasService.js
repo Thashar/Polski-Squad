@@ -73,20 +73,39 @@ class BossAliasService {
     }
 
     /**
+     * Sprawdza czy alias (case-insensitive) już istnieje gdziekolwiek w danych.
+     * Zwraca { englishName, language } jeśli znaleziono, null jeśli nie.
+     */
+    findExistingAlias(aliasName) {
+        const needle = aliasName.trim().toLowerCase().replace(/\s+/g, ' ');
+        for (const [boss, langMap] of Object.entries(this._data.aliases || {})) {
+            for (const [lang, arr] of Object.entries(langMap)) {
+                for (const a of arr) {
+                    if (a.trim().toLowerCase().replace(/\s+/g, ' ') === needle)
+                        return { englishName: boss, language: lang };
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Dodaje alias w danym języku dla angielskiej nazwy bossa.
+     * Zwraca { added: true } lub { added: false, conflict: { englishName, language } }.
      * @param {string} englishName  angielska nazwa bossa
      * @param {string} aliasName    alias w innym języku
      * @param {string} language     kod języka (pl, de, fr, ...)
      */
     async addAlias(englishName, aliasName, language) {
+        const trimmed = aliasName.trim();
+        const existing = this.findExistingAlias(trimmed);
+        if (existing) return { added: false, conflict: existing };
         const aliases = this._data.aliases;
         if (!aliases[englishName]) aliases[englishName] = {};
         if (!aliases[englishName][language]) aliases[englishName][language] = [];
-        const trimmed = aliasName.trim();
-        if (!aliases[englishName][language].includes(trimmed)) {
-            aliases[englishName][language].push(trimmed);
-            await this._save();
-        }
+        aliases[englishName][language].push(trimmed);
+        await this._save();
+        return { added: true };
     }
 
     /**

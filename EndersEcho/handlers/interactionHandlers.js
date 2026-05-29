@@ -9845,7 +9845,23 @@ class InteractionHandler {
             return;
         }
         const lang = interaction.values[0];
-        await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
+        const addResult = await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
+        const backRow = [new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
+        )];
+        if (!addResult.added) {
+            const { englishName: conflictBoss, language: conflictLang } = addResult.conflict;
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xED4245)
+                    .setTitle(t('❌ Alias już istnieje', '❌ Alias Already Exists'))
+                    .setDescription(t(
+                        `Alias **${session.pendingAlias}** jest już przypisany do **${conflictBoss}** (${conflictLang}).`,
+                        `Alias **${session.pendingAlias}** is already assigned to **${conflictBoss}** (${conflictLang}).`
+                    ))],
+                components: backRow,
+            });
+            return;
+        }
         this._bossCfgSessions.delete(interaction.user.id);
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
@@ -9854,9 +9870,7 @@ class InteractionHandler {
                     `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`,
                     `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`
                 ))],
-            components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
-            )],
+            components: backRow,
         });
     }
 
@@ -10339,11 +10353,23 @@ class InteractionHandler {
             return;
         }
         const lang = interaction.values[0];
-        await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
+        const addResult = await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
+        const langLabel = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang)?.label || lang;
+        if (!addResult.added) {
+            const { englishName: conflictBoss, language: conflictLang } = addResult.conflict;
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xED4245)
+                    .setTitle('❌ Alias już istnieje')
+                    .setDescription(
+                        `Alias **${session.adjustedBoss}** jest już przypisany do **${conflictBoss}** (${conflictLang}).`
+                    )],
+                components: [],
+            });
+            return;
+        }
         // Wyczyszanie sesji
         this._bossMapSessions.delete(interaction.user.id);
 
-        const langLabel = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang)?.label || lang;
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
                 .setTitle('✅ Alias zapisany')
