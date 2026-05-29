@@ -347,13 +347,12 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
                 'NOK: Zdjęcie przedstawia <opis co przedstawia zdjęcie>',
                 'NOK: Zdjęcie prawdopodobnie jest fałszywe, brakuje kluczowych elementów UI',
               ];
-        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie
-pasuje DO TEGO WZORCA.
+        const prompt = `Masz wzorzec ekranu referencyjnego. Sprawdź czy drugie zdjęcie pasuje DO TEGO WZORCA.
 
 KROK 0 — Przed porównaniem:
-Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach
-na język angielski. Dopiero na przetłumaczonej wersji wykonaj
-poniższe sprawdzenie.
+Zdjęcie może być zrobione w innym języku niż wzorzec, więc nie porównuj tekstu bezpośrednio.
+Przetłumacz mentalnie wszystkie napisy na obydwu zdjęciach na język angielski.
+Dopiero na przetłumaczonej wersji wykonaj poniższe sprawdzenie.
 
 WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - pełnoekranowe tło z gameplayem
