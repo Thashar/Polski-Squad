@@ -81,12 +81,12 @@ class BossAliasService {
     async addAlias(englishName, aliasName, language) {
         const aliases = this._data.aliases;
         if (!aliases[englishName]) aliases[englishName] = {};
+        if (!aliases[englishName][language]) aliases[englishName][language] = [];
         const trimmed = aliasName.trim();
-        const oldAlias = aliases[englishName][language]?.[0] ?? null;
-        // max 1 alias per language — replace existing
-        aliases[englishName][language] = [trimmed];
-        if (oldAlias !== trimmed) await this._save();
-        return { replaced: oldAlias !== null && oldAlias !== trimmed, oldAlias };
+        if (!aliases[englishName][language].includes(trimmed)) {
+            aliases[englishName][language].push(trimmed);
+            await this._save();
+        }
     }
 
     /**
