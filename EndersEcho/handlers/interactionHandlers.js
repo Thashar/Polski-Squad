@@ -9811,9 +9811,12 @@ class InteractionHandler {
         const aliasName = interaction.fields.getTextInputValue('alias_name').trim();
         session.pendingAlias = aliasName;
         const langs = this.bossAliasService.getSupportedLanguages();
-        const options = langs.map(l =>
-            new StringSelectMenuOptionBuilder().setValue(l.code).setLabel(l.label.substring(0, 100))
-        );
+        const bossLangAliases = this.bossAliasService.getAllAliases()[session.pendingBoss] || {};
+        const options = langs.map(l => {
+            const existing = bossLangAliases[l.code]?.[0];
+            const label = existing ? `${l.label} [${existing}]`.substring(0, 100) : l.label.substring(0, 100);
+            return new StringSelectMenuOptionBuilder().setValue(l.code).setLabel(label);
+        });
         const select = new StringSelectMenuBuilder()
             .setCustomId('boss_cfg_add_lang_sel')
             .setPlaceholder(t('Wybierz język...', 'Select language...'))
@@ -9839,15 +9842,21 @@ class InteractionHandler {
             return;
         }
         const lang = interaction.values[0];
-        await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
+        const { replaced, oldAlias } = await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
         this._bossCfgSessions.delete(interaction.user.id);
         await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0x57F287)
-                .setTitle(t('✅ Alias dodany', '✅ Alias Added'))
-                .setDescription(t(
-                    `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`,
-                    `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`
-                ))],
+            embeds: [new EmbedBuilder().setColor(replaced ? 0xFEE75C : 0x57F287)
+                .setTitle(replaced ? t('🔄 Alias zastąpiony', '🔄 Alias Replaced') : t('✅ Alias dodany', '✅ Alias Added'))
+                .setDescription(replaced
+                    ? t(
+                        `~~${oldAlias}~~ → **${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`,
+                        `~~${oldAlias}~~ → **${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`
+                    )
+                    : t(
+                        `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`,
+                        `**${session.pendingAlias}** (${lang}) → **${session.pendingBoss}**`
+                    )
+                )],
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
             )],
@@ -10333,17 +10342,18 @@ class InteractionHandler {
             return;
         }
         const lang = interaction.values[0];
-        await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
+        const { replaced, oldAlias } = await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
         // Wyczyszanie sesji
         this._bossMapSessions.delete(interaction.user.id);
 
         const langLabel = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang)?.label || lang;
         await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0x57F287)
-                .setTitle('✅ Alias zapisany')
+            embeds: [new EmbedBuilder().setColor(replaced ? 0xFEE75C : 0x57F287)
+                .setTitle(replaced ? '🔄 Alias zastąpiony' : '✅ Alias zapisany')
                 .setDescription(
-                    `Alias **\`${session.adjustedBoss}\`** (${langLabel}) przypisany do bossa **${session.englishBoss}**.\n\n` +
-                    `Od teraz nazwy podobne do tego aliasu będą automatycznie normalizowane do **${session.englishBoss}** przy analizie OCR.`
+                    `Alias **\`${session.adjustedBoss}\`** (${langLabel}) przypisany do bossa **${session.englishBoss}**.` +
+                    (replaced ? `\nPoprzedni alias \`${oldAlias}\` został zastąpiony.` : '') +
+                    `\n\nOd teraz nazwy podobne do tego aliasu będą automatycznie normalizowane do **${session.englishBoss}** przy analizie OCR.`
                 )],
             components: [],
         });
