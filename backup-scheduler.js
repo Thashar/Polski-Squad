@@ -44,7 +44,7 @@ class BackupScheduler {
                     logger.error(`   Stack trace: ${error.stack}`);
                 }
             }
-        });
+        }, { timezone: 'Europe/Warsaw' });
 
         logger.info('✅ Scheduler backupów aktywny');
 
