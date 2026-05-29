@@ -251,8 +251,9 @@ class InteractionHandler {
             // Pozostałe komendy — wymagają konfiguracji i dozwolonego kanału
             if (!this._checkConfigured(interaction)) return;
 
+            const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
             const isHeadAdminBypassCmd = ['ranking', 'achievements', 'subscribe'].includes(interaction.commandName);
-            if (!this.isAllowedChannel(interaction.channel.id, guildId) && !(this._isHeadAdmin(interaction.user.id) && isHeadAdminBypassCmd)) {
+            if (!this.isAllowedChannel(interaction.channel.id, guildId) && !(this._isHeadAdmin(interaction.user.id) && isHeadAdminBypassCmd) && !(isAdminGuild && interaction.commandName === 'ranking')) {
                 await interaction.reply({
                     content: this.msgs(guildId).channelNotAllowed,
                     flags: ['Ephemeral']
@@ -3165,6 +3166,11 @@ class InteractionHandler {
             const players = await this.rankingService.getSortedPlayers(guildId);
 
             if (players.length === 0) {
+                if (this.config.adminGuildId && guildId === this.config.adminGuildId) {
+                    const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs, guildId, 0);
+                    await interaction.editReply({ content: msgs.rankingSelectPrompt, embeds: [], components: selectRows });
+                    return;
+                }
                 await interaction.editReply({ content: msgs.rankingEmpty });
                 return;
             }
