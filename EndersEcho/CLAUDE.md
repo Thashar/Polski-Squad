@@ -339,6 +339,10 @@
 | `boss_map_boss_modal` | Modal z odczytaną nazwą bossa (edytowalną) |
 | `boss_map_boss_sel` | StringSelectMenu — wybór angielskiej nazwy bossa |
 | `boss_map_lang_sel` | StringSelectMenu języka → zapis aliasu z flow mapowania |
+| `boss_cfg_set_img` | Przycisk "🖼️ Przypisz zdjęcie" — otwiera select bossów |
+| `boss_cfg_img_boss_sel` | StringSelectMenu — wybrany boss → czeka na wiadomość ze zdjęciem |
+| `ranking_boss_list` | Przycisk "🎯 Ranking Bossów" w widoku global ranking |
+| `ranking_boss_sel` | StringSelectMenu — wybrany boss → pokazuje per-boss ranking globalny |
 
 **9. System aliasów bossów** — `services/bossAliasService.js` + `data/boss_aliases.json`:
 - **Cel:** Normalizacja nazw bossów z różnych języków → jedna angielska nazwa (np. "Robak" PL → "Shardstone Bug" EN = jeden boss w osiągnięciach).
@@ -347,24 +351,41 @@
 - **Backward compat:** stare pliki JSON przechowujące nazwy jako klucze `aliases{}` (z dawnego `initFromBaseNames`) są rozpoznawane przez `getExtraEnglishNames()` zwracające sumę `englishNames[]` + `Object.keys(aliases{})`.
 - **Obsługiwane języki:** pl, de, fr, es, pt, ru, it, tr, ja, zh, vi, ko (select menu w UI)
 - **Konfiguracja bossów (head admin):** `/manage` → 🎯 Konfiguracja bossów — dwa rzędy przycisków:
-  - **Rząd 1 (boss):** ➕ Dodaj bossa · 🗑️ Usuń bossa · ✏️ Edytuj bossa
+  - **Rząd 1 (boss):** ➕ Dodaj bossa · 🗑️ Usuń bossa · ✏️ Edytuj bossa · 🖼️ Przypisz zdjęcie
   - **Rząd 2 (alias):** ➕ Dodaj alias · 🗑️ Usuń alias · ✏️ Edytuj alias
   - Embed z listą wszystkich bossów (angielskie nazwy) + ich aliasami per język
   - **➕ Nowy boss (EN):** modal → dodaje custom boss poza KNOWN_BOSS_NAMES → `englishNames[]` w JSON
-  - **🔤 Dodaj alias:** boss select → modal (alias) → language select → zapis do `aliases`
+  - **🔤 Dodaj alias:** boss select → modal (alias) → language select → zapis do `aliases` + **automatyczna migracja boss_records** (surowa nazwa → angielska, zachowując lepszy wynik)
   - **🗑️ Usuń alias:** boss select → alias select → usunięcie
+  - **🖼️ Przypisz zdjęcie:** boss select → czeka 60s na wiadomość ze zdjęciem → pobiera attachment → zapisuje do `data/boss_images/{bossName}.{ext}` → ścieżka w `boss_aliases.json` jako `images["BossEN"]`
   - Sesje robocze: `_bossCfgSessions` Map (RAM, per userId)
 - **Wykrywanie nieznanej nazwy:** `correctBossNameFull(raw, bossAliasService)` zwraca `{ corrected, wasUnknown }`. Gdy `wasUnknown=true` i wynik OCR jest prawidłowy: `_runUpdateFlow` wywołuje `_sendUnknownBossEmbed` (fire-and-forget).
 - **Embed nieznanego bossa (czerwony):** wysyłany na `ENDERSECHO_SERVER_LOG_CHANNEL_ID`. Zawiera: nazwę bossa (OCR), gracza (link Discord), komendę, serwer, screenshot. Przycisk: 🔗 Dopasuj do nazwy angielskiej (`boss_mapm_{sessionKey}`).
 - **Flow mapowania (po kliknięciu przycisku):**
   1. Modal z oryginalną nazwą (edytowalna) → `boss_map_boss_modal`
   2. Select angielskiej nazwy bossa → `boss_map_boss_sel`
-  3. Select języka → `boss_map_lang_sel` → zapis aliasu + potwierdzenie
+  3. Select języka → `boss_map_lang_sel` → zapis aliasu + **automatyczna migracja boss_records** + potwierdzenie
   - Sesje: `_unknownBossEmbeds` Map (sessionKey → rawBoss, TTL 48h) + `_bossMapSessions` Map (userId → dane robocze)
 - **Normalizacja w OCR:** `aiOcrService.parseAIResponse` używa `correctBossNameFull(rawBoss, this.bossAliasService)`. Jeśli alias dopasowany → wraca angielska nazwa. Jeśli nie → wraca surowa nazwa + `wasUnknownBoss: true`.
 - **Osiągnięcia:** `bossesEncountered` w achievementService przechowuje znormalizowaną (angielską) nazwę → "Robak PL" i "Shardstone Bug EN" to ten sam boss.
-- **Persistencja:** `data/boss_aliases.json`: `{ englishNames: [], aliases: { "BossEN": { "pl": ["Alias PL"] } } }`. Przeżywa restart bota.
+- **Persistencja:** `data/boss_aliases.json`: `{ englishNames: [], aliases: { "BossEN": { "pl": ["Alias PL"] } }, images: { "BossEN": "filename.png" } }`. Przeżywa restart bota.
 - **Env:** `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
+
+**10. Per-boss rekordy + Ranking Bossów** — `services/bossRecordService.js` + `data/guilds/{guildId}/boss_records.json`:
+- **Cel:** Śledzenie najlepszego wyniku każdego gracza per boss (niezależnie od ogólnego rekordu).
+- **Zapis:** Przy każdym udanym OCR (`_runUpdateFlow`, bez `dryRun`) → `bossRecordService.updateBossRecord(guildId, userId, bossName, ...)`. Jeśli boss nieznany → zapisuje pod surową nazwą OCR.
+- **Migracja:** Gdy admin doda alias przez `boss_cfg_add_lang_sel` lub `boss_map_lang_sel` → automatyczna `migrateBossName(rawName, englishName, allGuildIds)` (fire-and-forget). Zachowuje lepszy wynik jeśli gracz ma rekordy pod obiema nazwami.
+- **Cofanie:** `_cvRemoveRecord` cofa per-boss rekord (`revertBossRecord`) po cofnięciu rekordu ogólnego + osiągnięć. Sesje CV i `_ocrRevertSessions` przechowują `bossName` + `previousBossRecord`.
+- **Embed rekordu:** Pole `🎯 Rekord na bossie` (msgs.bossRecordField) pokazywane gdy `isNewBossRecord = true`, PRZED polem osiągnięć. Dla braku ogólnego rekordu — pole `🎯 Nowy rekord na bossie` (msgs.bossRecordUpdated) w ephemeral embedzie.
+- **Struktura danych:** `data/guilds/{guildId}/boss_records.json` = `{ userId: { bossName: { score, scoreValue, timestamp, username } } }`. Write queue per-guild (`_enqueue`).
+- **Ranking Bossów (globalny):**
+  - Przycisk `🎯 Ranking Bossów` w widoku Global rankingu → `_handleRankingBossList` → StringSelectMenu z bossami mającymi ≥1 rekord (filtruje do znanych angielskich nazw)
+  - Wybór bossa → `_handleRankingBossShow` → globalny ranking per-boss embed (`createBossRankingEmbed`) z thumbnail zdjęcia bossa (jeśli ustawione)
+  - Paginacja: `ranking_prev/next/mypos` (te same przyciski co standardowy ranking; routing przez `_bossRankings.has(messageId)`)
+  - Stan paginacji: `_bossRankings` Map (RAM, per messageId)
+  - Powrót: przyciski `📋 Lista bossów` i `🌐 Global` w `createBossRankingButtons`
+- **Zdjęcia bossów:** Plik zapisywany w `data/boss_images/{safeName}.{ext}`. Ścieżka (tylko `{safeName}.{ext}`) przechowywana w `boss_aliases.json` jako `images["BossEN"]`. Używane jako thumbnail w `createBossRankingEmbed` (AttachmentBuilder + `attachment://filename`).
+- **Filtrowanie rankingów:** `getBossesWithRecords(allGuildIds, knownEnglishNames)` — pokazuje TYLKO bossów z angielską nazwą (admin musi zmapować alias). Nieznane surowe nazwy niewidoczne w UI dopóki nie zostają zmapowane.
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
@@ -454,8 +475,10 @@ EndersEcho/data/
 │       ├── ranking.json           # Ranking serwera (aktualny rekord per gracz)
 │       ├── achievements.json      # Osiągnięcia graczy serwera
 │       ├── role_rankings.json     # Konfiguracja rankingów ról
+│       ├── boss_records.json      # Per-boss rekordy graczy {userId: {bossName: {score, scoreValue, timestamp, username}}}
 │       └── wyniki/
 │           └── {userId}.json      # Historia rekordów gracza na tym serwerze
+├── boss_images/                   # Zdjęcia bossów ({bossName}.{ext})
 ├── notifications.json             # Subskrypcje powiadomień DM
 ├── guild_configs.json             # Per-guild konfiguracja
 ├── update_cooldowns.json          # Cooldowny /update (userId → expiresAt timestamp ms)

@@ -34,6 +34,7 @@ const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
+const BossRecordService = require('./services/bossRecordService');
 const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
@@ -110,8 +111,9 @@ const communityVerificationService = new CommunityVerificationService(config.ran
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
+const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService);
 
 /**
  * Inicjalizuje bota EndersEcho
