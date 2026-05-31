@@ -35,7 +35,6 @@ const GlobalTop10Service = require('./services/globalTop10Service');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const BossRecordService = require('./services/bossRecordService');
-const { runIfNeeded: migrateBossRecords } = require('./migrate-boss-records');
 const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
@@ -127,9 +126,6 @@ async function initializeBot() {
         // Korekcja nazw bossów w istniejących danych (uwzględnia aliasy z boss_aliases.json)
         const sharedDataDir = path.join(__dirname, '../shared_data');
         await fixBossNamesInData(config.ranking.dataDir, sharedDataDir, false, logger, bossAliasService);
-
-        // Jednorazowa migracja per-boss rekordów z historii wyników (uruchamia się tylko raz)
-        await migrateBossRecords(config.ranking.dataDir, bossAliasService, msg => logger.info(msg));
 
         // Inicjalizuj GuildConfigService — importuje .env guilds i migruje ocr_blocked.json
         await guildConfigService.load(config.guilds);
