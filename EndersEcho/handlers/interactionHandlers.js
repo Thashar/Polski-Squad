@@ -3932,14 +3932,17 @@ class InteractionHandler {
                 }
             }
 
-            // Snippet rankingu bossa — gdy rekord bossa też pobity
+            // Snippet + pozycja rankingu bossa — gdy rekord bossa też pobity
             let bossSnippetData = null;
+            let bossGlobalRankingOverride = null;
             if (!dryRun && isNewBossRecord && bossName) {
                 const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                     || Array.from(interaction.client.guilds.cache.keys());
-                bossSnippetData = await this._buildBossSnippetData(
+                const bossResult = await this._buildBossSnippetData(
                     userId, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client
                 );
+                bossSnippetData = bossResult.snippetData;
+                bossGlobalRankingOverride = bossResult.override;
                 if (bossSnippetData) gl.info(`🎯 Snippet bossa "${bossName}" dodany do embeda globalnego rekordu`);
             }
 
@@ -3959,7 +3962,7 @@ class InteractionHandler {
                 achievementsFieldValue,
                 globalSnippetData,
                 isNewBossRecord ? { isNewBossRecord, previousBossRecord, bossName } : null,
-                null,           // rankingOverride — nieużywane w globalnym flow
+                bossGlobalRankingOverride,
                 bossSnippetData
             );
 
@@ -5559,11 +5562,12 @@ class InteractionHandler {
     // Buduje dane snippetu zmiany w rankingu bossa (format identyczny jak globalSnippetData).
     // Zwraca { title, description } lub null.
     async _buildBossSnippetData(userId, bossName, previousBossRecord, allGuildIds, msgs, client) {
-        if (!this.bossRecordService || !this.globalTop10Service) return null;
+        if (!this.bossRecordService || !this.globalTop10Service) return { snippetData: null, override: null };
         try {
             const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
             const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
-            if (newBossIdx === -1) return null;
+            if (newBossIdx === -1) return { snippetData: null, override: null };
+            const newBossPosition = newBossIdx + 1;
 
             let prevBossPosition = null;
             if (previousBossRecord) {
@@ -5574,11 +5578,21 @@ class InteractionHandler {
                 prevBossPosition = prevIdx !== -1 ? prevIdx + 1 : null;
             }
 
-            return await this.globalTop10Service.buildBossSnippetFieldData(
+            const snippetData = await this.globalTop10Service.buildBossSnippetFieldData(
                 userId, bossRanking, prevBossPosition, bossName, msgs, client
             );
+
+            const bossPositionChange = prevBossPosition !== null ? prevBossPosition - newBossPosition : 0;
+            const override = {
+                position: newBossPosition,
+                positionChange: bossPositionChange,
+                isNewEntry: prevBossPosition === null,
+                label: msgs.recordBossRanking
+            };
+
+            return { snippetData, override };
         } catch {
-            return null;
+            return { snippetData: null, override: null };
         }
     }
 
