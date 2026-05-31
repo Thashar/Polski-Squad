@@ -1012,7 +1012,9 @@ class RankingService {
                 posLine += `  *(${msgs.recordNewEntry})*`;
             }
             descLines.push(posLine);
-        } else if (rankingOverride?.position) {
+        }
+
+        if (rankingOverride?.position) {
             const overrideMedal = this.getPositionMedal(rankingOverride.position);
             const rankingLabel = rankingOverride.label || msgs.recordRanking;
             let posLine = `**${rankingLabel}:** ${overrideMedal} #${rankingOverride.position}`;
