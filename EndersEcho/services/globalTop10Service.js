@@ -445,7 +445,7 @@ class GlobalTop10Service {
             lines.push(`${belowDir} ${await buildLine(below, newBossPosition + 1)}`);
         }
 
-        return { title, description: `\`${bossName}:\` ${direction} ${prevLabel} → #${newBossPosition}\n\n${lines.join('\n\n')}` };
+        return { title, description: `${direction} ${prevLabel} → #${newBossPosition}\n\n${lines.join('\n\n')}` };
     }
 
     /**

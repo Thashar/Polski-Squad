@@ -1056,17 +1056,14 @@ class RankingService {
             embed.addFields({ name: globalSnippetData.title, value: globalSnippetData.description, inline: false });
         }
 
-        if (bossSnippetData) {
-            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
-        }
-
-        // Per-boss rekord (tuż przed osiągnięciami)
+        // Per-boss rekord (przed snippetem bossa)
         if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
+            const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'} \`${bossRecordData.bossName}\``;
             let bossFieldVal;
             if (bossRecordData.previousBossRecord) {
-                bossFieldVal = `**${bossRecordData.bossName}:** ${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
+                bossFieldVal = `${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
             } else {
-                bossFieldVal = `**${bossRecordData.bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
+                bossFieldVal = `${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
             }
             if (rankingOverride?.position) {
                 const overrideMedal = this.getPositionMedal(rankingOverride.position);
@@ -1078,7 +1075,11 @@ class RankingService {
                 }
                 bossFieldVal += `\n${posLine}`;
             }
-            embed.addFields({ name: msgs.bossRecordField || '👾 Rekord na bossie', value: bossFieldVal, inline: false });
+            embed.addFields({ name: fieldName, value: bossFieldVal, inline: false });
+        }
+
+        if (bossSnippetData) {
+            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
         }
 
         if (achievementsFieldValue) {
