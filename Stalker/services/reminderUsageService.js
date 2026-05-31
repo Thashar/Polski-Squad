@@ -140,8 +140,8 @@ class ReminderUsageService {
         // Logika limitów:
         // - Więcej niż 6h (>360 min) - za wcześnie, blokada
         // - Między 2h a 6h (120-360 min) - można wysłać PIERWSZE przypomnienie
-        // - Między 1h a 2h (60-120 min) - można wysłać DRUGIE przypomnienie
-        // - Mniej niż 1h (0-60 min) - tylko catch-up dla pierwszego, drugie zablokowane
+        // - Między 30min a 2h (30-120 min) - można wysłać DRUGIE przypomnienie
+        // - Mniej niż 30min (0-30 min) - tylko catch-up dla pierwszego, drugie zablokowane
         // - Po deadline (<0 min) - blokada
 
         if (minutesToDeadline < 0) {
@@ -185,7 +185,7 @@ class ReminderUsageService {
                 const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **oknie 1h-2h przed deadline** (15:50-16:50).`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\nDrugie przypomnienie klan może wysłać w **oknie 30min-2h przed deadline** (15:50-17:20).`,
                     minutesToDeadline
                 };
             } else {
@@ -205,19 +205,19 @@ class ReminderUsageService {
             }
         }
 
-        if (minutesToDeadline >= 60 && minutesToDeadline < 120) {
-            // Między 1h a 2h - można wysłać DRUGIE przypomnienie
+        if (minutesToDeadline >= 30 && minutesToDeadline < 120) {
+            // Między 30min a 2h - można wysłać DRUGIE przypomnienie
             if (usageCount === 0) {
                 return {
                     canSend: true,
-                    reason: '✅ Pierwsze przypomnienie (okno 1h-2h przed deadline)',
+                    reason: '✅ Pierwsze przypomnienie (okno 30min-2h przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
             } else if (usageCount === 1) {
                 return {
                     canSend: true,
-                    reason: '✅ Drugie przypomnienie (okno 1h-2h przed deadline)',
+                    reason: '✅ Drugie przypomnienie (okno 30min-2h przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 2
                 };
@@ -238,12 +238,12 @@ class ReminderUsageService {
             }
         }
 
-        if (minutesToDeadline >= 0 && minutesToDeadline < 60) {
-            // Ostatnia godzina - catch-up dla pierwszego, drugie zablokowane (okno 15:50-16:50 minęło)
+        if (minutesToDeadline >= 0 && minutesToDeadline < 30) {
+            // Ostatnie 30 minut - catch-up dla pierwszego, drugie zablokowane (okno 15:50-17:20 minęło)
             if (usageCount === 0) {
                 return {
                     canSend: true,
-                    reason: '✅ Pierwsze przypomnienie (ostatnia godzina przed deadline)',
+                    reason: '✅ Pierwsze przypomnienie (ostatnie 30 minut przed deadline)',
                     minutesToDeadline,
                     reminderNumber: 1
                 };
@@ -252,7 +252,7 @@ class ReminderUsageService {
                 const senderMention = firstUsage.sentBy ? ` przez <@${firstUsage.sentBy}>` : '';
                 return {
                     canSend: false,
-                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\n❌ Okno na drugie przypomnienie (15:50-16:50) już minęło.`,
+                    reason: `✅ Pierwsze przypomnienie już wysłane o **${new Date(firstUsage.timestamp).toLocaleTimeString('pl-PL', { timeZone: this.config.timezone })}**${senderMention}.\n\n❌ Okno na drugie przypomnienie (15:50-17:20) już minęło.`,
                     minutesToDeadline
                 };
             } else {
