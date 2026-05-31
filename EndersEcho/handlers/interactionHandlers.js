@@ -2229,7 +2229,7 @@ class InteractionHandler {
                     new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel(t('Przetwórz role', 'Process Roles')).setStyle(ButtonStyle.Primary),
                 ),
                 new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
                     back,
                 ),
@@ -2302,8 +2302,8 @@ class InteractionHandler {
                   '🧪 **Testers** — manage the list of testers authorized to use `/test`.'),
                 t('📅 **Interwał TOP10** — ustaw datę i godzinę pierwszego raportu TOP10 globalnego (potem co ~3 dni automatycznie).',
                   '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
-                t('🎯 **Konfiguracja bossów** — zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach (automatyczna normalizacja OCR).',
-                  '🎯 **Boss Configuration** — manage English boss names and their aliases in other languages (automatic OCR normalization).'),
+                t('👾 **Konfiguracja bossów** — zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach (automatyczna normalizacja OCR).',
+                  '👾 **Boss Configuration** — manage English boss names and their aliases in other languages (automatic OCR normalization).'),
                 t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
                   '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
             );
@@ -10068,7 +10068,7 @@ class InteractionHandler {
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle(t('🎯 Konfiguracja Bossów', '🎯 Boss Configuration'))
+            .setTitle(t('👾 Konfiguracja Bossów', '👾 Boss Configuration'))
             .setDescription(
                 t(
                     'Aliasy w innych językach są automatycznie normalizowane do angielskiej nazwy przy analizie OCR.\nNazwa angielska jest kluczem — jeden boss = jeden rekord w osiągnięciach.',
@@ -10243,7 +10243,7 @@ class InteractionHandler {
         const lang = interaction.values[0];
         const addResult = await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
         const backRow = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
         )];
         if (!addResult.added) {
             const { englishName: conflictBoss, language: conflictLang } = addResult.conflict;
@@ -10366,7 +10366,7 @@ class InteractionHandler {
                     `Removed alias **${alias}** (${lang}) for boss **${session.pendingBoss}**.`
                 ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('🎯').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
             )],
         });
     }
@@ -10645,7 +10645,7 @@ class InteractionHandler {
             .setTimestamp();
         if (userAvatarUrl) embed.setThumbnail(userAvatarUrl);
         embed.addFields(
-            { name: '🎯 Nazwa bossa (OCR)', value: `\`${rawBoss}\``, inline: false },
+            { name: '👾 Nazwa bossa (OCR)', value: `\`${rawBoss}\``, inline: false },
             { name: '👤 Gracz', value: `[${userName}](https://discord.com/users/${userId})`, inline: true },
             { name: '⌨️ Komenda', value: `/${commandName}`, inline: true },
             { name: '🏠 Serwer', value: guildName, inline: true },
