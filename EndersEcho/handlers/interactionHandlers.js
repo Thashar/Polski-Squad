@@ -3810,7 +3810,7 @@ class InteractionHandler {
                         msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                         { bossName }
                     );
-                    bossPublicEmbed.addFields({ name: '⚠️ Niezweryfikowana nazwa bossa', value: noticeVal, inline: false });
+                    bossPublicEmbed.addFields({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal, inline: false });
                 }
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
@@ -3979,7 +3979,7 @@ class InteractionHandler {
                     msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                     { bossName }
                 );
-                publicEmbed.addFields({ name: '⚠️ Niezweryfikowana nazwa bossa', value: noticeVal, inline: false });
+                publicEmbed.addFields({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal, inline: false });
             }
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
