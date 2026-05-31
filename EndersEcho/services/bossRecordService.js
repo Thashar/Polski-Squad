@@ -75,6 +75,17 @@ class BossRecordService {
     }
 
     /**
+     * Read-only: czy podany wynik pobiłby istniejący rekord bossa gracza?
+     * Używane w trybie dryRun (/test) — nie zapisuje niczego.
+     */
+    async wouldBeatBossRecord(guildId, userId, bossName, scoreValue) {
+        const data = await this._load(guildId);
+        const existing = data?.[userId]?.[bossName];
+        const existingValue = (existing && typeof existing.scoreValue === 'number') ? existing.scoreValue : -Infinity;
+        return scoreValue > existingValue;
+    }
+
+    /**
      * Globalny ranking graczy wg najlepszego wyniku na danym bossie (cross-guild).
      * @param {string[]} allGuildIds
      * @param {string} bossName - angielska nazwa bossa

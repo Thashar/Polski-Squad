@@ -3618,6 +3618,12 @@ class InteractionHandler {
                 } catch (bossErr) {
                     gl.error(`Błąd zapisu per-boss rekordu: ${bossErr.message}`);
                 }
+            } else if (dryRun && bossName && this.bossRecordService) {
+                // dryRun: read-only sprawdzenie czy boss rekord byłby pobity (bez zapisu)
+                try {
+                    const bossScoreValue = this.rankingService.parseScoreValue(bestScore);
+                    isNewBossRecord = await this.bossRecordService.wouldBeatBossRecord(guildId, userId, bossName, bossScoreValue);
+                } catch { /* ignoruj */ }
             }
 
             // Pozycja po zapisie (potrzebna do osiągnięć i do embeda)
