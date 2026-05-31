@@ -1062,11 +1062,12 @@ class RankingService {
 
         // Per-boss rekord (tuż przed osiągnięciami)
         if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
+            const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'} \`${bossRecordData.bossName}\``;
             let bossFieldVal;
             if (bossRecordData.previousBossRecord) {
-                bossFieldVal = `**${bossRecordData.bossName}:** ${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
+                bossFieldVal = `${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
             } else {
-                bossFieldVal = `**${bossRecordData.bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
+                bossFieldVal = `${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
             }
             if (rankingOverride?.position) {
                 const overrideMedal = this.getPositionMedal(rankingOverride.position);
@@ -1078,7 +1079,7 @@ class RankingService {
                 }
                 bossFieldVal += `\n${posLine}`;
             }
-            embed.addFields({ name: msgs.bossRecordField || '👾 Rekord na bossie', value: bossFieldVal, inline: false });
+            embed.addFields({ name: fieldName, value: bossFieldVal, inline: false });
         }
 
         if (achievementsFieldValue) {
