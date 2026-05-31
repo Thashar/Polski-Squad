@@ -78,6 +78,7 @@ const pol = {
     recordNewScore: '🏆 Wynik',
     recordProgress: '📈 Progres',
     recordRanking: '🏅 Pozycja',
+    recordBossRanking: '🎯 Pozycja (boss)',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
     recordDateLabel: '📅 Data',
@@ -121,6 +122,7 @@ const pol = {
 
     // Global TOP snippet (pod wynikiem)
     globalSnippetTitle: '🌐 Zmiana w globalnym rankingu',
+    bossSnippetTitle: '🎯 Zmiana w rankingu bossa',
 
     // Global TOP10 cykliczny raport
     globalTop10ReportTitle: '🌐 TOP 10 Globalny',
@@ -432,6 +434,7 @@ const eng = {
     recordNewScore: '🏆 Score',
     recordProgress: '📈 Progress',
     recordRanking: '🏅 Position',
+    recordBossRanking: '🎯 Position (boss)',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
     recordDateLabel: '📅 Date',
@@ -475,6 +478,7 @@ const eng = {
 
     // Global TOP snippet (under result)
     globalSnippetTitle: '🌐 Global Ranking Change',
+    bossSnippetTitle: '🎯 Boss Ranking Change',
 
     // Global TOP10 periodic report
     globalTop10ReportTitle: '🌐 Global TOP 10',

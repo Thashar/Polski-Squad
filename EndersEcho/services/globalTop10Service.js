@@ -390,6 +390,66 @@ class GlobalTop10Service {
     }
 
     /**
+     * Snippet dla rankingu konkretnego bossa (identyczny format jak globalny).
+     * @param {string} userId
+     * @param {Array} bossRanking  - wynik getGlobalBossRanking (już po aktualizacji)
+     * @param {number|null} prevBossPosition - pozycja przed aktualizacją (null = nowy wpis)
+     * @param {string} bossName
+     * @param {object} msgs
+     * @param {object} client
+     * @returns {{ title, description }|null}
+     */
+    async buildBossSnippetFieldData(userId, bossRanking, prevBossPosition, bossName, msgs, client) {
+        const newBossIndex = bossRanking.findIndex(p => p.userId === userId);
+        if (newBossIndex === -1) return null;
+        const newBossPosition = newBossIndex + 1;
+
+        if (prevBossPosition !== null && prevBossPosition === newBossPosition) return null;
+
+        const guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag || null]));
+        const medals = ['🥇', '🥈', '🥉'];
+
+        const buildLine = async (player, position) => {
+            const posLabel = position <= 3 ? medals[position - 1] : `**${position}.**`;
+            let displayName = player.username || `ID:${player.userId}`;
+            try {
+                const guildObj = client.guilds.cache.get(player.sourceGuildId);
+                if (guildObj) {
+                    const member = await guildObj.members.fetch(player.userId).catch(() => null);
+                    if (member) displayName = member.displayName;
+                }
+            } catch { /* fallback */ }
+            const tag = guildTagMap.get(player.sourceGuildId);
+            const date = new Date(player.timestamp);
+            const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+            const serverSuffix = tag ? ` • ${tag}` : '';
+            return `${posLabel} ${displayName} • **${player.score || this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}`;
+        };
+
+        const prevLabel = prevBossPosition ? `#${prevBossPosition}` : '—';
+        const direction = !prevBossPosition || prevBossPosition > newBossPosition ? '↑' : '↓';
+        const snippetTitle = msgs.bossSnippetTitle || '🎯 Zmiana w rankingu bossa';
+        const title = `${snippetTitle} ${bossName} ${direction} ${prevLabel} → #${newBossPosition}`;
+
+        const lines = [];
+        const above   = bossRanking[newBossIndex - 1];
+        const current = bossRanking[newBossIndex];
+        const below   = bossRanking[newBossIndex + 1];
+
+        if (above) lines.push(await buildLine(above, newBossPosition - 1));
+
+        let currentLine = await buildLine(current, newBossPosition);
+        lines.push(`${direction} ${currentLine}`);
+
+        if (below) {
+            const belowDir = direction === '↑' ? '↓' : '↑';
+            lines.push(`${belowDir} ${await buildLine(below, newBossPosition + 1)}`);
+        }
+
+        return { title, description: lines.join('\n\n') };
+    }
+
+    /**
      * Buduje snippet embed (awans w globalnym rankingu).
      * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
      */
