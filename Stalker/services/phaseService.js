@@ -1409,7 +1409,7 @@ class PhaseService {
         }
 
         const createdDate = new Date(existingData.createdAt);
-        const dateStr = createdDate.toLocaleString('pl-PL');
+        const dateStr = createdDate.toLocaleString('pl-PL', { timeZone: this.config.timezone });
 
         const clanName = this.config.roleDisplayNames[clan] || clan;
 
