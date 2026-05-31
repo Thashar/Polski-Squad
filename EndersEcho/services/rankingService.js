@@ -602,7 +602,7 @@ class RankingService {
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(disabled)
             );
-            return [navRow, bossRow, ...roleRows];
+            return [navRow, ...roleRows, bossRow];
         }
 
         return [navRow, ...roleRows];
