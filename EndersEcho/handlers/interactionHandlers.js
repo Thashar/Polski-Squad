@@ -3744,9 +3744,10 @@ class InteractionHandler {
                     : null;
 
                 // Oblicz pozycję w rankingu bossa + snippet (jedno zapytanie do bossRecordService)
+                // Pomijamy dla nieznanego bossa — wynik jeszcze nie trafia do rankingu publicznego
                 let bossRankingOverride = null;
                 let bossSnippetDataLocal = null;
-                try {
+                if (!wasUnknownBoss) try {
                     const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                         || Array.from(interaction.client.guilds.cache.keys());
                     const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIdsForBoss, bossName);
@@ -3805,8 +3806,11 @@ class InteractionHandler {
                 bossPublicEmbed.setColor(0x1ABC9C);
 
                 if (wasUnknownBoss) {
-                    const warnVal = msgs.unknownBossAccepted || '⚠️ Nazwa bossa nierozpoznana — po weryfikacji wpis zostanie zaktualizowany.';
-                    bossPublicEmbed.addFields({ name: '⚠️ Weryfikacja', value: warnVal, inline: false });
+                    const noticeVal = formatMessage(
+                        msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                        { bossName }
+                    );
+                    bossPublicEmbed.addFields({ name: '⚠️ Niezweryfikowana nazwa bossa', value: noticeVal, inline: false });
                 }
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
@@ -3932,10 +3936,10 @@ class InteractionHandler {
                 }
             }
 
-            // Snippet + pozycja rankingu bossa — gdy rekord bossa też pobity
+            // Snippet + pozycja rankingu bossa — gdy rekord bossa pobity i boss jest znany
             let bossSnippetData = null;
             let bossGlobalRankingOverride = null;
-            if (!dryRun && isNewBossRecord && bossName) {
+            if (!dryRun && isNewBossRecord && bossName && !wasUnknownBoss) {
                 const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                     || Array.from(interaction.client.guilds.cache.keys());
                 const bossResult = await this._buildBossSnippetData(
@@ -3964,10 +3968,19 @@ class InteractionHandler {
                 rolePositions,
                 achievementsFieldValue,
                 globalSnippetData,
-                isNewBossRecord ? { isNewBossRecord, previousBossRecord, bossName } : null,
+                isNewBossRecord && !wasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName } : null,
                 bossGlobalRankingOverride,
                 bossSnippetData
             );
+
+            // Nieznana nazwa bossa — dodaj notice zamiast danych rankingowych
+            if (wasUnknownBoss && isNewBossRecord && bossName) {
+                const noticeVal = formatMessage(
+                    msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                    { bossName }
+                );
+                publicEmbed.addFields({ name: '⚠️ Niezweryfikowana nazwa bossa', value: noticeVal, inline: false });
+            }
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
             if (_prevGlobalUser && _newScoreValue > _prevGlobalUser.scoreValue && _prevGlobalUser.sourceGuildId !== guildId) {

@@ -330,6 +330,7 @@ const pol = {
     bossRecordUpdated: '🎯 Nowy rekord na bossie',
     bossRecordOnlyStatus: '🎯 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
     unknownBossAccepted: '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.',
+    unknownBossRankingNotice: '⚠️ Wykryto **nową nazwę bossa**: *{bossName}*\nWynik **nie pojawi się w rankingu bossów** do czasu weryfikacji przez admina.\nPo weryfikacji: nazwa zostanie dodana jako alias lub wynik zostanie cofnięty do poprzedniego stanu.',
     bossRecordOnlyConfirmed: '✅ **Nowy rekord na bossie ogłoszony!** 🎯 Twój wynik na tym bossie został opublikowany.',
     bossRecordPublicTitle: '🎯 Nowy Rekord Bossa!',
 
@@ -686,6 +687,7 @@ const eng = {
     bossRecordUpdated: '🎯 New Boss Record',
     bossRecordOnlyStatus: '🎯 Boss record beaten! Global record unchanged (current: {currentScore})',
     unknownBossAccepted: '⚠️ Score noted — boss name unrecognized. After admin verification, the entry will be updated or removed from the ranking.',
+    unknownBossRankingNotice: '⚠️ **New boss name** detected: *{bossName}*\nThe score **won\'t appear in the boss ranking** until verified by an admin.\nAfter verification: the name will be added as an alias or the score will be reverted.',
     bossRecordOnlyConfirmed: '✅ **New boss record announced!** 🎯 Your score on this boss has been published.',
     bossRecordPublicTitle: '🎯 New Boss Record!',
 
