@@ -1065,16 +1065,6 @@ class RankingService {
             } else {
                 bossFieldVal = `${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
             }
-            if (rankingOverride?.position) {
-                const overrideMedal = this.getPositionMedal(rankingOverride.position);
-                let posLine = `${overrideMedal} #${rankingOverride.position}`;
-                if (rankingOverride.positionChange > 0) {
-                    posLine += `  *(${msgs.recordPromotionBy} +${rankingOverride.positionChange})*`;
-                } else if (rankingOverride.isNewEntry) {
-                    posLine += `  *(${msgs.recordNewEntry})*`;
-                }
-                bossFieldVal += `\n${posLine}`;
-            }
             embed.addFields({ name: fieldName, value: bossFieldVal, inline: false });
         }
 
