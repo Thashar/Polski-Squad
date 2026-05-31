@@ -3643,7 +3643,10 @@ class InteractionHandler {
                 this.achievementService.trackNonRecord(guildId, userId).catch(() => {});
             }
 
-            if (!isNewRecord) {
+            const wasUnknownBoss = aiResult.wasUnknownBoss === true;
+
+            // Odrzuć tylko gdy: boss rozpoznany + brak rekordu globalnego + brak rekordu per-boss
+            if (!isNewRecord && !wasUnknownBoss && !isNewBossRecord) {
                 _ocrEmbedParams = { type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
@@ -3659,17 +3662,6 @@ class InteractionHandler {
                     const resultEmbed = this.rankingService.createResultEmbed(
                         userName, bestScore, currentScore.score, imageAttachment.name, bossName, msgs
                     );
-
-                    // Dodaj pole per-boss rekordu jeśli gracz poprawił wynik na tym bossie
-                    if (isNewBossRecord && bossName) {
-                        let bossFieldVal;
-                        if (previousBossRecord) {
-                            bossFieldVal = `**${bossName}:** ${previousBossRecord.score} ➜ ${bestScore}`;
-                        } else {
-                            bossFieldVal = `**${bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
-                        }
-                        resultEmbed.addFields({ name: msgs.bossRecordUpdated || '🎯 Nowy rekord na bossie', value: bossFieldVal, inline: false });
-                    }
 
                     try {
                         await interaction.editReply({ embeds: [resultEmbed], files: [imageAttachment] });
@@ -3692,6 +3684,65 @@ class InteractionHandler {
                     return;
                 } catch (noRecordError) {
                     throw noRecordError;
+                }
+            }
+
+            // Akceptacja bez pobicia rekordu globalnego:
+            // (A) boss nierozpoznany → wynik zapamiętany, ostrzeżenie o weryfikacji admina
+            // (B) boss rozpoznany + pobito rekord bossa → zielony embed sukcesu boss rekordu
+            if (!isNewRecord) {
+                _ocrEmbedParams = { type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                try {
+                    const safeUserNameAlt = userName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const imageAttachmentAlt = new AttachmentBuilder(tempImagePath, {
+                        name: `wynik_${safeUserNameAlt}_${Date.now()}.${fileExtension}`
+                    });
+
+                    let altEmbed;
+                    if (wasUnknownBoss) {
+                        // Boss nierozpoznany — wynik zapamiętany, oczekuje weryfikacji
+                        const statusVal = msgs.unknownBossAccepted || '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.';
+                        altEmbed = new EmbedBuilder()
+                            .setColor(0xFEE75C)
+                            .setTitle(msgs.resultTitle)
+                            .addFields([
+                                { name: msgs.resultPlayer, value: userName, inline: true },
+                                { name: msgs.resultScore, value: bestScore, inline: true },
+                                { name: msgs.resultStatus, value: statusVal, inline: false },
+                            ])
+                            .setImage(`attachment://${imageAttachmentAlt.name}`)
+                            .setTimestamp();
+                        if (bossName) altEmbed.addFields({ name: msgs.recordBoss, value: bossName, inline: false });
+                        gl.info(`⚠️ [/${commandName}] Wynik zaakceptowany z nierozpoznanym bossem: "${bossName || '???'}"`);
+                    } else {
+                        // Boss rozpoznany + pobito rekord bossa (rekord globalny bez zmian)
+                        const bossStatusVal = formatMessage(
+                            msgs.bossRecordOnlyStatus || '🎯 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
+                            { currentScore: currentScore?.score || '' }
+                        );
+                        altEmbed = new EmbedBuilder()
+                            .setColor(0x00b894)
+                            .setTitle(msgs.resultTitle)
+                            .addFields([
+                                { name: msgs.resultPlayer, value: userName, inline: true },
+                                { name: msgs.resultScore, value: bestScore, inline: true },
+                                { name: msgs.resultStatus, value: bossStatusVal, inline: false },
+                            ])
+                            .setImage(`attachment://${imageAttachmentAlt.name}`)
+                            .setTimestamp();
+                        if (isNewBossRecord && bossName) {
+                            const bossFieldVal = previousBossRecord
+                                ? `**${bossName}:** ${previousBossRecord.score} ➜ ${bestScore}`
+                                : `**${bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
+                            altEmbed.addFields({ name: msgs.bossRecordUpdated || '🎯 Nowy rekord na bossie', value: bossFieldVal, inline: false });
+                        }
+                        gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}" (rekord globalny bez zmian)`);
+                    }
+
+                    await interaction.editReply({ embeds: [altEmbed], files: [imageAttachmentAlt] });
+                    return;
+                } catch (altError) {
+                    throw altError;
                 }
             }
 

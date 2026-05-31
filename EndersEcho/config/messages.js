@@ -326,6 +326,8 @@ const pol = {
     bossRecordField: '🎯 Rekord na bossie',
     bossRecordFirst: 'pierwszy wynik na tym bossie!',
     bossRecordUpdated: '🎯 Nowy rekord na bossie',
+    bossRecordOnlyStatus: '🎯 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
+    unknownBossAccepted: '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.',
 
     // Ranking bossów
     buttonBossRanking: 'Ranking Bossów',
@@ -676,6 +678,8 @@ const eng = {
     bossRecordField: '🎯 Boss Record',
     bossRecordFirst: 'first score on this boss!',
     bossRecordUpdated: '🎯 New Boss Record',
+    bossRecordOnlyStatus: '🎯 Boss record beaten! Global record unchanged (current: {currentScore})',
+    unknownBossAccepted: '⚠️ Score noted — boss name unrecognized. After admin verification, the entry will be updated or removed from the ranking.',
 
     // Boss rankings
     buttonBossRanking: 'Boss Rankings',

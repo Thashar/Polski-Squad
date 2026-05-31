@@ -376,7 +376,12 @@
 - **Zapis:** Przy każdym udanym OCR (`_runUpdateFlow`, bez `dryRun`) → `bossRecordService.updateBossRecord(guildId, userId, bossName, ...)`. Jeśli boss nieznany → zapisuje pod surową nazwą OCR.
 - **Migracja:** Gdy admin doda alias przez `boss_cfg_add_lang_sel` lub `boss_map_lang_sel` → automatyczna `migrateBossName(rawName, englishName, allGuildIds)` (fire-and-forget). Zachowuje lepszy wynik jeśli gracz ma rekordy pod obiema nazwami.
 - **Cofanie:** `_cvRemoveRecord` cofa per-boss rekord (`revertBossRecord`) po cofnięciu rekordu ogólnego + osiągnięć. Sesje CV i `_ocrRevertSessions` przechowują `bossName` + `previousBossRecord`.
-- **Embed rekordu:** Pole `🎯 Rekord na bossie` (msgs.bossRecordField) pokazywane gdy `isNewBossRecord = true`, PRZED polem osiągnięć. Dla braku ogólnego rekordu — pole `🎯 Nowy rekord na bossie` (msgs.bossRecordUpdated) w ephemeral embedzie.
+- **Logika akceptacji OCR (3 przypadki):**
+  - **Boss rozpoznany + pobito rekord bossa** (bez globalnego) → zielony embed `0x00b894` z polem `bossRecordUpdated`; rekord per-boss zapisany
+  - **Boss nierozpoznany + brak globalnego** → żółty embed `0xFEE75C` z komunikatem `unknownBossAccepted`; wynik zapamiętany pod surową nazwą do weryfikacji admina
+  - **Boss rozpoznany + brak globalnego + brak rekordu bossa** → standardowy odrzut (embed `createResultEmbed`, kolor orange)
+  - Warunek odrzucenia: `!isNewRecord && !wasUnknownBoss && !isNewBossRecord`
+- **Embed rekordu:** Pole `🎯 Rekord na bossie` (msgs.bossRecordField) pokazywane gdy `isNewBossRecord = true`, PRZED polem osiągnięć. Dla pobitego rekordu bossa bez globalnego — pole `🎯 Nowy rekord na bossie` (msgs.bossRecordUpdated) w zielonym embedzie.
 - **Struktura danych:** `data/guilds/{guildId}/boss_records.json` = `{ userId: { bossName: { score, scoreValue, timestamp, username } } }`. Write queue per-guild (`_enqueue`).
 - **Ranking Bossów (globalny):**
   - Przycisk `🎯 Ranking Bossów` w widoku Global rankingu → `_handleRankingBossList` → StringSelectMenu z bossami mającymi ≥1 rekord (filtruje do znanych angielskich nazw)
