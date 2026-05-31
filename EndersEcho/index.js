@@ -40,6 +40,7 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const cron = require('node-cron');
+const AdminPanelService = require('./services/adminPanelService');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -113,7 +114,17 @@ const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankin
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService);
+const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
+    rankingService,
+    ocrStatsService,
+    tokenUsageService,
+    userBlockService,
+    updateCooldownService,
+    communityVerificationService,
+    guildConfigService,
+    globalTop10Service,
+});
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -147,6 +158,13 @@ async function initializeBot() {
         // Uruchom scheduler cyklicznych raportów TOP10 globalnego
         globalTop10Service.setClient(client);
         globalTop10Service.start();
+
+        // Wczytaj i uruchom Panel Centrum Dowodzenia Head Admina
+        adminPanelService.setClient(client);
+        await adminPanelService.load();
+        if (adminPanelService.isConfigured()) {
+            adminPanelService.refresh();
+        }
 
         // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
         cron.schedule('0 10 * * *', async () => {

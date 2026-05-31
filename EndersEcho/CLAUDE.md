@@ -182,6 +182,7 @@
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
    - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
+   - **Centrum Dowodzenia (head admin):** panel 5 embedów na dedykowanym kanale, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
 **Komendy slash:** `/achievements`, `/configure`, `/generate`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
 
@@ -189,7 +190,7 @@
 - Dostęp: Administrator Discord
 - **Układ rzędów — Główny panel (Admin i Head Admin):**
   - Rząd 1: `👥 Zarządzaj użytkownikami`, `🖥️ Zarządzaj serwerem`, `📊 Statystyki` (szare)
-  - Rząd 2 (tylko Head Admin): `📢 Wyślij Info`
+  - Rząd 2 (tylko Head Admin): `📢 Wyślij Info`, `📡 Centrum Dowodzenia`
 - **Sub-panel "Zarządzaj użytkownikami" (Admin):**
   - Rząd 1: `🗑️ Usuń gracza z rankingu`, `🔓 Odblokuj gracza`, `◀️ Wróć`
 - **Sub-panel "Zarządzaj użytkownikami" (Head Admin):**
@@ -285,6 +286,8 @@
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
 | `panel_process_roles` | Pełny reset ról TOP: usuń wszystkie → przyznaj wg aktualnego rankingu (admin + head admin) |
+| `panel_cmd_center` | Otwórz widok Centrum Dowodzenia (head admin) |
+| `panel_cmd_center_refresh` | Wymuś natychmiastowy refresh panelu Centrum Dowodzenia (head admin) |
 | `panel_info` | Otwórz modal /info (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
@@ -714,3 +717,52 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) pod embedem sukc
 - Thumbnail: ikona serwera Discord
 
 **Metody:** `_buildNewServerAnnouncementEmbeds(guild, serverNumber)`, `_enOrdinal(n)`, `_handleAnnounceNewServer()`, `_handleAnnounceNewServerSend()`
+
+---
+
+## Centrum Dowodzenia Head Admina (Admin Panel Live Dashboard)
+
+**Plik serwisu:** `services/adminPanelService.js`
+
+**Konfiguracja (zmienna env):**
+```env
+ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
+```
+
+**Działanie:** Panel to jedna stała wiadomość z 5 embedami na kanale head admina. Edytowana automatycznie po każdym zdarzeniu — nie flood kanału nowymi wiadomościami.
+
+**5 embedów panelu:**
+
+| # | Embed | Kolor | Zawartość |
+|---|---|---|---|
+| 1 | 📡 Centrum Dowodzenia | `0xFF6B35` | Uptime, liczba serwerów, AI OCR on/off, następny Global TOP10 |
+| 2 | 📊 Statystyki OCR | `0x5865F2` | Łącznie analiz, od resetu, Success Rate, interwencje admina, oczekujące CV, ostatnia analiza |
+| 3 | 🌍 Gracze Globalnie | `0x57F287` | Łącznie graczy, aktywne cooldowny, zablokowanych, TOP 3 globalny |
+| 4 | 💰 Koszty AI — Dzisiaj | `0xFEE75C` | Requesty, tokeny IN/OUT, łącznie tokenów, szacowany koszt ($) |
+| 5 | 🖥️ Status Serwerów | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag |
+
+**Triggery automatycznego refresh:**
+- ✅ Po każdym zapisie wyniku (`/update` — zarówno nowy rekord jak i brak rekordu, `!dryRun`)
+- ✅ Po analizie admina (`Analizuj` panel)
+- ✅ Po usunięciu gracza z rankingu (`panel_remove_confirm_*`)
+- ✅ Po zablokowaniu gracza (`panel_block_time_*`)
+- ✅ Po odblokowaniu gracza (`panel_unblock_select`)
+- ✅ Po akcji Community Verification (approve/remove/block)
+- ✅ Na żądanie: `/manage` → `📡 Centrum Dowodzenia` → `🔄 Odśwież Panel`
+- ✅ Przy starcie bota (jeśli kanał skonfigurowany)
+
+**Debouncing:** Maksymalnie 1 refresh naraz + 1 oczekujący (dodatkowe wywołania w trakcie odrzucane).
+
+**Persistencja:** `data/admin_panel.json` — `{ messageId, channelId }`. Jeśli wiadomość usunięta, serwis tworzy nową.
+
+**Klucz API serwisu:**
+```javascript
+adminPanelService.setLastRecord(userName, score, bossName, guildId); // przed refresh po OCR
+adminPanelService.refresh();   // fire-and-forget, debounced
+adminPanelService.setupChannel(channelId); // zmień kanał i wyślij nową wiadomość
+adminPanelService.isConfigured(); // czy ENDERSECHO_ADMIN_PANEL_CHANNEL_ID ustawione
+adminPanelService.getChannelId(); // ID aktualnego kanału
+adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie wysłana)
+```
+
+**Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → widok statusu + `🔄 Odśwież Panel`.

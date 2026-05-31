@@ -762,6 +762,8 @@ ENDERSECHO_ALLOWED_CHANNEL_ID=channel_id
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
+# Centrum Dowodzenia Head Admina — Live Dashboard (opcjonalne)
+ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 
 # ===== KONTROLER BOT =====
 KONTROLER_TOKEN=bot_token_here
