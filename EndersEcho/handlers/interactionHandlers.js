@@ -3743,15 +3743,46 @@ class InteractionHandler {
                     ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, langBoss)
                     : null;
 
-                // Embed identyczny jak przy globalnym rekordzie — tylko pole rekordu bossa + achievementy
+                // Oblicz pozycję gracza w rankingu bossa (po zapisie rekordu)
+                let bossRankingOverride = null;
+                try {
+                    const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
+                        || Array.from(interaction.client.guilds.cache.keys());
+                    const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIdsForBoss, bossName);
+                    const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
+                    if (newBossIdx !== -1) {
+                        const newBossPosition = newBossIdx + 1;
+                        let bossPositionChange = 0;
+                        let bossIsNewEntry = false;
+                        if (!previousBossRecord) {
+                            bossIsNewEntry = true;
+                        } else {
+                            const prevBossScoreValue = this.rankingService.parseScoreValue(previousBossRecord.score);
+                            const tempRanking = bossRanking.map(p =>
+                                p.userId === userId ? { ...p, scoreValue: prevBossScoreValue } : p
+                            );
+                            tempRanking.sort((a, b) => b.scoreValue - a.scoreValue);
+                            const prevBossIdx = tempRanking.findIndex(p => p.userId === userId);
+                            bossPositionChange = (prevBossIdx + 1) - newBossPosition;
+                        }
+                        bossRankingOverride = {
+                            position: newBossPosition,
+                            positionChange: bossPositionChange,
+                            isNewEntry: bossIsNewEntry,
+                            label: msgs.recordBossRanking || '🎯 Pozycja (boss)',
+                        };
+                    }
+                } catch { /* pozycja opcjonalna */ }
+
+                // Embed identyczny jak przy globalnym rekordzie — pozycja w boss rankingu + pole rekordu bossa + achievementy
                 const bossPublicEmbed = await this.rankingService.createRecordEmbed(
                     userName,
                     bestScore,
                     interaction.user.displayAvatarURL(),
                     imageAttachmentAlt.name,
                     null,                    // brak globalnego poprzedniego wyniku
-                    null,                    // brak userId → brak pozycji w rankingu
-                    null,                    // brak guildId → brak pozycji w rankingu
+                    null,                    // brak userId → brak pozycji globalnego rankingu
+                    null,                    // brak guildId → brak pozycji globalnego rankingu
                     msgs,
                     interaction.guild,
                     null,                    // brak ról TOP
@@ -3759,7 +3790,8 @@ class InteractionHandler {
                     [],                      // brak pozycji ról
                     bossAchievementsVal,
                     null,                    // brak globalnego snippetu
-                    { isNewBossRecord: true, previousBossRecord, bossName }
+                    { isNewBossRecord: true, previousBossRecord, bossName },
+                    bossRankingOverride      // pozycja w rankingu bossa
                 );
                 bossPublicEmbed.setColor(0x1ABC9C);
 

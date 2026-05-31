@@ -941,7 +941,7 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null, rankingOverride = null) {
         const msgs = messages || this.config.messages;
 
         // Oblicz postęp i poprawę w jednej linii
@@ -1009,6 +1009,16 @@ class RankingService {
             if (positionChange > 0) {
                 posLine += `  *(${msgs.recordPromotionBy} +${positionChange})*`;
             } else if (isNewEntry) {
+                posLine += `  *(${msgs.recordNewEntry})*`;
+            }
+            descLines.push(posLine);
+        } else if (rankingOverride?.position) {
+            const overrideMedal = this.getPositionMedal(rankingOverride.position);
+            const rankingLabel = rankingOverride.label || msgs.recordRanking;
+            let posLine = `**${rankingLabel}:** ${overrideMedal} #${rankingOverride.position}`;
+            if (rankingOverride.positionChange > 0) {
+                posLine += `  *(${msgs.recordPromotionBy} +${rankingOverride.positionChange})*`;
+            } else if (rankingOverride.isNewEntry) {
                 posLine += `  *(${msgs.recordNewEntry})*`;
             }
             descLines.push(posLine);
