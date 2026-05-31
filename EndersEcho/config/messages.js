@@ -78,7 +78,7 @@ const pol = {
     recordNewScore: '🏆 Wynik',
     recordProgress: '📈 Progres',
     recordRanking: '🏅 Pozycja',
-    recordBossRanking: '🎯 Pozycja (boss)',
+    recordBossRanking: '👾 Pozycja (boss)',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
     recordDateLabel: '📅 Data',
@@ -122,7 +122,7 @@ const pol = {
 
     // Global TOP snippet (pod wynikiem)
     globalSnippetTitle: '🌐 Zmiana w globalnym rankingu',
-    bossSnippetTitle: '🎯 Zmiana w rankingu bossa',
+    bossSnippetTitle: '👾 Zmiana w rankingu bossa',
 
     // Global TOP10 cykliczny raport
     globalTop10ReportTitle: '🌐 TOP 10 Globalny',
@@ -325,20 +325,20 @@ const pol = {
     cvBtnStatusRemoved: '🗑️ Usunięte przez admina',
 
     // Per-boss rekord (w embedzie ogłoszenia + w embedzie braku rekordu)
-    bossRecordField: '🎯 Rekord na bossie',
+    bossRecordField: '👾 Rekord na bossie',
     bossRecordFirst: 'pierwszy wynik na tym bossie!',
-    bossRecordUpdated: '🎯 Nowy rekord na bossie',
-    bossRecordOnlyStatus: '🎯 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
+    bossRecordUpdated: '👾 Nowy rekord na bossie',
+    bossRecordOnlyStatus: '👾 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
     unknownBossAccepted: '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.',
     unknownBossRankingNotice: '⚠️ Wykryto **nową nazwę bossa**: *{bossName}*\nWynik **nie pojawi się w rankingu bossów** do czasu weryfikacji przez admina.\nPo weryfikacji: nazwa zostanie dodana jako alias lub wynik zostanie cofnięty do poprzedniego stanu.',
     unknownBossRankingField: '⚠️ Niezweryfikowana nazwa bossa',
-    bossRecordOnlyConfirmed: '✅ **Nowy rekord na bossie ogłoszony!** 🎯 Twój wynik na tym bossie został opublikowany.',
-    bossRecordPublicTitle: '🎯 Nowy Rekord Bossa!',
+    bossRecordOnlyConfirmed: '✅ **Nowy rekord na bossie ogłoszony!** 👾 Twój wynik na tym bossie został opublikowany.',
+    bossRecordPublicTitle: '👾 Nowy Rekord Bossa!',
 
     // Ranking bossów
     buttonBossRanking: 'Ranking Bossów',
-    bossRankingTitle: '🎯 Ranking',
-    bossRankingSelectTitle: '🎯 Wybierz bossa',
+    bossRankingTitle: '👾 Ranking',
+    bossRankingSelectTitle: '👾 Wybierz bossa',
     bossRankingSelectDesc: 'Wybierz bossa z listy aby zobaczyć globalny ranking.',
     bossRankingSelectPlaceholder: 'Wybierz bossa...',
     bossRankingNoBosses: '📭 Brak wyników bossów do wyświetlenia.\nGracze muszą wysyłać screeny przez `/update` aby pojawili się w rankingu.',
@@ -436,7 +436,7 @@ const eng = {
     recordNewScore: '🏆 Score',
     recordProgress: '📈 Progress',
     recordRanking: '🏅 Position',
-    recordBossRanking: '🎯 Position (boss)',
+    recordBossRanking: '👾 Position (boss)',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
     recordDateLabel: '📅 Date',
@@ -480,7 +480,7 @@ const eng = {
 
     // Global TOP snippet (under result)
     globalSnippetTitle: '🌐 Global Ranking Change',
-    bossSnippetTitle: '🎯 Boss Ranking Change',
+    bossSnippetTitle: '👾 Boss Ranking Change',
 
     // Global TOP10 periodic report
     globalTop10ReportTitle: '🌐 Global TOP 10',
@@ -683,20 +683,20 @@ const eng = {
     cvBtnStatusRemoved: '🗑️ Removed by admin',
 
     // Per-boss record (in announcement embed + no-record embed)
-    bossRecordField: '🎯 Boss Record',
+    bossRecordField: '👾 Boss Record',
     bossRecordFirst: 'first score on this boss!',
-    bossRecordUpdated: '🎯 New Boss Record',
-    bossRecordOnlyStatus: '🎯 Boss record beaten! Global record unchanged (current: {currentScore})',
+    bossRecordUpdated: '👾 New Boss Record',
+    bossRecordOnlyStatus: '👾 Boss record beaten! Global record unchanged (current: {currentScore})',
     unknownBossAccepted: '⚠️ Score noted — boss name unrecognized. After admin verification, the entry will be updated or removed from the ranking.',
     unknownBossRankingNotice: '⚠️ **New boss name** detected: *{bossName}*\nThe score **won\'t appear in the boss ranking** until verified by an admin.\nAfter verification: the name will be added as an alias or the score will be reverted.',
     unknownBossRankingField: '⚠️ Unverified Boss Name',
-    bossRecordOnlyConfirmed: '✅ **New boss record announced!** 🎯 Your score on this boss has been published.',
-    bossRecordPublicTitle: '🎯 New Boss Record!',
+    bossRecordOnlyConfirmed: '✅ **New boss record announced!** 👾 Your score on this boss has been published.',
+    bossRecordPublicTitle: '👾 New Boss Record!',
 
     // Boss rankings
     buttonBossRanking: 'Boss Rankings',
-    bossRankingTitle: '🎯 Ranking',
-    bossRankingSelectTitle: '🎯 Select a Boss',
+    bossRankingTitle: '👾 Ranking',
+    bossRankingSelectTitle: '👾 Select a Boss',
     bossRankingSelectDesc: 'Choose a boss from the list to view the global ranking.',
     bossRankingSelectPlaceholder: 'Choose a boss...',
     bossRankingNoBosses: '📭 No boss records to display yet.\nPlayers need to submit screenshots via `/update` to appear in the ranking.',

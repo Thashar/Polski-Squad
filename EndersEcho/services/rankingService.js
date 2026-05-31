@@ -593,7 +593,7 @@ class RankingService {
             ...(mode === 'global' ? [
                 new ButtonBuilder()
                     .setCustomId('ranking_boss_list')
-                    .setEmoji('🎯')
+                    .setEmoji('👾')
                     .setLabel(msgs.buttonBossRanking || 'Ranking Bossów')
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled)
