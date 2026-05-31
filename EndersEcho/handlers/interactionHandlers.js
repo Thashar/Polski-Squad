@@ -3743,30 +3743,29 @@ class InteractionHandler {
                     ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, langBoss)
                     : null;
 
-                const bossRecordFieldVal = bossName
-                    ? (previousBossRecord
-                        ? `**${bossName}:** ${previousBossRecord.score} ➜ ${bestScore}`
-                        : `**${bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`)
-                    : bestScore;
-
-                const bossPublicEmbed = new EmbedBuilder()
-                    .setColor(0x1ABC9C)
-                    .setTitle(msgs.bossRecordPublicTitle || '🎯 Nowy Rekord Bossa!')
-                    .addFields([
-                        { name: msgs.resultPlayer, value: userName, inline: true },
-                        { name: msgs.resultScore, value: bestScore, inline: true },
-                        { name: msgs.bossRecordUpdated || '🎯 Nowy rekord na bossie', value: bossRecordFieldVal, inline: false },
-                    ])
-                    .setImage(`attachment://${imageAttachmentAlt.name}`)
-                    .setTimestamp();
+                // Embed identyczny jak przy globalnym rekordzie — tylko pole rekordu bossa + achievementy
+                const bossPublicEmbed = await this.rankingService.createRecordEmbed(
+                    userName,
+                    bestScore,
+                    interaction.user.displayAvatarURL(),
+                    imageAttachmentAlt.name,
+                    null,                    // brak globalnego poprzedniego wyniku
+                    null,                    // brak userId → brak pozycji w rankingu
+                    null,                    // brak guildId → brak pozycji w rankingu
+                    msgs,
+                    interaction.guild,
+                    null,                    // brak ról TOP
+                    null,                    // brak poprzedniego timestampu
+                    [],                      // brak pozycji ról
+                    bossAchievementsVal,
+                    null,                    // brak globalnego snippetu
+                    { isNewBossRecord: true, previousBossRecord, bossName }
+                );
+                bossPublicEmbed.setColor(0x1ABC9C);
 
                 if (wasUnknownBoss) {
                     const warnVal = msgs.unknownBossAccepted || '⚠️ Nazwa bossa nierozpoznana — po weryfikacji wpis zostanie zaktualizowany.';
                     bossPublicEmbed.addFields({ name: '⚠️ Weryfikacja', value: warnVal, inline: false });
-                }
-
-                if (bossAchievementsVal) {
-                    bossPublicEmbed.addFields({ name: msgs.achievementsNewField || '🎉 Nowe osiągnięcia', value: bossAchievementsVal, inline: false });
                 }
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
@@ -5411,6 +5410,46 @@ class InteractionHandler {
             return new AttachmentBuilder(buf, { name: 'ranking_progress.png' });
         } catch (err) {
             logger.warn('Błąd generowania wykresu progresu graczy:', err);
+            return null;
+        }
+    }
+
+    // Wykres dla rankingu konkretnego bossa — filtruje historię tylko do wpisów tego bossa.
+    // Dla graczy bez historii na tym bossie (rekord bez pobicia globalnego) używa aktualnego
+    // wpisu boss_records jako pojedynczego punktu danych.
+    async _buildBossRankingChartAttachment(players, currentPage, allGuildIds, bossName, t) {
+        if (!this.chartService?.generatePlayersProgressChart || !this.scoreHistoryService) return null;
+        const perPage = this.config.ranking.playersPerPage;
+        const pagePlayers = players.slice(currentPage * perPage, (currentPage + 1) * perPage);
+        if (pagePlayers.length === 0) return null;
+        try {
+            const histories = await Promise.all(
+                pagePlayers.map(async (p) => {
+                    const allEntries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.userId);
+                    const bossEntries = allEntries.filter(e =>
+                        typeof e.scoreValue === 'number' && e.scoreValue > 0 && e.bossName === bossName
+                    );
+                    // Brak historii dla tego bossa (np. tylko rekord bossa, nie globalny) →
+                    // użyj aktualnego rekordu jako pojedynczego punktu
+                    const finalEntries = bossEntries.length > 0 ? bossEntries : [{
+                        scoreValue: p.scoreValue,
+                        score: p.score,
+                        timestamp: p.timestamp,
+                        bossName,
+                    }];
+                    return {
+                        userId: p.userId,
+                        name: p.username || p.userId,
+                        entries: finalEntries,
+                    };
+                })
+            );
+            const chartTitle = `📊 ${bossName}`;
+            const buf = await this.chartService.generatePlayersProgressChart(histories, chartTitle);
+            if (!buf) return null;
+            return new AttachmentBuilder(buf, { name: 'boss_ranking_progress.png' });
+        } catch (err) {
+            logger.warn('Błąd generowania wykresu rankingu bossa:', err);
             return null;
         }
     }
@@ -10789,13 +10828,13 @@ class InteractionHandler {
             }
         }
 
-        // Wykres postępu graczy dla bossów (taki sam typ jak w standardowym rankingu)
+        // Wykres postępu graczy dla bossów — tylko wyniki z tego bossa
         let chartAttachment = null;
         try {
             const allGuildIdsForChart = this.guildConfigService?.getAllConfiguredGuildIds()
                 || Array.from(interaction.client.guilds.cache.keys());
             const t = this._panelT(interaction.guildId);
-            chartAttachment = await this._buildGlobalRankingChartAttachment(players, 0, allGuildIdsForChart, t);
+            chartAttachment = await this._buildBossRankingChartAttachment(players, 0, allGuildIdsForChart, bossName, t);
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
@@ -10820,7 +10859,7 @@ class InteractionHandler {
         if (bossImageAttachment) files.push(bossImageAttachment);
         if (chartAttachment) {
             files.push(chartAttachment);
-            embeds.push(new EmbedBuilder().setImage('attachment://ranking_progress.png'));
+            embeds.push(new EmbedBuilder().setImage('attachment://boss_ranking_progress.png'));
         }
         await interaction.editReply({ embeds, components: buttons, files, attachments: [] });
     }
@@ -10859,14 +10898,14 @@ class InteractionHandler {
             }
         }
 
-        // Wykres postępu graczy
+        // Wykres postępu graczy — tylko wyniki z tego bossa
         let chartAttachment = null;
         try {
             const allGuildIdsForChart = rankingData.allGuildIds
                 || this.guildConfigService?.getAllConfiguredGuildIds()
                 || Array.from(interaction.client.guilds.cache.keys());
             const t = this._panelT(interaction.guildId);
-            chartAttachment = await this._buildGlobalRankingChartAttachment(rankingData.players, newPage, allGuildIdsForChart, t);
+            chartAttachment = await this._buildBossRankingChartAttachment(rankingData.players, newPage, allGuildIdsForChart, rankingData.bossName, t);
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
@@ -10879,7 +10918,7 @@ class InteractionHandler {
         if (bossImageAttachment) files.push(bossImageAttachment);
         if (chartAttachment) {
             files.push(chartAttachment);
-            embeds.push(new EmbedBuilder().setImage('attachment://ranking_progress.png'));
+            embeds.push(new EmbedBuilder().setImage('attachment://boss_ranking_progress.png'));
         }
         await interaction.editReply({ embeds, components: buttons, files, attachments: [] });
     }
