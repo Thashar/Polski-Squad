@@ -106,6 +106,7 @@ module.exports = {
     rejectedChannelId: process.env.ENDERSECHO_REJECTED_CHANNEL_ID || null,
     communityChannelId: process.env.ENDERSECHO_COMMUNITY_CHANNEL_ID || null,
     appApiKey: process.env.ENDERSECHO_API_KEY || process.env.BOT_API_KEY || null,
+    adminPanelChannelId: process.env.ENDERSECHO_ADMIN_PANEL_CHANNEL_ID || null,
 
     // Lista serwerów z .env (fallback gdy guildConfigService niedostępny)
     guilds,

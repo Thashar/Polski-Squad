@@ -24,7 +24,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -49,6 +49,7 @@ class InteractionHandler {
         this.bossAliasService = bossAliasService;
         this.ocrStatsService = ocrStatsService;
         this.bossRecordService = bossRecordService;
+        this.adminPanelService = adminPanelService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -2162,6 +2163,7 @@ class InteractionHandler {
         ];
         if (isHeadAdmin) {
             descLines.push(`\n📢 **${t('Wyślij Info', 'Send Info')}** — ${t('skomponuj wiadomość i wyślij ją na kanały wszystkich skonfigurowanych serwerów.', 'compose a message and send it to all configured servers\' channels.')}`);
+            descLines.push(`📡 **${t('Centrum Dowodzenia', 'Command Center')}** — ${t('panel sterowania z live-statystykami OCR, graczy i kosztów AI, aktualizowany po każdej analizie.', 'control panel with live OCR, player and AI cost statistics, updated after each analysis.')}`);
         }
 
         const embed = new EmbedBuilder()
@@ -2181,9 +2183,10 @@ class InteractionHandler {
 
         const components = [row1];
         if (isHeadAdmin) {
-            // Rząd 2 Head Admin: Wyślij Info (zostaje w głównym panelu)
+            // Rząd 2 Head Admin: Wyślij Info + Centrum Dowodzenia
             components.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_info').setEmoji('📢').setLabel(t('Wyślij Info', 'Send Info')).setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('panel_cmd_center').setEmoji('📡').setLabel(t('Centrum Dowodzenia', 'Command Center')).setStyle(ButtonStyle.Primary),
             ));
         }
 
@@ -2424,6 +2427,99 @@ class InteractionHandler {
         await interaction.update({ embeds: [embed], components });
     }
 
+    async _handlePanelCmdCenter(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const t = this._panelT(interaction.guildId);
+        const svc = this.adminPanelService;
+        const isConfigured = svc?.isConfigured();
+        const channelId = svc?.getChannelId();
+        const messageId = svc?.getMessageId();
+
+        let statusLine;
+        if (!isConfigured) {
+            statusLine = t(
+                '⚠️ **Panel nie jest skonfigurowany.**\nUstaw `ENDERSECHO_ADMIN_PANEL_CHANNEL_ID` w pliku `.env` i zrestartuj bota.',
+                '⚠️ **Panel is not configured.**\nSet `ENDERSECHO_ADMIN_PANEL_CHANNEL_ID` in the `.env` file and restart the bot.'
+            );
+        } else if (messageId) {
+            statusLine = t(
+                `✅ **Panel aktywny** na kanale <#${channelId}>\n📩 ID wiadomości: \`${messageId}\``,
+                `✅ **Panel active** in channel <#${channelId}>\n📩 Message ID: \`${messageId}\``
+            );
+        } else {
+            statusLine = t(
+                `📬 Kanał ustawiony: <#${channelId}>\n⏳ Wiadomość zostanie wysłana przy najbliższym refresh.`,
+                `📬 Channel set: <#${channelId}>\n⏳ Message will be sent on next refresh.`
+            );
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle(t('📡 Centrum Dowodzenia', '📡 Command Center'))
+            .setDescription(
+                statusLine + '\n\n' +
+                t(
+                    '**Panel aktualizuje się automatycznie** po każdym nowym rekordzie, akcji admina i weryfikacji społeczności.\n\nUżyj przycisku poniżej aby wymusić natychmiastowy refresh.',
+                    '**The panel updates automatically** after every new record, admin action and community verification.\n\nUse the button below to force an immediate refresh.'
+                )
+            );
+
+        const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
+        const components = [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('panel_cmd_center_refresh')
+                .setEmoji('🔄')
+                .setLabel(t('Odśwież Panel', 'Refresh Panel'))
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!isConfigured),
+            back,
+        )];
+
+        await interaction.update({ embeds: [embed], components });
+    }
+
+    async _handlePanelCmdCenterRefresh(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const t = this._panelT(interaction.guildId);
+        await interaction.deferUpdate();
+
+        const svc = this.adminPanelService;
+        if (!svc?.isConfigured()) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('❌ Błąd', '❌ Error'))
+                    .setDescription(t('Panel nie jest skonfigurowany.', 'Panel is not configured.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_cmd_center').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+            return;
+        }
+
+        await svc._doRefresh().catch(() => {});
+
+        const channelId = svc.getChannelId();
+        const messageId = svc.getMessageId();
+        const statusLine = messageId
+            ? t(`✅ Panel odświeżony — <#${channelId}>`, `✅ Panel refreshed — <#${channelId}>`)
+            : t(`⚠️ Nie udało się znaleźć wiadomości panelu.`, `⚠️ Panel message not found.`);
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor(0x57F287)
+                .setTitle(t('📡 Centrum Dowodzenia', '📡 Command Center'))
+                .setDescription(statusLine)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_cmd_center').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
+            )]
+        });
+    }
+
     async _handlePanelRemove(interaction) {
         const t = this._panelT(interaction.guildId);
         const modal = new ModalBuilder()
@@ -2572,6 +2668,7 @@ class InteractionHandler {
             } catch (roleError) {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
+            this.adminPanelService?.refresh();
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
             await interaction.editReply({
@@ -3601,6 +3698,11 @@ class InteractionHandler {
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
+                // Aktualizuj panel Centrum Dowodzenia po każdym zapisie (nowy rekord lub nie)
+                if (this.adminPanelService) {
+                    this.adminPanelService.setLastRecord(userName, bestScore, bossName, guildId);
+                    this.adminPanelService.refresh();
+                }
             }
 
             // Per-boss rekord (zawsze po pozytywnym OCR, niezależnie od isNewRecord)
@@ -4275,6 +4377,8 @@ class InteractionHandler {
 
     _describePanelButton(customId) {
         if (customId === 'panel_back' || customId === 'cfg_admin_panel') return 'Otwarto panel';
+        if (customId === 'panel_cmd_center') return 'Centrum Dowodzenia';
+        if (customId === 'panel_cmd_center_refresh') return 'Odśwież Centrum Dowodzenia';
         if (customId === 'panel_cat_users') return 'Zarządzaj użytkownikami';
         if (customId === 'panel_cat_server') return 'Zarządzaj serwerem';
         if (customId === 'panel_cat_stats') return 'Statystyki';
@@ -4643,6 +4747,14 @@ class InteractionHandler {
                 }
                 const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
                 await interaction.update({ embeds: [embed], components: rows });
+                return;
+            }
+            if (customId === 'panel_cmd_center') {
+                await this._handlePanelCmdCenter(interaction);
+                return;
+            }
+            if (customId === 'panel_cmd_center_refresh') {
+                await this._handlePanelCmdCenterRefresh(interaction);
                 return;
             }
             if (customId === 'panel_remove') {
@@ -5409,6 +5521,7 @@ class InteractionHandler {
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminBlocked.replace('{adminName}', adminName), []);
         }
+        this.adminPanelService?.refresh();
     }
 
     async _updateOriginalRecordButton(client, session, action) {
@@ -6278,6 +6391,7 @@ class InteractionHandler {
                 }
                 const success = await this.userBlockService.unblockUser(targetUserId, isHeadAdmin);
                 const username = entry?.username || targetUserId;
+                if (success === true) this.adminPanelService?.refresh();
                 await interaction.update({
                     embeds: [new EmbedBuilder().setColor(success === true ? 0x57F287 : 0xFF4444)
                         .setTitle(success === true ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
@@ -7227,6 +7341,7 @@ class InteractionHandler {
         });
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
+        this.adminPanelService?.refresh();
 
         if (crossUpdateGlobalMsgId) {
             await this._updateGlobalReportMsg(interaction.client, crossUpdateGlobalMsgId, targetGuildId, 'blocked', adminName, durationLabel);
@@ -7634,6 +7749,10 @@ class InteractionHandler {
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
             if (this.ocrStatsService) this.ocrStatsService.recordAnalyze().catch(() => {});
+            if (this.adminPanelService) {
+                this.adminPanelService.setLastRecord(userName, aiResult.score, aiResult.bossName, targetGuildId);
+                this.adminPanelService.refresh();
+            }
 
             let newAchievements = [];
             if (this.achievementService) {
