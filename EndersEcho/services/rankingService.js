@@ -589,22 +589,21 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1),
 
             switchBtn,
-            // W trybie global backBtn przenoszony do osobnego wiersza — tylko 4 przyciski w navRow
-            ...(mode === 'global' ? [] : [backBtn])
-        );
-
-        // W trybie global: roleRows → bossRow → backRow (każdy w swoim wierszu)
-        if (mode === 'global') {
-            const bossRow = new ActionRowBuilder().addComponents(
+            // W trybie global: bossBtn na końcu wiersza 1 (szary), backBtn w osobnym wierszu
+            ...(mode === 'global' ? [
                 new ButtonBuilder()
                     .setCustomId('ranking_boss_list')
                     .setEmoji('🎯')
                     .setLabel(msgs.buttonBossRanking || 'Ranking Bossów')
-                    .setStyle(ButtonStyle.Primary)
+                    .setStyle(ButtonStyle.Secondary)
                     .setDisabled(disabled)
-            );
+            ] : [backBtn])
+        );
+
+        // W trybie global: roleRows → backRow (osobny wiersz)
+        if (mode === 'global') {
             const backRow = new ActionRowBuilder().addComponents(backBtn);
-            return [navRow, ...roleRows, bossRow, backRow];
+            return [navRow, ...roleRows, backRow];
         }
 
         return [navRow, ...roleRows];
