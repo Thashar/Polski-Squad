@@ -3792,9 +3792,57 @@ class InteractionHandler {
                 };
 
                 await interaction.editReply({ content: msgs.bossRecordOnlyConfirmed || '✅ Nowy rekord na bossie ogłoszony!' });
-                await interaction.followUp({ embeds: [bossPublicEmbed], files: [imageAttachmentAlt] });
 
-                // Sesja cofnięcia (boss record only — globalny ranking niezmieniony)
+                // Sprawdź czy community verification włączona
+                const cvCfgBoss = this.guildConfigService?.getCommunityVerification(guildId);
+                const cvEnabledBoss = cvCfgBoss?.enabled === true && this.communityVerificationService;
+
+                const bossPublicMsg = await interaction.followUp({ embeds: [bossPublicEmbed], files: [imageAttachmentAlt] });
+
+                // CV: przycisk Zgłoś + sesja weryfikacji (usuwa tylko rekord bossa, nie globalny)
+                if (cvEnabledBoss && bossPublicMsg) {
+                    try {
+                        const bossTs = new Date().toISOString();
+                        const expired = await this.communityVerificationService.expireUserSessions(userId, guildId);
+                        for (const oldMsgId of expired) {
+                            try {
+                                const oldSession = this.communityVerificationService.getSession(oldMsgId);
+                                if (oldSession) {
+                                    const ch = await interaction.client.channels.fetch(oldSession.channelId).catch(() => null);
+                                    if (ch) {
+                                        const oldMsg = await ch.messages.fetch(oldMsgId).catch(() => null);
+                                        if (oldMsg) await oldMsg.edit({ components: [] }).catch(() => {});
+                                    }
+                                }
+                            } catch {}
+                        }
+
+                        const bossCvBtn = new ButtonBuilder()
+                            .setCustomId(`cv_vote_${bossPublicMsg.id}`)
+                            .setLabel(msgs.cvVoteButton)
+                            .setStyle(ButtonStyle.Secondary);
+                        await bossPublicMsg.edit({ components: [new ActionRowBuilder().addComponents(bossCvBtn)] }).catch(() => {});
+
+                        const bossMsgUrl = `https://discord.com/channels/${guildId}/${bossPublicMsg.channelId}/${bossPublicMsg.id}`;
+                        await this.communityVerificationService.createSession({
+                            guildId,
+                            userId,
+                            messageId: bossPublicMsg.id,
+                            channelId: bossPublicMsg.channelId,
+                            messageUrl: bossMsgUrl,
+                            previousRecord: null,        // globalny ranking niezmieniony
+                            skipGlobalRevert: true,      // przy cofnięciu nie ruszaj globalnego rankingu
+                            newRecord: { score: bestScore, bossName, timestamp: bossTs },
+                            newAchievements,
+                            previousBossRecord: previousBossRecord ?? null,
+                        });
+                        gl.info(`🔍 CV sesja (boss record) utworzona dla ${userName} — boss: "${bossName}"`);
+                    } catch (cvBossErr) {
+                        gl.warn(`⚠️ community verification (boss record) session error: ${cvBossErr.message}`);
+                    }
+                }
+
+                // Sesja cofnięcia dla admina (boss record only — globalny ranking niezmieniony)
                 const bossRevertKey = `${userId}_${guildId}`;
                 this._ocrRevertSessions.set(bossRevertKey, {
                     guildId,

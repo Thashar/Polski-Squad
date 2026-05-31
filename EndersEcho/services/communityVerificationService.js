@@ -46,7 +46,7 @@ class CommunityVerificationService {
      * @param {Object} opts.newRecord - { score, bossName, timestamp }
      * @param {string[]} opts.newAchievements - ID osiągnięć zdobytych tym rekordem
      */
-    async createSession({ guildId, userId, messageId, channelId, messageUrl, previousRecord, newRecord, newAchievements }) {
+    async createSession({ guildId, userId, messageId, channelId, messageUrl, previousRecord, newRecord, newAchievements, previousBossRecord, skipGlobalRevert }) {
         await this._loadPromise;
         this._sessions[messageId] = {
             guildId,
@@ -56,6 +56,8 @@ class CommunityVerificationService {
             previousRecord: previousRecord || null,
             newRecord,
             newAchievements: newAchievements || [],
+            previousBossRecord: previousBossRecord ?? null,
+            skipGlobalRevert: skipGlobalRevert === true,
             voters: [],
             count: 0,
             status: 'pending',
