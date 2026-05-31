@@ -589,10 +589,11 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1),
 
             switchBtn,
-            backBtn
+            // W trybie global backBtn przenoszony do osobnego wiersza — tylko 4 przyciski w navRow
+            ...(mode === 'global' ? [] : [backBtn])
         );
 
-        // W trybie global dodaj dodatkowy rząd z przyciskiem Ranking Bossów
+        // W trybie global: roleRows → bossRow → backRow (każdy w swoim wierszu)
         if (mode === 'global') {
             const bossRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -602,7 +603,8 @@ class RankingService {
                     .setStyle(ButtonStyle.Primary)
                     .setDisabled(disabled)
             );
-            return [navRow, ...roleRows, bossRow];
+            const backRow = new ActionRowBuilder().addComponents(backBtn);
+            return [navRow, ...roleRows, bossRow, backRow];
         }
 
         return [navRow, ...roleRows];
