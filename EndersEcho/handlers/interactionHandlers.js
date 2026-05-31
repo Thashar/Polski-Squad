@@ -24,7 +24,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -48,6 +48,7 @@ class InteractionHandler {
         this.globalTop10Service = globalTop10Service;
         this.bossAliasService = bossAliasService;
         this.ocrStatsService = ocrStatsService;
+        this.bossRecordService = bossRecordService;
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -66,6 +67,8 @@ class InteractionHandler {
         this._bossCfgSessions = new Map();
         // Sesje cofnięcia wyniku OCR (userId_guildId -> { guildId, userId, previousRecord, newRecord })
         this._ocrRevertSessions = new Map();
+        // Stan paginacji rankingów per-boss (messageId -> { bossName, players, currentPage, totalPages, userId })
+        this._bossRankings = new Map();
     }
 
     /**
@@ -3600,6 +3603,23 @@ class InteractionHandler {
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
             }
 
+            // Per-boss rekord (zawsze po pozytywnym OCR, niezależnie od isNewRecord)
+            let isNewBossRecord = false;
+            let previousBossRecord = null;
+            if (!dryRun && bossName && this.bossRecordService) {
+                const bossTs = newRecordTimestamp || new Date().toISOString();
+                const bossScoreValue = this.rankingService.parseScoreValue(bestScore);
+                try {
+                    const bossResult = await this.bossRecordService.updateBossRecord(
+                        guildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
+                    );
+                    isNewBossRecord = bossResult.isNewBossRecord;
+                    previousBossRecord = bossResult.previousBossRecord;
+                } catch (bossErr) {
+                    gl.error(`Błąd zapisu per-boss rekordu: ${bossErr.message}`);
+                }
+            }
+
             // Pozycja po zapisie (potrzebna do osiągnięć i do embeda)
             let newAchievements = [];
             let currentPositionForAch = 0;
@@ -3639,6 +3659,17 @@ class InteractionHandler {
                     const resultEmbed = this.rankingService.createResultEmbed(
                         userName, bestScore, currentScore.score, imageAttachment.name, bossName, msgs
                     );
+
+                    // Dodaj pole per-boss rekordu jeśli gracz poprawił wynik na tym bossie
+                    if (isNewBossRecord && bossName) {
+                        let bossFieldVal;
+                        if (previousBossRecord) {
+                            bossFieldVal = `**${bossName}:** ${previousBossRecord.score} ➜ ${bestScore}`;
+                        } else {
+                            bossFieldVal = `**${bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
+                        }
+                        resultEmbed.addFields({ name: msgs.bossRecordUpdated || '🎯 Nowy rekord na bossie', value: bossFieldVal, inline: false });
+                    }
 
                     try {
                         await interaction.editReply({ embeds: [resultEmbed], files: [imageAttachment] });
@@ -3711,7 +3742,8 @@ class InteractionHandler {
                 currentScore ? currentScore.timestamp : null,
                 rolePositions,
                 achievementsFieldValue,
-                globalSnippetData
+                globalSnippetData,
+                isNewBossRecord ? { isNewBossRecord, previousBossRecord, bossName } : null
             );
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
@@ -3796,6 +3828,7 @@ class InteractionHandler {
                                 previousRecord: previousRecordSnapshot,
                                 newRecord: { score: bestScore, bossName, timestamp: newRecordTimestamp || new Date().toISOString() },
                                 newAchievements,
+                                previousBossRecord: previousBossRecord ?? null,
                             });
                         } catch (cvErr) {
                             gl.warn(`⚠️ community verification session error: ${cvErr.message}`);
@@ -3837,7 +3870,9 @@ class InteractionHandler {
                     guildId,
                     userId,
                     previousRecord: previousRecordSnapshot ?? null,
-                    newRecord: { timestamp: newRecordTimestamp }
+                    newRecord: { timestamp: newRecordTimestamp },
+                    bossName: bossName || null,
+                    previousBossRecord: previousBossRecord ?? null,
                 });
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
@@ -3855,7 +3890,9 @@ class InteractionHandler {
                     guildId,
                     userId,
                     previousRecord: previousRecordSnapshot ?? null,
-                    newRecord: { timestamp: newRecordTimestamp }
+                    newRecord: { timestamp: newRecordTimestamp },
+                    bossName: bossName || null,
+                    previousBossRecord: previousBossRecord ?? null,
                 });
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
@@ -4646,6 +4683,18 @@ class InteractionHandler {
                 await this._handleBossMapButton(interaction, customId);
                 return;
             }
+            if (customId === 'boss_cfg_set_img') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgSetImg(interaction);
+                return;
+            }
+            if (customId === 'ranking_boss_list') {
+                await this._handleRankingBossList(interaction);
+                return;
+            }
             if (customId === 'panel_ban_guild') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -4692,6 +4741,12 @@ class InteractionHandler {
 
             // === Przyciski paginacji ===
             await interaction.deferUpdate();
+
+            // Sprawdź najpierw czy to ranking bossa (przechowywany w _bossRankings)
+            if (this._bossRankings.has(interaction.message.id)) {
+                await this._handleRankingBossPage(interaction, customId);
+                return;
+            }
 
             const rankingData = this.rankingService.getActiveRanking(interaction.message.id);
 
@@ -5175,6 +5230,16 @@ class InteractionHandler {
             }
         } catch (e) {
             logger.error(`CV _cvRemoveRecord revert achievements error: ${e.message}`);
+        }
+        // Cofnij per-boss rekord
+        if (this.bossRecordService) {
+            const bossNameToRevert = session.newRecord?.bossName ?? session.bossName ?? null;
+            if (bossNameToRevert) {
+                await this.bossRecordService.revertBossRecord(
+                    session.guildId, session.userId, bossNameToRevert,
+                    session.previousBossRecord ?? null
+                ).catch(e => logger.error(`CV _cvRemoveRecord revert boss record error: ${e.message}`));
+            }
         }
     }
 
@@ -5832,6 +5897,20 @@ class InteractionHandler {
                     return;
                 }
                 await this._handleBossMapLangSel(interaction);
+                return;
+            }
+
+            if (customId === 'boss_cfg_img_boss_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgImgBossSel(interaction);
+                return;
+            }
+
+            if (customId === 'ranking_boss_sel') {
+                await this._handleRankingBossShow(interaction);
                 return;
             }
 
@@ -9709,6 +9788,7 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId('boss_cfg_add_name').setEmoji('➕').setLabel(t('Dodaj bossa', 'Add Boss')).setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('boss_cfg_rm_entry').setEmoji('🗑️').setLabel(t('Usuń bossa', 'Remove Boss')).setStyle(ButtonStyle.Danger).setDisabled(!hasNames),
             new ButtonBuilder().setCustomId('boss_cfg_edit_entry').setEmoji('✏️').setLabel(t('Edytuj bossa', 'Rename Boss')).setStyle(ButtonStyle.Primary).setDisabled(!hasNames),
+            new ButtonBuilder().setCustomId('boss_cfg_set_img').setEmoji('🖼️').setLabel(t('Przypisz zdjęcie', 'Set Image')).setStyle(ButtonStyle.Secondary).setDisabled(!hasNames),
         );
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('boss_cfg_add_alias_start').setEmoji('➕').setLabel(t('Dodaj alias', 'Add Alias')).setStyle(ButtonStyle.Success).setDisabled(!hasNames),
@@ -9863,6 +9943,15 @@ class InteractionHandler {
             return;
         }
         this._bossCfgSessions.delete(interaction.user.id);
+        // Migracja boss_records: przenieś rekordy pod surową nazwą aliasu na nazwę angielską
+        if (this.bossRecordService) {
+            const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const rawAlias = session.pendingAlias;
+            const engName = session.pendingBoss;
+            this.bossRecordService.migrateBossName(rawAlias, engName, allGuildIds)
+                .then(count => { if (count > 0) logger.info(`Migracja boss_records: "${rawAlias}" → "${engName}" (${count} graczy)`); })
+                .catch(e => logger.error(`Błąd migracji boss_records: ${e.message}`));
+        }
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
                 .setTitle(t('✅ Alias dodany', '✅ Alias Added'))
@@ -10369,6 +10458,15 @@ class InteractionHandler {
         }
         // Wyczyszanie sesji
         this._bossMapSessions.delete(interaction.user.id);
+        // Migracja boss_records: przenieś rekordy pod surową nazwą bossa na nazwę angielską
+        if (this.bossRecordService) {
+            const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const rawBoss = session.adjustedBoss;
+            const engName = session.englishBoss;
+            this.bossRecordService.migrateBossName(rawBoss, engName, allGuildIds)
+                .then(count => { if (count > 0) logger.info(`Migracja boss_records: "${rawBoss}" → "${engName}" (${count} graczy)`); })
+                .catch(e => logger.error(`Błąd migracji boss_records: ${e.message}`));
+        }
 
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
@@ -10382,6 +10480,258 @@ class InteractionHandler {
 
         // Usuń sesję embeda (już przetworzona)
         if (session.sessionKey) this._unknownBossEmbeds.delete(session.sessionKey);
+    }
+
+    // =========================================================================
+    // Boss Config — przypisywanie zdjęć do bossów
+    // =========================================================================
+
+    /** Wyświetla select menu bossów do przypisania zdjęcia */
+    async _handleBossCfgSetImg(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const allNames = this._getAllEnglishBossNames();
+        if (!allNames.length) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFEE75C)
+                    .setTitle(t('⚠️ Brak bossów', '⚠️ No Bosses'))
+                    .setDescription(t('Dodaj najpierw bossa angielską nazwą.', 'Add a boss with an English name first.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+        const options = allNames.slice(0, 25).map(n =>
+            new StringSelectMenuOptionBuilder().setValue(n).setLabel(n.substring(0, 100))
+        );
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('boss_cfg_img_boss_sel')
+            .setPlaceholder(msgs.bossCfgImgSelectPlaceholder || 'Wybierz bossa...')
+            .addOptions(options);
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🖼️ Przypisz zdjęcie', '🖼️ Set Boss Image'))
+                .setDescription(msgs.bossCfgImgSelectBoss || t('Wybierz bossa do przypisania zdjęcia:', 'Select a boss to assign an image:'))],
+            components: [new ActionRowBuilder().addComponents(select)],
+        });
+    }
+
+    /** Po wyborze bossa — czeka na wiadomość ze zdjęciem przez message collector */
+    async _handleBossCfgImgBossSel(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const bossName = interaction.values[0];
+
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('🖼️ Oczekiwanie na zdjęcie', '🖼️ Waiting for Image'))
+                .setDescription(msgs.bossCfgImgWaiting || t('Wyślij zdjęcie bossa jako wiadomość na tym kanale...', 'Send the boss image as a message in this channel...'))
+                .setFooter({ text: bossName })],
+            components: [],
+        });
+
+        const channel = interaction.channel;
+        if (!channel) return;
+
+        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+        const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+
+        let collected;
+        try {
+            collected = await channel.awaitMessages({
+                filter: m => m.author.id === interaction.user.id && m.attachments.size > 0,
+                max: 1,
+                time: 60_000,
+                errors: ['time'],
+            });
+        } catch {
+            await interaction.followUp({ content: msgs.bossCfgImgTimeout || t('⏱️ Upłynął czas oczekiwania.', '⏱️ Timed out.'), flags: ['Ephemeral'] });
+            return;
+        }
+
+        const msg = collected.first();
+        const attachment = msg.attachments.first();
+        if (!attachment) {
+            await interaction.followUp({ content: msgs.bossCfgImgNoAttachment || t('❌ Brak załącznika.', '❌ No attachment.'), flags: ['Ephemeral'] });
+            return;
+        }
+
+        const ext = path.extname(attachment.name || '').toLowerCase();
+        const contentType = (attachment.contentType || '').split(';')[0].trim();
+        if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTS.includes(ext)) {
+            await interaction.followUp({ content: msgs.bossCfgImgInvalidType || t('❌ Nieobsługiwany format.', '❌ Unsupported format.'), flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Pobierz i zapisz zdjęcie
+        try {
+            const imgDir = path.join(__dirname, '../data/boss_images');
+            await fs.mkdir(imgDir, { recursive: true });
+            const safeName = bossName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+            const filename = `${safeName}${ext || '.png'}`;
+            const buffer = await downloadBuffer(attachment.url);
+            await fs.writeFile(path.join(imgDir, filename), buffer);
+            await this.bossAliasService.setBossImage(bossName, filename);
+            const successMsg = (msgs.bossCfgImgSuccess || '✅ Zdjęcie przypisane do bossa **{bossName}**.').replace('{bossName}', bossName);
+            await interaction.followUp({ content: successMsg, flags: ['Ephemeral'] });
+            logger.info(`Zdjęcie bossa "${bossName}" zapisane jako ${filename}`);
+        } catch (e) {
+            logger.error(`Błąd zapisu zdjęcia bossa: ${e.message}`);
+            await interaction.followUp({ content: t('❌ Błąd zapisu zdjęcia.', '❌ Failed to save image.'), flags: ['Ephemeral'] });
+        }
+    }
+
+    // =========================================================================
+    // Ranking bossów — lista bossów i per-boss ranking globalny
+    // =========================================================================
+
+    /** Wyświetla select menu z listą bossów mających rekordy */
+    async _handleRankingBossList(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        if (!this.bossRecordService) {
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
+            return;
+        }
+        const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds()
+            || Array.from(interaction.client.guilds.cache.keys());
+        const knownNames = this.bossAliasService?.getExtraEnglishNames() || [];
+        const bosses = await this.bossRecordService.getBossesWithRecords(allGuildIds, knownNames);
+
+        if (!bosses.length) {
+            const backRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('ranking_select_global').setEmoji('🌐').setLabel(msgs.rankingGlobal || 'Global').setStyle(ButtonStyle.Primary),
+            );
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x5865F2)
+                    .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
+                    .setDescription(msgs.bossRankingNoBosses || '📭 Brak wyników bossów do wyświetlenia.')],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const options = bosses.slice(0, 25).map(b =>
+            new StringSelectMenuOptionBuilder()
+                .setValue(b.bossName)
+                .setLabel(b.bossName.substring(0, 100))
+                .setDescription(`${b.totalPlayers} ${msgs.bossRankingPlayers || 'graczy'}`)
+        );
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('ranking_boss_sel')
+            .setPlaceholder(msgs.bossRankingSelectPlaceholder || 'Wybierz bossa...')
+            .addOptions(options);
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('ranking_select_global').setEmoji('🌐').setLabel(msgs.rankingGlobal || 'Global').setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
+                .setDescription(msgs.bossRankingSelectDesc || 'Wybierz bossa z listy aby zobaczyć globalny ranking.')],
+            components: [new ActionRowBuilder().addComponents(select), backRow],
+        });
+    }
+
+    /** Wyświetla globalny ranking dla wybranego bossa */
+    async _handleRankingBossShow(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        if (!this.bossRecordService) {
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
+            return;
+        }
+        const bossName = interaction.values[0];
+        const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds()
+            || Array.from(interaction.client.guilds.cache.keys());
+        const players = await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
+
+        const perPage = this.config.ranking.playersPerPage || 10;
+        const totalPages = Math.max(1, Math.ceil(players.length / perPage));
+        const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+        const userPage = callerIdx !== -1 ? Math.floor(callerIdx / perPage) : null;
+
+        // Zdjęcie bossa
+        let bossImageName = null;
+        let bossImageAttachment = null;
+        if (this.bossAliasService) {
+            const imgPath = this.bossAliasService.getBossImagePath(bossName);
+            if (imgPath) {
+                try {
+                    const fullPath = path.join(__dirname, '../data/boss_images', imgPath);
+                    const buf = await fs.readFile(fullPath);
+                    bossImageName = imgPath;
+                    bossImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                } catch { /* bez zdjęcia */ }
+            }
+        }
+
+        const embed = this.rankingService.createBossRankingEmbed(
+            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id
+        );
+        const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
+
+        const rankingData = {
+            bossName,
+            players,
+            currentPage: 0,
+            totalPages,
+            userId: interaction.user.id,
+            userPage,
+        };
+        const reply = await interaction.fetchReply();
+        this._bossRankings.set(reply.id, rankingData);
+
+        const replyOpts = { embeds: [embed], components: buttons };
+        if (bossImageAttachment) replyOpts.files = [bossImageAttachment];
+        await interaction.editReply(replyOpts);
+    }
+
+    /** Paginacja rankingu bossa — prev/next/mypos (wywoływana po deferUpdate z caller) */
+    async _handleRankingBossPage(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        const rankingData = this._bossRankings.get(interaction.message.id);
+        if (!rankingData) {
+            await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
+            return;
+        }
+
+        let newPage = rankingData.currentPage;
+        if (customId.startsWith('ranking_boss_prev_')) newPage = Math.max(0, rankingData.currentPage - 1);
+        else if (customId.startsWith('ranking_boss_next_')) newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1);
+        else if (customId.startsWith('ranking_boss_mypos_')) newPage = rankingData.userPage ?? rankingData.currentPage;
+
+        rankingData.currentPage = newPage;
+        this._bossRankings.set(interaction.message.id, rankingData);
+
+        const perPage = this.config.ranking.playersPerPage || 10;
+
+        // Zdjęcie bossa
+        let bossImageName = null;
+        let bossImageAttachment = null;
+        if (this.bossAliasService) {
+            const imgPath = this.bossAliasService.getBossImagePath(rankingData.bossName);
+            if (imgPath) {
+                try {
+                    const fullPath = path.join(__dirname, '../data/boss_images', imgPath);
+                    const buf = await fs.readFile(fullPath);
+                    bossImageName = imgPath;
+                    bossImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                } catch { /* bez zdjęcia */ }
+            }
+        }
+
+        const embed = this.rankingService.createBossRankingEmbed(
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id
+        );
+        const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
+
+        const replyOpts = { embeds: [embed], components: buttons, attachments: [] };
+        if (bossImageAttachment) {
+            replyOpts.files = [bossImageAttachment];
+            delete replyOpts.attachments;
+        }
+        await interaction.editReply(replyOpts);
     }
 
 } // end InteractionHandler

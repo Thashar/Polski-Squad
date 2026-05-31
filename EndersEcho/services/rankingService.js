@@ -592,7 +592,94 @@ class RankingService {
             backBtn
         );
 
+        // W trybie global dodaj dodatkowy rząd z przyciskiem Ranking Bossów
+        if (mode === 'global') {
+            const bossRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('ranking_boss_list')
+                    .setEmoji('🎯')
+                    .setLabel(msgs.buttonBossRanking || 'Ranking Bossów')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(disabled)
+            );
+            return [navRow, bossRow, ...roleRows];
+        }
+
         return [navRow, ...roleRows];
+    }
+
+    /**
+     * Tworzy przyciski nawigacji dla rankingu bossa (tryb 'boss').
+     */
+    createBossRankingButtons(page, totalPages, userPage, disabled, messages) {
+        const msgs = messages || this.config.messages;
+        const navRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('ranking_prev')
+                .setEmoji('◀️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled || page === 0),
+
+            new ButtonBuilder()
+                .setCustomId('ranking_mypos')
+                .setEmoji('🎯')
+                .setLabel(msgs.buttonMyPos || 'Moja pozycja')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(disabled || userPage === null),
+
+            new ButtonBuilder()
+                .setCustomId('ranking_next')
+                .setEmoji('▶️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled || page >= totalPages - 1),
+
+            new ButtonBuilder()
+                .setCustomId('ranking_boss_list')
+                .setEmoji('📋')
+                .setLabel(msgs.bossRankingBackList || 'Lista bossów')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled),
+
+            new ButtonBuilder()
+                .setCustomId('ranking_select_global')
+                .setEmoji('🌐')
+                .setLabel(msgs.buttonGlobal || 'Global')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled)
+        );
+        return [navRow];
+    }
+
+    /**
+     * Tworzy embed rankingu bossa (globalny, tryb 'boss').
+     */
+    createBossRankingEmbed(bossName, players, page, perPage, messages, bossImageName = null, callerUserId = null) {
+        const msgs = messages || this.config.messages;
+        const startIdx = page * perPage;
+        const pagePlayers = players.slice(startIdx, startIdx + perPage);
+        const totalPages = Math.max(1, Math.ceil(players.length / perPage));
+
+        const medals = ['🥇', '🥈', '🥉'];
+        const lines = pagePlayers.map((p, idx) => {
+            const rank = startIdx + idx + 1;
+            const medal = rank <= 3 ? medals[rank - 1] : `**#${rank}**`;
+            const tag = p.sourceGuildId ? '' : '';
+            const isMe = p.userId === callerUserId ? ' 👈' : '';
+            return `${medal} **${p.username || p.userId}** — ${p.score}${isMe}`;
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}`)
+            .setDescription(lines.length > 0 ? lines.join('\n') : (msgs.rankingEmpty || 'Brak wyników.'))
+            .setFooter({ text: `${msgs.rankingPage?.replace('{current}', page + 1).replace('{total}', totalPages) || `Strona ${page + 1} z ${totalPages}`} · ${players.length} ${msgs.bossRankingPlayers || 'graczy'}` })
+            .setTimestamp();
+
+        if (bossImageName) {
+            embed.setThumbnail(`attachment://${bossImageName}`);
+        }
+
+        return embed;
     }
 
     /**
@@ -821,7 +908,7 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null) {
         const msgs = messages || this.config.messages;
 
         // Oblicz postęp i poprawę w jednej linii
@@ -934,6 +1021,17 @@ class RankingService {
 
         if (globalSnippetData) {
             embed.addFields({ name: globalSnippetData.title, value: globalSnippetData.description, inline: false });
+        }
+
+        // Per-boss rekord (tuż przed osiągnięciami)
+        if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
+            let bossFieldVal;
+            if (bossRecordData.previousBossRecord) {
+                bossFieldVal = `**${bossRecordData.bossName}:** ${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
+            } else {
+                bossFieldVal = `**${bossRecordData.bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
+            }
+            embed.addFields({ name: msgs.bossRecordField || '🎯 Rekord na bossie', value: bossFieldVal, inline: false });
         }
 
         if (achievementsFieldValue) {

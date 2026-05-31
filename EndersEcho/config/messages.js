@@ -321,6 +321,31 @@ const pol = {
     cvUserBlocked: '🔒 Twój wynik zgłoszony przez społeczność. Możliwość przesyłania wyników zablokowana na 24h lub do weryfikacji przez administratora.',
     cvBtnStatusApproved: '✅ Zatwierdzone przez admina',
     cvBtnStatusRemoved: '🗑️ Usunięte przez admina',
+
+    // Per-boss rekord (w embedzie ogłoszenia + w embedzie braku rekordu)
+    bossRecordField: '🎯 Rekord na bossie',
+    bossRecordFirst: 'pierwszy wynik na tym bossie!',
+    bossRecordUpdated: '🎯 Nowy rekord na bossie',
+
+    // Ranking bossów
+    buttonBossRanking: 'Ranking Bossów',
+    bossRankingTitle: '🎯 Ranking',
+    bossRankingSelectTitle: '🎯 Wybierz bossa',
+    bossRankingSelectDesc: 'Wybierz bossa z listy aby zobaczyć globalny ranking.',
+    bossRankingSelectPlaceholder: 'Wybierz bossa...',
+    bossRankingNoBosses: '📭 Brak wyników bossów do wyświetlenia.\nGracze muszą wysyłać screeny przez `/update` aby pojawili się w rankingu.',
+    bossRankingBackList: 'Lista bossów',
+    bossRankingPlayers: 'graczy',
+
+    // Panel bossów — zdjęcie
+    bossCfgSetImg: 'Przypisz zdjęcie',
+    bossCfgImgSelectBoss: 'Wybierz bossa do przypisania zdjęcia:',
+    bossCfgImgSelectPlaceholder: 'Wybierz bossa...',
+    bossCfgImgWaiting: '🖼️ Wyślij zdjęcie bossa jako wiadomość na tym kanale.\nObsługiwane formaty: jpg, png, gif, webp.\n\n⏳ Czekam **60 sekund**...',
+    bossCfgImgSuccess: '✅ Zdjęcie przypisane do bossa **{bossName}**.',
+    bossCfgImgTimeout: '⏱️ Upłynął czas oczekiwania na zdjęcie. Użyj przycisku ponownie.',
+    bossCfgImgNoAttachment: '❌ Wiadomość nie zawiera zdjęcia.',
+    bossCfgImgInvalidType: '❌ Nieobsługiwany format pliku. Użyj: jpg, png, gif, webp.',
 };
 
 const eng = {
@@ -646,6 +671,31 @@ const eng = {
     cvUserBlocked: '🔒 Your score has been reported by the community. Score submission blocked for 24h or until administrator review.',
     cvBtnStatusApproved: '✅ Approved by admin',
     cvBtnStatusRemoved: '🗑️ Removed by admin',
+
+    // Per-boss record (in announcement embed + no-record embed)
+    bossRecordField: '🎯 Boss Record',
+    bossRecordFirst: 'first score on this boss!',
+    bossRecordUpdated: '🎯 New Boss Record',
+
+    // Boss rankings
+    buttonBossRanking: 'Boss Rankings',
+    bossRankingTitle: '🎯 Ranking',
+    bossRankingSelectTitle: '🎯 Select a Boss',
+    bossRankingSelectDesc: 'Choose a boss from the list to view the global ranking.',
+    bossRankingSelectPlaceholder: 'Choose a boss...',
+    bossRankingNoBosses: '📭 No boss records to display yet.\nPlayers need to submit screenshots via `/update` to appear in the ranking.',
+    bossRankingBackList: 'Boss list',
+    bossRankingPlayers: 'players',
+
+    // Boss config panel — image
+    bossCfgSetImg: 'Set Image',
+    bossCfgImgSelectBoss: 'Select a boss to assign an image:',
+    bossCfgImgSelectPlaceholder: 'Select a boss...',
+    bossCfgImgWaiting: '🖼️ Send the boss image as a message in this channel.\nSupported formats: jpg, png, gif, webp.\n\n⏳ Waiting **60 seconds**...',
+    bossCfgImgSuccess: '✅ Image assigned to boss **{bossName}**.',
+    bossCfgImgTimeout: '⏱️ Timed out waiting for an image. Use the button again.',
+    bossCfgImgNoAttachment: '❌ Message contains no image attachment.',
+    bossCfgImgInvalidType: '❌ Unsupported file type. Use: jpg, png, gif, webp.',
 };
 
 module.exports = { pol, eng };

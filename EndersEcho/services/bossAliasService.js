@@ -23,7 +23,7 @@ const SUPPORTED_LANGUAGES = [
 
 class BossAliasService {
     constructor() {
-        this._data = { englishNames: [], aliases: {} };
+        this._data = { englishNames: [], aliases: {}, images: {} };
         this._load();
     }
 
@@ -34,6 +34,7 @@ class BossAliasService {
                 const parsed = JSON.parse(raw);
                 this._data.englishNames = Array.isArray(parsed.englishNames) ? parsed.englishNames : [];
                 this._data.aliases = parsed.aliases && typeof parsed.aliases === 'object' ? parsed.aliases : {};
+                this._data.images = parsed.images && typeof parsed.images === 'object' ? parsed.images : {};
             }
         } catch { /* zostaw domyślne */ }
     }
@@ -194,12 +195,42 @@ class BossAliasService {
     }
 
     /**
-     * Usuwa angielską nazwę bossa wraz ze wszystkimi jej aliasami.
+     * Usuwa angielską nazwę bossa wraz ze wszystkimi jej aliasami i zdjęciem.
      * @param {string} name
      */
     async removeEnglishName(name) {
         this._data.englishNames = (this._data.englishNames || []).filter(n => n !== name);
         if (this._data.aliases) delete this._data.aliases[name];
+        if (this._data.images) delete this._data.images[name];
+        await this._save();
+    }
+
+    /**
+     * Zwraca ścieżkę do pliku zdjęcia bossa (względem katalogu data/) lub null.
+     * @param {string} bossName - angielska nazwa bossa
+     * @returns {string|null}
+     */
+    getBossImagePath(bossName) {
+        return this._data.images?.[bossName] || null;
+    }
+
+    /**
+     * Zapisuje ścieżkę do zdjęcia bossa.
+     * @param {string} bossName
+     * @param {string} relativePath - względna ścieżka od katalogu data/
+     */
+    async setBossImage(bossName, relativePath) {
+        if (!this._data.images) this._data.images = {};
+        this._data.images[bossName] = relativePath;
+        await this._save();
+    }
+
+    /**
+     * Usuwa zdjęcie bossa z danych (nie usuwa pliku z dysku).
+     * @param {string} bossName
+     */
+    async removeBossImage(bossName) {
+        if (this._data.images) delete this._data.images[bossName];
         await this._save();
     }
 
@@ -219,6 +250,11 @@ class BossAliasService {
         if (this._data.aliases && oldName in this._data.aliases) {
             this._data.aliases[trimmed] = this._data.aliases[oldName];
             delete this._data.aliases[oldName];
+        }
+
+        if (this._data.images && oldName in this._data.images) {
+            this._data.images[trimmed] = this._data.images[oldName];
+            delete this._data.images[oldName];
         }
 
         await this._save();
