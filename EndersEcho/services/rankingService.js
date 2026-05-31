@@ -1056,11 +1056,7 @@ class RankingService {
             embed.addFields({ name: globalSnippetData.title, value: globalSnippetData.description, inline: false });
         }
 
-        if (bossSnippetData) {
-            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
-        }
-
-        // Per-boss rekord (tuż przed osiągnięciami)
+        // Per-boss rekord (przed snippetem bossa)
         if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
             const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'} \`${bossRecordData.bossName}\``;
             let bossFieldVal;
@@ -1080,6 +1076,10 @@ class RankingService {
                 bossFieldVal += `\n${posLine}`;
             }
             embed.addFields({ name: fieldName, value: bossFieldVal, inline: false });
+        }
+
+        if (bossSnippetData) {
+            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
         }
 
         if (achievementsFieldValue) {
