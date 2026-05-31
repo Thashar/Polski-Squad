@@ -10667,7 +10667,7 @@ class InteractionHandler {
         }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id
+            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id, interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
 
@@ -10722,7 +10722,7 @@ class InteractionHandler {
         }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id, interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
 

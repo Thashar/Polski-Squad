@@ -653,30 +653,62 @@ class RankingService {
     /**
      * Tworzy embed rankingu bossa (globalny, tryb 'boss').
      */
-    createBossRankingEmbed(bossName, players, page, perPage, messages, bossImageName = null, callerUserId = null) {
+    createBossRankingEmbed(bossName, players, page, perPage, messages, bossImageName = null, callerUserId = null, client = null) {
         const msgs = messages || this.config.messages;
         const startIdx = page * perPage;
         const pagePlayers = players.slice(startIdx, startIdx + perPage);
         const totalPages = Math.max(1, Math.ceil(players.length / perPage));
 
-        const medals = ['🥇', '🥈', '🥉'];
-        const lines = pagePlayers.map((p, idx) => {
+        const MEDALS = ['👑', '🥈', '🥉'];
+
+        let rankingText = '';
+        for (const [idx, p] of pagePlayers.entries()) {
             const rank = startIdx + idx + 1;
-            const medal = rank <= 3 ? medals[rank - 1] : `**#${rank}**`;
-            const tag = p.sourceGuildId ? '' : '';
-            const isMe = p.userId === callerUserId ? ' 👈' : '';
-            return `${medal} **${p.username || p.userId}** — ${p.score}${isMe}`;
-        });
+            const posLabel = rank <= 3
+                ? `\`${String(rank).padStart(2, '0')}\` ${MEDALS[rank - 1]}`
+                : `\`${String(rank).padStart(2, '0')}\``;
+
+            const displayName = p.username || `ID:${p.userId}`;
+            const isMe = p.userId === callerUserId;
+            const nickDisplay = isMe ? `**__${displayName}__**` : `**${displayName}**`;
+
+            const score = p.score || this.formatScore(p.scoreValue);
+
+            const date = p.timestamp ? new Date(p.timestamp) : null;
+            const shortDate = date
+                ? `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`
+                : '—';
+
+            const guildTag = p.sourceGuildId
+                ? (this.config.getAllGuilds().find(g => g.id === p.sourceGuildId)?.tag || null)
+                : null;
+            const tagSuffix = guildTag ? `  ·  ${guildTag}` : '';
+
+            rankingText += `${posLabel}  ${nickDisplay}  ·  **${score}**\n> *${shortDate}*${tagSuffix}\n\n`;
+        }
+
+        if (!rankingText.trim()) rankingText = msgs.rankingEmpty || 'Brak wyników.';
+
+        const statsLines = [
+            formatMessage(msgs.rankingPlayersCount, { count: players.length })
+        ];
+        if (players.length > 0) {
+            statsLines.push(formatMessage(msgs.rankingHighestScore, { score: players[0].score || this.formatScore(players[0].scoreValue) }));
+        }
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}`)
-            .setDescription(lines.length > 0 ? lines.join('\n') : (msgs.rankingEmpty || 'Brak wyników.'))
-            .setFooter({ text: `${msgs.rankingPage?.replace('{current}', page + 1).replace('{total}', totalPages) || `Strona ${page + 1} z ${totalPages}`} · ${players.length} ${msgs.bossRankingPlayers || 'graczy'}` })
+            .setDescription(rankingText)
+            .addFields({ name: msgs.rankingStatsGlobal || msgs.rankingStats || '📊 Statystyki', value: statsLines.join('\n'), inline: false })
+            .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 
         if (bossImageName) {
             embed.setThumbnail(`attachment://${bossImageName}`);
+        } else if (client) {
+            const botIconUrl = client.user?.displayAvatarURL({ size: 128 });
+            if (botIconUrl) embed.setThumbnail(botIconUrl);
         }
 
         return embed;
