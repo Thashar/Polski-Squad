@@ -122,6 +122,7 @@ const pol = {
 
     // Global TOP snippet (pod wynikiem)
     globalSnippetTitle: '🌐 Zmiana w globalnym rankingu',
+    bossSnippetTitle: '🎯 Zmiana w rankingu bossa',
 
     // Global TOP10 cykliczny raport
     globalTop10ReportTitle: '🌐 TOP 10 Globalny',
@@ -477,6 +478,7 @@ const eng = {
 
     // Global TOP snippet (under result)
     globalSnippetTitle: '🌐 Global Ranking Change',
+    bossSnippetTitle: '🎯 Boss Ranking Change',
 
     // Global TOP10 periodic report
     globalTop10ReportTitle: '🌐 Global TOP 10',

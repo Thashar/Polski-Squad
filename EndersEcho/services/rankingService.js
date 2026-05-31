@@ -941,7 +941,7 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null, rankingOverride = null) {
+    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null, rankingOverride = null, bossSnippetData = null) {
         const msgs = messages || this.config.messages;
 
         // Oblicz postęp i poprawę w jednej linii
@@ -1064,6 +1064,10 @@ class RankingService {
 
         if (globalSnippetData) {
             embed.addFields({ name: globalSnippetData.title, value: globalSnippetData.description, inline: false });
+        }
+
+        if (bossSnippetData) {
+            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
         }
 
         // Per-boss rekord (tuż przed osiągnięciami)

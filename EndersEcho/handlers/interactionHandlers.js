@@ -3743,8 +3743,9 @@ class InteractionHandler {
                     ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, langBoss)
                     : null;
 
-                // Oblicz pozycję gracza w rankingu bossa (po zapisie rekordu)
+                // Oblicz pozycję w rankingu bossa + snippet (jedno zapytanie do bossRecordService)
                 let bossRankingOverride = null;
+                let bossSnippetDataLocal = null;
                 try {
                     const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                         || Array.from(interaction.client.guilds.cache.keys());
@@ -3754,6 +3755,7 @@ class InteractionHandler {
                         const newBossPosition = newBossIdx + 1;
                         let bossPositionChange = 0;
                         let bossIsNewEntry = false;
+                        let prevBossPosition = null;
                         if (!previousBossRecord) {
                             bossIsNewEntry = true;
                         } else {
@@ -3764,6 +3766,7 @@ class InteractionHandler {
                             tempRanking.sort((a, b) => b.scoreValue - a.scoreValue);
                             const prevBossIdx = tempRanking.findIndex(p => p.userId === userId);
                             bossPositionChange = (prevBossIdx + 1) - newBossPosition;
+                            prevBossPosition = prevBossIdx !== -1 ? prevBossIdx + 1 : null;
                         }
                         bossRankingOverride = {
                             position: newBossPosition,
@@ -3771,10 +3774,15 @@ class InteractionHandler {
                             isNewEntry: bossIsNewEntry,
                             label: msgs.recordBossRanking || '🎯 Pozycja (boss)',
                         };
+                        if (!dryRun && this.globalTop10Service) {
+                            bossSnippetDataLocal = await this.globalTop10Service.buildBossSnippetFieldData(
+                                userId, bossRanking, prevBossPosition, bossName, msgs, interaction.client
+                            );
+                        }
                     }
                 } catch { /* pozycja opcjonalna */ }
 
-                // Embed identyczny jak przy globalnym rekordzie — pozycja w boss rankingu + pole rekordu bossa + achievementy
+                // Embed identyczny jak przy globalnym rekordzie — pozycja w boss rankingu + snippet + pole rekordu bossa + achievementy
                 const bossPublicEmbed = await this.rankingService.createRecordEmbed(
                     userName,
                     bestScore,
@@ -3791,7 +3799,8 @@ class InteractionHandler {
                     bossAchievementsVal,
                     null,                    // brak globalnego snippetu
                     { isNewBossRecord: true, previousBossRecord, bossName },
-                    bossRankingOverride      // pozycja w rankingu bossa
+                    bossRankingOverride,     // pozycja w rankingu bossa (linia opisu)
+                    bossSnippetDataLocal     // snippet zmiany w rankingu bossa
                 );
                 bossPublicEmbed.setColor(0x1ABC9C);
 
@@ -3923,6 +3932,17 @@ class InteractionHandler {
                 }
             }
 
+            // Snippet rankingu bossa — gdy rekord bossa też pobity
+            let bossSnippetData = null;
+            if (!dryRun && isNewBossRecord && bossName) {
+                const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
+                    || Array.from(interaction.client.guilds.cache.keys());
+                bossSnippetData = await this._buildBossSnippetData(
+                    userId, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client
+                );
+                if (bossSnippetData) gl.info(`🎯 Snippet bossa "${bossName}" dodany do embeda globalnego rekordu`);
+            }
+
             const publicEmbed = await this.rankingService.createRecordEmbed(
                 userName,
                 bestScore,
@@ -3938,7 +3958,9 @@ class InteractionHandler {
                 rolePositions,
                 achievementsFieldValue,
                 globalSnippetData,
-                isNewBossRecord ? { isNewBossRecord, previousBossRecord, bossName } : null
+                isNewBossRecord ? { isNewBossRecord, previousBossRecord, bossName } : null,
+                null,           // rankingOverride — nieużywane w globalnym flow
+                bossSnippetData
             );
 
             // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
@@ -5530,6 +5552,32 @@ class InteractionHandler {
             return new AttachmentBuilder(buf, { name: 'boss_ranking_progress.png' });
         } catch (err) {
             logger.warn('Błąd generowania wykresu rankingu bossa:', err);
+            return null;
+        }
+    }
+
+    // Buduje dane snippetu zmiany w rankingu bossa (format identyczny jak globalSnippetData).
+    // Zwraca { title, description } lub null.
+    async _buildBossSnippetData(userId, bossName, previousBossRecord, allGuildIds, msgs, client) {
+        if (!this.bossRecordService || !this.globalTop10Service) return null;
+        try {
+            const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
+            const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
+            if (newBossIdx === -1) return null;
+
+            let prevBossPosition = null;
+            if (previousBossRecord) {
+                const prevVal = this.rankingService.parseScoreValue(previousBossRecord.score);
+                const temp = bossRanking.map(p => p.userId === userId ? { ...p, scoreValue: prevVal } : p);
+                temp.sort((a, b) => b.scoreValue - a.scoreValue);
+                const prevIdx = temp.findIndex(p => p.userId === userId);
+                prevBossPosition = prevIdx !== -1 ? prevIdx + 1 : null;
+            }
+
+            return await this.globalTop10Service.buildBossSnippetFieldData(
+                userId, bossRanking, prevBossPosition, bossName, msgs, client
+            );
+        } catch {
             return null;
         }
     }
