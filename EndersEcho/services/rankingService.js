@@ -1058,7 +1058,7 @@ class RankingService {
 
         // Per-boss rekord (przed snippetem bossa)
         if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
-            const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'} \`${bossRecordData.bossName}\``;
+            const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'}: \`\`${bossRecordData.bossName}\`\``;
             let bossFieldVal;
             if (bossRecordData.previousBossRecord) {
                 bossFieldVal = `${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
