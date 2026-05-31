@@ -3943,7 +3943,10 @@ class InteractionHandler {
                 );
                 bossSnippetData = bossResult.snippetData;
                 bossGlobalRankingOverride = bossResult.override;
-                if (bossSnippetData) gl.info(`🎯 Snippet bossa "${bossName}" dodany do embeda globalnego rekordu`);
+                if (bossGlobalRankingOverride) {
+                    const prevBossPos = bossGlobalRankingOverride.isNewEntry ? null : bossGlobalRankingOverride.position + bossGlobalRankingOverride.positionChange;
+                    gl.info(`🎯 Snippet bossa "${bossName}": ${prevBossPos ?? '—'} → #${bossGlobalRankingOverride.position}`);
+                }
             }
 
             const publicEmbed = await this.rankingService.createRecordEmbed(
