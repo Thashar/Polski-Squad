@@ -3743,30 +3743,29 @@ class InteractionHandler {
                     ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, langBoss)
                     : null;
 
-                const bossRecordFieldVal = bossName
-                    ? (previousBossRecord
-                        ? `**${bossName}:** ${previousBossRecord.score} ➜ ${bestScore}`
-                        : `**${bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`)
-                    : bestScore;
-
-                const bossPublicEmbed = new EmbedBuilder()
-                    .setColor(0x1ABC9C)
-                    .setTitle(msgs.bossRecordPublicTitle || '🎯 Nowy Rekord Bossa!')
-                    .addFields([
-                        { name: msgs.resultPlayer, value: userName, inline: true },
-                        { name: msgs.resultScore, value: bestScore, inline: true },
-                        { name: msgs.bossRecordUpdated || '🎯 Nowy rekord na bossie', value: bossRecordFieldVal, inline: false },
-                    ])
-                    .setImage(`attachment://${imageAttachmentAlt.name}`)
-                    .setTimestamp();
+                // Embed identyczny jak przy globalnym rekordzie — tylko pole rekordu bossa + achievementy
+                const bossPublicEmbed = await this.rankingService.createRecordEmbed(
+                    userName,
+                    bestScore,
+                    interaction.user.displayAvatarURL(),
+                    imageAttachmentAlt.name,
+                    null,                    // brak globalnego poprzedniego wyniku
+                    null,                    // brak userId → brak pozycji w rankingu
+                    null,                    // brak guildId → brak pozycji w rankingu
+                    msgs,
+                    interaction.guild,
+                    null,                    // brak ról TOP
+                    null,                    // brak poprzedniego timestampu
+                    [],                      // brak pozycji ról
+                    bossAchievementsVal,
+                    null,                    // brak globalnego snippetu
+                    { isNewBossRecord: true, previousBossRecord, bossName }
+                );
+                bossPublicEmbed.setColor(0x1ABC9C);
 
                 if (wasUnknownBoss) {
                     const warnVal = msgs.unknownBossAccepted || '⚠️ Nazwa bossa nierozpoznana — po weryfikacji wpis zostanie zaktualizowany.';
                     bossPublicEmbed.addFields({ name: '⚠️ Weryfikacja', value: warnVal, inline: false });
-                }
-
-                if (bossAchievementsVal) {
-                    bossPublicEmbed.addFields({ name: msgs.achievementsNewField || '🎉 Nowe osiągnięcia', value: bossAchievementsVal, inline: false });
                 }
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
