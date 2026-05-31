@@ -10767,9 +10767,9 @@ class InteractionHandler {
         }
 
         let newPage = rankingData.currentPage;
-        if (customId.startsWith('ranking_boss_prev_')) newPage = Math.max(0, rankingData.currentPage - 1);
-        else if (customId.startsWith('ranking_boss_next_')) newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1);
-        else if (customId.startsWith('ranking_boss_mypos_')) newPage = rankingData.userPage ?? rankingData.currentPage;
+        if (customId === 'ranking_prev') newPage = Math.max(0, rankingData.currentPage - 1);
+        else if (customId === 'ranking_next') newPage = Math.min(rankingData.totalPages - 1, rankingData.currentPage + 1);
+        else if (customId === 'ranking_mypos') newPage = rankingData.userPage ?? rankingData.currentPage;
 
         rankingData.currentPage = newPage;
         this._bossRankings.set(interaction.message.id, rankingData);
