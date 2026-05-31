@@ -10608,6 +10608,8 @@ class InteractionHandler {
                     .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
                     .setDescription(msgs.bossRankingNoBosses || '📭 Brak wyników bossów do wyświetlenia.')],
                 components: [backRow],
+                files: [],
+                attachments: [],
             });
             return;
         }
@@ -10630,6 +10632,8 @@ class InteractionHandler {
                 .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
                 .setDescription(msgs.bossRankingSelectDesc || 'Wybierz bossa z listy aby zobaczyć globalny ranking.')],
             components: [new ActionRowBuilder().addComponents(select), backRow],
+            files: [],
+            attachments: [],
         });
     }
 
@@ -10666,8 +10670,17 @@ class InteractionHandler {
             }
         }
 
+        // Wykres postępu graczy dla bossów (taki sam typ jak w standardowym rankingu)
+        let chartAttachment = null;
+        try {
+            const allGuildIdsForChart = this.guildConfigService?.getAllConfiguredGuildIds()
+                || Array.from(interaction.client.guilds.cache.keys());
+            const t = this._panelT(interaction.guildId);
+            chartAttachment = await this._buildGlobalRankingChartAttachment(players, 0, allGuildIdsForChart, t);
+        } catch { /* wykres opcjonalny */ }
+
         const embed = this.rankingService.createBossRankingEmbed(
-            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id
+            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id, interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
 
@@ -10678,13 +10691,19 @@ class InteractionHandler {
             totalPages,
             userId: interaction.user.id,
             userPage,
+            allGuildIds,
         };
         const reply = await interaction.fetchReply();
         this._bossRankings.set(reply.id, rankingData);
 
-        const replyOpts = { embeds: [embed], components: buttons };
-        if (bossImageAttachment) replyOpts.files = [bossImageAttachment];
-        await interaction.editReply(replyOpts);
+        const files = [];
+        const embeds = [embed];
+        if (bossImageAttachment) files.push(bossImageAttachment);
+        if (chartAttachment) {
+            files.push(chartAttachment);
+            embeds.push(new EmbedBuilder().setImage('attachment://ranking_progress.png'));
+        }
+        await interaction.editReply({ embeds, components: buttons, files, attachments: [] });
     }
 
     /** Paginacja rankingu bossa — prev/next/mypos (wywoływana po deferUpdate z caller) */
@@ -10721,17 +10740,29 @@ class InteractionHandler {
             }
         }
 
+        // Wykres postępu graczy
+        let chartAttachment = null;
+        try {
+            const allGuildIdsForChart = rankingData.allGuildIds
+                || this.guildConfigService?.getAllConfiguredGuildIds()
+                || Array.from(interaction.client.guilds.cache.keys());
+            const t = this._panelT(interaction.guildId);
+            chartAttachment = await this._buildGlobalRankingChartAttachment(rankingData.players, newPage, allGuildIdsForChart, t);
+        } catch { /* wykres opcjonalny */ }
+
         const embed = this.rankingService.createBossRankingEmbed(
-            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id, interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
 
-        const replyOpts = { embeds: [embed], components: buttons, attachments: [] };
-        if (bossImageAttachment) {
-            replyOpts.files = [bossImageAttachment];
-            delete replyOpts.attachments;
+        const files = [];
+        const embeds = [embed];
+        if (bossImageAttachment) files.push(bossImageAttachment);
+        if (chartAttachment) {
+            files.push(chartAttachment);
+            embeds.push(new EmbedBuilder().setImage('attachment://ranking_progress.png'));
         }
-        await interaction.editReply(replyOpts);
+        await interaction.editReply({ embeds, components: buttons, files, attachments: [] });
     }
 
 } // end InteractionHandler
