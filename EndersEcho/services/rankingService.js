@@ -1014,18 +1014,6 @@ class RankingService {
             descLines.push(posLine);
         }
 
-        if (rankingOverride?.position) {
-            const overrideMedal = this.getPositionMedal(rankingOverride.position);
-            const rankingLabel = rankingOverride.label || msgs.recordRanking;
-            let posLine = `**${rankingLabel}:** ${overrideMedal} #${rankingOverride.position}`;
-            if (rankingOverride.positionChange > 0) {
-                posLine += `  *(${msgs.recordPromotionBy} +${rankingOverride.positionChange})*`;
-            } else if (rankingOverride.isNewEntry) {
-                posLine += `  *(${msgs.recordNewEntry})*`;
-            }
-            descLines.push(posLine);
-        }
-
         if (rolePositions?.length > 0) {
             for (const rp of rolePositions) {
                 descLines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
@@ -1080,7 +1068,17 @@ class RankingService {
             } else {
                 bossFieldVal = `**${bossRecordData.bossName}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
             }
-            embed.addFields({ name: msgs.bossRecordField || '🎯 Rekord na bossie', value: bossFieldVal, inline: false });
+            if (rankingOverride?.position) {
+                const overrideMedal = this.getPositionMedal(rankingOverride.position);
+                let posLine = `${overrideMedal} #${rankingOverride.position}`;
+                if (rankingOverride.positionChange > 0) {
+                    posLine += `  *(${msgs.recordPromotionBy} +${rankingOverride.positionChange})*`;
+                } else if (rankingOverride.isNewEntry) {
+                    posLine += `  *(${msgs.recordNewEntry})*`;
+                }
+                bossFieldVal += `\n${posLine}`;
+            }
+            embed.addFields({ name: msgs.bossRecordField || '👾 Rekord na bossie', value: bossFieldVal, inline: false });
         }
 
         if (achievementsFieldValue) {
