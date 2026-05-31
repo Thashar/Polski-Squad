@@ -9788,7 +9788,6 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId('boss_cfg_add_name').setEmoji('➕').setLabel(t('Dodaj bossa', 'Add Boss')).setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('boss_cfg_rm_entry').setEmoji('🗑️').setLabel(t('Usuń bossa', 'Remove Boss')).setStyle(ButtonStyle.Danger).setDisabled(!hasNames),
             new ButtonBuilder().setCustomId('boss_cfg_edit_entry').setEmoji('✏️').setLabel(t('Edytuj bossa', 'Rename Boss')).setStyle(ButtonStyle.Primary).setDisabled(!hasNames),
-            new ButtonBuilder().setCustomId('boss_cfg_set_img').setEmoji('🖼️').setLabel(t('Przypisz zdjęcie', 'Set Image')).setStyle(ButtonStyle.Secondary).setDisabled(!hasNames),
         );
         const row2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('boss_cfg_add_alias_start').setEmoji('➕').setLabel(t('Dodaj alias', 'Add Alias')).setStyle(ButtonStyle.Success).setDisabled(!hasNames),
@@ -9796,6 +9795,7 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId('boss_cfg_edit_alias').setEmoji('✏️').setLabel(t('Edytuj alias', 'Rename Alias')).setStyle(ButtonStyle.Primary).setDisabled(!hasAliases),
         );
         const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('boss_cfg_set_img').setEmoji('🖼️').setLabel(t('Przypisz zdjęcie', 'Set Image')).setStyle(ButtonStyle.Secondary).setDisabled(!hasNames),
             new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
         );
 
