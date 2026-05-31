@@ -384,8 +384,8 @@ class GlobalTop10Service {
         }
 
         return {
-            title: `${title} ${direction} ${prevLabel} → #${newGlobalPosition}`,
-            description: lines.join('\n\n')
+            title,
+            description: `${direction} ${prevLabel} → #${newGlobalPosition}\n\n${lines.join('\n\n')}`
         };
     }
 
@@ -428,8 +428,7 @@ class GlobalTop10Service {
 
         const prevLabel = prevBossPosition ? `#${prevBossPosition}` : '—';
         const direction = !prevBossPosition || prevBossPosition > newBossPosition ? '↑' : '↓';
-        const snippetTitle = msgs.bossSnippetTitle || '🎯 Zmiana w rankingu bossa';
-        const title = `${snippetTitle} ${bossName} ${direction} ${prevLabel} → #${newBossPosition}`;
+        const title = msgs.bossSnippetTitle || '🎯 Zmiana w rankingu bossa';
 
         const lines = [];
         const above   = bossRanking[newBossIndex - 1];
@@ -446,7 +445,7 @@ class GlobalTop10Service {
             lines.push(`${belowDir} ${await buildLine(below, newBossPosition + 1)}`);
         }
 
-        return { title, description: lines.join('\n\n') };
+        return { title, description: `\`${bossName}:\` ${direction} ${prevLabel} → #${newBossPosition}\n\n${lines.join('\n\n')}` };
     }
 
     /**
