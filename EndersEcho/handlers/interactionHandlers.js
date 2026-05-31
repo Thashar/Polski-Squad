@@ -2045,7 +2045,7 @@ class InteractionHandler {
                         .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
                         .addFields(
                             { name: tCfg('Serwer', 'Server'), value: interaction.guild.name },
-                            { name: tCfg('Administrator', 'Administrator'), value: interaction.member?.displayName || interaction.user.username },
+                            { name: tCfg('Administrator', 'Administrator'), value: `[${interaction.member?.displayName || interaction.user.username}](https://discord.com/users/${interaction.user.id})` },
                             { name: tCfg('Kanał bota', 'Bot channel'), value: `<#${newData.allowedChannelId}>` },
                             { name: tCfg('Język', 'Language'), value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
@@ -2115,7 +2115,7 @@ class InteractionHandler {
                         .setThumbnail(interaction.guild.iconURL({ dynamic: true, size: 128 }))
                         .addFields(
                             { name: tCfg('Serwer', 'Server'), value: interaction.guild.name, inline: true },
-                            { name: tCfg('Administrator', 'Administrator'), value: interaction.member?.displayName || interaction.user.username, inline: true },
+                            { name: tCfg('Administrator', 'Administrator'), value: `[${interaction.member?.displayName || interaction.user.username}](https://discord.com/users/${interaction.user.id})`, inline: true },
                             ...diffFields
                         )
                         .setTimestamp();
