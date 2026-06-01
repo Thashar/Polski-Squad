@@ -169,7 +169,7 @@ class AchievementService {
     }
 
     /**
-     * Usuwa tylko osiągnięcia kategorii 'score' i 'records' odblokowane od momentu cofniętego rekordu
+     * Usuwa WSZYSTKIE osiągnięcia odblokowane od momentu cofniętego rekordu
      * (unlockedAt >= fromTimestamp). Osiągnięcia zdobyte WCZEŚNIEJ pozostają.
      * Wywoływane przy cofaniu wyniku gracza (community verification / panel Analizuj → Cofnij).
      * @param {string} guildId
@@ -183,11 +183,7 @@ class AchievementService {
             if (!data[userId]) return;
             const userData = data[userId];
             const cutoff = new Date(fromTimestamp).getTime();
-            const scoreAndRecordIds = new Set(
-                ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
-            );
             for (const [id, info] of Object.entries(userData.unlocked || {})) {
-                if (!scoreAndRecordIds.has(id)) continue;
                 const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
                 if (ts >= cutoff) delete userData.unlocked[id];
             }
