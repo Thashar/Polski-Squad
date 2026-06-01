@@ -6256,22 +6256,40 @@ class InteractionHandler {
     }
 
     async handleProfileCommand(interaction) {
-        if (!this._checkConfigured(interaction)) return;
-        if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
-            await interaction.reply({ content: this.msgs(interaction.guildId).channelNotAllowed, flags: ['Ephemeral'] });
-            return;
+        const guildId      = interaction.guildId;
+        const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
+
+        if (!isAdminGuild) {
+            if (!this._checkConfigured(interaction)) return;
+            if (!this.isAllowedChannel(interaction.channel.id, guildId)) {
+                await interaction.reply({ content: this.msgs(guildId).channelNotAllowed, flags: ['Ephemeral'] });
+                return;
+            }
         }
+
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const guildId     = interaction.guildId;
             const viewerId    = interaction.user.id;
             const isPol       = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
-            const data = await this.profileService.collectData(guildId, viewerId, allGuildIds, interaction.client);
+            // Na serwerze admina użyj serwera skąd pochodzi globalny wynik gracza
+            let targetGuildId = guildId;
+            if (isAdminGuild) {
+                const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+                const entry = globalRanking.find(p => p.userId === viewerId);
+                if (entry?.sourceGuildId) {
+                    targetGuildId = entry.sourceGuildId;
+                } else {
+                    const firstGuild = [...allGuildIds][0];
+                    if (firstGuild) targetGuildId = firstGuild;
+                }
+            }
+
+            const data = await this.profileService.collectData(targetGuildId, viewerId, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol);
             const state = {
-                viewerId, targetUserId: viewerId, targetGuildId: guildId,
+                viewerId, targetUserId: viewerId, targetGuildId,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
             };
             const components = this.profileService.buildProfileComponents(
