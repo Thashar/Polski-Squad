@@ -59,12 +59,21 @@ class ProfileService {
             }
         }
 
-        // Rola TOP (wymaga member fetch)
+        // Rola TOP (wymaga member fetch) — z ikoną jeśli dostępna
         let topRoleName = null;
+        let topRoleIconURL = null;
         if (guild && guildConfig?.topRoles) {
             try {
                 const member = await guild.members.fetch(targetUserId).catch(() => null);
-                if (member) topRoleName = this._roleService.getUserTopRole(member, guildConfig.topRoles);
+                if (member) {
+                    const role = this._roleService.getUserTopRoleObject(member, guildConfig.topRoles);
+                    if (role) {
+                        topRoleName = role.unicodeEmoji
+                            ? `${role.unicodeEmoji} ${role.name}`
+                            : role.name;
+                        topRoleIconURL = role.iconURL({ size: 64 }) || null;
+                    }
+                }
             } catch { /* pomiń */ }
         }
 
@@ -121,6 +130,7 @@ class ProfileService {
             allBossRecords,
             bossGlobalPositions,
             knownBossNames,
+            topRoleIconURL,
         };
     }
 
@@ -138,6 +148,8 @@ class ProfileService {
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle(`👤 ${username} — ${globalGuildName}`);
+
+        if (data.topRoleIconURL) embed.setThumbnail(data.topRoleIconURL);
 
         const roleValue = rolePositions.length > 0
             ? rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`).join('\n')

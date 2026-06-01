@@ -309,6 +309,23 @@ class RoleService {
     }
 
     /**
+     * Zwraca obiekt roli TOP gracza (lub null).
+     * @param {GuildMember} member
+     * @param {Object} guildTopRoles
+     * @returns {Role|null}
+     */
+    getUserTopRoleObject(member, guildTopRoles = null) {
+        const normalized = normalizeTiers(guildTopRoles);
+        if (!normalized) return null;
+        for (const tier of normalized.tiers) {
+            if (tier.roleId && member.roles.cache.has(tier.roleId)) {
+                return member.guild.roles.cache.get(tier.roleId) || null;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Loguje zmiany w rolach TOP
      */
     logRoleChanges(oldHolders, newHolders) {
