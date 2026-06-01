@@ -1,4 +1,6 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const fs   = require('fs').promises;
+const path = require('path');
 
 const BOSSES_PER_PAGE = 15;
 
@@ -13,6 +15,7 @@ class ProfileService {
         this._roleService          = services.roleService;
         this._roleRankingCfg       = services.roleRankingConfigService;
         this._guildConfigService   = services.guildConfigService;
+        this._dataDir              = services.dataDir || null;
     }
 
     /**
@@ -59,22 +62,40 @@ class ProfileService {
             }
         }
 
-        // Rola TOP (wymaga member fetch) — z ikoną jeśli dostępna
+        // Fetch membera raz — używamy do avatara i roli TOP
+        let member = null;
+        if (guild) {
+            member = await guild.members.fetch(targetUserId).catch(() => null);
+        }
+
+        // Avatar użytkownika (guild-specific jeśli dostępny)
+        let userAvatarURL = member?.displayAvatarURL({ dynamic: true, size: 256 })
+            || client.users.cache.get(targetUserId)?.displayAvatarURL({ dynamic: true, size: 256 })
+            || null;
+
+        // Rola TOP — z ikoną jeśli dostępna
         let topRoleName = null;
         let topRoleIconURL = null;
-        if (guild && guildConfig?.topRoles) {
+        if (member && guildConfig?.topRoles) {
             try {
-                const member = await guild.members.fetch(targetUserId).catch(() => null);
-                if (member) {
-                    const role = this._roleService.getUserTopRoleObject(member, guildConfig.topRoles);
-                    if (role) {
-                        topRoleName = role.unicodeEmoji
-                            ? `${role.unicodeEmoji} ${role.name}`
-                            : role.name;
-                        topRoleIconURL = role.iconURL({ size: 64 }) || null;
-                    }
+                const role = this._roleService.getUserTopRoleObject(member, guildConfig.topRoles);
+                if (role) {
+                    topRoleName = role.unicodeEmoji
+                        ? `${role.unicodeEmoji} ${role.name}`
+                        : role.name;
+                    topRoleIconURL = role.iconURL({ size: 64 }) || null;
                 }
             } catch { /* pomiń */ }
+        }
+
+        // Najlepszy boss (max scoreValue) — do ikony w zakładce Bossowie
+        let bestBossName = null;
+        let bestBossScore = -1;
+        for (const [bossName, rec] of Object.entries(allBossRecords)) {
+            if ((rec.scoreValue || 0) > bestBossScore) {
+                bestBossScore = rec.scoreValue || 0;
+                bestBossName  = bossName;
+            }
         }
 
         // Pozycje w rankingach ról
@@ -131,6 +152,8 @@ class ProfileService {
             bossGlobalPositions,
             knownBossNames,
             topRoleIconURL,
+            userAvatarURL,
+            bestBossName,
         };
     }
 
@@ -149,7 +172,7 @@ class ProfileService {
             .setColor(0x5865F2)
             .setTitle(`👤 ${username} — ${globalGuildName}`);
 
-        if (data.topRoleIconURL) embed.setThumbnail(data.topRoleIconURL);
+        if (data.userAvatarURL) embed.setThumbnail(data.userAvatarURL);
 
         const roleValue = rolePositions.length > 0
             ? rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`).join('\n')
@@ -194,7 +217,7 @@ class ProfileService {
      * Buduje embed bossów (wszyscy znani bossowie z rekordami gracza).
      * @returns {{ embed: EmbedBuilder, totalPages: number, currentPage: number }}
      */
-    buildBossesEmbed(data, isPol, page) {
+    async buildBossesEmbed(data, isPol, page) {
         const t = (pol, eng) => isPol ? pol : eng;
         const { username, knownBossNames, allBossRecords, bossGlobalPositions } = data;
 
@@ -243,7 +266,21 @@ class ProfileService {
                 ),
             });
 
-        return { embed, totalPages, currentPage: safePage };
+        // Ikona bossa z najlepszym wynikiem gracza
+        const files = [];
+        const bestBoss = data.bestBossName;
+        if (bestBoss && this._dataDir && this._bossAliasService) {
+            const imgPath = this._bossAliasService.getBossImagePath(bestBoss);
+            if (imgPath) {
+                try {
+                    const buf = await fs.readFile(path.join(this._dataDir, 'boss_images', imgPath));
+                    files.push(new AttachmentBuilder(buf, { name: imgPath }));
+                    embed.setThumbnail(`attachment://${imgPath}`);
+                } catch { /* bez zdjęcia */ }
+            }
+        }
+
+        return { embed, totalPages, currentPage: safePage, files };
     }
 
     /**

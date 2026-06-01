@@ -58,6 +58,7 @@ class InteractionHandler {
             roleService,
             roleRankingConfigService,
             guildConfigService,
+            dataDir: config.ranking?.dataDir || null,
         });
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
@@ -6392,17 +6393,19 @@ class InteractionHandler {
             const data = state.cachedData;
 
             let embed;
+            let files = [];
             if (state.view === 'main') {
                 embed = this.profileService.buildMainEmbed(data, isPol);
             } else if (state.view === 'bosses') {
-                const result = this.profileService.buildBossesEmbed(data, isPol, state.bossPage);
+                const result = await this.profileService.buildBossesEmbed(data, isPol, state.bossPage);
                 embed = result.embed;
+                files = result.files || [];
                 state.bossMaxPage = result.totalPages;
                 state.bossPage    = result.currentPage;
             } else {
-                const achView     = state.view === 'ach_overview' ? 'overview' : 'cat';
-                const isOwnProf   = state.viewerId === state.targetUserId;
-                const lang        = isPol ? 'pol' : 'eng';
+                const achView   = state.view === 'ach_overview' ? 'overview' : 'cat';
+                const isOwnProf = state.viewerId === state.targetUserId;
+                const lang      = isPol ? 'pol' : 'eng';
                 let achResult;
                 if (isOwnProf) {
                     achResult = await this.achievementService.buildAchievementsView(
@@ -6414,6 +6417,7 @@ class InteractionHandler {
                     );
                 }
                 embed = achResult.embed;
+                if (data.userAvatarURL) embed.setThumbnail(data.userAvatarURL);
             }
 
             const components = this.profileService.buildProfileComponents({
@@ -6424,7 +6428,7 @@ class InteractionHandler {
                 isOwnProfile: state.viewerId === state.targetUserId,
             }, isPol);
 
-            await interaction.editReply({ embeds: [embed], components });
+            await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
             this._profileStates.set(interaction.message.id, state);
         } catch (err) {
             this.logService._gl(interaction.guildId).error(`Błąd przycisku /profile: ${err.message}`);
