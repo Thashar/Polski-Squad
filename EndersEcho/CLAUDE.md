@@ -184,7 +184,7 @@
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
    - **Centrum Dowodzenia (head admin):** panel 5 embedów na dedykowanym kanale, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
-**Komendy slash:** `/achievements`, `/configure`, `/generate`, `/manage`, `/ranking`, `/subscribe`, `/test`, `/update`
+**Komendy slash:** `/achievements`, `/configure`, `/generate`, `/manage`, `/profile`, `/ranking`, `/subscribe`, `/test`, `/update`
 
 **Panel Admina** — dostępny przez `/manage`:
 - Dostęp: Administrator Discord
@@ -395,6 +395,19 @@
 - **Zdjęcia bossów:** Plik zapisywany w `data/boss_images/{safeName}.{ext}`. Ścieżka (tylko `{safeName}.{ext}`) przechowywana w `boss_aliases.json` jako `images["BossEN"]`. Używane jako thumbnail w `createBossRankingEmbed` (AttachmentBuilder + `attachment://filename`).
 - **Filtrowanie rankingów:** `getBossesWithRecords(allGuildIds, knownEnglishNames)` — pokazuje TYLKO bossów z angielską nazwą (admin musi zmapować alias). Nieznane surowe nazwy niewidoczne w UI dopóki nie zostają zmapowane.
 
+**Komenda /profile** — profil gracza (kanał bota):
+- Wyświetla pełny profil gracza w 3 zakładkach (1 wiadomość ephemeral z przyciskami nawigacji)
+- Opcjonalny parametr `gracz` — fragment nicku do wyszukania; puste = własny profil
+- **Zakładka 👤 Profil (main):** rekord serwera (#pozycja / total), pozycja globalna, rola TOP, najlepszy wynik (score + boss + data), wycinek globalnego rankingu (gracz ±1), rankingi ról (pozycja w każdym skonfigurowanym rankingu roli)
+- **Zakładka 🎯 Bossowie:** lista WSZYSTKICH znanych bossów (z `bossAliasService.getExtraEnglishNames()`), posortowana alfabetycznie, 15/stronę; ✅ z rekordem (score + data), — bez rekordu; paginacja gdy >15
+- **Zakładka 🏆 Osiągnięcia:** reuse `achievementService.buildAchievementsView/ForUser` + 5 kategorii; własny profil — z opisami jak /achievements; cudzy — bez opisów
+- **Szukaj gracza (🔍):** otwiera modal → wyszukiwanie cross-server w globalRanking → 1 trafienie: od razu profil; wiele: StringSelectMenu; powrót: ◀️ Wróć do siebie (Danger)
+- **Stan sesji:** `_profileStates` Map (messageId → state), TTL 15 min; pola: `viewerId, targetUserId, targetGuildId, view, category, bossPage, bossMaxPage, cachedData`
+- **Dane per-boss:** `bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, userId)` — merge najlepszych wyników ze wszystkich serwerów
+- **CustomIDs:** `profile_main` | `profile_bosses` | `profile_bosses_prev` | `profile_bosses_next` | `profile_ach_overview` | `profile_ach_cat_{key}` | `profile_search` | `profile_search_modal` | `profile_search_sel` | `profile_back`
+- **Serwis:** `services/profileService.js` — `collectData`, `buildMainEmbed`, `buildBossesEmbed`, `buildProfileComponents`
+- `/achievements` pozostaje tymczasowo; `/profile` jest jego rozszerzonym zastępcą
+
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
 - 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Język (pol/eng) — wszystkie komunikaty i opisy komend
@@ -471,7 +484,7 @@
 - `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); gdy `ENDERSECHO_CONFIGURE_ADMIN_ONLY=true` → tylko Administrator; błąd: `configureNotAdmin`
 - `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
-- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`
+- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`, `/profile`, `/achievements`
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 

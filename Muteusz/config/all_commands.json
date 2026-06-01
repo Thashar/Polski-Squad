@@ -611,6 +611,12 @@
           "requiredPermission": "administrator"
         },
         {
+          "name": "/profile",
+          "description": "Wyświetla pełny profil gracza: rekord serwera, pozycja globalna, wycinek rankingu globalnego, rola TOP, rankingi ról, rekordy per boss, osiągnięcia. Można przeglądać profile innych graczy przez wyszukiwanie nicku.",
+          "usage": "/profile [gracz:fragment nicku]",
+          "requiredPermission": "public"
+        },
+        {
           "name": "/ranking",
           "description": "Wyświetla prywatny ranking wyników bossów (paginacja 10/stronę)",
           "usage": "/ranking",

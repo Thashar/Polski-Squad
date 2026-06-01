@@ -135,6 +135,41 @@ class BossRecordService {
     }
 
     /**
+     * Zwraca rekordy bossów jednego gracza na danym serwerze.
+     * @param {string} guildId
+     * @param {string} userId
+     * @returns {Object} { bossName: { score, scoreValue, timestamp, username } }
+     */
+    async getUserBossRecords(guildId, userId) {
+        const all = await this._load(guildId);
+        return all[userId] || {};
+    }
+
+    /**
+     * Zwraca najlepsze rekordy bossów gracza ze wszystkich serwerów (merge po scoreValue).
+     * @param {string[]|Set} allGuildIds
+     * @param {string} userId
+     * @returns {Object} { bossName: { score, scoreValue, timestamp, username, sourceGuildId } }
+     */
+    async getUserBossRecordsAllGuilds(allGuildIds, userId) {
+        const perGuild = await Promise.all(
+            [...allGuildIds].map(async gid => {
+                const recs = await this._load(gid).catch(() => ({}));
+                return [gid, recs[userId] || {}];
+            })
+        );
+        const merged = {};
+        for (const [gid, recs] of perGuild) {
+            for (const [boss, rec] of Object.entries(recs)) {
+                if (!merged[boss] || rec.scoreValue > merged[boss].scoreValue) {
+                    merged[boss] = { ...rec, sourceGuildId: gid };
+                }
+            }
+        }
+        return merged;
+    }
+
+    /**
      * Migracja: przenosi rekordy z surowej/starej nazwy bossa do angielskiej.
      * Wywoływana po dodaniu aliasu przez admina (boss_map_lang_sel, boss_cfg_add_lang_sel).
      * Jeśli gracz ma rekordy pod obiema nazwami — zachowuje lepszy wynik.

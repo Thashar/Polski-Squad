@@ -1,0 +1,338 @@
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+
+const BOSSES_PER_PAGE = 15;
+
+/**
+ * Serwis profilu gracza — zbiera dane z wielu systemów i buduje embedy.
+ */
+class ProfileService {
+    constructor(services) {
+        this._rankingService       = services.rankingService;
+        this._bossRecordService    = services.bossRecordService;
+        this._bossAliasService     = services.bossAliasService;
+        this._roleService          = services.roleService;
+        this._roleRankingCfg       = services.roleRankingConfigService;
+        this._guildConfigService   = services.guildConfigService;
+    }
+
+    /**
+     * Zbiera wszystkie dane gracza ze wszystkich serwisów.
+     * @param {string} guildId - serwer kontekstowy (skąd pochodzi zapytanie)
+     * @param {string} targetUserId
+     * @param {Set|string[]} allGuildIds
+     * @param {import('discord.js').Client} client
+     * @returns {Promise<Object>} profileData
+     */
+    async collectData(guildId, targetUserId, allGuildIds, client) {
+        const guild = client.guilds.cache.get(guildId);
+        const guildConfig = this._guildConfigService?.getConfig(guildId);
+
+        const [sortedPlayers, globalRanking, allBossRecords, knownBossNamesRaw] = await Promise.all([
+            this._rankingService.getSortedPlayers(guildId).catch(() => []),
+            this._rankingService.getGlobalRanking(allGuildIds).catch(() => []),
+            this._bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, targetUserId).catch(() => ({})),
+            Promise.resolve(this._bossAliasService.getExtraEnglishNames()),
+        ]);
+
+        // Pozycja na serwerze
+        const serverIdx = sortedPlayers.findIndex(p => p.userId === targetUserId);
+        const serverRecord   = serverIdx !== -1 ? sortedPlayers[serverIdx] : null;
+        const serverPosition = serverIdx !== -1 ? serverIdx + 1 : null;
+
+        // Pozycja globalna
+        const globalIdx    = globalRanking.findIndex(p => p.userId === targetUserId);
+        const globalRecord = globalIdx !== -1 ? globalRanking[globalIdx] : null;
+        const globalPosition = globalIdx !== -1 ? globalIdx + 1 : null;
+
+        // Wycinek globalnego rankingu (gracz ±1)
+        const snippetPlayers = [];
+        if (globalIdx !== -1) {
+            const start = Math.max(0, globalIdx - 1);
+            const end   = Math.min(globalRanking.length, globalIdx + 2);
+            for (let i = start; i < end; i++) {
+                snippetPlayers.push({
+                    ...globalRanking[i],
+                    position: i + 1,
+                    isTarget: globalRanking[i].userId === targetUserId,
+                });
+            }
+        }
+
+        // Rola TOP (wymaga member fetch)
+        let topRoleName = null;
+        if (guild && guildConfig?.topRoles) {
+            try {
+                const member = await guild.members.fetch(targetUserId).catch(() => null);
+                if (member) topRoleName = this._roleService.getUserTopRole(member, guildConfig.topRoles);
+            } catch { /* pomiń */ }
+        }
+
+        // Pozycje w rankingach ról
+        const rolePositions = [];
+        if (guild && this._roleRankingCfg) {
+            try {
+                const roleRankings = await this._roleRankingCfg.loadRoleRankings(guildId);
+                for (const rr of roleRankings) {
+                    const rolePlayers = await this._rankingService
+                        .getSortedPlayersByRole(guildId, rr.roleId, guild, this._roleRankingCfg)
+                        .catch(() => []);
+                    const roleIdx = rolePlayers.findIndex(p => p.userId === targetUserId);
+                    if (roleIdx !== -1) {
+                        rolePositions.push({
+                            roleName: rr.roleName,
+                            position: roleIdx + 1,
+                            total: rolePlayers.length,
+                        });
+                    }
+                }
+            } catch { /* pomiń */ }
+        }
+
+        const username = serverRecord?.username || globalRecord?.username || targetUserId;
+        const knownBossNames = Array.isArray(knownBossNamesRaw) ? [...knownBossNamesRaw].sort() : [];
+
+        return {
+            guildId,
+            guildName: guild?.name || guildId,
+            targetUserId,
+            username,
+            serverRecord,
+            serverPosition,
+            serverTotal: sortedPlayers.length,
+            globalRecord,
+            globalPosition,
+            globalTotal: globalRanking.length,
+            snippetPlayers,
+            topRoleName,
+            rolePositions,
+            allBossRecords,
+            knownBossNames,
+        };
+    }
+
+    /**
+     * Buduje główny embed profilu (rekord serwera, global, snippet, role).
+     */
+    buildMainEmbed(data, isPol) {
+        const t = (pol, eng) => isPol ? pol : eng;
+        const {
+            username, guildName, serverRecord, serverPosition, serverTotal,
+            globalPosition, globalTotal, topRoleName, rolePositions, snippetPlayers,
+        } = data;
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`👤 ${username}`)
+            .setFooter({ text: guildName });
+
+        // Wiersz statystyk (inline)
+        embed.addFields(
+            {
+                name: t('🖥️ Rekord Serwera', '🖥️ Server Record'),
+                value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',
+                inline: true,
+            },
+            {
+                name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
+                value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
+                inline: true,
+            },
+            {
+                name: t('👑 Rola TOP', '👑 TOP Role'),
+                value: topRoleName || '—',
+                inline: true,
+            }
+        );
+
+        // Najlepszy wynik
+        if (serverRecord) {
+            const date = new Date(serverRecord.timestamp).toLocaleString(
+                isPol ? 'pl-PL' : 'en-GB',
+                { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+            );
+            const boss = serverRecord.bossName ? ` — ${serverRecord.bossName}` : '';
+            embed.addFields({
+                name: t('📊 Najlepszy Wynik', '📊 Best Score'),
+                value: `**${serverRecord.score}**${boss}\n📅 ${date}`,
+                inline: false,
+            });
+        } else if (data.globalRecord) {
+            // Brak rekordu na serwerze, ale jest globalny
+            const date = new Date(data.globalRecord.timestamp).toLocaleString(
+                isPol ? 'pl-PL' : 'en-GB',
+                { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+            );
+            const boss = data.globalRecord.bossName ? ` — ${data.globalRecord.bossName}` : '';
+            embed.addFields({
+                name: t('📊 Najlepszy Wynik (Global)', '📊 Best Score (Global)'),
+                value: `**${data.globalRecord.score}**${boss}\n📅 ${date}`,
+                inline: false,
+            });
+        }
+
+        // Wycinek globalny
+        if (snippetPlayers.length > 0) {
+            const lines = snippetPlayers.map(p => {
+                const medal = p.position === 1 ? '🥇' : p.position === 2 ? '🥈' : p.position === 3 ? '🥉' : '';
+                const posStr = medal ? `${medal} \`#${p.position}\`` : `\`#${p.position}\``;
+                const nameStr = p.isTarget ? `**__${p.username}__**` : `**${p.username}**`;
+                return `${posStr} ${nameStr} · ${p.score}`;
+            });
+            embed.addFields({
+                name: t('🌐 Globalny Ranking', '🌐 Global Ranking'),
+                value: lines.join('\n'),
+                inline: false,
+            });
+        }
+
+        // Rankingi ról
+        if (rolePositions.length > 0) {
+            const lines = rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`);
+            embed.addFields({
+                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
+                value: lines.join('\n'),
+                inline: false,
+            });
+        }
+
+        return embed;
+    }
+
+    /**
+     * Buduje embed bossów (wszyscy znani bossowie z rekordami gracza).
+     * @returns {{ embed: EmbedBuilder, totalPages: number, currentPage: number }}
+     */
+    buildBossesEmbed(data, isPol, page) {
+        const t = (pol, eng) => isPol ? pol : eng;
+        const { username, guildName, knownBossNames, allBossRecords } = data;
+
+        const totalBosses = knownBossNames.length;
+        const totalPages  = Math.max(1, Math.ceil(totalBosses / BOSSES_PER_PAGE));
+        const safePage    = Math.max(0, Math.min(page, totalPages - 1));
+
+        const slice = knownBossNames.slice(safePage * BOSSES_PER_PAGE, (safePage + 1) * BOSSES_PER_PAGE);
+
+        let description;
+        if (totalBosses === 0) {
+            description = t('Brak skonfigurowanych bossów.', 'No configured bosses.');
+        } else {
+            const lines = slice.map(bossName => {
+                const rec = allBossRecords[bossName];
+                if (!rec) return `— **${bossName}**: ${t('brak rekordu', 'no record')}`;
+                const date = new Date(rec.timestamp).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
+                return `✅ **${bossName}**: ${rec.score} • ${date}`;
+            });
+            description = lines.join('\n');
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle(`🎯 ${t('Bossowie', 'Bosses')} — ${username}`)
+            .setDescription(description)
+            .setFooter({
+                text: `${guildName} · ${t(`Strona ${safePage + 1} z ${totalPages}`, `Page ${safePage + 1} of ${totalPages}`)} · ${t(`${totalBosses} bossów`, `${totalBosses} bosses`)}`,
+            });
+
+        return { embed, totalPages, currentPage: safePage };
+    }
+
+    /**
+     * Buduje komponenty (przyciski) dla profilu.
+     * @param {Object} state - { view, category, bossPage, bossMaxPage, isOwnProfile }
+     * @param {boolean} isPol
+     * @returns {ActionRowBuilder[]}
+     */
+    buildProfileComponents(state, isPol) {
+        const t = (pol, eng) => isPol ? pol : eng;
+        const { view, category, bossPage, bossMaxPage, isOwnProfile } = state;
+
+        const inAch = view === 'ach_overview' || view === 'ach_cat';
+
+        // Rząd 1: zakładki główne
+        const mainButtons = [
+            new ButtonBuilder()
+                .setCustomId('profile_main')
+                .setLabel(t('Profil', 'Profile'))
+                .setEmoji('👤')
+                .setStyle(view === 'main' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(view === 'main'),
+            new ButtonBuilder()
+                .setCustomId('profile_bosses')
+                .setLabel(t('Bossowie', 'Bosses'))
+                .setEmoji('🎯')
+                .setStyle(view === 'bosses' ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(view === 'bosses'),
+            new ButtonBuilder()
+                .setCustomId('profile_ach_overview')
+                .setLabel(t('Osiągnięcia', 'Achievements'))
+                .setEmoji('🏆')
+                .setStyle(inAch ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(inAch && view === 'ach_overview'),
+            new ButtonBuilder()
+                .setCustomId('profile_search')
+                .setLabel(t('Szukaj gracza', 'Search Player'))
+                .setEmoji('🔍')
+                .setStyle(ButtonStyle.Secondary),
+        ];
+
+        if (!isOwnProfile) {
+            mainButtons.push(
+                new ButtonBuilder()
+                    .setCustomId('profile_back')
+                    .setLabel(t('Wróć do siebie', 'Back to Me'))
+                    .setEmoji('◀️')
+                    .setStyle(ButtonStyle.Danger)
+            );
+        }
+
+        const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
+
+        // Rząd 2: nawigacja kategorii osiągnięć
+        if (inAch) {
+            const CATS = [
+                { key: 'score',    pol: 'Wyniki',      eng: 'Scores',    emoji: '🏆' },
+                { key: 'records',  pol: 'Rekordy',     eng: 'Records',   emoji: '🔁' },
+                { key: 'bosses',   pol: 'Łowy',        eng: 'The Hunt',  emoji: '🎯' },
+                { key: 'prestige', pol: 'Prestiż',     eng: 'Prestige',  emoji: '💎' },
+                { key: 'explorer', pol: 'Eksplorator', eng: 'Explorer',  emoji: '🕵️' },
+            ];
+            const isOverview = view === 'ach_overview';
+            const achNavRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('profile_ach_overview')
+                    .setEmoji('📊')
+                    .setLabel(t('Podsumowanie', 'Overview'))
+                    .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(isOverview),
+                ...CATS.map(c => new ButtonBuilder()
+                    .setCustomId(`profile_ach_cat_${c.key}`)
+                    .setEmoji(c.emoji)
+                    .setLabel(isPol ? c.pol : c.eng)
+                    .setStyle((view === 'ach_cat' && category === c.key) ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(view === 'ach_cat' && category === c.key)
+                )
+            );
+            rows.push(achNavRow);
+        }
+
+        // Rząd 3: paginacja bossów
+        if (view === 'bosses' && bossMaxPage > 1) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('profile_bosses_prev')
+                    .setEmoji('◀')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(bossPage === 0),
+                new ButtonBuilder()
+                    .setCustomId('profile_bosses_next')
+                    .setEmoji('▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(bossPage >= bossMaxPage - 1)
+            ));
+        }
+
+        return rows;
+    }
+}
+
+module.exports = ProfileService;

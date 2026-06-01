@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
+const ProfileService = require('../services/profileService');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -50,6 +51,14 @@ class InteractionHandler {
         this.ocrStatsService = ocrStatsService;
         this.bossRecordService = bossRecordService;
         this.adminPanelService = adminPanelService;
+        this.profileService = new ProfileService({
+            rankingService,
+            bossRecordService,
+            bossAliasService,
+            roleService,
+            roleRankingConfigService,
+            guildConfigService,
+        });
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
         // Każda sesja ma TTL 15 minut — timer usuwający ją automatycznie.
         this._infoSessions = new Map();
@@ -70,6 +79,8 @@ class InteractionHandler {
         this._ocrRevertSessions = new Map();
         // Stan paginacji rankingów per-boss (messageId -> { bossName, players, currentPage, totalPages, userId })
         this._bossRankings = new Map();
+        // Stan sesji /profile (messageId -> { viewerId, targetUserId, targetGuildId, view, category, bossPage, bossMaxPage, cachedData })
+        this._profileStates = new Map();
     }
 
     /**
@@ -141,6 +152,17 @@ class InteractionHandler {
                 .setName('achievements')
                 .setDescription('View your unlocked achievements')
                 .setDescriptionLocalizations(pl('Sprawdź swoje odblokowane osiągnięcia')),
+
+            new SlashCommandBuilder()
+                .setName('profile')
+                .setDescription('View player profile: records, bosses and achievements')
+                .setDescriptionLocalizations(pl('Wyświetl profil gracza: rekordy, bossowie i osiągnięcia'))
+                .addStringOption(opt =>
+                    opt.setName('gracz')
+                        .setNameLocalizations(pl('gracz'))
+                        .setDescription('Player name to search (leave empty for your own profile)')
+                        .setDescriptionLocalizations(pl('Nick gracza do wyszukania (puste = Twój profil)'))
+                        .setRequired(false)),
 
 
             new SlashCommandBuilder()
@@ -269,7 +291,8 @@ class InteractionHandler {
                 case 'ranking':      await this.handleRankingCommand(interaction);        break;
                 case 'update':       await this.handleUpdateCommand(interaction);         break;
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
-                case 'achievements': await this.handleAchievementsCommand(interaction); break;
+                case 'achievements': await this.handleAchievementsCommand(interaction);   break;
+                case 'profile':      await this.handleProfileCommand(interaction);        break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -338,6 +361,10 @@ class InteractionHandler {
             }
             if (interaction.customId === 'ach_check_modal') {
                 await this._handleAchCheckModal(interaction);
+                return;
+            }
+            if (interaction.customId === 'profile_search_modal') {
+                await this._handleProfileSearchModal(interaction);
                 return;
             }
             if (interaction.customId === 'panel_ach_del_modal') {
@@ -4703,6 +4730,15 @@ class InteractionHandler {
                 return;
             }
 
+            // === Przyciski /profile ===
+            if (customId === 'profile_main' || customId === 'profile_bosses' ||
+                customId === 'profile_ach_overview' || customId.startsWith('profile_ach_cat_') ||
+                customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
+                customId === 'profile_back' || customId === 'profile_search') {
+                await this._handleProfileButton(interaction);
+                return;
+            }
+
             // === Przyciski Panelu Admina ===
             if (customId.startsWith('panel_') || customId === 'cfg_admin_panel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
@@ -6215,6 +6251,295 @@ class InteractionHandler {
         }
     }
 
+    // ─── /profile ──────────────────────────────────────────────────────────────
+
+    _getProfileAllGuildIds(client) {
+        return new Set(
+            this.config.getAllGuilds()
+                .filter(g => client.guilds.cache.has(g.id))
+                .map(g => g.id)
+        );
+    }
+
+    async handleProfileCommand(interaction) {
+        if (!this._checkConfigured(interaction)) return;
+        if (!this.isAllowedChannel(interaction.channel.id, interaction.guildId)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).channelNotAllowed, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const guildId    = interaction.guildId;
+            const viewerId   = interaction.user.id;
+            const msgs       = this.msgs(guildId);
+            const isPol      = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+
+            let targetUserId  = viewerId;
+            let targetGuildId = guildId;
+
+            const query = interaction.options.getString('gracz')?.trim();
+            if (query) {
+                const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+                const matches = globalRanking.filter(p =>
+                    (p.username || p.userId).toLowerCase().includes(query.toLowerCase())
+                );
+                if (matches.length === 0) {
+                    await interaction.editReply({ content: msgs.profileNotFound.replace('{query}', query) });
+                    return;
+                }
+                if (matches.length === 1) {
+                    targetUserId  = matches[0].userId;
+                    targetGuildId = matches[0].sourceGuildId || guildId;
+                } else {
+                    const options = matches.slice(0, 25).map(p => ({
+                        label: (p.username || p.userId).slice(0, 100),
+                        description: `${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId} · ${p.score}`.slice(0, 100),
+                        value: `${p.userId}:${p.sourceGuildId || guildId}`,
+                    }));
+                    const select = new StringSelectMenuBuilder()
+                        .setCustomId('profile_search_sel')
+                        .setPlaceholder(msgs.profileSelectPlaceholder)
+                        .addOptions(options.map(o => new StringSelectMenuOptionBuilder().setLabel(o.label).setDescription(o.description).setValue(o.value)));
+                    const row = new ActionRowBuilder().addComponents(select);
+                    const replyMsg = await interaction.editReply({
+                        content: msgs.profileMultipleResults.replace('{count}', matches.length),
+                        components: [row],
+                    });
+                    this._profileStates.set(replyMsg.id, {
+                        viewerId, targetUserId: null, targetGuildId: null,
+                        view: 'select', category: null, bossPage: 0, bossMaxPage: 1, cachedData: null,
+                    });
+                    setTimeout(() => this._profileStates.delete(replyMsg.id), 15 * 60 * 1000);
+                    return;
+                }
+            }
+
+            const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+            const embed = this.profileService.buildMainEmbed(data, isPol);
+            const state = {
+                viewerId, targetUserId, targetGuildId,
+                view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
+            };
+            const components = this.profileService.buildProfileComponents(
+                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                isPol
+            );
+            const replyMsg = await interaction.editReply({ embeds: [embed], components });
+            this._profileStates.set(replyMsg.id, state);
+            setTimeout(() => this._profileStates.delete(replyMsg.id), 15 * 60 * 1000);
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd /profile: ${err.message}`);
+            await interaction.editReply({ content: this.msgs(interaction.guildId).generalError }).catch(() => {});
+        }
+    }
+
+    async _handleProfileButton(interaction) {
+        const customId = interaction.customId;
+        const state = this._profileStates.get(interaction.message.id);
+        const msgs   = this.msgs(interaction.guildId);
+
+        if (!state || state.view === 'select') {
+            await interaction.reply({ content: msgs.profileExpired, flags: ['Ephemeral'] });
+            return;
+        }
+        if (interaction.user.id !== state.viewerId) {
+            await interaction.reply({ content: msgs.profileWrongUser, flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (customId === 'profile_search') {
+            const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+            const t = (pol, eng) => isPol ? pol : eng;
+            const modal = new ModalBuilder()
+                .setCustomId('profile_search_modal')
+                .setTitle(t('🔍 Szukaj gracza', '🔍 Search Player'));
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('profile_search_query')
+                        .setLabel(t('Fragment nicku gracza', 'Part of player\'s nick'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setMinLength(2)
+                )
+            );
+            await interaction.showModal(modal);
+            return;
+        }
+
+        await interaction.deferUpdate();
+        try {
+            const guildId = interaction.guildId;
+            const isPol   = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+
+            if (customId === 'profile_back') {
+                state.targetUserId  = state.viewerId;
+                state.targetGuildId = guildId;
+                state.view          = 'main';
+                state.category      = null;
+                state.bossPage      = 0;
+                state.cachedData    = null;
+            } else if (customId === 'profile_main') {
+                state.view = 'main';
+            } else if (customId === 'profile_bosses') {
+                state.view     = 'bosses';
+                state.bossPage = 0;
+            } else if (customId === 'profile_bosses_prev') {
+                state.bossPage = Math.max(0, state.bossPage - 1);
+            } else if (customId === 'profile_bosses_next') {
+                state.bossPage = Math.min(state.bossMaxPage - 1, state.bossPage + 1);
+            } else if (customId === 'profile_ach_overview') {
+                state.view     = 'ach_overview';
+                state.category = null;
+            } else if (customId.startsWith('profile_ach_cat_')) {
+                state.view     = 'ach_cat';
+                state.category = customId.replace('profile_ach_cat_', '');
+            }
+
+            // Jeśli zmieniamy gracza (back) lub nie ma cache → odśwież dane
+            if (!state.cachedData) {
+                state.cachedData = await this.profileService.collectData(
+                    state.targetGuildId, state.targetUserId, allGuildIds, interaction.client
+                );
+            }
+            const data = state.cachedData;
+
+            let embed;
+            if (state.view === 'main') {
+                embed = this.profileService.buildMainEmbed(data, isPol);
+            } else if (state.view === 'bosses') {
+                const result = this.profileService.buildBossesEmbed(data, isPol, state.bossPage);
+                embed = result.embed;
+                state.bossMaxPage = result.totalPages;
+                state.bossPage    = result.currentPage;
+            } else {
+                const achView     = state.view === 'ach_overview' ? 'overview' : 'cat';
+                const isOwnProf   = state.viewerId === state.targetUserId;
+                const lang        = isPol ? 'pol' : 'eng';
+                let achResult;
+                if (isOwnProf) {
+                    achResult = await this.achievementService.buildAchievementsView(
+                        state.targetGuildId, state.targetUserId, lang, achView, state.category
+                    );
+                } else {
+                    achResult = await this.achievementService.buildAchievementsViewForUser(
+                        state.targetGuildId, state.targetUserId, data.username, lang, achView, state.category
+                    );
+                }
+                embed = achResult.embed;
+            }
+
+            const components = this.profileService.buildProfileComponents({
+                view: state.view,
+                category: state.category,
+                bossPage: state.bossPage,
+                bossMaxPage: state.bossMaxPage,
+                isOwnProfile: state.viewerId === state.targetUserId,
+            }, isPol);
+
+            await interaction.editReply({ embeds: [embed], components });
+            this._profileStates.set(interaction.message.id, state);
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd przycisku /profile: ${err.message}`);
+        }
+    }
+
+    async _handleProfileSearchModal(interaction) {
+        const state = this._profileStates.get(interaction.message?.id);
+        await interaction.deferUpdate();
+        try {
+            const guildId     = interaction.guildId;
+            const viewerId    = interaction.user.id;
+            const msgs        = this.msgs(guildId);
+            const isPol       = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const query       = interaction.fields.getTextInputValue('profile_search_query').trim();
+            const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+
+            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+            const matches = globalRanking.filter(p =>
+                (p.username || p.userId).toLowerCase().includes(query.toLowerCase())
+            );
+
+            if (matches.length === 0) {
+                await interaction.editReply({ content: msgs.profileNotFound.replace('{query}', query), embeds: [], components: [] });
+                return;
+            }
+
+            if (matches.length === 1) {
+                const targetUserId  = matches[0].userId;
+                const targetGuildId = matches[0].sourceGuildId || guildId;
+                const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+                const embed = this.profileService.buildMainEmbed(data, isPol);
+                const newState = {
+                    viewerId, targetUserId, targetGuildId,
+                    view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
+                };
+                const components = this.profileService.buildProfileComponents(
+                    { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                    isPol
+                );
+                await interaction.editReply({ content: null, embeds: [embed], components });
+                if (interaction.message?.id) this._profileStates.set(interaction.message.id, newState);
+                return;
+            }
+
+            const options = matches.slice(0, 25).map(p => ({
+                label: (p.username || p.userId).slice(0, 100),
+                description: `${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId} · ${p.score}`.slice(0, 100),
+                value: `${p.userId}:${p.sourceGuildId || guildId}`,
+            }));
+            const select = new StringSelectMenuBuilder()
+                .setCustomId('profile_search_sel')
+                .setPlaceholder(msgs.profileSelectPlaceholder)
+                .addOptions(options.map(o => new StringSelectMenuOptionBuilder().setLabel(o.label).setDescription(o.description).setValue(o.value)));
+            await interaction.editReply({
+                content: msgs.profileMultipleResults.replace('{count}', matches.length),
+                embeds: [],
+                components: [new ActionRowBuilder().addComponents(select)],
+            });
+            if (interaction.message?.id) {
+                const updState = this._profileStates.get(interaction.message.id) || {};
+                this._profileStates.set(interaction.message.id, {
+                    ...updState, viewerId, view: 'select', cachedData: null,
+                });
+            }
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd profile search modal: ${err.message}`);
+        }
+    }
+
+    async _handleProfileSearchSelect(interaction) {
+        await interaction.deferUpdate();
+        try {
+            const [targetUserId, targetGuildId] = interaction.values[0].split(':');
+            const guildId    = interaction.guildId;
+            const viewerId   = interaction.user.id;
+            const isPol      = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+
+            const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+            const embed = this.profileService.buildMainEmbed(data, isPol);
+            const newState = {
+                viewerId, targetUserId, targetGuildId,
+                view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
+            };
+            const components = this.profileService.buildProfileComponents(
+                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                isPol
+            );
+            await interaction.editReply({ content: null, embeds: [embed], components });
+            if (interaction.message?.id) {
+                this._profileStates.set(interaction.message.id, newState);
+            }
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd profile search select: ${err.message}`);
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────────────────
+
     async handleNotificationsCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
         const row = new ActionRowBuilder().addComponents(
@@ -6345,6 +6670,11 @@ class InteractionHandler {
 
             if (customId === 'ach_check_sel') {
                 await this._handleAchCheckSelect(interaction);
+                return;
+            }
+
+            if (customId === 'profile_search_sel') {
+                await this._handleProfileSearchSelect(interaction);
                 return;
             }
 

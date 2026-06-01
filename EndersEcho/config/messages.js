@@ -354,6 +354,16 @@ const pol = {
     bossCfgImgTimeout: '⏱️ Upłynął czas oczekiwania na zdjęcie. Użyj przycisku ponownie.',
     bossCfgImgNoAttachment: '❌ Wiadomość nie zawiera zdjęcia.',
     bossCfgImgInvalidType: '❌ Nieobsługiwany format pliku. Użyj: jpg, png, gif, webp.',
+
+    // /profile
+    profileNotFound: '❌ Nie znaleziono gracza zawierającego "**{query}**" w żadnym rankingu.',
+    profileMultipleResults: '🔍 Znaleziono **{count}** graczy. Wybierz gracza:',
+    profileSelectPlaceholder: 'Wybierz gracza...',
+    profileSearchLabel: 'Wpisz fragment nicku gracza',
+    profileSearchTitle: '🔍 Szukaj gracza',
+    profileExpired: '❌ Ta sesja profilu wygasła. Użyj `/profile` ponownie.',
+    profileWrongUser: '❌ Możesz obsługiwać tylko swój własny profil.',
+    profileNoData: '⚠️ Gracz nie ma żadnych danych w rankingu.',
 };
 
 const eng = {
@@ -712,6 +722,16 @@ const eng = {
     bossCfgImgTimeout: '⏱️ Timed out waiting for an image. Use the button again.',
     bossCfgImgNoAttachment: '❌ Message contains no image attachment.',
     bossCfgImgInvalidType: '❌ Unsupported file type. Use: jpg, png, gif, webp.',
+
+    // /profile
+    profileNotFound: '❌ No player found containing "**{query}**" in any ranking.',
+    profileMultipleResults: '🔍 Found **{count}** players. Select a player:',
+    profileSelectPlaceholder: 'Select a player...',
+    profileSearchLabel: 'Enter part of the player\'s nick',
+    profileSearchTitle: '🔍 Search Player',
+    profileExpired: '❌ This profile session has expired. Use `/profile` again.',
+    profileWrongUser: '❌ You can only manage your own profile.',
+    profileNoData: '⚠️ Player has no data in the ranking.',
 };
 
 module.exports = { pol, eng };
