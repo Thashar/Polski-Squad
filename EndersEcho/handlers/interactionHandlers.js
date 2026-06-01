@@ -4151,12 +4151,18 @@ class InteractionHandler {
                     currentPositionForAch = sortedAfter.findIndex(p => p.userId === userId) + 1;
                     const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
                     const newScoreValue = this.rankingService.parseScoreValue(bestScore);
+                    const _achConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                    const _achActiveGuildIds = new Set(_achConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                    const _achGlobalRanking = await this.rankingService.getGlobalRanking(_achActiveGuildIds);
+                    const _achGlobalIdx = _achGlobalRanking.findIndex(p => p.userId === userId);
+                    const globalPositionForAch = _achGlobalIdx !== -1 ? _achGlobalIdx + 1 : 0;
                     newAchievements = await this.achievementService.processSubmission(guildId, userId, {
                         scoreValue: newScoreValue,
                         bossName,
                         isNewRecord: true,
                         prevScoreValue,
                         currentPosition: currentPositionForAch,
+                        globalPosition: globalPositionForAch,
                     });
                 } catch {}
             }
@@ -4243,12 +4249,18 @@ class InteractionHandler {
                 if (!dryRun && this.achievementService) {
                     try {
                         const bossScoreVal = this.rankingService.parseScoreValue(bestScore);
+                        const _bossAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                        const _bossAchActiveGuildIds = new Set(_bossAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                        const _bossAchGlobalRanking = await this.rankingService.getGlobalRanking(_bossAchActiveGuildIds);
+                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => p.userId === userId);
+                        const bossGlobalPositionForAch = _bossAchGlobalIdx !== -1 ? _bossAchGlobalIdx + 1 : 0;
                         newAchievements = await this.achievementService.processSubmission(guildId, userId, {
                             scoreValue: bossScoreVal,
                             bossName,
                             isNewRecord: false,
                             prevScoreValue: previousBossRecord ? this.rankingService.parseScoreValue(previousBossRecord.score) : 0,
                             currentPosition: 0,
+                            globalPosition: bossGlobalPositionForAch,
                         });
                     } catch {}
                 }
@@ -6898,6 +6910,10 @@ class InteractionHandler {
                 (p.username || p.userId).toLowerCase().includes(query.toLowerCase())
             );
 
+            if (matches.length > 0 && this.achievementService) {
+                this.achievementService.trackProfileSearch(guildId, viewerId).catch(() => {});
+            }
+
             if (matches.length === 0) {
                 // Pokaż błąd z powrotem do aktualnego profilu (zachowaj stan)
                 const t = (pol, eng) => isPol ? pol : eng;
@@ -8571,12 +8587,18 @@ class InteractionHandler {
                         const currentPositionForAch = sortedAfter.findIndex(p => p.userId === targetUserId) + 1;
                         const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
                         const newScoreValue = this.rankingService.parseScoreValue(aiResult.score);
+                        const _analyzeConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                        const _analyzeActiveGuildIds = new Set(_analyzeConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                        const _analyzeGlobalRanking = await this.rankingService.getGlobalRanking(_analyzeActiveGuildIds);
+                        const _analyzeGlobalIdx = _analyzeGlobalRanking.findIndex(p => p.userId === targetUserId);
+                        const analyzeGlobalPositionForAch = _analyzeGlobalIdx !== -1 ? _analyzeGlobalIdx + 1 : 0;
                         newAchievements = await this.achievementService.processSubmission(targetGuildId, targetUserId, {
                             scoreValue: newScoreValue,
                             bossName: aiResult.bossName,
                             isNewRecord: true,
                             prevScoreValue,
                             currentPosition: currentPositionForAch,
+                            globalPosition: analyzeGlobalPositionForAch,
                         });
                     } catch {}
                 }

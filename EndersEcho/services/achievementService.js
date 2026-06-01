@@ -326,6 +326,24 @@ class AchievementService {
         } catch {}
     }
 
+    async trackProfileSearch(guildId, userId) {
+        try {
+            const data = await this.loadData(guildId);
+            const userData = this._ensureUser(data, userId);
+            const p = userData.progress;
+            p.profileSearches = (p.profileSearches || 0) + 1;
+
+            const nowIso = new Date().toISOString();
+            for (const ach of ACHIEVEMENTS) {
+                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
+                try {
+                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                } catch {}
+            }
+            await this.saveData(guildId, data);
+        } catch {}
+    }
+
     /**
      * Tworzy embed i komponenty dla komendy /achievements.
      * @param {string} guildId

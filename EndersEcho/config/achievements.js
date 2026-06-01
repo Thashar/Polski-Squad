@@ -311,6 +311,112 @@ const ACHIEVEMENTS = [
         descPol: 'Twój wynik przeanalizowany przez admina po odrzuceniu przez AI', descEng: 'Your score was re-analyzed by an admin after AI rejection',
         check: (p, _ctx) => (p.aiRescuedCount || 0) >= 1,
     },
+    {
+        id: 'early_bird', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🐓',
+        namePol: 'Ranny Ptaszek',   nameEng: 'Early Bird',
+        descPol: 'Pobij rekord między 5:00 a 9:00 UTC', descEng: 'Beat a record between 5:00 and 9:00 UTC',
+        check: (_p, _ctx) => { const h = new Date().getUTCHours(); return h >= 5 && h < 9; },
+    },
+    {
+        id: 'no_record_10', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🪨',
+        namePol: 'Uparty',   nameEng: 'Stubborn',
+        descPol: 'Dodaj 10 screenów nie pobijając rekordu', descEng: 'Submit 10 screenshots without beating your record',
+        check: (p, _ctx) => (p.nonRecordCount || 0) >= 10,
+    },
+    {
+        id: 'new_year', category: 'explorer', rarity: 'rare', hidden: true, icon: '🎆',
+        namePol: 'Nowy Rok',   nameEng: 'New Year',
+        descPol: 'Pobij rekord 1 stycznia', descEng: 'Beat a record on January 1st',
+        check: (_p, _ctx) => { const d = new Date(); return d.getUTCMonth() === 0 && d.getUTCDate() === 1; },
+    },
+    {
+        id: 'sub_25', category: 'explorer', rarity: 'rare', hidden: true, icon: '💜',
+        namePol: 'Ultrafan',   nameEng: 'Ultra Fan',
+        descPol: 'Aktywuj 25 subskrypcji', descEng: 'Activate 25 subscriptions',
+        check: (p, _ctx) => (p.subscriptions || 0) >= 25,
+    },
+    {
+        id: 'no_record_50', category: 'explorer', rarity: 'rare', hidden: true, icon: '🎭',
+        namePol: 'Masochista',   nameEng: 'Masochist',
+        descPol: 'Dodaj 50 screenów nie pobijając rekordu', descEng: 'Submit 50 screenshots without beating your record',
+        check: (p, _ctx) => (p.nonRecordCount || 0) >= 50,
+    },
+    {
+        id: 'same_day_5', category: 'explorer', rarity: 'mythic', hidden: true, icon: '🏃',
+        namePol: 'Maratończyk',   nameEng: 'Marathon Runner',
+        descPol: 'Pobij rekord 5 razy tego samego dnia', descEng: 'Beat your record 5 times in the same day',
+        check: (p, _ctx) => (p.todayRecordCount || 0) >= 5,
+    },
+    {
+        id: 'comeback_365', category: 'explorer', rarity: 'mythic', hidden: true, icon: '🦅',
+        namePol: 'Feniks',   nameEng: 'Phoenix',
+        descPol: 'Wróć po 365 dniach przerwy', descEng: 'Beat a record after a break of over 365 days',
+        check: (p, _ctx) => {
+            if (!p.lastRecordAt) return false;
+            const daysSince = (Date.now() - new Date(p.lastRecordAt).getTime()) / (1000 * 60 * 60 * 24);
+            return daysSince >= 365;
+        },
+    },
+    {
+        id: 'position_69', category: 'explorer', rarity: 'epic', hidden: true, icon: '😏',
+        namePol: 'Nice',   nameEng: 'Nice',
+        descPol: 'Zajmij dokładnie miejsce #69', descEng: 'Rank exactly #69 on the server',
+        check: (_p, ctx) => ctx.currentPosition === 69,
+    },
+    {
+        id: 'christmas', category: 'explorer', rarity: 'epic', hidden: true, icon: '🎄',
+        namePol: 'Świąteczny Wojownik',   nameEng: 'Christmas Warrior',
+        descPol: 'Pobij rekord 25 grudnia', descEng: 'Beat a record on December 25th',
+        check: (_p, _ctx) => { const d = new Date(); return d.getUTCMonth() === 11 && d.getUTCDate() === 25; },
+    },
+    {
+        id: 'cv_approved_3', category: 'explorer', rarity: 'legendary', hidden: true, icon: '⚖️',
+        namePol: 'Nietykalny',   nameEng: 'Untouchable',
+        descPol: 'Twój wynik zatwierdzony przez admina 3 razy po zgłoszeniu', descEng: 'Your score was approved by an admin 3 times after being reported',
+        check: (p, _ctx) => (p.cvApprovedCount || 0) >= 3,
+    },
+    {
+        id: 'view_1000', category: 'explorer', rarity: 'legendary', hidden: true, icon: '📖',
+        namePol: 'Encyklopedysta',   nameEng: 'Encyclopedist',
+        descPol: 'Sprawdź ranking 1000 razy', descEng: 'View the ranking 1000 times',
+        check: (p, _ctx) => (p.rankingViews || 0) >= 1000,
+    },
+    {
+        id: 'friday_13', category: 'explorer', rarity: 'legendary', hidden: true, icon: '🕐',
+        namePol: 'Pechowiec',   nameEng: 'Black Friday',
+        descPol: 'Pobij rekord w piątek 13-go', descEng: 'Beat a record on Friday the 13th',
+        check: (_p, _ctx) => { const d = new Date(); return d.getUTCDay() === 5 && d.getUTCDate() === 13; },
+    },
+    {
+        id: 'profile_spy_1', category: 'explorer', rarity: 'common', hidden: true, icon: '🔍',
+        namePol: 'Szpieg',   nameEng: 'Spy',
+        descPol: 'Wyszukaj gracza przez /profile', descEng: 'Search for a player via /profile',
+        check: (p, _ctx) => (p.profileSearches || 0) >= 1,
+    },
+    {
+        id: 'profile_spy_10', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🕵️',
+        namePol: 'Wywiadowca',   nameEng: 'Scout',
+        descPol: 'Wyszukaj 10 graczy przez /profile', descEng: 'Search for 10 players via /profile',
+        check: (p, _ctx) => (p.profileSearches || 0) >= 10,
+    },
+    {
+        id: 'profile_spy_50', category: 'explorer', rarity: 'rare', hidden: true, icon: '🧐',
+        namePol: 'Obserwator Profili',   nameEng: 'Profile Analyst',
+        descPol: 'Wyszukaj 50 graczy przez /profile', descEng: 'Search for 50 players via /profile',
+        check: (p, _ctx) => (p.profileSearches || 0) >= 50,
+    },
+    {
+        id: 'profile_spy_100', category: 'explorer', rarity: 'epic', hidden: true, icon: '🗃️',
+        namePol: 'Archiwista',   nameEng: 'Archivist',
+        descPol: 'Wyszukaj 100 graczy przez /profile', descEng: 'Search for 100 players via /profile',
+        check: (p, _ctx) => (p.profileSearches || 0) >= 100,
+    },
+    {
+        id: 'profile_spy_250', category: 'explorer', rarity: 'legendary', hidden: true, icon: '👁️',
+        namePol: 'Wszechwiedzący',   nameEng: 'Omniscient',
+        descPol: 'Wyszukaj 250 graczy przez /profile', descEng: 'Search for 250 players via /profile',
+        check: (p, _ctx) => (p.profileSearches || 0) >= 250,
+    },
 
     // ===== PRESTIŻ (PRESTIGE) =====
     {
@@ -352,6 +458,48 @@ const ACHIEVEMENTS = [
         namePol: 'Finał',   nameEng: 'Finals',
         descPol: 'Zdobądź miejsce w Top 5 serwera', descEng: 'Reach the Top 5 on the server',
         check: (_p, ctx) => ctx.currentPosition > 0 && ctx.currentPosition <= 5,
+    },
+    {
+        id: 'global_top100', category: 'prestige', rarity: 'common', hidden: false, icon: '🌍',
+        namePol: 'Globalny Wojownik',   nameEng: 'Global Warrior',
+        descPol: 'Wejdź w Top 100 globalnie', descEng: 'Reach the Global Top 100',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 100,
+    },
+    {
+        id: 'global_top50', category: 'prestige', rarity: 'uncommon', hidden: false, icon: '🌏',
+        namePol: 'Globalny Pretendent',   nameEng: 'Global Contender',
+        descPol: 'Wejdź w Top 50 globalnie', descEng: 'Reach the Global Top 50',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 50,
+    },
+    {
+        id: 'global_top30', category: 'prestige', rarity: 'rare', hidden: false, icon: '🌐',
+        namePol: 'Globalna Czołówka',   nameEng: 'Global Top Tier',
+        descPol: 'Wejdź w Top 30 globalnie', descEng: 'Reach the Global Top 30',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 30,
+    },
+    {
+        id: 'global_top20', category: 'prestige', rarity: 'rare', hidden: false, icon: '✨',
+        namePol: 'Elita Globalna',   nameEng: 'Global Elite',
+        descPol: 'Wejdź w Top 20 globalnie', descEng: 'Reach the Global Top 20',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 20,
+    },
+    {
+        id: 'global_top10', category: 'prestige', rarity: 'epic', hidden: false, icon: '🌟',
+        namePol: 'Frontrunner',   nameEng: 'Frontrunner',
+        descPol: 'Wejdź w Top 10 globalnie', descEng: 'Reach the Global Top 10',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 10,
+    },
+    {
+        id: 'global_top3', category: 'prestige', rarity: 'legendary', hidden: false, icon: '🌌',
+        namePol: 'Globalne Podium',   nameEng: 'Global Podium',
+        descPol: 'Wejdź w Top 3 globalnie', descEng: 'Reach the Global Top 3',
+        check: (_p, ctx) => (ctx.globalPosition || 0) > 0 && ctx.globalPosition <= 3,
+    },
+    {
+        id: 'global_top1', category: 'prestige', rarity: 'mythic', hidden: false, icon: '👑',
+        namePol: 'Władca Galaktyki',   nameEng: 'Galaxy Ruler',
+        descPol: 'Zajmij #1 globalnie', descEng: 'Reach #1 globally',
+        check: (_p, ctx) => ctx.globalPosition === 1,
     },
 ];
 
