@@ -178,7 +178,7 @@ class AdminPanelService {
         const guildIds = this._getActiveGuildIds();
         const now = new Date();
 
-        const [globalRanking, blockedUsersArr, serverStats] = await Promise.all([
+        const [globalRanking, blockedUsersArr, serverData] = await Promise.all([
             this._services.rankingService?.getGlobalRanking(guildIds).catch(() => []) ?? Promise.resolve([]),
             this._services.userBlockService?.getBlockedUsers().catch(() => []) ?? Promise.resolve([]),
             this._getServerStats([...guildIds]),
@@ -196,11 +196,11 @@ class AdminPanelService {
         });
 
         return [
-            this._buildStatusEmbed(serverStats, lastUpdated),
+            this._buildStatusEmbed(serverData.configured, lastUpdated),
             this._buildOcrEmbed(ocrStats, pendingCvCount),
             this._buildPlayersEmbed(globalRanking, blockedUsersArr, activeCooldownCount),
             this._buildCostEmbed(todayTokens),
-            this._buildServersEmbed(serverStats),
+            this._buildServersEmbed(serverData),
         ];
     }
 
@@ -237,10 +237,15 @@ class AdminPanelService {
         return { promptTokens, outputTokens, requests, cost };
     }
 
-    async _getServerStats(guildIds) {
-        const stats = [];
+    async _getServerStats(configuredGuildIds) {
         const cfgSvc = this._services.guildConfigService;
-        for (const guildId of guildIds) {
+        const botGuildIds = this._client?.guilds?.cache ? new Set(this._client.guilds.cache.keys()) : new Set();
+        const adminGuildId = this._config.adminGuildId || null;
+
+        const configured = [];
+        const absent = [];
+
+        for (const guildId of configuredGuildIds) {
             const cfg = cfgSvc?.getConfig(guildId);
             if (!cfg?.configured) continue;
             let playerCount = 0;
@@ -249,7 +254,7 @@ class AdminPanelService {
                 playerCount = Object.keys(ranking).length;
             } catch { /* pomiń */ }
             const ocrBlocked = cfg.ocrBlocked || [];
-            stats.push({
+            const entry = {
                 guildId,
                 guildName: cfg.guildName || guildId,
                 playerCount,
@@ -257,14 +262,28 @@ class AdminPanelService {
                 testBlocked: ocrBlocked.includes('test'),
                 lang: cfg.lang || 'pol',
                 tag: cfg.tag || null,
-            });
+            };
+            if (botGuildIds.has(guildId)) {
+                configured.push(entry);
+            } else {
+                absent.push(entry);
+            }
         }
-        return stats;
+
+        const unconfigured = [];
+        for (const [guildId, guild] of (this._client?.guilds?.cache || new Map())) {
+            if (adminGuildId && guildId === adminGuildId) continue;
+            const cfg = cfgSvc?.getConfig(guildId);
+            if (cfg?.configured) continue;
+            unconfigured.push({ guildId, guildName: guild.name });
+        }
+
+        return { configured, unconfigured, absent };
     }
 
-    _buildStatusEmbed(serverStats, lastUpdated) {
+    _buildStatusEmbed(configuredServers, lastUpdated) {
         const uptime = fmtUptime(Date.now() - this._startTime);
-        const configuredCount = serverStats.length;
+        const configuredCount = configuredServers.length;
 
         // Następny Global TOP10
         let nextTop10 = '—';
@@ -366,20 +385,43 @@ class AdminPanelService {
             );
     }
 
-    _buildServersEmbed(serverStats) {
-        if (serverStats.length === 0) {
+    _buildServersEmbed({ configured, unconfigured, absent }) {
+        const lines = [];
+
+        if (configured.length > 0) {
+            lines.push('**✅ Skonfigurowane — bot jest**');
+            for (const s of configured) {
+                const ocrIcon = s.updateBlocked ? '❌' : '✅';
+                const tag = s.tag ? ` \`${s.tag}\`` : '';
+                const lang = s.lang.toUpperCase();
+                lines.push(`${ocrIcon} **${s.guildName}**${tag} — ${s.playerCount} gr. | OCR: ${ocrIcon} | ${lang}`);
+            }
+        }
+
+        if (unconfigured.length > 0) {
+            if (lines.length > 0) lines.push('');
+            lines.push('**⚠️ Nieskonfigurowane — bot jest**');
+            for (const s of unconfigured) {
+                lines.push(`⚠️ **${s.guildName}** \`${s.guildId}\``);
+            }
+        }
+
+        if (absent.length > 0) {
+            if (lines.length > 0) lines.push('');
+            lines.push('**🔴 Skonfigurowane — brak bota**');
+            for (const s of absent) {
+                const tag = s.tag ? ` \`${s.tag}\`` : '';
+                const lang = s.lang.toUpperCase();
+                lines.push(`🔴 **${s.guildName}**${tag} — ${s.playerCount} gr. | ${lang}`);
+            }
+        }
+
+        if (lines.length === 0) {
             return new EmbedBuilder()
                 .setColor(0xEB459E)
                 .setTitle('🖥️ Status Serwerów')
                 .setDescription('Brak skonfigurowanych serwerów.');
         }
-
-        const lines = serverStats.map(s => {
-            const ocrIcon = s.updateBlocked ? '❌' : '✅';
-            const tag = s.tag ? ` \`${s.tag}\`` : '';
-            const lang = s.lang.toUpperCase();
-            return `${ocrIcon} **${s.guildName}**${tag} — ${s.playerCount} graczy | OCR: ${ocrIcon} | ${lang}`;
-        });
 
         return new EmbedBuilder()
             .setColor(0xEB459E)
