@@ -139,7 +139,11 @@ class ProfileService {
             .setColor(0x5865F2)
             .setTitle(`👤 ${username} — ${globalGuildName}`);
 
-        // Wiersz 1 (inline): Rola TOP, Pozycja na serwerze, Rankingi ról
+        // Wiersz 1 (3 × inline): Rola TOP | Pozycja na serwerze | Rankingi ról
+        const roleValue = rolePositions.length > 0
+            ? rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`).join('\n')
+            : '—';
+
         embed.addFields(
             {
                 name: t('👑 Rola TOP', '👑 TOP Role'),
@@ -150,41 +154,41 @@ class ProfileService {
                 name: t('🏰 Pozycja na serwerze', '🏰 Server Position'),
                 value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',
                 inline: true,
+            },
+            {
+                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
+                value: roleValue,
+                inline: true,
             }
         );
 
-        if (rolePositions.length > 0) {
-            const lines = rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`);
-            embed.addFields({
-                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
-                value: lines.join('\n'),
-                inline: true,
-            });
-        }
+        // Poniżej — wszystkie pola jedno pod drugim (inline: false)
 
-        // Najlepszy wynik
         const rec = serverRecord || data.globalRecord;
-        if (rec) {
-            const date = new Date(rec.timestamp).toLocaleString(
-                isPol ? 'pl-PL' : 'en-GB',
-                { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-            );
-            const boss = rec.bossName ? ` — ${rec.bossName}` : '';
-            embed.addFields({
+        const scoreValue = rec
+            ? (() => {
+                const date = new Date(rec.timestamp).toLocaleString(
+                    isPol ? 'pl-PL' : 'en-GB',
+                    { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+                );
+                const boss = rec.bossName ? ` — ${rec.bossName}` : '';
+                return `**${rec.score}**${boss}\n📅 ${date}`;
+            })()
+            : '—';
+
+        embed.addFields(
+            {
                 name: t('📊 Najlepszy Wynik', '📊 Best Score'),
-                value: `**${rec.score}**${boss}\n📅 ${date}`,
+                value: scoreValue,
                 inline: false,
-            });
-        }
+            },
+            {
+                name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
+                value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
+                inline: false,
+            }
+        );
 
-        // Pozycja globalna
-        embed.addFields({
-            name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
-            value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
-            inline: false,
-        });
-
-        // Wycinek globalny (z tagiem serwera po wyniku)
         if (snippetPlayers.length > 0) {
             const lines = snippetPlayers.map(p => {
                 const medal = p.position === 1 ? '🥇' : p.position === 2 ? '🥈' : p.position === 3 ? '🥉' : '';
