@@ -287,8 +287,17 @@
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
 | `panel_process_roles` | Pełny reset ról TOP: usuń wszystkie → przyznaj wg aktualnego rankingu (admin + head admin) |
-| `panel_cmd_center` | Otwórz widok Centrum Dowodzenia (head admin) |
+| `panel_cmd_center` | Otwórz widok Centrum Dowodzenia z zakładkami (head admin) |
 | `panel_cmd_center_refresh` | Wymuś natychmiastowy refresh panelu Centrum Dowodzenia (head admin) |
+| `cc_refresh` | Odśwież wiadomość panelu (panel message → ephemeral) |
+| `cc_quick` | Szybki Podgląd — live snapshot OCR/koszty/CV (panel message → ephemeral) |
+| `cc_alerts` | Zarządzanie alertami (panel message → ephemeral) |
+| `cc_alert_ack_all` | Potwierdź wszystkie aktywne alerty |
+| `cc_alert_ack_{type}` | Potwierdź konkretny alert (ocrRate/pendingCv/dailyCost) |
+| `cc_thresh_set_{type}` | Otwórz modal zmiany progu alertu |
+| `cc_thresh_modal_{type}` | Modal zmiany progu (pole `cc_thresh_value`) |
+| `cc_tab_sel` | StringSelectMenu — zmiana zakładki w widoku CC (overview/quick/alert_cfg) |
+| `cc_server_sel` | StringSelectMenu — deep-dive serwera (panel message → ephemeral z TOP5 i paskami postępu) |
 | `panel_info` | Otwórz modal /info (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
@@ -739,14 +748,14 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) pod embedem sukc
 
 ## Centrum Dowodzenia Head Admina (Admin Panel Live Dashboard)
 
-**Plik serwisu:** `services/adminPanelService.js`
+**Pliki serwisów:** `services/adminPanelService.js`, `services/alertService.js`
 
 **Konfiguracja (zmienna env):**
 ```env
 ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 ```
 
-**Działanie:** Panel to jedna stała wiadomość z 5 embedami na kanale head admina. Edytowana automatycznie po każdym zdarzeniu — nie flood kanału nowymi wiadomościami.
+**Działanie:** Panel to jedna stała wiadomość z 5 embedami + komponenty (przyciski + select menu) na kanale head admina. Edytowana automatycznie po każdym zdarzeniu.
 
 **5 embedów panelu:**
 
@@ -757,6 +766,26 @@ ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 | 3 | 🌍 Gracze Globalnie | `0x57F287` | Łącznie graczy, aktywne cooldowny, zablokowanych, TOP 3 globalny |
 | 4 | 💰 Koszty AI — Dzisiaj | `0xFEE75C` | Requesty, tokeny IN/OUT, łącznie tokenów, szacowany koszt ($) |
 | 5 | 🖥️ Status Serwerów | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag |
+
+**Komponenty na wiadomości panelu (Rząd 1 — przyciski):**
+- `🔄 cc_refresh` — wymuś refresh (odpowiada ephemeral)
+- `🚨 cc_alerts (N)` — zarządzaj alertami (czerwony gdy N>0, szary gdy brak; ephemeral)
+- `⚡ cc_quick` — Szybki Podgląd z live statystykami (ephemeral)
+
+**Komponenty na wiadomości panelu (Rząd 2 — select menu):**
+- `cc_server_sel` — deep-dive wybranego serwera: TOP5 z paskami postępu `█░`, koszty AI, OCR status (ephemeral)
+
+**Widok `/manage → 📡 Centrum Dowodzenia` (zakładki via select menu):**
+- `📡 Przegląd` — status panelu + instrukcje obsługi
+- `⚡ Szybki Podgląd` — live OCR rate z paskiem, koszty z paskiem, CV, cooldowny, serwery
+- `⚙️ Konfiguracja Alertów` — stan alertów, potwierdzanie, zmiana progów przez modal
+
+**AlertService (`services/alertService.js`):**
+- Trzy typy alertów: `ocrRate` (min %), `pendingCv` (max count), `dailyCost` (max $)
+- Domyślne progi: OCR <80%, CV >3, koszt >$5.00
+- Debounce: alert wysyłany max raz na godzinę tego samego typu
+- Persistencja: `data/alert_config.json` — `{ thresholds, active }`
+- Po przekroczeniu progu: oddzielna wiadomość `🚨 Centrum Dowodzenia — Nowy Alert!` na kanale panelu
 
 **Triggery automatycznego refresh:**
 - ✅ Po każdym zapisie wyniku (`/update` — zarówno nowy rekord jak i brak rekordu, `!dryRun`)
@@ -780,6 +809,8 @@ adminPanelService.setupChannel(channelId); // zmień kanał i wyślij nową wiad
 adminPanelService.isConfigured(); // czy ENDERSECHO_ADMIN_PANEL_CHANNEL_ID ustawione
 adminPanelService.getChannelId(); // ID aktualnego kanału
 adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie wysłana)
+adminPanelService.alertService;  // getter do AlertService (sprawdź alerty)
+adminPanelService.buildServerDeepDive(guildId); // embed z TOP5 + paski postępu dla serwera
 ```
 
-**Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → widok statusu + `🔄 Odśwież Panel`.
+**Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → zakładki: Przegląd / Szybki Podgląd / Konfiguracja Alertów.

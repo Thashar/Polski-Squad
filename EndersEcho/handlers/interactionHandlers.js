@@ -379,6 +379,14 @@ class InteractionHandler {
                 await this._handlePanelBlockModal(interaction, parts[0], parts[1]);
                 return;
             }
+            if (interaction.customId.startsWith('cc_thresh_modal_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcThreshModal(interaction);
+                return;
+            }
             if (interaction.customId === 'cfg_tag_modal') {
                 await this._handleConfigureTagModal(interaction);
                 return;
@@ -2454,53 +2462,262 @@ class InteractionHandler {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
             return;
         }
-        const t = this._panelT(interaction.guildId);
-        const svc = this.adminPanelService;
+        await this._showCcTab(interaction, 'overview', 'update');
+    }
+
+    // ─── Centrum Dowodzenia — wspólny renderer zakładek ──────────────────────
+
+    _buildCcTabRows(activeTab, svc, alertCount) {
+        const t = this._panelT();
+        const tabSel = new StringSelectMenuBuilder()
+            .setCustomId('cc_tab_sel')
+            .setPlaceholder('📂 Wybierz zakładkę...')
+            .addOptions([
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('📡 Przegląd')
+                    .setValue('overview')
+                    .setDescription('Status panelu i szybkie akcje')
+                    .setDefault(activeTab === 'overview'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('⚡ Szybki Podgląd')
+                    .setValue('quick')
+                    .setDescription('Live snapshot: OCR, gracze, koszty')
+                    .setDefault(activeTab === 'quick'),
+                new StringSelectMenuOptionBuilder()
+                    .setLabel('⚙️ Konfiguracja Alertów')
+                    .setValue('alert_cfg')
+                    .setDescription(`Aktywne alerty: ${alertCount}`)
+                    .setDefault(activeTab === 'alert_cfg'),
+            ]);
+
+        const isConfigured = svc?.isConfigured() ?? false;
+        const btnRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('panel_back')
+                .setEmoji('◀️')
+                .setLabel('Wróć')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('cc_refresh')
+                .setEmoji('🔄')
+                .setLabel('Odśwież Panel')
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(!isConfigured),
+            alertCount > 0
+                ? new ButtonBuilder().setCustomId('cc_alerts').setEmoji('🚨').setLabel(`Alerty (${alertCount})`).setStyle(ButtonStyle.Danger)
+                : new ButtonBuilder().setCustomId('cc_alerts').setEmoji('🚨').setLabel('Alerty').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        );
+
+        return [
+            new ActionRowBuilder().addComponents(tabSel),
+            btnRow,
+        ];
+    }
+
+    _buildCcOverviewEmbed(svc) {
         const isConfigured = svc?.isConfigured();
         const channelId = svc?.getChannelId();
         const messageId = svc?.getMessageId();
 
         let statusLine;
         if (!isConfigured) {
-            statusLine = t(
-                '⚠️ **Panel nie jest skonfigurowany.**\nUstaw `ENDERSECHO_ADMIN_PANEL_CHANNEL_ID` w pliku `.env` i zrestartuj bota.',
-                '⚠️ **Panel is not configured.**\nSet `ENDERSECHO_ADMIN_PANEL_CHANNEL_ID` in the `.env` file and restart the bot.'
-            );
+            statusLine = '⚠️ **Panel nie jest skonfigurowany.**\nUstaw `ENDERSECHO_ADMIN_PANEL_CHANNEL_ID` w `.env` i zrestartuj bota.';
         } else if (messageId) {
-            statusLine = t(
-                `✅ **Panel aktywny** na kanale <#${channelId}>\n📩 ID wiadomości: \`${messageId}\``,
-                `✅ **Panel active** in channel <#${channelId}>\n📩 Message ID: \`${messageId}\``
-            );
+            statusLine = `✅ **Panel aktywny** na kanale <#${channelId}>\n📩 ID wiadomości: \`${messageId}\``;
         } else {
-            statusLine = t(
-                `📬 Kanał ustawiony: <#${channelId}>\n⏳ Wiadomość zostanie wysłana przy najbliższym refresh.`,
-                `📬 Channel set: <#${channelId}>\n⏳ Message will be sent on next refresh.`
+            statusLine = `📬 Kanał ustawiony: <#${channelId}>\n⏳ Wiadomość zostanie wysłana przy najbliższym refresh.`;
+        }
+
+        return new EmbedBuilder()
+            .setColor(0xFF6B35)
+            .setTitle('📡 Centrum Dowodzenia — Przegląd')
+            .setDescription(
+                statusLine + '\n\n' +
+                '**Panel aktualizuje się automatycznie** po każdym nowym rekordzie, akcji admina i weryfikacji społeczności.\n\n' +
+                '• `🔄 Odśwież Panel` — wymuś natychmiastowe odświeżenie wiadomości panelu\n' +
+                '• `🚨 Alerty` — zarządzaj aktywnymi alertami i progami\n' +
+                '• Zakładka **⚡ Szybki Podgląd** — live snapshot statystyk\n' +
+                '• Zakładka **⚙️ Konfiguracja Alertów** — ustaw progi alertów'
             );
+    }
+
+    async _buildCcQuickEmbed() {
+        const fmtCost = (usd) => {
+            if (usd === 0) return '$0.0000';
+            if (usd < 0.0001) return '<$0.0001';
+            return `$${usd.toFixed(4)}`;
+        };
+        const fmtTokens = (n) => {
+            if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+            if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+            return n.toString();
+        };
+        const svc = this.adminPanelService;
+        if (!svc) return new EmbedBuilder().setColor(0xFF4444).setDescription('Brak serwisu panelu.');
+
+        const guildIds = [...svc._getActiveGuildIds()];
+        const ocrStats = svc._services?.ocrStatsService?.getStats() || null;
+        const pendingCv = svc._getPendingCvCount();
+        const { promptTokens, outputTokens, requests, cost } = svc._getTodayTokens(guildIds);
+        const activeCooldowns = svc._getActiveCooldownCount();
+
+        const at = ocrStats?.allTime ?? { total: 0, success: 0, adminFixed: 0 };
+        const ocrRate = at.total > 0
+            ? ((at.total - (at.adminFixed || 0)) / at.total * 100).toFixed(1)
+            : '—';
+        const ocrBar = at.total > 0
+            ? svc._buildProgressBar(parseFloat(ocrRate), 100, 12)
+            : '░'.repeat(12);
+
+        const costBar = svc._buildProgressBar(cost, 5.0, 12);
+
+        const now = new Date().toLocaleString('pl-PL', {
+            timeZone: 'Europe/Warsaw',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+        });
+
+        return new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('⚡ Centrum Dowodzenia — Szybki Podgląd')
+            .addFields(
+                {
+                    name: '📸 OCR',
+                    value: `Skuteczność: **${ocrRate}%**\n\`${ocrBar}\`\nŁącznie: ${at.total} | Interwencje: ${at.adminFixed || 0}`,
+                    inline: true,
+                },
+                {
+                    name: '💰 Koszt AI (dziś)',
+                    value: `**${fmtCost(cost)}** / $5.00\n\`${costBar}\`\nTokeny IN: ${fmtTokens(promptTokens)} | OUT: ${fmtTokens(outputTokens)}\nRequesty: ${requests}`,
+                    inline: true,
+                },
+                {
+                    name: '🗳️ Weryfikacje CV',
+                    value: `Oczekujących: **${pendingCv}**`,
+                    inline: true,
+                },
+                {
+                    name: '⏳ Cooldowny',
+                    value: `Aktywnych: **${activeCooldowns}**`,
+                    inline: true,
+                },
+                {
+                    name: '🖥️ Serwery',
+                    value: `Skonfigurowanych: **${guildIds.length}**`,
+                    inline: true,
+                },
+            )
+            .setFooter({ text: `Live snapshot • ${now}` });
+    }
+
+    _buildCcAlertCfgEmbed(alertSvc) {
+        if (!alertSvc) {
+            return new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle('⚙️ Centrum Dowodzenia — Konfiguracja Alertów')
+                .setDescription('⚠️ AlertService nie jest zainicjalizowany.');
+        }
+
+        const thresholds = alertSvc.getThresholds();
+        const active = alertSvc.getActiveAlerts();
+        const alertCount = alertSvc.getActiveAlertCount();
+
+        const threshLines = [
+            `• **OCR Rate**: alert gdy skuteczność < **${thresholds.ocrRate}%**`,
+            `• **Oczekujące CV**: alert gdy > **${thresholds.pendingCv}**`,
+            `• **Koszt AI/dzień**: alert gdy > **$${thresholds.dailyCost}**`,
+        ];
+
+        const activeLines = [];
+        for (const [type, alert] of Object.entries(active)) {
+            if (!alert) continue;
+            const ackIcon = alert.acknowledged ? '✅' : '🔴';
+            const desc = alertSvc.describeAlert(type, alert.value);
+            const since = new Date(alert.triggeredAt).toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw', hour: '2-digit', minute: '2-digit',
+            });
+            activeLines.push(`${ackIcon} ${desc}\n*od ${since}*`);
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0xFF6B35)
-            .setTitle(t('📡 Centrum Dowodzenia', '📡 Command Center'))
-            .setDescription(
-                statusLine + '\n\n' +
-                t(
-                    '**Panel aktualizuje się automatycznie** po każdym nowym rekordzie, akcji admina i weryfikacji społeczności.\n\nUżyj przycisku poniżej aby wymusić natychmiastowy refresh.',
-                    '**The panel updates automatically** after every new record, admin action and community verification.\n\nUse the button below to force an immediate refresh.'
-                )
+            .setColor(alertCount > 0 ? 0xFF4444 : 0x57F287)
+            .setTitle('⚙️ Centrum Dowodzenia — Konfiguracja Alertów')
+            .addFields({
+                name: '📏 Aktualne progi',
+                value: threshLines.join('\n'),
+                inline: false,
+            });
+
+        if (activeLines.length > 0) {
+            embed.addFields({
+                name: `🚨 Aktywne alerty (${alertCount})`,
+                value: activeLines.join('\n\n'),
+                inline: false,
+            });
+
+            const ackAllRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('cc_alert_ack_all')
+                    .setEmoji('✅')
+                    .setLabel('Potwierdź wszystkie')
+                    .setStyle(ButtonStyle.Success),
             );
+            embed.setDescription('Użyj przycisków poniżej, aby potwierdzić alerty lub zmienić progi.');
+            return { embed, extraRows: [ackAllRow] };
+        } else {
+            embed.addFields({
+                name: '✅ Brak aktywnych alertów',
+                value: 'Wszystkie metryki w normie.',
+                inline: false,
+            });
+        }
 
-        const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
-        const components = [new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('panel_cmd_center_refresh')
-                .setEmoji('🔄')
-                .setLabel(t('Odśwież Panel', 'Refresh Panel'))
-                .setStyle(ButtonStyle.Primary)
-                .setDisabled(!isConfigured),
-            back,
-        )];
+        embed.addFields({
+            name: '🔧 Zmiana progów',
+            value: 'Użyj przycisków poniżej, aby zmienić progi alertów.',
+            inline: false,
+        });
 
-        await interaction.update({ embeds: [embed], components });
+        return { embed, extraRows: [] };
+    }
+
+    async _showCcTab(interaction, tab, method = 'update') {
+        const svc = this.adminPanelService;
+        const alertSvc = svc?.alertService;
+        const alertCount = alertSvc?.getActiveAlertCount() ?? 0;
+
+        let embed;
+        let extraRows = [];
+
+        if (tab === 'overview') {
+            embed = this._buildCcOverviewEmbed(svc);
+        } else if (tab === 'quick') {
+            embed = await this._buildCcQuickEmbed();
+        } else if (tab === 'alert_cfg') {
+            const result = this._buildCcAlertCfgEmbed(alertSvc);
+            embed = result.embed;
+            extraRows = result.extraRows || [];
+
+            // Dodaj przyciski progów (tylko dla admina)
+            const threshBtns = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_thresh_set_ocrRate').setEmoji('📊').setLabel('Próg OCR %').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('cc_thresh_set_pendingCv').setEmoji('🗳️').setLabel('Próg CV').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('cc_thresh_set_dailyCost').setEmoji('💰').setLabel('Próg kosztu').setStyle(ButtonStyle.Secondary),
+            );
+            extraRows.push(threshBtns);
+        } else {
+            embed = this._buildCcOverviewEmbed(svc);
+        }
+
+        const tabRows = this._buildCcTabRows(tab, svc, alertCount);
+        const components = [...tabRows, ...extraRows];
+
+        if (method === 'update') {
+            await interaction.update({ embeds: [embed], components });
+        } else if (method === 'editReply') {
+            await interaction.editReply({ embeds: [embed], components });
+        } else {
+            await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+        }
     }
 
     async _handlePanelCmdCenterRefresh(interaction) {
@@ -2539,6 +2756,179 @@ class InteractionHandler {
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_cmd_center').setEmoji('◀️').setLabel(t('Powrót', 'Back')).setStyle(ButtonStyle.Secondary)
             )]
+        });
+    }
+
+    // ─── Panel message CC handlers (ephemeral) ───────────────────────────────
+
+    async _handleCcRefresh(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const svc = this.adminPanelService;
+        if (!svc?.isConfigured()) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription('❌ Panel nie jest skonfigurowany.')], flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        await svc._doRefresh().catch(() => {});
+        const channelId = svc.getChannelId();
+        await interaction.editReply({
+            embeds: [new EmbedBuilder().setColor(0x57F287)
+                .setTitle('✅ Panel odświeżony')
+                .setDescription(`Panel Centrum Dowodzenia na <#${channelId}> został zaktualizowany.`)
+            ]
+        });
+    }
+
+    async _handleCcQuick(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const embed = await this._buildCcQuickEmbed();
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    async _handleCcAlerts(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const alertSvc = this.adminPanelService?.alertService;
+        const { embed, extraRows } = this._buildCcAlertCfgEmbed(alertSvc);
+
+        const threshBtns = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_thresh_set_ocrRate').setEmoji('📊').setLabel('Próg OCR %').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_pendingCv').setEmoji('🗳️').setLabel('Próg CV').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_dailyCost').setEmoji('💰').setLabel('Próg kosztu').setStyle(ButtonStyle.Secondary),
+        );
+
+        const components = [...(extraRows || []), threshBtns];
+        await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+    }
+
+    async _handleCcAlertAck(interaction, alertType) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const alertSvc = this.adminPanelService?.alertService;
+        if (!alertSvc) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription('❌ AlertService niedostępny.')], flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (alertType === 'all') {
+            await alertSvc.acknowledgeAll();
+        } else {
+            await alertSvc.acknowledgeAlert(alertType);
+        }
+
+        // Odśwież panel żeby zaktualizować licznik przycisków
+        this.adminPanelService?.refresh();
+
+        const { embed, extraRows } = this._buildCcAlertCfgEmbed(alertSvc);
+        const threshBtns = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_thresh_set_ocrRate').setEmoji('📊').setLabel('Próg OCR %').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_pendingCv').setEmoji('🗳️').setLabel('Próg CV').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_dailyCost').setEmoji('💰').setLabel('Próg kosztu').setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [...(extraRows || []), threshBtns] });
+    }
+
+    async _handleCcThreshSet(interaction, alertType) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const alertSvc = this.adminPanelService?.alertService;
+        if (!alertSvc) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription('❌ AlertService niedostępny.')], flags: ['Ephemeral'] });
+            return;
+        }
+        const info = alertSvc.describeThreshold(alertType);
+        const modal = new ModalBuilder()
+            .setCustomId(`cc_thresh_modal_${alertType}`)
+            .setTitle(`Zmień próg: ${info.label}`);
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('cc_thresh_value')
+                .setLabel(`${info.label} (obecny: ${info.current})`)
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(info.unit ? `Podaj wartość (${info.unit})` : 'Podaj wartość liczbową')
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(10)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handleCcServerSel(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const guildId = interaction.values?.[0];
+        if (!guildId) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription('❌ Nie wybrano serwera.')], flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const svc = this.adminPanelService;
+        const embed = await svc?.buildServerDeepDive(guildId);
+        if (!embed) {
+            await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription(`❌ Brak danych dla serwera \`${guildId}\`.`)] });
+            return;
+        }
+        await interaction.editReply({ embeds: [embed] });
+    }
+
+    async _handleCcTabSel(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const tab = interaction.values?.[0] || 'overview';
+        await this._showCcTab(interaction, tab, 'update');
+    }
+
+    async _handleCcThreshModal(interaction) {
+        const alertType = interaction.customId.replace('cc_thresh_modal_', '');
+        const alertSvc = this.adminPanelService?.alertService;
+        if (!alertSvc) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription('❌ AlertService niedostępny.')], flags: ['Ephemeral'] });
+            return;
+        }
+        const raw = interaction.fields.getTextInputValue('cc_thresh_value');
+        const num = parseFloat(raw.replace(',', '.'));
+        if (isNaN(num) || num < 0) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription(`❌ Nieprawidłowa wartość: \`${raw}\`. Podaj dodatnią liczbę.`)], flags: ['Ephemeral'] });
+            return;
+        }
+        const ok = await alertSvc.setThreshold(alertType, num);
+        if (!ok) {
+            await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xFF4444).setDescription(`❌ Nieznany typ alertu: \`${alertType}\``)], flags: ['Ephemeral'] });
+            return;
+        }
+        const info = alertSvc.describeThreshold(alertType);
+        // Odśwież panel żeby odzwierciedlić nowe progi
+        this.adminPanelService?.refresh();
+        const { embed, extraRows } = this._buildCcAlertCfgEmbed(alertSvc);
+        const threshBtns = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_thresh_set_ocrRate').setEmoji('📊').setLabel('Próg OCR %').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_pendingCv').setEmoji('🗳️').setLabel('Próg CV').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_thresh_set_dailyCost').setEmoji('💰').setLabel('Próg kosztu').setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.reply({
+            embeds: [
+                new EmbedBuilder().setColor(0x57F287).setDescription(`✅ Próg **${info.label}** ustawiony na **${info.current}**.`),
+                embed,
+            ],
+            components: [...(extraRows || []), threshBtns],
+            flags: ['Ephemeral'],
         });
     }
 
@@ -4440,6 +4830,14 @@ class InteractionHandler {
         if (customId === 'panel_delete_server_data') return 'Usuń dane serwera (panel)';
         if (customId === 'panel_delete_server_sel') return 'Usuń dane serwera (wybór)';
         if (customId.startsWith('panel_delete_server_ok_')) return `Usuń dane serwera (potwierdź: ${customId.replace('panel_delete_server_ok_', '')})`;
+        if (customId === 'cc_refresh') return 'CC: Odśwież Panel';
+        if (customId === 'cc_quick') return 'CC: Szybki Podgląd';
+        if (customId === 'cc_alerts') return 'CC: Zarządzaj Alertami';
+        if (customId === 'cc_alert_ack_all') return 'CC: Potwierdź wszystkie alerty';
+        if (customId.startsWith('cc_alert_ack_')) return `CC: Potwierdź alert ${customId.replace('cc_alert_ack_', '')}`;
+        if (customId.startsWith('cc_thresh_set_')) return `CC: Zmień próg ${customId.replace('cc_thresh_set_', '')}`;
+        if (customId === 'cc_tab_sel') return 'CC: Zmiana zakładki';
+        if (customId === 'cc_server_sel') return 'CC: Deep-dive serwer';
         return `panel: ${customId}`;
     }
 
@@ -4789,6 +5187,31 @@ class InteractionHandler {
             }
             if (customId === 'panel_cmd_center_refresh') {
                 await this._handlePanelCmdCenterRefresh(interaction);
+                return;
+            }
+            // Centrum Dowodzenia — przyciski na wiadomości panelu lub w zakładce CC
+            if (customId === 'cc_refresh') {
+                await this._handleCcRefresh(interaction);
+                return;
+            }
+            if (customId === 'cc_quick') {
+                await this._handleCcQuick(interaction);
+                return;
+            }
+            if (customId === 'cc_alerts') {
+                await this._handleCcAlerts(interaction);
+                return;
+            }
+            if (customId === 'cc_alert_ack_all') {
+                await this._handleCcAlertAck(interaction, 'all');
+                return;
+            }
+            if (customId.startsWith('cc_alert_ack_')) {
+                await this._handleCcAlertAck(interaction, customId.replace('cc_alert_ack_', ''));
+                return;
+            }
+            if (customId.startsWith('cc_thresh_set_')) {
+                await this._handleCcThreshSet(interaction, customId.replace('cc_thresh_set_', ''));
                 return;
             }
             if (customId === 'panel_remove') {
@@ -6718,6 +7141,14 @@ class InteractionHandler {
                 return;
             }
 
+            if (customId === 'cc_tab_sel') {
+                await this._handleCcTabSel(interaction);
+                return;
+            }
+            if (customId === 'cc_server_sel') {
+                await this._handleCcServerSel(interaction);
+                return;
+            }
             if (customId === 'panel_ocr_guild_select') {
                 await this._handlePanelOcrGuildSelect(interaction);
                 return;
