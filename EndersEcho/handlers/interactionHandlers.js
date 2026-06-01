@@ -133,11 +133,6 @@ class InteractionHandler {
                         .setRequired(true)),
 
             new SlashCommandBuilder()
-                .setName('subscribe')
-                .setDescription('Manage record break notifications for players')
-                .setDescriptionLocalizations(pl('Zarządzaj powiadomieniami o pobiciach rekordów graczy')),
-
-            new SlashCommandBuilder()
                 .setName('test')
                 .setDescription('Add a new Ender\'s Echo score for analysis (Test OCR)')
                 .setDescriptionLocalizations(pl('Dodaj nowy wynik Ender\'s Echo do analizy (Test OCR)'))
@@ -5133,7 +5128,9 @@ class InteractionHandler {
             if (customId === 'profile_main' || customId === 'profile_bosses' ||
                 customId === 'profile_ach_overview' || customId.startsWith('profile_ach_cat_') ||
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
-                customId === 'profile_back' || customId === 'profile_search') {
+                customId === 'profile_back' || customId === 'profile_search' ||
+                customId === 'profile_manage_subs' || customId === 'profile_subscribe' ||
+                customId === 'profile_unsubscribe') {
                 await this._handleProfileButton(interaction);
                 return;
             }
@@ -6792,6 +6789,11 @@ class InteractionHandler {
             return;
         }
 
+        if (customId === 'profile_manage_subs') {
+            await this.handleNotificationsCommand(interaction);
+            return;
+        }
+
         await interaction.deferUpdate();
         try {
             const guildId = interaction.guildId;
@@ -6799,11 +6801,13 @@ class InteractionHandler {
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             if (customId === 'profile_back') {
-                state.targetUserId = state.viewerId;
-                state.view         = 'main';
-                state.category     = null;
-                state.bossPage     = 0;
-                state.cachedData   = null;
+                state.targetUserId   = state.viewerId;
+                state.view           = 'main';
+                state.category       = null;
+                state.bossPage       = 0;
+                state.cachedData     = null;
+                state.isSubscribed   = false;
+                state.subscriberCount = null;
                 // Na serwerze admina wyznacz właściwy serwer gracza z globalnego rankingu
                 const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
                 if (isAdminGuild) {
@@ -6814,6 +6818,23 @@ class InteractionHandler {
                     state.targetGuildId = guildId;
                 }
                 state.lang = this._getProfileLang(guildId, state.targetGuildId);
+            } else if (customId === 'profile_subscribe') {
+                const targetUsername  = state.cachedData?.username || state.targetUserId;
+                const targetGuildName = interaction.client.guilds.cache.get(state.targetGuildId)?.name || state.targetGuildId;
+                const added = await this.notificationService.addSubscription(
+                    state.viewerId, state.targetUserId, state.targetGuildId, targetUsername, targetGuildName
+                );
+                if (added && this.achievementService) {
+                    this.achievementService.trackSubscription(guildId, state.viewerId).catch(() => {});
+                }
+                state.isSubscribed = true;
+                if (state.subscriberCount !== null) state.subscriberCount = (state.subscriberCount || 0) + (added ? 1 : 0);
+            } else if (customId === 'profile_unsubscribe') {
+                const removed = await this.notificationService.removeSubscription(
+                    state.viewerId, state.targetUserId, state.targetGuildId
+                );
+                state.isSubscribed = false;
+                if (state.subscriberCount !== null && removed) state.subscriberCount = Math.max(0, (state.subscriberCount || 1) - 1);
             } else if (customId === 'profile_main') {
                 state.view = 'main';
             } else if (customId === 'profile_bosses') {
@@ -6841,8 +6862,10 @@ class InteractionHandler {
 
             let embed;
             let files = [];
+            const isOwnProfileNow = state.viewerId === state.targetUserId;
             if (state.view === 'main') {
-                embed = this.profileService.buildMainEmbed(data, isPol);
+                const subCount = !isOwnProfileNow ? (state.subscriberCount ?? null) : null;
+                embed = this.profileService.buildMainEmbed(data, isPol, subCount);
             } else if (state.view === 'bosses') {
                 const result = await this.profileService.buildBossesEmbed(data, isPol, state.bossPage);
                 embed = result.embed;
@@ -6873,6 +6896,7 @@ class InteractionHandler {
                 bossPage: state.bossPage,
                 bossMaxPage: state.bossMaxPage,
                 isOwnProfile: state.viewerId === state.targetUserId,
+                isSubscribed: state.isSubscribed || false,
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -6936,14 +6960,28 @@ class InteractionHandler {
                 const targetGuildId = matches[0].sourceGuildId || guildId;
                 const newLang = this._getProfileLang(guildId, targetGuildId);
                 const newIsPol = newLang === 'pol';
+                const isOwnProfile = viewerId === targetUserId;
+
+                let isSubscribed = false;
+                let subscriberCount = null;
+                if (!isOwnProfile && this.notificationService) {
+                    const [viewerSubs, targetSubscribers] = await Promise.all([
+                        this.notificationService.getSubscriptions(viewerId),
+                        this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId),
+                    ]);
+                    isSubscribed = viewerSubs.some(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
+                    subscriberCount = targetSubscribers.length;
+                }
+
                 const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
-                const embed = this.profileService.buildMainEmbed(data, newIsPol);
+                const embed = this.profileService.buildMainEmbed(data, newIsPol, subscriberCount);
                 const newState = {
                     viewerId, targetUserId, targetGuildId, lang: newLang,
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
+                    isSubscribed, subscriberCount,
                 };
                 const components = this.profileService.buildProfileComponents(
-                    { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                    { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed },
                     newIsPol
                 );
                 await interaction.editReply({ content: null, embeds: [embed], components });
@@ -6985,15 +7023,28 @@ class InteractionHandler {
             const lang       = this._getProfileLang(guildId, targetGuildId);
             const isPol      = lang === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+            const isOwnProfile = viewerId === targetUserId;
+
+            let isSubscribed = false;
+            let subscriberCount = null;
+            if (!isOwnProfile && this.notificationService) {
+                const [viewerSubs, targetSubscribers] = await Promise.all([
+                    this.notificationService.getSubscriptions(viewerId),
+                    this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId),
+                ]);
+                isSubscribed = viewerSubs.some(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
+                subscriberCount = targetSubscribers.length;
+            }
 
             const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
-            const embed = this.profileService.buildMainEmbed(data, isPol);
+            const embed = this.profileService.buildMainEmbed(data, isPol, subscriberCount);
             const newState = {
                 viewerId, targetUserId, targetGuildId, lang,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
+                isSubscribed, subscriberCount,
             };
             const components = this.profileService.buildProfileComponents(
-                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed },
                 isPol
             );
             await interaction.editReply({ content: null, embeds: [embed], components });

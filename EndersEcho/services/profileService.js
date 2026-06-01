@@ -161,8 +161,9 @@ class ProfileService {
 
     /**
      * Buduje główny embed profilu.
+     * @param {number|null} subscriberCount - liczba subskrybentów (null = własny profil, nie pokazuj)
      */
-    buildMainEmbed(data, isPol) {
+    buildMainEmbed(data, isPol, subscriberCount = null) {
         const t = (pol, eng) => isPol ? pol : eng;
         const {
             username, globalGuildName, guildTags,
@@ -210,6 +211,16 @@ class ProfileService {
                 return `${posStr} ${nameStr} · ${p.score}${tag}`;
             });
             embed.addFields({ name: t('🌐 Globalny Ranking', '🌐 Global Ranking'), value: lines.join('\n'), inline: false });
+        }
+
+        if (subscriberCount !== null) {
+            embed.addFields({
+                name: t('🔔 Obserwatorzy', '🔔 Watchers'),
+                value: subscriberCount > 0
+                    ? t(`**${subscriberCount}** ${subscriberCount === 1 ? 'osoba obserwuje' : subscriberCount < 5 ? 'osoby obserwują' : 'osób obserwuje'} tego gracza`, `**${subscriberCount}** ${subscriberCount === 1 ? 'person is watching' : 'people are watching'} this player`)
+                    : t('Nikt jeszcze nie obserwuje tego gracza.', 'Nobody is watching this player yet.'),
+                inline: false,
+            });
         }
 
         return embed;
@@ -292,13 +303,13 @@ class ProfileService {
 
     /**
      * Buduje komponenty (przyciski) dla profilu.
-     * @param {Object} state - { view, category, bossPage, bossMaxPage, isOwnProfile }
+     * @param {Object} state - { view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed }
      * @param {boolean} isPol
      * @returns {ActionRowBuilder[]}
      */
     buildProfileComponents(state, isPol) {
         const t = (pol, eng) => isPol ? pol : eng;
-        const { view, category, bossPage, bossMaxPage, isOwnProfile } = state;
+        const { view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
 
@@ -329,20 +340,19 @@ class ProfileService {
                 .setStyle(ButtonStyle.Secondary),
         ];
 
-        if (!isOwnProfile) {
+        if (isOwnProfile) {
             mainButtons.push(
                 new ButtonBuilder()
-                    .setCustomId('profile_back')
-                    .setLabel(t('Wróć do siebie', 'Back to Me'))
-                    .setEmoji('◀️')
-                    .setStyle(ButtonStyle.Danger)
+                    .setCustomId('profile_manage_subs')
+                    .setLabel(t('Subskrypcje', 'Subscriptions'))
+                    .setEmoji('🔔')
+                    .setStyle(ButtonStyle.Secondary)
             );
         }
 
         const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
 
-        // Rząd 2: 5 kategorii osiągnięć (max 5 przycisków per rząd)
-        // "Podsumowanie" obsługuje przycisk "Osiągnięcia" z rzędu 1 (ten sam customId profile_ach_overview)
+        // Rząd 2: 5 kategorii osiągnięć (gdy w widoku ach)
         if (inAch) {
             const CATS = [
                 { key: 'score',    pol: 'Wyniki',      eng: 'Scores',    emoji: '🏆' },
@@ -363,7 +373,23 @@ class ProfileService {
             rows.push(achNavRow);
         }
 
-        // Rząd 3: paginacja bossów
+        // Rząd na cudzy profil: Wróć do siebie (pierwszy) + Subskrybuj/Odsubskrybuj (ostatni)
+        if (!isOwnProfile) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('profile_back')
+                    .setLabel(t('Wróć do siebie', 'Back to Me'))
+                    .setEmoji('◀️')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(isSubscribed ? 'profile_unsubscribe' : 'profile_subscribe')
+                    .setLabel(isSubscribed ? t('Odsubskrybuj', 'Unsubscribe') : t('Subskrybuj', 'Subscribe'))
+                    .setEmoji(isSubscribed ? '🔕' : '🔔')
+                    .setStyle(isSubscribed ? ButtonStyle.Secondary : ButtonStyle.Success)
+            ));
+        }
+
+        // Paginacja bossów
         if (view === 'bosses' && bossMaxPage > 1) {
             rows.push(new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
