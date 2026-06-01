@@ -139,30 +139,9 @@ class ProfileService {
             .setColor(0x5865F2)
             .setTitle(`👤 ${username} — ${globalGuildName}`);
 
-        // Wiersz 1 (3 × inline): Rola TOP | Pozycja na serwerze | Rankingi ról
         const roleValue = rolePositions.length > 0
             ? rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`).join('\n')
             : '—';
-
-        embed.addFields(
-            {
-                name: t('👑 Rola TOP', '👑 TOP Role'),
-                value: topRoleName || '—',
-                inline: true,
-            },
-            {
-                name: t('🏰 Pozycja na serwerze', '🏰 Server Position'),
-                value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',
-                inline: true,
-            },
-            {
-                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
-                value: roleValue,
-                inline: true,
-            }
-        );
-
-        // Poniżej — wszystkie pola jedno pod drugim (inline: false)
 
         const rec = serverRecord || data.globalRecord;
         const scoreValue = rec
@@ -176,17 +155,13 @@ class ProfileService {
             })()
             : '—';
 
+        // Wszystkie pola jedno pod drugim
         embed.addFields(
-            {
-                name: t('📊 Najlepszy Wynik', '📊 Best Score'),
-                value: scoreValue,
-                inline: false,
-            },
-            {
-                name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
-                value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
-                inline: false,
-            }
+            { name: t('👑 Rola TOP',               '👑 TOP Role'),           value: topRoleName || '—',                                                                inline: false },
+            { name: t('🏰 Pozycja na serwerze',    '🏰 Server Position'),    value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',         inline: false },
+            { name: t('🏅 Rankingi Ról',           '🏅 Role Rankings'),      value: roleValue,                                                                          inline: false },
+            { name: t('📊 Najlepszy Wynik',         '📊 Best Score'),         value: scoreValue,                                                                         inline: false },
+            { name: t('🌐 Pozycja Globalna',        '🌐 Global Position'),    value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',         inline: false }
         );
 
         if (snippetPlayers.length > 0) {
@@ -197,11 +172,7 @@ class ProfileService {
                 const tag = guildTags?.[p.sourceGuildId] ? ` · ${guildTags[p.sourceGuildId]}` : '';
                 return `${posStr} ${nameStr} · ${p.score}${tag}`;
             });
-            embed.addFields({
-                name: t('🌐 Globalny Ranking', '🌐 Global Ranking'),
-                value: lines.join('\n'),
-                inline: false,
-            });
+            embed.addFields({ name: t('🌐 Globalny Ranking', '🌐 Global Ranking'), value: lines.join('\n'), inline: false });
         }
 
         return embed;

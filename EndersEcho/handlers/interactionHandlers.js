@@ -6256,6 +6256,15 @@ class InteractionHandler {
         );
     }
 
+    // Pobiera lang dla profilu — na serwerze admina (brak konfiguracji) fallback na targetGuildId
+    _getProfileLang(interactionGuildId, targetGuildId) {
+        const cfg = this.config.getGuildConfig(interactionGuildId);
+        if (cfg?.lang) return cfg.lang;
+        const targetCfg = this.config.getGuildConfig(targetGuildId);
+        if (targetCfg?.lang) return targetCfg.lang;
+        return 'pol';
+    }
+
     async handleProfileCommand(interaction) {
         const guildId      = interaction.guildId;
         const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
@@ -6279,10 +6288,14 @@ class InteractionHandler {
                 }
             }
 
+            const lang  = this._getProfileLang(guildId, targetGuildId);
+            const isPol = lang === 'pol';
+
             const data = await this.profileService.collectData(targetGuildId, viewerId, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol);
             const state = {
                 viewerId, targetUserId: viewerId, targetGuildId,
+                lang,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
             };
             const components = this.profileService.buildProfileComponents(
@@ -6313,7 +6326,7 @@ class InteractionHandler {
         }
 
         if (customId === 'profile_search') {
-            const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+            const isPol = (state.lang || 'pol') === 'pol';
             const t = (pol, eng) => isPol ? pol : eng;
             const modal = new ModalBuilder()
                 .setCustomId('profile_search_modal')
@@ -6335,7 +6348,7 @@ class InteractionHandler {
         await interaction.deferUpdate();
         try {
             const guildId = interaction.guildId;
-            const isPol   = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const isPol   = (state.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             if (customId === 'profile_back') {
@@ -6353,6 +6366,7 @@ class InteractionHandler {
                 } else {
                     state.targetGuildId = guildId;
                 }
+                state.lang = this._getProfileLang(guildId, state.targetGuildId);
             } else if (customId === 'profile_main') {
                 state.view = 'main';
             } else if (customId === 'profile_bosses') {
@@ -6425,7 +6439,8 @@ class InteractionHandler {
             const guildId     = interaction.guildId;
             const viewerId    = interaction.user.id;
             const msgs        = this.msgs(guildId);
-            const isPol       = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const lang        = state?.lang || this._getProfileLang(guildId, guildId);
+            const isPol       = lang === 'pol';
             const query       = interaction.fields.getTextInputValue('profile_search_query').trim();
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
@@ -6435,22 +6450,47 @@ class InteractionHandler {
             );
 
             if (matches.length === 0) {
-                await interaction.editReply({ content: msgs.profileNotFound.replace('{query}', query), embeds: [], components: [] });
+                // Pokaż błąd z powrotem do aktualnego profilu (zachowaj stan)
+                const t = (pol, eng) => isPol ? pol : eng;
+                const notFoundRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('profile_search')
+                        .setLabel(t('Szukaj ponownie', 'Search again'))
+                        .setEmoji('🔍')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+                // Przywróć poprzedni embed profilu jeśli mamy cached data
+                if (state?.cachedData && state.view !== 'select') {
+                    const prevEmbed = this.profileService.buildMainEmbed(state.cachedData, isPol);
+                    const prevComponents = this.profileService.buildProfileComponents(
+                        { view: state.view || 'main', category: state.category, bossPage: state.bossPage, bossMaxPage: state.bossMaxPage, isOwnProfile: state.viewerId === state.targetUserId },
+                        isPol
+                    );
+                    await interaction.editReply({
+                        content: msgs.profileNotFound.replace('{query}', query),
+                        embeds: [prevEmbed],
+                        components: prevComponents,
+                    });
+                } else {
+                    await interaction.editReply({ content: msgs.profileNotFound.replace('{query}', query), embeds: [], components: [notFoundRow] });
+                }
                 return;
             }
 
             if (matches.length === 1) {
                 const targetUserId  = matches[0].userId;
                 const targetGuildId = matches[0].sourceGuildId || guildId;
+                const newLang = this._getProfileLang(guildId, targetGuildId);
+                const newIsPol = newLang === 'pol';
                 const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
-                const embed = this.profileService.buildMainEmbed(data, isPol);
+                const embed = this.profileService.buildMainEmbed(data, newIsPol);
                 const newState = {
-                    viewerId, targetUserId, targetGuildId,
+                    viewerId, targetUserId, targetGuildId, lang: newLang,
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
                 };
                 const components = this.profileService.buildProfileComponents(
                     { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
-                    isPol
+                    newIsPol
                 );
                 await interaction.editReply({ content: null, embeds: [embed], components });
                 if (interaction.message?.id) this._profileStates.set(interaction.message.id, newState);
@@ -6474,7 +6514,7 @@ class InteractionHandler {
             if (interaction.message?.id) {
                 const updState = this._profileStates.get(interaction.message.id) || {};
                 this._profileStates.set(interaction.message.id, {
-                    ...updState, viewerId, view: 'select', cachedData: null,
+                    ...updState, viewerId, lang, view: 'select', cachedData: updState.cachedData ?? null,
                 });
             }
         } catch (err) {
@@ -6488,13 +6528,14 @@ class InteractionHandler {
             const [targetUserId, targetGuildId] = interaction.values[0].split(':');
             const guildId    = interaction.guildId;
             const viewerId   = interaction.user.id;
-            const isPol      = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const lang       = this._getProfileLang(guildId, targetGuildId);
+            const isPol      = lang === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol);
             const newState = {
-                viewerId, targetUserId, targetGuildId,
+                viewerId, targetUserId, targetGuildId, lang,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
             };
             const components = this.profileService.buildProfileComponents(
