@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
@@ -71,6 +71,8 @@ class AdminPanelService {
         this._lastRecord = null;
         this._refreshing = false;
         this._pendingRefresh = false;
+        this._alertService = services.alertService || null;
+        this._lastServerData = null;
     }
 
     setClient(client) {
@@ -114,6 +116,10 @@ class AdminPanelService {
         return this._messageId;
     }
 
+    get alertService() {
+        return this._alertService;
+    }
+
     // Ustaw kanał panelu (używane przez komendę /manage → Centrum Dowodzenia → Skonfiguruj)
     async setupChannel(channelId) {
         this._channelId = channelId;
@@ -143,7 +149,9 @@ class AdminPanelService {
     async _doRefresh() {
         if (!this._client || !this._channelId) return;
 
-        const embeds = await this._buildEmbeds();
+        const embeds = await this._buildEmbeds(); // ustawia this._lastServerData
+        const alertCount = this._alertService?.getActiveAlertCount() ?? 0;
+        const components = this._buildComponents(this._lastServerData, alertCount);
 
         const channel = await this._client.channels.fetch(this._channelId).catch(() => null);
         if (!channel) {
@@ -154,17 +162,20 @@ class AdminPanelService {
         if (this._messageId) {
             const msg = await channel.messages.fetch(this._messageId).catch(() => null);
             if (msg) {
-                await msg.edit({ embeds });
+                await msg.edit({ embeds, components });
+                // Sprawdź alerty po refresh (może wysłać alert jako osobna wiadomość)
+                await this._checkAlerts(channel).catch(() => {});
                 return;
             }
             // Wiadomość usunięta — wyczyść ID, wyślij nową
             this._messageId = null;
         }
 
-        const newMsg = await channel.send({ embeds });
+        const newMsg = await channel.send({ embeds, components });
         this._messageId = newMsg.id;
         await this._persist();
         logger.info(`Panel Centrum Dowodzenia: nowa wiadomość ${this._messageId} na kanale ${this._channelId}`);
+        await this._checkAlerts(channel).catch(() => {});
     }
 
     _getActiveGuildIds() {
@@ -278,7 +289,136 @@ class AdminPanelService {
             unconfigured.push({ guildId, guildName: guild.name });
         }
 
-        return { configured, unconfigured, absent };
+        const result = { configured, unconfigured, absent };
+        this._lastServerData = result;
+        return result;
+    }
+
+    _buildProgressBar(value, max, length = 10) {
+        if (!max || max <= 0) return '░'.repeat(length);
+        const filled = Math.min(length, Math.round((value / max) * length));
+        return '█'.repeat(filled) + '░'.repeat(length - filled);
+    }
+
+    _buildComponents(serverData, alertCount) {
+        const components = [];
+
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('cc_refresh')
+                .setEmoji('🔄')
+                .setLabel('Odśwież')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('cc_alerts')
+                .setEmoji('🚨')
+                .setLabel(alertCount > 0 ? `Alerty (${alertCount})` : 'Alerty')
+                .setStyle(alertCount > 0 ? ButtonStyle.Danger : ButtonStyle.Secondary)
+                .setDisabled(alertCount === 0),
+            new ButtonBuilder()
+                .setCustomId('cc_quick')
+                .setEmoji('⚡')
+                .setLabel('Podsumowanie')
+                .setStyle(ButtonStyle.Secondary),
+        );
+        components.push(row1);
+
+        const configured = serverData?.configured || [];
+        if (configured.length > 0) {
+            const options = configured.slice(0, 25).map(s =>
+                new StringSelectMenuOptionBuilder()
+                    .setLabel((s.tag || s.guildId).slice(0, 100))
+                    .setDescription(`${s.playerCount} graczy | OCR: ${s.updateBlocked ? 'zablokowany' : 'aktywny'} | ${s.lang.toUpperCase()}`.slice(0, 100))
+                    .setValue(s.guildId)
+                    .setEmoji('🖥️')
+            );
+            const serverSel = new StringSelectMenuBuilder()
+                .setCustomId('cc_server_sel')
+                .setPlaceholder('🔍 Deep-dive: wybierz serwer...')
+                .addOptions(options);
+            components.push(new ActionRowBuilder().addComponents(serverSel));
+        }
+
+        return components;
+    }
+
+    async buildServerDeepDive(guildId) {
+        const cfg = this._services.guildConfigService?.getConfig(guildId);
+        if (!cfg) return null;
+
+        const rankingService = this._services.rankingService;
+        const tokenSvc = this._services.tokenUsageService;
+        const ocrStats = this._services.ocrStatsService?.getStats();
+
+        let ranking = {};
+        try {
+            ranking = await rankingService?.loadRanking(guildId).catch(() => ({})) ?? {};
+        } catch { /* pomiń */ }
+
+        const players = Object.values(ranking).sort((a, b) => (b.score || 0) - (a.score || 0));
+        const top5 = players.slice(0, 5);
+        const maxScore = top5[0]?.score || 1;
+
+        const today = new Date().toISOString().slice(0, 10);
+        const tokenData = tokenSvc?.data?.guilds?.[guildId]?.[today];
+        const todayCost = tokenData
+            ? (tokenData.promptTokens / 1_000_000) * 0.10 + (tokenData.outputTokens / 1_000_000) * 0.40
+            : 0;
+
+        const ocrBlocked = cfg.ocrBlocked || [];
+        const ocrStatus = ocrBlocked.length > 0 ? `❌ Zablokowane: \`${ocrBlocked.join(', ')}\`` : '✅ Aktywne';
+
+        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+        const playerLines = top5.map((p, i) => {
+            const bar = this._buildProgressBar(p.score, maxScore, 12);
+            return `${medals[i]} **${(p.username || p.userId).slice(0, 20)}** — ${p.score}\n\`${bar}\``;
+        });
+        if (playerLines.length === 0) playerLines.push('Brak graczy w rankingu.');
+
+        return new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🖥️ Deep-Dive: ${(cfg.tag || guildId).slice(0, 50)}`)
+            .addFields(
+                { name: '👥 Graczy', value: `${players.length}`, inline: true },
+                { name: '🌐 Język', value: (cfg.lang || 'pol').toUpperCase(), inline: true },
+                { name: '📸 OCR', value: ocrStatus, inline: true },
+                { name: '💰 Koszt AI (dziś)', value: fmtCost(todayCost), inline: true },
+                { name: '​', value: '​', inline: true },
+                { name: '​', value: '​', inline: true },
+                { name: '🏆 TOP 5 (z paskami postępu)', value: playerLines.join('\n'), inline: false },
+            )
+            .setFooter({ text: `ID serwera: ${guildId}` });
+    }
+
+    async _checkAlerts(channel) {
+        if (!this._alertService) return;
+
+        const ocrStats = this._services.ocrStatsService?.getStats() || null;
+        const pendingCv = this._getPendingCvCount();
+        const guildIds = [...this._getActiveGuildIds()];
+        const { cost } = this._getTodayTokens(guildIds);
+
+        const at = ocrStats?.allTime ?? { total: 0, adminFixed: 0 };
+        const ocrRate = at.total > 0
+            ? ((at.total - (at.adminFixed || 0)) / at.total) * 100
+            : 100;
+
+        const newAlerts = await this._alertService.check(ocrRate, pendingCv, cost);
+
+        if (newAlerts.length > 0 && channel) {
+            const active = this._alertService.getActiveAlerts();
+            const lines = newAlerts.map(type =>
+                this._alertService.describeAlert(type, active[type]?.value)
+            );
+            await channel.send({
+                embeds: [new EmbedBuilder()
+                    .setColor(0xFF4444)
+                    .setTitle('🚨 Centrum Dowodzenia — Nowy Alert!')
+                    .setDescription(lines.join('\n\n'))
+                    .setFooter({ text: 'Kliknij przycisk 🚨 Alerty na panelu, aby zarządzać' })
+                ]
+            }).catch(() => {});
+        }
     }
 
     _buildStatusEmbed(configuredServers, lastUpdated) {
