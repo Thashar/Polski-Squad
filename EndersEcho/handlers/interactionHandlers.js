@@ -165,12 +165,6 @@ class InteractionHandler {
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
-
-            new SlashCommandBuilder()
-                .setName('generate')
-                .setDescription('Generate Global TOP 10 report on demand (head admins only)')
-                .setDescriptionLocalizations(pl('Wygeneruj raport Global TOP 10 na żądanie (tylko head adminowie)'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
         ];
     }
 
