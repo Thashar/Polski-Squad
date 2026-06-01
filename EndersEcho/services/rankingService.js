@@ -568,6 +568,52 @@ class RankingService {
         const myPosDisabled = disabled || userPage === null;
 
         const navRow = new ActionRowBuilder();
+
+        if (mode === 'global') {
+            // Rząd 1: tylko nawigacja (◀ 🎯 ▶)
+            navRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId('ranking_prev')
+                    .setEmoji('◀️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled || page === 0),
+
+                new ButtonBuilder()
+                    .setCustomId('ranking_mypos')
+                    .setEmoji('🎯')
+                    .setLabel(msgs.buttonMyPos || 'Moja pozycja')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(myPosDisabled),
+
+                new ButtonBuilder()
+                    .setCustomId('ranking_next')
+                    .setEmoji('▶️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled || page >= totalPages - 1)
+            );
+
+            // Rząd 2: Server Ranking | Boss Rankings | Ranking Osiągnięć
+            const modeRow = new ActionRowBuilder().addComponents(
+                switchBtn,
+                new ButtonBuilder()
+                    .setCustomId('ranking_boss_list')
+                    .setEmoji('👾')
+                    .setLabel(msgs.buttonBossRanking || 'Ranking Bossów')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId('ach_rank_start')
+                    .setEmoji('🏆')
+                    .setLabel(msgs.buttonAchRanking || 'Ranking Osiągnięć')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            );
+
+            // Rząd 3: Powrót
+            const backRow = new ActionRowBuilder().addComponents(backBtn);
+            return [navRow, modeRow, ...roleRows, backRow];
+        }
+
         navRow.addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
@@ -589,22 +635,8 @@ class RankingService {
                 .setDisabled(disabled || page >= totalPages - 1),
 
             switchBtn,
-            // W trybie global: bossBtn na końcu wiersza 1 (szary), backBtn w osobnym wierszu
-            ...(mode === 'global' ? [
-                new ButtonBuilder()
-                    .setCustomId('ranking_boss_list')
-                    .setEmoji('👾')
-                    .setLabel(msgs.buttonBossRanking || 'Ranking Bossów')
-                    .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(disabled)
-            ] : [backBtn])
+            backBtn
         );
-
-        // W trybie global: roleRows → backRow (osobny wiersz)
-        if (mode === 'global') {
-            const backRow = new ActionRowBuilder().addComponents(backBtn);
-            return [navRow, ...roleRows, backRow];
-        }
 
         return [navRow, ...roleRows];
     }

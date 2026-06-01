@@ -335,8 +335,9 @@ const pol = {
     bossRecordOnlyConfirmed: '✅ **Nowy rekord na bossie ogłoszony!** 👾 Twój wynik na tym bossie został opublikowany.',
     bossRecordPublicTitle: '👾 Nowy Rekord Bossa!',
 
-    // Ranking bossów
+    // Ranking bossów / osiągnięć
     buttonBossRanking: 'Ranking Bossów',
+    buttonAchRanking: 'Ranking Osiągnięć',
     bossRankingTitle: '👾 Ranking',
     bossRankingSelectTitle: '👾 Wybierz bossa',
     bossRankingSelectDesc: 'Wybierz bossa z listy aby zobaczyć globalny ranking.',
@@ -703,8 +704,9 @@ const eng = {
     bossRecordOnlyConfirmed: '✅ **New boss record announced!** 👾 Your score on this boss has been published.',
     bossRecordPublicTitle: '👾 New Boss Record!',
 
-    // Boss rankings
+    // Boss / achievement rankings
     buttonBossRanking: 'Boss Rankings',
+    buttonAchRanking: 'Achievement Ranking',
     bossRankingTitle: '👾 Ranking',
     bossRankingSelectTitle: '👾 Select a Boss',
     bossRankingSelectDesc: 'Choose a boss from the list to view the global ranking.',

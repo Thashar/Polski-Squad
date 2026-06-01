@@ -271,12 +271,6 @@ class ProfileService {
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
 
-        const rankingBtn = new ButtonBuilder()
-            .setCustomId('ach_rank_start')
-            .setLabel(t('Ranking osiągnięć', 'Achievement Ranking'))
-            .setEmoji('🏆')
-            .setStyle(ButtonStyle.Secondary);
-
         // Rząd 1: zakładki główne
         const mainButtons = [
             new ButtonBuilder()
@@ -297,21 +291,14 @@ class ProfileService {
                 .setEmoji('🏆')
                 .setStyle(inAch ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(inAch && view === 'ach_overview'),
+            new ButtonBuilder()
+                .setCustomId('profile_search')
+                .setLabel(t('Szukaj gracza', 'Search Player'))
+                .setEmoji('🔍')
+                .setStyle(ButtonStyle.Secondary),
         ];
 
-        if (isOwnProfile) {
-            // Własny profil: przycisk szukaj zawsze, ranking osiągnięć tylko w zakładce osiągnięć
-            mainButtons.push(
-                new ButtonBuilder()
-                    .setCustomId('profile_search')
-                    .setLabel(t('Szukaj gracza', 'Search Player'))
-                    .setEmoji('🔍')
-                    .setStyle(ButtonStyle.Secondary)
-            );
-            if (inAch) mainButtons.push(rankingBtn);
-        } else {
-            // Cudzy profil: zamiast szukaj → ranking osiągnięć, na końcu przycisk powrotu
-            mainButtons.push(rankingBtn);
+        if (!isOwnProfile) {
             mainButtons.push(
                 new ButtonBuilder()
                     .setCustomId('profile_back')
