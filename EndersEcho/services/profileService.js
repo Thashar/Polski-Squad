@@ -121,6 +121,7 @@ class ProfileService {
 
         const username = serverRecord?.username || globalRecord?.username || targetUserId;
         const knownBossNames = Array.isArray(knownBossNamesRaw) ? [...knownBossNamesRaw].sort() : [];
+        const botAvatarURL = client.user?.displayAvatarURL({ size: 128 }) || null;
 
         // Nazwa serwera skąd pochodzi globalny wynik gracza
         const globalSourceGuildId = globalRecord?.sourceGuildId || guildId;
@@ -154,6 +155,7 @@ class ProfileService {
             topRoleIconURL,
             userAvatarURL,
             bestBossName,
+            botAvatarURL,
         };
     }
 
@@ -266,9 +268,10 @@ class ProfileService {
                 ),
             });
 
-        // Ikona bossa z najlepszym wynikiem gracza
+        // Ikona bossa z najlepszym wynikiem gracza (fallback: avatar bota)
         const files = [];
         const bestBoss = data.bestBossName;
+        let bossImageSet = false;
         if (bestBoss && this._dataDir && this._bossAliasService) {
             const imgPath = this._bossAliasService.getBossImagePath(bestBoss);
             if (imgPath) {
@@ -276,8 +279,12 @@ class ProfileService {
                     const buf = await fs.readFile(path.join(this._dataDir, 'boss_images', imgPath));
                     files.push(new AttachmentBuilder(buf, { name: imgPath }));
                     embed.setThumbnail(`attachment://${imgPath}`);
+                    bossImageSet = true;
                 } catch { /* bez zdjęcia */ }
             }
+        }
+        if (!bossImageSet && data.botAvatarURL) {
+            embed.setThumbnail(data.botAvatarURL);
         }
 
         return { embed, totalPages, currentPage: safePage, files };
