@@ -6272,7 +6272,6 @@ class InteractionHandler {
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             const viewerId    = interaction.user.id;
-            const isPol       = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             // Na serwerze admina użyj serwera skąd pochodzi globalny wynik gracza
