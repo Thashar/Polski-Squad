@@ -150,11 +150,6 @@ class InteractionHandler {
                         .setRequired(true)),
 
             new SlashCommandBuilder()
-                .setName('achievements')
-                .setDescription('View your unlocked achievements')
-                .setDescriptionLocalizations(pl('Sprawdź swoje odblokowane osiągnięcia')),
-
-            new SlashCommandBuilder()
                 .setName('profile')
                 .setDescription('View player profile: records, bosses and achievements')
                 .setDescriptionLocalizations(pl('Wyświetl profil gracza: rekordy, bossowie i osiągnięcia')),
