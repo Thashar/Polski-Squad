@@ -6719,18 +6719,10 @@ class InteractionHandler {
             const viewerId    = interaction.user.id;
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
-            // Na serwerze admina użyj serwera skąd pochodzi globalny wynik gracza
-            let targetGuildId = guildId;
-            if (isAdminGuild) {
-                const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-                const entry = globalRanking.find(p => p.userId === viewerId);
-                if (entry?.sourceGuildId) {
-                    targetGuildId = entry.sourceGuildId;
-                } else {
-                    const firstGuild = [...allGuildIds][0];
-                    if (firstGuild) targetGuildId = firstGuild;
-                }
-            }
+            // Zawsze używaj serwera skąd pochodzi najlepszy wynik gracza
+            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+            const entry = globalRanking.find(p => p.userId === viewerId);
+            let targetGuildId = entry?.sourceGuildId || guildId;
 
             const lang  = this._getProfileLang(guildId, targetGuildId);
             const isPol = lang === 'pol';
