@@ -91,9 +91,21 @@ class ProfileService {
         const username = serverRecord?.username || globalRecord?.username || targetUserId;
         const knownBossNames = Array.isArray(knownBossNamesRaw) ? [...knownBossNamesRaw].sort() : [];
 
+        // Nazwa serwera skąd pochodzi globalny wynik gracza
+        const globalSourceGuildId = globalRecord?.sourceGuildId || guildId;
+        const globalGuildName = client.guilds.cache.get(globalSourceGuildId)?.name || guild?.name || guildId;
+
+        // Tagi serwerów do wyświetlania w snippecie globalnym
+        const allGuildsConfig = this._guildConfigService?.getAllConfiguredGuilds() || [];
+        const guildTags = Object.fromEntries(
+            allGuildsConfig.filter(g => g.tag).map(g => [g.id, g.tag])
+        );
+
         return {
             guildId,
             guildName: guild?.name || guildId,
+            globalGuildName,
+            guildTags,
             targetUserId,
             username,
             serverRecord,
@@ -111,85 +123,76 @@ class ProfileService {
     }
 
     /**
-     * Buduje główny embed profilu (rekord serwera, global, snippet, role).
+     * Buduje główny embed profilu.
      */
     buildMainEmbed(data, isPol) {
         const t = (pol, eng) => isPol ? pol : eng;
         const {
-            username, guildName, serverRecord, serverPosition, serverTotal,
+            username, globalGuildName, guildTags,
+            serverRecord, serverPosition, serverTotal,
             globalPosition, globalTotal, topRoleName, rolePositions, snippetPlayers,
         } = data;
 
         const embed = new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle(`👤 ${username}`)
-            .setFooter({ text: guildName });
+            .setTitle(`👤 ${username} — ${globalGuildName}`);
 
-        // Wiersz statystyk (inline)
+        // Wiersz 1 (inline): Rola TOP, Pozycja na serwerze, Rankingi ról
         embed.addFields(
-            {
-                name: t('🖥️ Rekord Serwera', '🖥️ Server Record'),
-                value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',
-                inline: true,
-            },
-            {
-                name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
-                value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
-                inline: true,
-            },
             {
                 name: t('👑 Rola TOP', '👑 TOP Role'),
                 value: topRoleName || '—',
                 inline: true,
+            },
+            {
+                name: t('🏰 Pozycja na serwerze', '🏰 Server Position'),
+                value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',
+                inline: true,
             }
         );
 
+        if (rolePositions.length > 0) {
+            const lines = rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`);
+            embed.addFields({
+                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
+                value: lines.join('\n'),
+                inline: true,
+            });
+        }
+
         // Najlepszy wynik
-        if (serverRecord) {
-            const date = new Date(serverRecord.timestamp).toLocaleString(
+        const rec = serverRecord || data.globalRecord;
+        if (rec) {
+            const date = new Date(rec.timestamp).toLocaleString(
                 isPol ? 'pl-PL' : 'en-GB',
                 { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
             );
-            const boss = serverRecord.bossName ? ` — ${serverRecord.bossName}` : '';
+            const boss = rec.bossName ? ` — ${rec.bossName}` : '';
             embed.addFields({
                 name: t('📊 Najlepszy Wynik', '📊 Best Score'),
-                value: `**${serverRecord.score}**${boss}\n📅 ${date}`,
-                inline: false,
-            });
-        } else if (data.globalRecord) {
-            // Brak rekordu na serwerze, ale jest globalny
-            const date = new Date(data.globalRecord.timestamp).toLocaleString(
-                isPol ? 'pl-PL' : 'en-GB',
-                { timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-            );
-            const boss = data.globalRecord.bossName ? ` — ${data.globalRecord.bossName}` : '';
-            embed.addFields({
-                name: t('📊 Najlepszy Wynik (Global)', '📊 Best Score (Global)'),
-                value: `**${data.globalRecord.score}**${boss}\n📅 ${date}`,
+                value: `**${rec.score}**${boss}\n📅 ${date}`,
                 inline: false,
             });
         }
 
-        // Wycinek globalny
+        // Pozycja globalna
+        embed.addFields({
+            name: t('🌐 Pozycja Globalna', '🌐 Global Position'),
+            value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',
+            inline: false,
+        });
+
+        // Wycinek globalny (z tagiem serwera po wyniku)
         if (snippetPlayers.length > 0) {
             const lines = snippetPlayers.map(p => {
                 const medal = p.position === 1 ? '🥇' : p.position === 2 ? '🥈' : p.position === 3 ? '🥉' : '';
                 const posStr = medal ? `${medal} \`#${p.position}\`` : `\`#${p.position}\``;
                 const nameStr = p.isTarget ? `**__${p.username}__**` : `**${p.username}**`;
-                return `${posStr} ${nameStr} · ${p.score}`;
+                const tag = guildTags?.[p.sourceGuildId] ? ` \`${guildTags[p.sourceGuildId]}\`` : '';
+                return `${posStr} ${nameStr} · ${p.score}${tag}`;
             });
             embed.addFields({
                 name: t('🌐 Globalny Ranking', '🌐 Global Ranking'),
-                value: lines.join('\n'),
-                inline: false,
-            });
-        }
-
-        // Rankingi ról
-        if (rolePositions.length > 0) {
-            const lines = rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`);
-            embed.addFields({
-                name: t('🏅 Rankingi Ról', '🏅 Role Rankings'),
                 value: lines.join('\n'),
                 inline: false,
             });
