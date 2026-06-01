@@ -27,11 +27,12 @@ class ProfileService {
         const guild = client.guilds.cache.get(guildId);
         const guildConfig = this._guildConfigService?.getConfig(guildId);
 
-        const [sortedPlayers, globalRanking, allBossRecords, knownBossNamesRaw] = await Promise.all([
+        const [sortedPlayers, globalRanking, allBossRecords, knownBossNamesRaw, bossGlobalPositions] = await Promise.all([
             this._rankingService.getSortedPlayers(guildId).catch(() => []),
             this._rankingService.getGlobalRanking(allGuildIds).catch(() => []),
             this._bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, targetUserId).catch(() => ({})),
             Promise.resolve(this._bossAliasService.getExtraEnglishNames()),
+            this._bossRecordService.getPlayerBossPositions(allGuildIds, targetUserId).catch(() => ({})),
         ]);
 
         // Pozycja na serwerze
@@ -118,6 +119,7 @@ class ProfileService {
             topRoleName,
             rolePositions,
             allBossRecords,
+            bossGlobalPositions,
             knownBossNames,
         };
     }
@@ -207,25 +209,40 @@ class ProfileService {
      */
     buildBossesEmbed(data, isPol, page) {
         const t = (pol, eng) => isPol ? pol : eng;
-        const { username, guildName, knownBossNames, allBossRecords } = data;
+        const { username, knownBossNames, allBossRecords, bossGlobalPositions } = data;
 
-        const totalBosses = knownBossNames.length;
+        // Rozdziel na: z rekordem (wg scoreValue malejąco) i bez rekordu (alfabetycznie)
+        const withRecord = knownBossNames
+            .filter(b => allBossRecords[b])
+            .sort((a, b) => (allBossRecords[b].scoreValue || 0) - (allBossRecords[a].scoreValue || 0));
+        const noRecord = knownBossNames.filter(b => !allBossRecords[b]);
+
+        const sorted = [...withRecord, ...noRecord];
+        const totalBosses = sorted.length;
         const totalPages  = Math.max(1, Math.ceil(totalBosses / BOSSES_PER_PAGE));
         const safePage    = Math.max(0, Math.min(page, totalPages - 1));
-
-        const slice = knownBossNames.slice(safePage * BOSSES_PER_PAGE, (safePage + 1) * BOSSES_PER_PAGE);
+        const slice       = sorted.slice(safePage * BOSSES_PER_PAGE, (safePage + 1) * BOSSES_PER_PAGE);
 
         let description;
         if (totalBosses === 0) {
             description = t('Brak skonfigurowanych bossów.', 'No configured bosses.');
         } else {
-            const lines = slice.map(bossName => {
+            const lines = [];
+            for (const bossName of slice) {
                 const rec = allBossRecords[bossName];
-                if (!rec) return `— **${bossName}**: ${t('brak rekordu', 'no record')}`;
-                const date = new Date(rec.timestamp).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB');
-                return `✅ **${bossName}**: ${rec.score} • ${date}`;
-            });
-            description = lines.join('\n');
+                if (!rec) {
+                    lines.push(`— **${bossName}**`);
+                    continue;
+                }
+                // Numer = pozycja w posortowanej liście z rekordem (1-indexed, globalnie po stronach)
+                const pos = String(withRecord.indexOf(bossName) + 1).padStart(2, '0');
+                const date = new Date(rec.timestamp);
+                const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}.${date.getFullYear()}`;
+                const globalPos = bossGlobalPositions?.[bossName];
+                const globalStr = globalPos ? `  ·  #${globalPos} ${t('globalnie', 'globally')}` : '';
+                lines.push(`\`${pos}\`  **${bossName}**  ·  **${rec.score}**\n> *${shortDate}*${globalStr}`);
+            }
+            description = lines.join('\n\n');
         }
 
         const embed = new EmbedBuilder()
@@ -233,7 +250,10 @@ class ProfileService {
             .setTitle(`🎯 ${t('Bossowie', 'Bosses')} — ${username}`)
             .setDescription(description)
             .setFooter({
-                text: `${guildName} · ${t(`Strona ${safePage + 1} z ${totalPages}`, `Page ${safePage + 1} of ${totalPages}`)} · ${t(`${totalBosses} bossów`, `${totalBosses} bosses`)}`,
+                text: t(
+                    `Strona ${safePage + 1} z ${totalPages} · ${withRecord.length} rekordów · ${totalBosses} bossów`,
+                    `Page ${safePage + 1} of ${totalPages} · ${withRecord.length} records · ${totalBosses} bosses`
+                ),
             });
 
         return { embed, totalPages, currentPage: safePage };

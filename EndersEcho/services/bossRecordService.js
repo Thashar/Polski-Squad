@@ -135,6 +135,38 @@ class BossRecordService {
     }
 
     /**
+     * Liczy globalną pozycję gracza per boss jednym przebiegiem przez wszystkie serwery.
+     * Zwraca tylko bossów gdzie gracz MA rekord.
+     * @param {string[]|Set} allGuildIds
+     * @param {string} userId
+     * @returns {Promise<Object>} { bossName: position (1-indexed) }
+     */
+    async getPlayerBossPositions(allGuildIds, userId) {
+        const allGuildsData = await Promise.all(
+            [...allGuildIds].map(gid => this._load(gid).catch(() => ({})))
+        );
+        // Zbierz najlepszy wynik per gracz per boss ze wszystkich serwerów
+        const bossPlayerBest = {}; // bossName -> Map<userId, scoreValue>
+        for (const guildData of allGuildsData) {
+            for (const [uid, bosses] of Object.entries(guildData)) {
+                for (const [bossName, rec] of Object.entries(bosses)) {
+                    if (!bossPlayerBest[bossName]) bossPlayerBest[bossName] = new Map();
+                    const cur = bossPlayerBest[bossName].get(uid) ?? -Infinity;
+                    if (rec.scoreValue > cur) bossPlayerBest[bossName].set(uid, rec.scoreValue);
+                }
+            }
+        }
+        const positions = {};
+        for (const [bossName, playerMap] of Object.entries(bossPlayerBest)) {
+            const targetScore = playerMap.get(userId);
+            if (targetScore === undefined) continue;
+            const sorted = [...playerMap.values()].sort((a, b) => b - a);
+            positions[bossName] = sorted.findIndex(s => s === targetScore) + 1;
+        }
+        return positions;
+    }
+
+    /**
      * Zwraca rekordy bossów jednego gracza na danym serwerze.
      * @param {string} guildId
      * @param {string} userId
