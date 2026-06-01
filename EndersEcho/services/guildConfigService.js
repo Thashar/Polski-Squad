@@ -199,6 +199,15 @@ class GuildConfigService {
     }
 
     /**
+     * Usuwa całą konfigurację serwera z guild_configs.json
+     * @param {string} guildId
+     */
+    async deleteConfig(guildId) {
+        this._guilds.delete(guildId);
+        await this._persist();
+    }
+
+    /**
      * Persystuje stan do pliku JSON (serialized writes)
      */
     async _persist() {

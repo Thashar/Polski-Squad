@@ -181,6 +181,7 @@
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
    - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
+   - **Usuń dane serwera (head admin):** lista skonfigurowanych serwerów, na których bota już nie ma (`configured=true` ale `!guilds.cache.has(guildId)`) → potwierdzenie → usuwa `data/guilds/{guildId}/` + wpis z `guild_configs.json`. Operacja nieodwracalna.
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
    - **Centrum Dowodzenia (head admin):** panel 5 embedów na dedykowanym kanale, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
@@ -199,7 +200,7 @@
   - Rząd 1: `🔁 Przetwórz role`, `◀️ Wróć`
 - **Sub-panel "Zarządzaj serwerem" (Head Admin):**
   - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
-  - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `◀️ Wróć`
+  - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `🗑️ Usuń dane serwera`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Admin):**
   - Rząd 1: `📊 Zużycie tokenów`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Head Admin):**
@@ -303,6 +304,9 @@
 | `panel_ban_guild_ok_{guildId}` | Potwierdź ban serwera |
 | `panel_unban_guild` | Lista zbanowanych serwerów |
 | `panel_unban_guild_sel` | StringSelectMenu — wybór serwera do odbanowania |
+| `panel_delete_server_data` | Panel usuwania danych serwera (head admin) — lista skonfigurowanych serwerów bez bota |
+| `panel_delete_server_sel` | StringSelectMenu — wybór serwera do usunięcia danych |
+| `panel_delete_server_ok_{guildId}` | Potwierdź usunięcie danych serwera |
 | `panel_ach_del` | Otwórz modal wyszukiwania gracza (head admin) |
 | `panel_ach_del_modal` | Modal wyszukiwania (pole `ach_del_query`) |
 | `panel_ach_del_ps` | StringSelectMenu — wybór gracza |

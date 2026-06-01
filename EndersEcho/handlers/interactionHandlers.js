@@ -2257,6 +2257,7 @@ class InteractionHandler {
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
                     new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('🗑️').setLabel(t('Usuń dane serwera', 'Delete Server Data')).setStyle(ButtonStyle.Danger),
                     back,
                 ),
             ];
@@ -4438,6 +4439,9 @@ class InteractionHandler {
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
         if (customId.startsWith('panel_ban_guild_ok_')) return `Zbanuj serwer (potwierdź: ${customId.replace('panel_ban_guild_ok_', '')})`;
+        if (customId === 'panel_delete_server_data') return 'Usuń dane serwera (panel)';
+        if (customId === 'panel_delete_server_sel') return 'Usuń dane serwera (wybór)';
+        if (customId.startsWith('panel_delete_server_ok_')) return `Usuń dane serwera (potwierdź: ${customId.replace('panel_delete_server_ok_', '')})`;
         return `panel: ${customId}`;
     }
 
@@ -4988,6 +4992,25 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBanServer(interaction);
+                return;
+            }
+
+            if (customId === 'panel_delete_server_data') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelDeleteServerData(interaction);
+                return;
+            }
+
+            if (customId.startsWith('panel_delete_server_ok_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const guildIdToDelete = customId.replace('panel_delete_server_ok_', '');
+                await this._handlePanelDeleteServerDataConfirm(interaction, guildIdToDelete);
                 return;
             }
 
@@ -6768,6 +6791,14 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBanGuildSelect(interaction);
+                return;
+            }
+            if (customId === 'panel_delete_server_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelDeleteServerDataSelect(interaction);
                 return;
             }
             if (customId === 'panel_unban_guild_sel') {
@@ -9874,6 +9905,136 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
             )],
         });
+    }
+
+    async _handlePanelDeleteServerData(interaction) {
+        const t = this._panelT(interaction.guildId);
+
+        const configuredIds = this.guildConfigService.getAllConfiguredGuildIds();
+        const absentGuilds = configuredIds.filter(guildId => !interaction.client.guilds.cache.has(guildId));
+
+        if (absentGuilds.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder()
+                    .setColor(0x57F287)
+                    .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))
+                    .setDescription(t(
+                        'Brak skonfigurowanych serwerów, na których bot już nie jest obecny.',
+                        'No configured servers where the bot is no longer present.'
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_cat_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+
+        const options = absentGuilds.slice(0, 25).map(guildId => {
+            const cfg = this.guildConfigService.getConfig(guildId);
+            const label = cfg?.tag || guildId;
+            return {
+                label: label.substring(0, 100),
+                description: guildId,
+                value: guildId,
+            };
+        });
+
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(0xFF6B35)
+                .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))
+                .setDescription(t(
+                    `Znaleziono **${absentGuilds.length}** serwer(ów), na których bot już nie jest obecny.\n\nWybierz serwer, którego dane chcesz usunąć:`,
+                    `Found **${absentGuilds.length}** server(s) where the bot is no longer present.\n\nSelect a server to delete its data:`
+                ))],
+            components: [
+                new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId('panel_delete_server_sel')
+                        .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                        .addOptions(options)
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_cat_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                ),
+            ],
+        });
+    }
+
+    async _handlePanelDeleteServerDataSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const guildId = interaction.values[0];
+        const cfg = this.guildConfigService.getConfig(guildId);
+        const guildName = cfg?.tag || guildId;
+
+        const embed = new EmbedBuilder()
+            .setColor(0xFF0000)
+            .setTitle(t('⚠️ Potwierdź usunięcie danych', '⚠️ Confirm Data Deletion'))
+            .setDescription(t(
+                `Czy na pewno chcesz usunąć wszystkie dane serwera **${guildName}**?\n\n` +
+                `Zostaną usunięte:\n` +
+                `• Ranking graczy\n` +
+                `• Historia wyników\n` +
+                `• Osiągnięcia graczy\n` +
+                `• Rekordy bossów\n` +
+                `• Konfiguracja serwera\n\n` +
+                `⚠️ **Ta operacja jest nieodwracalna!**`,
+                `Are you sure you want to delete all data for server **${guildName}**?\n\n` +
+                `The following will be deleted:\n` +
+                `• Player rankings\n` +
+                `• Score history\n` +
+                `• Player achievements\n` +
+                `• Boss records\n` +
+                `• Server configuration\n\n` +
+                `⚠️ **This action cannot be undone!**`
+            ));
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`panel_delete_server_ok_${guildId}`).setEmoji('✅').setLabel(t('Tak, usuń dane', 'Yes, delete data')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('❌').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [row] });
+    }
+
+    async _handlePanelDeleteServerDataConfirm(interaction, guildIdToDelete) {
+        const t = this._panelT(interaction.guildId);
+        const cfg = this.guildConfigService.getConfig(guildIdToDelete);
+        const guildName = cfg?.tag || guildIdToDelete;
+
+        try {
+            const guildDataDir = path.join(__dirname, '../data/guilds', guildIdToDelete);
+            await fs.rm(guildDataDir, { recursive: true, force: true }).catch(err => {
+                if (err.code !== 'ENOENT') throw err;
+            });
+
+            await this.guildConfigService.deleteConfig(guildIdToDelete);
+
+            const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+            this.logService._gl(interaction.guildId).warn(`${this.logService.nickLink(nick, interaction.user.id)} Usunięto dane serwera "${guildName}" (${guildIdToDelete})`);
+
+            await interaction.update({
+                embeds: [new EmbedBuilder()
+                    .setColor(0x57F287)
+                    .setTitle(t('✅ Dane usunięte', '✅ Data Deleted'))
+                    .setDescription(t(
+                        `Dane serwera **${guildName}** zostały pomyślnie usunięte.`,
+                        `Data for server **${guildName}** has been successfully deleted.`
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+        } catch (err) {
+            this.logService._gl(interaction.guildId).error(`Błąd usuwania danych serwera "${guildName}": ${err.message}`);
+            await interaction.update({
+                embeds: [new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setDescription(t(`❌ Błąd podczas usuwania danych: ${err.message}`, `❌ Error deleting data: ${err.message}`))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+        }
     }
 
     async _handlePanelUnbanGuild(interaction) {
