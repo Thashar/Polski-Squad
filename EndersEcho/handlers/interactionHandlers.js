@@ -156,13 +156,7 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('profile')
                 .setDescription('View player profile: records, bosses and achievements')
-                .setDescriptionLocalizations(pl('Wyświetl profil gracza: rekordy, bossowie i osiągnięcia'))
-                .addStringOption(opt =>
-                    opt.setName('gracz')
-                        .setNameLocalizations(pl('gracz'))
-                        .setDescription('Player name to search (leave empty for your own profile)')
-                        .setDescriptionLocalizations(pl('Nick gracza do wyszukania (puste = Twój profil)'))
-                        .setRequired(false)),
+                .setDescriptionLocalizations(pl('Wyświetl profil gracza: rekordy, bossowie i osiągnięcia')),
 
 
             new SlashCommandBuilder()
@@ -6269,60 +6263,19 @@ class InteractionHandler {
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const guildId    = interaction.guildId;
-            const viewerId   = interaction.user.id;
-            const msgs       = this.msgs(guildId);
-            const isPol      = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
+            const guildId     = interaction.guildId;
+            const viewerId    = interaction.user.id;
+            const isPol       = (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
-            let targetUserId  = viewerId;
-            let targetGuildId = guildId;
-
-            const query = interaction.options.getString('gracz')?.trim();
-            if (query) {
-                const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-                const matches = globalRanking.filter(p =>
-                    (p.username || p.userId).toLowerCase().includes(query.toLowerCase())
-                );
-                if (matches.length === 0) {
-                    await interaction.editReply({ content: msgs.profileNotFound.replace('{query}', query) });
-                    return;
-                }
-                if (matches.length === 1) {
-                    targetUserId  = matches[0].userId;
-                    targetGuildId = matches[0].sourceGuildId || guildId;
-                } else {
-                    const options = matches.slice(0, 25).map(p => ({
-                        label: (p.username || p.userId).slice(0, 100),
-                        description: `${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId} · ${p.score}`.slice(0, 100),
-                        value: `${p.userId}:${p.sourceGuildId || guildId}`,
-                    }));
-                    const select = new StringSelectMenuBuilder()
-                        .setCustomId('profile_search_sel')
-                        .setPlaceholder(msgs.profileSelectPlaceholder)
-                        .addOptions(options.map(o => new StringSelectMenuOptionBuilder().setLabel(o.label).setDescription(o.description).setValue(o.value)));
-                    const row = new ActionRowBuilder().addComponents(select);
-                    const replyMsg = await interaction.editReply({
-                        content: msgs.profileMultipleResults.replace('{count}', matches.length),
-                        components: [row],
-                    });
-                    this._profileStates.set(replyMsg.id, {
-                        viewerId, targetUserId: null, targetGuildId: null,
-                        view: 'select', category: null, bossPage: 0, bossMaxPage: 1, cachedData: null,
-                    });
-                    setTimeout(() => this._profileStates.delete(replyMsg.id), 15 * 60 * 1000);
-                    return;
-                }
-            }
-
-            const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+            const data = await this.profileService.collectData(guildId, viewerId, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol);
             const state = {
-                viewerId, targetUserId, targetGuildId,
+                viewerId, targetUserId: viewerId, targetGuildId: guildId,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
             };
             const components = this.profileService.buildProfileComponents(
-                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: viewerId === targetUserId },
+                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: true },
                 isPol
             );
             const replyMsg = await interaction.editReply({ embeds: [embed], components });
