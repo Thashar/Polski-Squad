@@ -5,7 +5,7 @@
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 
 **Serwisy:**
-- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach, sprawdzenie PRZED threadOwner (FIX zmiany nicku)
+- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach. Wątki już zablokowane (`thread.locked`) są pomijane na samym początku `processThread` (PRZED pobraniem wiadomości i PRZED threadOwner) — zapobiega odarchiwizowaniu i ponownemu wysyłaniu komunikatu o zamknięciu do dawno zamkniętych wątków przy restarcie. `lockThread` dodatkowo zabezpieczone przed ponownym zamykaniem zablokowanego wątku.
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
 - `aiChatService.js` - AI Chat z trzema providerami: Anthropic (prosty prompt), Grok (web_search) i Perplexity (web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER`
 

@@ -43,6 +43,17 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
 async function processThread(thread, guild, state, config, now, thresholds, isInitialCheck = false) {
     const { lockThreshold, reminderThreshold } = thresholds;
 
+    // Wątek już zablokowany (zamknięty) — nie przetwarzaj go ponownie.
+    // Bez tego przy każdym restarcie dawno zamknięte wątki były odarchiwizowywane,
+    // dostawały ponownie komunikat o zamknięciu i były zamykane od nowa.
+    // Sprawdzenie PRZED pobraniem wiadomości i PRZED threadOwner (działa też po zmianie nicku).
+    if (thread.locked) {
+        if (state.lastReminderMap.has(thread.id)) {
+            await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
+        }
+        return;
+    }
+
     const lastMessage = await thread.messages.fetch({ limit: 1 }).then(msgs => msgs.first());
     const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
     const inactiveTime = now - lastMessageTime;
@@ -72,11 +83,6 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
         (member.displayName === thread.name) || (member.user.username === thread.name)
     );
     if (!threadOwner) return;
-
-    if (thread.locked) {
-        await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
-        return;
-    }
 
     const reminderAlreadySent = threadData && threadData.reminderSent;
 
@@ -124,6 +130,15 @@ async function sendInactivityReminder(thread, threadOwner, state, config, now) {
 
 async function lockThread(thread, state, config) {
     try {
+        // Zabezpieczenie: nie zamykaj ponownie wątku, który jest już zablokowany
+        // (uniknij odarchiwizowania i ponownego wysłania komunikatu o zamknięciu).
+        if (thread.locked) {
+            if (state.lastReminderMap.has(thread.id)) {
+                await reminderStorage.removeReminder(state.lastReminderMap, thread.id);
+            }
+            return;
+        }
+
         if (thread.archived) {
             await thread.setArchived(false, 'Odarchiwizowanie w celu zamknięcia wątku');
         }
