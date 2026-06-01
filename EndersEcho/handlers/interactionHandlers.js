@@ -273,7 +273,8 @@ class InteractionHandler {
 
             const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
             const isHeadAdminBypassCmd = ['ranking', 'achievements', 'subscribe'].includes(interaction.commandName);
-            if (!this.isAllowedChannel(interaction.channel.id, guildId) && !(this._isHeadAdmin(interaction.user.id) && isHeadAdminBypassCmd) && !(isAdminGuild && interaction.commandName === 'ranking')) {
+            const isAdminGuildBypassCmd = isAdminGuild && ['ranking', 'profile', 'achievements', 'subscribe'].includes(interaction.commandName);
+            if (!this.isAllowedChannel(interaction.channel.id, guildId) && !(this._isHeadAdmin(interaction.user.id) && isHeadAdminBypassCmd) && !isAdminGuildBypassCmd) {
                 await interaction.reply({
                     content: this.msgs(guildId).channelNotAllowed,
                     flags: ['Ephemeral']
@@ -6258,14 +6259,6 @@ class InteractionHandler {
     async handleProfileCommand(interaction) {
         const guildId      = interaction.guildId;
         const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
-
-        if (!isAdminGuild) {
-            if (!this._checkConfigured(interaction)) return;
-            if (!this.isAllowedChannel(interaction.channel.id, guildId)) {
-                await interaction.reply({ content: this.msgs(guildId).channelNotAllowed, flags: ['Ephemeral'] });
-                return;
-            }
-        }
 
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
