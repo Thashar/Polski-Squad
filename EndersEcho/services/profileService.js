@@ -188,7 +188,7 @@ class ProfileService {
                 const medal = p.position === 1 ? '🥇' : p.position === 2 ? '🥈' : p.position === 3 ? '🥉' : '';
                 const posStr = medal ? `${medal} \`#${p.position}\`` : `\`#${p.position}\``;
                 const nameStr = p.isTarget ? `**__${p.username}__**` : `**${p.username}**`;
-                const tag = guildTags?.[p.sourceGuildId] ? ` \`${guildTags[p.sourceGuildId]}\`` : '';
+                const tag = guildTags?.[p.sourceGuildId] ? ` · ${guildTags[p.sourceGuildId]}` : '';
                 return `${posStr} ${nameStr} · ${p.score}${tag}`;
             });
             embed.addFields({

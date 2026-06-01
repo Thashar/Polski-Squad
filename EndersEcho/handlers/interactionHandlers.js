@@ -6339,12 +6339,20 @@ class InteractionHandler {
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             if (customId === 'profile_back') {
-                state.targetUserId  = state.viewerId;
-                state.targetGuildId = guildId;
-                state.view          = 'main';
-                state.category      = null;
-                state.bossPage      = 0;
-                state.cachedData    = null;
+                state.targetUserId = state.viewerId;
+                state.view         = 'main';
+                state.category     = null;
+                state.bossPage     = 0;
+                state.cachedData   = null;
+                // Na serwerze admina wyznacz właściwy serwer gracza z globalnego rankingu
+                const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
+                if (isAdminGuild) {
+                    const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+                    const entry = globalRanking.find(p => p.userId === state.viewerId);
+                    state.targetGuildId = entry?.sourceGuildId || [...allGuildIds][0] || guildId;
+                } else {
+                    state.targetGuildId = guildId;
+                }
             } else if (customId === 'profile_main') {
                 state.view = 'main';
             } else if (customId === 'profile_bosses') {
