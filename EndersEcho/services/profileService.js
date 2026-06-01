@@ -287,7 +287,8 @@ class ProfileService {
 
         const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
 
-        // Rząd 2: nawigacja kategorii osiągnięć
+        // Rząd 2: 5 kategorii osiągnięć (max 5 przycisków per rząd)
+        // "Podsumowanie" obsługuje przycisk "Osiągnięcia" z rzędu 1 (ten sam customId profile_ach_overview)
         if (inAch) {
             const CATS = [
                 { key: 'score',    pol: 'Wyniki',      eng: 'Scores',    emoji: '🏆' },
@@ -296,14 +297,7 @@ class ProfileService {
                 { key: 'prestige', pol: 'Prestiż',     eng: 'Prestige',  emoji: '💎' },
                 { key: 'explorer', pol: 'Eksplorator', eng: 'Explorer',  emoji: '🕵️' },
             ];
-            const isOverview = view === 'ach_overview';
             const achNavRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('profile_ach_overview')
-                    .setEmoji('📊')
-                    .setLabel(t('Podsumowanie', 'Overview'))
-                    .setStyle(isOverview ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                    .setDisabled(isOverview),
                 ...CATS.map(c => new ButtonBuilder()
                     .setCustomId(`profile_ach_cat_${c.key}`)
                     .setEmoji(c.emoji)
