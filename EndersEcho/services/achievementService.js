@@ -750,9 +750,9 @@ class AchievementService {
                 .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId('ach_rank_go_ranking')
-                .setEmoji('📊')
-                .setLabel(t('Ranking (Global)', 'Ranking (Global)'))
-                .setStyle(ButtonStyle.Secondary),
+                .setEmoji('↩️')
+                .setLabel(t('Wybór rankingów', 'Ranking Selection'))
+                .setStyle(ButtonStyle.Danger),
         );
 
         return [navRow, navRow2, ...roleRows];
