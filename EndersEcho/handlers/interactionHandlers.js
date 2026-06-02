@@ -5175,6 +5175,10 @@ class InteractionHandler {
                 await this._handleAchRankingPage(interaction, customId);
                 return;
             }
+            if (customId === 'ach_rank_go_ranking') {
+                await this._handleRankingSelect(interaction, 'ranking_select_global');
+                return;
+            }
 
             // === Przyciski /profile ===
             if (customId === 'profile_main' || customId === 'profile_bosses' ||

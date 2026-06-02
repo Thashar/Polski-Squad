@@ -740,14 +740,22 @@ class AchievementService {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1),
             switchBtn,
+        );
+
+        const navRow2 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ach_rank_back')
                 .setEmoji('↩️')
                 .setLabel(t('Wybór serwerów', 'Server Selection'))
-                .setStyle(ButtonStyle.Danger)
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('ach_rank_go_ranking')
+                .setEmoji('📊')
+                .setLabel(t('Ranking (Global)', 'Ranking (Global)'))
+                .setStyle(ButtonStyle.Secondary),
         );
 
-        return [navRow, ...roleRows];
+        return [navRow, navRow2, ...roleRows];
     }
 
     createAchRankingRoleButtons(roleRankings, guildId, activeRoleId = null) {
