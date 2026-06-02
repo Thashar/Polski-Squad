@@ -25,7 +25,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -51,6 +51,7 @@ class InteractionHandler {
         this.ocrStatsService = ocrStatsService;
         this.bossRecordService = bossRecordService;
         this.adminPanelService = adminPanelService;
+        this.commandUsageService = commandUsageService;
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -230,6 +231,9 @@ class InteractionHandler {
 
             // Log użycia każdej komendy slash
             this.logService.logCommandUsage(interaction.commandName, interaction);
+            if (this.commandUsageService) {
+                this.commandUsageService.record(guildId, interaction.commandName);
+            }
 
             // Komendy działające bez konfiguracji (head admin / admin)
             if (interaction.commandName === 'configure') {
@@ -2265,17 +2269,22 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
         const successRateBtn = new ButtonBuilder().setCustomId('panel_ocr_stats').setEmoji('🎯').setLabel(t('Success Rate', 'Success Rate')).setStyle(ButtonStyle.Secondary);
+        const cmdUsageBtn = new ButtonBuilder().setCustomId('panel_cmd_usage').setEmoji('🔢').setLabel(t('Użycia komend', 'Command Usage')).setStyle(ButtonStyle.Secondary);
         if (isHeadAdmin) {
-            return [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel(t('Przyrost graczy', 'Player Growth')).setStyle(ButtonStyle.Secondary),
-                successRateBtn,
-                back,
-            )];
+            return [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_unconfigured').setEmoji('⚠️').setLabel(t('Nieskonfigurowane', 'Unconfigured')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel(t('Przyrost graczy', 'Player Growth')).setStyle(ButtonStyle.Secondary),
+                    successRateBtn,
+                    back,
+                ),
+                new ActionRowBuilder().addComponents(cmdUsageBtn),
+            ];
         }
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_tokens').setEmoji('📊').setLabel(t('Zużycie tokenów', 'Token Usage')).setStyle(ButtonStyle.Secondary),
+            cmdUsageBtn,
             back,
         )];
     }
@@ -3183,6 +3192,48 @@ class InteractionHandler {
         const guildFilter = isSuperUser ? 'all' : interaction.guildId;
         const reply = await this._buildTokensEmbed(interaction, month, guildFilter, isSuperUser, 0);
         await interaction.editReply(reply);
+    }
+
+    async _handlePanelCmdUsage(interaction) {
+        await interaction.deferUpdate();
+        const t = this._panelT(interaction.guildId);
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+
+        let stats;
+        let title;
+        if (isHeadAdmin) {
+            stats = await this.commandUsageService?.getGlobalStats() || [];
+            title = t('🔢 Użycia Komend — Globalnie', '🔢 Command Usage — Global');
+        } else {
+            stats = await this.commandUsageService?.getGuildStats(interaction.guildId) || [];
+            const guildName = interaction.guild?.name || interaction.guildId;
+            title = t(`🔢 Użycia Komend — ${guildName}`, `🔢 Command Usage — ${guildName}`);
+        }
+
+        const total = stats.reduce((sum, s) => sum + s.count, 0);
+        const fmt = n => n.toLocaleString('pl-PL');
+        const padLeft = (str, len) => str.toString().padStart(len, ' ');
+
+        const lines = stats.length > 0
+            ? stats.map(s => `\`/${s.name.padEnd(12)}\` — **${fmt(s.count)}**`)
+            : [t('Brak danych.', 'No data yet.')];
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865f2)
+            .setTitle(title)
+            .setDescription(lines.join('\n'))
+            .setFooter({ text: t(`Łącznie: ${fmt(total)} wywołań`, `Total: ${fmt(total)} calls`) });
+
+        const backBtn = new ButtonBuilder()
+            .setCustomId('panel_cat_stats')
+            .setEmoji('◀️')
+            .setLabel(t('Wróć', 'Back'))
+            .setStyle(ButtonStyle.Secondary);
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(backBtn)],
+        });
     }
 
     async _handlePanelProcessRoles(interaction) {
@@ -4804,6 +4855,7 @@ class InteractionHandler {
         if (customId === 'panel_block') return 'Zablokuj gracza';
         if (customId.startsWith('panel_block_time_')) return 'Ustaw czas blokady gracza';
         if (customId === 'panel_tokens') return 'Zużycie tokenów';
+        if (customId === 'panel_cmd_usage') return 'Użycia komend';
         if (customId === 'panel_info') return 'Wyślij Info';
         if (customId === 'panel_tester') return 'Lista testerów';
         if (customId === 'panel_tester_add') return 'Dodaj testera';
@@ -5255,6 +5307,10 @@ class InteractionHandler {
             }
             if (customId === 'panel_tokens') {
                 await this._handlePanelTokens(interaction);
+                return;
+            }
+            if (customId === 'panel_cmd_usage') {
+                await this._handlePanelCmdUsage(interaction);
                 return;
             }
             if (customId === 'panel_process_roles') {

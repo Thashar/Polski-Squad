@@ -203,9 +203,10 @@
   - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
   - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `🗑️ Usuń dane serwera`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Admin):**
-  - Rząd 1: `📊 Zużycie tokenów`, `◀️ Wróć`
+  - Rząd 1: `📊 Zużycie tokenów`, `🔢 Użycia komend`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Head Admin):**
   - Rząd 1: `📊 Zużycie tokenów`, `⚠️ Nieskonfigurowane`, `📈 Przyrost graczy`, `🎯 Success Rate`, `◀️ Wróć`
+  - Rząd 2: `🔢 Użycia komend`
 - Po kliknięciu "Usuń/Odblokuj/OCR" → modal wyszukiwania (nowa wiadomość ephemeral z wynikami). Po akcji `panel_back` → panel pojawia się w tej samej wiadomości
 
 **Operacje w Panelu Admina:**
@@ -307,6 +308,7 @@
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
 | `panel_diagnostics` | Raport uprawnień bota: serwer, kanały raportów, hierarchia ról TOP, intenty — dostępny w `/configure` gdy wszystkie kroki ukończone (każdy admin) |
 | `panel_player_growth` | Statystyki przyrostu unikalnych graczy globalnie + wykres (head admin, ephemeral) |
+| `panel_cmd_usage` | Użycia komend — admin widzi swój serwer, head admin globalnie; dane w `data/command_usage.json` |
 | `panel_ban_server` | Panel zbanowania serwera (head admin) |
 | `panel_ban_guild` | Otwórz modal wyszukiwania serwera do bana |
 | `panel_ban_guild_modal` | Modal wyszukiwania (pole `ban_guild_query`) |

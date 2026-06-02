@@ -42,6 +42,7 @@ const { createLlmAdapter } = require('../utils/llmAdapter');
 const cron = require('node-cron');
 const AdminPanelService = require('./services/adminPanelService');
 const AlertService = require('./services/alertService');
+const CommandUsageService = require('./services/commandUsageService');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -116,6 +117,7 @@ const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
 const alertService = new AlertService(config.ranking.dataDir);
+const commandUsageService = new CommandUsageService(config.ranking.dataDir);
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
     rankingService,
     ocrStatsService,
@@ -127,7 +129,7 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     globalTop10Service,
     alertService,
 });
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService);
 
 /**
  * Inicjalizuje bota EndersEcho
