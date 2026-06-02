@@ -11175,7 +11175,7 @@ class InteractionHandler {
                 0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
 
-            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons });
+            const reply = await interaction.editReply({ content: null, embeds: [embed], components: buttons, files: [], attachments: [] });
 
             this._achRankings.set(reply.id, {
                 players, currentPage: 0, totalPages, perPage,
@@ -11215,7 +11215,7 @@ class InteractionHandler {
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
             data.roleRows, data.isPol, data.userPage, data.parentGuildId, data.parentGuildName
         );
-        await interaction.editReply({ embeds: [embed], components: buttons });
+        await interaction.editReply({ embeds: [embed], components: buttons, files: [], attachments: [] });
     }
 
     // ─── BOSS ALIAS — panel konfiguracji bossów ───────────────────────────────
