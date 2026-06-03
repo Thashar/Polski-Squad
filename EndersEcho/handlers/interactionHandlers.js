@@ -4018,7 +4018,7 @@ class InteractionHandler {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
                 this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, interaction.user.id).catch(() => {});
             }
-            if (this.ocrStatsService) {
+            if (this.ocrStatsService && !dryRun) {
                 this.ocrStatsService.record(interaction.guildId, !!aiResult.isValidVictory).catch(() => {});
             }
 
@@ -4068,8 +4068,9 @@ class InteractionHandler {
             gl.success(`✅ [/${commandName}] AI OCR: wynik="${bestScore}", boss="${bossName}"${aiResult.total ? `, total="${aiResult.total}"` : ''}`);
 
             // Nieznana nazwa bossa — alert dla admina na kanał logów
+            let unknownBossSessionKey = null;
             if (aiResult.wasUnknownBoss && this.bossAliasService) {
-                this._sendUnknownBossEmbed(interaction.client, interaction.guildId, {
+                unknownBossSessionKey = await this._sendUnknownBossEmbed(interaction.client, interaction.guildId, {
                     rawBoss: aiResult.rawBossName || bossName,
                     userName: interaction.member?.displayName || interaction.user.displayName || interaction.user.username,
                     userId: interaction.user.id,
@@ -4078,7 +4079,7 @@ class InteractionHandler {
                     imageExt: path.extname(tempImagePath).slice(1) || 'png',
                     commandName,
                     guild: interaction.guild,
-                }).catch(err => gl.warn(`[BossAlias] Błąd wysyłania embeda nieznanego bossa: ${err.message}`));
+                }).catch(err => { gl.warn(`[BossAlias] Błąd wysyłania embeda nieznanego bossa: ${err.message}`); return null; });
             }
 
             const guildId = interaction.guildId;
@@ -4407,6 +4408,12 @@ class InteractionHandler {
 
                 const bossPublicMsg = await interaction.followUp({ embeds: [bossPublicEmbed], files: [imageAttachmentAlt] });
 
+                // Aktualizuj sesję nieznanego bossa z ID ogłoszenia
+                if (unknownBossSessionKey && bossPublicMsg) {
+                    const _ubSess = this._unknownBossEmbeds.get(unknownBossSessionKey);
+                    if (_ubSess) { _ubSess.publicMsgId = bossPublicMsg.id; _ubSess.publicChannelId = bossPublicMsg.channelId; }
+                }
+
                 // CV: przycisk Zgłoś + sesja weryfikacji (usuwa tylko rekord bossa, nie globalny)
                 if (cvEnabledBoss && bossPublicMsg) {
                     try {
@@ -4460,6 +4467,8 @@ class InteractionHandler {
                     newRecord: { timestamp: new Date().toISOString() },
                     bossName: bossName || null,
                     previousBossRecord: previousBossRecord ?? null,
+                    publicMsgId: bossPublicMsg?.id || null,
+                    publicChannelId: bossPublicMsg?.channelId || null,
                 });
                 setTimeout(() => this._ocrRevertSessions.delete(bossRevertKey), 24 * 60 * 60 * 1000);
 
@@ -4569,6 +4578,7 @@ class InteractionHandler {
                 }
             }
 
+            let _newRecordPublicMsg = null;
             try {
                 if (dryRun) {
                     // Tryb testowy: wynik wyświetlany wyłącznie ephemeral,
@@ -4591,6 +4601,13 @@ class InteractionHandler {
                         embeds: [publicEmbed],
                         files: [imageAttachment],
                     });
+                    _newRecordPublicMsg = publicMsg;
+
+                    // Aktualizuj sesję nieznanego bossa z ID ogłoszenia
+                    if (unknownBossSessionKey && publicMsg) {
+                        const _ubSess = this._unknownBossEmbeds.get(unknownBossSessionKey);
+                        if (_ubSess) { _ubSess.publicMsgId = publicMsg.id; _ubSess.publicChannelId = publicMsg.channelId; }
+                    }
 
                     // Jeśli CV włączone — teraz znamy ID wiadomości, dodaj przycisk i utwórz sesję
                     if (cvEnabled && publicMsg) {
@@ -4672,6 +4689,8 @@ class InteractionHandler {
                     newRecord: { timestamp: newRecordTimestamp },
                     bossName: bossName || null,
                     previousBossRecord: previousBossRecord ?? null,
+                    publicMsgId: _newRecordPublicMsg?.id || null,
+                    publicChannelId: _newRecordPublicMsg?.channelId || null,
                 });
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
@@ -4692,6 +4711,8 @@ class InteractionHandler {
                     newRecord: { timestamp: newRecordTimestamp },
                     bossName: bossName || null,
                     previousBossRecord: previousBossRecord ?? null,
+                    publicMsgId: _newRecordPublicMsg?.id || null,
+                    publicChannelId: _newRecordPublicMsg?.channelId || null,
                 });
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
@@ -5037,7 +5058,10 @@ class InteractionHandler {
                 await interaction.deferUpdate();
                 this._ocrRevertSessions.delete(revertKey);
                 await this._cvRemoveRecord(session);
-                if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
+                // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
+                if (this.ocrStatsService && targetUserId !== interaction.user.id) {
+                    this.ocrStatsService.recordReverted().catch(() => {});
+                }
                 try {
                     const guild = interaction.client.guilds.cache.get(targetGuildId);
                     if (guild) {
@@ -5048,7 +5072,28 @@ class InteractionHandler {
                 const adminName = interaction.member?.displayName || interaction.user.username;
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .addFields({ name: '↩️ Cofnięto', value: `przez **${adminName}**`, inline: false });
-                await interaction.message.edit({ embeds: [updatedEmbed], components: [] }).catch(() => {});
+                // Dezaktywuj przycisk cofnięcia (zamiast usuwać)
+                const disabledOcrRevertBtn = new ButtonBuilder()
+                    .setCustomId(customId)
+                    .setLabel('↩️ Cofnij wynik')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true);
+                await interaction.message.edit({ embeds: [updatedEmbed], components: [new ActionRowBuilder().addComponents(disabledOcrRevertBtn)] }).catch(() => {});
+                // Dodaj notkę do ogłoszenia publicznego
+                if (session.publicMsgId && session.publicChannelId) {
+                    try {
+                        const _pubChan = interaction.client.channels.cache.get(session.publicChannelId)
+                            || await interaction.client.channels.fetch(session.publicChannelId).catch(() => null);
+                        if (_pubChan) {
+                            const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
+                            if (_pubMsg) {
+                                const _noteText = `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                                const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
+                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                            }
+                        }
+                    } catch {}
+                }
                 return;
             }
 
@@ -8745,6 +8790,7 @@ class InteractionHandler {
 
 
             // Ogłoszenie publiczne — tylko gdy wynik jest nowym rekordem
+            let analyzePublicMsg = null;
             const guildCfgAnnounce = this.config.getGuildConfig(targetGuildId);
             const announcementChannelId = guildCfgAnnounce?.allowedChannelId;
             if (isNewRecord && announcementChannelId) {
@@ -8776,7 +8822,7 @@ class InteractionHandler {
                             adminName,
                         });
 
-                        const publicMsg = await announcementChannel.send({
+                        analyzePublicMsg = await announcementChannel.send({
                             content: announcementContent,
                             embeds: [resultEmbed],
                             files: [fileAttachment],
@@ -8784,7 +8830,7 @@ class InteractionHandler {
                         gl.info(`✅ [Analizuj] Ogłoszenie wysłane na kanał ${announcementChannelId}`);
 
                         // DM do subskrybentów
-                        if (this.notificationService && publicMsg) {
+                        if (this.notificationService && analyzePublicMsg) {
                             try {
                                 const subscribers = await this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId);
                                 for (const sub of subscribers) {
@@ -8821,6 +8867,8 @@ class InteractionHandler {
                     newRecordTimestamp: isNewRecord ? (updatedRanking[targetUserId]?.timestamp ?? null) : null,
                     userName,
                     adminName,
+                    publicMsgId: analyzePublicMsg?.id || null,
+                    publicChannelId: analyzePublicMsg?.channelId || null,
                 });
                 try {
                     const globalChan = await interaction.client.channels.fetch(this.config.rejectedChannelId).catch(() => null);
@@ -8881,7 +8929,10 @@ class InteractionHandler {
 
             // 1. Cofnij ranking (identycznie jak CV revert)
             await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
-            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
+            // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
+            if (this.ocrStatsService && targetUserId !== interaction.user.id) {
+                this.ocrStatsService.recordReverted().catch(() => {});
+            }
             gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
@@ -8928,8 +8979,29 @@ class InteractionHandler {
                 return builder;
             });
 
-            await interaction.editReply({ embeds: updatedEmbeds, components: [] });
+            // Dezaktywuj przycisk cofnięcia (zamiast usuwać)
+            const disabledAnalyzeRevertBtn = new ButtonBuilder()
+                .setCustomId(`ee_analyze_revert_${globalMsgId}`)
+                .setLabel('↩️ Cofnij wynik')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(true);
+            await interaction.editReply({ embeds: updatedEmbeds, components: [new ActionRowBuilder().addComponents(disabledAnalyzeRevertBtn)] });
             gl.info(`↩️ [Cofnij] Embed zaktualizowany — cofnięcie zakończone`);
+
+            // Dodaj notkę do ogłoszenia publicznego
+            if (session.publicMsgId && session.publicChannelId) {
+                try {
+                    const _pubChan = await interaction.client.channels.fetch(session.publicChannelId).catch(() => null);
+                    if (_pubChan) {
+                        const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
+                        if (_pubMsg) {
+                            const _noteText = `↩️ Administrator **${reverterName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                            const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
+                            await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                        }
+                    }
+                } catch {}
+            }
         } catch (err) {
             gl.error(`❌ [Cofnij] Błąd cofania wyniku: ${err.message}`);
             await interaction.editReply({ components: [] }).catch(() => {});
@@ -11840,16 +11912,23 @@ class InteractionHandler {
         const msg = await channel.send({ content: '<@398983446812295168>', embeds: [embed], files: [file], components: [row] }).catch(() => null);
         if (msg) {
             // Zapisz sesję (TTL 48h)
-            this._unknownBossEmbeds.set(sessionKey, { rawBoss, guildId, userId });
+            this._unknownBossEmbeds.set(sessionKey, { rawBoss, guildId, userId, messageId: msg.id, channelId: msg.channelId });
             setTimeout(() => this._unknownBossEmbeds.delete(sessionKey), 48 * 60 * 60 * 1000);
+            return sessionKey;
         }
+        return null;
     }
 
     /** Obsługuje kliknięcie przycisku "Dopasuj do nazwy angielskiej" */
     async _handleBossMapButton(interaction, customId) {
         const sessionKey = customId.replace('boss_mapm_', '');
         const session = this._unknownBossEmbeds.get(sessionKey);
-        const rawBoss = session?.rawBoss || '???';
+        let rawBoss = session?.rawBoss || '???';
+        // Fallback: odczytaj nazwę bossa z embeda gdy sesja wygasła (np. po restarcie bota)
+        if (!session && interaction.message?.embeds?.[0]) {
+            const bossField = interaction.message.embeds[0].fields?.find(f => f.name.includes('Nazwa bossa'));
+            if (bossField) rawBoss = bossField.value.replace(/`/g, '').trim() || rawBoss;
+        }
 
         // Zapamiętaj sesję mapowania dla tego admina
         this._bossMapSessions.set(interaction.user.id, { rawBoss, sessionKey });
@@ -11943,6 +12022,15 @@ class InteractionHandler {
             });
             return;
         }
+
+        // Pobierz dane sesji embeda przed usunięciem
+        const adminName = interaction.member?.displayName || interaction.user.username;
+        const ubSession = session.sessionKey ? this._unknownBossEmbeds.get(session.sessionKey) : null;
+        const ubMsgId = ubSession?.messageId;
+        const ubChanId = ubSession?.channelId;
+        const ubPublicMsgId = ubSession?.publicMsgId;
+        const ubPublicChanId = ubSession?.publicChannelId;
+
         // Wyczyszanie sesji
         this._bossMapSessions.delete(interaction.user.id);
         // Migracja boss_records: przenieś rekordy pod surową nazwą bossa na nazwę angielską
@@ -11967,6 +12055,42 @@ class InteractionHandler {
 
         // Usuń sesję embeda (już przetworzona)
         if (session.sessionKey) this._unknownBossEmbeds.delete(session.sessionKey);
+
+        // Dezaktywuj przycisk w embedzie nieznanego bossa
+        if (ubChanId && ubMsgId) {
+            try {
+                const ubChan = interaction.client.channels.cache.get(ubChanId)
+                    || await interaction.client.channels.fetch(ubChanId).catch(() => null);
+                if (ubChan) {
+                    const ubMsg = await ubChan.messages.fetch(ubMsgId).catch(() => null);
+                    if (ubMsg) {
+                        const disabledMapBtn = new ButtonBuilder()
+                            .setCustomId(`boss_mapm_${session.sessionKey}`)
+                            .setEmoji('🔗')
+                            .setLabel('Dopasuj do nazwy angielskiej')
+                            .setStyle(ButtonStyle.Primary)
+                            .setDisabled(true);
+                        await ubMsg.edit({ embeds: ubMsg.embeds, components: [new ActionRowBuilder().addComponents(disabledMapBtn)] }).catch(() => null);
+                    }
+                }
+            } catch {}
+        }
+
+        // Dodaj notkę do ogłoszenia publicznego
+        if (ubPublicChanId && ubPublicMsgId) {
+            try {
+                const pubChan = interaction.client.channels.cache.get(ubPublicChanId)
+                    || await interaction.client.channels.fetch(ubPublicChanId).catch(() => null);
+                if (pubChan) {
+                    const pubMsg = await pubChan.messages.fetch(ubPublicMsgId).catch(() => null);
+                    if (pubMsg) {
+                        const noteText = `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`;
+                        const existingContent = pubMsg.content ? `${pubMsg.content}\n` : '';
+                        await pubMsg.edit({ content: `${existingContent}${noteText}`, embeds: pubMsg.embeds }).catch(() => null);
+                    }
+                }
+            } catch {}
+        }
     }
 
     // =========================================================================
