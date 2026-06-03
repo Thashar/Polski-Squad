@@ -4018,7 +4018,7 @@ class InteractionHandler {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
                 this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, interaction.user.id).catch(() => {});
             }
-            if (this.ocrStatsService) {
+            if (this.ocrStatsService && !dryRun) {
                 this.ocrStatsService.record(interaction.guildId, !!aiResult.isValidVictory).catch(() => {});
             }
 
@@ -5058,7 +5058,6 @@ class InteractionHandler {
                 await interaction.deferUpdate();
                 this._ocrRevertSessions.delete(revertKey);
                 await this._cvRemoveRecord(session);
-                if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
                 try {
                     const guild = interaction.client.guilds.cache.get(targetGuildId);
                     if (guild) {
@@ -8926,7 +8925,6 @@ class InteractionHandler {
 
             // 1. Cofnij ranking (identycznie jak CV revert)
             await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
-            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
