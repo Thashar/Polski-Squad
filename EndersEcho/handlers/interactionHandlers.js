@@ -5087,9 +5087,13 @@ class InteractionHandler {
                         if (_pubChan) {
                             const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
                             if (_pubMsg) {
-                                const _noteText = `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                                const _t = this._panelT(targetGuildId);
+                                const _noteText = _t(
+                                    `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
+                                    `↩️ Administrator **${adminName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
+                                );
                                 const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
-                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}` }).catch(() => null);
                             }
                         }
                     } catch {}
@@ -8995,9 +8999,13 @@ class InteractionHandler {
                     if (_pubChan) {
                         const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
                         if (_pubMsg) {
-                            const _noteText = `↩️ Administrator **${reverterName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                            const _t = this._panelT(targetGuildId);
+                            const _noteText = _t(
+                                `↩️ Administrator **${reverterName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
+                                `↩️ Administrator **${reverterName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
+                            );
                             const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
-                            await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                            await _pubMsg.edit({ content: `${_existingContent}${_noteText}` }).catch(() => null);
                         }
                     }
                 } catch {}
@@ -12009,7 +12017,9 @@ class InteractionHandler {
         }
         const lang = interaction.values[0];
         const addResult = await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
-        const langLabel = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang)?.label || lang;
+        const _langEntry = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang);
+        const langLabel = _langEntry?.label || lang;
+        const langLabelEn = _langEntry?.labelEn || _langEntry?.label || lang;
         if (!addResult.added) {
             const { englishName: conflictBoss, language: conflictLang } = addResult.conflict;
             await interaction.update({
@@ -12084,9 +12094,13 @@ class InteractionHandler {
                 if (pubChan) {
                     const pubMsg = await pubChan.messages.fetch(ubPublicMsgId).catch(() => null);
                     if (pubMsg) {
-                        const noteText = `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`;
+                        const _tPub = this._panelT(ubSession?.guildId || interaction.guildId);
+                        const noteText = _tPub(
+                            `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`,
+                            `📋 Administrator **${adminName}** set **${session.adjustedBoss}** (${langLabelEn}) as an alias for English boss name **${session.englishBoss}**`
+                        );
                         const existingContent = pubMsg.content ? `${pubMsg.content}\n` : '';
-                        await pubMsg.edit({ content: `${existingContent}${noteText}`, embeds: pubMsg.embeds }).catch(() => null);
+                        await pubMsg.edit({ content: `${existingContent}${noteText}` }).catch(() => null);
                     }
                 }
             } catch {}
