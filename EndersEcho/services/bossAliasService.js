@@ -7,18 +7,18 @@ const DATA_PATH = path.join(__dirname, '../data/boss_aliases.json');
 
 // Obsługiwane języki (kod → etykieta)
 const SUPPORTED_LANGUAGES = [
-    { code: 'pl', label: '🇵🇱 Polski' },
-    { code: 'de', label: '🇩🇪 Deutsch' },
-    { code: 'fr', label: '🇫🇷 Français' },
-    { code: 'es', label: '🇪🇸 Español' },
-    { code: 'pt', label: '🇵🇹 Português' },
-    { code: 'ru', label: '🇷🇺 Русский' },
-    { code: 'it', label: '🇮🇹 Italiano' },
-    { code: 'tr', label: '🇹🇷 Türkçe' },
-    { code: 'ja', label: '🇯🇵 日本語' },
-    { code: 'zh', label: '🇨🇳 中文' },
-    { code: 'vi', label: '🇻🇳 Tiếng Việt' },
-    { code: 'ko', label: '🇰🇷 한국어' },
+    { code: 'pl', label: '🇵🇱 Polski',      labelEn: '🇵🇱 Polish' },
+    { code: 'de', label: '🇩🇪 Deutsch',     labelEn: '🇩🇪 German' },
+    { code: 'fr', label: '🇫🇷 Français',    labelEn: '🇫🇷 French' },
+    { code: 'es', label: '🇪🇸 Español',     labelEn: '🇪🇸 Spanish' },
+    { code: 'pt', label: '🇵🇹 Português',   labelEn: '🇵🇹 Portuguese' },
+    { code: 'ru', label: '🇷🇺 Русский',     labelEn: '🇷🇺 Russian' },
+    { code: 'it', label: '🇮🇹 Italiano',    labelEn: '🇮🇹 Italian' },
+    { code: 'tr', label: '🇹🇷 Türkçe',      labelEn: '🇹🇷 Turkish' },
+    { code: 'ja', label: '🇯🇵 日本語',       labelEn: '🇯🇵 Japanese' },
+    { code: 'zh', label: '🇨🇳 中文',         labelEn: '🇨🇳 Chinese' },
+    { code: 'vi', label: '🇻🇳 Tiếng Việt',  labelEn: '🇻🇳 Vietnamese' },
+    { code: 'ko', label: '🇰🇷 한국어',       labelEn: '🇰🇷 Korean' },
 ];
 
 class BossAliasService {

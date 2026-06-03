@@ -12017,7 +12017,9 @@ class InteractionHandler {
         }
         const lang = interaction.values[0];
         const addResult = await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
-        const langLabel = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang)?.label || lang;
+        const _langEntry = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang);
+        const langLabel = _langEntry?.label || lang;
+        const langLabelEn = _langEntry?.labelEn || _langEntry?.label || lang;
         if (!addResult.added) {
             const { englishName: conflictBoss, language: conflictLang } = addResult.conflict;
             await interaction.update({
@@ -12095,7 +12097,7 @@ class InteractionHandler {
                         const _tPub = this._panelT(ubSession?.guildId || interaction.guildId);
                         const noteText = _tPub(
                             `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`,
-                            `📋 Administrator **${adminName}** set **${session.adjustedBoss}** (${langLabel}) as an alias for English boss name **${session.englishBoss}**`
+                            `📋 Administrator **${adminName}** set **${session.adjustedBoss}** (${langLabelEn}) as an alias for English boss name **${session.englishBoss}**`
                         );
                         const existingContent = pubMsg.content ? `${pubMsg.content}\n` : '';
                         await pubMsg.edit({ content: `${existingContent}${noteText}` }).catch(() => null);
