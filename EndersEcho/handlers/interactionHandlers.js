@@ -5087,7 +5087,11 @@ class InteractionHandler {
                         if (_pubChan) {
                             const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
                             if (_pubMsg) {
-                                const _noteText = `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                                const _t = this._panelT(targetGuildId);
+                                const _noteText = _t(
+                                    `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
+                                    `↩️ Administrator **${adminName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
+                                );
                                 const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
                                 await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
                             }
@@ -8995,7 +8999,11 @@ class InteractionHandler {
                     if (_pubChan) {
                         const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
                         if (_pubMsg) {
-                            const _noteText = `↩️ Administrator **${reverterName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`;
+                            const _t = this._panelT(targetGuildId);
+                            const _noteText = _t(
+                                `↩️ Administrator **${reverterName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
+                                `↩️ Administrator **${reverterName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
+                            );
                             const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
                             await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
                         }
@@ -12084,7 +12092,11 @@ class InteractionHandler {
                 if (pubChan) {
                     const pubMsg = await pubChan.messages.fetch(ubPublicMsgId).catch(() => null);
                     if (pubMsg) {
-                        const noteText = `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`;
+                        const _tPub = this._panelT(ubSession?.guildId || interaction.guildId);
+                        const noteText = _tPub(
+                            `📋 Administrator **${adminName}** ustawił nazwę **${session.adjustedBoss}** (${langLabel}) jako alias do angielskiej nazwy bossa **${session.englishBoss}**`,
+                            `📋 Administrator **${adminName}** set **${session.adjustedBoss}** (${langLabel}) as an alias for English boss name **${session.englishBoss}**`
+                        );
                         const existingContent = pubMsg.content ? `${pubMsg.content}\n` : '';
                         await pubMsg.edit({ content: `${existingContent}${noteText}`, embeds: pubMsg.embeds }).catch(() => null);
                     }
