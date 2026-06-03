@@ -5058,6 +5058,10 @@ class InteractionHandler {
                 await interaction.deferUpdate();
                 this._ocrRevertSessions.delete(revertKey);
                 await this._cvRemoveRecord(session);
+                // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
+                if (this.ocrStatsService && targetUserId !== interaction.user.id) {
+                    this.ocrStatsService.recordReverted().catch(() => {});
+                }
                 try {
                     const guild = interaction.client.guilds.cache.get(targetGuildId);
                     if (guild) {
@@ -6076,6 +6080,7 @@ class InteractionHandler {
 
         } else if (action === 'remove') {
             await this._cvRemoveRecord(session);
+            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'removed');
             if (this.userBlockService) {
                 await this.userBlockService.unblockUser(session.userId, true).catch(() => {});
@@ -6091,6 +6096,7 @@ class InteractionHandler {
                 );
             }
             await this._cvRemoveRecord(session);
+            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'blocked');
             await this._updateOriginalRecordButton(interaction.client, session, 'blocked');
             await this._updateAllCvReportMsgs(interaction.client, session,
@@ -8923,6 +8929,10 @@ class InteractionHandler {
 
             // 1. Cofnij ranking (identycznie jak CV revert)
             await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
+            // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
+            if (this.ocrStatsService && targetUserId !== interaction.user.id) {
+                this.ocrStatsService.recordReverted().catch(() => {});
+            }
             gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
