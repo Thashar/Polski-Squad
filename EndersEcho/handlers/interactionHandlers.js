@@ -6076,7 +6076,6 @@ class InteractionHandler {
 
         } else if (action === 'remove') {
             await this._cvRemoveRecord(session);
-            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'removed');
             if (this.userBlockService) {
                 await this.userBlockService.unblockUser(session.userId, true).catch(() => {});
@@ -6092,7 +6091,6 @@ class InteractionHandler {
                 );
             }
             await this._cvRemoveRecord(session);
-            if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'blocked');
             await this._updateOriginalRecordButton(interaction.client, session, 'blocked');
             await this._updateAllCvReportMsgs(interaction.client, session,
