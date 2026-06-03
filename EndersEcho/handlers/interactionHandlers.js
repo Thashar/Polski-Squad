@@ -5093,7 +5093,7 @@ class InteractionHandler {
                                     `↩️ Administrator **${adminName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
                                 );
                                 const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
-                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}` }).catch(() => null);
                             }
                         }
                     } catch {}
@@ -9005,7 +9005,7 @@ class InteractionHandler {
                                 `↩️ Administrator **${reverterName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
                             );
                             const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
-                            await _pubMsg.edit({ content: `${_existingContent}${_noteText}`, embeds: _pubMsg.embeds }).catch(() => null);
+                            await _pubMsg.edit({ content: `${_existingContent}${_noteText}` }).catch(() => null);
                         }
                     }
                 } catch {}
@@ -12098,7 +12098,7 @@ class InteractionHandler {
                             `📋 Administrator **${adminName}** set **${session.adjustedBoss}** (${langLabel}) as an alias for English boss name **${session.englishBoss}**`
                         );
                         const existingContent = pubMsg.content ? `${pubMsg.content}\n` : '';
-                        await pubMsg.edit({ content: `${existingContent}${noteText}`, embeds: pubMsg.embeds }).catch(() => null);
+                        await pubMsg.edit({ content: `${existingContent}${noteText}` }).catch(() => null);
                     }
                 }
             } catch {}
