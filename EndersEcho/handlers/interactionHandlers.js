@@ -9309,20 +9309,21 @@ class InteractionHandler {
         const leftLines   = [];
         let totalCost = 0;
 
+        const guildEntries = [];
         for (const guildId of tokenGuildIds) {
             const stats = this.tokenUsageService.getMonthlyStats(guildId, month);
             if (stats.requests === 0) continue;
-            const cost = stats.cost;
-            totalCost += cost;
+            totalCost += stats.cost;
             const liveName   = interaction.client.guilds.cache.get(guildId)?.name;
             const storedName = this.guildConfigService.getConfig(guildId)?.guildName;
             const name       = (liveName || storedName || guildId).slice(0, 24);
-            const line = `**${name}** — ${fmtCost(cost)} (${stats.requests} req)`;
-            if (liveName) {
-                activeLines.push(line);
-            } else {
-                leftLines.push(line);
-            }
+            guildEntries.push({ name, cost: stats.cost, requests: stats.requests, isActive: !!liveName });
+        }
+        guildEntries.sort((a, b) => b.requests - a.requests);
+        for (const entry of guildEntries) {
+            const line = `**${entry.name}** — ${fmtCost(entry.cost)} (${entry.requests} req)`;
+            if (entry.isActive) activeLines.push(line);
+            else leftLines.push(line);
         }
 
         activeLines.push('');
@@ -9391,6 +9392,7 @@ class InteractionHandler {
         const leftLines   = [];
         let totalCost = 0;
 
+        const guildEntries = [];
         for (const guildId of tokenGuildIds) {
             let promptTokens = 0, outputTokens = 0, requests = 0;
             for (const month of allMonths) {
@@ -9405,12 +9407,13 @@ class InteractionHandler {
             const liveName   = interaction.client.guilds.cache.get(guildId)?.name;
             const storedName = this.guildConfigService.getConfig(guildId)?.guildName;
             const name       = (liveName || storedName || guildId).slice(0, 24);
-            const line = `**${name}** — ${fmtCost(cost)} (${requests} req)`;
-            if (liveName) {
-                activeLines.push(line);
-            } else {
-                leftLines.push(line);
-            }
+            guildEntries.push({ name, cost, requests, isActive: !!liveName });
+        }
+        guildEntries.sort((a, b) => b.requests - a.requests);
+        for (const entry of guildEntries) {
+            const line = `**${entry.name}** — ${fmtCost(entry.cost)} (${entry.requests} req)`;
+            if (entry.isActive) activeLines.push(line);
+            else leftLines.push(line);
         }
 
         activeLines.push('');
