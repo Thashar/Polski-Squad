@@ -129,6 +129,8 @@ client.once(Events.ClientReady, async () => {
     // Inicjalizuj serwisy blokowania w messageHandlerze
     await messageHandler.initializeImageBlockService();
     await messageHandler.initializeWordBlockService();
+    // Przywróć aktywne mute'y po restarcie
+    await messageHandler.autoModerationService.initializePersistentMutes(client);
     // Inicjalizuj ChaosService
     await chaosService.initialize();
     await chaosService.restoreTimeouts(client);

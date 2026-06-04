@@ -91,7 +91,7 @@ module.exports = {
     
     autoModeration: {
         enabled: true,
-        violationWindow: 15, // okno czasowe w minutach
+        violationWindow: 5, // okno czasowe w minutach
         violationsBeforeWarn: 3, // ilość wyzwisk przed warnem
         warningsBeforeMute: 3, // ilość warnów przed mute
         muteTime: 60, // czas mute w minutach
