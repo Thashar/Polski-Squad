@@ -248,7 +248,7 @@ class AdminPanelService {
                 components: [this._buildUsersRow()],
             },
             {
-                embed: this._buildOcrEmbed(ocrStats, pendingCvCount),
+                embed: this._buildOcrEmbed(ocrStats),
                 components: [this._buildOcrRow()],
             },
             {
@@ -449,7 +449,7 @@ class AdminPanelService {
     }
 
     // ─── EMBED 3: OCR & Analizy ──────────────────────────────────────────────
-    _buildOcrEmbed(ocrStats, pendingCvCount) {
+    _buildOcrEmbed(ocrStats) {
         const at = ocrStats?.allTime ?? { total: 0, success: 0, adminFixed: 0 };
         const rs = ocrStats?.resettable ?? { total: 0, success: 0, adminFixed: 0 };
 
@@ -471,6 +471,13 @@ class AdminPanelService {
         const successRateValue =
             `\`[${atBar}]\` ${atRateStr} (łącznie)\n\`[${rsBar}]\` ${rsRateStr} (od resetu)`;
 
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        const ocrSvc = this._services.ocrStatsService;
+        const topRejected = ocrSvc?.getMonthlyTopRejectedUsers?.(currentMonth, 'all') ?? [];
+        const rejectedUsersValue = topRejected.length > 0
+            ? topRejected.map((u, i) => `${i + 1}. <@${u.userId}>: **${u.count}**`).join('\n')
+            : '—';
+
         return new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle('📊 OCR & Analizy')
@@ -483,7 +490,7 @@ class AdminPanelService {
                     inline: true,
                 },
                 { name: '🔧 Interwencje admina', value: `Łącznie: **${atFixed}** / Od resetu: **${rsFixed}**`, inline: true },
-                { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
+                { name: `🚫 Top odrzucani (${currentMonth})`, value: rejectedUsersValue, inline: false },
             );
     }
 
@@ -555,24 +562,33 @@ class AdminPanelService {
 
         const projection = dayOfMonth > 0 ? (monthCost / dayOfMonth) * daysInMonth : 0;
 
-        const today = todayKey();
-        const guildCosts = [];
+        const monthGuildCosts = [];
         if (svc?.data?.guilds && guildIds) {
             const cfgSvc = this._services.guildConfigService;
             for (const guildId of guildIds) {
-                const d = svc.data.guilds[guildId]?.[today];
-                if (!d) continue;
-                const gCost = (d.promptTokens / 1_000_000) * 0.10 + (d.outputTokens / 1_000_000) * 0.40;
+                const guildData = svc.data.guilds[guildId];
+                if (!guildData) continue;
+                let gCost = 0;
+                for (const [dateKey, d] of Object.entries(guildData)) {
+                    if (dateKey.startsWith(currentMonth)) {
+                        gCost += (d.promptTokens / 1_000_000) * 0.10 + (d.outputTokens / 1_000_000) * 0.40;
+                    }
+                }
                 if (gCost > 0) {
                     const cfg = cfgSvc?.getConfig(guildId);
-                    guildCosts.push({ tag: cfg?.tag || cfg?.guildName || guildId, cost: gCost });
+                    monthGuildCosts.push({ tag: cfg?.tag || cfg?.guildName || guildId, cost: gCost });
                 }
             }
         }
-        guildCosts.sort((a, b) => b.cost - a.cost);
-        const topGuilds = guildCosts.slice(0, 3);
-        const topGuildsValue = topGuilds.length > 0
-            ? topGuilds.map(g => `• ${g.tag}: ${fmtCost(g.cost)}`).join('\n')
+        monthGuildCosts.sort((a, b) => b.cost - a.cost);
+        const topGuildsValue = monthGuildCosts.slice(0, 3).length > 0
+            ? monthGuildCosts.slice(0, 3).map(g => `• ${g.tag}: ${fmtCost(g.cost)}`).join('\n')
+            : '—';
+
+        const topUsers = svc?.getUsersMonthlyStats?.(currentMonth, 'all') ?? [];
+        const top4Users = topUsers.slice(0, 4);
+        const topUsersValue = top4Users.length > 0
+            ? top4Users.map((u, i) => `${i + 1}. <@${u.userId}>: ${fmtCost(u.cost)} (${u.requests} req.)`).join('\n')
             : '—';
 
         return new EmbedBuilder()
@@ -585,11 +601,12 @@ class AdminPanelService {
                     inline: false,
                 },
                 {
-                    name: '📅 Ten miesiąc',
+                    name: `📅 Ten miesiąc (${currentMonth})`,
                     value: `${fmtCost(monthCost)} wydane | Projekcja: ~${fmtCost(projection)}`,
                     inline: false,
                 },
-                { name: '🏆 Top serwery (dziś)', value: topGuildsValue, inline: false },
+                { name: '🏆 Top 3 serwery (miesiąc)', value: topGuildsValue, inline: true },
+                { name: '👤 Top 4 użytkownicy (miesiąc)', value: topUsersValue, inline: false },
             );
     }
 
