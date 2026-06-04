@@ -15,8 +15,11 @@ class AutoModerationService {
         this.violationCounts = new Map(); // userId -> { count, firstViolation, violations: [] }
         this.userWarnings = new Map(); // userId -> { warnings: [], firstWarning }
         this.badWordsFile = path.join(__dirname, '../data/badwords.json');
+        this.violationCountsFile = path.join(__dirname, '../data/violation_counts.json');
+        this.activeMutesFile = path.join(__dirname, '../data/active_mutes.json');
         this.ensureDataDirectory();
         this.loadBadWords();
+        this.loadViolationCounts();
     }
 
     /**
@@ -381,6 +384,139 @@ class AutoModerationService {
     }
 
     /**
+     * Wczytuje liczniki naruszeń z pliku, odfiltrowanie wygasłych
+     */
+    loadViolationCounts() {
+        try {
+            if (!fs.existsSync(this.violationCountsFile)) return;
+            const data = safeParse(fs.readFileSync(this.violationCountsFile, 'utf8'), {});
+            const now = Date.now();
+            const windowMs = this.config.autoModeration.violationWindow * 60 * 1000;
+            for (const [userId, entry] of Object.entries(data)) {
+                const validViolations = entry.violations.filter(v => now - v.timestamp < windowMs);
+                if (validViolations.length > 0) {
+                    this.violationCounts.set(userId, {
+                        count: validViolations.length,
+                        firstViolation: validViolations[0].timestamp,
+                        violations: validViolations
+                    });
+                }
+            }
+        } catch (error) {
+            this.logger.error(`Błąd podczas wczytywania liczników naruszeń: ${error.message}`);
+        }
+    }
+
+    /**
+     * Zapisuje liczniki naruszeń do pliku
+     */
+    saveViolationCounts() {
+        try {
+            const data = {};
+            for (const [userId, entry] of this.violationCounts.entries()) {
+                data[userId] = entry;
+            }
+            fs.writeFileSync(this.violationCountsFile, JSON.stringify(data, null, 2));
+        } catch (error) {
+            this.logger.error(`Błąd podczas zapisywania liczników naruszeń: ${error.message}`);
+        }
+    }
+
+    /**
+     * Wczytuje aktywne mute'y z pliku
+     */
+    loadActiveMutes() {
+        try {
+            if (!fs.existsSync(this.activeMutesFile)) return [];
+            return safeParse(fs.readFileSync(this.activeMutesFile, 'utf8'), []);
+        } catch (error) {
+            this.logger.error(`Błąd podczas wczytywania aktywnych mute'ów: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
+     * Zapisuje aktywne mute'y do pliku
+     */
+    saveActiveMutes(mutes) {
+        try {
+            fs.writeFileSync(this.activeMutesFile, JSON.stringify(mutes, null, 2));
+        } catch (error) {
+            this.logger.error(`Błąd podczas zapisywania aktywnych mute'ów: ${error.message}`);
+        }
+    }
+
+    /**
+     * Dodaje mute do persystentnego pliku
+     */
+    saveMute(userId, guildId, unmuteTime) {
+        const mutes = this.loadActiveMutes().filter(m => !(m.userId === userId && m.guildId === guildId));
+        mutes.push({ userId, guildId, unmuteTime });
+        this.saveActiveMutes(mutes);
+    }
+
+    /**
+     * Usuwa mute z persystentnego pliku
+     */
+    removeMute(userId, guildId) {
+        const mutes = this.loadActiveMutes().filter(m => !(m.userId === userId && m.guildId === guildId));
+        this.saveActiveMutes(mutes);
+    }
+
+    /**
+     * Przywraca aktywne mute'y po restarcie bota
+     * @param {Client} client - Klient Discord
+     */
+    async initializePersistentMutes(client) {
+        const activeMutes = this.loadActiveMutes();
+        if (activeMutes.length === 0) return;
+
+        const now = Date.now();
+        this.logger.info(`♻️ Przywracam ${activeMutes.length} aktywnych mute'ów po restarcie...`);
+
+        for (const mute of activeMutes) {
+            const { userId, guildId, unmuteTime } = mute;
+            const remaining = unmuteTime - now;
+
+            try {
+                const guild = client.guilds.cache.get(guildId);
+                if (!guild) { this.removeMute(userId, guildId); continue; }
+
+                const muteRole = guild.roles.cache.get(this.config.mute.muteRoleId);
+                if (!muteRole) { this.removeMute(userId, guildId); continue; }
+
+                if (remaining <= 0) {
+                    // Mute wygasł podczas gdy bot był offline - zdejmij rolę natychmiast
+                    const member = await guild.members.fetch(userId).catch(() => null);
+                    if (member && member.roles.cache.has(this.config.mute.muteRoleId)) {
+                        await member.roles.remove(muteRole);
+                        this.logger.info(`♻️ Odmutowano ${userId} (mute wygasł podczas restartu)`);
+                    }
+                    this.removeMute(userId, guildId);
+                } else {
+                    // Ustaw timeout na pozostały czas
+                    setTimeout(async () => {
+                        try {
+                            const g = client.guilds.cache.get(guildId);
+                            if (!g) return;
+                            const r = g.roles.cache.get(this.config.mute.muteRoleId);
+                            const m = await g.members.fetch(userId).catch(() => null);
+                            if (m && r && m.roles.cache.has(r.id)) await m.roles.remove(r);
+                            this.removeMute(userId, guildId);
+                            this.logger.info(`♻️ Automatyczne odmute po restarcie: ${userId}`);
+                        } catch (e) {
+                            this.logger.error(`Błąd automatycznego odmute po restarcie: ${e.message}`);
+                        }
+                    }, remaining);
+                    this.logger.info(`♻️ Przywrócono mute dla ${userId} - zostało ${Math.ceil(remaining / 60000)} min`);
+                }
+            } catch (error) {
+                this.logger.error(`Błąd inicjalizacji mute dla ${userId}: ${error.message}`);
+            }
+        }
+    }
+
+    /**
      * Wczytuje listę wyzwisk z pliku
      */
     loadBadWords() {
@@ -598,7 +734,7 @@ class AutoModerationService {
 
         // Zwiększ licznik wyzwisk
         const now = Date.now();
-        const windowMs = this.config.autoModeration.violationWindow * 60 * 1000; // 15 minut
+        const windowMs = this.config.autoModeration.violationWindow * 60 * 1000;
 
         if (!this.violationCounts.has(userId)) {
             this.violationCounts.set(userId, {
@@ -624,6 +760,7 @@ class AutoModerationService {
         });
 
         userViolations.count = userViolations.violations.length;
+        this.saveViolationCounts();
 
         // Sprawdź czy przekroczono limit lub użytkownik już ma warny
         const existingWarnings = this.getUserWarningsInHour(userId, guildId);
@@ -705,11 +842,14 @@ class AutoModerationService {
         const now = Date.now();
         const windowMs = this.config.autoModeration.violationWindow * 60 * 1000;
 
+        let changed = false;
         for (const [userId, data] of this.violationCounts.entries()) {
             if (now - data.firstViolation > windowMs) {
                 this.violationCounts.delete(userId);
+                changed = true;
             }
         }
+        if (changed) this.saveViolationCounts();
     }
 
     /**
@@ -719,6 +859,7 @@ class AutoModerationService {
     clearViolations(userId) {
         if (this.violationCounts.has(userId)) {
             this.violationCounts.delete(userId);
+            this.saveViolationCounts();
             this.logger.info(`Wyczyszczono licznik wyzwisk dla użytkownika ${userId}`);
         }
     }

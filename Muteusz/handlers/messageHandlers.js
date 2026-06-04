@@ -329,7 +329,12 @@ class MessageHandler {
             if (muteRole && member) {
                 // Dodaj rolę mute
                 await member.roles.add(muteRole);
-                
+
+                // Zapisz mute do pliku (persistencja przez restart)
+                const muteMs = this.config.autoModeration.muteTime * 60 * 1000;
+                const unmuteTime = Date.now() + muteMs;
+                this.autoModerationService.saveMute(message.author.id, message.guild.id, unmuteTime);
+
                 // Ustaw automatyczne odmute
                 setTimeout(async () => {
                     try {
@@ -338,10 +343,11 @@ class MessageHandler {
                             await memberToUnmute.roles.remove(muteRole);
                             await this.logService.logMessage('info', `Auto-moderacja: automatyczne odmute użytkownika ${message.author.tag}`, message);
                         }
+                        this.autoModerationService.removeMute(message.author.id, message.guild.id);
                     } catch (error) {
                         await this.logService.logMessage('error', `Błąd podczas automatycznego odmute: ${error.message}`, message);
                     }
-                }, this.config.autoModeration.muteTime * 60 * 1000);
+                }, muteMs);
 
                 // Powiadom użytkownika o mute (reply z pingiem)
                 if (this.config.autoModeration.notifyUser) {
