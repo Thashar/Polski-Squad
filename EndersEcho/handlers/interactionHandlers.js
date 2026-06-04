@@ -3768,7 +3768,11 @@ class InteractionHandler {
                 this.tokenUsageService.record(interaction.guildId, promptTokens, outputTokens, interaction.user.id).catch(() => {});
             }
             if (this.ocrStatsService && !dryRun) {
-                this.ocrStatsService.record(interaction.guildId, !!aiResult.isValidVictory).catch(() => {});
+                const _ocrIsValid = !!aiResult.isValidVictory;
+                this.ocrStatsService.record(interaction.guildId, _ocrIsValid).catch(() => {});
+                if (!_ocrIsValid) {
+                    this.ocrStatsService.recordRejection(interaction.guildId, interaction.user.id).catch(() => {});
+                }
             }
 
             if (aiResult.error === 'NOT_SIMILAR') {

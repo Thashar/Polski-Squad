@@ -14,6 +14,7 @@ class OcrStatsService {
         return {
             allTime:    { total: 0, success: 0, adminFixed: 0 },
             resettable: { total: 0, success: 0, adminFixed: 0, resetAt: null },
+            userRejections: {},
         };
     }
 
@@ -77,6 +78,33 @@ class OcrStatsService {
         this._data.allTime.adminFixed++;
         this._data.resettable.adminFixed++;
         this._save().catch(() => {});
+    }
+
+    async recordRejection(guildId, userId) {
+        if (!this._data) await this.load();
+        if (!this._data.userRejections) this._data.userRejections = {};
+        if (!this._data.userRejections[guildId]) this._data.userRejections[guildId] = {};
+        if (!this._data.userRejections[guildId][userId]) this._data.userRejections[guildId][userId] = {};
+        const monthKey = new Date().toISOString().slice(0, 7);
+        const u = this._data.userRejections[guildId][userId];
+        u[monthKey] = (u[monthKey] || 0) + 1;
+        this._save().catch(() => {});
+    }
+
+    getMonthlyTopRejectedUsers(month, guildFilter) {
+        const rejData = this._data?.userRejections || {};
+        const guildIds = guildFilter === 'all' ? Object.keys(rejData) : [guildFilter];
+        const byUser = new Map();
+        for (const gId of guildIds) {
+            for (const [uId, months] of Object.entries(rejData[gId] || {})) {
+                const count = months[month] || 0;
+                if (count > 0) byUser.set(uId, (byUser.get(uId) || 0) + count);
+            }
+        }
+        return [...byUser.entries()]
+            .map(([userId, count]) => ({ userId, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 3);
     }
 
     getStats() {
