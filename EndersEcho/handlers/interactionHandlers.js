@@ -9206,13 +9206,11 @@ class InteractionHandler {
         const hasPrev   = idx > 0;
         const hasNext   = idx < available.length - 1;
 
-        const prevMonthRaw = hasPrev ? available[idx - 1].replace('-', '') : monthStr;
-        const nextMonthRaw = hasNext ? available[idx + 1].replace('-', '') : monthStr;
-
+        // Przyciski kodują BIEŻĄCY miesiąc — handler sam oblicza prev/next
         // Wiersz 1: ◀ | [Miesiąc → per user] | ▶ | 🌐 Wszystkie (superUser) | Zbiorczo (superUser)
         const row1Buttons = [
             new ButtonBuilder()
-                .setCustomId(`tk_p_${prevMonthRaw}_${guildFilter}_${userId}`)
+                .setCustomId(`tk_p_${monthStr}_${guildFilter}_${userId}`)
                 .setEmoji('◀️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasPrev),
@@ -9221,7 +9219,7 @@ class InteractionHandler {
                 .setLabel(monthLabel)
                 .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
-                .setCustomId(`tk_n_${nextMonthRaw}_${guildFilter}_${userId}`)
+                .setCustomId(`tk_n_${monthStr}_${guildFilter}_${userId}`)
                 .setEmoji('▶️')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(!hasNext),
