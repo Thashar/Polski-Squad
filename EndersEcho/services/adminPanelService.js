@@ -256,7 +256,7 @@ class AdminPanelService {
                 components: [this._buildActivityRow()],
             },
             {
-                embed: this._buildCostEmbed(todayTokens, [...guildIds]),
+                embed: this._buildCostEmbed(todayTokens, [...guildIds], globalRanking),
                 components: [this._buildCostRow()],
             },
             {
@@ -539,10 +539,11 @@ class AdminPanelService {
     }
 
     // ─── EMBED 5: Koszty AI ───────────────────────────────────────────────────
-    _buildCostEmbed(todayTokens, guildIds) {
+    _buildCostEmbed(todayTokens, guildIds, globalRanking = []) {
         const { promptTokens, outputTokens, requests, cost } = todayTokens;
 
         const svc = this._services.tokenUsageService;
+        const cfgSvc = this._services.guildConfigService;
         const currentMonth = new Date().toISOString().slice(0, 7);
         const dayOfMonth = new Date().getDate();
         const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
@@ -562,9 +563,9 @@ class AdminPanelService {
 
         const projection = dayOfMonth > 0 ? (monthCost / dayOfMonth) * daysInMonth : 0;
 
+        // Top 3 serwery — według nazwy, posortowane po koszcie miesięcznym
         const monthGuildCosts = [];
         if (svc?.data?.guilds && guildIds) {
-            const cfgSvc = this._services.guildConfigService;
             for (const guildId of guildIds) {
                 const guildData = svc.data.guilds[guildId];
                 if (!guildData) continue;
@@ -576,19 +577,26 @@ class AdminPanelService {
                 }
                 if (gCost > 0) {
                     const cfg = cfgSvc?.getConfig(guildId);
-                    monthGuildCosts.push({ tag: cfg?.tag || cfg?.guildName || guildId, cost: gCost });
+                    monthGuildCosts.push({ name: cfg?.guildName || cfg?.tag || guildId, cost: gCost });
                 }
             }
         }
         monthGuildCosts.sort((a, b) => b.cost - a.cost);
         const topGuildsValue = monthGuildCosts.slice(0, 3).length > 0
-            ? monthGuildCosts.slice(0, 3).map(g => `• ${g.tag}: ${fmtCost(g.cost)}`).join('\n')
+            ? monthGuildCosts.slice(0, 3).map(g => `• ${g.name}: ${fmtCost(g.cost)}`).join('\n')
             : '—';
 
-        const topUsers = svc?.getUsersMonthlyStats?.(currentMonth, 'all') ?? [];
-        const top4Users = topUsers.slice(0, 4);
-        const topUsersValue = top4Users.length > 0
-            ? top4Users.map((u, i) => `${i + 1}. <@${u.userId}>: ${fmtCost(u.cost)} (${u.requests} req.)`).join('\n')
+        // Top 5 użytkowników — według ilości req, z linkiem do profilu i tagiem serwera
+        const usernameMap = new Map(globalRanking.map(p => [p.userId, p.username]));
+        const topUsers = (svc?.getUsersMonthlyStats?.(currentMonth, 'all') ?? []).slice(0, 5);
+        const topUsersValue = topUsers.length > 0
+            ? topUsers.map((u, i) => {
+                const username = usernameMap.get(u.userId) || `<@${u.userId}>`;
+                const link = `[${username}](https://discord.com/users/${u.userId})`;
+                const serverTag = this._getUserPrimaryGuildTag(u.userId, currentMonth, guildIds, svc, cfgSvc);
+                const tagStr = serverTag ? ` \`${serverTag}\`` : '';
+                return `${i + 1}. ${link}${tagStr} — **${u.requests}** req.`;
+            }).join('\n')
             : '—';
 
         return new EmbedBuilder()
@@ -605,9 +613,27 @@ class AdminPanelService {
                     value: `${fmtCost(monthCost)} wydane | Projekcja: ~${fmtCost(projection)}`,
                     inline: false,
                 },
-                { name: '🏆 Top 3 serwery (miesiąc)', value: topGuildsValue, inline: true },
-                { name: '👤 Top 4 użytkownicy (miesiąc)', value: topUsersValue, inline: false },
+                { name: '🏆 Top 3 serwery (miesiąc)', value: topGuildsValue, inline: false },
+                { name: '👤 Top 5 użytkowników (miesiąc, req.)', value: topUsersValue, inline: false },
             );
+    }
+
+    _getUserPrimaryGuildTag(userId, month, guildIds, svc, cfgSvc) {
+        const usersData = svc?.data?.users || {};
+        let maxReq = 0, bestTag = null;
+        for (const gId of guildIds) {
+            const userDays = usersData[gId]?.[userId] || {};
+            let gReq = 0;
+            for (const [dateKey, d] of Object.entries(userDays)) {
+                if (dateKey.startsWith(month)) gReq += d.requests || 0;
+            }
+            if (gReq > maxReq) {
+                maxReq = gReq;
+                const cfg = cfgSvc?.getConfig(gId);
+                bestTag = cfg?.tag || cfg?.guildName || null;
+            }
+        }
+        return bestTag;
     }
 
     _buildCostRow() {
