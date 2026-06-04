@@ -38,39 +38,31 @@ function fmtTs(isoStr) {
     } catch { return isoStr.slice(0, 16).replace('T', ' '); }
 }
 
-function timeSince(isoStr) {
-    if (!isoStr) return '—';
-    const diff = Date.now() - new Date(isoStr).getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return 'przed chwilą';
-    if (m < 60) return `${m} min temu`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h}h temu`;
-    return `${Math.floor(h / 24)}d temu`;
-}
-
 function todayKey() {
     return new Date().toISOString().slice(0, 10);
 }
 
-// Polska nazwa miesiąca (skrócona)
 const MONTH_NAMES_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
+// Klucze sekcji — kolejność = kolejność wiadomości na kanale
+const SECTION_KEYS = ['system', 'users', 'ocr', 'activity', 'costs', 'servers'];
+
 /**
- * Zarządza wiadomością Centrum Dowodzenia Head Admina.
- * Panel jest wiadomością na kanale ENDERSECHO_ADMIN_PANEL_CHANNEL_ID,
- * automatycznie edytowaną po każdym nowym rekordzie lub akcji admina.
+ * Centrum Dowodzenia Head Admina.
+ * Panel składa się z 6 osobnych wiadomości na kanale ENDERSECHO_ADMIN_PANEL_CHANNEL_ID.
+ * Każda wiadomość zawiera jeden embed + dedykowane przyciski akcji bezpośrednio pod nim.
+ * Wszystkie 6 wiadomości są edytowane automatycznie po każdym zdarzeniu.
  */
 class AdminPanelService {
     constructor(dataDir, config, services) {
         this._dataFile = path.join(dataDir, 'admin_panel.json');
         this._config = config;
         this._services = services;
-        this._messageId = null;
+        // Słownik messageId per sekcja: { system, users, ocr, activity, costs, servers }
+        this._messageIds = {};
         this._channelId = config.adminPanelChannelId || null;
         this._client = null;
         this._startTime = Date.now();
-        // { userName, score, bossName, guildId, timestamp }
         this._lastRecord = null;
         this._refreshing = false;
         this._pendingRefresh = false;
@@ -85,7 +77,13 @@ class AdminPanelService {
         try {
             const raw = await fs.readFile(this._dataFile, 'utf8');
             const data = JSON.parse(raw);
-            this._messageId = data.messageId || null;
+            // Nowy format: messageIds (obiekt)
+            if (data.messageIds && typeof data.messageIds === 'object') {
+                this._messageIds = data.messageIds;
+            } else if (data.messageId) {
+                // Stary format: jedna wiadomość → ignorujemy, panel zostanie odtworzony
+                this._messageIds = {};
+            }
             if (!this._channelId && data.channelId) {
                 this._channelId = data.channelId;
             }
@@ -97,7 +95,7 @@ class AdminPanelService {
     async _persist() {
         await fs.mkdir(path.dirname(this._dataFile), { recursive: true });
         await fs.writeFile(this._dataFile, JSON.stringify({
-            messageId: this._messageId,
+            messageIds: this._messageIds,
             channelId: this._channelId,
         }, null, 2), 'utf8');
     }
@@ -114,19 +112,19 @@ class AdminPanelService {
         return this._channelId;
     }
 
+    // Zwraca ID pierwszej wiadomości panelu (dla backward compat z interactionHandlers)
     getMessageId() {
-        return this._messageId;
+        return this._messageIds.system || null;
     }
 
-    // Ustaw kanał panelu (używane przez komendę /manage → Centrum Dowodzenia → Skonfiguruj)
     async setupChannel(channelId) {
         this._channelId = channelId;
-        this._messageId = null;
+        this._messageIds = {};
         await this._persist();
         await this._doRefresh();
     }
 
-    // Debounced refresh — maksymalnie jeden pending na raz
+    // Debounced refresh
     refresh() {
         if (this._refreshing) {
             this._pendingRefresh = true;
@@ -147,8 +145,7 @@ class AdminPanelService {
     async _doRefresh() {
         if (!this._client || !this._channelId) return;
 
-        const embeds = await this._buildEmbeds(); // ustawia this._lastServerData
-        const components = this._buildComponents(this._lastServerData);
+        const sections = await this._buildSections();
 
         const channel = await this._client.channels.fetch(this._channelId).catch(() => null);
         if (!channel) {
@@ -156,20 +153,52 @@ class AdminPanelService {
             return;
         }
 
-        if (this._messageId) {
-            const msg = await channel.messages.fetch(this._messageId).catch(() => null);
-            if (msg) {
-                await msg.edit({ embeds, components });
-                return;
-            }
-            // Wiadomość usunięta — wyczyść ID, wyślij nową
-            this._messageId = null;
+        // Sprawdź czy wszystkie 6 wiadomości istnieje
+        const allKeysPresent = SECTION_KEYS.every(k => this._messageIds[k]);
+        let allExist = false;
+
+        if (allKeysPresent) {
+            const checks = await Promise.allSettled(
+                SECTION_KEYS.map(k => channel.messages.fetch(this._messageIds[k]))
+            );
+            allExist = checks.every(r => r.status === 'fulfilled');
         }
 
-        const newMsg = await channel.send({ embeds, components });
-        this._messageId = newMsg.id;
+        if (allExist) {
+            // Edytuj wszystkie 6 równolegle
+            await Promise.allSettled(
+                SECTION_KEYS.map((key, i) =>
+                    channel.messages.fetch(this._messageIds[key])
+                        .then(msg => msg.edit({
+                            embeds: [sections[i].embed],
+                            components: sections[i].components,
+                        }))
+                )
+            );
+            return;
+        }
+
+        // Usuń stare wiadomości panelu jeśli istnieją
+        for (const key of SECTION_KEYS) {
+            if (this._messageIds[key]) {
+                await channel.messages.fetch(this._messageIds[key])
+                    .then(msg => msg.delete())
+                    .catch(() => {});
+            }
+        }
+        this._messageIds = {};
+
+        // Wyślij 6 nowych wiadomości sekwencyjnie (zachowuje kolejność na kanale)
+        for (let i = 0; i < SECTION_KEYS.length; i++) {
+            const newMsg = await channel.send({
+                embeds: [sections[i].embed],
+                components: sections[i].components,
+            });
+            this._messageIds[SECTION_KEYS[i]] = newMsg.id;
+        }
+
         await this._persist();
-        logger.info(`Panel Centrum Dowodzenia: nowa wiadomość ${this._messageId} na kanale ${this._channelId}`);
+        logger.info(`Panel Centrum Dowodzenia: utworzono 6 wiadomości panelu na kanale ${this._channelId}`);
     }
 
     _getActiveGuildIds() {
@@ -179,7 +208,8 @@ class AdminPanelService {
         return new Set((this._config.guilds || []).map(g => g.id));
     }
 
-    async _buildEmbeds() {
+    // Buduje tablicę 6 obiektów { embed, components } — po jednym na sekcję
+    async _buildSections() {
         const guildIds = this._getActiveGuildIds();
         const now = new Date();
 
@@ -194,14 +224,13 @@ class AdminPanelService {
         const pendingCvCount = this._getPendingCvCount();
         const todayTokens = this._getTodayTokens([...guildIds]);
 
-        // Statystyki aktywności graczy
         let playerActivityStats = null;
         try {
             const scoreHistorySvc = this._services.scoreHistoryService;
             if (scoreHistorySvc?.getActivePlayersStats) {
                 playerActivityStats = await scoreHistorySvc.getActivePlayersStats([...guildIds]);
             }
-        } catch { /* pomiń — opcjonalne */ }
+        } catch { /* opcjonalne */ }
 
         const lastUpdated = now.toLocaleString('pl-PL', {
             timeZone: 'Europe/Warsaw',
@@ -210,12 +239,30 @@ class AdminPanelService {
         });
 
         return [
-            this._buildSystemEmbed(serverData.configured, lastUpdated, [...guildIds]),
-            this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount),
-            this._buildOcrEmbed(ocrStats, pendingCvCount),
-            this._buildActivityEmbed(playerActivityStats),
-            this._buildCostEmbed(todayTokens, [...guildIds]),
-            this._buildServersEmbed(serverData),
+            {
+                embed: this._buildSystemEmbed(serverData.configured, lastUpdated, [...guildIds]),
+                components: [this._buildSystemRow()],
+            },
+            {
+                embed: this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount),
+                components: [this._buildUsersRow()],
+            },
+            {
+                embed: this._buildOcrEmbed(ocrStats, pendingCvCount),
+                components: [this._buildOcrRow()],
+            },
+            {
+                embed: this._buildActivityEmbed(playerActivityStats),
+                components: [this._buildActivityRow()],
+            },
+            {
+                embed: this._buildCostEmbed(todayTokens, [...guildIds]),
+                components: [this._buildCostRow()],
+            },
+            {
+                embed: this._buildServersEmbed(serverData),
+                components: [this._buildServersRow()],
+            },
         ];
     }
 
@@ -311,7 +358,6 @@ class AdminPanelService {
         const ping = this._client?.ws?.ping ?? -1;
         const ram = Math.round(process.memoryUsage().rss / 1024 / 1024);
 
-        // Policz AI OCR per serwer
         const cfgSvc = this._services.guildConfigService;
         let aiOcrActive = 0;
         let aiOcrBlocked = 0;
@@ -326,7 +372,6 @@ class AdminPanelService {
             }
         }
 
-        // Następny Global TOP10
         let nextTop10 = '—';
         const g10 = this._services.globalTop10Service;
         try {
@@ -340,7 +385,7 @@ class AdminPanelService {
             .setTitle('📡 Przegląd Systemu')
             .addFields(
                 { name: '⏱️ Uptime', value: uptime, inline: true },
-                { name: '🏓 Ping (ms)', value: ping >= 0 ? `${ping}ms` : '—', inline: true },
+                { name: '🏓 Ping', value: ping >= 0 ? `${ping}ms` : '—', inline: true },
                 { name: '💾 RAM', value: `${ram}MB`, inline: true },
                 { name: '🖥️ Serwery', value: `${configuredCount}`, inline: true },
                 { name: '🌐 AI OCR', value: `${aiOcrActive} aktywnych / ${aiOcrBlocked} zablokowanych`, inline: true },
@@ -349,13 +394,20 @@ class AdminPanelService {
             .setFooter({ text: `Ostatnia aktualizacja: ${lastUpdated}` });
     }
 
+    _buildSystemRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_refresh').setEmoji('🔄').setLabel('Odśwież').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel('Interwał TOP10').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_info').setEmoji('📢').setLabel('Wyślij Info').setStyle(ButtonStyle.Secondary),
+        );
+    }
+
     // ─── EMBED 2: Użytkownicy ─────────────────────────────────────────────────
     _buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount) {
         const totalPlayers = globalRanking.length;
         const blockedCount = Array.isArray(blockedUsersArr) ? blockedUsersArr.length : 0;
         const testerCount = this._services.testerService?.getTesters()?.length ?? 0;
 
-        // Lista zablokowanych (max 3)
         let blockedValue = `${blockedCount}`;
         if (blockedCount > 0) {
             const show = blockedUsersArr.slice(0, 3);
@@ -364,7 +416,6 @@ class AdminPanelService {
                 if (!entry.blockedUntil) return `• **${nick}** — permanentnie`;
                 const remaining = new Date(entry.blockedUntil).getTime() - Date.now();
                 if (remaining <= 0) return `• **${nick}** — wygasła`;
-                // Formatuj datę DD.MM HH:MM
                 const d = new Date(entry.blockedUntil);
                 const day = String(d.getDate()).padStart(2, '0');
                 const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -386,6 +437,15 @@ class AdminPanelService {
                 { name: '🔒 Zablokowanych', value: blockedValue, inline: false },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
             );
+    }
+
+    _buildUsersRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel('Zablokuj').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('cc_action_unblock').setEmoji('🔓').setLabel('Odblokuj').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel('Usuń gracza').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel('Usuń osiągnięcia').setStyle(ButtonStyle.Secondary),
+        );
     }
 
     // ─── EMBED 3: OCR & Analizy ──────────────────────────────────────────────
@@ -415,24 +475,23 @@ class AdminPanelService {
             .setColor(0x5865F2)
             .setTitle('📊 OCR & Analizy')
             .addFields(
-                {
-                    name: '📊 Analizy',
-                    value: `Łącznie: **${at.total}** / Od resetu: **${rs.total}**`,
-                    inline: false,
-                },
+                { name: '📊 Analizy', value: `Łącznie: **${at.total}** / Od resetu: **${rs.total}**`, inline: false },
                 { name: '✅ Success Rate', value: successRateValue, inline: false },
                 {
                     name: '❌ Odrzucone',
                     value: `Łącznie: **${at.total - (at.success || 0)}** / Od resetu: **${rs.total - (rs.success || 0)}**`,
                     inline: true,
                 },
-                {
-                    name: '🔧 Interwencje admina',
-                    value: `Łącznie: **${atFixed}** / Od resetu: **${rsFixed}**`,
-                    inline: true,
-                },
+                { name: '🔧 Interwencje admina', value: `Łącznie: **${atFixed}** / Od resetu: **${rsFixed}**`, inline: true },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
             );
+    }
+
+    _buildOcrRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_action_ocr_stats').setEmoji('🎯').setLabel('Success Rate').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_action_cmd_usage').setEmoji('🔢').setLabel('Użycia komend').setStyle(ButtonStyle.Secondary),
+        );
     }
 
     // ─── EMBED 4: Aktywność Graczy ────────────────────────────────────────────
@@ -446,7 +505,6 @@ class AdminPanelService {
 
         const { activeLastWeek, activeLastMonth, newLastWeek, newLastMonth, monthBuckets } = stats;
 
-        // Ostatnie 3 miesiące
         const now = new Date();
         const months = [];
         for (let i = 2; i >= 0; i--) {
@@ -461,31 +519,24 @@ class AdminPanelService {
             .setColor(0x9B59B6)
             .setTitle('🏆 Aktywność Graczy')
             .addFields(
-                {
-                    name: '📈 Aktywni gracze',
-                    value: `Tydzień: **${activeLastWeek}** | Miesiąc: **${activeLastMonth}**`,
-                    inline: false,
-                },
-                {
-                    name: '🆕 Nowi gracze',
-                    value: `Tydzień: **${newLastWeek}** | Miesiąc: **${newLastMonth}**`,
-                    inline: false,
-                },
-                {
-                    name: '📅 Przyrost miesięczny',
-                    value: monthLine || '—',
-                    inline: false,
-                },
+                { name: '📈 Aktywni gracze', value: `Tydzień: **${activeLastWeek}** | Miesiąc: **${activeLastMonth}**`, inline: false },
+                { name: '🆕 Nowi gracze', value: `Tydzień: **${newLastWeek}** | Miesiąc: **${newLastMonth}**`, inline: false },
+                { name: '📅 Przyrost miesięczny', value: monthLine || '—', inline: false },
             );
+    }
+
+    _buildActivityRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel('Wykres przyrostu').setStyle(ButtonStyle.Secondary),
+        );
     }
 
     // ─── EMBED 5: Koszty AI ───────────────────────────────────────────────────
     _buildCostEmbed(todayTokens, guildIds) {
         const { promptTokens, outputTokens, requests, cost } = todayTokens;
 
-        // Koszt tego miesiąca
         const svc = this._services.tokenUsageService;
-        const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const currentMonth = new Date().toISOString().slice(0, 7);
         const dayOfMonth = new Date().getDate();
         const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
 
@@ -504,7 +555,6 @@ class AdminPanelService {
 
         const projection = dayOfMonth > 0 ? (monthCost / dayOfMonth) * daysInMonth : 0;
 
-        // Top 3 serwery po koszcie dziś
         const today = todayKey();
         const guildCosts = [];
         if (svc?.data?.guilds && guildIds) {
@@ -531,7 +581,7 @@ class AdminPanelService {
             .addFields(
                 {
                     name: '📤 Dziś',
-                    value: `Requesty: **${requests}** | Tokeny IN: **${fmtTokens(promptTokens)}** | Tokeny OUT: **${fmtTokens(outputTokens)}** | Koszt: **${fmtCost(cost)}**`,
+                    value: `Requesty: **${requests}** | Tokeny IN: **${fmtTokens(promptTokens)}** | OUT: **${fmtTokens(outputTokens)}** | Koszt: **${fmtCost(cost)}**`,
                     inline: false,
                 },
                 {
@@ -539,12 +589,15 @@ class AdminPanelService {
                     value: `${fmtCost(monthCost)} wydane | Projekcja: ~${fmtCost(projection)}`,
                     inline: false,
                 },
-                {
-                    name: '🏆 Top serwery (dziś)',
-                    value: topGuildsValue,
-                    inline: false,
-                },
+                { name: '🏆 Top serwery (dziś)', value: topGuildsValue, inline: false },
             );
+    }
+
+    _buildCostRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_action_tokens').setEmoji('📊').setLabel('Tokeny AI').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel('Ustaw limity').setStyle(ButtonStyle.Secondary),
+        );
     }
 
     // ─── EMBED 6: Serwery ─────────────────────────────────────────────────────
@@ -552,7 +605,6 @@ class AdminPanelService {
         const dailyLimit = this._services.usageLimitService?.getLimit();
         const cooldownMs = this._services.updateCooldownService?.getCooldownDuration?.() ?? null;
 
-        // Formatuj cooldown
         let cooldownStr = '—';
         if (cooldownMs && cooldownMs > 0) {
             const h = Math.floor(cooldownMs / 3600000);
@@ -607,116 +659,14 @@ class AdminPanelService {
             .setDescription(lines.join('\n'));
     }
 
-    // ─── Komponenty panelu (4 rzędy przycisków) ────────────────────────────────
-    _buildComponents(serverData) {
-        const components = [];
-
-        // Rząd 1 — System
-        const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('cc_refresh')
-                .setEmoji('🔄')
-                .setLabel('Odśwież')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('panel_top10_interval')
-                .setEmoji('📅')
-                .setLabel('Interwał TOP10')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_info')
-                .setEmoji('📢')
-                .setLabel('Wyślij Info')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_player_growth')
-                .setEmoji('📈')
-                .setLabel('Przyrost graczy')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('cc_action_cmd_usage')
-                .setEmoji('🔢')
-                .setLabel('Użycia komend')
-                .setStyle(ButtonStyle.Secondary),
+    _buildServersRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel('AI OCR').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_action_roles').setEmoji('🔁').setLabel('Przetwórz role').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_action_tester').setEmoji('🧪').setLabel('Testerzy').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🚫').setLabel('Zbanuj serwer').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('🗑️').setLabel('Usuń dane').setStyle(ButtonStyle.Danger),
         );
-        components.push(row1);
-
-        // Rząd 2 — Użytkownicy
-        const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('panel_block')
-                .setEmoji('🔒')
-                .setLabel('Zablokuj')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('cc_action_unblock')
-                .setEmoji('🔓')
-                .setLabel('Odblokuj')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_remove')
-                .setEmoji('🗑️')
-                .setLabel('Usuń gracza')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('panel_ach_del')
-                .setEmoji('🏆')
-                .setLabel('Usuń osiągnięcia')
-                .setStyle(ButtonStyle.Secondary),
-        );
-        components.push(row2);
-
-        // Rząd 3 — Serwer/OCR
-        const row3 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('panel_ocr')
-                .setEmoji('🔄')
-                .setLabel('AI OCR')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_limit')
-                .setEmoji('⚙️')
-                .setLabel('Ustaw limity')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('cc_action_roles')
-                .setEmoji('🔁')
-                .setLabel('Przetwórz role')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('cc_action_tester')
-                .setEmoji('🧪')
-                .setLabel('Testerzy')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_ban_guild')
-                .setEmoji('🚫')
-                .setLabel('Zbanuj serwer')
-                .setStyle(ButtonStyle.Danger),
-        );
-        components.push(row3);
-
-        // Rząd 4 — Statystyki
-        const row4 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('cc_action_tokens')
-                .setEmoji('📊')
-                .setLabel('Tokeny')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('cc_action_ocr_stats')
-                .setEmoji('🎯')
-                .setLabel('Success Rate')
-                .setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder()
-                .setCustomId('panel_delete_server_data')
-                .setEmoji('🗑️')
-                .setLabel('Usuń dane serwera')
-                .setStyle(ButtonStyle.Danger),
-        );
-        components.push(row4);
-
-        return components;
     }
 }
 
