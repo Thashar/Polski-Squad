@@ -41,7 +41,6 @@ const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const cron = require('node-cron');
 const AdminPanelService = require('./services/adminPanelService');
-const AlertService = require('./services/alertService');
 const CommandUsageService = require('./services/commandUsageService');
 
 const logger = createBotLogger('EndersEcho');
@@ -116,7 +115,6 @@ const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankin
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
-const alertService = new AlertService(config.ranking.dataDir);
 const commandUsageService = new CommandUsageService(config.ranking.dataDir);
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
     rankingService,
@@ -127,7 +125,9 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     communityVerificationService,
     guildConfigService,
     globalTop10Service,
-    alertService,
+    scoreHistoryService,
+    testerService,
+    usageLimitService,
 });
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService);
 
@@ -165,7 +165,6 @@ async function initializeBot() {
         globalTop10Service.start();
 
         // Wczytaj i uruchom Panel Centrum Dowodzenia Head Admina
-        await alertService.load();
         adminPanelService.setClient(client);
         await adminPanelService.load();
         if (adminPanelService.isConfigured()) {
