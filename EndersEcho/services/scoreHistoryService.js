@@ -168,6 +168,62 @@ class ScoreHistoryService {
             .sort((a, b) => a.firstTimestamp - b.firstTimestamp);
     }
 
+    // Zwraca statystyki aktywności graczy: aktywni (≥1 nowy rekord) w ostatnim tygodniu/miesiącu,
+    // nowi gracze (pierwszy rekord kiedykolwiek) w ostatnim tygodniu/miesiącu,
+    // oraz monthBuckets: { 'YYYY-MM': liczba_nowych_graczy }
+    async getActivePlayersStats(allGuildIds) {
+        const now = Date.now();
+        const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+        const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+        const activeWeek = new Set();
+        const activeMonth = new Set();
+        const newWeek = new Set();
+        const newMonth = new Set();
+        // Buckety miesięczne dla ostatnich 3 miesięcy (format YYYY-MM)
+        const monthBuckets = {};
+
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files = [];
+            try { files = await fs.readdir(dir); } catch { continue; }
+
+            for (const file of files) {
+                if (!file.endsWith('.json')) continue;
+                const userId = file.replace('.json', '');
+                try {
+                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
+                    const entries = JSON.parse(raw);
+                    if (!Array.isArray(entries) || entries.length === 0) continue;
+
+                    let firstTs = Infinity;
+                    for (const entry of entries) {
+                        const ts = new Date(entry.timestamp).getTime();
+                        if (isNaN(ts)) continue;
+                        if (ts < firstTs) firstTs = ts;
+                        if (ts >= weekAgo) activeWeek.add(userId);
+                        if (ts >= monthAgo) activeMonth.add(userId);
+                    }
+
+                    if (firstTs !== Infinity) {
+                        if (firstTs >= weekAgo) newWeek.add(userId);
+                        if (firstTs >= monthAgo) newMonth.add(userId);
+                        const bucket = new Date(firstTs).toISOString().slice(0, 7);
+                        monthBuckets[bucket] = (monthBuckets[bucket] || 0) + 1;
+                    }
+                } catch { /* pomiń uszkodzone pliki */ }
+            }
+        }
+
+        return {
+            activeLastWeek: activeWeek.size,
+            activeLastMonth: activeMonth.size,
+            newLastWeek: newWeek.size,
+            newLastMonth: newMonth.size,
+            monthBuckets, // { 'YYYY-MM': count }
+        };
+    }
+
     // Zwraca { guildId: [{userId, firstTimestamp}] } — dla każdego serwera lista pierwszych wpisów per gracz.
     async getPerGuildFirstEntries(allGuildIds) {
         const result = {};

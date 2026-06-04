@@ -184,7 +184,7 @@
    - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
    - **Usuń dane serwera (head admin):** lista skonfigurowanych serwerów, na których bota już nie ma (`configured=true` ale `!guilds.cache.has(guildId)`) → potwierdzenie → usuwa `data/guilds/{guildId}/` + wpis z `guild_configs.json`. Operacja nieodwracalna.
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
-   - **Centrum Dowodzenia (head admin):** panel 5 embedów na dedykowanym kanale, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
+   - **Centrum Dowodzenia (head admin):** panel 6 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
 **Komendy slash:** `/configure`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
 
@@ -289,17 +289,15 @@
 | `panel_unblock_select` | StringSelectMenu — wybór do odblokowania |
 | `panel_tokens` | Pokaż statystyki tokenów |
 | `panel_process_roles` | Pełny reset ról TOP: usuń wszystkie → przyznaj wg aktualnego rankingu (admin + head admin) |
-| `panel_cmd_center` | Otwórz widok Centrum Dowodzenia z zakładkami (head admin) |
+| `panel_cmd_center` | Otwórz widok Centrum Dowodzenia — info o kanale + przycisk Odśwież (head admin) |
 | `panel_cmd_center_refresh` | Wymuś natychmiastowy refresh panelu Centrum Dowodzenia (head admin) |
 | `cc_refresh` | Odśwież wiadomość panelu (panel message → ephemeral) |
-| `cc_quick` | Szybki Podgląd — live snapshot OCR/koszty/CV (panel message → ephemeral) |
-| `cc_alerts` | Zarządzanie alertami (panel message → ephemeral) |
-| `cc_alert_ack_all` | Potwierdź wszystkie aktywne alerty |
-| `cc_alert_ack_{type}` | Potwierdź konkretny alert (ocrRate/pendingCv/dailyCost) |
-| `cc_thresh_set_{type}` | Otwórz modal zmiany progu alertu |
-| `cc_thresh_modal_{type}` | Modal zmiany progu (pole `cc_thresh_value`) |
-| `cc_tab_sel` | StringSelectMenu — zmiana zakładki w widoku CC (overview/quick/alert_cfg) |
-| `cc_server_sel` | StringSelectMenu — deep-dive serwera (panel message → ephemeral z TOP5 i paskami postępu) |
+| `cc_action_unblock` | Odblokuj gracza — modal wyszukiwania lub info "brak zablokowanych" (ephemeral) |
+| `cc_action_roles` | Przetwórz role TOP — ephemeral z potwierdzeniem (używa `panel_process_roles`) |
+| `cc_action_tester` | Zarządzaj testerami — lista + przyciski Dodaj/Usuń (ephemeral) |
+| `cc_action_tokens` | Zużycie tokenów globalnie (ephemeral, head admin) |
+| `cc_action_cmd_usage` | Użycia komend globalnie (ephemeral, head admin) |
+| `cc_action_ocr_stats` | Success Rate z licznikami + przycisk reset (ephemeral, head admin) |
 | `panel_info` | Otwórz modal /info (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
@@ -753,44 +751,55 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) pod embedem sukc
 
 ## Centrum Dowodzenia Head Admina (Admin Panel Live Dashboard)
 
-**Pliki serwisów:** `services/adminPanelService.js`, `services/alertService.js`
+**Plik serwisu:** `services/adminPanelService.js`
 
 **Konfiguracja (zmienna env):**
 ```env
 ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 ```
 
-**Działanie:** Panel to jedna stała wiadomość z 5 embedami + komponenty (przyciski + select menu) na kanale head admina. Edytowana automatycznie po każdym zdarzeniu.
+**Działanie:** Panel to jedna stała wiadomość z 6 embedami + 4 rzędy przycisków na kanale head admina. Edytowana automatycznie po każdym zdarzeniu. Brak select menu — wyłącznie przyciski.
 
-**5 embedów panelu:**
+**6 embedów panelu:**
 
 | # | Embed | Kolor | Zawartość |
 |---|---|---|---|
-| 1 | 📡 Centrum Dowodzenia | `0xFF6B35` | Uptime, liczba serwerów, AI OCR on/off, następny Global TOP10 |
-| 2 | 📊 Statystyki OCR | `0x5865F2` | Łącznie analiz, od resetu, Success Rate, interwencje admina, oczekujące CV, ostatnia analiza |
-| 3 | 🌍 Gracze Globalnie | `0x57F287` | Łącznie graczy, aktywne cooldowny, zablokowanych, TOP 3 globalny |
-| 4 | 💰 Koszty AI — Dzisiaj | `0xFEE75C` | Requesty, tokeny IN/OUT, łącznie tokenów, szacowany koszt ($) |
-| 5 | 🖥️ Status Serwerów | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag |
+| 1 | 📡 Przegląd Systemu | `0xFF6B35` | Uptime, ping, RAM, liczba serwerów, AI OCR (aktywnych/zablokowanych), następny Global TOP10 |
+| 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, testerzy, lista zablokowanych (max 3 + "i N więcej"), oczekujące CV |
+| 3 | 📊 OCR & Analizy | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, odrzucone, interwencje admina, oczekujące CV |
+| 4 | 🏆 Aktywność Graczy | `0x9B59B6` | Aktywni gracze tydzień/miesiąc, nowi gracze tydzień/miesiąc, przyrost miesięczny (ostatnie 3 miesiące) |
+| 5 | 💰 Koszty AI | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), ten miesiąc + projekcja, top 3 serwery po koszcie |
+| 6 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku |
 
-**Komponenty na wiadomości panelu (Rząd 1 — przyciski):**
+**Komponenty na wiadomości panelu (4 rzędy przycisków):**
+
+**Rząd 1 — System:**
 - `🔄 cc_refresh` — wymuś refresh (odpowiada ephemeral)
-- `🚨 cc_alerts (N)` — zarządzaj alertami (czerwony gdy N>0, szary gdy brak; ephemeral)
-- `⚡ cc_quick` — Szybki Podgląd z live statystykami (ephemeral)
+- `📅 panel_top10_interval` — interwał Global TOP10 (otwiera modal)
+- `📢 panel_info` — wyślij info na wszystkie serwery (otwiera modal)
+- `📈 panel_player_growth` — statystyki przyrostu graczy (ephemeral)
+- `🔢 cc_action_cmd_usage` — użycia komend globalnie (ephemeral)
 
-**Komponenty na wiadomości panelu (Rząd 2 — select menu):**
-- `cc_server_sel` — deep-dive wybranego serwera: TOP5 z paskami postępu `█░`, koszty AI, OCR status (ephemeral)
+**Rząd 2 — Użytkownicy:**
+- `🔒 panel_block` — zablokuj gracza (otwiera modal wyszukiwania)
+- `🔓 cc_action_unblock` — odblokuj gracza (modal lub info "brak zablokowanych")
+- `🗑️ panel_remove` — usuń gracza (otwiera modal wyszukiwania)
+- `🏆 panel_ach_del` — usuń osiągnięcia (otwiera modal wyszukiwania)
 
-**Widok `/manage → 📡 Centrum Dowodzenia` (zakładki via select menu):**
-- `📡 Przegląd` — status panelu + instrukcje obsługi
-- `⚡ Szybki Podgląd` — live OCR rate z paskiem, koszty z paskiem, CV, cooldowny, serwery
-- `⚙️ Konfiguracja Alertów` — stan alertów, potwierdzanie, zmiana progów przez modal
+**Rząd 3 — Serwer/OCR:**
+- `🔄 panel_ocr` — AI OCR on/off per serwer (otwiera modal)
+- `⚙️ panel_limit` — ustaw limity (otwiera modal)
+- `🔁 cc_action_roles` — przetwórz role TOP (ephemeral z potwierdzeniem)
+- `🧪 cc_action_tester` — zarządzaj testerami (ephemeral)
+- `🚫 panel_ban_guild` — zbanuj serwer (otwiera modal)
 
-**AlertService (`services/alertService.js`):**
-- Trzy typy alertów: `ocrRate` (min %), `pendingCv` (max count), `dailyCost` (max $)
-- Domyślne progi: OCR <80%, CV >3, koszt >$5.00
-- Debounce: alert wysyłany max raz na godzinę tego samego typu
-- Persistencja: `data/alert_config.json` — `{ thresholds, active }`
-- Po przekroczeniu progu: oddzielna wiadomość `🚨 Centrum Dowodzenia — Nowy Alert!` na kanale panelu
+**Rząd 4 — Statystyki:**
+- `📊 cc_action_tokens` — zużycie tokenów globalnie (ephemeral)
+- `🎯 cc_action_ocr_stats` — Success Rate z licznikami (ephemeral)
+- `🗑️ panel_delete_server_data` — usuń dane serwera (otwiera panel)
+
+**Widok `/manage → 📡 Centrum Dowodzenia`:**
+Prosta informacja o kanale panelu + przycisk `🔄 Odśwież Panel`.
 
 **Triggery automatycznego refresh:**
 - ✅ Po każdym zapisie wyniku (`/update` — zarówno nowy rekord jak i brak rekordu, `!dryRun`)
@@ -799,12 +808,14 @@ ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 - ✅ Po zablokowaniu gracza (`panel_block_time_*`)
 - ✅ Po odblokowaniu gracza (`panel_unblock_select`)
 - ✅ Po akcji Community Verification (approve/remove/block)
-- ✅ Na żądanie: `/manage` → `📡 Centrum Dowodzenia` → `🔄 Odśwież Panel`
+- ✅ Na żądanie: `🔄 cc_refresh` na wiadomości panelu lub `/manage → Centrum Dowodzenia → Odśwież`
 - ✅ Przy starcie bota (jeśli kanał skonfigurowany)
 
 **Debouncing:** Maksymalnie 1 refresh naraz + 1 oczekujący (dodatkowe wywołania w trakcie odrzucane).
 
 **Persistencja:** `data/admin_panel.json` — `{ messageId, channelId }`. Jeśli wiadomość usunięta, serwis tworzy nową.
+
+**Aktywność graczy:** `scoreHistoryService.getActivePlayersStats(allGuildIds)` — dane o aktywnych/nowych graczach z historii wyników. Opcjonalne — jeśli serwis niedostępny, embed pokazuje "Brak danych".
 
 **Klucz API serwisu:**
 ```javascript
@@ -814,8 +825,6 @@ adminPanelService.setupChannel(channelId); // zmień kanał i wyślij nową wiad
 adminPanelService.isConfigured(); // czy ENDERSECHO_ADMIN_PANEL_CHANNEL_ID ustawione
 adminPanelService.getChannelId(); // ID aktualnego kanału
 adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie wysłana)
-adminPanelService.alertService;  // getter do AlertService (sprawdź alerty)
-adminPanelService.buildServerDeepDive(guildId); // embed z TOP5 + paski postępu dla serwera
 ```
 
-**Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → zakładki: Przegląd / Szybki Podgląd / Konfiguracja Alertów.
+**Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → info o kanale + `🔄 Odśwież Panel`.

@@ -1,6 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
@@ -53,6 +53,9 @@ function todayKey() {
     return new Date().toISOString().slice(0, 10);
 }
 
+// Polska nazwa miesiąca (skrócona)
+const MONTH_NAMES_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
+
 /**
  * Zarządza wiadomością Centrum Dowodzenia Head Admina.
  * Panel jest wiadomością na kanale ENDERSECHO_ADMIN_PANEL_CHANNEL_ID,
@@ -71,7 +74,6 @@ class AdminPanelService {
         this._lastRecord = null;
         this._refreshing = false;
         this._pendingRefresh = false;
-        this._alertService = services.alertService || null;
         this._lastServerData = null;
     }
 
@@ -116,10 +118,6 @@ class AdminPanelService {
         return this._messageId;
     }
 
-    get alertService() {
-        return this._alertService;
-    }
-
     // Ustaw kanał panelu (używane przez komendę /manage → Centrum Dowodzenia → Skonfiguruj)
     async setupChannel(channelId) {
         this._channelId = channelId;
@@ -150,8 +148,7 @@ class AdminPanelService {
         if (!this._client || !this._channelId) return;
 
         const embeds = await this._buildEmbeds(); // ustawia this._lastServerData
-        const alertCount = this._alertService?.getActiveAlertCount() ?? 0;
-        const components = this._buildComponents(this._lastServerData, alertCount);
+        const components = this._buildComponents(this._lastServerData);
 
         const channel = await this._client.channels.fetch(this._channelId).catch(() => null);
         if (!channel) {
@@ -163,8 +160,6 @@ class AdminPanelService {
             const msg = await channel.messages.fetch(this._messageId).catch(() => null);
             if (msg) {
                 await msg.edit({ embeds, components });
-                // Sprawdź alerty po refresh (może wysłać alert jako osobna wiadomość)
-                await this._checkAlerts(channel).catch(() => {});
                 return;
             }
             // Wiadomość usunięta — wyczyść ID, wyślij nową
@@ -175,7 +170,6 @@ class AdminPanelService {
         this._messageId = newMsg.id;
         await this._persist();
         logger.info(`Panel Centrum Dowodzenia: nowa wiadomość ${this._messageId} na kanale ${this._channelId}`);
-        await this._checkAlerts(channel).catch(() => {});
     }
 
     _getActiveGuildIds() {
@@ -200,6 +194,15 @@ class AdminPanelService {
         const pendingCvCount = this._getPendingCvCount();
         const todayTokens = this._getTodayTokens([...guildIds]);
 
+        // Statystyki aktywności graczy
+        let playerActivityStats = null;
+        try {
+            const scoreHistorySvc = this._services.scoreHistoryService;
+            if (scoreHistorySvc?.getActivePlayersStats) {
+                playerActivityStats = await scoreHistorySvc.getActivePlayersStats([...guildIds]);
+            }
+        } catch { /* pomiń — opcjonalne */ }
+
         const lastUpdated = now.toLocaleString('pl-PL', {
             timeZone: 'Europe/Warsaw',
             day: '2-digit', month: '2-digit', year: 'numeric',
@@ -207,10 +210,11 @@ class AdminPanelService {
         });
 
         return [
-            this._buildStatusEmbed(serverData.configured, lastUpdated),
+            this._buildSystemEmbed(serverData.configured, lastUpdated, [...guildIds]),
+            this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount),
             this._buildOcrEmbed(ocrStats, pendingCvCount),
-            this._buildPlayersEmbed(globalRanking, blockedUsersArr, activeCooldownCount),
-            this._buildCostEmbed(todayTokens),
+            this._buildActivityEmbed(playerActivityStats),
+            this._buildCostEmbed(todayTokens, [...guildIds]),
             this._buildServersEmbed(serverData),
         ];
     }
@@ -300,130 +304,27 @@ class AdminPanelService {
         return '█'.repeat(filled) + '░'.repeat(length - filled);
     }
 
-    _buildComponents(serverData, alertCount) {
-        const components = [];
-
-        const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('cc_refresh')
-                .setEmoji('🔄')
-                .setLabel('Odśwież')
-                .setStyle(ButtonStyle.Primary),
-            new ButtonBuilder()
-                .setCustomId('cc_alerts')
-                .setEmoji('🚨')
-                .setLabel(alertCount > 0 ? `Alerty (${alertCount})` : 'Alerty')
-                .setStyle(alertCount > 0 ? ButtonStyle.Danger : ButtonStyle.Secondary)
-                .setDisabled(alertCount === 0),
-            new ButtonBuilder()
-                .setCustomId('cc_quick')
-                .setEmoji('⚡')
-                .setLabel('Podsumowanie')
-                .setStyle(ButtonStyle.Secondary),
-        );
-        components.push(row1);
-
-        const configured = serverData?.configured || [];
-        if (configured.length > 0) {
-            const options = configured.slice(0, 25).map(s =>
-                new StringSelectMenuOptionBuilder()
-                    .setLabel((s.tag || s.guildId).slice(0, 100))
-                    .setDescription(`${s.playerCount} graczy | OCR: ${s.updateBlocked ? 'zablokowany' : 'aktywny'} | ${s.lang.toUpperCase()}`.slice(0, 100))
-                    .setValue(s.guildId)
-                    .setEmoji('🖥️')
-            );
-            const serverSel = new StringSelectMenuBuilder()
-                .setCustomId('cc_server_sel')
-                .setPlaceholder('🔍 Deep-dive: wybierz serwer...')
-                .addOptions(options);
-            components.push(new ActionRowBuilder().addComponents(serverSel));
-        }
-
-        return components;
-    }
-
-    async buildServerDeepDive(guildId) {
-        const cfg = this._services.guildConfigService?.getConfig(guildId);
-        if (!cfg) return null;
-
-        const rankingService = this._services.rankingService;
-        const tokenSvc = this._services.tokenUsageService;
-        const ocrStats = this._services.ocrStatsService?.getStats();
-
-        let ranking = {};
-        try {
-            ranking = await rankingService?.loadRanking(guildId).catch(() => ({})) ?? {};
-        } catch { /* pomiń */ }
-
-        const players = Object.values(ranking).sort((a, b) => (b.score || 0) - (a.score || 0));
-        const top5 = players.slice(0, 5);
-        const maxScore = top5[0]?.score || 1;
-
-        const today = new Date().toISOString().slice(0, 10);
-        const tokenData = tokenSvc?.data?.guilds?.[guildId]?.[today];
-        const todayCost = tokenData
-            ? (tokenData.promptTokens / 1_000_000) * 0.10 + (tokenData.outputTokens / 1_000_000) * 0.40
-            : 0;
-
-        const ocrBlocked = cfg.ocrBlocked || [];
-        const ocrStatus = ocrBlocked.length > 0 ? `❌ Zablokowane: \`${ocrBlocked.join(', ')}\`` : '✅ Aktywne';
-
-        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-        const playerLines = top5.map((p, i) => {
-            const bar = this._buildProgressBar(p.score, maxScore, 12);
-            return `${medals[i]} **${(p.username || p.userId).slice(0, 20)}** — ${p.score}\n\`${bar}\``;
-        });
-        if (playerLines.length === 0) playerLines.push('Brak graczy w rankingu.');
-
-        return new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle(`🖥️ Deep-Dive: ${(cfg.tag || guildId).slice(0, 50)}`)
-            .addFields(
-                { name: '👥 Graczy', value: `${players.length}`, inline: true },
-                { name: '🌐 Język', value: (cfg.lang || 'pol').toUpperCase(), inline: true },
-                { name: '📸 OCR', value: ocrStatus, inline: true },
-                { name: '💰 Koszt AI (dziś)', value: fmtCost(todayCost), inline: true },
-                { name: '​', value: '​', inline: true },
-                { name: '​', value: '​', inline: true },
-                { name: '🏆 TOP 5 (z paskami postępu)', value: playerLines.join('\n'), inline: false },
-            )
-            .setFooter({ text: `ID serwera: ${guildId}` });
-    }
-
-    async _checkAlerts(channel) {
-        if (!this._alertService) return;
-
-        const ocrStats = this._services.ocrStatsService?.getStats() || null;
-        const pendingCv = this._getPendingCvCount();
-        const guildIds = [...this._getActiveGuildIds()];
-        const { cost } = this._getTodayTokens(guildIds);
-
-        const at = ocrStats?.allTime ?? { total: 0, adminFixed: 0 };
-        const ocrRate = at.total > 0
-            ? ((at.total - (at.adminFixed || 0)) / at.total) * 100
-            : 100;
-
-        const newAlerts = await this._alertService.check(ocrRate, pendingCv, cost);
-
-        if (newAlerts.length > 0 && channel) {
-            const active = this._alertService.getActiveAlerts();
-            const lines = newAlerts.map(type =>
-                this._alertService.describeAlert(type, active[type]?.value)
-            );
-            await channel.send({
-                embeds: [new EmbedBuilder()
-                    .setColor(0xFF4444)
-                    .setTitle('🚨 Centrum Dowodzenia — Nowy Alert!')
-                    .setDescription(lines.join('\n\n'))
-                    .setFooter({ text: 'Kliknij przycisk 🚨 Alerty na panelu, aby zarządzać' })
-                ]
-            }).catch(() => {});
-        }
-    }
-
-    _buildStatusEmbed(configuredServers, lastUpdated) {
+    // ─── EMBED 1: Przegląd Systemu ───────────────────────────────────────────
+    _buildSystemEmbed(configuredServers, lastUpdated, guildIds) {
         const uptime = fmtUptime(Date.now() - this._startTime);
         const configuredCount = configuredServers.length;
+        const ping = this._client?.ws?.ping ?? -1;
+        const ram = Math.round(process.memoryUsage().rss / 1024 / 1024);
+
+        // Policz AI OCR per serwer
+        const cfgSvc = this._services.guildConfigService;
+        let aiOcrActive = 0;
+        let aiOcrBlocked = 0;
+        for (const guildId of guildIds) {
+            const cfg = cfgSvc?.getConfig(guildId);
+            if (!cfg?.configured) continue;
+            const blocked = cfg.ocrBlocked || [];
+            if (blocked.includes('update')) {
+                aiOcrBlocked++;
+            } else {
+                aiOcrActive++;
+            }
+        }
 
         // Następny Global TOP10
         let nextTop10 = '—';
@@ -434,102 +335,239 @@ class AdminPanelService {
             }
         } catch { /* pomiń */ }
 
-        const aiEnabled = this._config.ocr?.useAI !== false;
-
         return new EmbedBuilder()
             .setColor(0xFF6B35)
-            .setTitle('📡 Centrum Dowodzenia — EndersEcho')
+            .setTitle('📡 Przegląd Systemu')
             .addFields(
                 { name: '⏱️ Uptime', value: uptime, inline: true },
+                { name: '🏓 Ping (ms)', value: ping >= 0 ? `${ping}ms` : '—', inline: true },
+                { name: '💾 RAM', value: `${ram}MB`, inline: true },
                 { name: '🖥️ Serwery', value: `${configuredCount}`, inline: true },
-                { name: '🌐 AI OCR', value: aiEnabled ? '✅ Włączone' : '❌ Wyłączone', inline: true },
-                { name: '📅 Następny Global TOP10', value: nextTop10, inline: false },
+                { name: '🌐 AI OCR', value: `${aiOcrActive} aktywnych / ${aiOcrBlocked} zablokowanych`, inline: true },
+                { name: '📅 Następny Global TOP10', value: nextTop10, inline: true },
             )
             .setFooter({ text: `Ostatnia aktualizacja: ${lastUpdated}` });
     }
 
+    // ─── EMBED 2: Użytkownicy ─────────────────────────────────────────────────
+    _buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount) {
+        const totalPlayers = globalRanking.length;
+        const blockedCount = Array.isArray(blockedUsersArr) ? blockedUsersArr.length : 0;
+        const testerCount = this._services.testerService?.getTesters()?.length ?? 0;
+
+        // Lista zablokowanych (max 3)
+        let blockedValue = `${blockedCount}`;
+        if (blockedCount > 0) {
+            const show = blockedUsersArr.slice(0, 3);
+            const lines = show.map(entry => {
+                const nick = entry.username || entry.userId || '?';
+                if (!entry.blockedUntil) return `• **${nick}** — permanentnie`;
+                const remaining = new Date(entry.blockedUntil).getTime() - Date.now();
+                if (remaining <= 0) return `• **${nick}** — wygasła`;
+                // Formatuj datę DD.MM HH:MM
+                const d = new Date(entry.blockedUntil);
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const hh = String(d.getHours()).padStart(2, '0');
+                const mm = String(d.getMinutes()).padStart(2, '0');
+                return `• **${nick}** — do ${day}.${month} ${hh}:${mm}`;
+            });
+            if (blockedCount > 3) lines.push(`... i ${blockedCount - 3} więcej`);
+            blockedValue = lines.join('\n');
+        }
+
+        return new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle('👥 Użytkownicy')
+            .addFields(
+                { name: '👥 Łącznie graczy', value: `${totalPlayers}`, inline: true },
+                { name: '⏳ Aktywne cooldowny', value: `${activeCooldownCount}`, inline: true },
+                { name: '🧪 Testerzy', value: `${testerCount}`, inline: true },
+                { name: '🔒 Zablokowanych', value: blockedValue, inline: false },
+                { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
+            );
+    }
+
+    // ─── EMBED 3: OCR & Analizy ──────────────────────────────────────────────
     _buildOcrEmbed(ocrStats, pendingCvCount) {
         const at = ocrStats?.allTime ?? { total: 0, success: 0, adminFixed: 0 };
         const rs = ocrStats?.resettable ?? { total: 0, success: 0, adminFixed: 0 };
 
         const atFixed = at.adminFixed || 0;
         const rsFixed = rs.adminFixed || 0;
-        const atRate = at.total > 0 ? `${(((at.total - atFixed) / at.total) * 100).toFixed(1)}%` : '—';
-        const rsRate = rs.total > 0 ? `${(((rs.total - rsFixed) / rs.total) * 100).toFixed(1)}%` : '—';
 
-        let lastAnalysis = '—';
-        if (this._lastRecord) {
-            const lr = this._lastRecord;
-            const boss = lr.bossName ? ` (${lr.bossName})` : '';
-            lastAnalysis = `**${lr.userName}** — ${lr.score}${boss} • ${timeSince(lr.timestamp)}`;
-        }
+        const atSuccessCount = at.total - atFixed;
+        const rsSuccessCount = rs.total - rsFixed;
+
+        const atRateNum = at.total > 0 ? (atSuccessCount / at.total) * 100 : null;
+        const rsRateNum = rs.total > 0 ? (rsSuccessCount / rs.total) * 100 : null;
+
+        const atRateStr = atRateNum !== null ? `${atRateNum.toFixed(1)}%` : '—';
+        const rsRateStr = rsRateNum !== null ? `${rsRateNum.toFixed(1)}%` : '—';
+
+        const atBar = atRateNum !== null ? this._buildProgressBar(atRateNum, 100, 10) : '░'.repeat(10);
+        const rsBar = rsRateNum !== null ? this._buildProgressBar(rsRateNum, 100, 10) : '░'.repeat(10);
+
+        const successRateValue =
+            `\`[${atBar}]\` ${atRateStr} (łącznie)\n\`[${rsBar}]\` ${rsRateStr} (od resetu)`;
 
         return new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle('📊 Statystyki OCR')
+            .setTitle('📊 OCR & Analizy')
             .addFields(
-                { name: '📈 Łącznie analiz', value: `${at.total}`, inline: true },
-                { name: '🔄 Od ostatniego resetu', value: `${rs.total}`, inline: true },
-                { name: '✅ Success Rate', value: `${atRate} (reset: ${rsRate})`, inline: true },
-                { name: '🔧 Interwencje admina', value: `Łącznie: **${atFixed}** | Reset: **${rsFixed}**`, inline: true },
+                {
+                    name: '📊 Analizy',
+                    value: `Łącznie: **${at.total}** / Od resetu: **${rs.total}**`,
+                    inline: false,
+                },
+                { name: '✅ Success Rate', value: successRateValue, inline: false },
+                {
+                    name: '❌ Odrzucone',
+                    value: `Łącznie: **${at.total - (at.success || 0)}** / Od resetu: **${rs.total - (rs.success || 0)}**`,
+                    inline: true,
+                },
+                {
+                    name: '🔧 Interwencje admina',
+                    value: `Łącznie: **${atFixed}** / Od resetu: **${rsFixed}**`,
+                    inline: true,
+                },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
-                { name: '📸 Ostatnia analiza', value: lastAnalysis, inline: false },
             );
     }
 
-    _buildPlayersEmbed(globalRanking, blockedUsersArr, activeCooldownCount) {
-        const totalPlayers = globalRanking.length;
-        const blockedCount = Array.isArray(blockedUsersArr) ? blockedUsersArr.length : 0;
-        const medals = ['🥇', '🥈', '🥉'];
-
-        const fields = [
-            { name: '👥 Łącznie graczy', value: `${totalPlayers}`, inline: true },
-            { name: '⏳ Aktywne cooldowny', value: `${activeCooldownCount}`, inline: true },
-            { name: '🔒 Zablokowanych', value: `${blockedCount}`, inline: true },
-        ];
-
-        const top3 = (globalRanking || []).slice(0, 3);
-        for (let i = 0; i < top3.length; i++) {
-            const p = top3[i];
-            const boss = p.bossName ? ` • ${p.bossName}` : '';
-            fields.push({
-                name: `${medals[i]} #${i + 1} — ${p.username || p.userId}`,
-                value: `${p.score}${boss}`,
-                inline: true,
-            });
+    // ─── EMBED 4: Aktywność Graczy ────────────────────────────────────────────
+    _buildActivityEmbed(stats) {
+        if (!stats) {
+            return new EmbedBuilder()
+                .setColor(0x9B59B6)
+                .setTitle('🏆 Aktywność Graczy')
+                .setDescription('Brak danych o aktywności.');
         }
 
-        // Dopełnij do wielokrotności 3 (Discord wymaga równych rzędów inline)
-        while (fields.length % 3 !== 0 && top3.length > 0) {
-            fields.push({ name: '​', value: '​', inline: true });
+        const { activeLastWeek, activeLastMonth, newLastWeek, newLastMonth, monthBuckets } = stats;
+
+        // Ostatnie 3 miesiące
+        const now = new Date();
+        const months = [];
+        for (let i = 2; i >= 0; i--) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const key = d.toISOString().slice(0, 7);
+            const count = monthBuckets?.[key] || 0;
+            months.push({ label: MONTH_NAMES_PL[d.getMonth()], count });
         }
+        const monthLine = months.map(m => `${m.label}: +${m.count}`).join(' | ');
 
         return new EmbedBuilder()
-            .setColor(0x57F287)
-            .setTitle('🌍 Gracze Globalnie')
-            .addFields(fields);
+            .setColor(0x9B59B6)
+            .setTitle('🏆 Aktywność Graczy')
+            .addFields(
+                {
+                    name: '📈 Aktywni gracze',
+                    value: `Tydzień: **${activeLastWeek}** | Miesiąc: **${activeLastMonth}**`,
+                    inline: false,
+                },
+                {
+                    name: '🆕 Nowi gracze',
+                    value: `Tydzień: **${newLastWeek}** | Miesiąc: **${newLastMonth}**`,
+                    inline: false,
+                },
+                {
+                    name: '📅 Przyrost miesięczny',
+                    value: monthLine || '—',
+                    inline: false,
+                },
+            );
     }
 
-    _buildCostEmbed(todayTokens) {
+    // ─── EMBED 5: Koszty AI ───────────────────────────────────────────────────
+    _buildCostEmbed(todayTokens, guildIds) {
         const { promptTokens, outputTokens, requests, cost } = todayTokens;
+
+        // Koszt tego miesiąca
+        const svc = this._services.tokenUsageService;
+        const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+        const dayOfMonth = new Date().getDate();
+        const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+
+        let monthCost = 0;
+        if (svc?.data?.guilds && guildIds) {
+            for (const guildId of guildIds) {
+                const guildData = svc.data.guilds[guildId];
+                if (!guildData) continue;
+                for (const [dateKey, d] of Object.entries(guildData)) {
+                    if (dateKey.startsWith(currentMonth)) {
+                        monthCost += (d.promptTokens / 1_000_000) * 0.10 + (d.outputTokens / 1_000_000) * 0.40;
+                    }
+                }
+            }
+        }
+
+        const projection = dayOfMonth > 0 ? (monthCost / dayOfMonth) * daysInMonth : 0;
+
+        // Top 3 serwery po koszcie dziś
+        const today = todayKey();
+        const guildCosts = [];
+        if (svc?.data?.guilds && guildIds) {
+            const cfgSvc = this._services.guildConfigService;
+            for (const guildId of guildIds) {
+                const d = svc.data.guilds[guildId]?.[today];
+                if (!d) continue;
+                const gCost = (d.promptTokens / 1_000_000) * 0.10 + (d.outputTokens / 1_000_000) * 0.40;
+                if (gCost > 0) {
+                    const cfg = cfgSvc?.getConfig(guildId);
+                    guildCosts.push({ tag: cfg?.tag || cfg?.guildName || guildId, cost: gCost });
+                }
+            }
+        }
+        guildCosts.sort((a, b) => b.cost - a.cost);
+        const topGuilds = guildCosts.slice(0, 3);
+        const topGuildsValue = topGuilds.length > 0
+            ? topGuilds.map(g => `• ${g.tag}: ${fmtCost(g.cost)}`).join('\n')
+            : '—';
+
         return new EmbedBuilder()
             .setColor(0xFEE75C)
-            .setTitle('💰 Koszty AI — Dzisiaj')
+            .setTitle('💰 Koszty AI')
             .addFields(
-                { name: '📤 Requesty', value: `${requests}`, inline: true },
-                { name: '🔤 Tokeny IN', value: fmtTokens(promptTokens), inline: true },
-                { name: '🔤 Tokeny OUT', value: fmtTokens(outputTokens), inline: true },
-                { name: '💵 Szacowany koszt', value: fmtCost(cost), inline: true },
-                { name: '🔢 Łącznie tokenów', value: fmtTokens(promptTokens + outputTokens), inline: true },
-                { name: '​', value: '​', inline: true },
+                {
+                    name: '📤 Dziś',
+                    value: `Requesty: **${requests}** | Tokeny IN: **${fmtTokens(promptTokens)}** | Tokeny OUT: **${fmtTokens(outputTokens)}** | Koszt: **${fmtCost(cost)}**`,
+                    inline: false,
+                },
+                {
+                    name: '📅 Ten miesiąc',
+                    value: `${fmtCost(monthCost)} wydane | Projekcja: ~${fmtCost(projection)}`,
+                    inline: false,
+                },
+                {
+                    name: '🏆 Top serwery (dziś)',
+                    value: topGuildsValue,
+                    inline: false,
+                },
             );
     }
 
+    // ─── EMBED 6: Serwery ─────────────────────────────────────────────────────
     _buildServersEmbed({ configured, unconfigured, absent }) {
+        const dailyLimit = this._services.usageLimitService?.getLimit();
+        const cooldownMs = this._services.updateCooldownService?.getCooldownDuration?.() ?? null;
+
+        // Formatuj cooldown
+        let cooldownStr = '—';
+        if (cooldownMs && cooldownMs > 0) {
+            const h = Math.floor(cooldownMs / 3600000);
+            const m = Math.floor((cooldownMs % 3600000) / 60000);
+            if (h > 0 && m > 0) cooldownStr = `${h}h ${m}m`;
+            else if (h > 0) cooldownStr = `${h}h`;
+            else cooldownStr = `${m}m`;
+        }
+
+        const limitStr = dailyLimit !== null && dailyLimit !== undefined ? `${dailyLimit}/dzień` : '—';
+
         const lines = [];
 
         if (configured.length > 0) {
-            lines.push('**✅ Skonfigurowane — bot jest**');
+            lines.push(`**✅ Skonfigurowane — bot jest** | Limit: ${limitStr} | Cooldown: ${cooldownStr}`);
             for (const s of configured) {
                 const ocrIcon = s.updateBlocked ? '❌' : '✅';
                 const tag = s.tag ? ` \`${s.tag}\`` : '';
@@ -559,14 +597,126 @@ class AdminPanelService {
         if (lines.length === 0) {
             return new EmbedBuilder()
                 .setColor(0xEB459E)
-                .setTitle('🖥️ Status Serwerów')
+                .setTitle('🖥️ Serwery')
                 .setDescription('Brak skonfigurowanych serwerów.');
         }
 
         return new EmbedBuilder()
             .setColor(0xEB459E)
-            .setTitle('🖥️ Status Serwerów')
+            .setTitle('🖥️ Serwery')
             .setDescription(lines.join('\n'));
+    }
+
+    // ─── Komponenty panelu (4 rzędy przycisków) ────────────────────────────────
+    _buildComponents(serverData) {
+        const components = [];
+
+        // Rząd 1 — System
+        const row1 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('cc_refresh')
+                .setEmoji('🔄')
+                .setLabel('Odśwież')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('panel_top10_interval')
+                .setEmoji('📅')
+                .setLabel('Interwał TOP10')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_info')
+                .setEmoji('📢')
+                .setLabel('Wyślij Info')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_player_growth')
+                .setEmoji('📈')
+                .setLabel('Przyrost graczy')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('cc_action_cmd_usage')
+                .setEmoji('🔢')
+                .setLabel('Użycia komend')
+                .setStyle(ButtonStyle.Secondary),
+        );
+        components.push(row1);
+
+        // Rząd 2 — Użytkownicy
+        const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('panel_block')
+                .setEmoji('🔒')
+                .setLabel('Zablokuj')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('cc_action_unblock')
+                .setEmoji('🔓')
+                .setLabel('Odblokuj')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_remove')
+                .setEmoji('🗑️')
+                .setLabel('Usuń gracza')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('panel_ach_del')
+                .setEmoji('🏆')
+                .setLabel('Usuń osiągnięcia')
+                .setStyle(ButtonStyle.Secondary),
+        );
+        components.push(row2);
+
+        // Rząd 3 — Serwer/OCR
+        const row3 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('panel_ocr')
+                .setEmoji('🔄')
+                .setLabel('AI OCR')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_limit')
+                .setEmoji('⚙️')
+                .setLabel('Ustaw limity')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('cc_action_roles')
+                .setEmoji('🔁')
+                .setLabel('Przetwórz role')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('cc_action_tester')
+                .setEmoji('🧪')
+                .setLabel('Testerzy')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_ban_guild')
+                .setEmoji('🚫')
+                .setLabel('Zbanuj serwer')
+                .setStyle(ButtonStyle.Danger),
+        );
+        components.push(row3);
+
+        // Rząd 4 — Statystyki
+        const row4 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('cc_action_tokens')
+                .setEmoji('📊')
+                .setLabel('Tokeny')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('cc_action_ocr_stats')
+                .setEmoji('🎯')
+                .setLabel('Success Rate')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('panel_delete_server_data')
+                .setEmoji('🗑️')
+                .setLabel('Usuń dane serwera')
+                .setStyle(ButtonStyle.Danger),
+        );
+        components.push(row4);
+
+        return components;
     }
 }
 
