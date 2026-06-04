@@ -8467,6 +8467,26 @@ class InteractionHandler {
                 this.adminPanelService.refresh();
             }
 
+            // Per-boss rekord (zawsze gdy jest bossName — niezależnie od isNewRecord)
+            let isNewBossRecord = false;
+            let previousBossRecord = null;
+            if (aiResult.bossName && this.bossRecordService) {
+                const analyzeBossTs = isNewRecord
+                    ? (updatedRanking[targetUserId]?.timestamp ?? new Date().toISOString())
+                    : new Date().toISOString();
+                const analyzeBossScoreValue = this.rankingService.parseScoreValue(aiResult.score);
+                try {
+                    const bossResult = await this.bossRecordService.updateBossRecord(
+                        targetGuildId, targetUserId, aiResult.bossName, userName,
+                        aiResult.score, analyzeBossScoreValue, analyzeBossTs
+                    );
+                    isNewBossRecord = bossResult.isNewBossRecord;
+                    previousBossRecord = bossResult.previousBossRecord;
+                } catch (bossErr) {
+                    gl.error(`Błąd zapisu per-boss rekordu [Analizuj]: ${bossErr.message}`);
+                }
+            }
+
             let newAchievements = [];
             if (this.achievementService) {
                 this.achievementService.trackAiAnalyzed(targetGuildId, targetUserId).catch(() => {});
@@ -8488,6 +8508,23 @@ class InteractionHandler {
                             prevScoreValue,
                             currentPosition: currentPositionForAch,
                             globalPosition: analyzeGlobalPositionForAch,
+                        });
+                    } catch {}
+                } else if (isNewBossRecord) {
+                    try {
+                        const bossScoreVal = this.rankingService.parseScoreValue(aiResult.score);
+                        const _bossAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                        const _bossAchActiveGuildIds = new Set(_bossAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                        const _bossAchGlobalRanking = await this.rankingService.getGlobalRanking(_bossAchActiveGuildIds);
+                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => p.userId === targetUserId);
+                        const bossGlobalPositionForAch = _bossAchGlobalIdx !== -1 ? _bossAchGlobalIdx + 1 : 0;
+                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetUserId, {
+                            scoreValue: bossScoreVal,
+                            bossName: aiResult.bossName,
+                            isNewRecord: false,
+                            prevScoreValue: previousBossRecord ? this.rankingService.parseScoreValue(previousBossRecord.score) : 0,
+                            currentPosition: 0,
+                            globalPosition: bossGlobalPositionForAch,
                         });
                     } catch {}
                 }
@@ -8541,11 +8578,11 @@ class InteractionHandler {
             } catch {}
 
 
-            // Ogłoszenie publiczne — tylko gdy wynik jest nowym rekordem
+            // Ogłoszenie publiczne — gdy nowy rekord globalny lub nowy rekord bossa
             let analyzePublicMsg = null;
             const guildCfgAnnounce = this.config.getGuildConfig(targetGuildId);
             const announcementChannelId = guildCfgAnnounce?.allowedChannelId;
-            if (isNewRecord && announcementChannelId) {
+            if ((isNewRecord || isNewBossRecord) && announcementChannelId) {
                 try {
                     const announcementChannel = await interaction.client.channels.fetch(announcementChannelId).catch(() => null);
                     if (announcementChannel) {
@@ -8562,12 +8599,24 @@ class InteractionHandler {
                             ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, guildCfgAnnounce?.lang || 'eng')
                             : null;
 
-                        const resultEmbed = await this.rankingService.createRecordEmbed(
-                            userName, aiResult.score, userAvatarUrl, announceName,
-                            currentScore?.score ?? null, targetUserId, targetGuildId,
-                            targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
-                            currentScore?.timestamp ?? null, [], analyzeAchFieldValue
-                        );
+                        let resultEmbed;
+                        if (isNewRecord) {
+                            resultEmbed = await this.rankingService.createRecordEmbed(
+                                userName, aiResult.score, userAvatarUrl, announceName,
+                                currentScore?.score ?? null, targetUserId, targetGuildId,
+                                targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
+                                currentScore?.timestamp ?? null, [], analyzeAchFieldValue
+                            );
+                        } else {
+                            // Rekord bossa bez globalnego — teal embed
+                            resultEmbed = await this.rankingService.createRecordEmbed(
+                                userName, aiResult.score, userAvatarUrl, announceName,
+                                null, null, null, targetMsgs, targetGuildObj, null, null, [],
+                                analyzeAchFieldValue, null,
+                                { isNewBossRecord: true, previousBossRecord, bossName: aiResult.bossName }
+                            );
+                            resultEmbed.setColor(0x1ABC9C);
+                        }
 
                         const announcementContent = formatMessage(targetMsgs.analyzeManualAnnouncement, {
                             userId: targetUserId,
@@ -8604,7 +8653,7 @@ class InteractionHandler {
                 adminName,
                 bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
                 score: aiResult.score,
-                result: isNewRecord ? targetMsgs.analyzeResultNewRecord : targetMsgs.analyzeResultNoRecord,
+                result: isNewRecord ? targetMsgs.analyzeResultNewRecord : (isNewBossRecord ? (targetMsgs.analyzeResultBossRecord || '🎯 Nowy rekord na bossie!') : targetMsgs.analyzeResultNoRecord),
             });
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);

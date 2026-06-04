@@ -477,7 +477,7 @@
 - Footer globalnego raportu: `uid:{userId}|gid:{guildId}`
 - Footer per-guild raportu: `ref:{globalMsgId}|uid:{userId}|gid:{guildId}`
 - Gdy admin klika przycisk na per-guild embeddzie → globalny raport aktualizowany (pole akcji + usunięcie przycisków)
-- Przycisk **Analizuj** (`ee_analyze_`) dostępny dla raportu `NOT_SIMILAR` — pobiera obraz z `embed.image.url` (CDN URL), nie z `message.attachments`; uruchamia pełny flow OCR i zapisuje wynik dla docelowego użytkownika
+- Przycisk **Analizuj** (`ee_analyze_`) dostępny dla raportu `NOT_SIMILAR` — pobiera obraz z `embed.image.url` (CDN URL), nie z `message.attachments`; uruchamia pełny flow OCR i zapisuje wynik dla docelowego użytkownika. Obsługuje wszystkie 3 przypadki: nowy rekord globalny (złoty embed), nowy rekord bossa bez globalnego (teal embed 0x1ABC9C + publiczne ogłoszenie), brak rekordu (info). Aktualizuje też `bossRecordService` i osiągnięcia per-boss.
 - Metody pomocnicze: `_parseReportFooter(text)` i `_updateGlobalReportMsg(client, globalMsgId, guildId, action, admin, extra)`
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
