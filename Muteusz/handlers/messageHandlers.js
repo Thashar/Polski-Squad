@@ -169,20 +169,8 @@ class MessageHandler {
             return;
         }
 
-        // Sprawdź czy użytkownik ma zwolnioną rolę
+        // Sprawdź czy użytkownik ma zwolnioną rolę (tylko jawnie skonfigurowane role w exemptRoles)
         if (this.hasExemptRole(message.member)) {
-            // Loguj że użytkownik jest zwolniony (dla administratorów i moderatorów)
-            if (message.member.permissions.has('Administrator') || message.member.permissions.has('ModerateMembers')) {
-                try {
-                    const badWords = this.autoModerationService.detectBadWords(message.content);
-                    if (badWords.length > 0) {
-                        const badWordsText = badWords.map(word => word.original).join(', ');
-                        this.logger.info(`👑 Administrator/Moderator zwolniony: ${message.author.tag} (${message.author.id}) na kanale #${message.channel.name} - Słowa: ${badWordsText}`);
-                    }
-                } catch (error) {
-                    // Ignoruj błędy przy logowaniu
-                }
-            }
             return;
         }
 
@@ -205,13 +193,7 @@ class MessageHandler {
      */
     hasExemptRole(member) {
         if (!member || !member.roles) return false;
-        
-        // Sprawdź uprawnienia administratora i moderatora
-        if (member.permissions.has('Administrator') || member.permissions.has('ModerateMembers')) {
-            return true;
-        }
-        
-        return this.config.autoModeration.exemptRoles.some(roleId => 
+        return this.config.autoModeration.exemptRoles.some(roleId =>
             member.roles.cache.has(roleId)
         );
     }
