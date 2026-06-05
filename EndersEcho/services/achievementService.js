@@ -507,6 +507,100 @@ class AchievementService {
         return { embed, components: this._buildComponentsForUser(activeKey, isPol, t, targetUserId, guildId) };
     }
 
+    // Merge osiągnięć i postępu ze wszystkich serwerów dla jednego gracza
+    async _mergeAchievements(allGuildIds, userId) {
+        const ids = allGuildIds instanceof Set ? [...allGuildIds] : (Array.isArray(allGuildIds) ? allGuildIds : [allGuildIds]);
+        const merged = { unlocked: {}, progress: null };
+
+        for (const guildId of ids) {
+            const data = await this.loadData(guildId);
+            const ud = data[userId];
+            if (!ud) continue;
+
+            for (const [achId, info] of Object.entries(ud.unlocked || {})) {
+                if (!merged.unlocked[achId] || info.unlockedAt < merged.unlocked[achId].unlockedAt)
+                    merged.unlocked[achId] = info;
+            }
+
+            const p = ud.progress || {};
+            if (!merged.progress) {
+                merged.progress = {
+                    ...p,
+                    bossesEncountered: [...(p.bossesEncountered || [])],
+                };
+            } else {
+                const mp = merged.progress;
+                mp.recordCount    = (mp.recordCount    || 0) + (p.recordCount    || 0);
+                mp.rankingViews   = (mp.rankingViews   || 0) + (p.rankingViews   || 0);
+                mp.subscriptions  = (mp.subscriptions  || 0) + (p.subscriptions  || 0);
+                mp.nonRecordCount = (mp.nonRecordCount || 0) + (p.nonRecordCount || 0);
+                mp.cvApprovedCount  = (mp.cvApprovedCount  || 0) + (p.cvApprovedCount  || 0);
+                mp.aiRescuedCount   = (mp.aiRescuedCount   || 0) + (p.aiRescuedCount   || 0);
+                mp.profileSearches  = (mp.profileSearches  || 0) + (p.profileSearches  || 0);
+                const allBosses = new Set([...(mp.bossesEncountered || []), ...(p.bossesEncountered || [])]);
+                mp.bossesEncountered = [...allBosses];
+                if (p.lastRecordAt && (!mp.lastRecordAt || p.lastRecordAt > mp.lastRecordAt)) mp.lastRecordAt = p.lastRecordAt;
+                if (p.lastRecordBeatAt && (!mp.lastRecordBeatAt || p.lastRecordBeatAt > mp.lastRecordBeatAt)) mp.lastRecordBeatAt = p.lastRecordBeatAt;
+                if (p.todayRecordDate) {
+                    if (!mp.todayRecordDate || p.todayRecordDate > mp.todayRecordDate) {
+                        mp.todayRecordDate  = p.todayRecordDate;
+                        mp.todayRecordCount = p.todayRecordCount || 0;
+                    } else if (p.todayRecordDate === mp.todayRecordDate) {
+                        mp.todayRecordCount = (mp.todayRecordCount || 0) + (p.todayRecordCount || 0);
+                    }
+                }
+            }
+        }
+
+        if (!merged.progress) {
+            merged.progress = {
+                recordCount: 0, bossesEncountered: [], rankingViews: 0, subscriptions: 0,
+                lastRecordAt: null, lastRecordBeatAt: null, todayRecordDate: null, todayRecordCount: 0,
+                nonRecordCount: 0, cvApprovedCount: 0, aiRescuedCount: 0, profileSearches: 0,
+            };
+        }
+
+        return merged;
+    }
+
+    // Widok własnych osiągnięć zsumowany ze wszystkich serwerów
+    async buildAchievementsViewGlobal(allGuildIds, userId, lang, view, category) {
+        const isPol = lang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const { unlocked, progress } = await this._mergeAchievements(allGuildIds, userId);
+
+        let embed;
+        if (view === 'overview') {
+            ({ embed } = this._buildOverviewEmbed(unlocked, progress, t, isPol, null));
+        } else {
+            const cat = (category && CATEGORY_INFO[category]) ? category : 'score';
+            ({ embed } = this._buildCategoryEmbed(unlocked, cat, t, isPol));
+        }
+
+        const activeKey = view === 'overview' ? 'overview' : ((category && CATEGORY_INFO[category]) ? category : 'score');
+        const components = this._buildComponents(activeKey, isPol, t);
+        return { embed, components };
+    }
+
+    // Widok osiągnięć innego gracza zsumowany ze wszystkich serwerów
+    async buildAchievementsViewForUserGlobal(allGuildIds, targetUserId, targetUsername, viewerLang, view, category, fallbackGuildId = null) {
+        const isPol = viewerLang === 'pol';
+        const t = (pol, eng) => isPol ? pol : eng;
+        const { unlocked } = await this._mergeAchievements(allGuildIds, targetUserId);
+
+        let embed;
+        if (view === 'overview') {
+            ({ embed } = this._buildOverviewEmbedNoDesc(unlocked, t, isPol, targetUsername));
+        } else {
+            const cat = (category && CATEGORY_INFO[category]) ? category : 'score';
+            ({ embed } = this._buildCategoryEmbedNoDesc(unlocked, cat, t, isPol, targetUsername));
+        }
+
+        const activeKey = view === 'overview' ? 'overview' : ((category && CATEGORY_INFO[category]) ? category : 'score');
+        const guildIdForButtons = fallbackGuildId || (allGuildIds instanceof Set ? [...allGuildIds][0] : allGuildIds[0]) || 'all';
+        return { embed, components: this._buildComponentsForUser(activeKey, isPol, t, targetUserId, guildIdForButtons) };
+    }
+
     _buildCategoryEmbedNoDesc(unlocked, categoryKey, t, isPol, targetName) {
         const catInfo = CATEGORY_INFO[categoryKey];
         const catAchs = ACHIEVEMENTS.filter(a => a.category === categoryKey);
