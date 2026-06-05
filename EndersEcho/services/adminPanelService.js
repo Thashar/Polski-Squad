@@ -248,7 +248,7 @@ class AdminPanelService {
                 components: [this._buildUsersRow()],
             },
             {
-                embed: this._buildOcrEmbed(ocrStats),
+                embed: this._buildOcrEmbed(ocrStats, [...guildIds], globalRanking),
                 components: [this._buildOcrRow()],
             },
             {
@@ -449,7 +449,7 @@ class AdminPanelService {
     }
 
     // ─── EMBED 3: OCR & Analizy ──────────────────────────────────────────────
-    _buildOcrEmbed(ocrStats) {
+    _buildOcrEmbed(ocrStats, guildIds = [], globalRanking = []) {
         const at = ocrStats?.allTime ?? { total: 0, success: 0, adminFixed: 0 };
         const rs = ocrStats?.resettable ?? { total: 0, success: 0, adminFixed: 0 };
 
@@ -473,9 +473,19 @@ class AdminPanelService {
 
         const currentMonth = new Date().toISOString().slice(0, 7);
         const ocrSvc = this._services.ocrStatsService;
+        const cfgSvc = this._services.guildConfigService;
         const topRejected = ocrSvc?.getMonthlyTopRejectedUsers?.(currentMonth, 'all') ?? [];
+        const rejUsernameMap = new Map(globalRanking.map(p => [p.userId, p.username]));
         const rejectedUsersValue = topRejected.length > 0
-            ? topRejected.map((u, i) => `${i + 1}. <@${u.userId}>: **${u.count}**`).join('\n')
+            ? topRejected.map((u, i) => {
+                const username = rejUsernameMap.get(u.userId) || `<@${u.userId}>`;
+                const link = rejUsernameMap.has(u.userId)
+                    ? `[${username}](https://discord.com/users/${u.userId})`
+                    : username;
+                const serverTag = this._getRejectedUserPrimaryGuildTag(u.userId, currentMonth, guildIds, ocrSvc, cfgSvc);
+                const tagStr = serverTag ? ` \`${serverTag}\`` : '';
+                return `${i + 1}. ${link}${tagStr} — **${u.count}** odrzuc.`;
+            }).join('\n')
             : '—';
 
         return new EmbedBuilder()
@@ -629,6 +639,20 @@ class AdminPanelService {
             }
             if (gReq > maxReq) {
                 maxReq = gReq;
+                const cfg = cfgSvc?.getConfig(gId);
+                bestTag = cfg?.tag || cfg?.guildName || null;
+            }
+        }
+        return bestTag;
+    }
+
+    _getRejectedUserPrimaryGuildTag(userId, month, guildIds, ocrSvc, cfgSvc) {
+        const rejData = ocrSvc?.data?.userRejections || ocrSvc?._data?.userRejections || {};
+        let maxCount = 0, bestTag = null;
+        for (const gId of guildIds) {
+            const count = rejData[gId]?.[userId]?.[month] || 0;
+            if (count > maxCount) {
+                maxCount = count;
                 const cfg = cfgSvc?.getConfig(gId);
                 bestTag = cfg?.tag || cfg?.guildName || null;
             }
