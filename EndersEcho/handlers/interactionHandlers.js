@@ -6525,9 +6525,9 @@ class InteractionHandler {
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
-            const { achGuildId, crossServerGuildName } = await this._resolveAchGuildId(userId, guildId, interaction.client);
-            const { embed, components } = await this.achievementService.buildAchievementsView(
-                achGuildId, userId, lang, 'overview', null, crossServerGuildName
+            const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
+            const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
+                allAchGuildIds, userId, lang, 'overview', null
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -6546,9 +6546,9 @@ class InteractionHandler {
             const guildId = interaction.guildId;
             const userId = interaction.user.id;
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
-            const { achGuildId, crossServerGuildName } = await this._resolveAchGuildId(userId, guildId, interaction.client);
-            const { embed, components } = await this.achievementService.buildAchievementsView(
-                achGuildId, userId, lang, view, category, isOverview ? crossServerGuildName : null
+            const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
+            const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
+                allAchGuildIds, userId, lang, view, category
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -6735,12 +6735,12 @@ class InteractionHandler {
                 const lang      = isPol ? 'pol' : 'eng';
                 let achResult;
                 if (isOwnProf) {
-                    achResult = await this.achievementService.buildAchievementsView(
-                        state.targetGuildId, state.targetUserId, lang, achView, state.category
+                    achResult = await this.achievementService.buildAchievementsViewGlobal(
+                        allGuildIds, state.targetUserId, lang, achView, state.category
                     );
                 } else {
-                    achResult = await this.achievementService.buildAchievementsViewForUser(
-                        state.targetGuildId, state.targetUserId, data.username, lang, achView, state.category
+                    achResult = await this.achievementService.buildAchievementsViewForUserGlobal(
+                        allGuildIds, state.targetUserId, data.username, lang, achView, state.category, state.targetGuildId
                     );
                 }
                 embed = achResult.embed;
@@ -10775,8 +10775,9 @@ class InteractionHandler {
 
     async _showPlayerAchievements(interaction, targetUserId, targetUsername, sourceGuildId) {
         const lang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-        const { embed, components } = await this.achievementService.buildAchievementsViewForUser(
-            sourceGuildId, targetUserId, targetUsername, lang, 'cat', 'score'
+        const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
+        const { embed, components } = await this.achievementService.buildAchievementsViewForUserGlobal(
+            allAchGuildIds, targetUserId, targetUsername, lang, 'cat', 'score', sourceGuildId
         );
         if (interaction.deferred || interaction.replied) {
             await interaction.editReply({ embeds: [embed], components });
@@ -10792,8 +10793,9 @@ class InteractionHandler {
 
             if (customId === 'ach_vb') {
                 // Powrót do własnych osiągnięć
-                const { embed, components } = await this.achievementService.buildAchievementsView(
-                    interaction.guildId, interaction.user.id, lang, 'cat', 'score'
+                const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
+                const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
+                    allAchGuildIds, interaction.user.id, lang, 'cat', 'score'
                 );
                 await interaction.editReply({ embeds: [embed], components });
                 return;
@@ -10819,15 +10821,16 @@ class InteractionHandler {
                 targetGuildId = rest.substring(secondUnderscore + 1);
             }
 
-            const allGuildIds = new Set(interaction.client.guilds.cache.keys());
-            const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+            const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
+            const globalRanking = await this.rankingService.getGlobalRanking(allAchGuildIds);
             const player = globalRanking.find(p => p.userId === targetUserId);
             const targetUsername = player?.username || targetUserId;
 
-            const { embed, components } = await this.achievementService.buildAchievementsViewForUser(
-                targetGuildId, targetUserId, targetUsername, lang,
+            const { embed, components } = await this.achievementService.buildAchievementsViewForUserGlobal(
+                allAchGuildIds, targetUserId, targetUsername, lang,
                 isOverview ? 'overview' : 'cat',
-                isOverview ? null : category
+                isOverview ? null : category,
+                targetGuildId
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
