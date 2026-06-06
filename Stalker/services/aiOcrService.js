@@ -11,8 +11,9 @@ const SAFETY_SETTINGS_OFF = [
 ];
 
 const PROMPT_VERSIONS = {
-    'extract-results':   'v1',
-    'extract-equipment': 'v1',
+    'extract-results':       'v1',
+    'extract-results-batch': 'v1',
+    'extract-equipment':     'v1',
 };
 
 const logger = createBotLogger('Stalker');
@@ -123,6 +124,71 @@ Jeśli nie możesz odczytać wyników lub zdjęcie nie zawiera wyników graczy, 
 
         } catch (error) {
             logger.error(`[AI OCR] Błąd analizy obrazu:`, error);
+            throw error;
+        }
+    }
+
+    /**
+     * Analizuje WSZYSTKIE zdjęcia naraz w jednym zapytaniu do Gemini Vision (batch).
+     * Dodatkowo otrzymuje listę nicków z roli klanowej Discord i prosi AI o dopasowanie
+     * odczytanych nicków ze screenów do najbliższego nicku Discord.
+     * @param {string[]} imagePaths - Ścieżki do obrazów
+     * @param {string[]} clanNicks - Lista nicków członków roli klanowej z Discorda
+     * @returns {Promise<{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}>}
+     */
+    async analyzeResultsImagesBatch(imagePaths, clanNicks = []) {
+        if (!this.enabled) {
+            throw new Error('AI OCR nie jest włączony');
+        }
+
+        try {
+            logger.info(`[AI OCR - Batch] Rozpoczynam analizę ${imagePaths.length} zdjęć naraz (nicki klanu: ${clanNicks.length})`);
+
+            // Zbuduj części zapytania: najpierw wszystkie obrazy, potem prompt tekstowy
+            const parts = [];
+            for (const imagePath of imagePaths) {
+                const pngBuffer = await sharp(imagePath).png().toBuffer();
+                parts.push({ inlineData: { data: pngBuffer.toString('base64'), mimeType: 'image/png' } });
+            }
+
+            const nickListText = clanNicks.length > 0
+                ? clanNicks.map((n, i) => `${i + 1}. ${n}`).join('\n')
+                : '(brak listy)';
+
+            const prompt = `Przeanalizuj ${imagePaths.length} zdjęć z wynikami graczy z gry Survivor.io.
+Zdjęcia mogą się nakładać - ten sam gracz może pojawić się na kilku zdjęciach. Połącz wszystkie zdjęcia w jedną wspólną listę i usuń duplikaty (każdy gracz tylko raz, z jego wynikiem).
+
+Poniżej lista nicków graczy z roli klanowej na Discordzie:
+${nickListText}
+
+Dla każdego gracza odczytanego ze zdjęć dopasuj jego nick do NAJBARDZIEJ PODOBNEGO nicku z powyższej listy Discord. Nicki w grze mogą się nieznacznie różnić od nicków Discord (literówki, dodatkowe ozdobniki, inne znaki specjalne, emoji) - wybierz najbardziej prawdopodobne dopasowanie. W wyniku użyj DOKŁADNIE nicku z listy Discord.
+Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze zdjęcia.
+
+Zwróć wynik w następującym formacie (jeden gracz na linię):
+<nick na discordzie> - <wynik>
+
+Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników graczy, odpowiedz: "Nie wykryto wyników graczy".`;
+
+            parts.push({ text: prompt });
+
+            logger.info('[AI OCR - Batch] Wysyłam zapytanie zbiorcze do Gemini Vision...');
+
+            const res = await this._generateContent(parts, 4000, {
+                step:          'extract-results-batch',
+                promptName:    'extract-results-batch',
+                promptVersion: PROMPT_VERSIONS['extract-results-batch'],
+            });
+
+            logger.info('[AI OCR - Batch] Odpowiedź Gemini:');
+            logger.info(res.text);
+
+            const result = this.parseAIResponse(res.text);
+            logger.info(`[AI OCR - Batch] Wynik parsowania: ${result.players.length} graczy`);
+
+            return result;
+
+        } catch (error) {
+            logger.error('[AI OCR - Batch] Błąd analizy zbiorczej:', error);
             throw error;
         }
     }

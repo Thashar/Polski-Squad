@@ -784,6 +784,147 @@ class PhaseService {
     }
 
     /**
+     * Przetwarza WSZYSTKIE zdjęcia naraz przez AI (batch) dla komendy /test.
+     * AI dostaje listę nicków z roli klanowej i dopasowuje odczytane nicki do Discord.
+     * Wynik prezentowany jest WYŁĄCZNIE w ephemeralu - BEZ zapisu do bazy.
+     */
+    async processTestImages(session, downloadedFiles, guild, member) {
+        const aiOcrService = this.ocrService.aiOcrService;
+        const inter = session.publicInteraction;
+
+        // Pomocnicza funkcja do aktualizacji ephemerala
+        const editEphemeral = async (payload) => {
+            if (!inter) return;
+            try {
+                if (inter.editReply) {
+                    await inter.editReply(payload);
+                } else {
+                    await inter.edit(payload);
+                }
+            } catch (err) {
+                logger.warn(`[TEST] ⚠️ Nie udało się zaktualizować ephemerala: ${err.message}`);
+            }
+        };
+
+        try {
+            // Wymagany aktywny AI OCR
+            if (!aiOcrService || !aiOcrService.enabled) {
+                await editEphemeral({
+                    content: '❌ Komenda `/test` wymaga aktywnego AI OCR (USE_STALKER_AI_OCR=true). Funkcja jest obecnie wyłączona.',
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            session.isProcessing = true;
+
+            // Pokaż embed "trwa przetwarzanie"
+            const totalImages = downloadedFiles.length;
+            await editEphemeral({
+                embeds: [new EmbedBuilder()
+                    .setTitle('🧪 TEST - Analiza AI (batch)')
+                    .setDescription(`🤖 Wysyłam **${totalImages}** ${totalImages === 1 ? 'zdjęcie' : 'zdjęć'} do AI w jednym zapytaniu...\n⏳ To może chwilę potrwać.`)
+                    .setColor('#9B59B6')
+                    .setTimestamp()],
+                components: []
+            });
+
+            // Pobierz listę nicków z roli klanowej
+            const clanRoleId = this.config.targetRoles[session.clan];
+            await safeFetchMembers(guild, logger);
+            const clanNicks = Array.from(guild.members.cache.values())
+                .filter(m => m.roles.cache.has(clanRoleId))
+                .map(m => m.displayName)
+                .sort((a, b) => a.localeCompare(b));
+
+            logger.info(`[TEST] 👥 Pobrano ${clanNicks.length} nicków z roli klanowej (${this.config.roleDisplayNames[session.clan]})`);
+
+            // Analiza zbiorcza przez AI
+            const filepaths = downloadedFiles.map(f => f.filepath);
+            const aiResult = await aiOcrService.analyzeResultsImagesBatch(filepaths, clanNicks);
+
+            session.isProcessing = false;
+
+            if (session.cancelled) {
+                logger.info('[TEST] ℹ️ Sesja anulowana podczas przetwarzania - pomijam wynik');
+                return;
+            }
+
+            if (!aiResult.isValid || aiResult.players.length === 0) {
+                await editEphemeral({
+                    embeds: [new EmbedBuilder()
+                        .setTitle('🧪 TEST - Brak wyników')
+                        .setDescription('❌ AI nie wykryło żadnych graczy na przesłanych zdjęciach.')
+                        .setColor('#FF0000')
+                        .setTimestamp()],
+                    components: []
+                });
+                return;
+            }
+
+            // Posortuj malejąco i przydziel miejsca (jak w Fazie 1)
+            const sortedPlayers = [...aiResult.players].sort((a, b) => b.score - a.score);
+            const maxScore = sortedPlayers[0]?.score || 1;
+            const top30Sum = sortedPlayers.slice(0, 30).reduce((sum, p) => sum + (p.score || 0), 0);
+            const aboveZero = sortedPlayers.filter(p => p.score > 0).length;
+            const zeroCount = sortedPlayers.filter(p => p.score === 0).length;
+
+            const resultsText = sortedPlayers.map((player, index) => {
+                const position = index + 1;
+                const barLength = 10;
+                const filledLength = player.score > 0
+                    ? Math.max(1, Math.round((player.score / maxScore) * barLength))
+                    : 0;
+                const progressBar = '█'.repeat(filledLength) + '░'.repeat(barLength - filledLength);
+                return `${progressBar} **#${position}** ${player.playerName} - ${player.score.toLocaleString('pl-PL')}`;
+            }).join('\n');
+
+            const clanName = this.config.roleDisplayNames[session.clan] || session.clan;
+            const weekInfo = this.getCurrentWeekInfo();
+
+            // Discord limit opisu embeda = 4096 znaków - przytnij jeśli trzeba
+            const header = `**Klan:** ${clanName}\n**Tydzień:** ${weekInfo.weekNumber}/${weekInfo.year}\n**Zdjęć:** ${totalImages} | **Graczy:** ${sortedPlayers.length}\n\n`;
+            let description = header + resultsText;
+            if (description.length > 4000) {
+                description = description.slice(0, 3990) + '\n…(lista przycięta)';
+            }
+
+            const summaryEmbed = new EmbedBuilder()
+                .setTitle(`🧪 TEST - Podsumowanie (AI batch) - Tydzień ${weekInfo.weekNumber}/${weekInfo.year}`)
+                .setDescription(description)
+                .setColor('#9B59B6')
+                .addFields(
+                    { name: '✅ Graczy', value: sortedPlayers.length.toString(), inline: true },
+                    { name: '📈 Wynik > 0', value: `${aboveZero} osób`, inline: true },
+                    { name: '⭕ Wynik = 0', value: `${zeroCount} osób`, inline: true },
+                    { name: '🏆 Suma TOP30', value: `${top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
+                )
+                .setTimestamp()
+                .setFooter({ text: 'TEST - dane NIE zostały zapisane do bazy' });
+
+            await editEphemeral({ embeds: [summaryEmbed], components: [] });
+
+            logger.info(`[TEST] ✅ Wyświetlono podsumowanie testowe (${sortedPlayers.length} graczy) - bez zapisu do bazy`);
+
+        } catch (error) {
+            logger.error('[TEST] ❌ Błąd przetwarzania testowego:', error);
+            session.isProcessing = false;
+            await editEphemeral({
+                embeds: [new EmbedBuilder()
+                    .setTitle('🧪 TEST - Błąd')
+                    .setDescription('❌ Wystąpił błąd podczas analizy AI. Spróbuj ponownie.')
+                    .setColor('#FF0000')
+                    .setTimestamp()],
+                components: []
+            });
+        } finally {
+            // Zawsze zwolnij kolejkę OCR i wyczyść sesję
+            await this.cleanupSession(session.sessionId);
+        }
+    }
+
+    /**
      * Aktualizuje postęp w publicznej wiadomości
      */
     async updateProgress(session, progress) {
