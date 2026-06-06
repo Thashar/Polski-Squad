@@ -1206,6 +1206,11 @@ async function handleButton(interaction, sharedState) {
         return;
     }
 
+    if (interaction.customId.startsWith('test_finish_')) {
+        await handleTestFinishButton(interaction, sharedState);
+        return;
+    }
+
     if (interaction.customId === 'queue_cmd_remind') {
         await handleRemindCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.reminderService, sharedState.reminderUsageService);
         return;
@@ -3800,6 +3805,41 @@ async function handleTestCommand(interaction, sharedState) {
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /test.'
         });
+    }
+}
+
+/**
+ * Obsługuje przycisk "Zakończ" w podsumowaniu /test.
+ * Dopiero kliknięcie sprząta sesję i zwalnia kolejkę OCR.
+ */
+async function handleTestFinishButton(interaction, sharedState) {
+    const { phaseService, ocrService } = sharedState;
+    const sessionId = interaction.customId.replace('test_finish_', '');
+
+    // Zaktualizuj wiadomość: usuń przycisk i oznacz jako zakończone
+    try {
+        const baseEmbed = interaction.message.embeds[0]
+            ? EmbedBuilder.from(interaction.message.embeds[0])
+            : new EmbedBuilder().setTitle('🧪 TEST').setColor('#9B59B6');
+        baseEmbed.setFooter({ text: '🏁 TEST zakończony - dane NIE zostały zapisane do bazy' });
+        await interaction.update({ embeds: [baseEmbed], components: [] });
+    } catch (err) {
+        logger.warn(`[TEST] ⚠️ Nie udało się zaktualizować wiadomości przy zakończeniu: ${err.message}`);
+    }
+
+    // Wyczyść sesję i zwolnij kolejkę OCR
+    try {
+        const session = phaseService.getSession(sessionId);
+        if (session) {
+            await phaseService.cleanupSession(sessionId);
+            logger.info(`[TEST] 🏁 Sesja testowa zakończona przez ${interaction.user.tag} - zwolniono kolejkę OCR`);
+        } else {
+            // Sesja już nieaktywna (np. wygasła) - awaryjnie zwolnij kolejkę
+            await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            logger.info(`[TEST] 🏁 Sesja testowa już nieaktywna - awaryjne zwolnienie kolejki przez ${interaction.user.tag}`);
+        }
+    } catch (err) {
+        logger.error(`[TEST] ❌ Błąd przy zakończeniu sesji testowej: ${err.message}`);
     }
 }
 

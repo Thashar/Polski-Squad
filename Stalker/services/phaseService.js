@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const fs = require('fs').promises;
@@ -792,24 +792,56 @@ class PhaseService {
         const aiOcrService = this.ocrService.aiOcrService;
         const inter = session.publicInteraction;
 
-        // Pomocnicza funkcja do aktualizacji ephemerala
+        // Sukces sprząta dopiero przycisk "Zakończ" - reszta ścieżek sprząta od razu w finally
+        let deferCleanup = false;
+
+        // Pomocnicza funkcja do aktualizacji ephemerala (zwraca true gdy się powiodło)
         const editEphemeral = async (payload) => {
-            if (!inter) return;
+            if (!inter) return false;
             try {
                 if (inter.editReply) {
                     await inter.editReply(payload);
                 } else {
                     await inter.edit(payload);
                 }
+                return true;
             } catch (err) {
-                logger.warn(`[TEST] ⚠️ Nie udało się zaktualizować ephemerala: ${err.message}`);
+                logger.warn(`[TEST] ⚠️ editReply nie powiódł się: ${err.message} - próbuję followUp`);
+                try {
+                    if (inter.followUp) {
+                        await inter.followUp({ ...payload, flags: MessageFlags.Ephemeral });
+                        return true;
+                    }
+                } catch (err2) {
+                    logger.error(`[TEST] ❌ Nie udało się zaktualizować ephemerala: ${err2.message}`);
+                }
+                return false;
             }
+        };
+
+        // Dostarcza wynik: najpierw ephemeral, a gdy interakcja wygasła - jako wiadomość na kanale (fallback)
+        const deliverResult = async (payload) => {
+            if (await editEphemeral(payload)) return true;
+            try {
+                const channel = await guild.channels.fetch(session.channelId);
+                if (channel) {
+                    await channel.send({
+                        content: `<@${session.userId}> 🧪 Wynik testu (interakcja wygasła - wysyłam tutaj):`,
+                        ...payload
+                    });
+                    logger.info('[TEST] 📨 Wynik testu dostarczony jako wiadomość na kanale (fallback)');
+                    return true;
+                }
+            } catch (err) {
+                logger.error(`[TEST] ❌ Nie udało się dostarczyć wyniku testu nawet na kanał: ${err.message}`);
+            }
+            return false;
         };
 
         try {
             // Wymagany aktywny AI OCR
             if (!aiOcrService || !aiOcrService.enabled) {
-                await editEphemeral({
+                await deliverResult({
                     content: '❌ Komenda `/test` wymaga aktywnego AI OCR (USE_STALKER_AI_OCR=true). Funkcja jest obecnie wyłączona.',
                     embeds: [],
                     components: []
@@ -852,7 +884,7 @@ class PhaseService {
             }
 
             if (!aiResult.isValid || aiResult.players.length === 0) {
-                await editEphemeral({
+                await deliverResult({
                     embeds: [new EmbedBuilder()
                         .setTitle('🧪 TEST - Brak wyników')
                         .setDescription('❌ AI nie wykryło żadnych graczy na przesłanych zdjęciach.')
@@ -901,16 +933,37 @@ class PhaseService {
                     { name: '🏆 Suma TOP30', value: `${top30Sum.toLocaleString('pl-PL')} pkt`, inline: false }
                 )
                 .setTimestamp()
-                .setFooter({ text: 'TEST - dane NIE zostały zapisane do bazy' });
+                .setFooter({ text: 'TEST - dane NIE zostały zapisane do bazy | Kliknij "Zakończ" aby zwolnić kolejkę OCR' });
 
-            await editEphemeral({ embeds: [summaryEmbed], components: [] });
+            // Przycisk "Zakończ" - dopiero jego kliknięcie sprząta sesję i zwalnia kolejkę OCR
+            const finishRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`test_finish_${session.sessionId}`)
+                    .setLabel('Zakończ')
+                    .setEmoji('🏁')
+                    .setStyle(ButtonStyle.Secondary)
+            );
 
-            logger.info(`[TEST] ✅ Wyświetlono podsumowanie testowe (${sortedPlayers.length} graczy) - bez zapisu do bazy`);
+            const delivered = await deliverResult({ embeds: [summaryEmbed], components: [finishRow] });
+
+            if (delivered) {
+                // Nie sprzątaj automatycznie - czekaj na przycisk "Zakończ"
+                deferCleanup = true;
+                // Zmień stage, by kolejny upload nie uruchomił testu ponownie
+                session.stage = 'test_completed';
+                // Odśwież timeout sesji OCR jako zabezpieczenie, gdyby admin nie kliknął "Zakończ"
+                if (this.ocrService) {
+                    await this.ocrService.refreshOCRSession(session.guildId, session.userId);
+                }
+                logger.info(`[TEST] ✅ Wyświetlono podsumowanie testowe (${sortedPlayers.length} graczy) - czekam na "Zakończ"`);
+            } else {
+                logger.warn('[TEST] ⚠️ Nie dostarczono podsumowania testowego - sesja zostanie posprzątana automatycznie');
+            }
 
         } catch (error) {
             logger.error('[TEST] ❌ Błąd przetwarzania testowego:', error);
             session.isProcessing = false;
-            await editEphemeral({
+            await deliverResult({
                 embeds: [new EmbedBuilder()
                     .setTitle('🧪 TEST - Błąd')
                     .setDescription('❌ Wystąpił błąd podczas analizy AI. Spróbuj ponownie.')
@@ -919,8 +972,10 @@ class PhaseService {
                 components: []
             });
         } finally {
-            // Zawsze zwolnij kolejkę OCR i wyczyść sesję
-            await this.cleanupSession(session.sessionId);
+            // Sukces czeka na przycisk "Zakończ" - pozostałe ścieżki sprzątają od razu
+            if (!deferCleanup) {
+                await this.cleanupSession(session.sessionId);
+            }
         }
     }
 
