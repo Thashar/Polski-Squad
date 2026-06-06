@@ -56,6 +56,10 @@ class MemberNotificationService {
                 return;
             }
 
+            // Pobierz nick serwerowy i nazwę Discord
+            const discordName = member.user.username;
+            const nickname = member.nickname;
+
             // Link do profilu z nickiem Discord jako etykieta
             const displayName = nickname && nickname !== discordName ? nickname : discordName;
             const profileLink = `[${displayName}](https://discord.com/users/${member.user.id})`;
