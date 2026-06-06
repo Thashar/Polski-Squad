@@ -366,9 +366,9 @@
         },
         {
           "name": "/test",
-          "description": "TEST: analizuje wszystkie zdjęcia naraz przez AI i dopasowuje odczytane nicki do nicków członków roli klanowej z Discorda. Wynik z miejscami tylko w ephemeralu, BEZ zapisu do bazy (wymaga AI OCR)",
-          "usage": "/test → prześlij od 1 do 10 zdjęć → ephemeralna lista <nick Discord> - <wynik> z miejscami",
-          "requiredPermission": "moderator"
+          "description": "TEST (tylko administrator): analizuje wszystkie zdjęcia naraz przez AI i dopasowuje odczytane nicki do nicków członków roli klanowej z Discorda. Wynik z miejscami tylko w ephemeralu, BEZ zapisu do bazy (wymaga AI OCR). Dostępna też jako przycisk 🧪 Test w panelu kolejki OCR",
+          "usage": "/test (lub przycisk 🧪 Test w panelu) → prześlij od 1 do 10 zdjęć → ephemeralna lista <nick Discord> - <wynik> z miejscami",
+          "requiredPermission": "administrator"
         },
         {
           "name": "/wyniki",

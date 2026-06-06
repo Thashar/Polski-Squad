@@ -78,7 +78,8 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode'];
+    // ('test' pomija bramkę ról moderatora - własny check Administratora w handleTestCommand)
+    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode', 'test'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -1197,6 +1198,11 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_faza2') {
         await handlePhase2Command(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_test') {
+        await handleTestCommand(interaction, sharedState);
         return;
     }
 
@@ -3688,13 +3694,12 @@ async function handleTestCommand(interaction, sharedState) {
     const userId = interaction.user.id;
     const commandName = '/test';
 
-    // Sprawdź uprawnienia (admin lub allowedPunishRoles)
+    // Sprawdź uprawnienia (TYLKO administrator)
     const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
 
-    if (!isAdmin && !hasPunishRole) {
+    if (!isAdmin) {
         await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola moderatora.',
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**.',
             flags: MessageFlags.Ephemeral
         });
         return;

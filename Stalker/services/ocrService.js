@@ -1390,6 +1390,12 @@ class OCRService {
                 .setEmoji('📈')
                 .setStyle(ButtonStyle.Secondary);
 
+            const testButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_test')
+                .setLabel('Test')
+                .setEmoji('🧪')
+                .setStyle(ButtonStyle.Secondary);
+
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
@@ -1451,7 +1457,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
+                .addComponents(faza1Button, faza2Button, testButton, remindButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
@@ -1460,7 +1466,7 @@ class OCRService {
                 .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
 
             const row4 = new ActionRowBuilder()
-                .addComponents(wdupieButton);
+                .addComponents(wdupieButton, leaveQueueButton);
 
             if (this.queueMessageId) {
                 try {
@@ -1709,6 +1715,12 @@ class OCRService {
                 .setEmoji('📈')
                 .setStyle(ButtonStyle.Secondary);
 
+            const testButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_test')
+                .setLabel('Test')
+                .setEmoji('🧪')
+                .setStyle(ButtonStyle.Secondary);
+
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
@@ -1770,7 +1782,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, remindButton, punishButton, leaveQueueButton);
+                .addComponents(faza1Button, faza2Button, testButton, remindButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
@@ -1779,7 +1791,7 @@ class OCRService {
                 .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
 
             const row4 = new ActionRowBuilder()
-                .addComponents(wdupieButton);
+                .addComponents(wdupieButton, leaveQueueButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed
