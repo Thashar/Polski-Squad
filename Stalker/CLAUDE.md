@@ -8,7 +8,8 @@
      - Domyślny model: `gemini-2.5-flash-preview-05-20` (nadpisywalny przez `STALKER_GOOGLE_AI_MODEL`)
      - Prompt: "Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie: <nick> - <wynik>"
      - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
-     - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`, Core Stock (skan ekwipunku)
+     - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`, `/test`, Core Stock (skan ekwipunku)
+     - **Tryb batch (`/test`):** `analyzeResultsImagesBatch(imagePaths, clanNicks)` - wysyła WSZYSTKIE zdjęcia naraz w jednym zapytaniu (oszczędność czasu/tokenów). Do promptu dołącza listę nicków z roli klanowej Discord i prosi AI o dopasowanie odczytanych nicków ze screenów do najbliższego nicku Discord. Zwraca format `<nick Discord> - <wynik>`. Wersja promptu: `extract-results-batch` v1
      - Walidacja wyników: 0–999999 (obsługuje wyniki 5-cyfrowe i wyższe)
      - Retry 3× z exponential backoff (1s/2s/4s) dla błędów 429/503/500/sieciowych
      - Weryfikacja wersji promptów przez `PROMPT_VERSIONS` (Langfuse telemetria)
@@ -28,6 +29,7 @@
    - Dane widoczne w `/player-status` w sekcji "### 🎒 EKWIPUNEK (Core Stock)"
    - Dane tymczasowe (pending) przechowywane w `client._equipmentPending` Map (wygasają po 5 min)
 6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2). Po każdym zatwierdzeniu `/faza1` (i przy starcie bota) wywołuje `clanThresholdsExportService.exportClanThresholds()` → zapisuje `shared_data/clan_thresholds.json` z minimalnym maxScore per klan, używanym przez Rekrutera do dynamicznej kwalifikacji.
+   - **`/test`** (`processTestImages()`): Tryb testowy - mirror `/faza1` (te same uprawnienia moderatora, ten sam kanał OCR `1437122516974829679`, ta sama kolejka OCR), ale: (1) przetwarza WSZYSTKIE zdjęcia naraz przez AI batch (`analyzeResultsImagesBatch`) zamiast pojedynczo; (2) do promptu AI dołącza listę nicków z roli klanowej użytkownika (pobrane przez `safeFetchMembers`), AI dopasowuje odczytane nicki do nicków Discord; (3) wynik (posortowana lista z miejscami `█████░░░░░ #1 nick - wynik` + suma TOP30) wyświetlany WYŁĄCZNIE w **ephemeralu** (`deferReply({ ephemeral: true })`); (4) **BEZ zapisu do bazy** - czysto diagnostyczny. Sesja oznaczona flagą `session.isTest = true`. Wymaga aktywnego AI OCR (`USE_STALKER_AI_OCR=true`).
 7. **AI Chat** - `aiChatService.js`: Mention @Stalker → rozmowa na dowolny temat, Anthropic API (Claude 3 Haiku), cooldown 5min, **bez pamięci kontekstu** (każde pytanie niezależne)
 8. **Broadcast Messages** - `broadcastMessageService.js`: `/msg` (admin) - wysyłanie wiadomości na wszystkie kanały tekstowe, rate limit protection (1s między kanałami), persistent storage messageId, `/msg` bez tekstu → usuwanie wszystkich poprzednich wiadomości
 9. **Kalkulator** - Auto-odpowiedź na słowo "kalkulator" w wiadomości → link do sio-tools.exp0.dev/?migrate=1, cooldown 1h per kanał (persistencja w `data/calculator_cooldowns.json`)
@@ -226,7 +228,7 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/test`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
 
 **Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
 - Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)

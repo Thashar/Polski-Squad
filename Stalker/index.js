@@ -651,6 +651,12 @@ client.on(Events.MessageCreate, async (message) => {
                     logger.error('[PHASE1] ❌ Błąd usuwania wiadomości:', deleteError);
                 }
 
+                // TEST: analiza wszystkich zdjęć naraz przez AI - wynik w ephemeralu, bez zapisu do bazy
+                if (session.isTest) {
+                    await phaseService.processTestImages(session, downloadedFiles, message.guild, message.member);
+                    return;
+                }
+
                 // KROK 3: Przetwarzaj zdjęcia z dysku
                 const results = await phaseService.processImagesFromDisk(
                     session.sessionId,
