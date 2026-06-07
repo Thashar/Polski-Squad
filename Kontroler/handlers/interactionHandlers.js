@@ -6,6 +6,7 @@ const {
 const fs = require('fs').promises;
 const OligopolyService = require('../services/oligopolyService');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { getPolandParts } = require('../utils/timezone');
 
 const logger = createBotLogger('Kontroler');
 
@@ -240,24 +241,24 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         return;
     }
     
-    // Sprawdź czy data nie jest w przeszłości i nie przekracza limitu 365 dni
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    drawDate.setHours(0, 0, 0, 0);
-    
-    if (drawDate < now) {
+    // Sprawdź czy data nie jest w przeszłości i nie przekracza limitu 365 dni (względem POLSKIEJ daty "dziś")
+    const plNow = getPolandParts();
+    const today = new Date(Date.UTC(plNow.year, plNow.month - 1, plNow.day));
+    const drawDay = new Date(Date.UTC(year, month - 1, day));
+
+    if (drawDay < today) {
         await interaction.reply({
             content: '❌ Data następnego losowania nie może być w przeszłości.',
             ephemeral: true
         });
         return;
     }
-    
-    // Sprawdź czy data nie przekracza limitu 365 dni
-    const maxDate = new Date(now);
-    maxDate.setDate(now.getDate() + 365);
 
-    if (drawDate > maxDate) {
+    // Sprawdź czy data nie przekracza limitu 365 dni
+    const maxDate = new Date(today);
+    maxDate.setUTCDate(today.getUTCDate() + 365);
+
+    if (drawDay > maxDate) {
         await interaction.reply({
             content: '❌ Data następnego losowania nie może być dalej niż 365 dni w przyszłości.',
             ephemeral: true
@@ -394,8 +395,8 @@ async function handleLotteryRerollCommand(interaction, config, lotteryService) {
         const recentHistory = history.slice(-20); // Ostatnie 20 loterii
         const selectOptions = recentHistory.map((result, index) => {
             const originalIndex = history.length - recentHistory.length + index;
-            const date = new Date(result.date).toLocaleDateString('pl-PL');
-            const time = new Date(result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+            const date = new Date(result.date).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+            const time = new Date(result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'});
             
             return {
                 label: `${result.lotteryName}`,
@@ -490,7 +491,7 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     const selectOptions = activeLotteries.map(lottery => {
         // Użyj nextDraw zamiast daty z ID loterii
         const nextDrawDate = lottery.nextDraw ? new Date(lottery.nextDraw) : null;
-        const formattedDate = nextDrawDate ? nextDrawDate.toLocaleDateString('pl-PL') : 'Jednorazowa - wykonana';
+        const formattedDate = nextDrawDate ? nextDrawDate.toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'Jednorazowa - wykonana';
         const clan = config.lottery.clans[lottery.clanKey];
         
         return {
@@ -547,8 +548,8 @@ async function handleHistoricalLotteryRemove(interaction, config, lotteryService
     const recentHistory = history.slice(-20); // Ostatnie 20 loterii
     const selectOptions = recentHistory.map((result, index) => {
         const originalIndex = history.length - recentHistory.length + index;
-        const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
-        const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+        const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+        const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'});
         
         return {
             label: `${result.lotteryName}`,
@@ -638,8 +639,8 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
             // Przygotuj listę historycznych wyników z datami
             let historyList = '';
             relatedResults.forEach((result, index) => {
-                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
-                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'});
                 const isReroll = result.lotteryId && result.lotteryId.includes('_reroll');
                 const type = isReroll ? '🔄 Reroll' : '🎲 Losowanie';
                 const winnersCount = (result.winners || result.newWinners || []).length;
@@ -670,7 +671,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -722,7 +723,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -847,7 +848,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -899,7 +900,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
                     },
                     {
                         name: '📅 Harmonogram',
-                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL') : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
+                        value: `${lottery.nextDraw ? new Date(lottery.nextDraw).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }) : 'Jednorazowa'} o ${lottery.hour}:${lottery.minute.toString().padStart(2, '0')}`,
                         inline: true
                     },
                     {
@@ -994,7 +995,7 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
                 },
                 {
                     name: '📅 Data',
-                    value: new Date(lotteryToRemove.originalDate || lotteryToRemove.date).toLocaleDateString('pl-PL'),
+                    value: new Date(lotteryToRemove.originalDate || lotteryToRemove.date).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' }),
                     inline: true
                 },
                 {
@@ -1489,8 +1490,8 @@ async function generateHistoryEmbed(history, currentPage, config, guild = null) 
         pageItems.forEach((result, index) => {
             try {
                 const globalIndex = startIndex + index + 1;
-                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL');
-                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit'});
+                const date = new Date(result.originalDate || result.date).toLocaleDateString('pl-PL', { timeZone: 'Europe/Warsaw' });
+                const time = new Date(result.originalDate || result.date).toLocaleTimeString('pl-PL', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw'});
             
             // Znajdź nazwę klanu
             let clanName = 'Nieznany';

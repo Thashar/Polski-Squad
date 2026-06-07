@@ -3,6 +3,7 @@ const path = require('path');
 const cron = require('node-cron');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
 
 const logger = createBotLogger('Kontroler');
 
@@ -146,26 +147,17 @@ class LotteryService {
         // Ustaw dokładną datę i czas pierwszego losowania w polskiej strefie czasowej
         // Tworzymy datę w formacie YYYY-MM-DD HH:MM w strefie Europe/Warsaw
         const year = drawDate.getFullYear();
-        const month = String(drawDate.getMonth() + 1).padStart(2, '0');
-        const day = String(drawDate.getDate()).padStart(2, '0');
-        const hourStr = String(hour).padStart(2, '0');
-        const minuteStr = String(minute).padStart(2, '0');
-        
-        // Tworzymy datę w polskiej strefie czasowej
-        const dateTimeString = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00`;
-        
-        // Konwertujemy na UTC uwzględniając polską strefę czasową
-        const nextDrawDate = new Date(dateTimeString);
-        
-        // Sprawdź czy to czas letni (marzec-październik) czy zimowy
-        const isWinterTime = this.isWinterTime(nextDrawDate);
-        const offsetHours = isWinterTime ? -1 : -2; // Polska to UTC+1 (zimą) lub UTC+2 (latem)
-        
-        // Skoryguj o różnicę czasową (konwertuj z polskiego czasu na UTC)
-        nextDrawDate.setHours(nextDrawDate.getHours() + offsetHours);
-        
+        const monthNum = drawDate.getMonth() + 1;
+        const dayNum = drawDate.getDate();
+        const month = String(monthNum).padStart(2, '0');
+        const day = String(dayNum).padStart(2, '0');
+
+        // Polski zegar ścienny (Europe/Warsaw) → poprawny moment UTC.
+        // DST obsłużone automatycznie, niezależnie od strefy czasowej serwera.
+        const nextDrawDate = polandWallClockToUTC(year, monthNum, dayNum, hour, minute);
+
         const nextDrawTimestamp = nextDrawDate.getTime();
-        const formattedDate = nextDrawDate.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+        const formattedDate = `${year}${month}${day}`; // YYYYMMDD (polska data losowania)
         const roleShort = targetRole.name.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 6);
         const clanShort = clanKey.toLowerCase();
         const randomSuffix = Math.random().toString(36).substr(2, 4);
@@ -183,7 +175,7 @@ class LotteryService {
             clanName: clan.name,
             clanDisplayName: clan.displayName,
             frequency: frequency,
-            firstDrawDate: drawDate.toISOString().split('T')[0], // Zapisz oryginalną datę w formacie YYYY-MM-DD
+            firstDrawDate: `${year}-${month}-${day}`, // Polska data pierwszego losowania (YYYY-MM-DD)
             hour: hour,
             minute: minute,
             winnersCount: winnersCount,
@@ -211,36 +203,13 @@ class LotteryService {
     }
 
     /**
-     * Sprawdza czy podana data jest w czasie zimowym (UTC+1) czy letnim (UTC+2) w Polsce
-     * @param {Date} date - Data do sprawdzenia
-     * @returns {boolean} - true jeśli czas zimowy, false jeśli letni
-     */
-    isWinterTime(date) {
-        const year = date.getFullYear();
-        
-        // Ostatnia niedziela marca (początek czasu letniego)
-        const lastSundayMarch = new Date(year, 2, 31);
-        lastSundayMarch.setDate(31 - lastSundayMarch.getDay());
-        
-        // Ostatnia niedziela października (powrót do czasu zimowego)
-        const lastSundayOctober = new Date(year, 9, 31);
-        lastSundayOctober.setDate(31 - lastSundayOctober.getDay());
-        
-        // Jeśli data jest przed ostatnią niedzielą marca lub po ostatniej niedzieli października
-        return date < lastSundayMarch || date > lastSundayOctober;
-    }
-
-    /**
      * Konwertuje czas UTC na polski czas lokalny dla wyświetlania
      * @param {Date} utcDate - Data w UTC
      * @returns {string} - Sformatowana data w polskim czasie
      */
     convertUTCToPolishTime(utcDate) {
-        const isWinter = this.isWinterTime(utcDate);
-        const offsetHours = isWinter ? 1 : 2; // Dodajemy offset dla konwersji UTC -> Polski czas
-        
-        const polishTime = new Date(utcDate.getTime() + offsetHours * 60 * 60 * 1000);
-        return polishTime.toLocaleString('pl-PL');
+        // Formatowanie w strefie Europe/Warsaw (DST automatyczne, niezależne od strefy serwera)
+        return formatPolandDateTime(utcDate);
     }
 
     /**
@@ -261,27 +230,16 @@ class LotteryService {
             return currentDrawDate;
         }
         
-        // Dla cyklicznych loterii - dodaj frequency dni do aktualnej daty
-        const currentDate = new Date(currentDrawDate);
-        const nextDate = new Date(currentDate);
-        nextDate.setDate(currentDate.getDate() + frequency);
-        
-        // Ustaw czas w polskiej strefie czasowej
-        const year = nextDate.getFullYear();
-        const month = String(nextDate.getMonth() + 1).padStart(2, '0');
-        const day = String(nextDate.getDate()).padStart(2, '0');
-        const hourStr = String(hour).padStart(2, '0');
-        const minuteStr = String(minute).padStart(2, '0');
-        
-        const dateTimeString = `${year}-${month}-${day}T${hourStr}:${minuteStr}:00`;
-        const polishTime = new Date(dateTimeString);
-        
-        // Sprawdź czy to czas letni czy zimowy i skoryguj
-        const isWinter = this.isWinterTime(polishTime);
-        const offsetHours = isWinter ? -1 : -2;
-        polishTime.setHours(polishTime.getHours() + offsetHours);
-        
-        return polishTime.toISOString();
+        // Dla cyklicznych loterii - dodaj frequency dni do POLSKIEJ daty bieżącego losowania,
+        // po czym przelicz polski zegar ścienny (hour:minute) na poprawny moment UTC.
+        const cur = getPolandParts(new Date(currentDrawDate));
+        const base = new Date(Date.UTC(cur.year, cur.month - 1, cur.day));
+        base.setUTCDate(base.getUTCDate() + frequency);
+        const year = base.getUTCFullYear();
+        const monthNum = base.getUTCMonth() + 1;
+        const dayNum = base.getUTCDate();
+
+        return polandWallClockToUTC(year, monthNum, dayNum, hour, minute).toISOString();
     }
 
     /**
@@ -464,9 +422,10 @@ class LotteryService {
                 return;
             }
 
-            // Sprawdź czy ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
+            // Sprawdź czy ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie (czas polski)
             const now = new Date();
-            const warningKey = `closing_${channelType}_${now.getDate()}_${now.getMonth()}_${now.getHours()}_${now.getMinutes()}`;
+            const pl = getPolandParts(now);
+            const warningKey = `closing_${channelType}_${pl.day}_${pl.month}_${pl.hour}_${pl.minute}`;
             
             if (this.sentWarnings.has(warningKey)) {
                 logger.info(`📋 Ostrzeżenie zamknięcia już wysłane dla ${channelType} w tym czasie - pomijanie`);
@@ -534,9 +493,10 @@ class LotteryService {
                 return;
             }
 
-            // Sprawdź czy finalne ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie
+            // Sprawdź czy finalne ostrzeżenie już zostało wysłane dla tego typu kanału w tej godzinie (czas polski)
             const now = new Date();
-            const warningKey = `final_${channelType}_${now.getDate()}_${now.getMonth()}_${now.getHours()}_${now.getMinutes()}`;
+            const pl = getPolandParts(now);
+            const warningKey = `final_${channelType}_${pl.day}_${pl.month}_${pl.hour}_${pl.minute}`;
             
             if (this.sentWarnings.has(warningKey)) {
                 logger.info(`📋 Finalne ostrzeżenie już wysłane dla ${channelType} w tym czasie - pomijanie`);
