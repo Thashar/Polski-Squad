@@ -3,7 +3,8 @@
 **4 Systemy:**
 1. **OCR Dwukanałowy** - `ocrService.js`: CX (1500min, 0-2800/100, skip1, rola 2800+), Daily (910min, 0-1050/10, skip3, 2x nick), normalizacja znaków (o→0, z→2, l→1, sg→9)
    - **Zapis CX do shared_data:** Po udanym OCR na kanale CX, wynik jest zapisywany do `shared_data/cx_history.json` (klucz: userId, historia max 20 wyników). Używane przez Stalker Bot w `/player-status` i `/player-compare`
-2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
+2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM) w **czasie polskim** (Europe/Warsaw, niezależnie od strefy serwera), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
+   - **Czas polski (`utils/timezone.js`):** Bot operuje w strefie Europe/Warsaw niezależnie od strefy czasowej serwera (np. UTC). `polandWallClockToUTC(y,m,d,h,min)` przelicza polski zegar ścienny na poprawny moment UTC (DST przez `Intl`), `getPolandParts()` zwraca komponenty czasu polskiego "teraz" (walidacja dat, klucze ostrzeżeń), `formatPolandDateTime/Date/Time()` formatują do wyświetlenia. Tworzenie loterii, obliczanie kolejnych losowań, walidacja daty i wszystkie wyświetlane daty używają czasu polskiego.
 3. **Dywersja w klanie** - `votingService.js`:
    - Trigger: Fraza "działasz na szkodę klanu" w odpowiedzi do użytkownika
    - Głosowanie: 15 minut (przyciski Tak/Nie), ping roli klanowej

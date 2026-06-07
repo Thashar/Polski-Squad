@@ -1,5 +1,6 @@
 const { downloadFile, cleanupFiles, safeEditMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { formatPolandDateTime } = require('../utils/timezone');
 const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
@@ -221,7 +222,7 @@ class MessageHandler {
         logger.info(`👤 Nick serwera: "${displayName}"`);
         logger.info(`👤 Nazwa użytkownika: "${username}"`);
         logger.info(`📷 Obraz: ${imageAttachment.name} (${Math.round(imageAttachment.size / 1024)}KB)`);
-        logger.info(`📅 Czas: ${new Date().toLocaleString('pl-PL')}`);
+        logger.info(`📅 Czas: ${formatPolandDateTime(new Date())}`);
         logger.info(`🔗 URL: ${imageAttachment.url}`);
         logger.info(`⚙️ Kanał ${channelConfig.name}: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}`);
         logger.info(`🎯 Wymagane ${channelConfig.requireSecondOccurrence ? 'DRUGIE' : 'PIERWSZE'} wystąpienie nicku`);
