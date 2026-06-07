@@ -3,6 +3,7 @@ const messages = require('../config/messages');
 const fs = require('fs').promises;
 const path = require('path');
 const { downloadDiscordImage } = require('../utils/helpers');
+const { assignNicksToClan } = require('../utils/nickMatcher');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
@@ -597,9 +598,29 @@ class ReminderService {
     }
 
     /**
-     * Przetwarza zdjęcia z dysku dla /remind
+     * Przetwarza zdjęcia z dysku dla /remind - dyspozytor.
+     * AI OCR włączony → analiza batch wszystkich zdjęć naraz (jak faza1/faza2);
+     * wyłączony → fallback na klasyczne przetwarzanie zdjęcie-po-zdjęciu.
      */
     async processImagesFromDisk(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error('Sesja nie istnieje lub wygasła');
+        }
+
+        const aiOcrService = ocrService && ocrService.aiOcrService;
+        if (aiOcrService && aiOcrService.enabled) {
+            return this.processImagesBatch(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService);
+        }
+
+        logger.info('[REMIND] ℹ️ AI OCR wyłączony - klasyczne przetwarzanie zdjęcie-po-zdjęciu');
+        return this.processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService);
+    }
+
+    /**
+     * Klasyczne przetwarzanie zdjęcie-po-zdjęciu (Tesseract) - fallback gdy AI OCR wyłączony.
+     */
+    async processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
         const session = this.getSession(sessionId);
         if (!session) {
             throw new Error('Sesja nie istnieje lub wygasła');
@@ -876,6 +897,222 @@ class ReminderService {
         }
 
         return results;
+    }
+
+    /**
+     * Analiza zbiorcza (batch) dla /remind: wszystkie zdjęcia tej partii wysyłane są do AI
+     * w jednym zapytaniu razem z listą nicków roli klanowej. AI deduplikuje i dopasowuje
+     * nicki, zwracając wyniki graczy; wybieramy graczy z wynikiem 0 (do przypomnień).
+     * Dopasowanie nicków AI → klanowych przez przydział 1:1 (`assignNicksToClan`).
+     */
+    async processImagesBatch(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error('Sesja nie istnieje lub wygasła');
+        }
+
+        session.publicInteraction = publicInteraction;
+        session.isProcessing = true;
+        session.blinkState = false;
+        session.isUpdatingProgress = false;
+
+        const totalImages = downloadedFiles.length;
+        session.batchSteps = [
+            { key: 'downloading', icon: '📥', label: 'Pobieranie zdjęć' },
+            { key: 'sending',     icon: '🤖', label: 'Wysyłanie do AI' },
+            { key: 'processing',  icon: '⚙️', label: 'Przetwarzanie przez AI' },
+            { key: 'analyzing',   icon: '📊', label: 'Analiza wyników (gracze z zerem)' }
+        ];
+        session.batchTotalImages = totalImages;
+        session.currentStepKey = 'downloading';
+
+        session.blinkTimer = setInterval(async () => {
+            if (session.isUpdatingProgress) return;
+            session.blinkState = !session.blinkState;
+            if (session.publicInteraction && session.currentStepKey && session.currentStepKey !== 'done') {
+                try {
+                    session.isUpdatingProgress = true;
+                    await this.updateBatchProgress(session);
+                } catch (e) {
+                    logger.error('[REMIND] ❌ Błąd aktualizacji migania (batch):', e.message);
+                } finally {
+                    session.isUpdatingProgress = false;
+                }
+            }
+        }, 1000);
+
+        const stopBlinkTimer = async () => {
+            if (session.blinkTimer) { clearInterval(session.blinkTimer); session.blinkTimer = null; }
+            let w = 0;
+            while (session.isUpdatingProgress && w < 50) { await new Promise(r => setTimeout(r, 100)); w++; }
+        };
+
+        logger.info(`[REMIND] 🔄 Analiza batch ${totalImages} zdjęć dla sesji ${sessionId}`);
+
+        try {
+            const aiOcrService = ocrService.aiOcrService;
+            await safeFetchMembers(guild, logger);
+
+            session.currentStepKey = 'downloading';
+            await this.updateBatchProgress(session);
+            await new Promise(r => setTimeout(r, 400));
+
+            // Lista członków roli klanowej (z obiektami member do rozwiązania userId)
+            const roleNicks = await ocrService.getRoleNicks(guild, member); // [{userId, member, displayName}]
+            const clanNicks = roleNicks.map(r => r.displayName);
+            const nickToMember = new Map();
+            for (const rn of roleNicks) {
+                if (!nickToMember.has(rn.displayName)) nickToMember.set(rn.displayName, rn);
+            }
+            logger.info(`[REMIND] 👥 Nicki klanu do promptu AI: ${clanNicks.length}`);
+
+            session.currentStepKey = 'sending';
+            await this.updateBatchProgress(session);
+            await new Promise(r => setTimeout(r, 400));
+
+            session.currentStepKey = 'processing';
+            const filepaths = downloadedFiles.map(f => f.filepath);
+            const aiResult = await aiOcrService.analyzeResultsImagesBatch(filepaths, clanNicks);
+
+            if (!session.cancelled) {
+                session.currentStepKey = 'analyzing';
+                await this.updateBatchProgress(session);
+
+                const rawPlayers = (aiResult && aiResult.isValid && Array.isArray(aiResult.players)) ? aiResult.players : [];
+                // Przydział 1:1 nicków AI → klanowych
+                const assigned = assignNicksToClan(rawPlayers, clanNicks, logger);
+                // Tylko gracze z wynikiem 0 (do przypomnień)
+                const zeroPlayers = assigned.filter(p => Number(p.score) === 0);
+
+                const players = [];
+                const uniqueBefore = session.uniqueNicks.size;
+                for (const zp of zeroPlayers) {
+                    const roleNick = nickToMember.get(zp.playerName);
+                    if (!roleNick || !roleNick.member) {
+                        logger.warn(`[REMIND] ⚠️ Brak membera dla "${zp.playerName}" - pomijam`);
+                        continue;
+                    }
+                    players.push({
+                        detectedNick: roleNick.displayName,
+                        user: roleNick,
+                        confirmed: true,
+                        line: '',
+                        endValue: '0',
+                        uncertain: false
+                    });
+                    session.uniqueNicks.add(roleNick.displayName);
+                }
+                const newUniques = session.uniqueNicks.size - uniqueBefore;
+
+                // Jeden wpis processedImages na każdy plik (dla załączników i licznika);
+                // gracze z zerem trafiają do pierwszego wpisu tej partii
+                downloadedFiles.forEach((file, idx) => {
+                    session.processedImages.push({
+                        filepath: file.filepath,
+                        result: {
+                            imageIndex: session.processedImages.length + 1,
+                            foundPlayers: idx === 0 ? players.length : 0,
+                            newUniques: idx === 0 ? newUniques : 0,
+                            players: idx === 0 ? players : []
+                        }
+                    });
+                });
+
+                logger.info(`[REMIND] ✅ Batch: ${players.length} graczy z zerem (unikalnych łącznie: ${session.uniqueNicks.size})`);
+                session.currentStepKey = 'done';
+                await this.updateBatchProgress(session);
+            } else {
+                logger.warn('[REMIND] ⚠️ Sesja anulowana podczas analizy batch - pomijam wynik');
+            }
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd analizy batch:', error);
+            // Wpisy plików bez graczy, by załączniki/licznik były spójne
+            downloadedFiles.forEach(file => {
+                session.processedImages.push({
+                    filepath: file.filepath,
+                    result: { imageIndex: session.processedImages.length + 1, foundPlayers: 0, newUniques: 0, players: [], error: error.message }
+                });
+            });
+        } finally {
+            await stopBlinkTimer();
+            session.currentProcessingData = null;
+            session.isProcessing = false;
+        }
+
+        if (session.cancelled) {
+            logger.info('[REMIND] 🧹 Sesja anulowana - czyszczę po zakończeniu przetwarzania');
+            const ci = session.publicInteraction;
+            if (ci) {
+                try {
+                    const e = new EmbedBuilder()
+                        .setTitle('❌ Sesja anulowana')
+                        .setDescription('Sesja /remind została anulowana. Wszystkie pliki zostały usunięte.')
+                        .setColor('#FF0000')
+                        .setTimestamp();
+                    if (ci.editReply) await ci.editReply({ embeds: [e], components: [] });
+                    else await ci.edit({ embeds: [e], components: [] });
+                } catch (err) {
+                    logger.warn(`[REMIND] ⚠️ Nie udało się zaktualizować embeda po anulowaniu: ${err.message}`);
+                }
+            }
+            await this.cleanupSession(sessionId);
+        }
+
+        return session.processedImages;
+    }
+
+    /**
+     * Pasek postępu batch (stepper) dla /remind - pokazuje etapy procesu.
+     */
+    async updateBatchProgress(session) {
+        if (!session.publicInteraction) return;
+        try {
+            const steps = session.batchSteps || [];
+            const order = steps.map(s => s.key);
+            const isDone = session.currentStepKey === 'done';
+            const currentIdx = isDone ? steps.length : order.indexOf(session.currentStepKey);
+
+            const stepLines = steps.map((s, i) => {
+                let marker;
+                if (isDone || i < currentIdx) marker = '✅';
+                else if (i === currentIdx) marker = session.blinkState ? '🟧' : '⬜';
+                else marker = '⬜';
+                let suffix = '';
+                if (s.key === 'downloading') suffix = ` (${session.batchTotalImages} szt.)`;
+                else if (i === currentIdx && !isDone) suffix = '...';
+                return `${marker} ${s.icon} ${s.label}${suffix}`;
+            }).join('\n');
+
+            const imgWord = session.batchTotalImages === 1 ? 'zdjęcie' : 'zdjęć';
+            const embed = new EmbedBuilder()
+                .setTitle(isDone ? '✅ Analiza zakończona' : '⏳ Przetwarzanie zdjęć...')
+                .setDescription(`${stepLines}\n\n🤖 Analiza AI: **${session.batchTotalImages}** ${imgWord} w jednym zapytaniu`)
+                .setColor(isDone ? '#00FF00' : '#FFA500')
+                .addFields({ name: '👥 Suma graczy z zerem', value: `${session.uniqueNicks.size}`, inline: true })
+                .setTimestamp();
+
+            const cancelRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('remind_cancel_session').setLabel('❌ Anuluj').setStyle(ButtonStyle.Danger)
+            );
+
+            try {
+                if (session.publicInteraction.editReply) {
+                    await session.publicInteraction.editReply({ embeds: [embed], components: [cancelRow] });
+                } else {
+                    await session.publicInteraction.edit({ embeds: [embed], components: [cancelRow] });
+                }
+            } catch (e) {
+                if (e.code === 10008 || e.message?.includes('Unknown Message')) {
+                    logger.warn('[REMIND] ⚠️ Wiadomość postępu usunięta - kontynuuję bez aktualizacji');
+                } else if (e.code === 10015 || e.message?.includes('Unknown Webhook') || e.message?.includes('Invalid Webhook Token')) {
+                    logger.warn('[REMIND] ⏰ Interakcja wygasła podczas batch');
+                } else {
+                    throw e;
+                }
+            }
+        } catch (error) {
+            logger.error('[REMIND] ❌ Błąd aktualizacji postępu (batch):', error.message);
+        }
     }
 
     /**
