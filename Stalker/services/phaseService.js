@@ -921,9 +921,12 @@ class PhaseService {
                 session.currentStepKey = 'analyzing';
                 await this.updateBatchProgress(session);
 
-                const players = (aiResult && aiResult.isValid && Array.isArray(aiResult.players))
+                const rawPlayers = (aiResult && aiResult.isValid && Array.isArray(aiResult.players))
                     ? aiResult.players
                     : [];
+
+                // Normalizacja nicków AI → kanoniczne nicki Discord (spójność między rundami/przebiegami)
+                const players = this.normalizePlayersToClanNicks(rawPlayers, clanNicks);
 
                 // Dodaj JEDEN wpis dla całego przebiegu batch (mapowanie playerName → nick)
                 session.processedImages.push({
@@ -1080,6 +1083,91 @@ class PhaseService {
     }
 
     /**
+     * Dzieli string na grafemy (emoji liczone jako 1 znak).
+     * Używa Intl.Segmenter gdy dostępny, w przeciwnym razie fallback po punktach kodowych.
+     */
+    _splitGraphemes(str) {
+        const s = str || '';
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+            try {
+                const seg = new Intl.Segmenter('pl', { granularity: 'grapheme' });
+                return Array.from(seg.segment(s), x => x.segment);
+            } catch (_) { /* fallback poniżej */ }
+        }
+        return Array.from(s); // dzieli po punktach kodowych (lepsze niż po UTF-16)
+    }
+
+    /**
+     * Odległość Levenshteina na tablicach grafemów (emoji = 1 znak).
+     */
+    _graphemeLevenshtein(a, b) {
+        const m = a.length, n = b.length;
+        if (m === 0) return n;
+        if (n === 0) return m;
+        let prev = new Array(n + 1);
+        for (let j = 0; j <= n; j++) prev[j] = j;
+        for (let i = 1; i <= m; i++) {
+            const cur = [i];
+            for (let j = 1; j <= n; j++) {
+                const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+                cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+            }
+            prev = cur;
+        }
+        return prev[n];
+    }
+
+    /**
+     * Normalizuje nicki odczytane przez AI do kanonicznych nicków Discord.
+     * Zawsze zwraca nick Discord, gdy różnica znaków ≤ 20% (Levenshtein na grafemach,
+     * emoji = 1 znak). Gdy żaden nick nie mieści się w progu - zostawia nick z AI.
+     * Dodatkowo deduplikuje w obrębie partii: jeśli kilka nicków AI zmapuje się na ten
+     * sam nick Discord, zostaje wpis z najwyższym wynikiem (zapobiega fałszywym konfliktom).
+     *
+     * @param {Array<{playerName: string, score: number}>} players
+     * @param {string[]} clanNicks
+     * @returns {Array<{playerName: string, score: number}>}
+     */
+    normalizePlayersToClanNicks(players, clanNicks) {
+        if (!Array.isArray(players) || players.length === 0) return players || [];
+        if (!Array.isArray(clanNicks) || clanNicks.length === 0) return players;
+
+        const clan = clanNicks.map(n => ({ nick: n, g: this._splitGraphemes(n) }));
+        const THRESHOLD = 0.20; // dopuszczalna różnica = 20% znaków
+
+        const byNick = new Map();
+        for (const p of players) {
+            const srcG = this._splitGraphemes(p.playerName || '');
+            let best = null, bestNorm = Infinity;
+            for (const c of clan) {
+                const dist = this._graphemeLevenshtein(srcG, c.g);
+                const maxLen = Math.max(srcG.length, c.g.length) || 1;
+                const norm = dist / maxLen;
+                if (norm < bestNorm) {
+                    bestNorm = norm;
+                    best = c;
+                }
+            }
+
+            let finalName = p.playerName;
+            if (best && bestNorm <= THRESHOLD) {
+                if (best.nick !== p.playerName) {
+                    logger.info(`[PHASE] 🔗 Nick AI "${p.playerName}" → Discord "${best.nick}" (różnica ${Math.round(bestNorm * 100)}%)`);
+                }
+                finalName = best.nick;
+            }
+
+            // Deduplikacja w obrębie partii - zostaw wpis z wyższym wynikiem
+            const existing = byNick.get(finalName);
+            if (!existing || (p.score || 0) > (existing.score || 0)) {
+                byNick.set(finalName, { ...p, playerName: finalName });
+            }
+        }
+
+        return Array.from(byNick.values());
+    }
+
+    /**
      * Przetwarza WSZYSTKIE zdjęcia naraz przez AI (batch) dla komendy /test.
      * AI dostaje listę nicków z roli klanowej i dopasowuje odczytane nicki do Discord.
      * Wynik prezentowany jest WYŁĄCZNIE w ephemeralu - BEZ zapisu do bazy.
@@ -1191,8 +1279,11 @@ class PhaseService {
                 return;
             }
 
+            // Normalizacja nicków AI → kanoniczne nicki Discord (spójność, dedup)
+            const normalizedPlayers = this.normalizePlayersToClanNicks(aiResult.players, clanNicks);
+
             // Posortuj malejąco i przydziel miejsca (jak w Fazie 1)
-            const sortedPlayers = [...aiResult.players].sort((a, b) => b.score - a.score);
+            const sortedPlayers = [...normalizedPlayers].sort((a, b) => b.score - a.score);
             const maxScore = sortedPlayers[0]?.score || 1;
             const top30Sum = sortedPlayers.slice(0, 30).reduce((sum, p) => sum + (p.score || 0), 0);
             const aboveZero = sortedPlayers.filter(p => p.score > 0).length;
