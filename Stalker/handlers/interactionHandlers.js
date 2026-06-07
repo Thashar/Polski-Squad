@@ -1134,6 +1134,7 @@ async function handleButton(interaction, sharedState) {
                     `⏰ ${timeMessage}`
                 )
                 .setColor('#00ff00')
+                .addFields(...buildDmResultFields(reminderResult))
                 .setFooter({ text: `Wykonano przez ${interaction.user.tag}` });
 
             // Sprawdź czy interakcja nie wygasła przed próbą edycji
@@ -11618,6 +11619,32 @@ function buildSendChecklist(type, currentKey) {
     return `### ${title}\n${lines.join('\n')}`;
 }
 
+/**
+ * Buduje pola embeda z listą dostarczalności DM (kto dostał DM, a do kogo nie dotarło).
+ * @param {{dmDelivered?: string[], dmFailed?: string[]}} result - wynik z sendReminders
+ * @returns {Array<{name: string, value: string, inline: boolean}>}
+ */
+function buildDmResultFields(result) {
+    const delivered = (result && result.dmDelivered) || [];
+    const failed = (result && result.dmFailed) || [];
+    const fmt = (arr) => {
+        if (arr.length === 0) return '—';
+        const shown = arr.slice(0, 25).map(n => `• ${n}`).join('\n');
+        return (arr.length > 25 ? `${shown}\n…i ${arr.length - 25} więcej` : shown).slice(0, 1024);
+    };
+    const fields = [
+        { name: `✅ DM dostarczone (${delivered.length})`, value: fmt(delivered), inline: false }
+    ];
+    if (failed.length > 0) {
+        fields.push({
+            name: `❌ DM nie dotarło (${failed.length}) — zablokowany bot lub wyłączone DM`,
+            value: fmt(failed),
+            inline: false
+        });
+    }
+    return fields;
+}
+
 async function finalizeAfterVacationDecisions(session, type, sharedState) {
     const { vacationDecisionData } = session;
     const { allFoundUsers, vacationDecisions, playersWithVacation, interaction } = vacationDecisionData;
@@ -11749,6 +11776,7 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
                     `dla **${reminderResult.totalUsers}** ${reminderResult.totalUsers === 1 ? 'użytkownika' : 'użytkowników'}.`
                 )
                 .setColor('#00FF00')
+                .addFields(...buildDmResultFields(reminderResult))
                 .setTimestamp()
                 .setFooter({ text: `Wysłano do ${reminderResult.roleGroups} ${reminderResult.roleGroups === 1 ? 'grupy' : 'grup'} ról` });
 

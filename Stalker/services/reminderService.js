@@ -35,6 +35,10 @@ class ReminderService {
             const roleGroups = new Map();
             let sentMessages = 0;
 
+            // Listy dostarczalności DM (do podsumowania dla moderatora)
+            const dmDelivered = []; // displayName osób, do których DM dotarł
+            const dmFailed = [];    // displayName osób, do których DM NIE dotarł (zablokowany bot / wyłączone DM)
+
             // Grupuj użytkowników według ról
             for (const userData of foundUsers) {
                 // POPRAWKA: userData.user zawiera {userId, member, displayName}
@@ -112,9 +116,11 @@ class ReminderService {
                                 await this.saveActiveReminderDMs();
 
                                 dmsSent++;
+                                dmDelivered.push(member.displayName);
                                 logger.info(`📨 Wysłano DM do ${member.user.tag}`);
                             } catch (dmError) {
                                 dmsFailed++;
+                                dmFailed.push(member.displayName);
                                 logger.warn(`⚠️ Nie udało się wysłać DM do ${member.user.tag}: ${dmError.message}`);
                             }
                         }
@@ -129,7 +135,9 @@ class ReminderService {
             return {
                 sentMessages: sentMessages,
                 roleGroups: roleGroups.size,
-                totalUsers: foundUsers.length
+                totalUsers: foundUsers.length,
+                dmDelivered: dmDelivered,
+                dmFailed: dmFailed
             };
         } catch (error) {
             logger.error('Błąd przypomnień');
