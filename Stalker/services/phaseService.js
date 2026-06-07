@@ -1118,11 +1118,31 @@ class PhaseService {
     }
 
     /**
-     * Normalizuje nicki odczytane przez AI do kanonicznych nicków Discord.
-     * Zawsze zwraca nick Discord, gdy różnica znaków ≤ 20% (Levenshtein na grafemach,
-     * emoji = 1 znak). Gdy żaden nick nie mieści się w progu - zostawia nick z AI.
-     * Dodatkowo deduplikuje w obrębie partii: jeśli kilka nicków AI zmapuje się na ten
-     * sam nick Discord, zostaje wpis z najwyższym wynikiem (zapobiega fałszywym konfliktom).
+     * Buduje znormalizowaną reprezentację nicku do porównań: NFKD + usunięcie znaków
+     * diakrytycznych (ę→e, ó→o, ...) + lowercase, podzieloną na grafemy (emoji = 1 znak).
+     * Dzięki temu literówki/ozdobniki mniej zaburzają odległość edycyjną.
+     */
+    _normForMatch(str) {
+        const norm = (str || '')
+            .normalize('NFKD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+        return this._splitGraphemes(norm);
+    }
+
+    /**
+     * Dopasowuje nicki odczytane przez AI do nicków roli klanowej.
+     *
+     * Założenie domenowe: KAŻDY gracz na screenie ma rolę klanową, więc każdy odczytany
+     * nick odpowiada DOKŁADNIE jednemu członkowi klanu. Rozwiązujemy to jako problem
+     * przydziału 1:1 (każdy klanowicz użyty maks. raz w obrębie partii), minimalizując
+     * łączną odległość edycyjną. Algorytm zachłanny po globalnym minimum: najpierw wiązane
+     * są pary o najmniejszej odległości (dokładne trafienia kotwiczą resztę), więc
+     * literówki/błędy OCR (np. "krępo" → "Krzempo") trafiają do najbliższego WOLNEGO
+     * klanowicza - bez progu odcięcia.
+     *
+     * Efekt: te same osoby dostają identyczny kanoniczny nick we wszystkich rundach →
+     * spójny union i poprawne sumowanie w Fazie 2.
      *
      * @param {Array<{playerName: string, score: number}>} players
      * @param {string[]} clanNicks
@@ -1132,39 +1152,48 @@ class PhaseService {
         if (!Array.isArray(players) || players.length === 0) return players || [];
         if (!Array.isArray(clanNicks) || clanNicks.length === 0) return players;
 
-        const clan = clanNicks.map(n => ({ nick: n, g: this._splitGraphemes(n) }));
-        const THRESHOLD = 0.20; // dopuszczalna różnica = 20% znaków
-
-        const byNick = new Map();
+        // Pre-dedup identycznych nicków AI w obrębie partii (zostaw wyższy wynik)
+        const uniq = new Map();
         for (const p of players) {
-            const srcG = this._splitGraphemes(p.playerName || '');
-            let best = null, bestNorm = Infinity;
-            for (const c of clan) {
-                const dist = this._graphemeLevenshtein(srcG, c.g);
-                const maxLen = Math.max(srcG.length, c.g.length) || 1;
-                const norm = dist / maxLen;
-                if (norm < bestNorm) {
-                    bestNorm = norm;
-                    best = c;
-                }
-            }
+            const key = p.playerName || '';
+            const ex = uniq.get(key);
+            if (!ex || (p.score || 0) > (ex.score || 0)) uniq.set(key, p);
+        }
+        const detected = Array.from(uniq.values());
 
-            let finalName = p.playerName;
-            if (best && bestNorm <= THRESHOLD) {
-                if (best.nick !== p.playerName) {
-                    logger.info(`[PHASE] 🔗 Nick AI "${p.playerName}" → Discord "${best.nick}" (różnica ${Math.round(bestNorm * 100)}%)`);
-                }
-                finalName = best.nick;
-            }
+        const detG = detected.map(p => this._normForMatch(p.playerName));
+        const clanG = clanNicks.map(n => this._normForMatch(n));
 
-            // Deduplikacja w obrębie partii - zostaw wpis z wyższym wynikiem
-            const existing = byNick.get(finalName);
-            if (!existing || (p.score || 0) > (existing.score || 0)) {
-                byNick.set(finalName, { ...p, playerName: finalName });
+        // Zbuduj wszystkie pary (detected i, clan j) z odległością edycyjną
+        const pairs = [];
+        for (let i = 0; i < detected.length; i++) {
+            for (let j = 0; j < clanNicks.length; j++) {
+                pairs.push({ i, j, dist: this._graphemeLevenshtein(detG[i], clanG[j]) });
             }
         }
+        // Najpierw najmniejsze odległości - dokładne trafienia (dist 0) blokują swoich klanowiczów
+        pairs.sort((a, b) => a.dist - b.dist);
 
-        return Array.from(byNick.values());
+        const assignedClan = new Array(detected.length).fill(-1);
+        const usedDet = new Set();
+        const usedClan = new Set();
+        for (const { i, j } of pairs) {
+            if (usedDet.has(i) || usedClan.has(j)) continue;
+            assignedClan[i] = j;
+            usedDet.add(i);
+            usedClan.add(j);
+            if (usedDet.size === detected.length) break;
+        }
+
+        return detected.map((p, i) => {
+            const j = assignedClan[i];
+            if (j === -1) return p; // więcej odczytów niż klanowiczów - zostaw nick AI
+            const canonical = clanNicks[j];
+            if (canonical !== p.playerName) {
+                logger.info(`[PHASE] 🔗 Nick AI "${p.playerName}" → Discord "${canonical}"`);
+            }
+            return { ...p, playerName: canonical };
+        });
     }
 
     /**
