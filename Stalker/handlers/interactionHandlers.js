@@ -930,9 +930,9 @@ async function handleButton(interaction, sharedState) {
         // Odśwież timeout sesji OCR
         await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
-        // Natychmiast pokaż status "Wysyłanie..." (usuwa przyciski)
+        // Natychmiast pokaż checklistę wysyłki (usuwa przyciski)
         await interaction.update({
-            content: '⏳ **Wysyłanie powiadomień...**\n\nSprawdzam urlopy i wysyłam wiadomości do użytkowników.',
+            content: buildSendChecklist('remind', 'dedup'),
             embeds: [],
             components: []
         });
@@ -975,6 +975,9 @@ async function handleButton(interaction, sharedState) {
             await sharedState.reminderService.cleanupSession(session.sessionId);
             return;
         }
+
+        // Checklist: krok sprawdzania urlopów
+        await interaction.editReply({ content: buildSendChecklist('remind', 'vacation'), embeds: [], components: [] });
 
         // Sprawdź urlopy przed wysłaniem przypomnień
         const vacationChannelId = '1269726207633522740';
@@ -1055,10 +1058,16 @@ async function handleButton(interaction, sharedState) {
 
         // Wyślij przypomnienia
         try {
+            // Checklist: krok wysyłki
+            await interaction.editReply({ content: buildSendChecklist('remind', 'sending'), embeds: [], components: [] });
+
             const reminderResult = await sharedState.reminderService.sendReminders(interaction.guild, foundUsers);
 
             // Zapisz użycie /remind przez klan (dla limitów czasowych)
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
+
+            // Checklist: krok trackingu
+            await interaction.editReply({ content: buildSendChecklist('remind', 'tracking'), embeds: [], components: [] });
 
             // Utwórz tracking status potwierdzeń
             const members = foundUsers
@@ -1130,6 +1139,7 @@ async function handleButton(interaction, sharedState) {
             // Sprawdź czy interakcja nie wygasła przed próbą edycji
             try {
                 await interaction.editReply({
+                    content: null,
                     embeds: [successEmbed],
                     components: []
                 });
@@ -1519,9 +1529,9 @@ async function handleButton(interaction, sharedState) {
         // Odśwież timeout sesji OCR
         await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
-        // Natychmiast pokaż status "Dodawanie punktów..." (usuwa przyciski)
+        // Natychmiast pokaż checklistę nakładania kar (usuwa przyciski)
         await interaction.update({
-            content: '⏳ **Dodawanie punktów karnych...**\n\nSprawdzam urlopy i dodaję punkty użytkownikom.',
+            content: buildSendChecklist('punish', 'dedup'),
             embeds: [],
             components: []
         });
@@ -1564,6 +1574,9 @@ async function handleButton(interaction, sharedState) {
             await sharedState.punishmentService.cleanupSession(session.sessionId);
             return;
         }
+
+        // Checklist: krok sprawdzania urlopów
+        await interaction.editReply({ content: buildSendChecklist('punish', 'vacation'), embeds: [], components: [] });
 
         // Sprawdź urlopy przed dodaniem punktów
         const vacationChannelId = '1269726207633522740';
@@ -1644,6 +1657,9 @@ async function handleButton(interaction, sharedState) {
 
         // Dodaj punkty karne
         try {
+            // Checklist: krok nakładania kar
+            await interaction.editReply({ content: buildSendChecklist('punish', 'punishing'), embeds: [], components: [] });
+
             const results = await sharedState.punishmentService.processPunishments(interaction.guild, foundUsers);
 
             // Zapisz dane sesji PRZED czyszczeniem (dla embeda)
@@ -1678,6 +1694,7 @@ async function handleButton(interaction, sharedState) {
                 .setFooter({ text: `${interaction.user.tag} | 🎭 = rola karania (2+ pkt) | 📢 = ostrzeżenie wysłane` });
 
             await interaction.editReply({
+                content: null,
                 embeds: [successEmbed],
                 components: []
             });
@@ -11565,6 +11582,42 @@ async function showVacationDecisionPrompt(session, type, sharedState) {
 /**
  * Finalizuje proces po podjęciu wszystkich decyzji o urlopowiczach
  */
+// Definicja etapów checklisty wysyłki (po potwierdzeniu) dla /remind i /punish
+const SEND_CHECKLIST_STEPS = {
+    remind: [
+        { key: 'dedup',    label: '👥 Deduplikacja użytkowników' },
+        { key: 'vacation', label: '🏖️ Sprawdzanie urlopów' },
+        { key: 'sending',  label: '📨 Wysyłanie przypomnień (DM + ping)' },
+        { key: 'tracking', label: '📊 Tworzenie trackingu potwierdzeń' }
+    ],
+    punish: [
+        { key: 'dedup',     label: '👥 Deduplikacja użytkowników' },
+        { key: 'vacation',  label: '🏖️ Sprawdzanie urlopów' },
+        { key: 'punishing', label: '💀 Nakładanie kar (punkty + role)' }
+    ]
+};
+
+/**
+ * Buduje checklistę etapu wysyłki (po potwierdzeniu) - aktywny krok ma 🔄, ukończone ✅.
+ * @param {'remind'|'punish'} type
+ * @param {string} currentKey - klucz aktualnego kroku lub 'done' dla wszystkich ukończonych
+ */
+function buildSendChecklist(type, currentKey) {
+    const steps = SEND_CHECKLIST_STEPS[type] || [];
+    const order = steps.map(s => s.key);
+    const isDone = currentKey === 'done';
+    const idx = isDone ? steps.length : order.indexOf(currentKey);
+    const lines = steps.map((s, i) => {
+        let marker;
+        if (isDone || i < idx) marker = '✅';
+        else if (i === idx) marker = '🔄';
+        else marker = '⬜';
+        return `${marker} ${s.label}${(!isDone && i === idx) ? '...' : ''}`;
+    });
+    const title = type === 'remind' ? '📨 Wysyłanie przypomnień' : '💀 Nakładanie kar';
+    return `### ${title}\n${lines.join('\n')}`;
+}
+
 async function finalizeAfterVacationDecisions(session, type, sharedState) {
     const { vacationDecisionData } = session;
     const { allFoundUsers, vacationDecisions, playersWithVacation, interaction } = vacationDecisionData;
@@ -11639,9 +11692,9 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
             }
         }
 
-        // Wyślij przypomnienia
+        // Wyślij przypomnienia (checklist: krok wysyłki)
         await interaction.editReply({
-            content: '⏳ **Wysyłanie powiadomień...**\n\nWysyłam wiadomości do użytkowników.',
+            content: buildSendChecklist('remind', 'sending'),
             embeds: [],
             components: []
         });
@@ -11651,6 +11704,9 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 
             // Zapisz użycie /remind przez klan (dla limitów czasowych)
             await sharedState.reminderUsageService.recordRoleUsage(session.userClanRoleId, session.userId);
+
+            // Checklist: krok trackingu
+            await interaction.editReply({ content: buildSendChecklist('remind', 'tracking'), embeds: [], components: [] });
 
             // Utwórz tracking status potwierdzeń
             const vacationMembers = finalUsers
@@ -11735,9 +11791,9 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
         }
 
     } else {
-        // Dodaj punkty karne
+        // Dodaj punkty karne (checklist: krok nakładania kar)
         await interaction.editReply({
-            content: '⏳ **Dodawanie punktów karnych...**\n\nDodaję punkty użytkownikom.',
+            content: buildSendChecklist('punish', 'punishing'),
             embeds: [],
             components: []
         });
