@@ -365,12 +365,6 @@
           "requiredPermission": "moderator"
         },
         {
-          "name": "/test",
-          "description": "TEST (tylko administrator): analizuje wszystkie zdjęcia naraz przez AI i dopasowuje odczytane nicki do nicków członków roli klanowej z Discorda. Wynik z miejscami tylko w ephemeralu, BEZ zapisu do bazy (wymaga AI OCR). Dostępna też jako przycisk 🧪 Test w panelu kolejki OCR",
-          "usage": "/test (lub przycisk 🧪 Test w panelu) → prześlij od 1 do 10 zdjęć → ephemeralna lista <nick Discord> - <wynik> z miejscami",
-          "requiredPermission": "administrator"
-        },
-        {
           "name": "/wyniki",
           "description": "Wyświetla wyniki wszystkich faz ekspedycji (tylko dla członków klanu)",
           "usage": "/wyniki",

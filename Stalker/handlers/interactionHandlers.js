@@ -78,15 +78,14 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    // ('test' pomija bramkę ról moderatora - własny check Administratora w handleTestCommand)
-    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode', 'test'];
+    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
     }
 
     // Sprawdź kanał dla komend OCR i faz
-    const ocrCommands = ['punish', 'remind', 'faza1', 'faza2', 'test'];
+    const ocrCommands = ['punish', 'remind', 'faza1', 'faza2'];
     const allowedChannelId = '1437122516974829679';
     if (ocrCommands.includes(interaction.commandName) && interaction.channelId !== allowedChannelId) {
         await interaction.reply({
@@ -125,9 +124,6 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'faza1':
             await handlePhase1Command(interaction, sharedState);
-            break;
-        case 'test':
-            await handleTestCommand(interaction, sharedState);
             break;
         case 'wyniki':
             await handleWynikiCommand(interaction, sharedState);
@@ -1209,16 +1205,6 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_faza2') {
         await handlePhase2Command(interaction, sharedState);
-        return;
-    }
-
-    if (interaction.customId === 'queue_cmd_test') {
-        await handleTestCommand(interaction, sharedState);
-        return;
-    }
-
-    if (interaction.customId.startsWith('test_finish_')) {
-        await handleTestFinishButton(interaction, sharedState);
         return;
     }
 
@@ -2776,10 +2762,6 @@ async function registerSlashCommands(client) {
             .setDescription('Zbierz i zapisz wyniki wszystkich graczy dla Fazy 1'),
 
         new SlashCommandBuilder()
-            .setName('test')
-            .setDescription('TEST: analiza AI wszystkich zdjęć naraz + dopasowanie do nicków Discord (bez zapisu)'),
-
-        new SlashCommandBuilder()
             .setName('wyniki')
             .setDescription('Wyświetl wyniki dla wszystkich faz'),
 
@@ -3703,161 +3685,6 @@ async function handleModalSubmit(interaction, sharedState) {
         await handlePhase1ManualModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_manual_modal_')) {
         await handlePhase2ManualModalSubmit(interaction, sharedState);
-    }
-}
-
-/**
- * Komenda /test - analiza AI wszystkich zdjęć naraz (batch) z dopasowaniem nicków
- * ze screenów do nicków członków roli klanowej z Discorda. Wynik WYŁĄCZNIE w ephemeralu,
- * BEZ zapisu do bazy. Korzysta z tej samej kolejki OCR co /faza1.
- */
-async function handleTestCommand(interaction, sharedState) {
-    const { config, phaseService, ocrService } = sharedState;
-    const guildId = interaction.guild.id;
-    const userId = interaction.user.id;
-    const commandName = '/test';
-
-    // Sprawdź uprawnienia (TYLKO administrator)
-    const isAdmin = interaction.member.permissions.has('Administrator');
-
-    if (!isAdmin) {
-        await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // /test wymaga aktywnego AI OCR (analiza batch przez Gemini Vision)
-    if (!ocrService.aiOcrService || !ocrService.aiOcrService.enabled) {
-        await interaction.reply({
-            content: '❌ Komenda `/test` wymaga aktywnego AI OCR (`USE_STALKER_AI_OCR=true`). Funkcja jest obecnie wyłączona.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    // ===== SPRAWDZENIE KOLEJKI OCR (przed deferReply) =====
-    const isOCRActive = ocrService.isOCRActive(guildId);
-    const isQueueEmpty = ocrService.isQueueEmpty(guildId);
-    const willBeQueued = isOCRActive || !isQueueEmpty;
-
-    // Ephemeral - wynik widoczny tylko dla wywołującego
-    await interaction.deferReply({ ephemeral: true });
-
-    try {
-        // Wykryj klan użytkownika
-        let userClan = null;
-        for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
-            if (interaction.member.roles.cache.has(roleId)) {
-                userClan = clanKey;
-                logger.info(`[TEST] 🎯 Wykryto klan użytkownika: ${clanKey} (${config.roleDisplayNames[clanKey]})`);
-                break;
-            }
-        }
-
-        if (!userClan) {
-            await interaction.editReply({
-                content: '❌ Nie wykryto Twojego klanu. Musisz mieć jedną z ról: ' +
-                    Object.values(config.roleDisplayNames).join(', ')
-            });
-            return;
-        }
-
-        const runSession = async (inter) => {
-            await ocrService.startOCRSession(guildId, userId, commandName);
-            logger.info(`[OCR-QUEUE] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
-
-            const activeOCR = ocrService.activeProcessing.get(guildId);
-            const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
-
-            // Utwórz sesję (oznaczona jako testowa)
-            const sessionId = phaseService.createSession(
-                inter.user.id,
-                inter.guild.id,
-                inter.channelId,
-                1, // phase
-                ocrExpiresAt
-            );
-
-            const session = phaseService.getSession(sessionId);
-            session.publicInteraction = inter; // ephemeral interaction (editowalna)
-            session.clan = userClan;
-            session.isTest = true; // znacznik trybu testowego
-
-            // Pokaż embed z prośbą o zdjęcia (EPHEMERAL)
-            const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
-            awaitingEmbed.embed.setTitle('🧪 TEST - Prześlij zdjęcia wyników')
-                .setColor('#9B59B6')
-                .setFooter({ text: 'TEST - wynik tylko dla Ciebie, dane NIE będą zapisane' });
-            await inter.editReply({
-                embeds: [awaitingEmbed.embed],
-                components: [awaitingEmbed.row]
-            });
-
-            logger.info(`[TEST] ✅ Sesja testowa utworzona, czekam na zdjęcia od ${inter.user.tag}`);
-        };
-
-        if (willBeQueued) {
-            const { position } = await ocrService.addToOCRQueue(guildId, userId, commandName, interaction, runSession);
-
-            const queueEmbed = new EmbedBuilder()
-                .setTitle('⏳ Kolejka OCR')
-                .setDescription(`System OCR jest obecnie zajęty przez innego użytkownika.\n\n` +
-                               `Zostałeś dodany do kolejki na pozycji **#${position}**.\n\n` +
-                               `⚡ Sesja zostanie **automatycznie uruchomiona** gdy będzie Twoja kolej.`)
-                .setColor('#ffa500')
-                .setTimestamp()
-                .setFooter({ text: `Komenda: ${commandName} | Pozycja w kolejce: ${position}` });
-
-            await interaction.editReply({ embeds: [queueEmbed] });
-            return;
-        }
-
-        await runSession(interaction);
-
-    } catch (error) {
-        logger.error('[TEST] ❌ Błąd komendy /test:', error);
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR-QUEUE] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
-        await interaction.editReply({
-            content: '❌ Wystąpił błąd podczas inicjalizacji komendy /test.'
-        });
-    }
-}
-
-/**
- * Obsługuje przycisk "Zakończ" w podsumowaniu /test.
- * Dopiero kliknięcie sprząta sesję i zwalnia kolejkę OCR.
- */
-async function handleTestFinishButton(interaction, sharedState) {
-    const { phaseService, ocrService } = sharedState;
-    const sessionId = interaction.customId.replace('test_finish_', '');
-
-    // Zaktualizuj wiadomość: usuń przycisk i oznacz jako zakończone
-    try {
-        const baseEmbed = interaction.message.embeds[0]
-            ? EmbedBuilder.from(interaction.message.embeds[0])
-            : new EmbedBuilder().setTitle('🧪 TEST').setColor('#9B59B6');
-        baseEmbed.setFooter({ text: '🏁 TEST zakończony - dane NIE zostały zapisane do bazy' });
-        await interaction.update({ embeds: [baseEmbed], components: [] });
-    } catch (err) {
-        logger.warn(`[TEST] ⚠️ Nie udało się zaktualizować wiadomości przy zakończeniu: ${err.message}`);
-    }
-
-    // Wyczyść sesję i zwolnij kolejkę OCR
-    try {
-        const session = phaseService.getSession(sessionId);
-        if (session) {
-            await phaseService.cleanupSession(sessionId);
-            logger.info(`[TEST] 🏁 Sesja testowa zakończona przez ${interaction.user.tag} - zwolniono kolejkę OCR`);
-        } else {
-            // Sesja już nieaktywna (np. wygasła) - awaryjnie zwolnij kolejkę
-            await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-            logger.info(`[TEST] 🏁 Sesja testowa już nieaktywna - awaryjne zwolnienie kolejki przez ${interaction.user.tag}`);
-        }
-    } catch (err) {
-        logger.error(`[TEST] ❌ Błąd przy zakończeniu sesji testowej: ${err.message}`);
     }
 }
 

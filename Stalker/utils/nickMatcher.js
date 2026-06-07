@@ -9,7 +9,7 @@
  * Odległość liczona na GRAFEMACH (emoji = 1 znak) po normalizacji
  * (NFKD + usunięcie diakrytyków + lowercase).
  *
- * Używane przez phaseService (faza1/faza2/test) oraz reminderService/punishmentService.
+ * Używane przez phaseService (faza1/faza2) oraz reminderService/punishmentService.
  */
 
 /**

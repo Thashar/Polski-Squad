@@ -1390,12 +1390,6 @@ class OCRService {
                 .setEmoji('📈')
                 .setStyle(ButtonStyle.Secondary);
 
-            const testButton = new ButtonBuilder()
-                .setCustomId('queue_cmd_test')
-                .setLabel('Test')
-                .setEmoji('🧪')
-                .setStyle(ButtonStyle.Secondary);
-
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
@@ -1457,7 +1451,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, testButton, remindButton, punishButton);
+                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
@@ -1715,12 +1709,6 @@ class OCRService {
                 .setEmoji('📈')
                 .setStyle(ButtonStyle.Secondary);
 
-            const testButton = new ButtonBuilder()
-                .setCustomId('queue_cmd_test')
-                .setLabel('Test')
-                .setEmoji('🧪')
-                .setStyle(ButtonStyle.Secondary);
-
             const remindButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_remind')
                 .setLabel('Remind')
@@ -1782,7 +1770,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, testButton, remindButton, punishButton);
+                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
