@@ -568,6 +568,28 @@ class PhaseService {
             throw new Error('Sesja nie istnieje lub wygasła');
         }
 
+        // Wybór ścieżki przetwarzania:
+        // - AI OCR włączony → analiza zbiorcza (batch) wszystkich zdjęć naraz + lista nicków klanu (jak /test)
+        // - AI OCR wyłączony → fallback na klasyczne przetwarzanie zdjęcie-po-zdjęciu (Tesseract)
+        const aiOcrService = this.ocrService && this.ocrService.aiOcrService;
+        if (aiOcrService && aiOcrService.enabled) {
+            return this.processImagesBatch(sessionId, downloadedFiles, guild, member, publicInteraction);
+        }
+
+        logger.info(`[PHASE${session.phase}] ℹ️ AI OCR wyłączony - używam klasycznego przetwarzania zdjęcie-po-zdjęciu`);
+        return this.processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction);
+    }
+
+    /**
+     * Klasyczne przetwarzanie zdjęcie-po-zdjęciu (Tesseract).
+     * Używane jako fallback gdy AI OCR jest wyłączony.
+     */
+    async processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error('Sesja nie istnieje lub wygasła');
+        }
+
         // Ustaw flagę przetwarzania
         session.isProcessing = true;
         session.publicInteraction = publicInteraction;
@@ -781,6 +803,280 @@ class PhaseService {
         }
 
         return results;
+    }
+
+    /**
+     * Analiza zbiorcza (batch) dla Fazy 1/2: wszystkie zdjęcia tej partii wysyłane są
+     * do AI w JEDNYM zapytaniu razem z listą nicków roli klanowej. AI deduplikuje i
+     * dopasowuje odczytane nicki do nicków Discord, zwracając jeden wynik na gracza.
+     *
+     * Każdy przebieg batch (pierwszy upload oraz każde "➕ Dodaj więcej") tworzy JEDEN
+     * wpis w session.processedImages - dzięki temu mechanizm konfliktów działa bez zmian:
+     * jeśli ten sam nick pojawi się w kolejnym przebiegu z innym wynikiem → konflikt,
+     * który użytkownik rozstrzyga ręcznie.
+     */
+    async processImagesBatch(sessionId, downloadedFiles, guild, member, publicInteraction) {
+        const session = this.getSession(sessionId);
+        if (!session) {
+            throw new Error('Sesja nie istnieje lub wygasła');
+        }
+
+        session.isProcessing = true;
+        session.publicInteraction = publicInteraction;
+        session.blinkState = false;
+        session.isUpdatingProgress = false;
+
+        const totalImages = downloadedFiles.length;
+
+        // Definicja etapów (stepper) - aktywny etap miga, ukończone mają ✅
+        session.batchSteps = [
+            { key: 'downloading', icon: '📥', label: 'Pobieranie zdjęć' },
+            { key: 'sending',     icon: '🤖', label: 'Wysyłanie do AI' },
+            { key: 'processing',  icon: '⚙️', label: 'Przetwarzanie przez AI' },
+            { key: 'analyzing',   icon: '📊', label: 'Analiza wyników' }
+        ];
+        session.batchTotalImages = totalImages;
+        session.currentStepKey = 'downloading';
+
+        // Timer migania - animuje aktywny etap co 1s
+        session.blinkTimer = setInterval(async () => {
+            if (session.isUpdatingProgress) return;
+            session.blinkState = !session.blinkState;
+            if (session.publicInteraction && session.currentStepKey && session.currentStepKey !== 'done') {
+                try {
+                    session.isUpdatingProgress = true;
+                    await this.updateBatchProgress(session);
+                } catch (error) {
+                    logger.error('[PHASE] ❌ Błąd aktualizacji migania (batch):', error.message);
+                } finally {
+                    session.isUpdatingProgress = false;
+                }
+            }
+        }, 1000);
+
+        const stopBlinkTimer = async () => {
+            if (session.blinkTimer) {
+                clearInterval(session.blinkTimer);
+                session.blinkTimer = null;
+                logger.info('[PHASE] ⏹️ Zatrzymano timer migania (batch)');
+            }
+            // Poczekaj na zakończenie ostatniej aktualizacji (race condition fix)
+            let waitCount = 0;
+            while (session.isUpdatingProgress && waitCount < 50) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                waitCount++;
+            }
+        };
+
+        logger.info(`[PHASE${session.phase}] 🔄 Analiza batch ${totalImages} zdjęć dla sesji ${sessionId}`);
+
+        try {
+            const aiOcrService = this.ocrService.aiOcrService;
+
+            // Odśwież cache członków przed przetwarzaniem
+            await safeFetchMembers(guild, logger);
+
+            // Utwórz snapshot nicków przy pierwszym przebiegu (spójność w obrębie sesji)
+            if (!session.roleNicksSnapshotPath) {
+                const snapshotPath = path.join(this.tempDir, `role_nicks_snapshot_${sessionId}.json`);
+                const ok = await this.ocrService.saveRoleNicksSnapshot(guild, member, snapshotPath);
+                if (ok) {
+                    session.roleNicksSnapshotPath = snapshotPath;
+                    logger.info(`[PHASE${session.phase}] ✅ Snapshot nicków utworzony: ${snapshotPath}`);
+                }
+            }
+
+            // ETAP: Pobieranie zdjęć (już pobrane przez index.js - pokaż jako ukończone)
+            session.currentStepKey = 'downloading';
+            await this.updateBatchProgress(session);
+            await new Promise(r => setTimeout(r, 400));
+
+            // Pobierz listę nicków roli klanowej (snapshot → fallback na żywo)
+            let clanNicks = [];
+            if (session.roleNicksSnapshotPath) {
+                const snap = await this.ocrService.loadRoleNicksSnapshot(session.roleNicksSnapshotPath);
+                clanNicks = snap.map(m => m.displayName).filter(Boolean);
+            }
+            if (clanNicks.length === 0) {
+                const clanRoleId = this.config.targetRoles[session.clan];
+                clanNicks = Array.from(guild.members.cache.values())
+                    .filter(m => clanRoleId && m.roles.cache.has(clanRoleId))
+                    .map(m => m.displayName);
+            }
+            clanNicks = clanNicks.sort((a, b) => a.localeCompare(b));
+            logger.info(`[PHASE${session.phase}] 👥 Lista nicków klanu do promptu AI: ${clanNicks.length}`);
+
+            // ETAP: Wysyłanie do AI
+            session.currentStepKey = 'sending';
+            await this.updateBatchProgress(session);
+            await new Promise(r => setTimeout(r, 400));
+
+            // ETAP: Przetwarzanie przez AI (długie oczekiwanie - miganie przez blinkTimer)
+            session.currentStepKey = 'processing';
+            const filepaths = downloadedFiles.map(f => f.filepath);
+            const aiResult = await aiOcrService.analyzeResultsImagesBatch(filepaths, clanNicks);
+
+            if (!session.cancelled) {
+                // ETAP: Analiza wyników
+                session.currentStepKey = 'analyzing';
+                await this.updateBatchProgress(session);
+
+                const players = (aiResult && aiResult.isValid && Array.isArray(aiResult.players))
+                    ? aiResult.players
+                    : [];
+
+                // Dodaj JEDEN wpis dla całego przebiegu batch (mapowanie playerName → nick)
+                session.processedImages.push({
+                    imageName: `batch_${session.processedImages.length + 1}`,
+                    imageCount: totalImages,
+                    results: players.map(p => ({ nick: p.playerName, score: p.score }))
+                });
+
+                // Agregacja (cross-batch) - tu powstają konflikty między przebiegami
+                this.aggregateResults(session);
+
+                logger.info(`[PHASE${session.phase}] ✅ Batch zakończony: ${players.length} graczy (łącznie nicków: ${session.aggregatedResults.size})`);
+
+                session.currentStepKey = 'done';
+                await this.updateBatchProgress(session);
+            } else {
+                logger.warn(`[PHASE${session.phase}] ⚠️ Sesja anulowana podczas analizy batch - pomijam wynik`);
+            }
+        } catch (error) {
+            logger.error(`[PHASE${session.phase}] ❌ Błąd analizy batch:`, error);
+            // Dodaj wpis błędu, by flow mógł kontynuować bez utraty wcześniejszych przebiegów
+            session.processedImages.push({
+                imageName: `batch_error_${session.processedImages.length + 1}`,
+                imageCount: totalImages,
+                error: error.message,
+                results: []
+            });
+            this.aggregateResults(session);
+        } finally {
+            await stopBlinkTimer();
+            session.currentProcessingImage = null;
+            session.isProcessing = false;
+        }
+
+        // Obsługa anulowania (po zakończeniu przetwarzania)
+        if (session.cancelled) {
+            await this._finishCancelledSession(session);
+        }
+
+        return session.processedImages;
+    }
+
+    /**
+     * Aktualizuje pasek postępu w trybie batch - "stepper" pokazujący aktualny etap
+     * (pobieranie / wysyłanie do AI / przetwarzanie / analiza wyników).
+     */
+    async updateBatchProgress(session) {
+        if (!session.publicInteraction) return;
+        try {
+            const steps = session.batchSteps || [];
+            const order = steps.map(s => s.key);
+            const currentKey = session.currentStepKey;
+            const isDone = currentKey === 'done';
+            const currentIdx = isDone ? steps.length : order.indexOf(currentKey);
+
+            const stepLines = steps.map((s, i) => {
+                let marker;
+                if (isDone || i < currentIdx) {
+                    marker = '✅';
+                } else if (i === currentIdx) {
+                    marker = session.blinkState ? '🟧' : '⬜';
+                } else {
+                    marker = '⬜';
+                }
+                let suffix = '';
+                if (s.key === 'downloading') {
+                    suffix = ` (${session.batchTotalImages} szt.)`;
+                } else if (i === currentIdx && !isDone) {
+                    suffix = '...';
+                }
+                return `${marker} ${s.icon} ${s.label}${suffix}`;
+            }).join('\n');
+
+            // Statystyki z dotychczas zagregowanych przebiegów
+            const uniqueNicks = session.aggregatedResults.size;
+            const confirmedResults = Array.from(session.aggregatedResults.values())
+                .filter(scores => scores.length >= 2 && new Set(scores).size === 1).length;
+            const unconfirmedResults = uniqueNicks - confirmedResults;
+            const conflictsCount = Array.from(session.aggregatedResults.values())
+                .filter(scores => new Set(scores).size > 1).length;
+            const playersWithZero = Array.from(session.aggregatedResults.entries())
+                .filter(([nick, scores]) => {
+                    const uniqueScores = [...new Set(scores)];
+                    return uniqueScores.length === 1 && (uniqueScores[0] === 0 || uniqueScores[0] === '0');
+                }).length;
+
+            const phaseTitle = session.phase === 2 ? 'Faza 2' : 'Faza 1';
+            const roundText = session.phase === 2 ? ` - Runda ${session.currentRound}/3` : '';
+            const headerIcon = isDone ? '✅' : '🔄';
+            const imgWord = session.batchTotalImages === 1 ? 'zdjęcie' : 'zdjęć';
+
+            const embed = new EmbedBuilder()
+                .setTitle(`${headerIcon} Przetwarzanie zdjęć - ${phaseTitle}${roundText}`)
+                .setDescription(`${stepLines}\n\n🤖 Analiza AI: **${session.batchTotalImages}** ${imgWord} w jednym zapytaniu`)
+                .setColor(isDone ? '#00FF00' : '#FFA500')
+                .addFields(
+                    { name: '👥 Unikalnych nicków', value: uniqueNicks.toString(), inline: true },
+                    { name: '✅ Potwierdzone', value: confirmedResults.toString(), inline: true },
+                    { name: '❓ Niepotwierdzone', value: unconfirmedResults.toString(), inline: true },
+                    { name: '⚠️ Konflikty', value: conflictsCount.toString(), inline: true },
+                    { name: '🥚 Graczy z zerem', value: playersWithZero.toString(), inline: true }
+                );
+
+            if (session.ocrExpiresAt) {
+                const ocrExpiryTimestamp = Math.floor(session.ocrExpiresAt / 1000);
+                embed.addFields({ name: '⏱️ OCR wygasa', value: `<t:${ocrExpiryTimestamp}:R>`, inline: true });
+            }
+
+            embed.setTimestamp().setFooter({ text: isDone ? 'Analiza zakończona' : 'Przetwarzanie...' });
+
+            try {
+                if (session.publicInteraction.editReply) {
+                    await session.publicInteraction.editReply({ embeds: [embed] });
+                } else {
+                    await session.publicInteraction.edit({ embeds: [embed] });
+                }
+            } catch (editError) {
+                if (editError.code === 10008 || editError.message?.includes('Unknown Message')) {
+                    logger.warn('[PHASE] ⚠️ Wiadomość postępu usunięta - kontynuuję przetwarzanie bez aktualizacji');
+                } else if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {
+                    logger.warn('[PHASE] ⏰ Interakcja wygasła podczas batch - kontynuuję, finalny embed wyśle index.js');
+                } else {
+                    throw editError;
+                }
+            }
+        } catch (error) {
+            logger.error('[PHASE] ❌ Błąd aktualizacji postępu (batch):', error.message);
+        }
+    }
+
+    /**
+     * Wspólna obsługa anulowanej sesji: aktualizuje embed do stanu "anulowano" i sprząta.
+     */
+    async _finishCancelledSession(session) {
+        logger.info(`[PHASE${session.phase}] 🧹 Sesja anulowana - czyszczę po zakończeniu przetwarzania`);
+        const cancelledInteraction = session.publicInteraction;
+        if (cancelledInteraction) {
+            try {
+                const cancelledEmbed = new EmbedBuilder()
+                    .setTitle('❌ Sesja anulowana')
+                    .setDescription('Przetwarzanie zostało anulowane przez użytkownika.')
+                    .setColor('#FF0000')
+                    .setTimestamp();
+                if (cancelledInteraction.editReply) {
+                    await cancelledInteraction.editReply({ embeds: [cancelledEmbed], components: [] });
+                } else {
+                    await cancelledInteraction.edit({ embeds: [cancelledEmbed], components: [] });
+                }
+            } catch (err) {
+                logger.warn(`[PHASE${session.phase}] ⚠️ Nie udało się zaktualizować embeda po anulowaniu: ${err.message}`);
+            }
+        }
+        await this.cleanupSession(session.sessionId);
     }
 
     /**
@@ -1449,7 +1745,8 @@ class PhaseService {
             })
             .length;
 
-        const totalImages = session.processedImages.length;
+        // Realna liczba zdjęć: wpisy batch mają imageCount, wpisy per-zdjęcie liczone jako 1
+        const totalImages = session.processedImages.reduce((sum, img) => sum + (img.imageCount || 1), 0);
         const progressBar = this.createProgressBar(totalImages, totalImages, 'completed', true);
 
         const phaseTitle = session.phase === 2 ? 'Faza 2' : 'Faza 1';
