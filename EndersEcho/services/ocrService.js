@@ -128,10 +128,10 @@ class OCRService {
         }
 
         // KROK 1: linia "Best:" z jednostką
-        const bestScorePattern = /(?:best\s*:?|最高記録[：:]?)\s*[©»]*\s*(\d+(?:\.\d+)?(?:Qi|Sx|[KMBTQ])+)/gi;
+        const bestScorePattern = /(?:best\s*:?|最高記録[：:]?)\s*[©»]*\s*(\d+(?:\.\d+)?(?:Sp|Sx|Qi|[KMBTQ])+)/gi;
         const matches = text.match(bestScorePattern);
         if (matches && matches.length > 0) {
-            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
+            const scoreMatch = matches[0].match(/(\d+(?:\.\d+)?(?:Sp|Sx|Qi|[KMBTQ])+)/i);
             if (scoreMatch) {
                 let result = scoreMatch[1];
                 const wholePart = result.match(/^(\d+)/)?.[1] || '';
@@ -147,7 +147,7 @@ class OCRService {
         // KROK 2: linia wyżej przed "Best:"
         if (bestLineIndex > 0) {
             const lineAbove = lines[bestLineIndex - 1];
-            const aboveMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?(?:Qi|[KMBTQ])+)/i);
+            const aboveMatch = lineAbove.match(/©?\s*(\d+(?:\.\d+)?(?:Sp|Sx|Qi|[KMBTQ])+)/i);
             if (aboveMatch) {
                 let score = aboveMatch[1];
                 const wholePart = score.match(/^(\d+)/)?.[1] || '';
@@ -202,7 +202,7 @@ class OCRService {
 
         result = this.fixScoreFormat(result, log);
 
-        if (result && /\d+(?:\.\d+)?(?:Qi|[KMBTQ])/i.test(result)) {
+        if (result && /\d+(?:\.\d+)?(?:Sp|Sx|Qi|[KMBTQ])/i.test(result)) {
             log.info(`✅ normalizeNoUnit: "${score}" → "${result}"`);
             return result;
         }

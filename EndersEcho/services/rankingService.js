@@ -282,7 +282,7 @@ class RankingService {
      */
     parseScoreValue(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|SX|[KMBTQ])?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         if (!match) return 0;
         const number = parseFloat(match[1]);
         const unit = match[2];
@@ -297,6 +297,7 @@ class RankingService {
     formatScore(value) {
         if (value == null || isNaN(value)) return '0';
         const units = [
+            { name: 'Sp', value: 1000000000000000000000000 },
             { name: 'Sx', value: 1000000000000000000000 },
             { name: 'Qi', value: 1000000000000000000 },
             { name: 'Q', value: 1000000000000000 },
@@ -325,7 +326,7 @@ class RankingService {
      */
     getScoreUnit(scoreText) {
         const upperScore = scoreText.toUpperCase().trim();
-        const match = upperScore.match(/^(\d+(?:\.\d+)?)(QI|SX|[KMBTQ])?$/);
+        const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         return match && match[2] ? match[2] : '';
     }
 
@@ -346,7 +347,7 @@ class RankingService {
             Math.floor(unitImprovement).toString() :
             parseFloat(unitImprovement.toFixed(2)).toString();
 
-        const displayUnit = targetUnit === 'QI' ? 'Qi' : targetUnit === 'SX' ? 'Sx' : targetUnit;
+        const displayUnit = targetUnit === 'SP' ? 'Sp' : targetUnit === 'QI' ? 'Qi' : targetUnit === 'SX' ? 'Sx' : targetUnit;
         return `+${formattedValue}${displayUnit}`;
     }
 
