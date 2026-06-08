@@ -217,7 +217,7 @@ class GlobalTop10Service {
             const tag       = guildTagMap.get(player.sourceGuildId);
             const date      = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            const tagSuffix = tag ? `  ·  ${tag}` : '';
+            const tagSuffix = tag ? `  ·  ${tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
             const scoreStr  = player.score || this.rankingService.formatScore(player.scoreValue);
             const bossStr   = player.bossName || msgs.unknownBoss;
 
@@ -357,7 +357,7 @@ class GlobalTop10Service {
             const tag = guildTagMap.get(player.sourceGuildId);
             const date = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            const serverSuffix = tag ? ` • ${tag}` : '';
+            const serverSuffix = tag ? ` • ${tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
             return `${posLabel} ${displayName} • **${player.score || this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${player.bossName || msgs.unknownBoss}${serverSuffix}`;
         };
 
@@ -422,7 +422,7 @@ class GlobalTop10Service {
             const tag = guildTagMap.get(player.sourceGuildId);
             const date = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-            const serverSuffix = tag ? ` • ${tag}` : '';
+            const serverSuffix = tag ? ` • ${tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
             return `${posLabel} ${displayName} • **${player.score || this.rankingService.formatScore(player.scoreValue)}**\n*(${shortDate})* • ${bossName}${serverSuffix}`;
         };
 
