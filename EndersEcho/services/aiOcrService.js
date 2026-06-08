@@ -101,10 +101,10 @@ class AIOCRService {
 1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
 2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
 3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
-WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx
+WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx, Sp
 UWAGA: Litera Q może wyglądać jak cyfra 0 — rozróżniaj je uważnie.
-UWAGA: Litera S może wyglądać jak cyfra 5 — gdy wynik kończy się na "5x", to prawdopodobnie "Sx".
-UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx), NIGDY cyfra.
+UWAGA: Litera S może wyglądać jak cyfra 5 — gdy wynik kończy się na "5x", to prawdopodobnie "Sx"; gdy kończy się na "5p", to prawdopodobnie "Sp".
+UWAGA: Ostatni znak wyniku to ZAWSZE litera jednostki (K/M/B/T/Q/Qi/Sx/Sp), NIGDY cyfra.
 ⚠️ KRYTYCZNA ZASADA:
 Odczytaj wartości DOKŁADNIE tak jak są na ekranie.
 NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
@@ -175,9 +175,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             score = corrected;
         }
 
-        const validScorePattern = /^\d+(?:\.\d+)?(K|M|B|T|Q|Qi|Sx)$/i;
+        const validScorePattern = /^\d+(?:\.\d+)?(K|M|B|T|Q|Qi|Sx|Sp)$/i;
         if (score && !validScorePattern.test(score)) {
-            log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx) — odrzucam`);
+            log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx/Sp) — odrzucam`);
             return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
         }
 
@@ -223,7 +223,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             score = fixed;
         }
 
-        const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
+        const match = score.match(/^([\d,.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx|SP|Sp)?$/i);
         if (!match) return score;
 
         let numberPart = match[1].replace(/,/g, '.');
@@ -257,8 +257,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
     parseScoreToNumber(score) {
         if (!score) return null;
-        const unitMultipliers = { K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15, QI: 1e18, SX: 1e21 };
-        const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx)?$/i);
+        const unitMultipliers = { K: 1e3, M: 1e6, B: 1e9, T: 1e12, Q: 1e15, QI: 1e18, SX: 1e21, SP: 1e24 };
+        const match = score.match(/^([\d.]+)\s*(K|M|B|T|Q|QI|Qi|SX|Sx|SP|Sp)?$/i);
         if (!match) return null;
         return parseFloat(match[1]) * (unitMultipliers[(match[2] || '').toUpperCase()] || 1);
     }
@@ -359,13 +359,13 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - centralny panel BEZ ikony X ani przycisku zamknięcia po prawej stronie u góry okienka
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
 - w centrum panelu: JEDNA duża ikona z liczbą
-- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (K/M/B/T/Q/Qi/Sx) — to jest normalne
+- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (K/M/B/T/Q/Qi/Sx/Sp) — to jest normalne
 - na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
 - pod panelem: jeden żółty przycisk (nie jest wymagany, ale jeśli jest, to musi być pod panelem, a nie w jego obrębie)
 
 CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
 - Tekstu na banerze, w centrym panelu.
-- Liczb, wyników, jednostek (K/M/B/T/Q/Qi/Sx)
+- Liczb, wyników, jednostek (K/M/B/T/Q/Qi/Sx/Sp)
 
 Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
 

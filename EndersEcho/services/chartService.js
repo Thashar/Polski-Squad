@@ -13,6 +13,7 @@ const CLAN_PALETTE = [
 ];
 
 const SCORE_UNITS = [
+    { name: 'Sp', value: 1e24 },
     { name: 'Sx', value: 1e21 },
     { name: 'Qi', value: 1e18 },
     { name: 'Q',  value: 1e15 },
