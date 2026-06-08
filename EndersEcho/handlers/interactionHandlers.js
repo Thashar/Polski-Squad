@@ -176,6 +176,7 @@ class InteractionHandler {
         for (const id of client.guilds.cache.keys()) guildIds.add(id);
 
         const skipped = [];
+        const registered = [];
         for (const guildId of guildIds) {
             if (!client.guilds.cache.has(guildId)) {
                 skipped.push(guildId);
@@ -188,10 +189,13 @@ class InteractionHandler {
                     Routes.applicationGuildCommands(this.config.clientId, guildId),
                     { body: commands }
                 );
-                logger.info(`✅ Zarejestrowano komendy dla serwera "${client.guilds.cache.get(guildId)?.name || guildId}" (${cfg.lang || 'eng'})`);
+                registered.push(`"${client.guilds.cache.get(guildId)?.name || guildId}" (${cfg.lang || 'eng'})`);
             } catch (error) {
                 logger.error(`Błąd rejestracji slash commands dla serwera "${client.guilds.cache.get(guildId)?.name || guildId}":`, error);
             }
+        }
+        if (registered.length > 0) {
+            logger.info(`✅ Zarejestrowano komendy dla ${registered.length} serwer(ów): ${registered.join(', ')}`);
         }
         if (skipped.length > 0) {
             logger.info(`ℹ️ Pominięto rejestrację komend dla ${skipped.length} serwer(ów) nieobecnych w cache (bot usunięty)`);
