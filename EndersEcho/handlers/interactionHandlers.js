@@ -5703,7 +5703,7 @@ class InteractionHandler {
             const cvGuildConfig = this.config.getGuildConfig(session.guildId);
             const cvGuildTag = cvGuildConfig?.tag || null;
             const cvGuildIcon = sourceGuild?.iconURL({ dynamic: true, size: 64 }) || cvGuildConfig?.icon || null;
-            const cvAuthorName = cvGuildTag ? `${cvGuildTag}  ${sourceGuild?.name || session.guildId}` : (sourceGuild?.name || session.guildId);
+            const cvAuthorName = cvGuildTag ? `${cvGuildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}  ${sourceGuild?.name || session.guildId}` : (sourceGuild?.name || session.guildId);
             const cvUserAvatar = targetUser?.displayAvatarURL({ dynamic: true, size: 64 }) || cvGuildIcon || null;
 
             // Pobierz screenshota z oryginalnej wiadomości (embed.image lub attachment)
@@ -8907,7 +8907,7 @@ class InteractionHandler {
                 const guildConfig = this.config.getGuildConfig(interaction.guildId);
                 const guildTag = guildConfig?.tag || null;
                 const guildIcon = interaction.guild?.iconURL({ dynamic: true, size: 64 }) || guildConfig?.icon || null;
-                const authorName = guildTag ? `${guildTag}  ${serverName}` : serverName;
+                const authorName = guildTag ? `${guildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}  ${serverName}` : serverName;
                 const userAvatar = interaction.user.displayAvatarURL({ dynamic: true, size: 64 });
 
                 const fields = [

@@ -165,7 +165,7 @@ class LogService {
                 .setTitle(`${cfg.emoji} ${cfg.label}`)
                 .setTimestamp();
 
-            const authorName = guildTag ? `${guildTag}  ${guildName}` : guildName;
+            const authorName = guildTag ? `${guildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}  ${guildName}` : guildName;
             embed.setAuthor({ name: authorName, iconURL: guildIcon || undefined });
             const thumbnailUrl = userAvatar || guildIcon;
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);

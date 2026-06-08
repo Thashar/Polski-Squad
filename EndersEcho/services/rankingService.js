@@ -180,7 +180,7 @@ class RankingService {
             const posLabel = rank <= 3
                 ? `\`${String(rank).padStart(2, '0')}\` ${MEDALS[rank - 1]}`
                 : `\`${String(rank).padStart(2, '0')}\``;
-            const tagPart = gs.tag ? `  ·  ${gs.tag}` : '';
+            const tagPart = gs.tag ? `  ·  ${gs.tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
             const isCaller = callerGuildId && gs.guildId === callerGuildId;
             const nameFormatted = isCaller ? `__**${gs.guildName}**__` : `**${gs.guildName}**`;
             rankingText += `${posLabel}  ${nameFormatted}  ·  **${gs.totalScore}**\n> ${gs.playerCount} ${playersLabel}  ·  ${bestLabel}: ${gs.topScore}${tagPart}\n\n`;
@@ -404,7 +404,7 @@ class RankingService {
                 let tagSuffix = '';
                 if (isGlobal) {
                     const guildTag = this.config.getAllGuilds().find(g => g.id === player.sourceGuildId)?.tag;
-                    tagSuffix = guildTag ? `  ·  ${guildTag}` : '';
+                    tagSuffix = guildTag ? `  ·  ${guildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
                 }
 
                 const lineText = `${posLabel}  ${nickDisplay}  ·  **${player.score || this.formatScore(player.scoreValue)}**\n> ${bossName}  ·  *${shortDate}*${tagSuffix}\n\n`;
@@ -716,7 +716,7 @@ class RankingService {
             const guildTag = p.sourceGuildId
                 ? (this.config.getAllGuilds().find(g => g.id === p.sourceGuildId)?.tag || null)
                 : null;
-            const tagSuffix = guildTag ? `  ·  ${guildTag}` : '';
+            const tagSuffix = guildTag ? `  ·  ${guildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
 
             rankingText += `${posLabel}  ${nickDisplay}  ·  **${score}**\n> *${shortDate}*${tagSuffix}\n\n`;
         }
