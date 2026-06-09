@@ -2531,13 +2531,14 @@ class InteractionHandler {
 
             // Helper function to format rival data with conditional emojis
             const formatRivalField = (rival) => {
-                // Parse member count (e.g., "40/40" -> 40)
-                const memberCount = parseInt(rival.members.split('/')[0]);
                 let membersEmoji = '';
-                if (memberCount >= 1 && memberCount <= 29) {
-                    membersEmoji = ' <a:PepeBro:1341084788634681384>';
-                } else if (memberCount >= 30 && memberCount <= 36) {
-                    membersEmoji = ' <a:PepeEvil:1280067725355384905>';
+                if (rival.members) {
+                    const memberCount = parseInt(rival.members.split('/')[0]);
+                    if (memberCount >= 1 && memberCount <= 29) {
+                        membersEmoji = ' <a:PepeBro:1341084788634681384>';
+                    } else if (memberCount >= 30 && memberCount <= 36) {
+                        membersEmoji = ' <a:PepeEvil:1280067725355384905>';
+                    }
                 }
 
                 // Parse rival score and compare with user's score
@@ -2557,8 +2558,10 @@ class InteractionHandler {
                 if (rival.totalRelicCores !== undefined) {
                     result += `<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> **RC+TC:** ${rival.totalRelicCores}+\n`;
                 }
-                result += `👥 **Members:** ${rival.members}${membersEmoji}\n` +
-                         `👤 **Leader:** ${rival.leader}\n` +
+                if (rival.members) {
+                    result += `👥 **Members:** ${rival.members}${membersEmoji}\n`;
+                }
+                result += `👤 **Leader:** ${rival.leader}\n` +
                          `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
 
                 return result;
