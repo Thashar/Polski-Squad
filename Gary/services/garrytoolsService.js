@@ -662,19 +662,21 @@ class GarrytoolsService {
 
         tbody.find('tr').each((index, row) => {
             const cells = $(row).find('td');
-            if (cells.length < 7) return;
+            if (cells.length < 6) return;
 
             const isUserGuild = $(row).hasClass('text-success') ||
                               $(cells[0]).hasClass('text-success');
 
+            // Site removed "Members" column (was cells[3]), now: Rank, Guild ID, Name, Leader, Grade, Score
+            const hasMembersCol = cells.length >= 7;
             const rival = {
                 rank: $(cells[0]).text().trim(),
                 guildId: $(cells[1]).text().trim(),
                 name: $(cells[2]).text().trim(),
-                members: $(cells[3]).text().trim(),
-                leader: $(cells[4]).text().trim(),
-                grade: $(cells[5]).text().trim(),
-                score: $(cells[6]).text().trim(),
+                members: hasMembersCol ? $(cells[3]).text().trim() : null,
+                leader: $(cells[hasMembersCol ? 4 : 3]).text().trim(),
+                grade: $(cells[hasMembersCol ? 5 : 4]).text().trim(),
+                score: $(cells[hasMembersCol ? 6 : 5]).text().trim(),
                 isUserGuild: isUserGuild
             };
 
