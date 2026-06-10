@@ -658,27 +658,73 @@ class GarrytoolsService {
 
     parseRivalsTable($, table) {
         const rivals = [];
-        const tbody = $(table).find('tbody');
+        const $table = $(table);
 
-        tbody.find('tr').each((index, row) => {
+        // Map columns by header text — robust to the site adding/removing columns.
+        // Known variants seen on garrytools:
+        //   7 cols: Rank, Guild ID, Name, Members, Leader, Grade, Score
+        //   6 cols: Rank, Guild ID, Name, Leader, Grade, Score   (Members removed)
+        //   5 cols: Rank, Guild ID, Name, Leader, Grade          (Members + Score removed)
+        const headerMap = {
+            'rank': 'rank',
+            'guild id': 'guildId',
+            'name': 'name',
+            'members': 'members',
+            'leader': 'leader',
+            'grade': 'grade',
+            'score': 'score'
+        };
+        const colIndex = {};
+        $table.find('thead th, thead td').each((i, cell) => {
+            const header = $(cell).text().replace(/\s+/g, ' ').trim().toLowerCase();
+            const key = headerMap[header];
+            if (key) colIndex[key] = i;
+        });
+
+        // Real rival tables always expose at least Guild ID + Name headers.
+        // Other tables on the page (search box, multiplier) won't, so they yield no rivals.
+        const hasHeaderMap = colIndex.guildId !== undefined && colIndex.name !== undefined;
+
+        $table.find('tbody tr').each((index, row) => {
             const cells = $(row).find('td');
-            if (cells.length < 6) return;
+            if (cells.length < 3) return;
 
             const isUserGuild = $(row).hasClass('text-success') ||
                               $(cells[0]).hasClass('text-success');
 
-            // Site removed "Members" column (was cells[3]), now: Rank, Guild ID, Name, Leader, Grade, Score
-            const hasMembersCol = cells.length >= 7;
-            const rival = {
-                rank: $(cells[0]).text().trim(),
-                guildId: $(cells[1]).text().trim(),
-                name: $(cells[2]).text().trim(),
-                members: hasMembersCol ? $(cells[3]).text().trim() : null,
-                leader: $(cells[hasMembersCol ? 4 : 3]).text().trim(),
-                grade: $(cells[hasMembersCol ? 5 : 4]).text().trim(),
-                score: $(cells[hasMembersCol ? 6 : 5]).text().trim(),
-                isUserGuild: isUserGuild
-            };
+            let rival;
+            if (hasHeaderMap) {
+                const cell = (key) => {
+                    const idx = colIndex[key];
+                    return (idx !== undefined && cells[idx]) ? $(cells[idx]).text().trim() : null;
+                };
+                rival = {
+                    rank: cell('rank'),
+                    guildId: cell('guildId'),
+                    name: cell('name'),
+                    members: cell('members'),
+                    leader: cell('leader'),
+                    grade: cell('grade'),
+                    score: cell('score'),
+                    isUserGuild: isUserGuild
+                };
+            } else {
+                // Positional fallback when headers are unavailable
+                const hasMembers = cells.length >= 7;
+                const hasScore = cells.length >= 6;
+                let i = 3;
+                const members = hasMembers ? $(cells[i++]).text().trim() : null;
+                rival = {
+                    rank: $(cells[0]).text().trim(),
+                    guildId: $(cells[1]).text().trim(),
+                    name: $(cells[2]).text().trim(),
+                    members: members,
+                    leader: $(cells[i++]).text().trim(),
+                    grade: $(cells[i++]).text().trim(),
+                    score: hasScore ? $(cells[i++]).text().trim() : null,
+                    isUserGuild: isUserGuild
+                };
+            }
 
             rivals.push(rival);
         });

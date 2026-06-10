@@ -2572,8 +2572,9 @@ class InteractionHandler {
                 if (rival.members) {
                     result += `👥 **Members:** ${rival.members}${membersEmoji}\n`;
                 }
+                const scoreText = rival.score ? ` (${rival.score})` : '';
                 result += `👤 **Leader:** ${rival.leader}\n` +
-                         `⭐ **Grade:** ${rival.grade} (${rival.score})${scoreEmoji}`;
+                         `⭐ **Grade:** ${rival.grade}${scoreText}${scoreEmoji}`;
 
                 return result;
             };
