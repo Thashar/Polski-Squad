@@ -923,7 +923,7 @@ class InteractionHandler {
                             {
                                 buffer: await this.generateGuildMetricChart(
                                     allHistory, 'rank', 'Clan Rankings',
-                                    { invertY: true, formatLabel: v => `#${v}`, formatDot: v => `#${v}` }
+                                    { invertY: true, formatLabel: v => `#${v}`, formatDot: v => `#${v}`, yMin: 1, yStep: 200 }
                                 ),
                                 filename: 'clans_rank.png'
                             },
@@ -2308,7 +2308,7 @@ class InteractionHandler {
      */
     async generateGuildMetricChart(clansData, metricKey, title, opts = {}) {
         const sharp = require('sharp');
-        const { invertY = false, formatLabel = v => String(v), formatDot } = opts;
+        const { invertY = false, formatLabel = v => String(v), formatDot, yMin, yStep } = opts;
         const fmtDot = formatDot || formatLabel;
 
         const validClans = clansData.filter(c => c.history && c.history.length >= 2);
@@ -2328,7 +2328,7 @@ class InteractionHandler {
 
         if (allWeeks.length < 2) return null;
 
-        const W = 800, H = 310;
+        const W = 800, H = 1240;
         const M = { top: 68, right: 28, bottom: 44, left: 68 };
         const cW = W - M.left - M.right;
         const cH = H - M.top - M.bottom;
@@ -2345,8 +2345,8 @@ class InteractionHandler {
 
         // For rank: rank 1 (best) should appear at the top of the chart,
         // so we invert: smaller value → higher Y position (lower SVG y).
-        const yLo = invertY ? minVal - range * 0.1 : Math.max(0, minVal - range * 0.1);
-        const yHi = maxVal + range * 0.25;
+        const yLo = yMin !== undefined ? yMin : (invertY ? minVal - range * 0.1 : Math.max(0, minVal - range * 0.1));
+        const yHi = yStep !== undefined ? Math.ceil(maxVal / yStep) * yStep : maxVal + range * 0.25;
 
         const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
         const toY = (v) => invertY
@@ -2367,14 +2367,25 @@ class InteractionHandler {
             return d;
         }
 
-        // Grid lines (5 horizontal)
-        const gridLines = Array.from({ length: 5 }, (_, i) => {
-            const frac = invertY ? i / 4 : 1 - i / 4;
-            const v = yLo + (yHi - yLo) * frac;
-            const y = toY(v);
-            return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+        // Grid lines — fixed step when yStep provided, otherwise 5 evenly spaced
+        let gridLines;
+        if (yStep !== undefined) {
+            const gridVals = [];
+            for (let v = yLo; v <= yHi + 0.001; v += yStep) gridVals.push(Math.round(v));
+            gridLines = gridVals.map(v => {
+                const y = toY(v);
+                return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
+    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${formatLabel(v)}</text>`;
+            }).join('\n    ');
+        } else {
+            gridLines = Array.from({ length: 5 }, (_, i) => {
+                const frac = invertY ? i / 4 : 1 - i / 4;
+                const v = yLo + (yHi - yLo) * frac;
+                const y = toY(v);
+                return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
     <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${formatLabel(Math.round(v))}</text>`;
-        }).join('\n    ');
+            }).join('\n    ');
+        }
 
         const xLabels = allWeeks.map((w, i) =>
             `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
