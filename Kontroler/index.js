@@ -11,6 +11,7 @@ const MessageService = require('./services/messageService');
 const LotteryService = require('./services/lotteryService');
 const OligopolyService = require('./services/oligopolyService');
 const VotingService = require('./services/votingService');
+const MvpService = require('./services/mvpService');
 
 const MessageHandler = require('./handlers/messageHandlers');
 const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
@@ -24,12 +25,13 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
         GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildMessageReactions,
         GatewayIntentBits.DirectMessages
     ],
-    partials: [Partials.Channel, Partials.Message]
+    partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 
-let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService;
+let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService, mvpService;
 
 /**
  * Inicjalizuje wszystkie serwisy
@@ -42,6 +44,7 @@ async function initializeServices() {
     lotteryService = new LotteryService(config);
     oligopolyService = new OligopolyService(config, logger);
     votingService = new VotingService(config);
+    mvpService = new MvpService(config);
     messageService = new MessageService(config, lotteryService);
     messageHandler = new MessageHandler(
         config,
@@ -99,6 +102,11 @@ function onShutdown(signal) {
     // Zatrzymaj serwis loterii
     if (lotteryService) {
         lotteryService.stop();
+    }
+
+    // Zatrzymaj serwis MVP tygodnia
+    if (mvpService) {
+        mvpService.stop();
     }
 
     client.destroy();
@@ -196,6 +204,8 @@ function setupEventHandlers() {
             await lotteryService.initialize(client);
             // Inicjalizuj serwis głosowania z klientem Discord
             await votingService.initialize(client);
+            // Inicjalizuj serwis MVP tygodnia z klientem Discord
+            await mvpService.initialize(client);
             await registerSlashCommands(client, config);
 
             await updateActivationMessage(
@@ -292,8 +302,18 @@ function setupEventHandlers() {
         }
         interaction.client.oligopolyService = oligopolyService;
         interaction.client.votingService = votingService;
+        interaction.client.mvpService = mvpService;
         handleInteraction(interaction, config, lotteryService);
     });
+
+    // Obsługa reakcji dla ankiety MVP tygodnia
+    client.on(Events.MessageReactionAdd, async (reaction, user) => {
+        if (mvpService) await mvpService.handleReactionAdd(reaction, user);
+    });
+    client.on(Events.MessageReactionRemove, async (reaction, user) => {
+        if (mvpService) await mvpService.handleReactionRemove(reaction, user);
+    });
+
     client.on(Events.Error, onError);
 
     process.on('unhandledRejection', onUnhandledRejection);
@@ -318,6 +338,7 @@ async function start() {
 
 async function stop() {
     if (lotteryService) lotteryService.stop();
+    if (mvpService) mvpService.stop();
     return client.destroy();
 }
 

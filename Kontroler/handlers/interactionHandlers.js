@@ -55,6 +55,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'kawka':
                     await handleKawkaCommand(interaction, config);
                     break;
+                case 'mvp':
+                    await handleMvpCommand(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -1328,6 +1331,10 @@ async function registerSlashCommands(client, config) {
                     .setRequired(true)
                     .setAutocomplete(true)),
 
+        new SlashCommandBuilder()
+            .setName('mvp')
+            .setDescription('Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst)'),
+
     ];
 
     const rest = new REST().setToken(config.token);
@@ -1339,6 +1346,57 @@ async function registerSlashCommands(client, config) {
         );
     } catch (error) {
         logger.error('[COMMANDS] ❌ Błąd rejestracji komend slash:', error);
+    }
+}
+
+/**
+ * Obsługuje komendę /mvp — ranking zdobywców tytułu MVP tygodnia (publiczna)
+ */
+async function handleMvpCommand(interaction, config) {
+    await interaction.deferReply();
+    try {
+        const mvpService = interaction.client.mvpService;
+        if (!mvpService) {
+            await interaction.editReply({ content: '❌ Serwis MVP jest niedostępny.' });
+            return;
+        }
+
+        const ranking = mvpService.getRanking();
+        if (ranking.length === 0) {
+            await interaction.editReply({ content: '📊 Nikt jeszcze nie zdobył tytułu **MVP tygodnia**. Bądź pierwszy! 😄' });
+            return;
+        }
+
+        const medals = ['🥇', '🥈', '🥉'];
+        const lines = ranking.slice(0, 25).map((entry, i) => {
+            const place = i < 3 ? medals[i] : `**${i + 1}.**`;
+            const titleWord = entry.count === 1
+                ? 'tytuł'
+                : ((entry.count % 10 >= 2 && entry.count % 10 <= 4 && !(entry.count % 100 >= 12 && entry.count % 100 <= 14)) ? 'tytuły' : 'tytułów');
+            return `${place} <@${entry.userId}> — **${entry.count}** ${titleWord}`;
+        });
+
+        const total = ranking.reduce((sum, e) => sum + e.count, 0);
+        const embed = new EmbedBuilder()
+            .setColor('#FFD700')
+            .setTitle('🏆 Ranking MVP tygodnia')
+            .setDescription(lines.join('\n'))
+            .setFooter({ text: `Łącznie przyznano ${total} tytuł(ów) MVP` })
+            .setTimestamp();
+
+        if (mvpService.currentWinnerId) {
+            embed.addFields({ name: '👑 Aktualny MVP', value: `<@${mvpService.currentWinnerId}>` });
+        }
+
+        await interaction.editReply({ embeds: [embed], allowedMentions: { parse: [] } });
+    } catch (error) {
+        logger.error('❌ Błąd obsługi komendy /mvp:', error);
+        const msg = '❌ Wystąpił błąd podczas pobierania rankingu MVP.';
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: msg });
+        } else {
+            await interaction.reply({ content: msg, ephemeral: true });
+        }
     }
 }
 

@@ -309,6 +309,12 @@
           "description": "Ogłoszenie wsparcia serwera kawką (tylko administratorzy)",
           "usage": "/kawka nick:[nick użytkownika] → wypełnij formularz z kwotą i typem wpłaty",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/mvp",
+          "description": "Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst za reakcje KEKW)",
+          "usage": "/mvp",
+          "requiredPermission": "public"
         }
       ]
     },

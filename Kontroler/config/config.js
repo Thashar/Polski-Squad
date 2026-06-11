@@ -162,6 +162,39 @@ module.exports = {
             'niedziela': 0
         }
     },
-    
+
+    // Konfiguracja systemu MVP tygodnia (najlepszy tekst za reakcje KEKW)
+    mvp: {
+        // Kanał, na którym publikowana jest ankieta i ogłoszenie zwycięzcy
+        pollChannelId: '1514700582609358974',
+        // Rola przyznawana zwycięzcy na tydzień (do kolejnego rozstrzygnięcia)
+        roleId: '1514704005719134389',
+        // Emoji reakcji, które jest liczone (KEKW) - dopasowanie po ID
+        kekwEmojiId: '1219657372713226382',
+        // Reakcje do głosowania w ankiecie (1 na każdego kandydata, max 3)
+        voteEmojis: ['1️⃣', '2️⃣', '3️⃣'],
+        // Ile dni wstecz skanować wiadomości
+        scanDays: 7,
+        // Maksymalna liczba kandydatów w ankiecie
+        maxCandidates: 3,
+        // Czas trwania głosowania (24h)
+        votingDurationMs: 24 * 60 * 60 * 1000,
+        // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 21:30
+        scheduleWeekday: 4,
+        scheduleHour: 21,
+        scheduleMinute: 30,
+        // Kanały WYKLUCZONE ze skanowania (kanał ankiety jest wykluczany automatycznie).
+        excludedChannels: [
+            '1272432690284462110',
+            '1263240344871370804',
+            '1173653205557719140',
+            '1190323209837498528',
+            '1227161073019523072',
+            '1261286979824259072',
+            '1262791964710146170',
+            '1514700582609358974'
+        ]
+    },
+
     messages
 };
