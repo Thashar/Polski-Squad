@@ -237,11 +237,54 @@ class MvpService {
             }
         }
 
-        // Sortowanie: więcej KEKW → wyżej; remis rozstrzyga wcześniejszy timestamp
-        candidates.sort((a, b) => b.kekwCount - a.kekwCount || a.createdTimestamp - b.createdTimestamp);
-        const top = candidates.slice(0, this.cfg.maxCandidates);
-        this.logger.info(`🔎 MVP: znaleziono ${candidates.length} wiadomości z KEKW, wybrano TOP ${top.length}`);
-        return top;
+        const selected = this.selectCandidates(candidates);
+        this.logger.info(`🔎 MVP: znaleziono ${candidates.length} wiadomości z KEKW; w zestawieniu ${selected.length} tekstów (różni autorzy)`);
+        return selected;
+    }
+
+    /**
+     * Wybiera teksty do zestawienia.
+     * - 1 (najlepszy) tekst na osobę,
+     * - ranking osób wg liczby KEKW; bazowo `targetAuthors` osób, ale przy remisie na granicy
+     *   wchodzą wszyscy remisujący (np. 5/4/3/3 → 4 osoby),
+     * - najlepszy tekst danej osoby: najwięcej KEKW → remis: najwięcej pozostałych reakcji → remis: wcześniejszy.
+     */
+    selectCandidates(messages) {
+        if (messages.length === 0) return [];
+
+        // Komparator "lepsza wiadomość" (sort rosnący: lepsza = wcześniej):
+        // KEKW ↓, pozostałe reakcje ↓, wcześniejszy timestamp ↑
+        const better = (a, b) =>
+            b.kekwCount - a.kekwCount ||
+            b.otherReactionsCount - a.otherReactionsCount ||
+            a.createdTimestamp - b.createdTimestamp;
+
+        // Najlepszy tekst per autor
+        const bestByAuthor = new Map();
+        for (const msg of messages) {
+            const current = bestByAuthor.get(msg.authorId);
+            if (!current || better(msg, current) < 0) {
+                bestByAuthor.set(msg.authorId, msg);
+            }
+        }
+
+        const authors = Array.from(bestByAuthor.values()).sort(better);
+
+        // Dobór osób: bazowo targetAuthors, ale z uwzględnieniem remisów na granicy (wg KEKW)
+        let selected;
+        if (authors.length <= this.cfg.targetAuthors) {
+            selected = authors;
+        } else {
+            const cutoffKekw = authors[this.cfg.targetAuthors - 1].kekwCount;
+            selected = authors.filter(a => a.kekwCount >= cutoffKekw);
+        }
+
+        // Twardy limit = liczba dostępnych emoji do głosowania
+        if (selected.length > this.cfg.maxCandidates) {
+            this.logger.warn(`⚠️ MVP: ${selected.length} kandydatów po remisach - przycinam do ${this.cfg.maxCandidates}`);
+            selected = selected.slice(0, this.cfg.maxCandidates);
+        }
+        return selected;
     }
 
     async collectFromChannel(channel, windowStart, candidates) {
@@ -261,6 +304,12 @@ class MvpService {
                 if (!reaction) continue;
                 const count = reaction.count || 0;
                 if (count <= 0) continue;
+                // Suma pozostałych reakcji (poza KEKW) - tie-break przy wyborze tekstu danej osoby
+                let otherReactionsCount = 0;
+                for (const r of msg.reactions.cache.values()) {
+                    if (r.emoji?.id === this.cfg.kekwEmojiId) continue;
+                    otherReactionsCount += r.count || 0;
+                }
                 candidates.push({
                     messageId: msg.id,
                     channelId: channel.id,
@@ -270,6 +319,7 @@ class MvpService {
                     content: msg.content || '',
                     hasAttachment: msg.attachments.size > 0,
                     kekwCount: count,
+                    otherReactionsCount,
                     createdTimestamp: msg.createdTimestamp,
                     url: msg.url
                 });
@@ -324,18 +374,16 @@ class MvpService {
         const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
 
         let body = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst na serwerze!\n`;
-        body += `W minionym tygodniu zebraliśmy teksty z największą liczbą reakcji ${kekw}. Zagłosujcie na najzabawniejszy!\n\n`;
+        body += `W minionym tygodniu padło kilka perełek. Zagłosujcie na **najlepszy tekst** — głosujemy na tekst, nie na osobę!\n\n`;
 
         candidates.forEach((c, i) => {
             const dateUnix = Math.floor(c.createdTimestamp / 1000);
-            body += `${this.cfg.voteEmojis[i]} **Kandydat ${i + 1}** — <@${c.authorId}> (${c.kekwCount}x ${kekw})\n`;
+            body += `${this.cfg.voteEmojis[i]}\n`;
             body += `> ${this.formatCandidateText(c)}\n`;
-            body += `📍 <#${c.channelId}> • 🕒 <t:${dateUnix}:f> • [przejdź do wiadomości](${c.url})\n\n`;
+            body += `-# ✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
         });
 
-        body += `🗳️ **Jak głosować:** kliknij reakcję pod tym postem — `;
-        body += candidates.map((c, i) => `${this.cfg.voteEmojis[i]} = Kandydat ${i + 1}`).join(', ') + '.\n';
-        body += `Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
+        body += `🗳️ **Jak głosować:** kliknij reakcję przy wybranym tekście. Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
         body += `⏳ Głosowanie kończy się <t:${endUnix}:R>.`;
         return body;
     }
@@ -424,7 +472,10 @@ class MvpService {
                 const better = tally[i] > tally[winnerIndex] ||
                     (tally[i] === tally[winnerIndex] && (
                         c.kekwCount > w.kekwCount ||
-                        (c.kekwCount === w.kekwCount && c.createdTimestamp < w.createdTimestamp)
+                        (c.kekwCount === w.kekwCount && (
+                            c.otherReactionsCount > w.otherReactionsCount ||
+                            (c.otherReactionsCount === w.otherReactionsCount && c.createdTimestamp < w.createdTimestamp)
+                        ))
                     ));
                 if (better) winnerIndex = i;
             }
@@ -504,14 +555,15 @@ class MvpService {
     }
 
     buildWinnerMessage(winner, tally, candidates, winnerIndex) {
+        const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
         let body = `@everyone\n# 👑 MVP TYGODNIA wyłoniony!\n`;
-        body += `Zwycięski tekst napisał(a) <@${winner.authorId}>! 🎉\n\n`;
+        body += `Zwyciężył tekst, który napisał(a) <@${winner.authorId}>! 🎉\n\n`;
         body += `> ${this.formatCandidateText(winner)}\n`;
-        body += `📍 <#${winner.channelId}> • [przejdź do wiadomości](${winner.url})\n\n`;
+        body += `-# ✍️ <@${winner.authorId}> · ${winner.kekwCount}× ${kekw} · <#${winner.channelId}> · [oryginał](${winner.url})\n\n`;
         body += `📊 **Wyniki głosowania:**\n`;
         candidates.forEach((c, i) => {
-            const marker = i === winnerIndex ? '👑 ' : '▫️ ';
-            body += `${marker}${this.cfg.voteEmojis[i]} Kandydat ${i + 1} (<@${c.authorId}>): **${tally[i]}** głos(ów)\n`;
+            const marker = i === winnerIndex ? '👑' : '▫️';
+            body += `${marker} ${this.cfg.voteEmojis[i]} — **${tally[i]}** głos(ów) (<@${c.authorId}>)\n`;
         });
         const winnerCount = (this.winners[winner.authorId]?.count) || 1;
         body += `\n🏅 <@${winner.authorId}> otrzymuje rolę MVP na najbliższy tydzień! To już **${winnerCount}.** tytuł MVP tej osoby.`;

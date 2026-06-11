@@ -171,18 +171,20 @@ module.exports = {
         roleId: '1514704005719134389',
         // Emoji reakcji, które jest liczone (KEKW) - dopasowanie po ID
         kekwEmojiId: '1219657372713226382',
-        // Reakcje do głosowania w ankiecie (1 na każdego kandydata, max 3)
-        voteEmojis: ['1️⃣', '2️⃣', '3️⃣'],
+        // Reakcje do głosowania w ankiecie (1 na każdego kandydata)
+        voteEmojis: ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'],
         // Ile dni wstecz skanować wiadomości
         scanDays: 7,
-        // Maksymalna liczba kandydatów w ankiecie
-        maxCandidates: 3,
+        // Bazowa liczba różnych autorów w zestawieniu (przy remisie na granicy wchodzą wszyscy remisujący)
+        targetAuthors: 3,
+        // Twardy limit kandydatów (= liczba dostępnych emoji do głosowania)
+        maxCandidates: 10,
         // Czas trwania głosowania (24h)
         votingDurationMs: 24 * 60 * 60 * 1000,
-        // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 21:30
+        // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 22:00
         scheduleWeekday: 4,
-        scheduleHour: 21,
-        scheduleMinute: 30,
+        scheduleHour: 22,
+        scheduleMinute: 0,
         // Kanały WYKLUCZONE ze skanowania (kanał ankiety jest wykluczany automatycznie).
         excludedChannels: [
             '1272432690284462110',
