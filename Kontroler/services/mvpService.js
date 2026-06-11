@@ -379,7 +379,7 @@ class MvpService {
         candidates.forEach((c, i) => {
             const dateUnix = Math.floor(c.createdTimestamp / 1000);
             body += `${this.cfg.voteEmojis[i]}\n`;
-            body += `> ${this.formatCandidateText(c)}\n`;
+            body += `> ***„${this.formatCandidateText(c)}”***\n`;
             body += `-# ✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
         });
 
@@ -558,7 +558,7 @@ class MvpService {
         const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
         let body = `@everyone\n# 👑 MVP TYGODNIA wyłoniony!\n`;
         body += `Zwyciężył tekst, który napisał(a) <@${winner.authorId}>! 🎉\n\n`;
-        body += `> ${this.formatCandidateText(winner)}\n`;
+        body += `> ***„${this.formatCandidateText(winner)}”***\n`;
         body += `-# ✍️ <@${winner.authorId}> · ${winner.kekwCount}× ${kekw} · <#${winner.channelId}> · [oryginał](${winner.url})\n\n`;
         body += `📊 **Wyniki głosowania:**\n`;
         candidates.forEach((c, i) => {
