@@ -181,10 +181,10 @@ module.exports = {
         maxCandidates: 10,
         // Czas trwania głosowania (24h)
         votingDurationMs: 24 * 60 * 60 * 1000,
-        // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 22:00
+        // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 22:05
         scheduleWeekday: 4,
         scheduleHour: 22,
-        scheduleMinute: 0,
+        scheduleMinute: 5,
         // Kanały WYKLUCZONE ze skanowania (kanał ankiety jest wykluczany automatycznie).
         excludedChannels: [
             '1272432690284462110',

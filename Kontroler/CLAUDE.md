@@ -22,8 +22,8 @@
 5. **MVP tygodnia** - `mvpService.js`:
    - **Cel:** Głosowanie na najlepszy **tekst** (nie osobę) z minionego tygodnia; nagradza jego autora. Kwalifikacja po reakcji `<:z_Kekw:1219657372713226382>` (dopasowanie po ID emoji)
    - **Harmonogram (czas polski Europe/Warsaw, DST auto przez `utils/timezone.js`):**
-     - **Czwartek 22:00** → skan wszystkich kanałów tekstowych/ogłoszeń (poza `excludedChannels` + kanał ankiety) 7 dni wstecz; pomija wiadomości botów; post ankiety z `@everyone` na kanale `1514700582609358974`
-     - **Piątek 22:00** (24h później) → zamknięcie ankiety, ogłoszenie zwycięzcy z `@everyone`, zdjęcie roli `1514704005719134389` WSZYSTKIM i nadanie jej zwycięzcy na kolejny tydzień
+     - **Czwartek 22:05** → skan wszystkich kanałów tekstowych/ogłoszeń (poza `excludedChannels` + kanał ankiety) 7 dni wstecz; pomija wiadomości botów; post ankiety z `@everyone` na kanale `1514700582609358974`
+     - **Piątek 22:05** (24h później) → zamknięcie ankiety, ogłoszenie zwycięzcy z `@everyone`, zdjęcie roli `1514704005719134389` WSZYSTKIM i nadanie jej zwycięzcy na kolejny tydzień
    - **Dobór kandydatów (`selectCandidates`):** 1 (najlepszy) tekst na osobę; ranking osób wg liczby KEKW; bazowo `targetAuthors`=3 różnych autorów, ale przy **remisie na granicy** wchodzą wszyscy remisujący (np. KEKW 5/4/3/3 → 4 teksty). Najlepszy tekst danej osoby: najwięcej KEKW → remis: najwięcej **pozostałych** reakcji (poza KEKW) → remis: wcześniejszy. Twardy limit = liczba emoji (10)
    - **Treść ankiety (tekst-centryczna):** Każdy kandydat to TEKST (cytat) + drobna wzmianka `-# ✍️ autor · N× KEKW · #kanał · data · [oryginał]`. Bez rywalizacji osób
    - **Ankieta reakcyjna:** Bot dodaje 1️⃣2️⃣3️⃣… (po jednej na kandydata, pula `voteEmojis` 1-10). 1 głos/os - kliknięcie innej reakcji kasuje poprzednią. Zliczanie z mapy `state.votes` (userId→opcja, "ostatni klik = ważny głos") - odporne na brak uprawnienia "Zarządzanie wiadomościami" i na restart. Fizyczne kasowanie poprzedniej reakcji jest kosmetyczne (wymaga Manage Messages), nie wpływa na wynik. Remis w głosach → więcej KEKW → więcej pozostałych reakcji → wcześniejszy
