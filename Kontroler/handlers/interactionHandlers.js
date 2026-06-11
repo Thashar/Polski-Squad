@@ -1333,7 +1333,7 @@ async function registerSlashCommands(client, config) {
 
         new SlashCommandBuilder()
             .setName('mvp')
-            .setDescription('Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst)'),
+            .setDescription('Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst na serwerze)'),
 
     ];
 

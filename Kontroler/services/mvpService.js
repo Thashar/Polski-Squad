@@ -323,7 +323,7 @@ class MvpService {
         const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
         const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
 
-        let body = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst!\n`;
+        let body = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst na serwerze!\n`;
         body += `W minionym tygodniu zebraliśmy teksty z największą liczbą reakcji ${kekw}. Zagłosujcie na najzabawniejszy!\n\n`;
 
         candidates.forEach((c, i) => {
