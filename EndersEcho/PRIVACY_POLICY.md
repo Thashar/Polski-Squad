@@ -47,4 +47,4 @@ We may update this policy from time to time. The "Last updated" date at the top 
 
 ## 8. Contact
 
-For questions or data requests, contact the developer at: **[wstaw tutaj swój kontakt — np. e-mail lub link do serwera Discord wsparcia]**
+For questions or data requests, contact us on our Discord support server: **https://discord.gg/aTPH4r9Zbg**
