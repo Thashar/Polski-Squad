@@ -2100,10 +2100,9 @@ function hasPermission(member, allowedRoles) {
 
 /**
  * Wysyła "ghost ping" - wiadomość z pingiem, która jest usuwana po 3 sekundach
- * Jeśli użytkownik nie kliknie przycisku, ping jest ponawiany co 30 sekund
  * @param {Object} channel - Kanał Discord
  * @param {string} userId - ID użytkownika do pingowania
- * @param {Object} session - Sesja phaseService (opcjonalne - do zapisywania timerów)
+ * @param {Object} session - Sesja phaseService (opcjonalne, zachowane dla kompatybilności wywołań)
  */
 async function sendGhostPing(channel, userId, session = null) {
     try {
@@ -2121,37 +2120,6 @@ async function sendGhostPing(channel, userId, session = null) {
         }, 3000);
 
         logger.info(`[GHOST_PING] 📨 Wysłano ghost ping do użytkownika ${userId}`);
-
-        // Jeśli mamy sesję, ustaw timer do ponawiania pingu co 30 sekund
-        if (session) {
-            // Wyczyść poprzedni timer jeśli istnieje
-            if (session.pingTimer) {
-                clearInterval(session.pingTimer);
-            }
-
-            // Ustaw nowy timer
-            session.pingTimer = setInterval(async () => {
-                try {
-                    const repeatPingMessage = await channel.send({
-                        content: `<@${userId}> Analiza zdjęć została zakończona, kontynuuj!`
-                    });
-
-                    setTimeout(async () => {
-                        try {
-                            await repeatPingMessage.delete();
-                        } catch (error) {
-                            logger.error('[GHOST_PING] ❌ Nie udało się usunąć powtarzanego ghost pingu:', error.message);
-                        }
-                    }, 3000);
-
-                    logger.info(`[GHOST_PING] 🔄 Powtórzono ghost ping do użytkownika ${userId}`);
-                } catch (error) {
-                    logger.error('[GHOST_PING] ❌ Błąd podczas powtarzania ghost pingu:', error.message);
-                }
-            }, 30000); // 30 sekund
-
-            logger.info(`[GHOST_PING] ⏰ Ustawiono timer ponawiania pingów co 30s dla sesji ${session.sessionId}`);
-        }
     } catch (error) {
         logger.error('[GHOST_PING] ❌ Błąd wysyłania ghost pingu:', error.message);
     }
