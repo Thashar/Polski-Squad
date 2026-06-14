@@ -64,16 +64,16 @@ const ACHIEVEMENTS = [
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e23,
     },
     {
-        id: 'score_1sp', category: 'score', rarity: 'mythic', hidden: false, icon: '🌀',
-        namePol: 'Poza Granicami',   nameEng: 'Beyond Limits',
-        descPol: 'Osiągnij wynik 1Sp', descEng: 'Reach a score of 1Sp',
-        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e24,
-    },
-    {
-        id: 'score_100xx', category: 'score', rarity: 'mythic', hidden: false, icon: '💫',
+        id: 'score_100sp', category: 'score', rarity: 'mythic', hidden: false, icon: '💫',
         namePol: 'Władca Septylionów',   nameEng: 'Lord of Septillions',
         descPol: 'Osiągnij wynik 100Sp', descEng: 'Reach a score of 100Sp',
         check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e26,
+    },
+    {
+        id: 'score_100xx', category: 'score', rarity: 'mythic', hidden: false, icon: '🌀',
+        namePol: 'Poza Granicami',   nameEng: 'Beyond Limits',
+        descPol: 'Osiągnij wynik w nieznanej jednostce', descEng: 'Reach a score in an unknown unit',
+        check: (_p, ctx) => (ctx.scoreValue || 0) >= 1e29,
     },
 
     // ===== REKORDY (RECORDS) =====
