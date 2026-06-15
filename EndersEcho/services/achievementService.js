@@ -4,6 +4,9 @@ const fs = require('fs').promises;
 const path = require('path');
 const { ACHIEVEMENTS, RARITY, CATEGORY_INFO } = require('../config/achievements');
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
+const { createBotLogger } = require('../../utils/consoleLogger');
+
+const logger = createBotLogger('EndersEcho');
 
 const PER_PAGE = 10;
 
@@ -11,6 +14,23 @@ class AchievementService {
     constructor(config) {
         this.config = config;
         this.dataDir = config.ranking?.dataDir || path.join(__dirname, '../data');
+        // Serializacja operacji read-modify-write per serwer — zapobiega race condition
+        // między processSubmission a metodami track* (utrata zapisów + cofanie lastRecordBeatAt,
+        // które powodowało ponowne ogłaszanie już posiadanych osiągnięć).
+        this._writeQueues = new Map();
+    }
+
+    // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
+    // Każda operacja ma timeout 30s — jeśli przekroczy, kolejka jest odblokowana.
+    _enqueue(guildId, fn) {
+        const run = () => Promise.race([
+            fn(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error(`Timeout kolejki osiągnięć dla guildId=${guildId}`)), 30000)),
+        ]);
+        const prev = this._writeQueues.get(guildId) ?? Promise.resolve();
+        const next = prev.then(run, run);
+        this._writeQueues.set(guildId, next.catch(() => {}));
+        return next;
     }
 
     _getDataFile(guildId) {
@@ -62,61 +82,63 @@ class AchievementService {
     async processSubmission(guildId, userId, ctx) {
         if (!ctx.isNewRecord) return [];
 
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                const userData = this._ensureUser(data, userId);
+                const p = userData.progress;
 
-            const prevLastBeat = p.lastRecordBeatAt;
+                const prevLastBeat = p.lastRecordBeatAt;
 
-            // Aktualizuj progress przed sprawdzeniem warunków
-            p.recordCount = (p.recordCount || 0) + 1;
+                // Aktualizuj progress przed sprawdzeniem warunków
+                p.recordCount = (p.recordCount || 0) + 1;
 
-            // Dzienny licznik rekordów (same_day / same_day_3)
-            const todayStr = new Date().toISOString().slice(0, 10);
-            if (p.todayRecordDate !== todayStr) {
-                p.todayRecordDate = todayStr;
-                p.todayRecordCount = 0;
-            }
-            p.todayRecordCount = (p.todayRecordCount || 0) + 1;
+                // Dzienny licznik rekordów (same_day / same_day_3)
+                const todayStr = new Date().toISOString().slice(0, 10);
+                if (p.todayRecordDate !== todayStr) {
+                    p.todayRecordDate = todayStr;
+                    p.todayRecordCount = 0;
+                }
+                p.todayRecordCount = (p.todayRecordCount || 0) + 1;
 
-            if (ctx.bossName) {
-                const boss = ctx.bossName.trim();
-                if (boss && boss !== 'Nieznany' && boss !== 'Unknown') {
-                    if (!p.bossesEncountered) p.bossesEncountered = [];
-                    const lc = boss.toLowerCase();
-                    if (!p.bossesEncountered.some(b => b.toLowerCase() === lc)) {
-                        p.bossesEncountered.push(boss);
+                if (ctx.bossName) {
+                    const boss = ctx.bossName.trim();
+                    if (boss && boss !== 'Nieznany' && boss !== 'Unknown') {
+                        if (!p.bossesEncountered) p.bossesEncountered = [];
+                        const lc = boss.toLowerCase();
+                        if (!p.bossesEncountered.some(b => b.toLowerCase() === lc)) {
+                            p.bossesEncountered.push(boss);
+                        }
                     }
                 }
+
+                const nowIso = new Date().toISOString();
+
+                // Sprawdź i odblokuj osiągnięcia
+                for (const ach of ACHIEVEMENTS) {
+                    if (userData.unlocked[ach.id]) continue;
+                    try {
+                        if (ach.check(p, ctx)) {
+                            userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                        }
+                    } catch {}
+                }
+
+                // Zbierz osiągnięcia do pokazania w embeddzie (odblokowane od ostatniego pobicia rekordu)
+                const toShow = Object.entries(userData.unlocked)
+                    .filter(([, info]) => !prevLastBeat || info.unlockedAt > prevLastBeat)
+                    .map(([id]) => id);
+
+                // Zapisz timestamp PO zebraniu listy (żeby prevLastBeat był sprzed obecnego rekordu)
+                p.lastRecordAt = nowIso;
+                p.lastRecordBeatAt = nowIso;
+
+                await this.saveData(guildId, data);
+                return toShow;
+            } catch {
+                return [];
             }
-
-            const nowIso = new Date().toISOString();
-
-            // Sprawdź i odblokuj osiągnięcia
-            for (const ach of ACHIEVEMENTS) {
-                if (userData.unlocked[ach.id]) continue;
-                try {
-                    if (ach.check(p, ctx)) {
-                        userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                    }
-                } catch {}
-            }
-
-            // Zbierz osiągnięcia do pokazania w embeddzie (odblokowane od ostatniego pobicia rekordu)
-            const toShow = Object.entries(userData.unlocked)
-                .filter(([, info]) => !prevLastBeat || info.unlockedAt > prevLastBeat)
-                .map(([id]) => id);
-
-            // Zapisz timestamp PO zebraniu listy (żeby prevLastBeat był sprzed obecnego rekordu)
-            p.lastRecordAt = nowIso;
-            p.lastRecordBeatAt = nowIso;
-
-            await this.saveData(guildId, data);
-            return toShow;
-        } catch {
-            return [];
-        }
+        });
     }
 
     /**
@@ -129,21 +151,23 @@ class AchievementService {
      * @param {Object|null} previousRecord - poprzedni rekord ({ timestamp } lub null)
      */
     async revertSubmissionAchievements(guildId, userId, achievementIds, previousRecord) {
-        try {
-            const data = await this.loadData(guildId);
-            if (!data[userId]) return;
-            const userData = data[userId];
-            for (const id of achievementIds) {
-                delete userData.unlocked[id];
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[userId]) return;
+                const userData = data[userId];
+                for (const id of achievementIds) {
+                    delete userData.unlocked[id];
+                }
+                userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 1) - 1);
+                const prevTs = previousRecord?.timestamp || null;
+                userData.progress.lastRecordAt = prevTs;
+                userData.progress.lastRecordBeatAt = prevTs;
+                await this.saveData(guildId, data);
+            } catch (err) {
+                logger.error(`revertSubmissionAchievements error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
             }
-            userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 1) - 1);
-            const prevTs = previousRecord?.timestamp || null;
-            userData.progress.lastRecordAt = prevTs;
-            userData.progress.lastRecordBeatAt = prevTs;
-            await this.saveData(guildId, data);
-        } catch (err) {
-            logger.error(`revertSubmissionAchievements error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
-        }
+        });
     }
 
     /**
@@ -151,21 +175,23 @@ class AchievementService {
      * oraz resetuje powiązane pola progress. Wywoływane przy usunięciu gracza z rankingu przez admina.
      */
     async clearUserAchievements(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            if (!data[userId]) return;
-            const userData = data[userId];
-            const scoreAndRecordIds = new Set(
-                ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
-            );
-            for (const id of scoreAndRecordIds) {
-                delete userData.unlocked[id];
-            }
-            userData.progress.recordCount = 0;
-            userData.progress.lastRecordAt = null;
-            userData.progress.lastRecordBeatAt = null;
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[userId]) return;
+                const userData = data[userId];
+                const scoreAndRecordIds = new Set(
+                    ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
+                );
+                for (const id of scoreAndRecordIds) {
+                    delete userData.unlocked[id];
+                }
+                userData.progress.recordCount = 0;
+                userData.progress.lastRecordAt = null;
+                userData.progress.lastRecordBeatAt = null;
+                await this.saveData(guildId, data);
+            } catch {}
+        });
     }
 
     /**
@@ -178,25 +204,27 @@ class AchievementService {
      * @param {{ removedRecordCount?: number, previousRecord?: Object|null }} [opts]
      */
     async clearAchievementsAfter(guildId, userId, fromTimestamp, { removedRecordCount = 0, previousRecord = null } = {}) {
-        try {
-            const data = await this.loadData(guildId);
-            if (!data[userId]) return;
-            const userData = data[userId];
-            const cutoff = new Date(fromTimestamp).getTime();
-            for (const [id, info] of Object.entries(userData.unlocked || {})) {
-                const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
-                if (ts >= cutoff) delete userData.unlocked[id];
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[userId]) return;
+                const userData = data[userId];
+                const cutoff = new Date(fromTimestamp).getTime();
+                for (const [id, info] of Object.entries(userData.unlocked || {})) {
+                    const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
+                    if (ts >= cutoff) delete userData.unlocked[id];
+                }
+                if (userData.progress) {
+                    userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 0) - removedRecordCount);
+                    const prevTs = previousRecord?.timestamp || null;
+                    userData.progress.lastRecordAt = prevTs;
+                    userData.progress.lastRecordBeatAt = fromTimestamp;
+                }
+                await this.saveData(guildId, data);
+            } catch (err) {
+                logger.error(`clearAchievementsAfter error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
             }
-            if (userData.progress) {
-                userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 0) - removedRecordCount);
-                const prevTs = previousRecord?.timestamp || null;
-                userData.progress.lastRecordAt = prevTs;
-                userData.progress.lastRecordBeatAt = fromTimestamp;
-            }
-            await this.saveData(guildId, data);
-        } catch (err) {
-            logger.error(`clearAchievementsAfter error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
-        }
+        });
     }
 
     /**
@@ -204,21 +232,25 @@ class AchievementService {
      * Wywoływane przez head admina z poziomu /manage → Reset osiągnięć.
      */
     async resetAllAchievements(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            if (!data[userId]) return;
-            delete data[userId];
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[userId]) return;
+                delete data[userId];
+                await this.saveData(guildId, data);
+            } catch {}
+        });
     }
 
     async removeOneAchievement(guildId, userId, achId) {
-        try {
-            const data = await this.loadData(guildId);
-            if (!data[userId]?.unlocked?.[achId]) return;
-            delete data[userId].unlocked[achId];
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[userId]?.unlocked?.[achId]) return;
+                delete data[userId].unlocked[achId];
+                await this.saveData(guildId, data);
+            } catch {}
+        });
     }
 
     async getUnlockedAchievements(guildId, userId) {
@@ -230,118 +262,60 @@ class AchievementService {
     }
 
     /**
+     * Wspólna logika śledzenia aktywności eksploratora — inkrementuje licznik postępu
+     * i odblokowuje ukryte osiągnięcia kategorii 'explorer'. Cała operacja
+     * read-modify-write jest serializowana per serwer (zapobiega utracie zapisów
+     * i cofaniu lastRecordBeatAt w wyścigu z processSubmission).
+     * @param {string} guildId
+     * @param {string} userId
+     * @param {(progress: Object) => void} incrementFn - inkrementuje odpowiedni licznik postępu
      */
+    async _trackExplorer(guildId, userId, incrementFn) {
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                const userData = this._ensureUser(data, userId);
+                const p = userData.progress;
+                incrementFn(p);
+
+                const nowIso = new Date().toISOString();
+                for (const ach of ACHIEVEMENTS) {
+                    if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
+                    try {
+                        if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                    } catch {}
+                }
+
+                await this.saveData(guildId, data);
+            } catch {}
+        });
+    }
+
     async trackRankingView(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.rankingViews = (p.rankingViews || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.rankingViews = (p.rankingViews || 0) + 1; });
     }
 
     /**
      * Śledzi aktywację subskrypcji — może odblokować ukryte osiągnięcia eksploratora.
      */
     async trackSubscription(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.subscriptions = (p.subscriptions || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.subscriptions = (p.subscriptions || 0) + 1; });
     }
 
     async trackNonRecord(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.nonRecordCount = (p.nonRecordCount || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.nonRecordCount = (p.nonRecordCount || 0) + 1; });
     }
 
     async trackCvApproved(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.cvApprovedCount = (p.cvApprovedCount || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.cvApprovedCount = (p.cvApprovedCount || 0) + 1; });
     }
 
     async trackAiAnalyzed(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.aiRescuedCount = (p.aiRescuedCount || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.aiRescuedCount = (p.aiRescuedCount || 0) + 1; });
     }
 
     async trackProfileSearch(guildId, userId) {
-        try {
-            const data = await this.loadData(guildId);
-            const userData = this._ensureUser(data, userId);
-            const p = userData.progress;
-            p.profileSearches = (p.profileSearches || 0) + 1;
-
-            const nowIso = new Date().toISOString();
-            for (const ach of ACHIEVEMENTS) {
-                if (!ach.hidden || userData.unlocked[ach.id] || ach.category !== 'explorer') continue;
-                try {
-                    if (ach.check(p, {})) userData.unlocked[ach.id] = { unlockedAt: nowIso };
-                } catch {}
-            }
-            await this.saveData(guildId, data);
-        } catch {}
+        return this._trackExplorer(guildId, userId, p => { p.profileSearches = (p.profileSearches || 0) + 1; });
     }
 
     /**
