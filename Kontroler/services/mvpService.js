@@ -310,6 +310,23 @@ class MvpService {
                     if (r.emoji?.id === this.cfg.kekwEmojiId) continue;
                     otherReactionsCount += r.count || 0;
                 }
+                // Jeśli wiadomość jest odpowiedzią na inną - zapamiętaj treść i autora oryginału
+                let replyTo = null;
+                if (msg.reference && msg.reference.messageId) {
+                    try {
+                        const ref = await msg.fetchReference();
+                        if (ref) {
+                            replyTo = {
+                                authorId: ref.author?.id || null,
+                                authorDisplay: ref.member?.displayName || ref.author?.username || 'nieznany',
+                                content: ref.content || '',
+                                hasAttachment: (ref.attachments?.size || 0) > 0
+                            };
+                        }
+                    } catch (e) {
+                        // Oryginalna wiadomość mogła zostać usunięta lub jest niedostępna - pomijamy kontekst odpowiedzi
+                    }
+                }
                 candidates.push({
                     messageId: msg.id,
                     channelId: channel.id,
@@ -321,7 +338,8 @@ class MvpService {
                     kekwCount: count,
                     otherReactionsCount,
                     createdTimestamp: msg.createdTimestamp,
-                    url: msg.url
+                    url: msg.url,
+                    replyTo
                 });
             }
 
@@ -369,6 +387,20 @@ class MvpService {
         return t;
     }
 
+    formatReplyText(replyTo) {
+        let t = (replyTo?.content || '').replace(/\r?\n+/g, ' ').trim();
+        if (t.length > 180) t = t.slice(0, 177) + '...';
+        if (!t) t = replyTo?.hasAttachment ? '[załącznik / obraz]' : '[brak treści tekstowej]';
+        return t;
+    }
+
+    // Linia kontekstu: gdy tekst był odpowiedzią na inną wiadomość, pokaż na co odpowiadał
+    buildReplyContextLine(replyTo) {
+        if (!replyTo) return '';
+        const who = replyTo.authorId ? `<@${replyTo.authorId}>` : (replyTo.authorDisplay || 'nieznany');
+        return `-# ↩️ odpowiedź na ${who}: „${this.formatReplyText(replyTo)}”\n`;
+    }
+
     buildPollMessage(candidates) {
         const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
         const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
@@ -380,6 +412,7 @@ class MvpService {
             const dateUnix = Math.floor(c.createdTimestamp / 1000);
             body += `${this.cfg.voteEmojis[i]}\n`;
             body += `> ***„${this.formatCandidateText(c)}”***\n`;
+            body += this.buildReplyContextLine(c.replyTo);
             body += `-# ✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
         });
 
@@ -519,7 +552,9 @@ class MvpService {
      */
     tallyFromState(candidateCount) {
         const counts = new Array(candidateCount).fill(0);
-        for (const opt of Object.values(this.state.votes || {})) {
+        const botId = this.client?.user?.id;
+        for (const [userId, opt] of Object.entries(this.state.votes || {})) {
+            if (botId && userId === botId) continue; // Nie liczymy głosów bota
             if (typeof opt === 'number' && opt >= 0 && opt < candidateCount) counts[opt]++;
         }
         return counts;
@@ -559,6 +594,7 @@ class MvpService {
         let body = `@everyone\n# 👑 MVP TYGODNIA wyłoniony!\n`;
         body += `Zwyciężył tekst, który napisał(a) <@${winner.authorId}>! 🎉\n\n`;
         body += `> ***„${this.formatCandidateText(winner)}”***\n`;
+        body += this.buildReplyContextLine(winner.replyTo);
         body += `-# ✍️ <@${winner.authorId}> · ${winner.kekwCount}× ${kekw} · <#${winner.channelId}> · [oryginał](${winner.url})\n\n`;
         body += `📊 **Wyniki głosowania:**\n`;
         candidates.forEach((c, i) => {
