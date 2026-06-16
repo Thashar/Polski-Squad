@@ -32,7 +32,13 @@
 
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+14. **Naprawa osiągnięć EndersEcho** - `interactionHandlers.js` (`/napraw-osiagniecia-ee`): Jednorazowe narzędzie naprawcze (tylko administrator). Pobiera backup EndersEcho z wybranej daty z Google Drive (`BackupManager.downloadAndExtractBackupByDate`), buduje plan przez `EndersEcho/services/achievementRestoreService.buildRestorePlan()` i pokazuje podgląd z przyciskami `napraw_ach_confirm` / `napraw_ach_cancel`. Po potwierdzeniu `applyRestorePlan()` zapisuje zmiany.
+    - **Parametr:** `data` (opcjonalny, format `RRRR-MM-DD`, domyślnie `2026-06-14`) — dopasowanie pliku backupu po nazwie.
+    - **Zadanie 1 (przywracanie):** dla każdego serwera scala brakujące osiągnięcia `unlocked` (kategorie inne niż `score`) z backupu do aktualnego pliku — odzyskuje osiągnięcia utracone przez race condition (lost writes). Delikatnie scala `progress` (recordCount=max, bossesEncountered=suma, liczniki eksploratora=max); znaczniki czasu nieruszane.
+    - **Zadanie 2 (naprawa score_100sp):** osiągnięcia kategorii `score` przelicza z aktualnego `ranking.json` (best `scoreValue`). Stare błędne `score_100xx` (Poza Granicami @1e26) → migracja na `score_100sp` (Władca Septylionów @1e26); `score_100xx` usuwane tylko gdy znamy realny wynik < 1e29. Osiągnięcia są wyłącznie dodawane (poza tym jednym wyjątkiem).
+    - **Bezpieczeństwo:** przed nadpisaniem tworzy kopię `achievements.before_restore_<timestamp>.json` w folderze serwera; zapis atomowy (tmp + rename). Sesja w `pendingAchRestores` Map z auto-cleanup po 10 min (usuwa folder tymczasowy backupu).
+
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/napraw-osiagniecia-ee`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---

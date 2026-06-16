@@ -897,6 +897,95 @@ class BackupManager {
     }
 
     /**
+     * Pobiera backup danego bota z KONKRETNEJ daty z Google Drive.
+     * Dopasowuje plik po fragmencie nazwy (data w formacie YYYY-MM-DD).
+     * @param {string} botName
+     * @param {string} dateStr - data w formacie YYYY-MM-DD (część nazwy pliku backupu)
+     * @returns {Promise<{tempPath: string, fileName: string}|null>}
+     */
+    async downloadBackupByDate(botName, dateStr) {
+        if (!this.drive) {
+            logger.warn('⚠️  Google Drive nie jest zainicjalizowany — nie można pobrać backupu');
+            return null;
+        }
+
+        try {
+            const backupFolderId = await this.ensureDriveFolder('Polski_Squad_Backups');
+            const botFolderId = await this.ensureBotFolder(backupFolderId, botName);
+
+            const response = await this.drive.files.list({
+                q: `'${botFolderId}' in parents and trashed=false and name contains '${dateStr}'`,
+                fields: 'files(id, name, createdTime)',
+                orderBy: 'createdTime desc',
+                spaces: 'drive',
+                supportsAllDrives: true,
+                includeItemsFromAllDrives: true,
+                pageSize: 5
+            });
+
+            if (!response.data.files.length) {
+                logger.warn(`⚠️  Brak backupu ${botName} z datą ${dateStr} na Google Drive`);
+                return null;
+            }
+
+            const file = response.data.files[0];
+            logger.info(`📥 Pobieranie backupu ${file.name} dla ${botName}...`);
+
+            this.ensureBackupsFolder();
+            const tempPath = path.join(this.backupsFolder, `_restore_${botName}_${dateStr}.zip`);
+
+            const dest = fs.createWriteStream(tempPath);
+            const res = await this.drive.files.get(
+                { fileId: file.id, alt: 'media', supportsAllDrives: true },
+                { responseType: 'stream' }
+            );
+
+            await new Promise((resolve, reject) => {
+                res.data.pipe(dest);
+                dest.on('finish', resolve);
+                dest.on('error', reject);
+                res.data.on('error', reject);
+            });
+
+            logger.info(`✅ Pobrano backup: ${file.name}`);
+            return { tempPath, fileName: file.name };
+
+        } catch (error) {
+            logger.error(`❌ Błąd pobierania backupu ${botName} (${dateStr}):`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Pobiera i rozpakowuje backup z konkretnej daty do folderu tymczasowego.
+     * Używa systemowego polecenia `unzip` (Linux). Wywołujący MUSI usunąć tempDir po użyciu.
+     * @param {string} botName
+     * @param {string} dateStr - YYYY-MM-DD
+     * @returns {Promise<{tempDir: string, fileName: string}|null>}
+     */
+    async downloadAndExtractBackupByDate(botName, dateStr) {
+        const dl = await this.downloadBackupByDate(botName, dateStr);
+        if (!dl) return null;
+
+        const { spawnSync } = require('child_process');
+        const os = require('os');
+
+        const tempDir = path.join(os.tmpdir(), `restore_${botName}_${dateStr}_${Date.now()}`);
+        fs.mkdirSync(tempDir, { recursive: true });
+
+        logger.info(`📦 Wypakowuję backup ${botName} (${dl.fileName}) do ${tempDir}...`);
+        const result = spawnSync('unzip', ['-o', dl.tempPath, '-d', tempDir], { encoding: 'utf8' });
+        try { fs.unlinkSync(dl.tempPath); } catch {}
+
+        if (result.error || (result.status !== 0 && result.status !== 1)) {
+            try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
+            throw new Error(`unzip błąd (kod ${result.status}${result.error ? ', ' + result.error.message : ''})`);
+        }
+
+        return { tempDir, fileName: dl.fileName };
+    }
+
+    /**
      * Wyodrębnia wskazane pliki z archiwum ZIP i przywraca je na oryginalne ścieżki.
      * Używa systemowego polecenia `unzip` (dostępnego na serwerach Linux) — brak zewnętrznych zależności.
      * @param {string} archivePath - Ścieżka do archiwum ZIP
