@@ -32,14 +32,39 @@
 
 12. **Prima Aprilis** - `primaAprilisService.js`: Moduł prima aprilis. Przy starcie bota wysyła (lub aktualizuje istniejącą) wiadomość z czerwonym przyciskiem 🛑 "NIE KLIKAĆ POD ŻADNYM POZOREM" na kanale `1486500418358870074`. Po kliknięciu: zapisuje wszystkie role użytkownika do `data/prima_aprilis_roles.json`, odbiera je i nadaje rolę więźnia `1486506395057524887`. Użytkownik wychodzi pisząc `exit` gdziekolwiek - role są przywracane. Persistencja przeżywa restart bota.
 
-14. **Naprawa osiągnięć EndersEcho** - `interactionHandlers.js` (`/napraw-osiagniecia-ee`): Jednorazowe narzędzie naprawcze (tylko administrator). Pobiera backup EndersEcho z wybranej daty z Google Drive (`BackupManager.downloadAndExtractBackupByDate`), buduje plan przez `EndersEcho/services/achievementRestoreService.buildRestorePlan()` i pokazuje podgląd z przyciskami `napraw_ach_confirm` / `napraw_ach_cancel`. Po potwierdzeniu `applyRestorePlan()` zapisuje zmiany.
-    - **Parametr:** `data` (opcjonalny, format `RRRR-MM-DD`, domyślnie `2026-06-14`) — dopasowanie pliku backupu po nazwie.
-    - **Zadanie 1 (przywracanie):** dla każdego serwera scala brakujące osiągnięcia `unlocked` (kategorie inne niż `score`) z backupu do aktualnego pliku — odzyskuje osiągnięcia utracone przez race condition (lost writes). Delikatnie scala `progress` (recordCount=max, bossesEncountered=suma, liczniki eksploratora=max); znaczniki czasu nieruszane.
-    - **Zadanie 2 (naprawa score_100sp):** osiągnięcia kategorii `score` przelicza z aktualnego `ranking.json` (best `scoreValue`). Stare błędne `score_100xx` (Poza Granicami @1e26) → migracja na `score_100sp` (Władca Septylionów @1e26); `score_100xx` usuwane tylko gdy znamy realny wynik < 1e29. Osiągnięcia są wyłącznie dodawane (poza tym jednym wyjątkiem).
-    - **Bezpieczeństwo:** przed nadpisaniem tworzy kopię `achievements.before_restore_<timestamp>.json` w folderze serwera; zapis atomowy (tmp + rename). Sesja w `pendingAchRestores` Map z auto-cleanup po 10 min (usuwa folder tymczasowy backupu).
+14. **Kompleksowe przywracanie danych** - `handlers/restoreBackupHandler.js` (`/restore-backup`): Kreator przywracania danych z Google Drive (tylko administrator). Stan sesji per-użytkownik w `RestoreBackupHandler.sessions` Map (TTL 15 min, auto-cleanup usuwa pobrane foldery tymczasowe). Patrz sekcja **[Komenda /restore-backup](#komenda-restore-backup)** poniżej.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/napraw-osiagniecia-ee`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
+
+---
+
+## Komenda /restore-backup
+
+Kreator przywracania danych z backupów Google Drive — `handlers/restoreBackupHandler.js` (klasa `RestoreBackupHandler`, instancjonowana w `interactionHandlers.js`). Tylko **Administrator**. Wszystkie wiadomości ephemeral.
+
+**Architektura:**
+- Routing w `interactionHandlers.js`: komenda `restore-backup` → `restoreBackupHandler.handleCommand`; przyciski/selecty/modale z prefiksem `rb_` → `handleButton` / `handleSelect` / `handleModal`.
+- Stan sesji per-użytkownik w `this.sessions` Map (TTL 15 min). Pola: `mode`, `botName`, `date`, `pickedFileId/pickedFileName`, `backupList`, `applyType`, `tempDirs{botName→katalog}`, `prepared`, `browsePath`, `page`, `selected:Set`, `nameCache`, `guildConfigMap`. Auto-cleanup po TTL usuwa pobrane foldery tymczasowe.
+- Logika pobierania/rozpakowania/kopiowania w `BackupManager`: `downloadAndExtractLatest`, `downloadAndExtractBackupByDate`, `downloadAndExtractById`, `listAvailableBackups`, `restoreFilesFromTemp` (z kopią bezpieczeństwa), `prepareRestore(dateStr)` / `executeRestore` (tryb uszkodzone). Rozpakowanie przez systemowy `unzip` (Linux).
+
+**Przepływ kreatora:**
+1. **Tryb** (`rb_mode_*`): 🗂️ Cały backup · 🤖 Konkretny bot · 🩹 Tylko uszkodzone (0B/brakujące — odpowiednik `/przywroc-backup`).
+2. **(tryb bot)** wybór bota — `rb_bot_select`.
+3. **Wersja backupu** (`rb_time_*`): 📅 Najnowszy · 🗓️ Konkretny dzień (modal `rb_date_modal`, format `RRRR-MM-DD`) · 📜 **Wybierz z listy** (tylko tryb bot) — `listAvailableBackups` scala backupy z obu folderów Drive: **automatyczne** (`Polski_Squad_Backups`, oznaczone 🅰) **i manualne** (`Polski_Squad_Manual_Backups`, oznaczone 🅼), posortowane wg **daty i godziny utworzenia** (`createdTime`), dzięki czemu rozróżnia kilka backupów z tego samego dnia; pobieranie po ID pliku (`rb_backup_select` → `downloadAndExtractById`). Tryby 📅 Najnowszy / 🗓️ Konkretny dzień korzystają wyłącznie z folderu automatycznego; manualne dostępne są przez 📜 Wybierz z listy.
+4. **Pobranie** danych z wybranej wersji (cały backup = wszystkie boty; bot = jeden bot).
+5. **Zakres:**
+   - Cały backup → podgląd liczby plików per bot → `rb_apply`.
+   - Bot → 📦 Przywróć całego bota (`rb_bot_all`) lub 🗂️ Wybierz pliki (`rb_browse`).
+   - Uszkodzone → podsumowanie odzyskiwalnych plików → `rb_apply`.
+6. **Przeglądarka plików** (tryb wybór plików): nawigacja po drzewie rozpakowanego backupu — select `rb_browse_select` (📁 folder = wejdź, 📄 plik = zaznacz/odznacz), przyciski `rb_nav_up`/`rb_nav_root`, paginacja `rb_page_prev/next` (25/stronę), `rb_sel_folder`/`rb_unsel_folder` (zaznacz/odznacz cały podfolder rekurencyjnie), `rb_browse_done` → podgląd → `rb_apply`.
+7. **Wykonanie** (`rb_apply`): kopiuje pliki z `tempDir` do żywego `data/`; przed nadpisaniem tworzy kopię bezpieczeństwa w `_restore_safety/<timestamp>/` (katalog główny projektu — poza folderami `data/`, więc nie trafia do kolejnych backupów). Podsumowanie + webhook (`sendRestoreSummaryToWebhook`) + log.
+
+**Rozwiązywanie ID→nazwa w przeglądarce i podglądzie:** nazwy plików/folderów będące snowflake'em (17–20 cyfr) są zamieniane na czytelne — ID serwera → nazwa serwera (`client.guilds.cache` lub `EndersEcho/data/guild_configs.json`), ID gracza w `wyniki/{userId}.json` → nick (`client.users.fetch`). Podpowiedź typu (`childHint`): dzieci folderu `guilds/` = serwery, dzieci `wyniki/` = gracze; w innych miejscach próba serwer→gracz. Wyniki cache'owane per sesja.
+
+**customIDs:** `rb_mode_all|bot|broken`, `rb_back_mode`, `rb_bot_select`, `rb_time_latest|date|list`, `rb_date_modal` (pole `rb_date`), `rb_backup_select`, `rb_bot_all`, `rb_browse`, `rb_browse_select`, `rb_nav_up|root`, `rb_page_prev|next`, `rb_sel_folder`, `rb_unsel_folder`, `rb_browse_done`, `rb_apply`, `rb_cancel`.
+
+**Uwaga (godziny na liście backupów):** czas w „Wybierz z listy" pochodzi z `createdTime` Google Drive i jest formatowany w strefie czasowej procesu bota. Aby kilka backupów dziennie było rozróżnialnych, wystarczy zwiększyć częstotliwość w `backup-scheduler.js` — pliki tego samego dnia mają różne `createdTime`, więc każdy jest osobno wybieralny (nazwa pliku może się powtarzać, pobieranie odbywa się po unikalnym ID).
 
 ---
 

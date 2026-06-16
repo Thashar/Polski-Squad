@@ -966,23 +966,180 @@ class BackupManager {
     async downloadAndExtractBackupByDate(botName, dateStr) {
         const dl = await this.downloadBackupByDate(botName, dateStr);
         if (!dl) return null;
+        const { tempDir } = this._extractArchiveToTemp(dl.tempPath, botName);
+        return { tempDir, fileName: dl.fileName };
+    }
 
+    /**
+     * Pobiera i rozpakowuje NAJNOWSZY backup danego bota do folderu tymczasowego.
+     * @param {string} botName
+     * @returns {Promise<{tempDir: string, fileName: string}|null>}
+     */
+    async downloadAndExtractLatest(botName) {
+        const archivePath = await this.downloadLatestBackupFromDrive(botName);
+        if (!archivePath) return null;
+        const fileName = path.basename(archivePath);
+        const { tempDir } = this._extractArchiveToTemp(archivePath, botName);
+        return { tempDir, fileName };
+    }
+
+    /**
+     * Rozpakowuje archiwum ZIP do unikalnego folderu tymczasowego i usuwa archiwum.
+     * @param {string} archivePath
+     * @param {string} botName
+     * @returns {{ tempDir: string }}
+     */
+    _extractArchiveToTemp(archivePath, botName) {
         const { spawnSync } = require('child_process');
         const os = require('os');
 
-        const tempDir = path.join(os.tmpdir(), `restore_${botName}_${dateStr}_${Date.now()}`);
+        const tempDir = path.join(os.tmpdir(), `restore_${botName}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
         fs.mkdirSync(tempDir, { recursive: true });
 
-        logger.info(`📦 Wypakowuję backup ${botName} (${dl.fileName}) do ${tempDir}...`);
-        const result = spawnSync('unzip', ['-o', dl.tempPath, '-d', tempDir], { encoding: 'utf8' });
-        try { fs.unlinkSync(dl.tempPath); } catch {}
+        logger.info(`📦 Wypakowuję backup ${botName} do ${tempDir}...`);
+        const result = spawnSync('unzip', ['-o', archivePath, '-d', tempDir], { encoding: 'utf8' });
+        try { fs.unlinkSync(archivePath); } catch {}
 
         if (result.error || (result.status !== 0 && result.status !== 1)) {
             try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
             throw new Error(`unzip błąd (kod ${result.status}${result.error ? ', ' + result.error.message : ''})`);
         }
 
+        return { tempDir };
+    }
+
+    /**
+     * Zwraca ścieżkę do żywego folderu data danego bota (shared_data ma własną lokalizację).
+     * @param {string} botName
+     * @returns {string}
+     */
+    liveDataFolder(botName) {
+        return botName === 'shared_data'
+            ? path.join(this.botsFolder, 'shared_data')
+            : path.join(this.botsFolder, botName, 'data');
+    }
+
+    /**
+     * Listuje dostępne backupy danego bota na Google Drive (najnowsze pierwsze).
+     * @param {string} botName
+     * @param {number} limit
+     * @returns {Promise<Array<{id, name, createdTime}>>}
+     */
+    async listAvailableBackups(botName, limit = 25, { includeManual = true } = {}) {
+        if (!this.drive) return [];
+
+        const collect = async (rootFolderName, isManual) => {
+            try {
+                const folderId = await this.ensureDriveFolder(rootFolderName);
+                const botFolderId = await this.ensureBotFolder(folderId, botName);
+                const response = await this.drive.files.list({
+                    q: `'${botFolderId}' in parents and trashed=false`,
+                    fields: 'files(id, name, createdTime, size)',
+                    orderBy: 'createdTime desc',
+                    spaces: 'drive',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true,
+                    pageSize: limit
+                });
+                return (response.data.files || []).map(f => ({ ...f, isManual }));
+            } catch (error) {
+                logger.error(`❌ Błąd listowania backupów (${rootFolderName}/${botName}):`, error.message);
+                return [];
+            }
+        };
+
+        const auto = await collect('Polski_Squad_Backups', false);
+        const manual = includeManual ? await collect('Polski_Squad_Manual_Backups', true) : [];
+
+        return [...auto, ...manual]
+            .sort((a, b) => new Date(b.createdTime) - new Date(a.createdTime))
+            .slice(0, limit);
+    }
+
+    /**
+     * Pobiera konkretny plik backupu z Google Drive po ID.
+     * @param {string} botName - tylko do nazwania pliku tymczasowego
+     * @param {string} fileId
+     * @param {string|null} niceName
+     * @returns {Promise<{tempPath: string, fileName: string}|null>}
+     */
+    async downloadBackupById(botName, fileId, niceName = null) {
+        if (!this.drive) {
+            logger.warn('⚠️  Google Drive nie jest zainicjalizowany — nie można pobrać backupu');
+            return null;
+        }
+        try {
+            this.ensureBackupsFolder();
+            const tempPath = path.join(this.backupsFolder, `_restore_${botName}_${fileId}.zip`);
+            const dest = fs.createWriteStream(tempPath);
+            const res = await this.drive.files.get(
+                { fileId, alt: 'media', supportsAllDrives: true },
+                { responseType: 'stream' }
+            );
+            await new Promise((resolve, reject) => {
+                res.data.pipe(dest);
+                dest.on('finish', resolve);
+                dest.on('error', reject);
+                res.data.on('error', reject);
+            });
+            logger.info(`✅ Pobrano backup po ID: ${niceName || fileId}`);
+            return { tempPath, fileName: niceName || fileId };
+        } catch (error) {
+            logger.error(`❌ Błąd pobierania backupu po ID (${botName}):`, error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Pobiera i rozpakowuje konkretny backup po ID pliku.
+     * @returns {Promise<{tempDir: string, fileName: string}|null>}
+     */
+    async downloadAndExtractById(botName, fileId, niceName = null) {
+        const dl = await this.downloadBackupById(botName, fileId, niceName);
+        if (!dl) return null;
+        const { tempDir } = this._extractArchiveToTemp(dl.tempPath, botName);
         return { tempDir, fileName: dl.fileName };
+    }
+
+    /**
+     * Kopiuje wskazane pliki z rozpakowanego backupu (tempDir) do żywego folderu data bota.
+     * Przed nadpisaniem istniejącego pliku tworzy kopię bezpieczeństwa w safetyRoot.
+     * @param {string} botName
+     * @param {string} tempDir - katalog z rozpakowanym backupem (zawiera zawartość folderu data)
+     * @param {string[]} relPaths - relatywne ścieżki plików do przywrócenia
+     * @param {string|null} safetyRoot - katalog na kopie bezpieczeństwa (null = bez kopii)
+     * @returns {{ restored: string[], failed: Array<{file, reason}>, missing: string[] }}
+     */
+    restoreFilesFromTemp(botName, tempDir, relPaths, safetyRoot = null) {
+        const restored = [];
+        const failed = [];
+        const missing = [];
+        const liveRoot = this.liveDataFolder(botName);
+
+        for (const rel of relPaths) {
+            try {
+                const src = path.join(tempDir, rel);
+                if (!fs.existsSync(src) || !fs.statSync(src).isFile()) {
+                    missing.push(rel);
+                    continue;
+                }
+                const dest = path.join(liveRoot, rel);
+                if (fs.existsSync(dest) && safetyRoot) {
+                    const safe = path.join(safetyRoot, botName, rel);
+                    try {
+                        fs.mkdirSync(path.dirname(safe), { recursive: true });
+                        fs.copyFileSync(dest, safe);
+                    } catch {}
+                }
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                fs.copyFileSync(src, dest);
+                restored.push(rel);
+            } catch (error) {
+                failed.push({ file: rel, reason: error.message });
+            }
+        }
+
+        return { restored, failed, missing };
     }
 
     /**
@@ -997,7 +1154,7 @@ class BackupManager {
      * Nie modyfikuje żadnych plików produkcyjnych — tylko przygotowuje dane do podglądu.
      * @returns {{ bots, totalEmpty, totalBackupSizeMB }}
      */
-    async prepareRestore() {
+    async prepareRestore(dateStr = null) {
         const { spawnSync } = require('child_process');
         const os = require('os');
 
@@ -1008,9 +1165,7 @@ class BackupManager {
         let totalBackupSizeBytes = 0;
 
         for (const botName of this.bots) {
-            const dataFolder = botName === 'shared_data'
-                ? path.join(this.botsFolder, 'shared_data')
-                : path.join(this.botsFolder, botName, 'data');
+            const dataFolder = this.liveDataFolder(botName);
 
             if (!fs.existsSync(dataFolder)) continue;
 
@@ -1021,7 +1176,10 @@ class BackupManager {
             logger.warn(`⚠️  ${botName}: znaleziono ${emptyFiles.length} uszkodzonych plików`);
             emptyFiles.forEach(f => logger.warn(`   📄 ${f.relativePath}`));
 
-            const archivePath = await this.downloadLatestBackupFromDrive(botName);
+            const dl = dateStr
+                ? await this.downloadBackupByDate(botName, dateStr)
+                : await this.downloadLatestBackupFromDrive(botName);
+            const archivePath = dl ? (typeof dl === 'string' ? dl : dl.tempPath) : null;
             if (!archivePath) {
                 bots.push({ botName, tempDir: null, emptyFiles, recoverableFiles: [], unrecoverableFiles: emptyFiles, backupSizeMB: '0.00', error: 'Brak backupu na Google Drive' });
                 continue;

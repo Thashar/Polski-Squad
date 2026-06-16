@@ -131,9 +131,9 @@
           "requiredPermission": "administrator"
         },
         {
-          "name": "/napraw-osiagniecia-ee",
-          "description": "Jednorazowa naprawa osiągnięć EndersEcho: pobiera backup z wybranej daty z Google Drive, przywraca brakujące osiągnięcia (utracone przez race condition) i naprawia rotację score_100sp. Pokazuje podgląd planu z potwierdzeniem; tworzy kopię bezpieczeństwa przed zapisem.",
-          "usage": "/napraw-osiagniecia-ee [data:RRRR-MM-DD]",
+          "name": "/restore-backup",
+          "description": "Kompleksowe przywracanie danych z Google Drive. Tryby: cały backup, konkretny bot, wybrane pliki (z przeglądarką plików i czytelnymi nazwami serwerów/graczy zamiast ID) lub tylko uszkodzone pliki (0B/brakujące). Najnowszy backup lub z konkretnego dnia. Podgląd + potwierdzenie, kopia bezpieczeństwa przed nadpisaniem.",
+          "usage": "/restore-backup",
           "requiredPermission": "administrator"
         },
         {

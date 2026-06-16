@@ -1,8 +1,9 @@
-const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, ContextMenuCommandBuilder, ApplicationCommandType, REST, Routes, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, PermissionFlagsBits } = require('discord.js');
 const { formatMessage } = require('../utils/helpers');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
 const ReportStatsService = require('../services/reportStatsService');
+const RestoreBackupHandler = require('./restoreBackupHandler');
 
 const logger = createBotLogger('Muteusz');
 
@@ -19,8 +20,8 @@ class InteractionHandler {
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
         // Mapa oczekujących potwierdzeń przywracania backupu (userId → dane)
         this.pendingRestores = new Map();
-        // Mapa oczekujących potwierdzeń naprawy osiągnięć EndersEcho (userId → { plan, tempDir, timeout })
-        this.pendingAchRestores = new Map();
+        // Kompleksowe narzędzie przywracania danych z backupu (/restore-backup)
+        this.restoreBackupHandler = new RestoreBackupHandler(config, logService);
     }
 
     /**
@@ -305,13 +306,9 @@ class InteractionHandler {
                 .setDescription('Skanuje pliki 0B i przywraca je z ostatniego backupu na Google Drive (tylko administrator)'),
 
             new SlashCommandBuilder()
-                .setName('napraw-osiagniecia-ee')
-                .setDescription('EndersEcho: przywraca brakujące osiągnięcia z backupu i naprawia score_100sp (administrator)')
-                .addStringOption(option =>
-                    option.setName('data')
-                        .setDescription('Data backupu w formacie RRRR-MM-DD (domyślnie 2026-06-14)')
-                        .setRequired(false)
-                ),
+                .setName('restore-backup')
+                .setDescription('Kompleksowe przywracanie danych z Google Drive: cały backup, bot, pliki lub tylko uszkodzone (administrator)')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
                 .setName('msg')
@@ -449,8 +446,8 @@ class InteractionHandler {
                 case 'przywroc-backup':
                     await this.handlePrzywrocBackupCommand(interaction);
                     break;
-                case 'napraw-osiagniecia-ee':
-                    await this.handleNaprawOsiagnieciaCommand(interaction);
+                case 'restore-backup':
+                    await this.restoreBackupHandler.handleCommand(interaction);
                     break;
                 case 'msg':
                     await this.handleMsgCommand(interaction);
@@ -491,6 +488,12 @@ class InteractionHandler {
                 await this.handleContextWarnModalSubmit(interaction);
             } else if (interaction.customId.startsWith('automod_warn_modal_')) {
                 await this.handleAutoModWarnModalSubmit(interaction);
+            } else if (interaction.customId.startsWith('rb_')) {
+                await this.restoreBackupHandler.handleModal(interaction);
+            }
+        } else if (interaction.isStringSelectMenu()) {
+            if (interaction.customId.startsWith('rb_')) {
+                await this.restoreBackupHandler.handleSelect(interaction);
             }
         }
     }
@@ -522,10 +525,8 @@ class InteractionHandler {
             await this.handlePrzywrocConfirm(interaction);
         } else if (interaction.customId === 'przywroc_cancel') {
             await this.handlePrzywrocCancel(interaction);
-        } else if (interaction.customId === 'napraw_ach_confirm') {
-            await this.handleNaprawOsiagnieciaConfirm(interaction);
-        } else if (interaction.customId === 'napraw_ach_cancel') {
-            await this.handleNaprawOsiagnieciaCancel(interaction);
+        } else if (interaction.customId.startsWith('rb_')) {
+            await this.restoreBackupHandler.handleButton(interaction);
         }
     }
 
@@ -3484,186 +3485,6 @@ class InteractionHandler {
         }
         await interaction.update({
             content: '❌ **Przywracanie anulowane.** Foldery tymczasowe usunięte.',
-            components: []
-        });
-    }
-
-    /**
-     * /napraw-osiagniecia-ee — Etap 1: pobiera backup EndersEcho z danej daty,
-     * buduje plan przywrócenia brakujących osiągnięć + naprawy score_100sp i pokazuje podgląd.
-     * @param {ChatInputCommandInteraction} interaction
-     */
-    async handleNaprawOsiagnieciaCommand(interaction) {
-        const { MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-        const path = require('path');
-        const fs = require('fs');
-
-        if (!interaction.member.permissions.has('Administrator')) {
-            await interaction.reply({
-                content: '❌ Nie masz uprawnień do użycia tej komendy. Wymaga uprawnień Administratora.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const dateStr = (interaction.options.getString('data') || '2026-06-14').trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            await interaction.editReply('❌ Nieprawidłowy format daty. Użyj `RRRR-MM-DD`, np. `2026-06-14`.');
-            return;
-        }
-
-        let extracted = null;
-        try {
-            const BackupManager = require('../../utils/backupManager');
-            const backupManager = new BackupManager();
-            await backupManager.initializeDrive();
-
-            extracted = await backupManager.downloadAndExtractBackupByDate('EndersEcho', dateStr);
-            if (!extracted) {
-                await interaction.editReply(`❌ Nie znaleziono backupu EndersEcho z datą \`${dateStr}\` na Google Drive.`);
-                return;
-            }
-
-            const backupGuildsRoot = path.join(extracted.tempDir, 'guilds');
-            if (!fs.existsSync(backupGuildsRoot)) {
-                try { fs.rmSync(extracted.tempDir, { recursive: true, force: true }); } catch {}
-                await interaction.editReply('❌ Backup nie zawiera folderu `guilds/` — nieoczekiwana struktura archiwum.');
-                return;
-            }
-
-            const restoreSvc = require('../../EndersEcho/services/achievementRestoreService');
-            const plan = restoreSvc.buildRestorePlan(backupGuildsRoot);
-
-            if (plan.totals.usersTouched === 0) {
-                try { fs.rmSync(extracted.tempDir, { recursive: true, force: true }); } catch {}
-                await interaction.editReply(`✅ **Brak zmian** — wszystkie osiągnięcia są aktualne (backup \`${extracted.fileName}\`).`);
-                return;
-            }
-
-            let msg = `🔍 **Plan naprawy osiągnięć EndersEcho**\n`;
-            msg += `📦 Backup: \`${extracted.fileName}\`\n\n`;
-            msg += `**Serwery:** ${plan.totals.guilds} · **Gracze do zmiany:** ${plan.totals.usersTouched}\n`;
-            msg += `♻️ Przywrócone osiągnięcia: **${plan.totals.restored}**\n`;
-            msg += `💫 Przyznane score (w tym score_100sp): **${plan.totals.scoreGranted}**\n`;
-            msg += `🧹 Usunięte błędne score_100xx: **${plan.totals.scoreRemoved}**\n\n`;
-
-            for (const g of plan.guilds) {
-                if (!g.userChanges.length) continue;
-                const r = g.userChanges.reduce((a, u) => a + u.restored.length, 0);
-                const sg = g.userChanges.reduce((a, u) => a + u.scoreGranted.length, 0);
-                const sr = g.userChanges.reduce((a, u) => a + u.scoreRemoved.length, 0);
-                const gName = interaction.client.guilds.cache.get(g.guildId)?.name || g.guildId;
-                msg += `**${gName}** — ${g.userChanges.length} graczy (♻️${r} 💫${sg} 🧹${sr})\n`;
-            }
-            msg += `\n💾 Przed zapisem utworzę kopię obecnych plików (\`achievements.before_restore_*.json\`).\nPotwierdzić?`;
-            if (msg.length > 1900) msg = msg.substring(0, 1860) + '\n…_(lista skrócona)_\n\nPotwierdzić?';
-
-            // Zapamiętaj sesję — auto-cleanup po 10 minutach
-            const pendingKey = interaction.user.id;
-            if (this.pendingAchRestores.has(pendingKey)) {
-                const old = this.pendingAchRestores.get(pendingKey);
-                clearTimeout(old.timeout);
-                try { fs.rmSync(old.tempDir, { recursive: true, force: true }); } catch {}
-            }
-            const timeout = setTimeout(() => {
-                if (this.pendingAchRestores.has(pendingKey)) {
-                    const data = this.pendingAchRestores.get(pendingKey);
-                    try { fs.rmSync(data.tempDir, { recursive: true, force: true }); } catch {}
-                    this.pendingAchRestores.delete(pendingKey);
-                    logger.info(`🧹 Auto-cleanup naprawy osiągnięć dla ${interaction.user.tag} (timeout 10 min)`);
-                }
-            }, 10 * 60 * 1000);
-            this.pendingAchRestores.set(pendingKey, { plan, tempDir: extracted.tempDir, timeout });
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('napraw_ach_confirm')
-                    .setLabel('Przywróć')
-                    .setStyle(ButtonStyle.Success)
-                    .setEmoji('✅'),
-                new ButtonBuilder()
-                    .setCustomId('napraw_ach_cancel')
-                    .setLabel('Anuluj')
-                    .setStyle(ButtonStyle.Danger)
-                    .setEmoji('❌')
-            );
-
-            await interaction.editReply({ content: msg, components: [row] });
-
-        } catch (error) {
-            if (extracted) { try { fs.rmSync(extracted.tempDir, { recursive: true, force: true }); } catch {} }
-            logger.error('❌ Błąd /napraw-osiagniecia-ee:', error);
-            await interaction.editReply(`❌ Błąd:\n\`\`\`${error.message}\`\`\``);
-        }
-    }
-
-    /**
-     * /napraw-osiagniecia-ee — Etap 2: zapisuje plan (z kopią bezpieczeństwa) i czyści tempy.
-     */
-    async handleNaprawOsiagnieciaConfirm(interaction) {
-        const { MessageFlags } = require('discord.js');
-        const fs = require('fs');
-        const pendingKey = interaction.user.id;
-
-        if (!this.pendingAchRestores.has(pendingKey)) {
-            await interaction.reply({
-                content: '❌ Sesja wygasła (10 min). Uruchom `/napraw-osiagniecia-ee` ponownie.',
-                flags: MessageFlags.Ephemeral
-            });
-            return;
-        }
-
-        const { plan, tempDir, timeout } = this.pendingAchRestores.get(pendingKey);
-        clearTimeout(timeout);
-        this.pendingAchRestores.delete(pendingKey);
-
-        await interaction.deferUpdate();
-
-        try {
-            const restoreSvc = require('../../EndersEcho/services/achievementRestoreService');
-            const res = restoreSvc.applyRestorePlan(plan);
-            try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
-
-            let msg = `✅ **Naprawa osiągnięć zakończona**\n\n`;
-            msg += `Zapisano serwerów: **${res.written.length}**, błędów: **${res.failed.length}**\n`;
-            msg += `♻️ Przywrócone: **${plan.totals.restored}** · 💫 Score: **${plan.totals.scoreGranted}** · 🧹 Usunięte: **${plan.totals.scoreRemoved}**\n`;
-            if (res.failed.length > 0) {
-                msg += '\n' + res.failed.map(f => `❌ \`${f.guildId}\` — ${f.reason}`).join('\n');
-            }
-            if (msg.length > 2000) msg = msg.substring(0, 1950) + '\n…(skrócono)';
-
-            await interaction.editReply({ content: msg, components: [] });
-
-            await this.logService.logMessage('info',
-                `${interaction.user.tag} wykonał /napraw-osiagniecia-ee: ${plan.totals.restored} przywróconych, ${plan.totals.scoreGranted} score, ${plan.totals.scoreRemoved} usuniętych`,
-                interaction
-            );
-        } catch (error) {
-            try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
-            logger.error('❌ Błąd potwierdzenia naprawy osiągnięć:', error);
-            await interaction.editReply({
-                content: `❌ Błąd:\n\`\`\`${error.message}\`\`\``,
-                components: []
-            });
-        }
-    }
-
-    /**
-     * /napraw-osiagniecia-ee — Anuluj: czyści folder tymczasowy backupu.
-     */
-    async handleNaprawOsiagnieciaCancel(interaction) {
-        const fs = require('fs');
-        const pendingKey = interaction.user.id;
-        if (this.pendingAchRestores.has(pendingKey)) {
-            const { tempDir, timeout } = this.pendingAchRestores.get(pendingKey);
-            clearTimeout(timeout);
-            try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch {}
-            this.pendingAchRestores.delete(pendingKey);
-        }
-        await interaction.update({
-            content: '❌ **Naprawa osiągnięć anulowana.** Pliki tymczasowe usunięte.',
             components: []
         });
     }
