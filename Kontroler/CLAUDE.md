@@ -34,11 +34,12 @@
    - **Restart-safe:** Odtwarzanie timera ankiety (lub natychmiastowa finalizacja gdy wygasła) + przeplanowanie kolejnego skanu przy starcie; resync głosów z reakcji
    - **Komenda:** `/mvp` - publiczny ranking zdobywców tytułu MVP (malejąco wg liczby tytułów + aktualny MVP)
    - **Aprobata MVP (reakcja KEKW aktualnego MVP):** Gdy posiadacz roli MVP tygodnia (`roleId`) zostawi reakcję KEKW pod **cudzym** postem, bot odpala LOSOWY „stempel aprobaty". Niezależne od ankiety tygodniowej.
-     - **Pula efektów (losowo 1):** `stamp` (bot dorzuca pod postem reakcje-pieczęcie 👑✅🔥), `embed` (ozdobny embed z losowym tekstem gratulacyjnym jako reply), `crown` (autor dostaje prefix 👑 w nicku na 1h przez współdzielony `NicknameManager`)
-     - **Szczęśliwy traf (jackpot, `jackpotChance` ~12%):** wszystkie efekty naraz + specjalny embed
-     - **Zasady:** jeden post = jeden efekt (dedup po `messageId` w `mvp_approvals.json`, trim do `maxApprovedMemory`); pomija kanał ankiety, `excludedChannels`, posty botów i własne posty MVP; `crown` z fallbackiem na `embed` gdy autor nieedytowalny (wyższa rola/owner)
+     - **Losowanie efektu:** `textreply` ma priorytet z szansą `textReplyChance` (~30%) → krótka odpowiedź tekstowa ze „znakiem jakości" (losowa z puli, np. „Przyznano znak jakości wypowiedzi! 🏅"). W pozostałych przypadkach: jackpot (`jackpotChance` ~12%), inaczej równo z puli `['stamp', 'crown']`
+     - **Efekty:** `stamp` (bot dorzuca pod postem reakcje-pieczęcie 👑✅🔥), `crown` (autor dostaje prefix 👑 w nicku na 1h przez współdzielony `NicknameManager`), `embed` (ozdobny embed gratulacyjny — **wyłącznie** w jackpocie)
+     - **Szczęśliwy traf (jackpot):** wszystkie efekty naraz (stamp + crown + specjalny embed)
+     - **Zasady:** jeden post = jeden efekt (dedup po `messageId` w `mvp_approvals.json`, trim do `maxApprovedMemory`); pomija kanał ankiety, `excludedChannels`, posty botów i własne posty MVP; `crown` z fallbackiem na `textreply` gdy autor nieedytowalny (wyższa rola/owner) — embed NIE jest używany poza jackpotem
      - **Handler:** `handleApprovalReaction` w `mvpService.js`, podpięty obok `handleReactionAdd` na `MessageReactionAdd` w `index.js`. Korona restart-safe przez `NicknameManager.restoreExpiredEffects` przy starcie
-   - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels, **approval**: enabled, crownDurationMs, crownPrefix, jackpotChance, stampEmojis, maxApprovedMemory)
+   - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels, **approval**: enabled, crownDurationMs, crownPrefix, jackpotChance, textReplyChance, stampEmojis, maxApprovedMemory)
 
 **Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)

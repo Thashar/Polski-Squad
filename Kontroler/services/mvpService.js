@@ -576,10 +576,19 @@ class MvpService {
             // Rezerwacja dedup PO walidacji (anty-double-fire / anty-spam), zanim ruszą efekty async
             this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
 
-            // Losowanie efektu: "szczęśliwy traf" = jackpot (wszystko naraz), inaczej 1 z puli
-            const jackpot = Math.random() < (ac.jackpotChance ?? 0.1);
-            const pool = ['stamp', 'embed', 'crown'];
-            const effect = jackpot ? 'jackpot' : pool[Math.floor(Math.random() * pool.length)];
+            // Losowanie efektu:
+            //  - textreply (znak jakości) ma priorytet z szansą textReplyChance (~30%)
+            //  - następnie "szczęśliwy traf" = jackpot (wszystko naraz + embed)
+            //  - inaczej równo 1 z puli (embed jest zarezerwowany WYŁĄCZNIE dla jackpota)
+            let effect;
+            if (Math.random() < (ac.textReplyChance ?? 0.3)) {
+                effect = 'textreply';
+            } else if (Math.random() < (ac.jackpotChance ?? 0.1)) {
+                effect = 'jackpot';
+            } else {
+                const pool = ['stamp', 'crown'];
+                effect = pool[Math.floor(Math.random() * pool.length)];
+            }
 
             const mvpName = mvpMember.displayName || user.username;
             await this.runApprovalEffect(effect, { fullMessage, guild, author, mvpName });
@@ -622,14 +631,15 @@ class MvpService {
             await this.effectEmbed(ctx, true);
             return;
         }
+        if (effect === 'textreply') return this.effectTextReply(ctx);
         if (effect === 'stamp') return this.effectStamp(ctx);
         if (effect === 'crown') {
             const ok = await this.effectCrown(ctx);
-            // Korona może się nie udać (brak uprawnień / wyższa rola) → fallback na embed
-            if (!ok) await this.effectEmbed(ctx, false);
+            // Korona może się nie udać (brak uprawnień / wyższa rola) → fallback na znak jakości
+            // (NIE embed — embed jest zarezerwowany dla jackpota)
+            if (!ok) await this.effectTextReply(ctx);
             return;
         }
-        if (effect === 'embed') return this.effectEmbed(ctx, false);
     }
 
     /** Pieczęć: bot dorzuca pod postem zestaw reakcji-stempli. */
@@ -654,6 +664,16 @@ class MvpService {
             await ctx.fullMessage.reply({ embeds: [embed], allowedMentions: { repliedUser: true } });
         } catch (error) {
             this.logger.error(`❌ MVP: błąd embedu aprobaty: ${error.message}`);
+        }
+    }
+
+    /** Znak jakości: bot odpowiada krótkim tekstem (nie embedem) z losowej puli. */
+    async effectTextReply(ctx) {
+        try {
+            const content = this.pickRandom(this.approvalTextReplies());
+            await ctx.fullMessage.reply({ content, allowedMentions: { repliedUser: true } });
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd odpowiedzi tekstowej aprobaty: ${error.message}`);
         }
     }
 
@@ -703,6 +723,19 @@ class MvpService {
             'Wszystkie gwiazdy się zgrały — MVP tygodnia obsypuje ten wpis zaszczytami! 👑✅🔥',
             'JACKPOT! MVP tygodnia uznaje to za arcydzieło tygodnia. 🍀🏆',
             'Niebywałe! Pełnia aprobaty MVP — korona, pieczęć i owacje na stojąco! 🎉'
+        ];
+    }
+
+    approvalTextReplies() {
+        return [
+            'Przyznano znak jakości wypowiedzi! 🏅',
+            'Ta wypowiedź otrzymuje znak jakości MVP! 🛡️',
+            'Certyfikat jakości MVP przyznany! 📜✨',
+            'Oficjalny znak jakości od MVP tygodnia! 🏆',
+            'Brawo! MVP tygodnia nadaje tej wypowiedzi znak jakości. ✅',
+            'Ta wypowiedź przeszła kontrolę jakości MVP! 🔎👌',
+            'Znak jakości przyznany — tak mówi MVP tygodnia! 🥇',
+            'MVP tygodnia stawia tu swój znak jakości! ⭐'
         ];
     }
 

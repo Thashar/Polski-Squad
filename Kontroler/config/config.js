@@ -208,6 +208,8 @@ module.exports = {
             crownPrefix: '👑',
             // Szansa na "szczęśliwy traf" (jackpot — wszystkie efekty naraz + specjalny embed)
             jackpotChance: 0.12,
+            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (ma priorytet nad resztą puli)
+            textReplyChance: 0.30,
             // Emoji "pieczęci" dodawane pod docenionym postem
             stampEmojis: ['👑', '✅', '🔥'],
             // Limit zapamiętanych docenionych wiadomości (dedup; trim najstarszych)
