@@ -358,9 +358,7 @@ WZORZEC (pierwsze zdjęcie) ma DOKŁADNIE:
 - pełnoekranowe tło z gameplayem
 - centralny panel BEZ ikony X ani przycisku zamknięcia po prawej stronie u góry okienka
 - kolorowy baner na górze panelu (zaokrąglony, podobny do wstęgi)
-- w centrum panelu: JEDNA duża ikona z liczbą
-- poniżej: dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (K/M/B/T/Q/Qi/Sx/Sp) — to jest normalne
-- na dole panelu: rząd małych okrągłych lub sześciokątnych szarych ikon
+- dwie linie statystyk (Best / Total) — mogą mieć RÓŻNE jednostki (K/M/B/T/Q/Qi/Sx/Sp) — to jest normalne
 - pod panelem: jeden żółty przycisk (nie jest wymagany, ale jeśli jest, to musi być pod panelem, a nie w jego obrębie)
 
 CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
