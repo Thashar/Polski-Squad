@@ -1,7 +1,8 @@
-const { ChannelType, PermissionsBitField } = require('discord.js');
+const { ChannelType, PermissionsBitField, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const NicknameManager = require('../../utils/nicknameManagerService');
 const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
 
 /**
@@ -25,10 +26,13 @@ class MvpService {
         this.dataDir = path.join(__dirname, '../data');
         this.stateFile = path.join(this.dataDir, 'mvp_state.json');
         this.winnersFile = path.join(this.dataDir, 'mvp_winners.json');
+        this.approvalsFile = path.join(this.dataDir, 'mvp_approvals.json');
 
         this.state = this.emptyState();
         this.winners = {};
         this.currentWinnerId = null;
+        this.approvals = { messages: {} }; // dedup aprobat MVP: messageId -> { mvpUserId, authorId, effect, at }
+        this.nicknameManager = null;
 
         this.finishTimer = null;
         this.scanTimer = null;
@@ -53,7 +57,25 @@ class MvpService {
         await this.ensureDataDir();
         await this.loadState();
         await this.loadWinners();
+        await this.loadApprovals();
         await this.restore();
+        await this.initNicknameManager(client);
+    }
+
+    /**
+     * Inicjalizuje współdzielony NicknameManager (singleton) na potrzeby efektu "korona w nicku".
+     * Boty działają w jednym procesie, więc singleton jest wspólny — inicjalizacja jest idempotentna.
+     * Gdy się nie powiedzie, efekt korony jest pomijany (pozostałe efekty aprobaty działają normalnie).
+     */
+    async initNicknameManager(client) {
+        try {
+            this.nicknameManager = NicknameManager.getInstance();
+            await this.nicknameManager.initialize();
+            await this.nicknameManager.restoreExpiredEffects(client);
+        } catch (error) {
+            this.logger.warn(`⚠️ MVP: NicknameManager niedostępny (korona w nicku wyłączona): ${error.message}`);
+            this.nicknameManager = null;
+        }
     }
 
     async ensureDataDir() {
@@ -107,6 +129,27 @@ class MvpService {
             }, null, 2));
         } catch (error) {
             this.logger.error(`❌ MVP: błąd zapisu zwycięzców: ${error.message}`);
+        }
+    }
+
+    async loadApprovals() {
+        try {
+            const data = await fs.readFile(this.approvalsFile, 'utf8');
+            const parsed = JSON.parse(data);
+            this.approvals = { messages: parsed.messages || {} };
+        } catch (error) {
+            if (error.code !== 'ENOENT') {
+                this.logger.error(`❌ MVP: błąd ładowania aprobat: ${error.message}`);
+            }
+            this.approvals = { messages: {} };
+        }
+    }
+
+    async saveApprovals() {
+        try {
+            await fs.writeFile(this.approvalsFile, JSON.stringify(this.approvals, null, 2));
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd zapisu aprobat: ${error.message}`);
         }
     }
 
@@ -484,6 +527,183 @@ class MvpService {
         } catch (error) {
             this.logger.error(`❌ MVP: błąd obsługi reakcji (remove): ${error.message}`);
         }
+    }
+
+    // ===== Aprobata MVP (reakcja KEKW aktualnego MVP pod cudzym postem) =====
+
+    /**
+     * Aprobata MVP: gdy aktualny MVP tygodnia (posiadacz roli) zostawi reakcję KEKW pod
+     * cudzym postem, bot odpala LOSOWY efekt "stempla aprobaty".
+     * Zasada: jeden post = jeden efekt (dedup po messageId). Niezależne od ankiety tygodniowej.
+     */
+    async handleApprovalReaction(reaction, user) {
+        try {
+            if (user.bot) return;
+            const ac = this.cfg.approval;
+            if (!ac || !ac.enabled) return;
+
+            // Tylko reakcja KEKW (dopasowanie po ID — działa też dla partiali)
+            if (reaction.emoji?.id !== this.cfg.kekwEmojiId) return;
+
+            const message = reaction.message;
+            const channelId = message.channelId || message.channel?.id;
+
+            // Pomijaj kanał ankiety i kanały wykluczone
+            if (channelId === this.cfg.pollChannelId) return;
+            if (Array.isArray(this.cfg.excludedChannels) && this.cfg.excludedChannels.includes(channelId)) return;
+
+            // Dedup PRZED jakimkolwiek fetchem — jeden post = jeden efekt
+            if (this.approvals.messages[message.id]) return;
+
+            // Wymagany kontekst serwera (pomija DM)
+            let guild = message.guild;
+            if (!guild && message.guildId) {
+                try { guild = await this.client.guilds.fetch(message.guildId); } catch { return; }
+            }
+            if (!guild) return;
+
+            // Czy reagujący to aktualny MVP (posiadacz roli MVP tygodnia)?
+            let mvpMember;
+            try { mvpMember = await guild.members.fetch(user.id); } catch { return; }
+            if (!mvpMember.roles.cache.has(this.cfg.roleId)) return;
+
+            // Pobierz pełną wiadomość, by ustalić autora
+            const fullMessage = message.partial ? await message.fetch() : message;
+            const author = fullMessage.author;
+            if (!author || author.bot) return;
+            if (author.id === user.id) return; // brak samo-aprobaty
+
+            // Rezerwacja dedup PO walidacji (anty-double-fire / anty-spam), zanim ruszą efekty async
+            this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
+
+            // Losowanie efektu: "szczęśliwy traf" = jackpot (wszystko naraz), inaczej 1 z puli
+            const jackpot = Math.random() < (ac.jackpotChance ?? 0.1);
+            const pool = ['stamp', 'embed', 'crown'];
+            const effect = jackpot ? 'jackpot' : pool[Math.floor(Math.random() * pool.length)];
+
+            const mvpName = mvpMember.displayName || user.username;
+            await this.runApprovalEffect(effect, { fullMessage, guild, author, mvpName });
+
+            // Zapisz finalny efekt
+            if (this.approvals.messages[fullMessage.id]) {
+                this.approvals.messages[fullMessage.id].effect = effect;
+            }
+            await this.saveApprovals();
+
+            this.logger.info(`👑 MVP aprobata: ${mvpName} docenił post ${author.tag} → efekt "${effect}"`);
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd obsługi aprobaty: ${error.message}`);
+        }
+    }
+
+    /**
+     * Zapisuje wpis dedup i przycina najstarsze, by plik nie puchł w nieskończoność.
+     */
+    recordApproval(messageId, data) {
+        this.approvals.messages[messageId] = { ...data, at: Date.now() };
+
+        const max = this.cfg.approval?.maxApprovedMemory || 1000;
+        const ids = Object.keys(this.approvals.messages);
+        if (ids.length > max) {
+            const sorted = ids.sort((a, b) =>
+                (this.approvals.messages[a].at || 0) - (this.approvals.messages[b].at || 0));
+            for (const id of sorted.slice(0, ids.length - max)) {
+                delete this.approvals.messages[id];
+            }
+        }
+        // Trwała rezerwacja zanim ruszą efekty (na wypadek restartu w trakcie)
+        this.saveApprovals();
+    }
+
+    async runApprovalEffect(effect, ctx) {
+        if (effect === 'jackpot') {
+            await this.effectStamp(ctx);
+            await this.effectCrown(ctx);
+            await this.effectEmbed(ctx, true);
+            return;
+        }
+        if (effect === 'stamp') return this.effectStamp(ctx);
+        if (effect === 'crown') {
+            const ok = await this.effectCrown(ctx);
+            // Korona może się nie udać (brak uprawnień / wyższa rola) → fallback na embed
+            if (!ok) await this.effectEmbed(ctx, false);
+            return;
+        }
+        if (effect === 'embed') return this.effectEmbed(ctx, false);
+    }
+
+    /** Pieczęć: bot dorzuca pod postem zestaw reakcji-stempli. */
+    async effectStamp(ctx) {
+        const emojis = this.cfg.approval?.stampEmojis || ['👑', '✅', '🔥'];
+        for (const e of emojis) {
+            try { await ctx.fullMessage.react(e); } catch {}
+        }
+    }
+
+    /** Embed: bot odpowiada ozdobnym embedem z gratulacjami (losowy tekst). */
+    async effectEmbed(ctx, isJackpot) {
+        try {
+            const text = isJackpot
+                ? this.pickRandom(this.approvalJackpotTexts())
+                : this.pickRandom(this.approvalEmbedTexts());
+            const embed = new EmbedBuilder()
+                .setColor(isJackpot ? 0xFFC400 : 0xF1C40F)
+                .setTitle(isJackpot ? '🍀 SZCZĘŚLIWY TRAF — Wielka Aprobata MVP!' : '👑 Aprobata MVP tygodnia')
+                .setDescription(text)
+                .setFooter({ text: `Doceniony przez ${ctx.mvpName} — MVP tygodnia` });
+            await ctx.fullMessage.reply({ embeds: [embed], allowedMentions: { repliedUser: true } });
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd embedu aprobaty: ${error.message}`);
+        }
+    }
+
+    /** Korona: autor docenionego posta dostaje prefix 👑 w nicku na 1h (przez NicknameManager). */
+    async effectCrown(ctx) {
+        try {
+            if (!this.nicknameManager) return false;
+            const member = await ctx.guild.members.fetch(ctx.author.id);
+            if (!member.manageable) {
+                this.logger.warn(`⚠️ MVP: brak uprawnień do korony dla ${member.user.tag} (wyższa rola/owner)`);
+                return false;
+            }
+            const prefix = this.cfg.approval?.crownPrefix || '👑';
+            const duration = this.cfg.approval?.crownDurationMs || 60 * 60 * 1000;
+            await this.nicknameManager.applyEffect(
+                ctx.author.id,
+                'mvp_crown',
+                duration,
+                { guildId: ctx.guild.id, appliedBy: 'MVP tygodnia' },
+                member,
+                prefix
+            );
+            return true;
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd nadawania korony: ${error.message}`);
+            return false;
+        }
+    }
+
+    pickRandom(arr) {
+        return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    approvalEmbedTexts() {
+        return [
+            'Sam MVP tygodnia przybił pieczątkę jakości pod tym tekstem. 🏆',
+            'To się nazywa klasa — aprobata prosto od MVP tygodnia! 👏',
+            'MVP tygodnia ogłasza: ten wpis przechodzi do historii. 📜',
+            'Stempel jakości przyznany. Brawo! 🔥',
+            'MVP tygodnia kłania się przed tym tekstem. 🙇',
+            'Oficjalnie docenione przez najlepszego mówcę tygodnia. 🎖️'
+        ];
+    }
+
+    approvalJackpotTexts() {
+        return [
+            'Wszystkie gwiazdy się zgrały — MVP tygodnia obsypuje ten wpis zaszczytami! 👑✅🔥',
+            'JACKPOT! MVP tygodnia uznaje to za arcydzieło tygodnia. 🍀🏆',
+            'Niebywałe! Pełnia aprobaty MVP — korona, pieczęć i owacje na stojąco! 🎉'
+        ];
     }
 
     // ===== Finalizacja =====

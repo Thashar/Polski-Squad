@@ -517,10 +517,14 @@ class NicknameManagerService {
      * Uruchamia automatyczne czyszczenie w interwałach
      */
     startCleanupInterval() {
-        setInterval(async () => {
+        // Idempotentne — singleton bywa inicjalizowany przez kilka botów w tym samym procesie,
+        // więc nie dublujemy timera czyszczenia przy ponownym initialize().
+        if (this._cleanupIntervalId) return;
+
+        this._cleanupIntervalId = setInterval(async () => {
             await this.cleanupExpiredEffects();
         }, this.config.cleanupInterval);
-        
+
         logger.info(`🔄 Uruchomiono automatyczne czyszczenie (co ${this.config.cleanupInterval / (60 * 1000)} minut)`);
     }
     

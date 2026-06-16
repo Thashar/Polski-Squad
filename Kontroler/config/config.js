@@ -195,7 +195,24 @@ module.exports = {
             '1261286979824259072',
             '1262791964710146170',
             '1514700582609358974'
-        ]
+        ],
+
+        // Aprobata MVP — aktualny MVP tygodnia (posiadacz roli), stawiając reakcję KEKW
+        // pod cudzym postem, odpala LOSOWY efekt "stempla aprobaty".
+        // Zasada: jeden post = jeden efekt (dedup po messageId). Pomija kanał ankiety,
+        // kanały wykluczone, posty botów oraz własne posty MVP.
+        approval: {
+            enabled: true,
+            // Czas trwania korony 👑 w nicku docenionego autora (1h)
+            crownDurationMs: 60 * 60 * 1000,
+            crownPrefix: '👑',
+            // Szansa na "szczęśliwy traf" (jackpot — wszystkie efekty naraz + specjalny embed)
+            jackpotChance: 0.12,
+            // Emoji "pieczęci" dodawane pod docenionym postem
+            stampEmojis: ['👑', '✅', '🔥'],
+            // Limit zapamiętanych docenionych wiadomości (dedup; trim najstarszych)
+            maxApprovedMemory: 1000
+        }
     },
 
     messages

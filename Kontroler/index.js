@@ -306,9 +306,12 @@ function setupEventHandlers() {
         handleInteraction(interaction, config, lotteryService);
     });
 
-    // Obsługa reakcji dla ankiety MVP tygodnia
+    // Obsługa reakcji dla ankiety MVP tygodnia + aprobata MVP (reakcja KEKW aktualnego MVP)
     client.on(Events.MessageReactionAdd, async (reaction, user) => {
-        if (mvpService) await mvpService.handleReactionAdd(reaction, user);
+        if (mvpService) {
+            await mvpService.handleReactionAdd(reaction, user);
+            await mvpService.handleApprovalReaction(reaction, user);
+        }
     });
     client.on(Events.MessageReactionRemove, async (reaction, user) => {
         if (mvpService) await mvpService.handleReactionRemove(reaction, user);

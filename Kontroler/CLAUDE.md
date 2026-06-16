@@ -33,7 +33,12 @@
    - **Persistencja:** `mvp_state.json` (aktywna ankieta: kandydaci, głosy, czas końca), `mvp_winners.json` (liczniki tytułów per user + `currentWinnerId`)
    - **Restart-safe:** Odtwarzanie timera ankiety (lub natychmiastowa finalizacja gdy wygasła) + przeplanowanie kolejnego skanu przy starcie; resync głosów z reakcji
    - **Komenda:** `/mvp` - publiczny ranking zdobywców tytułu MVP (malejąco wg liczby tytułów + aktualny MVP)
-   - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels)
+   - **Aprobata MVP (reakcja KEKW aktualnego MVP):** Gdy posiadacz roli MVP tygodnia (`roleId`) zostawi reakcję KEKW pod **cudzym** postem, bot odpala LOSOWY „stempel aprobaty". Niezależne od ankiety tygodniowej.
+     - **Pula efektów (losowo 1):** `stamp` (bot dorzuca pod postem reakcje-pieczęcie 👑✅🔥), `embed` (ozdobny embed z losowym tekstem gratulacyjnym jako reply), `crown` (autor dostaje prefix 👑 w nicku na 1h przez współdzielony `NicknameManager`)
+     - **Szczęśliwy traf (jackpot, `jackpotChance` ~12%):** wszystkie efekty naraz + specjalny embed
+     - **Zasady:** jeden post = jeden efekt (dedup po `messageId` w `mvp_approvals.json`, trim do `maxApprovedMemory`); pomija kanał ankiety, `excludedChannels`, posty botów i własne posty MVP; `crown` z fallbackiem na `embed` gdy autor nieedytowalny (wyższa rola/owner)
+     - **Handler:** `handleApprovalReaction` w `mvpService.js`, podpięty obok `handleReactionAdd` na `MessageReactionAdd` w `index.js`. Korona restart-safe przez `NicknameManager.restoreExpiredEffects` przy starcie
+   - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels, **approval**: enabled, crownDurationMs, crownPrefix, jackpotChance, stampEmojis, maxApprovedMemory)
 
 **Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
@@ -66,4 +71,4 @@ KONTROLER_BLOCKED_ROLE=role_id            # Rola blokująca udział w loteriach
 - **Logger:** createBotLogger('Kontroler')
 - **OCR:** Dwukanałowy (CX + Daily)
 - **Loteria:** DST auto, multi-klan, cykle 0-365 dni
-- **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json
+- **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json
