@@ -18,7 +18,7 @@ const SNOWFLAKE = /^\d{17,20}$/;
  * Tryby:
  *  - all    — przywróć cały backup (wszystkie boty, wszystkie pliki)
  *  - bot    — przywróć konkretnego bota (całość lub wybrane pliki z przeglądarką)
- *  - broken — przywróć tylko uszkodzone pliki (0 bajtów lub brakujące) — jak /przywroc-backup
+ *  - broken — przywróć tylko uszkodzone pliki (0 bajtów lub brakujące)
  *
  * Czas: najnowszy backup lub z konkretnego dnia (RRRR-MM-DD).
  *
@@ -261,7 +261,7 @@ class RestoreBackupHandler {
                 '',
                 '🗂️ **Cały backup** — wszystkie pliki wszystkich botów',
                 '🤖 **Konkretny bot** — całość lub wybrane pliki (z przeglądarką)',
-                '🩹 **Tylko uszkodzone** — pliki 0 bajtów lub brakujące (jak `/przywroc-backup`)',
+                '🩹 **Tylko uszkodzone** — pliki 0 bajtów lub brakujące',
                 '',
                 '_Najpierw wybierzesz wersję backupu (najnowszą lub z konkretnego dnia), a dane zostaną pobrane przed wyborem plików._',
             ].join('\n'));

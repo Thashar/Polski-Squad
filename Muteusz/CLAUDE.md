@@ -34,7 +34,7 @@
 
 14. **Kompleksowe przywracanie danych** - `handlers/restoreBackupHandler.js` (`/restore-backup`): Kreator przywracania danych z Google Drive (tylko administrator). Stan sesji per-użytkownik w `RestoreBackupHandler.sessions` Map (TTL 15 min, auto-cleanup usuwa pobrane foldery tymczasowe). Patrz sekcja **[Komenda /restore-backup](#komenda-restore-backup)** poniżej.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/przywroc-backup`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---
@@ -49,7 +49,7 @@ Kreator przywracania danych z backupów Google Drive — `handlers/restoreBackup
 - Logika pobierania/rozpakowania/kopiowania w `BackupManager`: `downloadAndExtractLatest`, `downloadAndExtractBackupByDate`, `downloadAndExtractById`, `listAvailableBackups`, `restoreFilesFromTemp` (z kopią bezpieczeństwa), `prepareRestore(dateStr)` / `executeRestore` (tryb uszkodzone). Rozpakowanie przez systemowy `unzip` (Linux).
 
 **Przepływ kreatora:**
-1. **Tryb** (`rb_mode_*`): 🗂️ Cały backup · 🤖 Konkretny bot · 🩹 Tylko uszkodzone (0B/brakujące — odpowiednik `/przywroc-backup`).
+1. **Tryb** (`rb_mode_*`): 🗂️ Cały backup · 🤖 Konkretny bot · 🩹 Tylko uszkodzone (0B/brakujące — skanuje foldery `data/` przez `prepareRestore` i przywraca tylko puste/brakujące pliki; zastąpiło dawną komendę `/przywroc-backup`).
 2. **(tryb bot)** wybór bota — `rb_bot_select`.
 3. **Wersja backupu** (`rb_time_*`): 📅 Najnowszy · 🗓️ Konkretny dzień (modal `rb_date_modal`, format `RRRR-MM-DD`) · 📜 **Wybierz z listy** (tylko tryb bot) — `listAvailableBackups` scala backupy z obu folderów Drive: **automatyczne** (`Polski_Squad_Backups`, oznaczone 🅰) **i manualne** (`Polski_Squad_Manual_Backups`, oznaczone 🅼), posortowane wg **daty i godziny utworzenia** (`createdTime`), dzięki czemu rozróżnia kilka backupów z tego samego dnia; pobieranie po ID pliku (`rb_backup_select` → `downloadAndExtractById`). Tryby 📅 Najnowszy / 🗓️ Konkretny dzień korzystają wyłącznie z folderu automatycznego; manualne dostępne są przez 📜 Wybierz z listy.
 4. **Pobranie** danych z wybranej wersji (cały backup = wszystkie boty; bot = jeden bot).
