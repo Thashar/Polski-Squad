@@ -38,6 +38,7 @@
      - **Efekty:** `stamp` (bot dorzuca pod postem reakcje-pieczęcie 👑✅🔥), `crown` (autor dostaje prefix 👑 w nicku na 1h przez współdzielony `NicknameManager`), `embed` (ozdobny embed gratulacyjny — **wyłącznie** w jackpocie)
      - **Szczęśliwy traf (jackpot):** wszystkie efekty naraz (stamp + crown + specjalny embed)
      - **Zasady:** jeden post = jeden efekt (dedup po `messageId` w `mvp_approvals.json`, trim do `maxApprovedMemory`); pomija kanał ankiety, `excludedChannels`, posty botów i własne posty MVP; `crown` z fallbackiem na `textreply` gdy autor nieedytowalny (wyższa rola/owner) — embed NIE jest używany poza jackpotem
+     - **Brak stackowania korony:** jeśli autor ma już aktywną koronę MVP (`getActiveEffectType === 'mvp_crown'`), ponowne nadanie jest pomijane (standalone `crown` → fallback `textreply`), więc prefix 👑 się nie nakłada
      - **Handler:** `handleApprovalReaction` w `mvpService.js`, podpięty obok `handleReactionAdd` na `MessageReactionAdd` w `index.js`. Korona restart-safe przez `NicknameManager.restoreExpiredEffects` przy starcie
    - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels, **approval**: enabled, crownDurationMs, crownPrefix, jackpotChance, textReplyChance, stampEmojis, maxApprovedMemory)
 

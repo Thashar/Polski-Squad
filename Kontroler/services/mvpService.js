@@ -681,6 +681,15 @@ class MvpService {
     async effectCrown(ctx) {
         try {
             if (!this.nicknameManager) return false;
+
+            // Brak stackowania — jeśli autor ma już aktywną koronę MVP, pomiń ponowne nadanie
+            // (inaczej prefix 👑 nakładałby się: "👑 👑 Nick"). Standalone 'crown' → fallback na textreply.
+            if (this.nicknameManager.hasActiveEffect(ctx.author.id) &&
+                this.nicknameManager.getActiveEffectType(ctx.author.id) === 'mvp_crown') {
+                this.logger.info(`👑 MVP: ${ctx.author.tag} ma już aktywną koronę — pomijam (brak stackowania)`);
+                return false;
+            }
+
             const member = await ctx.guild.members.fetch(ctx.author.id);
             if (!member.manageable) {
                 this.logger.warn(`⚠️ MVP: brak uprawnień do korony dla ${member.user.tag} (wyższa rola/owner)`);
