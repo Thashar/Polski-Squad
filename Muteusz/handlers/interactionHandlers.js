@@ -301,7 +301,7 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('restore-backup')
-                .setDescription('Kompleksowe przywracanie danych z Google Drive: cały backup, bot, pliki lub tylko uszkodzone (administrator)')
+                .setDescription('Przywracanie danych z backupu: cały backup, bot, pliki lub uszkodzone (administrator)')
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
