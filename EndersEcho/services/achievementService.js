@@ -88,8 +88,6 @@ class AchievementService {
                 const userData = this._ensureUser(data, userId);
                 const p = userData.progress;
 
-                const prevLastBeat = p.lastRecordBeatAt;
-
                 // Aktualizuj progress przed sprawdzeniem warunków
                 p.recordCount = (p.recordCount || 0) + 1;
 
@@ -114,22 +112,24 @@ class AchievementService {
 
                 const nowIso = new Date().toISOString();
 
-                // Sprawdź i odblokuj osiągnięcia
+                // Sprawdź i odblokuj osiągnięcia — zbieraj TYLKO te faktycznie odblokowane w tym zgłoszeniu
+                const newlyUnlocked = [];
                 for (const ach of ACHIEVEMENTS) {
                     if (userData.unlocked[ach.id]) continue;
                     try {
                         if (ach.check(p, ctx)) {
                             userData.unlocked[ach.id] = { unlockedAt: nowIso };
+                            newlyUnlocked.push(ach.id);
                         }
                     } catch {}
                 }
 
-                // Zbierz osiągnięcia do pokazania w embeddzie (odblokowane od ostatniego pobicia rekordu)
-                const toShow = Object.entries(userData.unlocked)
-                    .filter(([, info]) => !prevLastBeat || info.unlockedAt > prevLastBeat)
-                    .map(([id]) => id);
+                // Pokazuj w embeddzie WYŁĄCZNIE osiągnięcia odblokowane w TYM zgłoszeniu.
+                // (Wcześniejszy filtr po lastRecordBeatAt przy niespójnych/odtworzonych danych lub gdy
+                //  lastRecordBeatAt był null ogłaszał ponownie WSZYSTKIE już posiadane osiągnięcia —
+                //  to był błąd "ponownego przyznawania osiągnięć". Teraz nie zależymy od timestampów.)
+                const toShow = newlyUnlocked;
 
-                // Zapisz timestamp PO zebraniu listy (żeby prevLastBeat był sprzed obecnego rekordu)
                 p.lastRecordAt = nowIso;
                 p.lastRecordBeatAt = nowIso;
 
