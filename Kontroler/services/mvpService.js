@@ -583,18 +583,22 @@ class MvpService {
             // Rezerwacja dedup PO walidacji (anty-double-fire / anty-spam), zanim ruszą efekty async
             this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
 
-            // Losowanie efektu:
-            //  - "szczęśliwy traf" = jackpot sprawdzany PIERWSZY ⇒ ~1% absolutnie (wszystko naraz + embed + dzika karta)
-            //  - textreply (znak jakości) z szansą textReplyChance (~30%)
-            //  - inaczej równo 1 z puli (embed jest zarezerwowany WYŁĄCZNIE dla jackpota)
+            // Losowanie efektu wg stałych szans (pojedynczy los, progi skumulowane):
+            //  jackpot ~1% → textreply ~9% → korona ~30% → pieczęć ~60% (reszta, zawsze domyka do 100%).
+            //  Embed i dzika karta są zarezerwowane WYŁĄCZNIE dla jackpota.
+            const jackpotChance = ac.jackpotChance ?? 0.01;
+            const textReplyChance = ac.textReplyChance ?? 0.09;
+            const crownChance = ac.crownChance ?? 0.30;
+            const roll = Math.random();
             let effect;
-            if (Math.random() < (ac.jackpotChance ?? 0.01)) {
+            if (roll < jackpotChance) {
                 effect = 'jackpot';
-            } else if (Math.random() < (ac.textReplyChance ?? 0.3)) {
+            } else if (roll < jackpotChance + textReplyChance) {
                 effect = 'textreply';
+            } else if (roll < jackpotChance + textReplyChance + crownChance) {
+                effect = 'crown';
             } else {
-                const pool = ['stamp', 'crown'];
-                effect = pool[Math.floor(Math.random() * pool.length)];
+                effect = 'stamp';
             }
 
             const mvpName = mvpMember.displayName || user.username;
@@ -658,7 +662,7 @@ class MvpService {
 
     /** Pieczęć: bot dorzuca pod postem zestaw reakcji-stempli. */
     async effectStamp(ctx) {
-        const emojis = this.cfg.approval?.stampEmojis || ['👑', '✅', '🔥'];
+        const emojis = this.cfg.approval?.stampEmojis || ['🏅', '⭐', '💯', '🔥', '👏', '🏆'];
         for (const e of emojis) {
             try { await ctx.fullMessage.react(e); } catch {}
         }

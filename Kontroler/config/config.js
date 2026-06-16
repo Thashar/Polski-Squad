@@ -210,10 +210,13 @@ module.exports = {
             jackpotChance: 0.01,
             // Jackpot nadaje wypowiedzi "dziką kartę" — dodatkowy, gwarantowany tekst w najbliższej ankiecie MVP tygodnia
             wildcardOnJackpot: true,
-            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (po jackpocie, przed resztą puli)
-            textReplyChance: 0.30,
-            // Emoji "pieczęci" dodawane pod docenionym postem
-            stampEmojis: ['👑', '✅', '🔥'],
+            // Szanse efektów (pojedynczy los, progi skumulowane): jackpot ~1% → textreply ~9% → korona ~30% → pieczęć ~60% (reszta)
+            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (~9%)
+            textReplyChance: 0.09,
+            // Szansa na koronę 👑 w nicku na 1h (~30%)
+            crownChance: 0.30,
+            // Emoji "pieczęci" dodawane pod docenionym postem (pieczęć = reszta puli, ~60%)
+            stampEmojis: ['🏅', '⭐', '💯', '🔥', '👏', '🏆'],
             // Limit zapamiętanych docenionych wiadomości (dedup; trim najstarszych)
             maxApprovedMemory: 1000
         }
