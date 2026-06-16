@@ -206,9 +206,11 @@ module.exports = {
             // Czas trwania korony 👑 w nicku docenionego autora (1h)
             crownDurationMs: 60 * 60 * 1000,
             crownPrefix: '👑',
-            // Szansa na "szczęśliwy traf" (jackpot — wszystkie efekty naraz + specjalny embed)
-            jackpotChance: 0.12,
-            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (ma priorytet nad resztą puli)
+            // Szansa na "szczęśliwy traf" (jackpot — wszystkie efekty naraz + embed). Sprawdzany jako pierwszy ⇒ ~1% absolutnie
+            jackpotChance: 0.01,
+            // Jackpot nadaje wypowiedzi "dziką kartę" — dodatkowy, gwarantowany tekst w najbliższej ankiecie MVP tygodnia
+            wildcardOnJackpot: true,
+            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (po jackpocie, przed resztą puli)
             textReplyChance: 0.30,
             // Emoji "pieczęci" dodawane pod docenionym postem
             stampEmojis: ['👑', '✅', '🔥'],

@@ -31,7 +31,9 @@ class MvpService {
         this.state = this.emptyState();
         this.winners = {};
         this.currentWinnerId = null;
-        this.approvals = { messages: {} }; // dedup aprobat MVP: messageId -> { mvpUserId, authorId, effect, at }
+        // dedup aprobat MVP: messages[messageId] = { mvpUserId, authorId, effect, at }
+        // wildcards: lista "dzikich kart" (z jackpota) oczekujących na najbliższą ankietę MVP
+        this.approvals = { messages: {}, wildcards: [] };
         this.nicknameManager = null;
 
         this.finishTimer = null;
@@ -136,12 +138,12 @@ class MvpService {
         try {
             const data = await fs.readFile(this.approvalsFile, 'utf8');
             const parsed = JSON.parse(data);
-            this.approvals = { messages: parsed.messages || {} };
+            this.approvals = { messages: parsed.messages || {}, wildcards: parsed.wildcards || [] };
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 this.logger.error(`❌ MVP: błąd ładowania aprobat: ${error.message}`);
             }
-            this.approvals = { messages: {} };
+            this.approvals = { messages: {}, wildcards: [] };
         }
     }
 
@@ -245,6 +247,8 @@ class MvpService {
             }
 
             await this.startPoll(channel, candidates);
+            // Dzikie karty zostały wystawione w ankiecie — czyścimy, by nie przeszły na kolejny tydzień
+            await this.consumeWildcards();
         } catch (error) {
             this.logger.error(`❌ MVP: błąd cotygodniowego skanu: ${error.message}`);
         } finally {
@@ -281,8 +285,10 @@ class MvpService {
         }
 
         const selected = this.selectCandidates(candidates);
-        this.logger.info(`🔎 MVP: znaleziono ${candidates.length} wiadomości z KEKW; w zestawieniu ${selected.length} tekstów (różni autorzy)`);
-        return selected;
+        const withWildcards = this.mergeWildcards(selected, windowStart);
+        const wildcardCount = withWildcards.length - selected.length;
+        this.logger.info(`🔎 MVP: znaleziono ${candidates.length} wiadomości z KEKW; w zestawieniu ${withWildcards.length} tekstów${wildcardCount > 0 ? ` (w tym ${wildcardCount} 🃏 dzika karta)` : ''}`);
+        return withWildcards;
     }
 
     /**
@@ -456,7 +462,8 @@ class MvpService {
             body += `${this.cfg.voteEmojis[i]}\n`;
             body += `> ***„${this.formatCandidateText(c)}”***\n`;
             body += this.buildReplyContextLine(c.replyTo);
-            body += `-# ✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
+            const wild = c.isWildcard ? '🃏 *dzika karta od MVP* · ' : '';
+            body += `-# ${wild}✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
         });
 
         body += `🗳️ **Jak głosować:** kliknij reakcję przy wybranym tekście. Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
@@ -577,21 +584,28 @@ class MvpService {
             this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
 
             // Losowanie efektu:
-            //  - textreply (znak jakości) ma priorytet z szansą textReplyChance (~30%)
-            //  - następnie "szczęśliwy traf" = jackpot (wszystko naraz + embed)
+            //  - "szczęśliwy traf" = jackpot sprawdzany PIERWSZY ⇒ ~1% absolutnie (wszystko naraz + embed + dzika karta)
+            //  - textreply (znak jakości) z szansą textReplyChance (~30%)
             //  - inaczej równo 1 z puli (embed jest zarezerwowany WYŁĄCZNIE dla jackpota)
             let effect;
-            if (Math.random() < (ac.textReplyChance ?? 0.3)) {
-                effect = 'textreply';
-            } else if (Math.random() < (ac.jackpotChance ?? 0.1)) {
+            if (Math.random() < (ac.jackpotChance ?? 0.01)) {
                 effect = 'jackpot';
+            } else if (Math.random() < (ac.textReplyChance ?? 0.3)) {
+                effect = 'textreply';
             } else {
                 const pool = ['stamp', 'crown'];
                 effect = pool[Math.floor(Math.random() * pool.length)];
             }
 
             const mvpName = mvpMember.displayName || user.username;
-            await this.runApprovalEffect(effect, { fullMessage, guild, author, mvpName });
+            const ctx = { fullMessage, guild, author, mvpName };
+
+            // Jackpot → wypowiedź dostaje "dziką kartę" do najbliższej ankiety MVP (przed efektami, by embed mógł o niej wspomnieć)
+            if (effect === 'jackpot' && (ac.wildcardOnJackpot ?? true)) {
+                await this.addWildcard(ctx);
+            }
+
+            await this.runApprovalEffect(effect, ctx);
 
             // Zapisz finalny efekt
             if (this.approvals.messages[fullMessage.id]) {
@@ -729,9 +743,9 @@ class MvpService {
 
     approvalJackpotTexts() {
         return [
-            'Wszystkie gwiazdy się zgrały — MVP tygodnia obsypuje ten wpis zaszczytami! 👑✅🔥',
-            'JACKPOT! MVP tygodnia uznaje to za arcydzieło tygodnia. 🍀🏆',
-            'Niebywałe! Pełnia aprobaty MVP — korona, pieczęć i owacje na stojąco! 🎉'
+            'JACKPOT! 🍀 MVP tygodnia uznaje to za arcydzieło — ta wypowiedź dostaje **dziką kartę** 🃏 do cotygodniowego losowania MVP!',
+            'Wszystkie gwiazdy się zgrały — pełnia aprobaty MVP 👑✅🔥 i **dzika karta** 🃏 prosto do ankiety MVP tygodnia!',
+            'Niebywałe! Szczęśliwy traf — ten tekst wskakuje jako **dzika karta** 🃏 do walki o tytuł MVP tygodnia!'
         ];
     }
 
@@ -746,6 +760,80 @@ class MvpService {
             'Znak jakości przyznany — tak mówi MVP tygodnia! 🥇',
             'MVP tygodnia stawia tu swój znak jakości! ⭐'
         ];
+    }
+
+    // ===== Dzika karta (jackpot → dodatkowy tekst w najbliższej ankiecie MVP) =====
+
+    /** Zapisuje wypowiedź jako "dziką kartę" — kandydat-kształtny obiekt do scalenia przy skanie. */
+    async addWildcard(ctx) {
+        try {
+            const msg = ctx.fullMessage;
+
+            // Kontekst odpowiedzi (jak w collectFromChannel)
+            let replyTo = null;
+            if (msg.reference && msg.reference.messageId) {
+                try {
+                    const ref = await msg.fetchReference();
+                    if (ref) {
+                        replyTo = {
+                            authorId: ref.author?.id || null,
+                            authorDisplay: ref.member?.displayName || ref.author?.username || 'nieznany',
+                            content: ref.content || '',
+                            hasAttachment: (ref.attachments?.size || 0) > 0
+                        };
+                    }
+                } catch (e) { /* oryginał usunięty/niedostępny - pomijamy kontekst */ }
+            }
+
+            const kekwReaction = msg.reactions.cache.find(r => r.emoji?.id === this.cfg.kekwEmojiId);
+            const kekwCount = kekwReaction?.count || 1;
+
+            const wildcard = {
+                messageId: msg.id,
+                channelId: msg.channelId || msg.channel?.id,
+                authorId: ctx.author.id,
+                authorTag: ctx.author.tag,
+                authorDisplay: msg.member?.displayName || ctx.author.username,
+                content: msg.content || '',
+                hasAttachment: msg.attachments.size > 0,
+                kekwCount,
+                otherReactionsCount: 0,
+                createdTimestamp: msg.createdTimestamp,
+                url: msg.url,
+                replyTo,
+                isWildcard: true,
+                addedAt: Date.now()
+            };
+
+            // Dedup — nie dubluj tej samej wiadomości jako dzikiej karty
+            if (!this.approvals.wildcards.some(w => w.messageId === wildcard.messageId)) {
+                this.approvals.wildcards.push(wildcard);
+                await this.saveApprovals();
+                this.logger.info(`🃏 MVP: nadano dziką kartę wypowiedzi ${ctx.author.tag} (do najbliższej ankiety MVP)`);
+            }
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd nadawania dzikiej karty: ${error.message}`);
+        }
+    }
+
+    /** Scala dzikie karty (w oknie skanu) z normalnie wybranymi kandydatami — karty są gwarantowane. */
+    mergeWildcards(selected, windowStart) {
+        const active = (this.approvals.wildcards || []).filter(w => (w.addedAt || 0) >= windowStart);
+        // Pomijaj karty, które i tak są już w zestawieniu (po messageId)
+        const fresh = active.filter(w => !selected.some(c => c.messageId === w.messageId));
+        if (fresh.length === 0) return selected;
+
+        // Gwarancja kart: rezerwuj im sloty, resztę wypełnij normalnymi kandydatami; twardy limit = liczba emoji
+        const maxNormal = Math.max(0, this.cfg.maxCandidates - fresh.length);
+        const combined = [...selected.slice(0, maxNormal), ...fresh];
+        return combined.slice(0, this.cfg.maxCandidates);
+    }
+
+    /** Czyści zużyte dzikie karty po wystawieniu ankiety. */
+    async consumeWildcards() {
+        if (!this.approvals.wildcards || this.approvals.wildcards.length === 0) return;
+        this.approvals.wildcards = [];
+        await this.saveApprovals();
     }
 
     // ===== Finalizacja =====
