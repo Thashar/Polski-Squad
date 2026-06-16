@@ -584,11 +584,11 @@ class MvpService {
             this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
 
             // Losowanie efektu wg stałych szans (pojedynczy los, progi skumulowane):
-            //  jackpot ~1% → textreply ~9% → korona ~30% → pieczęć ~60% (reszta, zawsze domyka do 100%).
+            //  jackpot ~1% → textreply ~9% → korona ~60% → pieczęć ~30% (reszta, zawsze domyka do 100%).
             //  Embed i dzika karta są zarezerwowane WYŁĄCZNIE dla jackpota.
             const jackpotChance = ac.jackpotChance ?? 0.01;
             const textReplyChance = ac.textReplyChance ?? 0.09;
-            const crownChance = ac.crownChance ?? 0.30;
+            const crownChance = ac.crownChance ?? 0.60;
             const roll = Math.random();
             let effect;
             if (roll < jackpotChance) {

@@ -210,13 +210,22 @@ module.exports = {
             jackpotChance: 0.01,
             // Jackpot nadaje wypowiedzi "dziką kartę" — dodatkowy, gwarantowany tekst w najbliższej ankiecie MVP tygodnia
             wildcardOnJackpot: true,
-            // Szanse efektów (pojedynczy los, progi skumulowane): jackpot ~1% → textreply ~9% → korona ~30% → pieczęć ~60% (reszta)
+            // Szanse efektów (pojedynczy los, progi skumulowane): jackpot ~1% → textreply ~9% → korona ~60% → pieczęć ~30% (reszta)
             // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (~9%)
             textReplyChance: 0.09,
-            // Szansa na koronę 👑 w nicku na 1h (~30%)
-            crownChance: 0.30,
+            // Szansa na koronę 👑 w nicku na 1h (~60%)
+            crownChance: 0.60,
             // Emoji "pieczęci" dodawane pod docenionym postem (pieczęć = reszta puli, ~60%)
-            stampEmojis: ['🏅', '⭐', '💯', '🔥', '👏', '🏆'],
+            // Customowe emoji serwerowe KEKW — format <a:nazwa:id> (animowane) / <:nazwa:id> (statyczne)
+            stampEmojis: [
+                '<a:z_Kekw7:1481671554843803648>',
+                '<:z_kekw2:1516549160419983440>',
+                '<a:z_kekw3:1516549577652834509>',
+                '<a:z_kekw4:1516549522682286261>',
+                '<:z_kekw5:1516549233623171154>',
+                '<a:z_kekw6:1481769242260148366>',
+                '<a:z_kekw8:1516550205884076212>'
+            ],
             // Limit zapamiętanych docenionych wiadomości (dedup; trim najstarszych)
             maxApprovedMemory: 1000
         }
