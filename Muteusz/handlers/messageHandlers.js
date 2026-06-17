@@ -70,8 +70,10 @@ class MessageHandler {
             });
             
             if (hasImages) {
-                await this.handleImageBlock(message);
-                return; // Zatrzymaj dalsze przetwarzanie jeśli obrazy zostały zablokowane
+                const blocked = await this.handleImageBlock(message);
+                if (blocked) {
+                    return; // Zatrzymaj dalsze przetwarzanie TYLKO jeśli obrazy faktycznie zostały zablokowane
+                }
             }
         }
 
@@ -493,10 +495,13 @@ class MessageHandler {
                     message
                 );
 
-                return; // Zatrzymaj dalsze przetwarzanie
+                return true; // Obraz został zablokowany - zatrzymaj dalsze przetwarzanie
             }
+
+            return false; // Kanał niezablokowany - pozwól na repost mediów
         } catch (error) {
             logger.error(`❌ Błąd obsługi blokady obrazów: ${error.message}`);
+            return false; // W razie błędu nie blokuj dalszego przetwarzania
         }
     }
 
