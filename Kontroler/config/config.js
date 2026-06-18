@@ -178,7 +178,7 @@ module.exports = {
         // Bazowa liczba różnych autorów w zestawieniu (przy remisie na granicy wchodzą wszyscy remisujący)
         targetAuthors: 3,
         // Twardy limit kandydatów (= liczba dostępnych emoji do głosowania)
-        maxCandidates: 10,
+        maxCandidates: 5,
         // Czas trwania głosowania (24h)
         votingDurationMs: 24 * 60 * 60 * 1000,
         // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 22:05
