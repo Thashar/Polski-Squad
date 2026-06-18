@@ -184,7 +184,7 @@ module.exports = {
         // Harmonogram (czas polski Europe/Warsaw): czwartek (4) o 22:05
         scheduleWeekday: 4,
         scheduleHour: 20,
-        scheduleMinute: 0,
+        scheduleMinute: 20,
         // Kanały WYKLUCZONE ze skanowania (kanał ankiety jest wykluczany automatycznie).
         excludedChannels: [
             '1272432690284462110',
