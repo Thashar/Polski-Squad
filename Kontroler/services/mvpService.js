@@ -401,8 +401,9 @@ class MvpService {
     // ===== Ankieta =====
 
     async startPoll(channel, candidates) {
+        const pollPayload = this.buildPollMessage(candidates);
         const pollMessage = await channel.send({
-            content: this.buildPollMessage(candidates),
+            ...pollPayload,
             allowedMentions: { parse: ['everyone'] }
         });
 
@@ -429,46 +430,48 @@ class MvpService {
         this.logger.info(`🏆 MVP: rozpoczęto ankietę (${candidates.length} kandydatów), koniec za 24h`);
     }
 
-    formatCandidateText(c) {
+    formatCandidateText(c, maxLen = 280) {
         let t = (c.content || '').replace(/\r?\n+/g, ' ').trim();
-        if (t.length > 280) t = t.slice(0, 277) + '...';
+        if (t.length > maxLen) t = t.slice(0, maxLen - 3) + '...';
         if (!t) t = c.hasAttachment ? '[załącznik / obraz]' : '[brak treści tekstowej]';
         return t;
     }
 
-    formatReplyText(replyTo) {
+    formatReplyText(replyTo, maxLen = 180) {
         let t = (replyTo?.content || '').replace(/\r?\n+/g, ' ').trim();
-        if (t.length > 180) t = t.slice(0, 177) + '...';
+        if (t.length > maxLen) t = t.slice(0, maxLen - 3) + '...';
         if (!t) t = replyTo?.hasAttachment ? '[załącznik / obraz]' : '[brak treści tekstowej]';
         return t;
     }
 
     // Linia kontekstu: gdy tekst był odpowiedzią na inną wiadomość, pokaż na co odpowiadał
-    buildReplyContextLine(replyTo) {
+    buildReplyContextLine(replyTo, replyMaxLen = 180) {
         if (!replyTo) return '';
         const who = replyTo.authorId ? `<@${replyTo.authorId}>` : (replyTo.authorDisplay || 'nieznany');
-        return `-# ↩️ odpowiedź na ${who}: „${this.formatReplyText(replyTo)}”\n`;
+        return `-# ↩️ odpowiedź na ${who}: „${this.formatReplyText(replyTo, replyMaxLen)}”\n`;
     }
 
+    // Zwraca { content, embeds } — kandydaci w embedzie (limit 4096), nie w content (limit 2000)
     buildPollMessage(candidates) {
         const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
         const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
 
-        let body = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst na serwerze!\n`;
-        body += `W minionym tygodniu padło kilka perełek. Zagłosujcie na **najlepszy tekst** — głosujemy na tekst, nie na osobę!\n\n`;
+        const content = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst na serwerze!\nW minionym tygodniu padło kilka perełek. Zagłosujcie na **najlepszy tekst** — głosujemy na tekst, nie na osobę!`;
 
+        let desc = '';
         candidates.forEach((c, i) => {
             const dateUnix = Math.floor(c.createdTimestamp / 1000);
-            body += `${this.cfg.voteEmojis[i]}\n`;
-            body += `> ***„${this.formatCandidateText(c)}”***\n`;
-            body += this.buildReplyContextLine(c.replyTo);
+            desc += `${this.cfg.voteEmojis[i]}\n`;
+            desc += `> ***„${this.formatCandidateText(c, 80)}”***\n`;
+            desc += this.buildReplyContextLine(c.replyTo, 30);
             const wild = c.isWildcard ? '🃏 *dzika karta od MVP* · ' : '';
-            body += `-# ${wild}✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
+            desc += `-# ${wild}✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
         });
 
-        body += `🗳️ **Jak głosować:** kliknij reakcję przy wybranym tekście. Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
-        body += `⏳ Głosowanie kończy się <t:${endUnix}:R>.`;
-        return body;
+        desc += `🗳️ **Jak głosować:** kliknij reakcję przy wybranym tekście. Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
+        desc += `⏳ Głosowanie kończy się <t:${endUnix}:R>.`;
+
+        return { content, embeds: [{ description: desc }] };
     }
 
     buildNoCandidatesMessage() {
