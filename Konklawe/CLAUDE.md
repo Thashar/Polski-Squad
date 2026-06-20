@@ -1,7 +1,7 @@
 ### ⛪ Konklawe Bot
 
 **8 Systemów:**
-1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska
+1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska. Za odgadnięcie hasła domyślnego "Konklawe" NIE przyznawane są punkty (tylko rola papieska) - dotyczy każdego użycia, nie tylko pierwszego
 2. **Osiągnięcia** - Medal Virtutti Papajlari: 30+ odpowiedzi, reset rankingu, specjalne uprawnienia
 3. **Timery** - `timerService.js`: 15/30/60min przypomnienia, auto-reset, persistent (`game_state.json`), restore po restarcie
 4. **AI Wspomaganie** - `aiService.js`: Generowanie haseł i podpowiedzi przez Anthropic lub Grok API

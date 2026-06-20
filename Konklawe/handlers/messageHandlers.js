@@ -315,8 +315,8 @@ class MessageHandler {
         this.gameService.resetHints();
         this.gameService.clearAttempts();
 
-        // Obsługa specjalnego przypadku słowa "konklawe"
-        if (currentTrigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase() && !this.gameService.konklaweUsed) {
+        // Obsługa specjalnego przypadku słowa "konklawe" - za hasło domyślne NIE przyznajemy punktów
+        if (currentTrigger.toLowerCase() === this.config.messages.defaultPassword.toLowerCase()) {
             this.gameService.konklaweUsed = true;
             await this.timerService.setAutoResetTimer();
             await this.timerService.setReminderTimer(message.author.id);
