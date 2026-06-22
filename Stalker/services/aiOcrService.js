@@ -71,10 +71,12 @@ class AIOCRService {
             } catch (err) {
                 lastError = err;
                 const status = err.status ?? err.statusCode ?? err.code;
-                const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
+                const msgStr = typeof err.message === 'string' ? err.message : '';
+                const isOverloaded = msgStr.includes('503') || msgStr.includes('Service Unavailable') || msgStr.includes('high demand');
+                const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT' || isOverloaded;
                 if (!isRetryable || attempt === retries - 1) throw err;
                 const delay = 1000 * Math.pow(2, attempt);
-                logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
+                logger.warn(`[AI OCR] Gemini error ${status ?? 'unknown'} (overloaded: ${isOverloaded}), retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
                 await new Promise(r => setTimeout(r, delay));
             }
         }

@@ -12468,7 +12468,12 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
 
             } catch (error) {
                 logger.error('[EQUIPMENT] ❌ Błąd analizy zdjęcia:', error);
-                await inter.editReply({ content: '❌ Wystąpił błąd podczas analizy zdjęcia.' });
+                const errMsg = typeof error.message === 'string' ? error.message : '';
+                const isOverloaded = error.status === 503 || errMsg.includes('503') || errMsg.includes('Service Unavailable') || errMsg.includes('high demand');
+                const replyContent = isOverloaded
+                    ? '❌ Model AI jest w tej chwili **przeciążony** — Google API zwróciło błąd 503 (zbyt duże obciążenie serwerów). Spróbuj ponownie za kilka minut.'
+                    : '❌ Wystąpił błąd podczas analizy zdjęcia.';
+                await inter.editReply({ content: replyContent });
                 await ocrService.endOCRSession(guildId, userId, true);
             }
         });
