@@ -12208,7 +12208,6 @@ function fmtEquipmentLine(name, qty) {
 async function handleCoreRankingCommand(interaction, sharedState) {
     const { config } = sharedState;
 
-    // Sprawdź uprawnienia - tylko członkowie klanu lub admin
     const clanRoleIds = Object.values(config.targetRoles);
     const hasClanRole = clanRoleIds.some(roleId => interaction.member.roles.cache.has(roleId));
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -12223,22 +12222,19 @@ async function handleCoreRankingCommand(interaction, sharedState) {
 
     const { ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
 
-    // Parsuj custom emoji string "<:name:id>" na obiekt emoji dla discord.js
     const parseEmoji = (str) => {
         const m = str.match(/^<:(\w+):(\d+)>$/);
         return m ? { name: m[1], id: m[2] } : str;
     };
 
-    // Jeden przycisk per core (6 sztuk)
     const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
         new BB()
-            .setCustomId(`core_ranking|${name}`)
+            .setCustomId(`core_ranking|${name}|0`)
             .setLabel(name)
             .setEmoji(parseEmoji(icon))
             .setStyle(BS.Secondary)
     );
 
-    // Rozmieść na max 2 wiersze (po 3 przyciski)
     const row1 = new ARB().addComponents(coreButtons.slice(0, 3));
     const row2 = new ARB().addComponents(coreButtons.slice(3, 6));
 
@@ -12250,12 +12246,14 @@ async function handleCoreRankingCommand(interaction, sharedState) {
 
 async function handleCoreRankingButton(interaction, sharedState) {
     const { config } = sharedState;
-    const coreName = interaction.customId.split('|').slice(1).join('|');
+    const parts = interaction.customId.split('|');
+    const coreName = parts[1];
+    const page = parseInt(parts[2]) || 0;
+    const PER_PAGE = 25;
 
     await interaction.deferUpdate();
 
     try {
-        // Wczytaj dane ekwipunku
         const fs = require('fs').promises;
         const path = require('path');
         const dataPath = path.join(__dirname, '../data/equipment_data.json');
@@ -12268,14 +12266,12 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return;
         }
 
-        // Wczytaj historię do obliczenia miesięcznego wzrostu i wykresu
         const { generateCoreHistoryChart } = require('../services/coreHistoryService');
         let historyData = {};
         try {
             historyData = JSON.parse(await fs.readFile(path.join(__dirname, '../data/equipment_history.json'), 'utf8'));
         } catch {}
 
-        // Oblicz % wzrostu w skali 30 dni dla danego gracza i cora
         function calcMonthlyGrowthPct(userId, coreName) {
             const userHist = historyData[userId];
             if (!userHist || userHist.length < 2) return null;
@@ -12306,7 +12302,6 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return (scaledDiff / baseQty) * 100;
         }
 
-        // Buduj wpisy z tie-breakingiem wg czasu pierwszego osiągnięcia ilości
         const entries = [];
         for (const [userId, userData] of Object.entries(equipData)) {
             if (!userData.items || userData.items[coreName] === undefined) continue;
@@ -12323,16 +12318,19 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return;
         }
 
-        // Malejąco po ilości; przy remisie — kto wcześniej osiągnął tę ilość
         entries.sort((a, b) => {
             if (b.qty !== a.qty) return b.qty - a.qty;
             return a.firstAchievedAt.localeCompare(b.firstAchievedAt);
         });
 
-        // Pobierz memberów serwera
         const members = await safeFetchMembers(interaction.guild);
 
-        const lines = entries.slice(0, 250).map((entry, i) => {
+        const parseEmoji = (str) => {
+            const m = str.match(/^<:(\w+):(\d+)>$/);
+            return m ? { name: m[1], id: m[2] } : str;
+        };
+
+        const lines = entries.map((entry, i) => {
             const member = members.get(entry.userId);
             const nick = member ? member.displayName : `<@${entry.userId}>`;
 
@@ -12356,26 +12354,58 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}**${growthStr} ${clanIcon}`;
         });
 
+        const totalPages = Math.max(1, Math.ceil(lines.length / PER_PAGE));
+        const safePage = Math.min(Math.max(0, page), totalPages - 1);
+        const pageLines = lines.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+
         const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
-        const { EmbedBuilder: EBLocal } = require('discord.js');
+        const { EmbedBuilder: EBLocal, ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
+
         const embed = new EBLocal()
             .setTitle(`${coreIcon} Ranking — ${coreName}`)
             .setColor('#00BFFF')
-            .setFooter({ text: `Łącznie graczy z danymi: ${entries.length}` })
-            .setTimestamp();
+            .setFooter({ text: `Strona ${safePage + 1}/${totalPages} | Łącznie graczy: ${entries.length}` })
+            .setTimestamp()
+            .addFields({ name: `${coreIcon} ${coreName}`, value: pageLines.join('\n'), inline: false });
 
-        for (let i = 0; i < lines.length; i += 10) {
-            embed.addFields({ name: '​', value: lines.slice(i, i + 10).join('\n'), inline: true });
-        }
+        // Wiersz 1: paginacja
+        const rowPagination = new ARB().addComponents(
+            new BB()
+                .setCustomId(`core_ranking|${coreName}|${safePage - 1}`)
+                .setLabel('◄')
+                .setStyle(BS.Secondary)
+                .setDisabled(safePage === 0),
+            new BB()
+                .setCustomId('core_ranking_page_label')
+                .setLabel(`${safePage + 1} / ${totalPages}`)
+                .setStyle(BS.Secondary)
+                .setDisabled(true),
+            new BB()
+                .setCustomId(`core_ranking|${coreName}|${safePage + 1}`)
+                .setLabel('►')
+                .setStyle(BS.Secondary)
+                .setDisabled(safePage === totalPages - 1)
+        );
 
-        // Wykres historii dla wywolujacego
+        // Wiersze 2-3: przyciski typów corów (aktywny wyróżniony kolorem Primary)
+        const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+            new BB()
+                .setCustomId(`core_ranking|${name}|0`)
+                .setLabel(name)
+                .setEmoji(parseEmoji(icon))
+                .setStyle(name === coreName ? BS.Primary : BS.Secondary)
+        );
+        const rowCores1 = new ARB().addComponents(coreButtons.slice(0, 3));
+        const rowCores2 = new ARB().addComponents(coreButtons.slice(3, 6));
+
+        // Wykres historii dla wywołującego
         const viewerName = interaction.member?.displayName || interaction.user.username;
         const chartBuffer = await generateCoreHistoryChart(interaction.user.id, coreName, viewerName);
 
         const replyPayload = {
             content: null,
             embeds: [embed],
-            components: interaction.message.components,
+            components: [rowPagination, rowCores1, rowCores2],
             files: []
         };
 
