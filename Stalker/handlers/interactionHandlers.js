@@ -12314,7 +12314,19 @@ async function handleCoreRankingButton(interaction, sharedState) {
         }
 
         if (entries.length === 0) {
-            await interaction.editReply({ content: `❌ Brak danych dla **${coreName}**.`, components: interaction.message.components, embeds: [] });
+            const peEmpty = (str) => { const m = str.match(/^<:(\w+):(\d+)>$/); return m ? { name: m[1], id: m[2] } : str; };
+            const emptyButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+                new ButtonBuilder()
+                    .setCustomId(`core_ranking|${name}|0`)
+                    .setLabel(name)
+                    .setEmoji(peEmpty(icon))
+                    .setStyle(name === coreName ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+            await interaction.editReply({
+                content: `❌ Brak danych dla **${coreName}**.`,
+                components: [new ActionRowBuilder().addComponents(emptyButtons.slice(0, 3)), new ActionRowBuilder().addComponents(emptyButtons.slice(3, 6))],
+                embeds: []
+            });
             return;
         }
 
@@ -12417,7 +12429,19 @@ async function handleCoreRankingButton(interaction, sharedState) {
         await interaction.editReply(replyPayload);
     } catch (error) {
         logger.error('[CORE-RANKING] ❌ Błąd:', error);
-        await interaction.editReply({ content: '❌ Błąd podczas generowania rankingu.', components: interaction.message.components, embeds: [] });
+        const parseEmojiErr = (str) => { const m = str.match(/^<:(\w+):(\d+)>$/); return m ? { name: m[1], id: m[2] } : str; };
+        const errCoreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+            new ButtonBuilder()
+                .setCustomId(`core_ranking|${name}|0`)
+                .setLabel(name)
+                .setEmoji(parseEmojiErr(icon))
+                .setStyle(ButtonStyle.Secondary)
+        );
+        await interaction.editReply({
+            content: '❌ Błąd podczas generowania rankingu.',
+            components: [new ActionRowBuilder().addComponents(errCoreButtons.slice(0, 3)), new ActionRowBuilder().addComponents(errCoreButtons.slice(3, 6))],
+            embeds: []
+        });
     }
 }
 
