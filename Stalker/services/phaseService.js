@@ -947,19 +947,47 @@ class PhaseService {
                 logger.warn(`[PHASE${session.phase}] ⚠️ Sesja anulowana podczas analizy batch - pomijam wynik`);
             }
         } catch (error) {
-            logger.error(`[PHASE${session.phase}] ❌ Błąd analizy batch:`, error);
-            // Dodaj wpis błędu, by flow mógł kontynuować bez utraty wcześniejszych przebiegów
-            session.processedImages.push({
-                imageName: `batch_error_${session.processedImages.length + 1}`,
-                imageCount: totalImages,
-                error: error.message,
-                results: []
-            });
-            this.aggregateResults(session);
+            if (error.isAPIOverloaded) {
+                logger.warn(`[PHASE${session.phase}] ⚠️ API Gemini przeciążone po 10 próbach - kończę procedurę OCR`);
+                const ci = session.publicInteraction;
+                if (ci) {
+                    try {
+                        const overloadEmbed = new EmbedBuilder()
+                            .setTitle('🔴 API Gemini jest przeciążone')
+                            .setDescription('API jest aktualnie przeciążone i nie odpowiedziało po 10 próbach.\nSpróbuj ponownie za kilka minut.')
+                            .setColor('#FF0000')
+                            .setTimestamp();
+                        if (ci.editReply) await ci.editReply({ embeds: [overloadEmbed], components: [] });
+                        else await ci.edit({ embeds: [overloadEmbed], components: [] });
+                    } catch (e) {
+                        logger.warn(`[PHASE${session.phase}] ⚠️ Nie udało się zaktualizować embeda o przeciążeniu: ${e.message}`);
+                    }
+                }
+                try {
+                    await this.ocrService.endOCRSession(guild.id, member.id);
+                } catch (e) {
+                    logger.warn(`[PHASE${session.phase}] ⚠️ Nie udało się zakończyć sesji OCR: ${e.message}`);
+                }
+                session.apiOverloaded = true;
+            } else {
+                logger.error(`[PHASE${session.phase}] ❌ Błąd analizy batch:`, error);
+                // Dodaj wpis błędu, by flow mógł kontynuować bez utraty wcześniejszych przebiegów
+                session.processedImages.push({
+                    imageName: `batch_error_${session.processedImages.length + 1}`,
+                    imageCount: totalImages,
+                    error: error.message,
+                    results: []
+                });
+                this.aggregateResults(session);
+            }
         } finally {
             await stopBlinkTimer();
             session.currentProcessingImage = null;
             session.isProcessing = false;
+        }
+
+        if (session.apiOverloaded) {
+            return null;
         }
 
         // Obsługa anulowania (po zakończeniu przetwarzania)

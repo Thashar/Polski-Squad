@@ -48,10 +48,16 @@ class AIOCRService {
 
     /**
      * Wywołanie Gemini przez wspólny adapter z retry.
+     * Błędy 503 (przeciążone API) retry do 10x niezależnie od parametru `retries`.
+     * Po 10 nieudanych próbach 503 rzuca błąd z flagą `isAPIOverloaded = true`.
      */
     async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3) {
         let lastError;
-        for (let attempt = 0; attempt < retries; attempt++) {
+        let regularAttempts = 0;
+        let overloadedAttempts = 0;
+        const MAX_OVERLOADED = 10;
+
+        while (true) {
             try {
                 const result = await this.adapter.generate({
                     provider: 'gemini',
@@ -72,15 +78,29 @@ class AIOCRService {
                 lastError = err;
                 const status = err.status ?? err.statusCode ?? err.code;
                 const msgStr = typeof err.message === 'string' ? err.message : '';
-                const isOverloaded = msgStr.includes('503') || msgStr.includes('Service Unavailable') || msgStr.includes('high demand');
-                const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT' || isOverloaded;
-                if (!isRetryable || attempt === retries - 1) throw err;
-                const delay = Math.min(5000, 1000 * Math.pow(2, attempt));
-                logger.warn(`[AI OCR] Gemini error ${status ?? 'unknown'} (overloaded: ${isOverloaded}), retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
+                const isOverloaded = status === 503 || msgStr.includes('503') || msgStr.includes('Service Unavailable') || msgStr.includes('high demand');
+
+                if (isOverloaded) {
+                    overloadedAttempts++;
+                    if (overloadedAttempts >= MAX_OVERLOADED) {
+                        const overloadedError = new Error('API Gemini jest przeciążone. Spróbuj ponownie za kilka minut.');
+                        overloadedError.isAPIOverloaded = true;
+                        throw overloadedError;
+                    }
+                    const delay = Math.min(5000, 1000 * Math.pow(2, Math.min(overloadedAttempts - 1, 5)));
+                    logger.warn(`[AI OCR] Gemini 503 przeciążone, próba ${overloadedAttempts}/${MAX_OVERLOADED} za ${delay}ms`);
+                    await new Promise(r => setTimeout(r, delay));
+                    continue;
+                }
+
+                const isRetryable = status === 429 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
+                if (!isRetryable || regularAttempts >= retries - 1) throw err;
+                regularAttempts++;
+                const delay = Math.min(5000, 1000 * Math.pow(2, regularAttempts - 1));
+                logger.warn(`[AI OCR] Gemini error ${status ?? 'unknown'}, retry ${regularAttempts}/${retries - 1} za ${delay}ms`);
                 await new Promise(r => setTimeout(r, delay));
             }
         }
-        throw lastError;
     }
 
     /**
