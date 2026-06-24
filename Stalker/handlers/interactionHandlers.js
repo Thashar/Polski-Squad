@@ -12349,8 +12349,8 @@ async function handleCoreRankingButton(interaction, sharedState) {
 
             let growthStr = '';
             if (entry.monthlyPct !== null) {
-                const sign = entry.monthlyPct >= 0 ? '+' : '';
-                growthStr = ` — ${sign}${entry.monthlyPct.toFixed(1)}%/mies.`;
+                const arrow = entry.monthlyPct >= 0 ? '▲' : '▼';
+                growthStr = ` ${arrow} ${Math.abs(entry.monthlyPct).toFixed(1)}%`;
             }
 
             return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}**${growthStr} ${clanIcon}`;
