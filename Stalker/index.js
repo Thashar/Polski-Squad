@@ -660,7 +660,11 @@ client.on(Events.MessageCreate, async (message) => {
                     session.publicInteraction
                 );
 
-                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                // Sprawdź czy sesja nie została anulowana lub API było przeciążone
+                if (results === null) {
+                    logger.warn('[PHASE1] ⚠️ API Gemini przeciążone - zakończono procedurę OCR');
+                    return;
+                }
                 if (session.cancelled || !session.aggregatedResults) {
                     logger.info('[PHASE1] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
                     return;
@@ -766,7 +770,11 @@ client.on(Events.MessageCreate, async (message) => {
                     ocrService
                 );
 
-                // Sprawdź czy sesja nie została anulowana podczas przetwarzania
+                // Sprawdź czy sesja nie została anulowana lub API było przeciążone
+                if (results === null) {
+                    logger.warn('[REMIND] ⚠️ API Gemini przeciążone - zakończono procedurę OCR');
+                    return;
+                }
                 if (session.cancelled) {
                     logger.info('[REMIND] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
                     return;
@@ -874,6 +882,16 @@ client.on(Events.MessageCreate, async (message) => {
                     session.publicInteraction,
                     ocrService
                 );
+
+                // Sprawdź czy API było przeciążone lub sesja anulowana
+                if (results === null) {
+                    logger.warn('[PUNISH] ⚠️ API Gemini przeciążone - zakończono procedurę OCR');
+                    return;
+                }
+                if (session.cancelled) {
+                    logger.info('[PUNISH] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    return;
+                }
 
                 // Pokaż końcowe potwierdzenie z listą graczy
                 const confirmation = punishmentService.createFinalConfirmationEmbed(session);
