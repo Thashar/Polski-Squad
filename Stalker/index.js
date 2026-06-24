@@ -326,10 +326,6 @@ client.once(Events.ClientReady, async () => {
         logger.error(`❌ Błąd inicjalizacji wyświetlania kolejki OCR: ${error.message}`);
     }
 
-    // Jednorazowy backfill historii Core Stock (2026-05-24)
-    const { backfillHistoryFromEquipmentData } = require('./services/coreHistoryService');
-    backfillHistoryFromEquipmentData().catch(e => logger.error('❌ Błąd backfill historii:', e));
-
     // Sprawdź i upewnij się, że wiadomość o urlopach jest ostatnia na kanale
     for (const guild of client.guilds.cache.values()) {
         try {
