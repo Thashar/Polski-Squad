@@ -12254,6 +12254,23 @@ async function handleCoreRankingButton(interaction, sharedState) {
 
     await interaction.deferUpdate();
 
+    // Przebuduj przyciski od nowa (unikanie COMPONENT_CUSTOM_ID_DUPLICATED przy reserialization)
+    const parseEmoji = (str) => {
+        const m = str.match(/^<:(\w+):(\d+)>$/);
+        return m ? { name: m[1], id: m[2] } : str;
+    };
+    const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+        new ButtonBuilder()
+            .setCustomId(`core_ranking|${name}`)
+            .setLabel(name)
+            .setEmoji(parseEmoji(icon))
+            .setStyle(ButtonStyle.Secondary)
+    );
+    const components = [
+        new ActionRowBuilder().addComponents(coreButtons.slice(0, 3)),
+        new ActionRowBuilder().addComponents(coreButtons.slice(3, 6))
+    ];
+
     try {
         // Wczytaj dane ekwipunku
         const fs = require('fs').promises;
@@ -12375,7 +12392,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
         const replyPayload = {
             content: null,
             embeds: [embed],
-            components: interaction.message.components,
+            components,
             files: []
         };
 
@@ -12387,7 +12404,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
         await interaction.editReply(replyPayload);
     } catch (error) {
         logger.error('[CORE-RANKING] ❌ Błąd:', error);
-        await interaction.editReply({ content: '❌ Błąd podczas generowania rankingu.', components: interaction.message.components, embeds: [] });
+        await interaction.editReply({ content: '❌ Błąd podczas generowania rankingu.', components, embeds: [] });
     }
 }
 
