@@ -75,7 +75,7 @@ class AIOCRService {
                 const isOverloaded = msgStr.includes('503') || msgStr.includes('Service Unavailable') || msgStr.includes('high demand');
                 const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT' || isOverloaded;
                 if (!isRetryable || attempt === retries - 1) throw err;
-                const delay = 1000 * Math.pow(2, attempt);
+                const delay = Math.min(5000, 1000 * Math.pow(2, attempt));
                 logger.warn(`[AI OCR] Gemini error ${status ?? 'unknown'} (overloaded: ${isOverloaded}), retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
                 await new Promise(r => setTimeout(r, delay));
             }
@@ -310,7 +310,7 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
                 step:          'extract-equipment',
                 promptName:    'extract-equipment',
                 promptVersion: PROMPT_VERSIONS['extract-equipment'],
-            });
+            }, 10);
 
             const responseText = res.text.trim();
             logger.info(`[AI OCR - Equipment] Odpowiedź: ${responseText}`);
