@@ -240,10 +240,22 @@
 **Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
 - Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)
 - Po kliknięciu: ranking graczy według ilości wybranego cora (malejąco)
-- Format linii: `#1 Nick **ilość** 🔥` (pozycja, nick, pogrubiona ilość, ikona klanu)
+- Format linii: `**1.** Nick - **125** — +8.5%/mies. 🔥` (pozycja, nick, ilość, % wzrostu/mies., ikona klanu)
+- **Tie-breaking:** przy tej samej ilości wyżej jest gracz, który jako pierwszy osiągnął tę ilość (pole `coreFirstAchievedAt` w equipment_data.json)
+- **Wzrost miesięczny:** obliczany z historii — delta ilości od baseline ~30 dni temu, skalowana do 30 dni / wartość bazowa × 100%
 - Brak klanu → ikona 💀
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
-- Max 30 pozycji w rankingu (z informacją o liczbie pozostałych)
+- Pod rankingiem: wykres historii danego cora dla osoby wywołującej komendę (SVG → PNG przez sharp)
+- Wykres widoczny tylko gdy wywołujący ma ≥2 punkty danych w historii
+- Dane historyczne: `data/equipment_history.json` — dzienne snapshoty per userId
+
+**Historia Core Stock** - `services/coreHistoryService.js`:
+- Przy każdym zapisie ekwipunku (`handleEquipmentSave`) → `saveDailySnapshot(userId, items)` (fire-and-forget)
+- Jeden wpis per dzień: jeśli gracz skanuje dwukrotnie tego samego dnia, zachowywana jest **max ilość** per typ cora
+- Retencja: max 365 dni (starsze wpisy automatycznie usuwane przy każdym nowym zapisie)
+- Format: `{ userId: [ { date: 'YYYY-MM-DD', items: {...}, savedAt: ISO_string }, ... ] }`
+- `generateCoreHistoryChart(userId, coreName, username)` → Buffer PNG (900×280px) lub null gdy <2 punktów
+- Wykres: Discord dark theme (#1E1F22), krzywa Catmull-Rom, blurple (#5865F2), oś miesięczna (pl), detekcja kolizji etykiet
 
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 

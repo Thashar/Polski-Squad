@@ -12268,11 +12268,54 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return;
         }
 
-        // Filtruj użytkowników posiadających dane dla wybranego cora
+        // Wczytaj historię do obliczenia miesięcznego wzrostu i wykresu
+        const { generateCoreHistoryChart } = require('../services/coreHistoryService');
+        let historyData = {};
+        try {
+            historyData = JSON.parse(await fs.readFile(path.join(__dirname, '../data/equipment_history.json'), 'utf8'));
+        } catch {}
+
+        // Oblicz % wzrostu w skali 30 dni dla danego gracza i cora
+        function calcMonthlyGrowthPct(userId, coreName) {
+            const userHist = historyData[userId];
+            if (!userHist || userHist.length < 2) return null;
+            const sorted = [...userHist]
+                .filter(e => e.items[coreName] !== undefined)
+                .sort((a, b) => a.date.localeCompare(b.date));
+            if (sorted.length < 2) return null;
+
+            const cutoffStr = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+            let baseline = null;
+            for (const e of sorted) {
+                if (e.date <= cutoffStr) baseline = e;
+                else break;
+            }
+            if (!baseline) baseline = sorted[0];
+            const latest = sorted[sorted.length - 1];
+            if (baseline === latest) return null;
+
+            const baseQty = baseline.items[coreName];
+            const latestQty = latest.items[coreName];
+            if (!baseQty) return null;
+
+            const daysDiff = Math.max(1,
+                (new Date(latest.date + 'T00:00:00Z') - new Date(baseline.date + 'T00:00:00Z'))
+                / (1000 * 60 * 60 * 24)
+            );
+            const scaledDiff = (latestQty - baseQty) / daysDiff * 30;
+            return (scaledDiff / baseQty) * 100;
+        }
+
+        // Buduj wpisy z tie-breakingiem wg czasu pierwszego osiągnięcia ilości
         const entries = [];
         for (const [userId, userData] of Object.entries(equipData)) {
             if (!userData.items || userData.items[coreName] === undefined) continue;
-            entries.push({ userId, qty: userData.items[coreName] });
+            const qty = userData.items[coreName];
+            const firstAchievedAt = userData.coreFirstAchievedAt?.[coreName]
+                || userData.updatedAt
+                || userData.createdAt
+                || '9999';
+            entries.push({ userId, qty, firstAchievedAt, monthlyPct: calcMonthlyGrowthPct(userId, coreName) });
         }
 
         if (entries.length === 0) {
@@ -12280,18 +12323,19 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return;
         }
 
-        // Posortuj malejąco
-        entries.sort((a, b) => b.qty - a.qty);
+        // Malejąco po ilości; przy remisie — kto wcześniej osiągnął tę ilość
+        entries.sort((a, b) => {
+            if (b.qty !== a.qty) return b.qty - a.qty;
+            return a.firstAchievedAt.localeCompare(b.firstAchievedAt);
+        });
 
         // Pobierz memberów serwera
         const members = await safeFetchMembers(interaction.guild);
 
-        // Zbuduj linie rankingu (max 250 = 25 pól × 10, limit Discord)
         const lines = entries.slice(0, 250).map((entry, i) => {
             const member = members.get(entry.userId);
             const nick = member ? member.displayName : `<@${entry.userId}>`;
 
-            // Ikona klanu
             let clanIcon = '💀';
             if (member) {
                 for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
@@ -12303,7 +12347,13 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 }
             }
 
-            return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}** ${clanIcon}`;
+            let growthStr = '';
+            if (entry.monthlyPct !== null) {
+                const sign = entry.monthlyPct >= 0 ? '+' : '';
+                growthStr = ` — ${sign}${entry.monthlyPct.toFixed(1)}%/mies.`;
+            }
+
+            return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}**${growthStr} ${clanIcon}`;
         });
 
         const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
@@ -12314,15 +12364,27 @@ async function handleCoreRankingButton(interaction, sharedState) {
             .setFooter({ text: `Łącznie graczy z danymi: ${entries.length}` })
             .setTimestamp();
 
-        // Pola po max 10 wpisów, bez nagłówków
         for (let i = 0; i < lines.length; i += 10) {
-            const chunk = lines.slice(i, i + 10);
-            const fieldValue = chunk.join('\n');
-            embed.addFields({ name: '\u200b', value: fieldValue, inline: true });
+            embed.addFields({ name: '​', value: lines.slice(i, i + 10).join('\n'), inline: true });
         }
 
-        await interaction.editReply({ content: null, embeds: [embed], components: interaction.message.components });
+        // Wykres historii dla wywolujacego
+        const viewerName = interaction.member?.displayName || interaction.user.username;
+        const chartBuffer = await generateCoreHistoryChart(interaction.user.id, coreName, viewerName);
 
+        const replyPayload = {
+            content: null,
+            embeds: [embed],
+            components: interaction.message.components,
+            files: []
+        };
+
+        if (chartBuffer) {
+            replyPayload.files.push(new AttachmentBuilder(chartBuffer, { name: 'core_history.png' }));
+            replyPayload.embeds.push(new EBLocal().setColor('#5865F2').setImage('attachment://core_history.png'));
+        }
+
+        await interaction.editReply(replyPayload);
     } catch (error) {
         logger.error('[CORE-RANKING] ❌ Błąd:', error);
         await interaction.editReply({ content: '❌ Błąd podczas generowania rankingu.', components: interaction.message.components, embeds: [] });
@@ -12520,14 +12582,33 @@ async function handleEquipmentSave(interaction, sharedState) {
         } catch {}
 
         const scannedAt = new Date().toISOString();
+        const oldUserData = data[userId] || {};
+        const oldItems = oldUserData.items || {};
+        const oldFirstAchieved = oldUserData.coreFirstAchievedAt || {};
+
+        // coreFirstAchievedAt: zapisz timestamp gdy ilość rośnie (lub pierwsze pojawienie się)
+        const newFirstAchieved = { ...oldFirstAchieved };
+        for (const [coreName, qty] of Object.entries(pending.items)) {
+            const oldQty = oldItems[coreName];
+            if (oldQty === undefined || qty > oldQty) {
+                newFirstAchieved[coreName] = scannedAt;
+            }
+        }
+
         data[userId] = {
             items: pending.items,
             updatedAt: scannedAt,
+            createdAt: oldUserData.createdAt || scannedAt,
+            coreFirstAchievedAt: newFirstAchieved,
             guildId: interaction.guildId
         };
 
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
         await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
+
+        // Zapisz dzienny snapshot do historii (fire-and-forget)
+        const { saveDailySnapshot } = require('../services/coreHistoryService');
+        saveDailySnapshot(userId, pending.items).catch(e => logger.error('[EQUIPMENT] Błąd snapshotu:', e));
 
         interaction.client._equipmentPending.delete(userId);
 
