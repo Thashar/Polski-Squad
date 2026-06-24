@@ -17,6 +17,7 @@ const pol = {
 
     // Ranking — embed
     rankingTitle: '🏆 Ranking Graczy',
+    roleRankingTitle: '🎖️ Ranking roli: {roleName}',
     rankingStats: 'Statystyki',
     rankingStatsGlobal: 'Statystyki globalne',
     rankingPlayersCount: '👥 Liczba graczy: {count}',
@@ -387,6 +388,7 @@ const eng = {
 
     // Ranking — embed
     rankingTitle: '🏆 Player Ranking',
+    roleRankingTitle: '🎖️ Role Ranking: {roleName}',
     rankingStats: 'Statistics',
     rankingStatsGlobal: 'Global statistics',
     rankingPlayersCount: '👥 Players: {count}',

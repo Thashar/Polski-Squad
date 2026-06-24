@@ -6329,7 +6329,7 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, 0, totalPages, parentUserId, guild,
-                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, titleOverride: `🎖️ Ranking roli: ${roleName}` }
+                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, titleOverride: formatMessage(msgs.roleRankingTitle, { roleName }) }
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, btnOptions);
 
