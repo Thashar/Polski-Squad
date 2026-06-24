@@ -275,4 +275,44 @@ async function generateCoreHistoryChart(userId, coreName, username) {
     }
 }
 
-module.exports = { saveDailySnapshot, generateCoreHistoryChart };
+const EQUIP_DATA_PATH = path.join(__dirname, '../data/equipment_data.json');
+const BACKFILL_DATE = '2026-05-24';
+const BACKFILL_FLAG = '_backfilled_may24';
+
+async function backfillHistoryFromEquipmentData() {
+    try {
+        const history = await loadHistory();
+        if (history[BACKFILL_FLAG]) return;
+
+        let equipData = {};
+        try {
+            equipData = JSON.parse(await fs.readFile(EQUIP_DATA_PATH, 'utf8'));
+        } catch {
+            return;
+        }
+
+        let count = 0;
+        for (const [userId, userData] of Object.entries(equipData)) {
+            if (!userData.items || Object.keys(userData.items).length === 0) continue;
+            if (!history[userId]) history[userId] = [];
+            const alreadyHas = history[userId].some(e => e.date === BACKFILL_DATE);
+            if (!alreadyHas) {
+                history[userId].push({
+                    date: BACKFILL_DATE,
+                    items: { ...userData.items },
+                    savedAt: BACKFILL_DATE + 'T00:00:00.000Z'
+                });
+                history[userId].sort((a, b) => a.date.localeCompare(b.date));
+                count++;
+            }
+        }
+
+        history[BACKFILL_FLAG] = true;
+        await saveHistory(history);
+        logger.info(`[CORE-HISTORY] ✅ Backfill ${BACKFILL_DATE}: dodano wpisy dla ${count} graczy`);
+    } catch (error) {
+        logger.error('[CORE-HISTORY] ❌ Błąd backfill:', error);
+    }
+}
+
+module.exports = { saveDailySnapshot, generateCoreHistoryChart, backfillHistoryFromEquipmentData };
