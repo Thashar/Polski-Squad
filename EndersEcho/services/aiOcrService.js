@@ -60,7 +60,7 @@ class AIOCRService {
      * Zachowuje poprzedni kształt odpowiedzi (text, promptTokens, outputTokens,
      * thoughtTokens) + dodaje pola telemetryczne (durationMs, traceId, provider).
      */
-    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3) {
+    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3, onRetry = null) {
         let lastError;
         for (let attempt = 0; attempt < retries; attempt++) {
             try {
@@ -88,15 +88,15 @@ class AIOCRService {
                 const status = err.status ?? err.statusCode ?? err.code;
                 const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
                 if (!isRetryable || attempt === retries - 1) throw err;
-                const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-                logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
-                await new Promise(r => setTimeout(r, delay));
+                logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za 3000ms`);
+                if (onRetry) await onRetry(attempt + 1, retries).catch(() => {});
+                await new Promise(r => setTimeout(r, 3000));
             }
         }
         throw lastError;
     }
 
-    async _extractData(base64Image, mediaType, telemetryMeta) {
+    async _extractData(base64Image, mediaType, telemetryMeta, onRetry = null) {
         const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
 1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
 2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
@@ -124,7 +124,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             step: 'extract-data-eng',
             promptName: 'extract-data-eng',
             promptVersion: PROMPT_VERSIONS['extract-data-eng'],
-        }, 10);
+        }, 10, onRetry);
 
         return { text: res.text, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
     }
@@ -291,7 +291,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
      * @param {object} [telemetryMeta] — { operationType, actorDiscordId, guildId, authorizationId }
      * @param {string} [lang]      — język serwera ('pol'|'eng'), wpływa na powód odrzucenia
      */
-    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol', onProgress = null) {
+    async analyzeTestImage(imagePath, log = logger, telemetryMeta = {}, lang = 'pol', onProgress = null, onRetry = null) {
         if (!this.enabled) throw new Error('AI OCR nie jest włączony');
 
         const tokenUsage = { promptTokens: 0, outputTokens: 0, thoughtTokens: 0 };
@@ -307,7 +307,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const wzorBase64 = wzorBuffer.toString('base64');
             const mediaType = 'image/png';
 
-            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang);
+            const onRetryTemplate = onRetry ? (attempt, total) => onRetry(attempt, total, 'template') : null;
+            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang, onRetryTemplate);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
@@ -318,7 +319,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
             if (onProgress) await onProgress('extracting');
 
-            const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta);
+            const onRetryExtract = onRetry ? (attempt, total) => onRetry(attempt, total, 'extract') : null;
+            const extractRes = await this._extractData(uploadedBase64, mediaType, telemetryMeta, onRetryExtract);
             tokenUsage.promptTokens  += extractRes.promptTokens;
             tokenUsage.outputTokens  += extractRes.outputTokens;
             tokenUsage.thoughtTokens += extractRes.thoughtTokens;
@@ -333,7 +335,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         }
     }
 
-    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta, lang = 'pol') {
+    async _compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log = logger, telemetryMeta, lang = 'pol', onRetry = null) {
         const isEng = lang === 'eng';
         const reasonLang = isEng ? 'English' : 'Polish';
         const exampleReasons = isEng
@@ -386,7 +388,7 @@ ${exampleReasons.join('\n')}
             step: 'compare-template',
             promptName: 'compare-template',
             promptVersion: PROMPT_VERSIONS['compare-template'],
-        }, 10);
+        }, 10, onRetry);
 
         const response = res.text.trim();
         const upper = response.toUpperCase();

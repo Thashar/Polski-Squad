@@ -3762,8 +3762,15 @@ class InteractionHandler {
                 }
             };
 
+            const onRetry = async (attempt, total, step) => {
+                const msgKey = step === 'extract' ? 'updateRetryExtract' : 'updateRetryTemplate';
+                const template = msgs[msgKey] || '⏳ API przeciążone — próba {attempt}/{total}...';
+                const text = template.replace('{attempt}', attempt + 1).replace('{total}', total);
+                await interaction.editReply({ content: text }).catch(() => {});
+            };
+
             const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
-            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress);
+            const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress, onRetry);
 
             const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
 
