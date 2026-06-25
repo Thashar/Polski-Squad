@@ -139,7 +139,8 @@ class MessageHandler {
             }
 
             // === FORTNITE - Cicha klątwa admina na 1h za napisanie "fortnite" (lub obejścia cenzury) ===
-            if (interactionHandler && message.member && this.detectFortnite(message.content)) {
+            const fortniteCensorExcluded = this.config.channels.fortniteCensorExcluded || [];
+            if (interactionHandler && message.member && !fortniteCensorExcluded.includes(message.channel.id) && this.detectFortnite(message.content)) {
                 try {
                     await interactionHandler.applyRandomCurseToUser(message.member, 'FortniteCensor', 60 * 60 * 1000);
                     logger.info(`🎮 Fortnite wykryto od ${message.author.tag} - nałożono cichą klątwę admina na 1h`);
