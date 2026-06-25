@@ -88,7 +88,7 @@ class AIOCRService {
                 const status = err.status ?? err.statusCode ?? err.code;
                 const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
                 if (!isRetryable || attempt === retries - 1) throw err;
-                const delay = 1000 * Math.pow(2, attempt);
+                const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
                 logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za ${delay}ms`);
                 await new Promise(r => setTimeout(r, delay));
             }
@@ -124,7 +124,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             step: 'extract-data-eng',
             promptName: 'extract-data-eng',
             promptVersion: PROMPT_VERSIONS['extract-data-eng'],
-        });
+        }, 10);
 
         return { text: res.text, promptTokens: res.promptTokens, outputTokens: res.outputTokens, thoughtTokens: res.thoughtTokens };
     }
@@ -386,7 +386,7 @@ ${exampleReasons.join('\n')}
             step: 'compare-template',
             promptName: 'compare-template',
             promptVersion: PROMPT_VERSIONS['compare-template'],
-        });
+        }, 10);
 
         const response = res.text.trim();
         const upper = response.toUpperCase();
