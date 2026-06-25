@@ -12,7 +12,10 @@ module.exports = {
         command: "1377633547028005027",
         attempts: "1377633547028005027",
         reminder: "1377633547028005027",
-        judgment: process.env.KONKLAWE_JUDGMENT_CHANNEL_ID
+        judgment: process.env.KONKLAWE_JUDGMENT_CHANNEL_ID,
+        fortniteCensorExcluded: [
+            "11519739015660568637"
+        ]
     },
     roles: {
         papal: "1298897770844786699",
