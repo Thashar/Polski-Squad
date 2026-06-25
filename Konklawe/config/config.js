@@ -5,6 +5,7 @@ module.exports = {
     token: process.env.KONKLAWE_TOKEN,
     clientId: process.env.KONKLAWE_CLIENT_ID,
     guildId: process.env.KONKLAWE_GUILD_ID,
+    forbiddenPhrase: process.env.KONKLAWE_FORBIDDEN_PHRASE || 'fortnite',
     timezone: 'Europe/Warsaw',
     channels: {
         trigger: "1377549511542439976",
