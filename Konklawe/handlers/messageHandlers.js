@@ -15,13 +15,16 @@ class MessageHandler {
     }
 
     /**
-     * Wykrywa słowo "fortnite" i zaawansowane próby ominięcia cenzury.
+     * Wykrywa zakazaną frazę i zaawansowane próby ominięcia cenzury.
      * Obsługuje: leet speak, separatory, podwojone litery, homoglify unicode,
-     * podział na "fort nite", fonetyczne zamienniki (ph→f, y→i, kn→n).
+     * podział spacją wewnątrz frazy, fonetyczne zamienniki (ph→f, y→i, kn→n).
      * @param {string} text - Treść wiadomości
-     * @returns {boolean} true jeśli wykryto "fortnite"
+     * @param {string} phrase - Zakazana fraza (z config.forbiddenPhrase)
+     * @returns {boolean} true jeśli wykryto frazę
      */
-    detectFortnite(text) {
+    detectForbiddenPhrase(text, phrase) {
+        const target = phrase.toLowerCase();
+
         // Krok 1: małe litery
         let normalized = text.toLowerCase();
 
@@ -47,7 +50,7 @@ class MessageHandler {
             .replace(/@/g, 'a')
             .replace(/\|/g, 'i');
 
-        // Krok 4: fonetyczne zamienniki (ph→f, y→i przy "nyte", kn→n)
+        // Krok 4: fonetyczne zamienniki (ph→f, kn→n)
         normalized = normalized
             .replace(/ph/g, 'f')
             .replace(/kn/g, 'n');
@@ -58,20 +61,16 @@ class MessageHandler {
         // Krok 6: usuń podwojone litery (forrtniite → fortnite)
         const deduplicated = noSep.replace(/(.)\1+/g, '$1');
 
-        // Sprawdzenia po usunięciu separatorów (fortnite, f0rtn1t3, f.o.r.t.n.i.t.e itp.)
-        if (noSep.includes('fortnite')) return true;
-        if (deduplicated.includes('fortnite')) return true;
+        if (noSep.includes(target)) return true;
+        if (deduplicated.includes(target)) return true;
 
-        // Wariant "fort nite" (spacja w środku słowa)
+        // Wariant z dowolną spacją wewnątrz frazy (np. "fort nite")
         const spacedNorm = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-        if (spacedNorm.includes('fort nite')) return true;
-
-        // Fonetyczny wariant "fortnight" → po usunięciu 'gh' zostaje fortnit
-        if (noSep.replace(/gh/g, '').includes('fortnit')) return true;
+        if (spacedNorm.includes(target)) return true;
 
         // Wariant z "y" jako "i": "fortnyte" → zamień y→i
         const yToI = noSep.replace(/y/g, 'i');
-        if (yToI.includes('fortnite')) return true;
+        if (yToI.includes(target)) return true;
 
         return false;
     }
@@ -138,14 +137,17 @@ class MessageHandler {
                 }
             }
 
-            // === FORTNITE - Cicha klątwa admina na 1h za napisanie "fortnite" (lub obejścia cenzury) ===
-            const fortniteCensorExcluded = this.config.channels.fortniteCensorExcluded || [];
-            if (interactionHandler && message.member && !fortniteCensorExcluded.includes(message.channel.id) && this.detectFortnite(message.content)) {
+            // === CENZURA FRAZY - Cicha klątwa admina na 1h za napisanie zakazanej frazy (lub obejścia cenzury) ===
+            const forbiddenPhrase = this.config.forbiddenPhrase;
+            const forbiddenCensorExcluded = this.config.channels.fortniteCensorExcluded || [];
+            if (interactionHandler && message.member && forbiddenPhrase &&
+                !forbiddenCensorExcluded.includes(message.channel.id) &&
+                this.detectForbiddenPhrase(message.content, forbiddenPhrase)) {
                 try {
-                    await interactionHandler.applyRandomCurseToUser(message.member, 'FortniteCensor', 60 * 60 * 1000);
-                    logger.info(`🎮 Fortnite wykryto od ${message.author.tag} - nałożono cichą klątwę admina na 1h`);
+                    await interactionHandler.applyRandomCurseToUser(message.member, 'ForbiddenPhraseCensor', 60 * 60 * 1000);
+                    logger.info(`🚫 Zakazana fraza "${forbiddenPhrase}" wykryta od ${message.author.tag} - nałożono cichą klątwę admina na 1h`);
                 } catch (error) {
-                    logger.error(`❌ Błąd nakładania klątwy za Fortnite: ${error.message}`);
+                    logger.error(`❌ Błąd nakładania klątwy za zakazaną frazę: ${error.message}`);
                 }
             }
 
