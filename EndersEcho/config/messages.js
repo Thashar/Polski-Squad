@@ -41,7 +41,9 @@ const pol = {
     // /update — przetwarzanie (postęp krok po kroku)
     updateDownloading: '📥 Pobieranie obrazu...',
     updateComparingTemplate: '🔍 Analiza zgodności obrazu ze wzorcem...',
+    updateRetryTemplate: '⏳ API przeciążone — ponawiam sprawdzanie wzorca (próba {attempt}/{total})...',
     updateExtractingData: '✅ Analiza OK — odczytuję dane rekordu...',
+    updateRetryExtract: '⏳ API przeciążone — ponawiam odczytywanie danych (próba {attempt}/{total})...',
     updateSaving: '💾 Zapis danych...',
     updateNotImage: '❌ Załączony plik nie jest obrazem! Obsługiwane formaty: PNG, JPG, JPEG, GIF, BMP',
     updateFileTooLarge: '❌ Plik jest za duży! Maksymalny rozmiar: **{maxMB}MB**, twój plik: **{fileMB}MB**\n💡 **Tip:** Zmniejsz jakość obrazu lub użyj kompresji.',
@@ -412,7 +414,9 @@ const eng = {
     // /update — processing (step by step progress)
     updateDownloading: '📥 Downloading image...',
     updateComparingTemplate: '🔍 Checking image against template...',
+    updateRetryTemplate: '⏳ API overloaded — retrying template check (attempt {attempt}/{total})...',
     updateExtractingData: '✅ Match confirmed — reading record data...',
+    updateRetryExtract: '⏳ API overloaded — retrying data extraction (attempt {attempt}/{total})...',
     updateSaving: '💾 Saving data...',
     updateNotImage: '❌ The attached file is not an image! Supported formats: PNG, JPG, JPEG, GIF, BMP',
     updateFileTooLarge: '❌ File is too large! Maximum size: **{maxMB}MB**, your file: **{fileMB}MB**\n💡 **Tip:** Reduce image quality or use compression.',
