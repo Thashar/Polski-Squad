@@ -3359,7 +3359,7 @@ class InteractionHandler {
      * @param {GuildMember} targetMember - Cel klątwy
      * @param {string} source - Źródło klątwy (dla logów)
      */
-    async applyRandomCurseToUser(targetMember, source = 'Unknown') {
+    async applyRandomCurseToUser(targetMember, source = 'Unknown', duration = 5 * 60 * 1000) {
         const userId = targetMember.id;
         const guild = targetMember.guild;
 
@@ -3392,9 +3392,10 @@ class InteractionHandler {
             selectedCurse = curses[Math.floor(Math.random() * curses.length)];
         }
 
-        // Nałóż klątwę (5 minut)
-        await this.applyCurse(targetMember, selectedCurse, guild);
-        logger.info(`🔥 ${source}: Nałożono losową klątwę "${selectedCurse}" na ${targetMember.user.tag}`);
+        // Nałóż klątwę z zadanym czasem trwania
+        const endTime = Date.now() + duration;
+        await this.applyCurse(targetMember, selectedCurse, guild, endTime);
+        logger.info(`🔥 ${source}: Nałożono losową klątwę "${selectedCurse}" na ${targetMember.user.tag} (${Math.round(duration / 60000)}min)`);
     }
 
     async applyCurse(targetMember, curseType, guild, customEndTime = null) {

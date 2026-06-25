@@ -15,6 +15,68 @@ class MessageHandler {
     }
 
     /**
+     * Wykrywa słowo "fortnite" i zaawansowane próby ominięcia cenzury.
+     * Obsługuje: leet speak, separatory, podwojone litery, homoglify unicode,
+     * podział na "fort nite", fonetyczne zamienniki (ph→f, y→i, kn→n).
+     * @param {string} text - Treść wiadomości
+     * @returns {boolean} true jeśli wykryto "fortnite"
+     */
+    detectFortnite(text) {
+        // Krok 1: małe litery
+        let normalized = text.toLowerCase();
+
+        // Krok 2: homoglify unicode (litery wyglądające jak łacińskie)
+        normalized = normalized
+            .replace(/[ꜰᶠℱ𝐟𝑓𝒻𝓯𝔣𝕗𝖋𝗳𝘧𝙛]/g, 'f')
+            .replace(/[ºοοо𝐨𝑜𝒐𝓸𝔬𝕠𝖔𝗼𝘰𝙤ₒ]/g, 'o')
+            .replace(/[ʀʁ𝐫𝑟𝓻𝔯𝕣𝖗𝗿𝘳𝙧]/g, 'r')
+            .replace(/[ᴛ𝐭𝑡𝓽𝔱𝕥𝖙𝗍𝘵𝙩]/g, 't')
+            .replace(/[ɴ𝐧𝑛𝓷𝔫𝕟𝖓𝗻𝘯𝙣]/g, 'n')
+            .replace(/[ɪ𝐢𝑖𝓲𝔦𝕚𝖎𝗶𝘪𝙞]/g, 'i')
+            .replace(/[ᴇ𝐞𝑒𝓮𝔢𝕖𝖊𝗲𝘦𝙚]/g, 'e');
+
+        // Krok 3: leet speak
+        normalized = normalized
+            .replace(/0/g, 'o')
+            .replace(/1/g, 'i')
+            .replace(/3/g, 'e')
+            .replace(/4/g, 'a')
+            .replace(/5/g, 's')
+            .replace(/7/g, 't')
+            .replace(/\$/g, 's')
+            .replace(/@/g, 'a')
+            .replace(/\|/g, 'i');
+
+        // Krok 4: fonetyczne zamienniki (ph→f, y→i przy "nyte", kn→n)
+        normalized = normalized
+            .replace(/ph/g, 'f')
+            .replace(/kn/g, 'n');
+
+        // Krok 5: usuń separatory
+        const noSep = normalized.replace(/[\s.\-_*|,!?'"`~^+=&#%@/\\]/g, '');
+
+        // Krok 6: usuń podwojone litery (forrtniite → fortnite)
+        const deduplicated = noSep.replace(/(.)\1+/g, '$1');
+
+        // Sprawdzenia po usunięciu separatorów (fortnite, f0rtn1t3, f.o.r.t.n.i.t.e itp.)
+        if (noSep.includes('fortnite')) return true;
+        if (deduplicated.includes('fortnite')) return true;
+
+        // Wariant "fort nite" (spacja w środku słowa)
+        const spacedNorm = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        if (spacedNorm.includes('fort nite')) return true;
+
+        // Fonetyczny wariant "fortnight" → po usunięciu 'gh' zostaje fortnit
+        if (noSep.replace(/gh/g, '').includes('fortnit')) return true;
+
+        // Wariant z "y" jako "i": "fortnyte" → zamień y→i
+        const yToI = noSep.replace(/y/g, 'i');
+        if (yToI.includes('fortnite')) return true;
+
+        return false;
+    }
+
+    /**
      * Wykrywa herezję "Full HP najlepsze" i próby obejścia cenzury
      * @param {string} text - Treść wiadomości
      * @returns {boolean} true jeśli wykryto herezję
@@ -73,6 +135,16 @@ class MessageHandler {
                     logger.info(`🔱 Herezja Full HP wykryta od ${message.author.tag} - nałożono cichą klątwę`);
                 } catch (error) {
                     logger.error(`❌ Błąd nakładania klątwy za herezję Full HP: ${error.message}`);
+                }
+            }
+
+            // === FORTNITE - Cicha klątwa admina na 1h za napisanie "fortnite" (lub obejścia cenzury) ===
+            if (interactionHandler && message.member && this.detectFortnite(message.content)) {
+                try {
+                    await interactionHandler.applyRandomCurseToUser(message.member, 'FortniteCensor', 60 * 60 * 1000);
+                    logger.info(`🎮 Fortnite wykryto od ${message.author.tag} - nałożono cichą klątwę admina na 1h`);
+                } catch (error) {
+                    logger.error(`❌ Błąd nakładania klątwy za Fortnite: ${error.message}`);
                 }
             }
 

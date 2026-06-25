@@ -31,7 +31,8 @@
 7. **Virtue Check** - 10 cnót + porady (0 many)
 8. **Losowe Odpowiedzi** - Użytkownicy papiescy: 1/100 szansa, emoji JP2roll
 10. **Chaos Bomby** - `bombChaosService.js`: Komenda `/bomba` (admin) aktywuje 1h chaos — każda wiadomość ma 30% szansę na ghost ping `💥 @user 💥` (usuwany po 2s). Persystencja w `shared_data/bomb_chaos_state.json`. Pomija użytkowników z rolą gracza (`EXEMPT_ROLE_ID`).
-9. **Herezja Full HP** - `messageHandlers.js`: Automatyczna cicha losowa klątwa za napisanie "Full HP najlepsze" (lub wariantów z leet speak, separatorami, próbami obejścia cenzury). Wykrywa: małe/wielkie litery, leet speak (0→o, 1→i, 3→e, 4→a...), separatory (spacje, kropki, myślniki między literami). Klątwa nakładana bez żadnego publicznego powiadomienia.
+9. **Herezja Full HP** - `messageHandlers.js`: Automatyczna cicha losowa klątwa (5min) za napisanie "Full HP najlepsze" (lub wariantów z leet speak, separatorami, próbami obejścia cenzury). Wykrywa: małe/wielkie litery, leet speak (0→o, 1→i, 3→e, 4→a...), separatory (spacje, kropki, myślniki między literami). Klątwa nakładana bez żadnego publicznego powiadomienia.
+11. **Cenzura Fortnite** - `messageHandlers.js`: Automatyczna cicha klątwa admina na **1 godzinę** za napisanie "fortnite" (lub zaawansowanych prób obejścia). Algorytm wykrywania: leet speak (0→o, 1→i, 3→e, 7→t...), homoglify unicode, separatory (f.o.r.t.n.i.t.e), podwojone litery (forrtniite→fortnite), podział "fort nite", fonetyczne zamienniki (ph→f, y→i, kn→n, fortnight). Wywołuje `applyRandomCurseToUser` z czasem 60min. Brak publicznego powiadomienia.
 
 **Komendy:** `/podpowiedz`, `/podpowiedzi`, `/statystyki`, `/blessing`, `/curse`, `/revenge`, `/virtue-check`, `/bomba` (admin)
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, KONKLAWE_AI_PROVIDER (opcjonalne), KONKLAWE_ANTHROPIC_API_KEY (opcjonalne), KONKLAWE_AI_MODEL (opcjonalne), KONKLAWE_GROK_MODEL (opcjonalne), XAI_API_KEY (opcjonalne)
