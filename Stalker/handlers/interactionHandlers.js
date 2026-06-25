@@ -2087,7 +2087,7 @@ async function handleButton(interaction, sharedState) {
         await handleProgresNavButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('clan_status_prev|') || interaction.customId.startsWith('clan_status_next|')) {
         await handleClanStatusPageButton(interaction, sharedState);
-    } else if (interaction.customId.startsWith('core_ranking|')) {
+    } else if (interaction.customId.startsWith('core_ranking|') || interaction.customId.startsWith('core_ranking_nav|')) {
         await handleCoreRankingButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('confirm_reminder_')) {
         await handleConfirmReminderButton(interaction, sharedState);
@@ -12383,7 +12383,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
         // Wiersz 1: paginacja
         const rowPagination = new ARB().addComponents(
             new BB()
-                .setCustomId(`core_ranking|${coreName}|${safePage - 1}`)
+                .setCustomId(`core_ranking_nav|${coreName}|${safePage - 1}`)
                 .setLabel('◄')
                 .setStyle(BS.Secondary)
                 .setDisabled(safePage === 0),
@@ -12393,7 +12393,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 .setStyle(BS.Secondary)
                 .setDisabled(true),
             new BB()
-                .setCustomId(`core_ranking|${coreName}|${safePage + 1}`)
+                .setCustomId(`core_ranking_nav|${coreName}|${safePage + 1}`)
                 .setLabel('►')
                 .setStyle(BS.Secondary)
                 .setDisabled(safePage === totalPages - 1)
