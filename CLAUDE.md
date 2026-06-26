@@ -784,7 +784,7 @@ KONKLAWE_AI_MODEL=claude-3-haiku-20240307
 # Grok / xAI (gdy provider=grok)
 XAI_API_KEY=xai-xxxxxxxxxxxxx
 KONKLAWE_GROK_MODEL=grok-3-mini
-# Cenzura frazy (opcjonalne, domyślnie "fortnite")
+# Cenzura frazy (opcjonalne, brak zmiennej = cenzura wyłączona)
 KONKLAWE_FORBIDDEN_PHRASE=fortnite
 
 # ===== WYDARZYNIER BOT =====
