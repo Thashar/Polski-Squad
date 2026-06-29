@@ -1266,8 +1266,8 @@ class RankingService {
                 .setTitle(msgs.globalRankingEmbedTitle || '🌍 Ranking globalny');
             embed2.setDescription(globalSnippetData.description);
             if (chartName) embed2.setImage(`attachment://${chartName}`);
-            // Ikona rankingu globalnego (UWAGA: Discord nie renderuje SVG — może się nie wyświetlić)
-            embed2.setFooter({ text: botName || 'EndersEcho', iconURL: 'https://discord.com/assets/34f5679881a6a6e3.svg' });
+            // Ikona rankingu globalnego
+            embed2.setFooter({ text: botName || 'EndersEcho', iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128' });
             embeds.push(embed2);
         }
 
