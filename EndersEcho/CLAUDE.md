@@ -600,7 +600,7 @@ ENDERSECHO_GROK_CHAT_MODEL=grok-3-mini
 # AI OCR (opcjonalne)
 USE_ENDERSECHO_AI_OCR=false
 ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
-ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
+ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 
 # Serwer administracyjny (opcjonalne)
 # Bot jest na tym serwerze ale go ignoruje: brak zapisu do guild_configs, brak przypomnień o /configure,

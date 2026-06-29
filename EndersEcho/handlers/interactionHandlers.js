@@ -112,7 +112,7 @@ function playerMatchesQuery(p, query, client, guildId) {
 
 function buildGeminiUsage(aiResult) {
     if (!aiResult?.tokenUsage) return null;
-    const model = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
+    const model = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-lite';
     return {
         provider:     `gemini/${model}`,
         inputTokens:  aiResult.tokenUsage.promptTokens,

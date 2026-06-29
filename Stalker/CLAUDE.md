@@ -5,7 +5,7 @@
    - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
    - **AI OCR (opcjonalny):** `aiOcrService.js` - Google Gemini API (Gemini Vision), analiza wyników graczy przez AI
      - Włączany przez `USE_STALKER_AI_OCR=true` w .env + klucz `STALKER_GOOGLE_AI_API_KEY`
-     - Domyślny model: `gemini-2.5-flash-preview-05-20` (nadpisywalny przez `STALKER_GOOGLE_AI_MODEL`)
+     - Domyślny model: `gemini-2.5-flash-lite` (nadpisywalny przez `STALKER_GOOGLE_AI_MODEL`)
      - Prompt: "Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie: <nick> - <wynik>"
      - Automatyczny fallback na tradycyjny OCR gdy AI zawiedzie
      - Dotyczy komend: `/punish`, `/remind`, `/faza1`, `/faza2`, Core Stock (skan ekwipunku)
@@ -306,7 +306,7 @@ STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 # AI OCR Google Gemini (opcjonalne)
 USE_STALKER_AI_OCR=false
 STALKER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
-STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
+STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 
 ```
 

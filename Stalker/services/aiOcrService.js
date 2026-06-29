@@ -33,7 +33,7 @@ class AIOCRService {
 
         const apiKey = config.ocr.googleAiApiKey;
         this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
-        this.modelName = config.ocr.googleAiModel || 'gemini-2.5-flash-preview-05-20';
+        this.modelName = config.ocr.googleAiModel || 'gemini-2.5-flash-lite';
 
         if (this.enabled) {
             logger.success(`✅ AI OCR aktywny (Google Gemini) - model: ${this.modelName}`);

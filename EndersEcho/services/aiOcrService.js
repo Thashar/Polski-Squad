@@ -38,7 +38,7 @@ class AIOCRService {
 
         const apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
         this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
-        this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
+        this.modelName = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-lite';
 
         if (this.enabled) {
             logger.success(`✅ AI OCR aktywny - model: ${this.modelName}`);

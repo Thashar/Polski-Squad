@@ -17,7 +17,7 @@
  *   const adapter = createLlmAdapter({ botSlug: 'endersecho' });
  *   const result = await adapter.generate({
  *       provider:        'gemini',
- *       model:           'gemini-2.5-flash-preview-05-20',
+ *       model:           'gemini-2.5-flash-lite',
  *       parts:           [ { inlineData: { data, mimeType } }, { text: prompt } ],
  *       maxOutputTokens: 500,
  *       safetySettings:  [...],     // opcjonalne, provider-specific passthrough
