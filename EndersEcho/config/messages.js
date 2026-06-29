@@ -94,10 +94,11 @@ const pol = {
     recordFollowerLabel: '🔔 SUBSKRYPCJE:',
 
     // Wieloembedowe ogłoszenie /update (nagłówki sekcji)
-    globalRankingEmbedTitle: '🌍 Ranking globalny',
-    bossRankingEmbedTitle: '👾 Ranking bossa: {bossName}',
-    systemInfoEmbedTitle: 'ℹ️ Analiza zgłoszenia',
-    systemInfoAllGood: '✅ Zdjęcie zweryfikowane poprawnie — brak uwag. Wynik zapisany w rankingu.',
+    globalRankingEmbedTitle: 'Ranking globalny',
+    bossRankingEmbedTitle: 'Ranking bossa: `{bossName}`',
+    systemInfoEmbedTitle: 'Analiza zgłoszenia',
+    systemInfoAllGood: 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.',
+    snippetPositionChange: 'Zmiana pozycji:',
 
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
@@ -336,7 +337,7 @@ const pol = {
     cvBtnStatusRemoved: '🗑️ Usunięte przez admina',
 
     // Per-boss rekord (w embedzie ogłoszenia + w embedzie braku rekordu)
-    bossRecordField: '👾 Rekord na bossie',
+    bossRecordField: 'Rekord na bossie',
     bossRecordFirst: 'pierwszy wynik na tym bossie!',
     bossRecordUpdated: '👾 Nowy rekord na bossie',
     bossRecordOnlyStatus: '👾 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
@@ -474,10 +475,11 @@ const eng = {
     recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
 
     // Multi-embed /update announcement (section headers)
-    globalRankingEmbedTitle: '🌍 Global Ranking',
-    bossRankingEmbedTitle: '👾 Boss Ranking: {bossName}',
-    systemInfoEmbedTitle: 'ℹ️ Submission Analysis',
-    systemInfoAllGood: '✅ Screenshot verified successfully — no issues. Score saved to the ranking.',
+    globalRankingEmbedTitle: 'Global Ranking',
+    bossRankingEmbedTitle: 'Boss Ranking: `{bossName}`',
+    systemInfoEmbedTitle: 'Submission Analysis',
+    systemInfoAllGood: 'Screenshot verified successfully.\nScore saved to the ranking.',
+    snippetPositionChange: 'Position change:',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',
@@ -716,7 +718,7 @@ const eng = {
     cvBtnStatusRemoved: '🗑️ Removed by admin',
 
     // Per-boss record (in announcement embed + no-record embed)
-    bossRecordField: '👾 Boss Record',
+    bossRecordField: 'Boss Record',
     bossRecordFirst: 'first score on this boss!',
     bossRecordUpdated: '👾 New Boss Record',
     bossRecordOnlyStatus: '👾 Boss record beaten! Global record unchanged (current: {currentScore})',

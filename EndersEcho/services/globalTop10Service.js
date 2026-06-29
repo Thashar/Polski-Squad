@@ -385,7 +385,7 @@ class GlobalTop10Service {
 
         return {
             title,
-            description: `${direction} ${prevLabel} → #${newGlobalPosition}\n\n${lines.join('\n\n')}`
+            description: `**${msgs.snippetPositionChange || 'Zmiana pozycji:'}** ${direction} ${prevLabel} → #${newGlobalPosition}\n\n${lines.join('\n\n')}`
         };
     }
 
@@ -445,7 +445,7 @@ class GlobalTop10Service {
             lines.push(`${belowDir} ${await buildLine(below, newBossPosition + 1)}`);
         }
 
-        return { title, description: `${direction} ${prevLabel} → #${newBossPosition}\n\n${lines.join('\n\n')}` };
+        return { title, description: `**${msgs.snippetPositionChange || 'Zmiana pozycji:'}** ${direction} ${prevLabel} → #${newBossPosition}\n\n${lines.join('\n\n')}` };
     }
 
     /**

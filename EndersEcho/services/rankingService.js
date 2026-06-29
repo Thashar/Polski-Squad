@@ -1237,8 +1237,7 @@ class RankingService {
             .setColor(embedColor)
             .setTitle(msgs.recordTitle)
             .setDescription(descLines.join('\n'))
-            .setThumbnail(userAvatarUrl)
-            .setTimestamp();
+            .setThumbnail(userAvatarUrl);
 
         if (positionRole) {
             const roleIconUrl = positionRole.iconURL({ size: 256 });
@@ -1275,15 +1274,12 @@ class RankingService {
         const bossDisplayName = bossName || bossRecordData?.bossName || null;
         const hasBossRecord = bossRecordData?.isNewBossRecord && bossRecordData.bossName;
         if (hasBossRecord || bossSnippetData) {
-            // Zdjęcie bossa: w polu ikony embeda (author) ORAZ jako thumbnail; bez fallbacku na logo bota
+            // Nagłówek z ikoną emoji bossa (author); zdjęcie bossa jako thumbnail
             const embed3 = new EmbedBuilder().setColor(embedColor);
-            const bossTitle = formatMessage(msgs.bossRankingEmbedTitle || '👾 Ranking bossa: {bossName}', { bossName: bossDisplayName || '' });
+            const bossTitle = formatMessage(msgs.bossRankingEmbedTitle || 'Ranking bossa: {bossName}', { bossName: bossDisplayName || '' });
+            embed3.setAuthor({ name: bossTitle, iconURL: 'https://cdn.discordapp.com/emojis/1278011356876111873.webp' });
             if (bossImageName) {
-                const bossImgRef = `attachment://${bossImageName}`;
-                embed3.setAuthor({ name: bossTitle, iconURL: bossImgRef });
-                embed3.setThumbnail(bossImgRef);
-            } else {
-                embed3.setAuthor({ name: bossTitle });
+                embed3.setThumbnail(`attachment://${bossImageName}`);
             }
 
             const bossDescLines = [];
@@ -1316,10 +1312,12 @@ class RankingService {
             .setTimestamp(); // stopka „Dziś o HH:MM"
         if (hasNotices) {
             for (const notice of systemNotices) {
-                embed4.addFields({ name: notice.name, value: notice.value, inline: false });
+                // Każde zdanie komunikatu systemowego w nowym wierszu (łamanie po ". ")
+                const noticeValue = String(notice.value).split('. ').join('.\n');
+                embed4.addFields({ name: notice.name, value: noticeValue, inline: false });
             }
         } else {
-            embed4.setDescription(msgs.systemInfoAllGood || '✅ Zdjęcie zweryfikowane poprawnie — brak uwag.');
+            embed4.setDescription(msgs.systemInfoAllGood || 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.');
         }
         if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
         embeds.push(embed4);
