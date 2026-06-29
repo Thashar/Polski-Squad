@@ -1,7 +1,12 @@
 ### 🎯 Kontroler Bot
 
 **5 Systemów:**
-1. **OCR Dwukanałowy** - `ocrService.js`: CX (1500min, 0-2800/100, skip1, rola 2800+), Daily (910min, 0-1050/10, skip3, 2x nick), normalizacja znaków (o→0, z→2, l→1, sg→9)
+1. **AI OCR Dwukanałowy** - `aiOcrService.js` (Google Gemini Vision) + `analysisService.js`: jedyny silnik OCR, **bez fallbacku na Tesseract** (stary `ocrService.js` usunięty)
+   - **Silnik:** `aiOcrService.analyzeResultsImage(imagePath)` wysyła SUROWY obraz (bez preprocessingu) do Gemini Vision przez wspólny `utils/llmAdapter.js` (DI z `index.js`, `createLlmAdapter({ botSlug: 'kontroler' })`). Prompt prosi o listę `<nick> - <wynik>` całego rankingu. Parsowanie jak w Stalkerze (`parseAIResponse`), wykrywanie niepoprawnego screena po słowach kluczowych ("nie wykryto", "brak wyników" itd.)
+   - **Retry 503 (przeciążone API):** 10× exponential backoff → po wyczerpaniu rzuca `isAPIOverloaded=true`. Inne retryable (429/500/sieciowe): 3×
+   - **Dopasowanie gracza (`analysisService.findMatchingPlayer`):** wśród odczytanych graczy szuka nicku serwera — FAZA 1 dokładne dopasowanie (normalizacja: lowercase, tylko litery/cyfry + polskie znaki, dwukierunkowe `includes`), FAZA 2 podobieństwo Levenshtein (`isSimilarNick`, próg `similarity.threshold` 0.4 → `lowThreshold` 0.3). Brak konceptu "drugie wystąpienie nicku" (AI zwraca jeden wpis per gracz)
+   - **Walidacja wyniku (`validateScore`):** liczba z AI sprawdzana wobec konfiguracji kanału — CX (1500min, zakres 0-2800, krok 100, rola specjalna 2800+), Daily (910min, zakres 0-1050, krok 10). Poza krokiem → zaokrąglenie do najbliższej wielokrotności. Poza zakresem → odrzucenie
+   - **Env:** `KONTROLER_GOOGLE_AI_API_KEY` (fallback `ENDERSECHO_GOOGLE_AI_API_KEY`/`GOOGLE_AI_API_KEY`), `KONTROLER_GOOGLE_AI_MODEL` (domyślnie `gemini-2.5-flash-preview-05-20`). Bez klucza OCR nie zadziała (brak fallbacku)
    - **Zapis CX do shared_data:** Po udanym OCR na kanale CX, wynik jest zapisywany do `shared_data/cx_history.json` (klucz: userId, historia max 20 wyników). Używane przez Stalker Bot w `/player-status` i `/player-compare`
 2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM) w **czasie polskim** (Europe/Warsaw, niezależnie od strefy serwera), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
    - **Czas polski (`utils/timezone.js`):** Bot operuje w strefie Europe/Warsaw niezależnie od strefy czasowej serwera (np. UTC). `polandWallClockToUTC(y,m,d,h,min)` przelicza polski zegar ścienny na poprawny moment UTC (DST przez `Intl`), `getPolandParts()` zwraca komponenty czasu polskiego "teraz" (walidacja dat, klucze ostrzeżeń), `formatPolandDateTime/Date/Time()` formatują do wyświetlenia. Tworzenie loterii, obliczanie kolejnych losowań, walidacja daty i wszystkie wyświetlane daty używają czasu polskiego.
@@ -62,6 +67,10 @@ KONTROLER_TOKEN=bot_token_here
 KONTROLER_CLIENT_ID=client_id
 KONTROLER_GUILD_ID=guild_id
 
+# AI OCR Google Gemini (WYMAGANE - jedyny silnik OCR, bez fallbacku)
+KONTROLER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx   # fallback: ENDERSECHO_GOOGLE_AI_API_KEY / GOOGLE_AI_API_KEY
+KONTROLER_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
+
 # Opcjonalne - z fallbackiem do wartości produkcyjnych
 ROBOT1_FORWARD_CHANNEL=channel_id         # Kanał forward dla Robot1
 ROBOT1_MENTION_ROLE=role_id               # Rola do pingu (@) dla Robot1
@@ -72,6 +81,6 @@ KONTROLER_BLOCKED_ROLE=role_id            # Rola blokująca udział w loteriach
 ## Najlepsze Praktyki
 
 - **Logger:** createBotLogger('Kontroler')
-- **OCR:** Dwukanałowy (CX + Daily)
+- **OCR:** AI (Google Gemini Vision), dwukanałowy (CX + Daily), bez fallbacku na Tesseract
 - **Loteria:** DST auto, multi-klan, cykle 0-365 dni
 - **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json

@@ -4,8 +4,9 @@ const path = require('path');
 
 const config = require('./config/config');
 
-const OCRService = require('./services/ocrService');
+const AIOCRService = require('./services/aiOcrService');
 const AnalysisService = require('./services/analysisService');
+const { createLlmAdapter } = require('../utils/llmAdapter');
 const RoleService = require('./services/roleService');
 const MessageService = require('./services/messageService');
 const LotteryService = require('./services/lotteryService');
@@ -31,15 +32,15 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 
-let ocrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService, mvpService;
+let aiOcrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService, mvpService;
 
 /**
  * Inicjalizuje wszystkie serwisy
  */
 async function initializeServices() {
-    ocrService = new OCRService(config);
-    await ocrService.ensureDirectories();
-    analysisService = new AnalysisService(config, ocrService);
+    const llmAdapter = createLlmAdapter({ botSlug: 'kontroler', tracerName: 'kontroler-bot', apiKey: config.ocr.googleAiApiKey });
+    aiOcrService = new AIOCRService(config, llmAdapter);
+    analysisService = new AnalysisService(config, aiOcrService);
     roleService = new RoleService(config);
     lotteryService = new LotteryService(config);
     oligopolyService = new OligopolyService(config, logger);
@@ -48,7 +49,6 @@ async function initializeServices() {
     messageService = new MessageService(config, lotteryService);
     messageHandler = new MessageHandler(
         config,
-        ocrService,
         analysisService,
         roleService,
         messageService,

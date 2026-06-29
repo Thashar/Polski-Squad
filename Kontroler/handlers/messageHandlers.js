@@ -9,9 +9,8 @@ const path = require('path');
 const logger = createBotLogger('Kontroler');
 
 class MessageHandler {
-    constructor(config, ocrService, analysisService, roleService, messageService, lotteryService = null, votingService = null) {
+    constructor(config, analysisService, roleService, messageService, lotteryService = null, votingService = null) {
         this.config = config;
-        this.ocrService = ocrService;
         this.analysisService = analysisService;
         this.roleService = roleService;
         this.messageService = messageService;
@@ -225,14 +224,8 @@ class MessageHandler {
         logger.info(`📅 Czas: ${formatPolandDateTime(new Date())}`);
         logger.info(`🔗 URL: ${imageAttachment.url}`);
         logger.info(`⚙️ Kanał ${channelConfig.name}: min=${channelConfig.minimumScore}, zakres=${channelConfig.scoreRange}, krok=${channelConfig.scoreStep}`);
-        logger.info(`🎯 Wymagane ${channelConfig.requireSecondOccurrence ? 'DRUGIE' : 'PIERWSZE'} wystąpienie nicku`);
+        logger.info(`🤖 Silnik OCR: AI (Google Gemini Vision) - bez fallbacku`);
         logger.info(`🔍 Próg podobieństwa nicku: ${this.config.similarity.threshold * 100}%`);
-        logger.info(`🖼️ Preprocessing: ${channelConfig.name === 'Daily' ? 'BIAŁY TEKST NA SZARYM TLE' : 'BIAŁO-CZARNY'}`);
-        logger.info(`🔤 Normalizacja s/S: 5 lub 8 (testowane oba warianty)`);
-        if (channelConfig.name === 'Daily') {
-            logger.info('🎯 DAILY: Specjalny wyjątek "sg" -> "9"');
-        }
-        logger.info(`⚠️ WYKLUCZENIE: Pierwsze ${channelConfig.skipLines} linie tekstu są pomijane`);
         logger.info('='.repeat(70));
     }
 
@@ -248,20 +241,15 @@ class MessageHandler {
      */
     async processImage(analysisMessage, imageAttachment, displayName, username, channelConfig, member, guild) {
         let originalImagePath = null;
-        let processedImagePath = null;
 
         try {
             // Pobieranie obrazu
             await safeEditMessage(analysisMessage, this.config.messages.downloading);
             originalImagePath = await this.downloadImage(imageAttachment);
 
-            // Preprocessing
-            await safeEditMessage(analysisMessage, this.config.messages.preprocessing);
-            processedImagePath = await this.ocrService.preprocessImage(originalImagePath, channelConfig);
-
-            // OCR i analiza
+            // AI OCR i analiza (surowy obraz - bez preprocessingu)
             await safeEditMessage(analysisMessage, this.config.messages.ocr);
-            const result = await this.analysisService.analyzeImage(processedImagePath, displayName, username, channelConfig);
+            const result = await this.analysisService.analyzeImage(originalImagePath, displayName, username, channelConfig);
 
             logger.info(`Wynik analizy: ${JSON.stringify(result)}`);
 
@@ -278,7 +266,7 @@ class MessageHandler {
             // Wyślij informację o loterii Daily lub CX z opóźnieniem zawsze na końcu
             this.scheduleLotteryInfo(analysisMessage, channelConfig);
             
-            cleanupFiles(originalImagePath, processedImagePath);
+            cleanupFiles(originalImagePath);
             logger.info('Zakończono czyszczenie pamięci');
             logger.info('='.repeat(70) + '\n');
         }
