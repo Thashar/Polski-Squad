@@ -11,6 +11,7 @@
 - Format commit message: Krótki opis zmian po polsku (bez dodatkowych linii)
 - Przykład: "Dodano system kolejkowania OCR do Stalker"
 - NIGDY nie pytaj użytkownika czy zacommitować - po prostu to zrób
+- Jeżeli pracujesz na branchu innym niż main: ZAWSZE sprawdź czy PR dla tego brancha już został zmergowany. Jeżeli tak — stwórz nowy PR dla nowych commitów
 
 **⚠️ INSTRUKCJA AKTUALIZACJI DOKUMENTACJI (KRYTYCZNE!):**
 - **Po KAŻDEJ zmianie w kodzie bota → NATYCHMIAST aktualizuj `{Bot}/CLAUDE.md`**
