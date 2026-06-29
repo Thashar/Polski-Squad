@@ -77,7 +77,7 @@ module.exports = {
 
         // AI OCR (Google Gemini) — jedyny silnik OCR, bez fallbacku na Tesseract
         googleAiApiKey: process.env.KONTROLER_GOOGLE_AI_API_KEY || process.env.ENDERSECHO_GOOGLE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY,
-        googleAiModel: process.env.KONTROLER_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20',
+        googleAiModel: process.env.KONTROLER_GOOGLE_AI_MODEL || 'gemini-2.5-flash',
 
         languages: 'pol+eng',
         charWhitelist: '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzĄąĆćĘęŁłŃńÓóŚśŹźŻż .,:-_[](){}',

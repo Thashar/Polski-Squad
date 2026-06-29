@@ -772,7 +772,7 @@ KONTROLER_CLIENT_ID=client_id
 KONTROLER_GUILD_ID=guild_id
 # AI OCR Google Gemini (WYMAGANE - jedyny silnik OCR, bez fallbacku na Tesseract)
 KONTROLER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
-KONTROLER_GOOGLE_AI_MODEL=gemini-2.5-flash-preview-05-20
+KONTROLER_GOOGLE_AI_MODEL=gemini-2.5-flash
 # Przekazywanie wiadomości (robot1) - lista user ID rozdzielona przecinkami
 ROBOT=user_id_1,user_id_2
 
