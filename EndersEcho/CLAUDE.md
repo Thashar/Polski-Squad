@@ -92,14 +92,20 @@
    - **Diff-based update**: zamiast resetować wszystkie role i przyznawać od nowa, oblicza różnicę między aktualnym stanem (z Discord cache `role.members`) a pożądanym (z rankingu). Tylko faktyczne zmiany trafiają do API. Jeśli gracz nie zmienił pozycji, zero API calls.
    - **Równoległe operacje**: usunięcia i dodania wykonywane przez `Promise.allSettled` — szybsze niż sekwencyjne `await`. Batch fetch wszystkich memberów wymagających roli naraz (`guild.members.fetch({ user: [...] })`).
    - **Logowanie błędów per-guild**: `roleService` przyjmuje `logService` w konstruktorze i loguje błędy (usuwania/przyznawania ról, fetch memberów) przez `logService._gl(guildId)` — trafia do dedykowanego webhooka serwera.
-   - **Ogłoszenie rekordu** (`rankingService.createRecordEmbed`):
-     - Kolor embeda wg pozycji: 🥇 złoty (TOP1), 🥈 srebrny (TOP2), 🥉 brązowy (TOP3), niebieski (TOP4-10), zielony (TOP11+)
-     - Tytuł: `🏆 GRATULACJE!` + opis z headerem markdown
-     - Pola: Postęp (`stary ➜ nowy`), Poprawa (`+X`), Data, Pozycja z medalem emoji
-     - Author (górny pasek): ikona roli + nazwa roli (jeśli rola ma ikonę/emoji)
-     - Thumbnail: avatar gracza | Image: screenshot wyniku
+   - **Ogłoszenie rekordu — STOS 4 EMBEDÓW** (`rankingService.createRecordEmbeds` → zwraca `EmbedBuilder[]`):
+     - Wszystkie embedy wysyłane w **jednej wiadomości** (`followUp({ embeds, files })`) — pojawiają się jednocześnie, atomowo (jeden `message.id`). Komponenty (przycisk CV „Zgłoś") renderują się pod całą wiadomością, czyli pod ostatnim (4.) embedem.
+     - **Kolor jednolity** dla wszystkich 4 embedów wg pozycji gracza (`getPositionColor`): 🥇 złoty (TOP1), 🥈 srebrny (TOP2), 🥉 brązowy (TOP3), niebieski (TOP4-10), zielony (TOP11+ / brak pozycji)
+     - **Embed 1 — 🏆 Gratulacje (BEZ bossa):** tytuł `🏆 GRATULACJE!`, author = ikona+nazwa roli TOP, thumbnail = avatar gracza, opis = postęp (`stary ➜ nowy (+X)`) + **pozycja w klanie** (`medal #N (+awans)`) + **pozycje w rankingach ról** (🎖️) + czas od ostatniego rekordu; pola: `🎉 Nowe osiągnięcia`, `🔔 SUBSKRYPCJE: N`
+     - **Embed 2 — 🌍 Ranking globalny:** tytuł `globalRankingEmbedTitle`, opis = snippet globalny, `image` = wykres progresu (`score_history.png`, ten sam co w `/ranking`, gdy ≥2 wpisy historii), footer z ikoną globalną. **Pokazywany WYŁĄCZNIE gdy zmieniła się pozycja globalna** (`globalSnippetData != null`) — gdy brak zmiany, embed jest pomijany (a wykres nie jest generowany).
+     - **Embed 3 — 👾 Ranking bossa:** tytuł `bossRankingEmbedTitle` z `{bossName}`, thumbnail = **ikona bossa** (`bossAliasService.getBossImagePath` → `data/boss_images/`, fallback ikona bota), opis = `👾 Rekord na bossie` (`stary ➜ nowy` / „pierwszy wynik") + snippet rankingu bossa. Pokazywany gdy pobito rekord bossa (`isNewBossRecord && bossName && !wasUnknownBoss`).
+     - **Embed 4 — ℹ️ Informacje systemowe:** tytuł `systemInfoEmbedTitle`, pola = komunikaty (`crossServerScoreRemovedField`, `unknownBossRankingField`) lub — gdy brak komunikatów — `systemInfoAllGood` („✅ Zdjęcie zweryfikowane poprawnie — brak uwag"), `image` = **screenshot przesłany do analizy**, footer z ikoną bota
+     - **Załączniki** (`files`): `[screenshot, score_history.png?, bossImage?]`
+     - **Guard 6000 znaków** (`_enforceEmbedCharLimit`) — przycina opisy/pola od końca, by zmieścić się w limicie wiadomości
+     - **Ścieżka tylko-rekord-bossa** (globalny ranking niezmieniony): stos bez Embedu 2 (1 + 3 + 4)
+     - **DM subskrybentów** (`createDmNotifEmbeds`): **cały stos embedów**; Embed 1 przekształcony (tytuł → author „pobił rekord", pola porównania z wynikiem subskrybenta), pozostałe embedy klonowane; załączniki odtwarzane z tymi samymi nazwami
+     - **Uwaga:** ścieżka admina `/analizuj` (panel) nadal używa starej, jednoembedowej `createRecordEmbed` (`createRecordEmbeds` dotyczy `/update` i `/test`)
    - **Snippet globalny** (`globalTop10Service.buildSnippetFieldData`):
-     - Wbudowany jako pole w głównym embedzie rekordu, **powyżej pola osiągnięć**
+     - Wbudowany jako opis Embedu 2 (ranking globalny)
      - Warunek: pozycja globalna gracza zmieniła się (dotyczy WSZYSTKICH graczy, nie tylko TOP10 serwera)
      - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
    - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:

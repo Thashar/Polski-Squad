@@ -4204,41 +4204,61 @@ class InteractionHandler {
                     }
                 } catch { /* pozycja opcjonalna */ }
 
-                // Embed identyczny jak przy globalnym rekordzie — pozycja w boss rankingu + snippet + pole rekordu bossa + achievementy
-                const bossPublicEmbed = await this.rankingService.createRecordEmbed(
-                    userName,
-                    bestScore,
-                    interaction.user.displayAvatarURL(),
-                    imageAttachmentAlt.name,
-                    null,                    // brak globalnego poprzedniego wyniku
-                    null,                    // brak userId → brak pozycji globalnego rankingu
-                    null,                    // brak guildId → brak pozycji globalnego rankingu
-                    msgs,
-                    interaction.guild,
-                    null,                    // brak ról TOP
-                    null,                    // brak poprzedniego timestampu
-                    [],                      // brak pozycji ról
-                    bossAchievementsVal,
-                    null,                    // brak globalnego snippetu
-                    { isNewBossRecord: true, previousBossRecord, bossName },
-                    bossRankingOverride,     // pozycja w rankingu bossa (linia opisu)
-                    bossSnippetDataLocal     // snippet zmiany w rankingu bossa
-                );
-                bossPublicEmbed.setColor(0x1ABC9C);
-
+                // Stos embedów — bez Embedu 2 (globalny ranking niezmieniony): Embed 1 (gratulacje + achievementy),
+                // Embed 3 (rekord na bossie + snippet + ikona bossa), Embed 4 (komunikaty systemowe + screenshot)
+                const bossSystemNotices = [];
                 if (wasUnknownBoss) {
                     const noticeVal = formatMessage(
                         msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                         { bossName }
                     );
-                    bossPublicEmbed.addFields({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal, inline: false });
+                    bossSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
                 }
+
+                // Ikona bossa (Embed 3) — gdy boss znany
+                let bossOnlyImageAttachment = null;
+                let bossOnlyImageName = null;
+                if (!wasUnknownBoss && this.bossAliasService) {
+                    try {
+                        const imgPath = this.bossAliasService.getBossImagePath(bossName);
+                        if (imgPath) {
+                            const buf = await fs.readFile(path.join(__dirname, '../data/boss_images', imgPath));
+                            bossOnlyImageName = imgPath;
+                            bossOnlyImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                        }
+                    } catch { /* bez ikony bossa */ }
+                }
+
+                const _botUserBoss = interaction.client.user;
+                const bossPublicEmbeds = await this.rankingService.createRecordEmbeds({
+                    userName,
+                    bestScore,
+                    userAvatarUrl: interaction.user.displayAvatarURL(),
+                    screenshotName: imageAttachmentAlt.name,
+                    previousScore: null,
+                    userId: null,            // brak pozycji w klanie (rekord globalny niezmieniony)
+                    guildId: null,
+                    messages: msgs,
+                    guild: interaction.guild,
+                    achievementsFieldValue: bossAchievementsVal,
+                    globalSnippetData: null, // brak Embedu 2
+                    bossRecordData: { isNewBossRecord: true, previousBossRecord, bossName },
+                    bossSnippetData: bossSnippetDataLocal,
+                    bossName,
+                    botName: _botUserBoss?.username || null,
+                    botIconUrl: _botUserBoss?.displayAvatarURL() || null,
+                    bossImageName: bossOnlyImageName,
+                    systemNotices: bossSystemNotices,
+                });
+
+                const bossPublicFiles = [imageAttachmentAlt];
+                if (bossOnlyImageAttachment) bossPublicFiles.push(bossOnlyImageAttachment);
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
 
                 if (dryRun) {
                     _ocrEmbedParams = { type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: previousBossRecord?.score };
-                    await interaction.editReply({ embeds: [bossPublicEmbed], files: [imageAttachmentAlt] });
+                    await interaction.editReply({ embeds: bossPublicEmbeds, files: bossPublicFiles });
                     return;
                 }
 
@@ -4263,7 +4283,7 @@ class InteractionHandler {
                 const cvCfgBoss = this.guildConfigService?.getCommunityVerification(guildId);
                 const cvEnabledBoss = cvCfgBoss?.enabled === true && this.communityVerificationService;
 
-                const bossPublicMsg = await interaction.followUp({ embeds: [bossPublicEmbed], files: [imageAttachmentAlt] });
+                const bossPublicMsg = await interaction.followUp({ embeds: bossPublicEmbeds, files: bossPublicFiles });
 
                 // Aktualizuj sesję nieznanego bossa z ID ogłoszenia
                 if (unknownBossSessionKey && bossPublicMsg) {
@@ -4382,58 +4402,104 @@ class InteractionHandler {
                 }
             }
 
-            const publicEmbed = await this.rankingService.createRecordEmbed(
-                userName,
-                bestScore,
-                interaction.user.displayAvatarURL(),
-                imageAttachment.name,
-                currentScore ? currentScore.score : null,
-                userId,
-                interaction.guildId,
-                msgs,
-                interaction.guild,
-                guildConfig?.topRoles || null,
-                currentScore ? currentScore.timestamp : null,
-                rolePositions,
-                achievementsFieldValue,
-                globalSnippetData,
-                isNewBossRecord && !wasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName } : null,
-                bossGlobalRankingOverride,
-                bossSnippetData
-            );
-
-            // Nieznana nazwa bossa — dodaj notice zamiast danych rankingowych
+            // === Komunikaty systemowe (Embed 4) ===
+            const systemNotices = [];
             if (wasUnknownBoss && isNewBossRecord && bossName) {
                 const noticeVal = formatMessage(
                     msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                     { bossName }
                 );
-                publicEmbed.addFields({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal, inline: false });
+                systemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
             }
-
-            // Dodaj pole o usuniętym rekordzie z innego serwera (jeśli nowy wynik go pobił)
             if (_prevGlobalUser && _newScoreValue > _prevGlobalUser.scoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
                 const removedGuildName = interaction.client.guilds.cache.get(_prevGlobalUser.sourceGuildId)?.name
                     || _prevGlobalUser.sourceGuildId;
-                publicEmbed.addFields({
+                systemNotices.push({
                     name: msgs.crossServerScoreRemovedField,
                     value: formatMessage(msgs.crossServerScoreRemovedValue, { score: _prevGlobalUser.score, guildName: removedGuildName }),
-                    inline: false
                 });
             }
 
-            // Pobierz subskrybentów i dodaj liczbę obserwujących do embeda
+            // === Licznik subskrybentów (Embed 1) ===
             let recordSubscribers = [];
             if (!dryRun) {
                 try {
                     recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
-                    if (recordSubscribers.length > 0) {
-                        publicEmbed.addFields({ name: `${msgs.recordFollowerLabel} ${recordSubscribers.length}`, value: '​' });
-                    }
                 } catch (subErr) {
                     gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
                 }
             }
+
+            // === Wykres progresu (Embed 2) — tylko gdy zmiana w globalnym rankingu ===
+            let chartAttachment = null;
+            let chartName = null;
+            if (globalSnippetData && this.scoreHistoryService && this.chartService) {
+                try {
+                    const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, userId, 365);
+                    if (callerHistory.length >= 2) {
+                        const guildTagMap = {};
+                        const guildNameMap = {};
+                        for (const g of (this.guildConfigService?.getAllConfiguredGuilds() || [])) {
+                            const discordName = interaction.client.guilds.cache.get(g.id)?.name;
+                            guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
+                            guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
+                        }
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, userName, msgs.chartTitle, guildTagMap, guildNameMap);
+                        if (chartBuffer) {
+                            chartName = 'score_history.png';
+                            chartAttachment = new AttachmentBuilder(chartBuffer, { name: chartName });
+                        }
+                    }
+                } catch (chartErr) {
+                    gl.warn(`⚠️ Błąd generowania wykresu progresu: ${chartErr.message}`);
+                }
+            }
+
+            // === Ikona bossa (Embed 3) — gdy pobito rekord bossa i boss znany ===
+            let bossImageAttachment = null;
+            let bossImageName = null;
+            if (isNewBossRecord && bossName && !wasUnknownBoss && this.bossAliasService) {
+                try {
+                    const imgPath = this.bossAliasService.getBossImagePath(bossName);
+                    if (imgPath) {
+                        const buf = await fs.readFile(path.join(__dirname, '../data/boss_images', imgPath));
+                        bossImageName = imgPath;
+                        bossImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                    }
+                } catch { /* bez ikony bossa */ }
+            }
+
+            const _botUser = interaction.client.user;
+            const publicEmbeds = await this.rankingService.createRecordEmbeds({
+                userName,
+                bestScore,
+                userAvatarUrl: interaction.user.displayAvatarURL(),
+                screenshotName: imageAttachment.name,
+                previousScore: currentScore ? currentScore.score : null,
+                userId,
+                guildId: interaction.guildId,
+                messages: msgs,
+                guild: interaction.guild,
+                guildTopRoles: guildConfig?.topRoles || null,
+                previousTimestamp: currentScore ? currentScore.timestamp : null,
+                rolePositions,
+                achievementsFieldValue,
+                globalSnippetData,
+                bossRecordData: isNewBossRecord && !wasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName } : null,
+                bossSnippetData,
+                bossName,
+                botName: _botUser?.username || null,
+                botIconUrl: _botUser?.displayAvatarURL() || null,
+                chartName,
+                bossImageName,
+                followerCount: recordSubscribers.length,
+                systemNotices,
+            });
+
+            const publicFiles = [imageAttachment];
+            if (chartAttachment) publicFiles.push(chartAttachment);
+            if (bossImageAttachment) publicFiles.push(bossImageAttachment);
 
             let _newRecordPublicMsg = null;
             try {
@@ -4442,8 +4508,8 @@ class InteractionHandler {
                     // brak publicznego followUp, brak aktualizacji ról,
                     // brak powiadomień na inne serwery i brak DM.
                     await interaction.editReply({
-                        embeds: [publicEmbed],
-                        files: [imageAttachment]
+                        embeds: publicEmbeds,
+                        files: publicFiles
                     });
                     gl.info('✅ Wysłano ephemeral podgląd nowego rekordu (tryb testowy)');
                 } else {
@@ -4453,10 +4519,10 @@ class InteractionHandler {
                     const cvCfg = this.guildConfigService?.getCommunityVerification(guildId);
                     const cvEnabled = cvCfg?.enabled === true && this.communityVerificationService;
 
-                    // Wyślij publiczny embed (bez przycisku na starcie — ID wiadomości nieznane przed wysłaniem)
+                    // Wyślij publiczne ogłoszenie (stos 4 embedów; przycisk CV dodany niżej, gdy znamy ID wiadomości)
                     const publicMsg = await interaction.followUp({
-                        embeds: [publicEmbed],
-                        files: [imageAttachment],
+                        embeds: publicEmbeds,
+                        files: publicFiles,
                     });
                     _newRecordPublicMsg = publicMsg;
 
@@ -4603,17 +4669,21 @@ class InteractionHandler {
                     for (const subscriberId of recordSubscribers) {
                         try {
                             const subscriberUser = await interaction.client.users.fetch(subscriberId);
-                            const dmAttachment = new AttachmentBuilder(tempImagePath, { name: imageAttachment.name });
                             const subscriberScore = guildRanking[subscriberId]?.score || null;
-                            const dmEmbed = this.rankingService.createDmNotifEmbed(
-                                publicEmbed,
+                            // Cały stos embedów (pierwszy przekształcony pod subskrybenta)
+                            const dmEmbeds = this.rankingService.createDmNotifEmbeds(
+                                publicEmbeds,
                                 userName,
                                 trackedAvatarUrl,
                                 bestScore,
                                 subscriberScore,
                                 this.msgs(interaction.guildId)
                             );
-                            await subscriberUser.send({ embeds: [dmEmbed], files: [dmAttachment] });
+                            // Odtwórz załączniki z tymi samymi nazwami, by setImage/thumbnail się rozwiązały
+                            const dmFiles = [new AttachmentBuilder(tempImagePath, { name: imageAttachment.name })];
+                            if (chartAttachment) dmFiles.push(new AttachmentBuilder(chartAttachment.attachment, { name: chartName }));
+                            if (bossImageAttachment) dmFiles.push(new AttachmentBuilder(bossImageAttachment.attachment, { name: bossImageName }));
+                            await subscriberUser.send({ embeds: dmEmbeds, files: dmFiles });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {
                             gl.warn(`⚠️ Nie można wysłać DM do ${subscriberId}: ${dmError.message}`);

@@ -91,6 +91,12 @@ const pol = {
     recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSKRYPCJE:',
 
+    // Wieloembedowe ogłoszenie /update (nagłówki sekcji)
+    globalRankingEmbedTitle: '🌍 Ranking globalny',
+    bossRankingEmbedTitle: '👾 Ranking bossa: {bossName}',
+    systemInfoEmbedTitle: 'ℹ️ Analiza zgłoszenia',
+    systemInfoAllGood: '✅ Zdjęcie zweryfikowane poprawnie — brak uwag. Wynik zapisany w rankingu.',
+
     // /remove
     playerNotInRanking: '❌ Gracz {tag} nie był w rankingu tego serwera.',
     playerRemovedSuccess: '✅ Gracz {tag} został pomyślnie usunięty z rankingu. Role TOP zostały zaktualizowane.',
@@ -462,6 +468,12 @@ const eng = {
     recordDateLocale: 'en-GB',
     recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
+
+    // Multi-embed /update announcement (section headers)
+    globalRankingEmbedTitle: '🌍 Global Ranking',
+    bossRankingEmbedTitle: '👾 Boss Ranking: {bossName}',
+    systemInfoEmbedTitle: 'ℹ️ Submission Analysis',
+    systemInfoAllGood: '✅ Screenshot verified successfully — no issues. Score saved to the ranking.',
 
     // /remove
     playerNotInRanking: '❌ Player {tag} was not in the ranking of this server.',

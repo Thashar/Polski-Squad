@@ -1114,6 +1114,262 @@ class RankingService {
     }
 
     /**
+     * Wieloembedowe ogłoszenie rekordu dla /update (4 embedy wg rodzajów rankingów).
+     *
+     * Embed 1 — 🏆 Gratulacje: postęp, pozycja w klanie (serwerze), pozycje w rankingach ról,
+     *           nowe osiągnięcia, subskrypcje. BEZ jakichkolwiek informacji o bossie.
+     * Embed 2 — 🌍 Ranking globalny: snippet globalny + wykres progresu + ikona bota.
+     *           Pomijany, gdy brak snippeta globalnego i brak wykresu.
+     * Embed 3 — 👾 Ranking bossa: rekord na bossie + snippet rankingu bossa + ikona bossa.
+     *           Pomijany, gdy nie pobito rekordu bossa.
+     * Embed 4 — ℹ️ Informacje systemowe: komunikaty (cross-server, nieznany boss) lub "brak uwag",
+     *           + zdjęcie przesłane do analizy + ikona bota.
+     *
+     * Kolor wszystkich embedów = jednolity wg pozycji gracza (getPositionColor).
+     *
+     * @param {Object} opts
+     * @returns {Promise<EmbedBuilder[]>} tablica embedów (1–4), gotowa do followUp({ embeds })
+     */
+    async createRecordEmbeds(opts = {}) {
+        const {
+            userName,
+            bestScore,
+            userAvatarUrl,
+            screenshotName,
+            previousScore = null,
+            userId = null,
+            guildId = null,
+            messages = null,
+            guild = null,
+            guildTopRoles = null,
+            previousTimestamp = null,
+            rolePositions = [],
+            achievementsFieldValue = null,
+            globalSnippetData = null,
+            bossRecordData = null,
+            bossSnippetData = null,
+            bossName = null,
+            botName = null,
+            botIconUrl = null,
+            chartName = null,
+            bossImageName = null,
+            followerCount = 0,
+            systemNotices = [],
+        } = opts;
+
+        const msgs = messages || this.config.messages;
+
+        // --- Postęp (stary ➜ nowy (+X)) ---
+        let progressText = bestScore;
+        if (previousScore) {
+            const previousScoreValue = this.parseScoreValue(previousScore);
+            const newScoreValue = this.parseScoreValue(bestScore);
+            const improvement = newScoreValue - previousScoreValue;
+            const newScoreUnit = this.getScoreUnit(bestScore);
+            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
+            progressText = `${previousScore} ➜ ${bestScore} (${improvementText})`;
+        }
+
+        // --- Pozycja w klanie (na serwerze) ---
+        let currentPosition = null;
+        let positionChange = 0;
+        let isNewEntry = false;
+        if (userId && guildId) {
+            try {
+                const sortedPlayers = await this.getSortedPlayers(guildId);
+                const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
+                if (userIndex !== -1) {
+                    currentPosition = userIndex + 1;
+                    if (previousScore) {
+                        const tempPlayers = [...sortedPlayers];
+                        const userPlayer = tempPlayers.find(p => p.userId === userId);
+                        if (userPlayer) {
+                            userPlayer.scoreValue = this.parseScoreValue(previousScore);
+                            tempPlayers.sort((a, b) => b.scoreValue - a.scoreValue);
+                            const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
+                            positionChange = (previousIndex + 1) - currentPosition;
+                        }
+                    } else {
+                        isNewEntry = true;
+                    }
+                }
+            } catch (error) {
+                logger.error('Błąd pobierania pozycji w rankingu:', error);
+            }
+        }
+
+        const positionRole = currentPosition ? this.getPositionRole(currentPosition, guildTopRoles, guild) : null;
+        const embedColor = this.getPositionColor(currentPosition);
+        const medal = this.getPositionMedal(currentPosition);
+
+        const embeds = [];
+
+        // ===== EMBED 1 — 🏆 Gratulacje (bez bossa) =====
+        const descLines = [];
+        descLines.push(formatMessage(msgs.recordDescription, { username: userName }));
+        descLines.push('');
+        if (previousScore) {
+            descLines.push(`**${msgs.recordProgress}:** ${progressText}`);
+        } else {
+            descLines.push(`**${msgs.recordNewScore}:** ${bestScore}`);
+        }
+        if (currentPosition !== null) {
+            let posLine = `**${msgs.recordRanking}:** ${medal} #${currentPosition}`;
+            if (positionChange > 0) {
+                posLine += `  *(${msgs.recordPromotionBy} +${positionChange})*`;
+            } else if (isNewEntry) {
+                posLine += `  *(${msgs.recordNewEntry})*`;
+            }
+            descLines.push(posLine);
+        }
+        if (rolePositions?.length > 0) {
+            for (const rp of rolePositions) {
+                descLines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
+            }
+        }
+        const timeSince = this.formatTimeSince(previousTimestamp);
+        if (timeSince) {
+            descLines.push(`*(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`);
+        }
+
+        const embed1 = new EmbedBuilder()
+            .setColor(embedColor)
+            .setTitle(msgs.recordTitle)
+            .setDescription(descLines.join('\n'))
+            .setThumbnail(userAvatarUrl)
+            .setTimestamp();
+
+        if (positionRole) {
+            const roleIconUrl = positionRole.iconURL({ size: 256 });
+            if (roleIconUrl) {
+                embed1.setAuthor({ name: positionRole.name, iconURL: roleIconUrl });
+            } else if (positionRole.unicodeEmoji) {
+                embed1.setAuthor({ name: `${positionRole.unicodeEmoji} ${positionRole.name}` });
+            } else {
+                embed1.setAuthor({ name: positionRole.name });
+            }
+        }
+
+        if (achievementsFieldValue) {
+            embed1.addFields({ name: msgs.achievementsNewField || '🎉 Nowe osiągnięcia', value: achievementsFieldValue, inline: false });
+        }
+        if (followerCount > 0) {
+            embed1.addFields({ name: `${msgs.recordFollowerLabel} ${followerCount}`, value: '​' });
+        }
+        embeds.push(embed1);
+
+        // ===== EMBED 2 — 🌍 Ranking globalny (snippet + wykres) =====
+        // Pokazujemy WYŁĄCZNIE gdy zmieniła się pozycja w globalnym rankingu (globalSnippetData != null).
+        if (globalSnippetData) {
+            const embed2 = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(msgs.globalRankingEmbedTitle || '🌍 Ranking globalny');
+            embed2.setDescription(globalSnippetData.description);
+            if (chartName) embed2.setImage(`attachment://${chartName}`);
+            // Ikona rankingu globalnego (UWAGA: Discord nie renderuje SVG — może się nie wyświetlić)
+            embed2.setFooter({ text: botName || 'EndersEcho', iconURL: 'https://discord.com/assets/34f5679881a6a6e3.svg' });
+            embeds.push(embed2);
+        }
+
+        // ===== EMBED 3 — 👾 Ranking bossa (rekord na bossie + snippet + ikona bossa) =====
+        const bossDisplayName = bossName || bossRecordData?.bossName || null;
+        const hasBossRecord = bossRecordData?.isNewBossRecord && bossRecordData.bossName;
+        if (hasBossRecord || bossSnippetData) {
+            const embed3 = new EmbedBuilder()
+                .setColor(embedColor)
+                .setTitle(formatMessage(msgs.bossRankingEmbedTitle || '👾 Ranking bossa: {bossName}', { bossName: bossDisplayName || '' }));
+            if (bossImageName) {
+                embed3.setThumbnail(`attachment://${bossImageName}`);
+            } else if (botIconUrl) {
+                embed3.setThumbnail(botIconUrl);
+            }
+
+            const bossDescLines = [];
+            if (hasBossRecord) {
+                const recLabel = msgs.bossRecordField || '👾 Rekord na bossie';
+                if (bossRecordData.previousBossRecord) {
+                    bossDescLines.push(`**${recLabel}:** ${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`);
+                } else {
+                    bossDescLines.push(`**${recLabel}:** ${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`);
+                }
+            }
+            if (bossSnippetData) {
+                if (bossDescLines.length > 0) bossDescLines.push('');
+                bossDescLines.push(bossSnippetData.description);
+            }
+            embed3.setDescription(bossDescLines.join('\n'));
+            embeds.push(embed3);
+        }
+
+        // ===== EMBED 4 — ℹ️ Informacje systemowe (komunikaty + zdjęcie analizy) =====
+        const embed4 = new EmbedBuilder()
+            .setColor(embedColor)
+            .setTitle(msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia');
+        if (Array.isArray(systemNotices) && systemNotices.length > 0) {
+            for (const notice of systemNotices) {
+                embed4.addFields({ name: notice.name, value: notice.value, inline: false });
+            }
+        } else {
+            embed4.setDescription(msgs.systemInfoAllGood || '✅ Zdjęcie zweryfikowane poprawnie — brak uwag.');
+        }
+        if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
+        if (botName || botIconUrl) {
+            embed4.setFooter({ text: botName || 'EndersEcho', ...(botIconUrl ? { iconURL: botIconUrl } : {}) });
+        }
+        embeds.push(embed4);
+
+        // Guard: łączny limit 6000 znaków na wszystkie embedy w wiadomości
+        this._enforceEmbedCharLimit(embeds);
+
+        return embeds;
+    }
+
+    /**
+     * Pilnuje łącznego limitu 6000 znaków dla wszystkich embedów w jednej wiadomości.
+     * W razie przekroczenia przycina opisy/pola od końca (najmniej istotne sekcje).
+     * @param {EmbedBuilder[]} embeds
+     */
+    _enforceEmbedCharLimit(embeds) {
+        const MAX = 5800; // bufor pod limit 6000
+        const totalLen = () => embeds.reduce((sum, e) => {
+            const d = e.data || {};
+            let n = (d.title?.length || 0) + (d.description?.length || 0) + (d.author?.name?.length || 0) + (d.footer?.text?.length || 0);
+            for (const f of (d.fields || [])) n += (f.name?.length || 0) + (f.value?.length || 0);
+            return sum + n;
+        }, 0);
+
+        // Przycinaj pojedyncze pola/opisy od ostatniego embeda, dopóki nie zmieścimy się w limicie
+        for (let i = embeds.length - 1; i >= 0 && totalLen() > MAX; i--) {
+            const d = embeds[i].data || {};
+            if (d.fields?.length) {
+                for (let f = d.fields.length - 1; f >= 0 && totalLen() > MAX; f--) {
+                    const field = d.fields[f];
+                    if (field.value && field.value.length > 64) {
+                        field.value = field.value.slice(0, Math.max(64, field.value.length - 256)) + '…';
+                    }
+                }
+            }
+            if (d.description && d.description.length > 64 && totalLen() > MAX) {
+                d.description = d.description.slice(0, Math.max(64, d.description.length - 256)) + '…';
+            }
+        }
+    }
+
+    /**
+     * Buduje wieloembedowy DM dla subskrybenta — cały stos embedów ogłoszenia.
+     * Pierwszy embed jest przekształcany (tytuł → author "pobił rekord", pola porównania
+     * z wynikiem subskrybenta), pozostałe embedy są klonowane bez zmian.
+     * @param {EmbedBuilder[]} embeds  - stos z createRecordEmbeds
+     * @returns {EmbedBuilder[]}
+     */
+    createDmNotifEmbeds(embeds, trackedUsername, trackedAvatarUrl, bestScore, subscriberScore, messages) {
+        if (!Array.isArray(embeds) || embeds.length === 0) return [];
+        const first = this.createDmNotifEmbed(embeds[0], trackedUsername, trackedAvatarUrl, bestScore, subscriberScore, messages);
+        const rest = embeds.slice(1).map(e => new EmbedBuilder(e.toJSON()));
+        return [first, ...rest];
+    }
+
+    /**
      * Tworzy embed DM powiadomienia dla subskrybenta.
      * @param {EmbedBuilder} recordEmbed
      * @param {string} trackedUsername
