@@ -4634,8 +4634,9 @@ class InteractionHandler {
                     const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
                     const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, userId, 365);
                     // /test (dryRun): nowy wpis nie jest jeszcze w historii — dokładamy symulowany punkt, by wykres był identyczny jak po /update
+                    // WAŻNE: pole 'guildId' (nie 'sourceGuildId') — wykres grupuje serie po 'guildId' (z getUserHistoryAllGuilds)
                     if (dryRun) {
-                        callerHistory.push({ scoreValue: _newScoreValue, score: bestScore, timestamp: new Date().toISOString(), bossName: bossName || null, sourceGuildId: guildId });
+                        callerHistory.push({ scoreValue: _newScoreValue, score: bestScore, timestamp: new Date().toISOString(), bossName: bossName || null, guildId });
                     }
                     if (callerHistory.length >= 2) {
                         const guildTagMap = {};
