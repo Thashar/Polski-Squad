@@ -1261,13 +1261,12 @@ class RankingService {
         // ===== EMBED 2 — 🌍 Ranking globalny (snippet + wykres) =====
         // Pokazujemy WYŁĄCZNIE gdy zmieniła się pozycja w globalnym rankingu (globalSnippetData != null).
         if (globalSnippetData) {
+            // Ikona rankingu globalnego w polu ikony embeda (author)
             const embed2 = new EmbedBuilder()
                 .setColor(embedColor)
-                .setTitle(msgs.globalRankingEmbedTitle || '🌍 Ranking globalny');
+                .setAuthor({ name: msgs.globalRankingEmbedTitle || '🌍 Ranking globalny', iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128' });
             embed2.setDescription(globalSnippetData.description);
             if (chartName) embed2.setImage(`attachment://${chartName}`);
-            // Ikona rankingu globalnego
-            embed2.setFooter({ text: botName || 'EndersEcho', iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128' });
             embeds.push(embed2);
         }
 
@@ -1275,14 +1274,11 @@ class RankingService {
         const bossDisplayName = bossName || bossRecordData?.bossName || null;
         const hasBossRecord = bossRecordData?.isNewBossRecord && bossRecordData.bossName;
         if (hasBossRecord || bossSnippetData) {
-            const embed3 = new EmbedBuilder()
-                .setColor(embedColor)
-                .setTitle(formatMessage(msgs.bossRankingEmbedTitle || '👾 Ranking bossa: {bossName}', { bossName: bossDisplayName || '' }));
-            if (bossImageName) {
-                embed3.setThumbnail(`attachment://${bossImageName}`);
-            } else if (botIconUrl) {
-                embed3.setThumbnail(botIconUrl);
-            }
+            // Ikona bossa w polu ikony embeda (author); fallback: ikona bota
+            const embed3 = new EmbedBuilder().setColor(embedColor);
+            const bossTitle = formatMessage(msgs.bossRankingEmbedTitle || '👾 Ranking bossa: {bossName}', { bossName: bossDisplayName || '' });
+            const bossAuthorIcon = bossImageName ? `attachment://${bossImageName}` : (botIconUrl || null);
+            embed3.setAuthor(bossAuthorIcon ? { name: bossTitle, iconURL: bossAuthorIcon } : { name: bossTitle });
 
             const bossDescLines = [];
             if (hasBossRecord) {
@@ -1303,9 +1299,14 @@ class RankingService {
 
         // ===== EMBED 4 — ℹ️ Informacje systemowe (komunikaty + zdjęcie analizy) =====
         const hasNotices = Array.isArray(systemNotices) && systemNotices.length > 0;
+        // Ikona statusu w polu ikony embeda (author): zaakceptowano (brak uwag) vs informacja systemowa
+        const systemInfoIcon = hasNotices
+            ? 'https://cdn.discordapp.com/emojis/1297532628395622440.webp?size=128&animated=true'
+            : 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true';
         const embed4 = new EmbedBuilder()
             .setColor(embedColor)
-            .setTitle(msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia');
+            .setAuthor({ name: msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia', iconURL: systemInfoIcon })
+            .setTimestamp(); // stopka „Dziś o HH:MM"
         if (hasNotices) {
             for (const notice of systemNotices) {
                 embed4.addFields({ name: notice.name, value: notice.value, inline: false });
@@ -1314,11 +1315,6 @@ class RankingService {
             embed4.setDescription(msgs.systemInfoAllGood || '✅ Zdjęcie zweryfikowane poprawnie — brak uwag.');
         }
         if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
-        // Ikona footera zależna od wyniku: brak uwag (zaakceptowano) vs jest informacja systemowa
-        const systemInfoIcon = hasNotices
-            ? 'https://cdn.discordapp.com/emojis/1297532628395622440.webp?size=128&animated=true'
-            : 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true';
-        embed4.setFooter({ text: botName || 'EndersEcho', iconURL: systemInfoIcon });
         embeds.push(embed4);
 
         // Guard: łączny limit 6000 znaków na wszystkie embedy w wiadomości
