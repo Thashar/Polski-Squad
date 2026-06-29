@@ -3952,14 +3952,187 @@ class InteractionHandler {
             const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
             const _prevGlobalUser = !dryRun ? prevGlobalRanking?.find(p => p.userId === userId) : null;
 
-            // Duplikat cross-server: gracz ma już taki sam (lub lepszy) wynik na innym serwerze — nie zapisuj
+            // Duplikat cross-server: gracz ma już taki sam (lub lepszy) wynik na innym serwerze — nie zapisuj do rankingu globalnego
             if (!dryRun && _prevGlobalUser && _prevGlobalUser.scoreValue >= _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
+                const sourceGuildId = _prevGlobalUser.sourceGuildId;
+                const sourceGuildName = interaction.client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
+
+                // Mimo duplikatu globalnego — sprawdź czy pobito rekord na bossie (globalnie, po wszystkich serwerach)
+                let csBossIsNew = false;
+                let csPrevBossRecord = null; // globalny poprzedni rekord bossa (do wyświetlenia "stary ➜ nowy")
+                if (bossName && this.bossRecordService) {
+                    try {
+                        const allGuildIdsCs = this.guildConfigService?.getAllConfiguredGuildIds()
+                            || Array.from(interaction.client.guilds.cache.keys());
+                        const userBossAll = await this.bossRecordService.getUserBossRecordsAllGuilds(allGuildIdsCs, userId);
+                        const prevBoss = userBossAll?.[bossName] || null;
+                        const prevBossVal = prevBoss && typeof prevBoss.scoreValue === 'number' ? prevBoss.scoreValue : -Infinity;
+                        if (_newScoreValue > prevBossVal) {
+                            csBossIsNew = true;
+                            csPrevBossRecord = prevBoss
+                                ? { score: prevBoss.score, scoreValue: prevBoss.scoreValue, timestamp: prevBoss.timestamp, username: prevBoss.username }
+                                : null;
+                        }
+                    } catch (csBossErr) {
+                        gl.warn(`⚠️ [cross-server] Błąd sprawdzania rekordu bossa: ${csBossErr.message}`);
+                    }
+                }
+
+                // === Przypadek: pobito rekord bossa mimo duplikatu globalnego ===
+                // Zapis trafia na POPRZEDNI serwer gracza (dane nie przenoszą się na nowy serwer); publikujemy ogłoszenie.
+                if (csBossIsNew) {
+                    const wasUnknownBossCs = aiResult.wasUnknownBoss === true;
+                    const bossTs = new Date().toISOString();
+                    const bossScoreValue = _newScoreValue;
+
+                    // Zapis rekordu bossa na poprzednim serwerze; previousBossRecord (serwera A) → potrzebny do poprawnego cofnięcia
+                    let csServerAPrevBoss = null;
+                    try {
+                        const res = await this.bossRecordService.updateBossRecord(
+                            sourceGuildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
+                        );
+                        csServerAPrevBoss = res.previousBossRecord;
+                    } catch (saveErr) {
+                        gl.error(`Błąd zapisu rekordu bossa (cross-server): ${saveErr.message}`);
+                    }
+
+                    // Achievementy rekordu bossa — na poprzednim serwerze (tam są dane gracza)
+                    let csAchievements = [];
+                    if (this.achievementService) {
+                        try {
+                            const _csAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                            const _csAchActiveGuildIds = new Set(_csAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                            const _csAchGlobalRanking = await this.rankingService.getGlobalRanking(_csAchActiveGuildIds);
+                            const _csAchGlobalIdx = _csAchGlobalRanking.findIndex(p => p.userId === userId);
+                            const csGlobalPosForAch = _csAchGlobalIdx !== -1 ? _csAchGlobalIdx + 1 : 0;
+                            csAchievements = await this.achievementService.processSubmission(sourceGuildId, userId, {
+                                scoreValue: bossScoreValue,
+                                bossName,
+                                isNewRecord: false,
+                                prevScoreValue: csPrevBossRecord ? csPrevBossRecord.scoreValue : 0,
+                                currentPosition: 0,
+                                globalPosition: csGlobalPosForAch,
+                            });
+                        } catch {}
+                    }
+                    const langCs = this.config.getGuildConfig(guildId)?.lang || 'pol';
+                    const csAchVal = this.achievementService
+                        ? this.achievementService.buildNewAchievementsFieldValue(csAchievements, langCs)
+                        : null;
+
+                    // Snippet rankingu bossa + ikona bossa (tylko boss znany)
+                    let csBossSnippet = null;
+                    let csBossImageName = null;
+                    let csBossImageAttachment = null;
+                    if (!wasUnknownBossCs) {
+                        try {
+                            const allGuildIdsCs2 = this.guildConfigService?.getAllConfiguredGuildIds()
+                                || Array.from(interaction.client.guilds.cache.keys());
+                            const bossRankingCs = await this.bossRecordService.getGlobalBossRanking(allGuildIdsCs2, bossName);
+                            const newBossIdxCs = bossRankingCs.findIndex(p => p.userId === userId);
+                            if (newBossIdxCs !== -1 && this.globalTop10Service) {
+                                let prevBossPosCs = null;
+                                if (csPrevBossRecord) {
+                                    const prevValCs = csPrevBossRecord.scoreValue;
+                                    const tempCs = bossRankingCs.map(p => p.userId === userId ? { ...p, scoreValue: prevValCs } : p);
+                                    tempCs.sort((a, b) => b.scoreValue - a.scoreValue);
+                                    const prevIdxCs = tempCs.findIndex(p => p.userId === userId);
+                                    prevBossPosCs = prevIdxCs !== -1 ? prevIdxCs + 1 : null;
+                                }
+                                csBossSnippet = await this.globalTop10Service.buildBossSnippetFieldData(
+                                    userId, bossRankingCs, prevBossPosCs, bossName, msgs, interaction.client
+                                );
+                            }
+                        } catch { /* snippet opcjonalny */ }
+
+                        if (this.bossAliasService) {
+                            try {
+                                const imgPath = this.bossAliasService.getBossImagePath(bossName);
+                                if (imgPath) {
+                                    const buf = await fs.readFile(path.join(__dirname, '../data/boss_images', imgPath));
+                                    csBossImageName = imgPath;
+                                    csBossImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                                }
+                            } catch { /* bez ikony bossa */ }
+                        }
+                    }
+
+                    // Komunikaty systemowe (Embed 4): dane pozostają na poprzednim serwerze + ew. nieznany boss
+                    const csSystemNotices = [{
+                        name: msgs.crossServerBossKeptField,
+                        value: formatMessage(msgs.crossServerBossKeptValue, { score: _prevGlobalUser.score, guildName: sourceGuildName }),
+                    }];
+                    if (wasUnknownBossCs) {
+                        const noticeVal = formatMessage(
+                            msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                            { bossName }
+                        );
+                        csSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
+                    }
+
+                    const safeUserNameCs = userName.replace(/[^a-zA-Z0-9]/g, '_');
+                    const imageAttachmentCs = new AttachmentBuilder(tempImagePath, { name: `rekord_${safeUserNameCs}_${Date.now()}.${fileExtension}` });
+
+                    const _botUserCs = interaction.client.user;
+                    const csEmbeds = await this.rankingService.createRecordEmbeds({
+                        userName,
+                        bestScore,
+                        userAvatarUrl: interaction.user.displayAvatarURL(),
+                        screenshotName: imageAttachmentCs.name,
+                        previousScore: null,
+                        userId: null,            // brak pozycji w klanie (dane na poprzednim serwerze)
+                        guildId: null,
+                        messages: msgs,
+                        guild: interaction.guild,
+                        achievementsFieldValue: csAchVal,
+                        globalSnippetData: null, // brak Embedu 2 (ranking globalny niezmieniony)
+                        bossRecordData: { isNewBossRecord: true, previousBossRecord: csPrevBossRecord, bossName },
+                        bossSnippetData: csBossSnippet,
+                        bossName,
+                        botName: _botUserCs?.username || null,
+                        botIconUrl: _botUserCs?.displayAvatarURL() || null,
+                        bossImageName: csBossImageName,
+                        systemNotices: csSystemNotices,
+                    });
+                    const csFiles = [imageAttachmentCs];
+                    if (csBossImageAttachment) csFiles.push(csBossImageAttachment);
+
+                    // Przycisk cofnięcia (admin) — keyed na POPRZEDNI serwer, gdzie zapisano rekord bossa
+                    const csRevertRow = [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`ocr_revert_${userId}_${sourceGuildId}`)
+                            .setLabel('↩️ Cofnij wynik')
+                            .setStyle(ButtonStyle.Secondary)
+                    ).toJSON()];
+
+                    await interaction.editReply({ content: msgs.bossRecordOnlyConfirmed || '✅ Nowy rekord na bossie ogłoszony!' });
+                    const csPublicMsg = await interaction.followUp({ embeds: csEmbeds, files: csFiles });
+
+                    // Sesja cofnięcia rekordu bossa — globalny ranking niezmieniony (skipGlobalRevert), cel = poprzedni serwer
+                    const csRevertKey = `${userId}_${sourceGuildId}`;
+                    this._ocrRevertSessions.set(csRevertKey, {
+                        guildId: sourceGuildId,
+                        userId,
+                        previousRecord: null,
+                        skipGlobalRevert: true,
+                        newRecord: { timestamp: bossTs, bossName },
+                        bossName: bossName || null,
+                        previousBossRecord: csServerAPrevBoss ?? null,
+                        publicMsgId: csPublicMsg?.id || null,
+                        publicChannelId: csPublicMsg?.channelId || null,
+                    });
+                    setTimeout(() => this._ocrRevertSessions.delete(csRevertKey), 24 * 60 * 60 * 1000);
+
+                    _ocrEmbedParams = { type: 'boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score, revertComponents: csRevertRow };
+                    gl.info(`🎯 [/${commandName}] Duplikat globalny cross-server, ale pobito rekord bossa "${bossName}" — zapis na serwerze "${sourceGuildName}"`);
+                    return;
+                }
+
+                // === Brak rekordu bossa — standardowy komunikat duplikatu cross-server (bez zapisu) ===
                 const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
                 const imageAttachment = new AttachmentBuilder(tempImagePath, {
                     name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
                 });
-                const sourceGuildName = interaction.client.guilds.cache.get(_prevGlobalUser.sourceGuildId)?.name
-                    || _prevGlobalUser.sourceGuildId;
                 const crossServerEmbed = new EmbedBuilder()
                     .setColor(0xff9900)
                     .setTitle(msgs.resultTitle)

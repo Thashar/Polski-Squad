@@ -64,6 +64,8 @@ const pol = {
     resultNotBeatenCrossServer: '❌ Nie pobito rekordu — taki sam wynik (**{score}**) widnieje już na serwerze **{guildName}**.',
     crossServerScoreRemovedField: '🗑️ Poprzedni wynik zostanie ukryty',
     crossServerScoreRemovedValue: 'Wynik **{score}** na serwerze **{guildName}** nie będzie widoczny w rankingu. Twoja historia wciąż będzie zachowana.',
+    crossServerBossKeptField: 'ℹ️ Rekord globalny bez zmian',
+    crossServerBossKeptValue: 'Twój najlepszy wynik **{score}** pozostaje na serwerze **{guildName}** — nie został przeniesiony. Tutaj ustawiłeś jedynie nowy rekord na tym bossie.',
     noRecordFallback: '❌ Nie pobito rekordu\n**Gracz:** {username}\n**Wynik:** {score}\n**Obecny rekord:** {current}\n\n*Błąd wysyłania embed z obrazem*',
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
 
@@ -442,6 +444,8 @@ const eng = {
     resultNotBeatenCrossServer: '❌ Record not beaten — same score (**{score}**) already exists on server **{guildName}**.',
     crossServerScoreRemovedField: '🗑️ Previous score will be hidden',
     crossServerScoreRemovedValue: 'Score **{score}** on server **{guildName}** will no longer be visible in the ranking. Your history will still be preserved.',
+    crossServerBossKeptField: 'ℹ️ Global record unchanged',
+    crossServerBossKeptValue: 'Your best score **{score}** stays on server **{guildName}** — it was not moved. Here you only set a new record on this boss.',
     noRecordFallback: '❌ Record not beaten\n**Player:** {username}\n**Score:** {score}\n**Current record:** {current}\n\n*Error sending embed with image*',
     rankingImageCaption: '📎 **Original result image:**',
 
