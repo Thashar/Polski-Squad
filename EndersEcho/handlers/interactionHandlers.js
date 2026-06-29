@@ -757,10 +757,10 @@ class InteractionHandler {
                 .setDescription(
                     t(
                         'Wybierz kanał, na którym użytkownicy będą używać komend EndersEcho.\n\n' +
-                        '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n• `/achievements` — wyświetl osiągnięcia\n\n' +
+                        '**Dostępne na tym kanale (wszyscy):**\n• `/update` — prześlij wynik\n• `/ranking` — wyświetl ranking\n• `/subscribe` — zarządzaj powiadomieniami\n• `/achievements` — wyświetl osiągnięcia\n• `/profile` — przeglądaj profil gracza\n\n' +
                         'Komendy adminów są dostępne przez `/manage` z dowolnego kanału.',
                         'Choose the channel where users can run EndersEcho commands.\n\n' +
-                        '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n• `/achievements` — view achievements\n\n' +
+                        '**Available in this channel (all users):**\n• `/update` — submit a score\n• `/ranking` — view rankings\n• `/subscribe` — manage notifications\n• `/achievements` — view achievements\n• `/profile` — browse a player\'s profile\n\n' +
                         'Admin commands are available through `/manage` from any channel.'
                     ) + currentChLine
                 );
