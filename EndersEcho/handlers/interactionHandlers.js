@@ -6755,15 +6755,10 @@ class InteractionHandler {
                 state.cachedData     = null;
                 state.isSubscribed   = false;
                 state.subscriberCount = null;
-                // Na serwerze admina wyznacz właściwy serwer gracza z globalnego rankingu
-                const isAdminGuild = this.config.adminGuildId && guildId === this.config.adminGuildId;
-                if (isAdminGuild) {
-                    const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-                    const entry = globalRanking.find(p => p.userId === state.viewerId);
-                    state.targetGuildId = entry?.sourceGuildId || [...allGuildIds][0] || guildId;
-                } else {
-                    state.targetGuildId = guildId;
-                }
+                // Zawsze używaj serwera skąd pochodzi najlepszy wynik gracza
+                const backRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+                const backEntry = backRanking.find(p => p.userId === state.viewerId);
+                state.targetGuildId = backEntry?.sourceGuildId || guildId;
                 state.lang = this._getProfileLang(guildId, state.targetGuildId);
             } else if (customId === 'profile_subscribe') {
                 const targetUsername  = state.cachedData?.username || state.targetUserId;
