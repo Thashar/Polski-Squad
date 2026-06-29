@@ -1283,8 +1283,11 @@ class RankingService {
             }
 
             const bossDescLines = [];
+            // Nazwa bossa w monospace (renderuje się w opisie embeda, w przeciwieństwie do nagłówka author)
+            if (bossDisplayName) bossDescLines.push(`\`${bossDisplayName}\``);
             if (hasBossRecord) {
-                const recLabel = msgs.bossRecordField || '👾 Rekord na bossie';
+                if (bossDescLines.length > 0) bossDescLines.push('');
+                const recLabel = msgs.bossRecordField || 'Rekord na bossie';
                 if (bossRecordData.previousBossRecord) {
                     bossDescLines.push(`**${recLabel}:** ${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`);
                 } else {

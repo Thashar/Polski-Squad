@@ -95,7 +95,7 @@ const pol = {
 
     // Wieloembedowe ogłoszenie /update (nagłówki sekcji)
     globalRankingEmbedTitle: 'Ranking globalny',
-    bossRankingEmbedTitle: 'Ranking bossa: `{bossName}`',
+    bossRankingEmbedTitle: 'Ranking bossa',
     systemInfoEmbedTitle: 'Analiza zgłoszenia',
     systemInfoAllGood: 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.',
     snippetPositionChange: 'Zmiana pozycji:',
@@ -476,7 +476,7 @@ const eng = {
 
     // Multi-embed /update announcement (section headers)
     globalRankingEmbedTitle: 'Global Ranking',
-    bossRankingEmbedTitle: 'Boss Ranking: `{bossName}`',
+    bossRankingEmbedTitle: 'Boss Ranking',
     systemInfoEmbedTitle: 'Submission Analysis',
     systemInfoAllGood: 'Screenshot verified successfully.\nScore saved to the ranking.',
     snippetPositionChange: 'Position change:',
