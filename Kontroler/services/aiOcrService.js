@@ -99,6 +99,40 @@ class AIOCRService {
     }
 
     /**
+     * Binaryzuje obraz przed wysłaniem do AI: białe piksele zostają białe,
+     * cała reszta zamieniana na czarno (biały tekst na czarnym tle).
+     * Piksel uznawany za biały gdy WSZYSTKIE kanały R/G/B >= whiteThreshold.
+     * @param {string} imagePath - Ścieżka do obrazu
+     * @returns {Promise<Buffer>} - Bufor PNG zbinaryzowanego obrazu
+     */
+    async _binarizeWhiteOnBlack(imagePath) {
+        const threshold = this.config.ocr.whiteThreshold || 200;
+
+        const { data, info } = await sharp(imagePath)
+            .removeAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const channels = info.channels;
+        let whitePixels = 0;
+        for (let i = 0; i < data.length; i += channels) {
+            const isWhite = data[i] >= threshold && data[i + 1] >= threshold && data[i + 2] >= threshold;
+            const value = isWhite ? 255 : 0;
+            data[i] = value;
+            data[i + 1] = value;
+            data[i + 2] = value;
+            if (isWhite) whitePixels++;
+        }
+
+        const totalPixels = data.length / channels;
+        logger.info(`[AI OCR] Binaryzacja (próg ${threshold}): białych ${whitePixels}/${totalPixels} pikseli`);
+
+        return await sharp(data, { raw: { width: info.width, height: info.height, channels } })
+            .png()
+            .toBuffer();
+    }
+
+    /**
      * Analizuje zdjęcie z rankingiem graczy przez Gemini Vision.
      * @param {string} imagePath - Ścieżka do obrazu
      * @returns {Promise<{players: Array<{playerName: string, score: number}>, isValid: boolean, error?: string}>}
@@ -111,7 +145,7 @@ class AIOCRService {
         try {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
 
-            const pngBuffer = await sharp(imagePath).png().toBuffer();
+            const pngBuffer = await this._binarizeWhiteOnBlack(imagePath);
             const base64Image = pngBuffer.toString('base64');
 
             logger.info('[AI OCR] Wysyłam zapytanie do Gemini Vision...');
