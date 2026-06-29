@@ -1274,11 +1274,16 @@ class RankingService {
         const bossDisplayName = bossName || bossRecordData?.bossName || null;
         const hasBossRecord = bossRecordData?.isNewBossRecord && bossRecordData.bossName;
         if (hasBossRecord || bossSnippetData) {
-            // Ikona bossa w polu ikony embeda (author); fallback: ikona bota
+            // Zdjęcie bossa: w polu ikony embeda (author) ORAZ jako thumbnail; bez fallbacku na logo bota
             const embed3 = new EmbedBuilder().setColor(embedColor);
             const bossTitle = formatMessage(msgs.bossRankingEmbedTitle || '👾 Ranking bossa: {bossName}', { bossName: bossDisplayName || '' });
-            const bossAuthorIcon = bossImageName ? `attachment://${bossImageName}` : (botIconUrl || null);
-            embed3.setAuthor(bossAuthorIcon ? { name: bossTitle, iconURL: bossAuthorIcon } : { name: bossTitle });
+            if (bossImageName) {
+                const bossImgRef = `attachment://${bossImageName}`;
+                embed3.setAuthor({ name: bossTitle, iconURL: bossImgRef });
+                embed3.setThumbnail(bossImgRef);
+            } else {
+                embed3.setAuthor({ name: bossTitle });
+            }
 
             const bossDescLines = [];
             if (hasBossRecord) {
