@@ -2808,7 +2808,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -3186,7 +3186,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -9640,7 +9640,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -10765,7 +10765,7 @@ class InteractionHandler {
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
 
             const matches = globalRanking.filter(p =>
-                normalizeForSearch(p.username || '').includes(query)
+                playerMatchesQuery(p, query, interaction.client, p.sourceGuildId || null)
             );
 
             const backRow = new ActionRowBuilder().addComponents(
