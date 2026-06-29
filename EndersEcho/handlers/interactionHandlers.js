@@ -3943,17 +3943,16 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
 
-            const prevGlobalRanking = dryRun ? null : await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-            const prevGlobalPosition = !dryRun
-                ? (() => { const i = prevGlobalRanking?.findIndex(p => p.userId === userId); return i !== -1 ? i + 1 : null; })()
-                : null;
+            // Stan globalny przed zapisem — liczony też w /test (dryRun), żeby podgląd był identyczny jak /update (read-only)
+            const prevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+            const prevGlobalPosition = (() => { const i = prevGlobalRanking?.findIndex(p => p.userId === userId); return i !== -1 ? i + 1 : null; })();
 
             // Dane cross-server — obliczane raz, używane przy sprawdzeniu duplikatu i przy embeddzie rekordu
             const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
-            const _prevGlobalUser = !dryRun ? prevGlobalRanking?.find(p => p.userId === userId) : null;
+            const _prevGlobalUser = prevGlobalRanking?.find(p => p.userId === userId) || null;
 
             // Duplikat cross-server: gracz ma już taki sam (lub lepszy) wynik na innym serwerze — nie zapisuj do rankingu globalnego
-            if (!dryRun && _prevGlobalUser && _prevGlobalUser.scoreValue >= _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
+            if (_prevGlobalUser && _prevGlobalUser.scoreValue >= _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
                 const sourceGuildId = _prevGlobalUser.sourceGuildId;
                 const sourceGuildName = interaction.client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
 
@@ -3986,17 +3985,20 @@ class InteractionHandler {
                     const bossScoreValue = _newScoreValue;
 
                     // Zapis rekordu bossa na poprzednim serwerze; previousBossRecord (serwera A) → potrzebny do poprawnego cofnięcia
+                    // /test (dryRun): pomijamy zapis (podgląd bez modyfikacji danych)
                     let csServerAPrevBoss = null;
-                    try {
-                        const res = await this.bossRecordService.updateBossRecord(
-                            sourceGuildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
-                        );
-                        csServerAPrevBoss = res.previousBossRecord;
-                    } catch (saveErr) {
-                        gl.error(`Błąd zapisu rekordu bossa (cross-server): ${saveErr.message}`);
+                    if (!dryRun) {
+                        try {
+                            const res = await this.bossRecordService.updateBossRecord(
+                                sourceGuildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
+                            );
+                            csServerAPrevBoss = res.previousBossRecord;
+                        } catch (saveErr) {
+                            gl.error(`Błąd zapisu rekordu bossa (cross-server): ${saveErr.message}`);
+                        }
                     }
 
-                    // Achievementy rekordu bossa — na poprzednim serwerze (tam są dane gracza)
+                    // Achievementy rekordu bossa — na poprzednim serwerze (tam są dane gracza); /test = preview bez zapisu
                     let csAchievements = [];
                     if (this.achievementService) {
                         try {
@@ -4012,7 +4014,7 @@ class InteractionHandler {
                                 prevScoreValue: csPrevBossRecord ? csPrevBossRecord.scoreValue : 0,
                                 currentPosition: 0,
                                 globalPosition: csGlobalPosForAch,
-                            });
+                            }, { preview: dryRun });
                         } catch {}
                     }
                     const langCs = this.config.getGuildConfig(guildId)?.lang || 'pol';
@@ -4028,7 +4030,10 @@ class InteractionHandler {
                         try {
                             const allGuildIdsCs2 = this.guildConfigService?.getAllConfiguredGuildIds()
                                 || Array.from(interaction.client.guilds.cache.keys());
-                            const bossRankingCs = await this.bossRecordService.getGlobalBossRanking(allGuildIdsCs2, bossName);
+                            // /test (dryRun): symulowany ranking bossa (nowy wynik nałożony bez zapisu); inaczej realny stan po zapisie
+                            const bossRankingCs = dryRun
+                                ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsCs2, bossName, userId, bossScoreValue, bestScore, userName, sourceGuildId)
+                                : await this.bossRecordService.getGlobalBossRanking(allGuildIdsCs2, bossName);
                             const newBossIdxCs = bossRankingCs.findIndex(p => p.userId === userId);
                             if (newBossIdxCs !== -1 && this.globalTop10Service) {
                                 let prevBossPosCs = null;
@@ -4104,6 +4109,14 @@ class InteractionHandler {
                             .setLabel('↩️ Cofnij wynik')
                             .setStyle(ButtonStyle.Secondary)
                     ).toJSON()];
+
+                    // /test (dryRun): podgląd ephemeral, bez publicznego ogłoszenia i bez sesji cofnięcia
+                    if (dryRun) {
+                        _ocrEmbedParams = { type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score };
+                        await interaction.editReply({ embeds: csEmbeds, files: csFiles });
+                        gl.info(`🧪 [/test] Podgląd: duplikat globalny cross-server + rekord bossa "${bossName}" (bez zapisu)`);
+                        return;
+                    }
 
                     await interaction.editReply({ content: msgs.bossRecordOnlyConfirmed || '✅ Nowy rekord na bossie ogłoszony!' });
                     const csPublicMsg = await interaction.followUp({ embeds: csEmbeds, files: csFiles });
@@ -4201,25 +4214,31 @@ class InteractionHandler {
                     gl.error(`Błąd zapisu per-boss rekordu: ${bossErr.message}`);
                 }
             } else if (dryRun && bossName && this.bossRecordService) {
-                // dryRun: read-only sprawdzenie czy boss rekord byłby pobity (bez zapisu)
+                // dryRun (/test): read-only — czy boss rekord byłby pobity + poprzedni rekord (bez zapisu)
                 try {
                     const bossScoreValue = this.rankingService.parseScoreValue(bestScore);
                     isNewBossRecord = await this.bossRecordService.wouldBeatBossRecord(guildId, userId, bossName, bossScoreValue);
+                    const userBoss = await this.bossRecordService.getUserBossRecords(guildId, userId);
+                    previousBossRecord = userBoss?.[bossName] ? { ...userBoss[bossName] } : null;
                 } catch { /* ignoruj */ }
             }
 
-            // Pozycja po zapisie (potrzebna do osiągnięć i do embeda)
+            // Pozycja po zapisie (potrzebna do osiągnięć i do embeda); /test = symulacja + preview bez zapisu
             let newAchievements = [];
             let currentPositionForAch = 0;
-            if (isNewRecord && !dryRun && this.achievementService) {
+            if (isNewRecord && this.achievementService) {
                 try {
-                    const sortedAfter = await this.rankingService.getSortedPlayers(guildId);
+                    const sortedAfter = dryRun
+                        ? await this.rankingService.simulateSortedPlayers(guildId, userId, userName, bestScore)
+                        : await this.rankingService.getSortedPlayers(guildId);
                     currentPositionForAch = sortedAfter.findIndex(p => p.userId === userId) + 1;
                     const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
                     const newScoreValue = this.rankingService.parseScoreValue(bestScore);
                     const _achConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                     const _achActiveGuildIds = new Set(_achConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
-                    const _achGlobalRanking = await this.rankingService.getGlobalRanking(_achActiveGuildIds);
+                    const _achGlobalRanking = dryRun
+                        ? await this.rankingService.simulateGlobalRanking(_achActiveGuildIds, userId, userName, bestScore, guildId)
+                        : await this.rankingService.getGlobalRanking(_achActiveGuildIds);
                     const _achGlobalIdx = _achGlobalRanking.findIndex(p => p.userId === userId);
                     const globalPositionForAch = _achGlobalIdx !== -1 ? _achGlobalIdx + 1 : 0;
                     newAchievements = await this.achievementService.processSubmission(guildId, userId, {
@@ -4229,7 +4248,7 @@ class InteractionHandler {
                         prevScoreValue,
                         currentPosition: currentPositionForAch,
                         globalPosition: globalPositionForAch,
-                    });
+                    }, { preview: dryRun });
                 } catch {}
             }
 
@@ -4311,8 +4330,8 @@ class InteractionHandler {
                 }
 
                 // Case B: pobito rekord bossa (isNewBossRecord = true)
-                // Achievementy dla rekordu bossa (non-dryRun)
-                if (!dryRun && this.achievementService) {
+                // Achievementy dla rekordu bossa; /test = preview bez zapisu
+                if (this.achievementService) {
                     try {
                         const bossScoreVal = this.rankingService.parseScoreValue(bestScore);
                         const _bossAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
@@ -4327,7 +4346,7 @@ class InteractionHandler {
                             prevScoreValue: previousBossRecord ? this.rankingService.parseScoreValue(previousBossRecord.score) : 0,
                             currentPosition: 0,
                             globalPosition: bossGlobalPositionForAch,
-                        });
+                        }, { preview: dryRun });
                     } catch {}
                 }
 
@@ -4344,7 +4363,10 @@ class InteractionHandler {
                 if (!wasUnknownBoss) try {
                     const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                         || Array.from(interaction.client.guilds.cache.keys());
-                    const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIdsForBoss, bossName);
+                    // /test (dryRun): symulowany ranking bossa (nowy wynik bez zapisu); inaczej realny stan po zapisie
+                    const bossRanking = dryRun
+                        ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, userId, this.rankingService.parseScoreValue(bestScore), bestScore, userName, guildId)
+                        : await this.bossRecordService.getGlobalBossRanking(allGuildIdsForBoss, bossName);
                     const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
                     if (newBossIdx !== -1) {
                         const newBossPosition = newBossIdx + 1;
@@ -4369,7 +4391,7 @@ class InteractionHandler {
                             isNewEntry: bossIsNewEntry,
                             label: msgs.recordBossRanking || '🎯 Pozycja (boss)',
                         };
-                        if (!dryRun && this.globalTop10Service) {
+                        if (this.globalTop10Service) {
                             bossSnippetDataLocal = await this.globalTop10Service.buildBossSnippetFieldData(
                                 userId, bossRanking, prevBossPosition, bossName, msgs, interaction.client
                             );
@@ -4538,34 +4560,37 @@ class InteractionHandler {
                 ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, lang)
                 : null;
 
-            // Snippet globalny — dla wszystkich graczy u których zmieniła się pozycja
+            // Snippet globalny — dla wszystkich graczy u których zmieniła się pozycja; /test = symulacja bez zapisu
             let globalSnippetData = null;
-            if (!dryRun) {
-                try {
-                    const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
-                    const activeGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-                    const newGlobalRanking = await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
-                    globalPlayerCount = newGlobalRanking.length;
-                    globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
-                        userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
-                    );
-                    if (globalSnippetData) {
-                        const newGlobalIdx = newGlobalRanking.findIndex(p => p.userId === userId);
-                        gl.info(`🌐 Snippet globalny: ${prevGlobalPosition ?? '—'} → #${newGlobalIdx + 1}`);
-                    }
-                } catch (snippetErr) {
-                    gl.error(`❌ Błąd snippeta globalnego: ${snippetErr.message}`);
+            try {
+                const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                const activeGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
+                const newGlobalRanking = dryRun
+                    ? await this.rankingService.simulateGlobalRanking(new Set(activeGuildIds), userId, userName, bestScore, guildId)
+                    : await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
+                globalPlayerCount = newGlobalRanking.length;
+                globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
+                    userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
+                );
+                if (globalSnippetData) {
+                    const newGlobalIdx = newGlobalRanking.findIndex(p => p.userId === userId);
+                    gl.info(`🌐 Snippet globalny${dryRun ? ' (test)' : ''}: ${prevGlobalPosition ?? '—'} → #${newGlobalIdx + 1}`);
                 }
+            } catch (snippetErr) {
+                gl.error(`❌ Błąd snippeta globalnego: ${snippetErr.message}`);
             }
 
-            // Snippet + pozycja rankingu bossa — gdy rekord bossa pobity i boss jest znany
+            // Snippet + pozycja rankingu bossa — gdy rekord bossa pobity i boss jest znany; /test = symulacja bez zapisu
             let bossSnippetData = null;
             let bossGlobalRankingOverride = null;
-            if (!dryRun && isNewBossRecord && bossName && !wasUnknownBoss) {
+            if (isNewBossRecord && bossName && !wasUnknownBoss) {
                 const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                     || Array.from(interaction.client.guilds.cache.keys());
+                const bossRankingOverrideSim = dryRun
+                    ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, userId, _newScoreValue, bestScore, userName, guildId)
+                    : null;
                 const bossResult = await this._buildBossSnippetData(
-                    userId, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client
+                    userId, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client, bossRankingOverrideSim
                 );
                 bossSnippetData = bossResult.snippetData;
                 bossGlobalRankingOverride = bossResult.override;
@@ -4593,14 +4618,12 @@ class InteractionHandler {
                 });
             }
 
-            // === Licznik subskrybentów (Embed 1) ===
+            // === Licznik subskrybentów (Embed 1) === (read-only; w /test pokazujemy taki sam licznik, DM nie wychodzi)
             let recordSubscribers = [];
-            if (!dryRun) {
-                try {
-                    recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
-                } catch (subErr) {
-                    gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
-                }
+            try {
+                recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
+            } catch (subErr) {
+                gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
             }
 
             // === Wykres progresu (Embed 2) — tylko gdy zmiana w globalnym rankingu ===
@@ -4610,6 +4633,10 @@ class InteractionHandler {
                 try {
                     const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
                     const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, userId, 365);
+                    // /test (dryRun): nowy wpis nie jest jeszcze w historii — dokładamy symulowany punkt, by wykres był identyczny jak po /update
+                    if (dryRun) {
+                        callerHistory.push({ scoreValue: _newScoreValue, score: bestScore, timestamp: new Date().toISOString(), bossName: bossName || null, sourceGuildId: guildId });
+                    }
                     if (callerHistory.length >= 2) {
                         const guildTagMap = {};
                         const guildNameMap = {};
@@ -4668,6 +4695,10 @@ class InteractionHandler {
                 bossImageName,
                 followerCount: recordSubscribers.length,
                 systemNotices,
+                // /test (dryRun): symulowana pozycja w klanie (nowy wynik bez zapisu), by była identyczna jak po /update
+                sortedPlayersOverride: dryRun
+                    ? await this.rankingService.simulateSortedPlayers(guildId, userId, userName, bestScore)
+                    : null,
             });
 
             const publicFiles = [imageAttachment];
@@ -6364,10 +6395,11 @@ class InteractionHandler {
 
     // Buduje dane snippetu zmiany w rankingu bossa (format identyczny jak globalSnippetData).
     // Zwraca { title, description } lub null.
-    async _buildBossSnippetData(userId, bossName, previousBossRecord, allGuildIds, msgs, client) {
+    async _buildBossSnippetData(userId, bossName, previousBossRecord, allGuildIds, msgs, client, bossRankingOverride = null) {
         if (!this.bossRecordService || !this.globalTop10Service) return { snippetData: null, override: null };
         try {
-            const bossRanking = await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
+            // /test (dryRun): symulowany ranking bossa (z nowym wynikiem, bez zapisu); inaczej realny stan po zapisie
+            const bossRanking = bossRankingOverride || await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
             const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
             if (newBossIdx === -1) return { snippetData: null, override: null };
             const newBossPosition = newBossIdx + 1;

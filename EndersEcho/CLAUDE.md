@@ -65,13 +65,17 @@
      - **Cooldown 5 min** po udanym zapisie wyniku — sprawdzany przez `updateCooldownService`; informuje gracza ile czasu pozostało (w języku serwera); persystowany w `data/update_cooldowns.json` (przeżywa restart)
    - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, wymaga AI OCR):** Tryb testowy `/update` — współdzieli pełną implementację przez `_runUpdateFlow(interaction, { dryRun: true, commandName: 'test', ocrBlockKey: 'test' })`:
      - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
-     - Identyczny przepływ jak `/update` (te same walidacje, ten sam `analyzeTestImage()` z weryfikacją wzorca, ten sam prompt) **z wyjątkiem** kroków dry-run:
-       - Wynik (rekord i brak rekordu) wyświetlany jako **ephemeral** w `editReply` — bez publicznego `followUp`
-       - **Brak zapisu do rankingu** (`guilds/{guildId}/ranking.json`) — `isNewRecord` obliczany porównaniem z aktualnym stanem bez `updateUserRanking()`
-       - **Brak aktualizacji ról TOP** (`roleService.updateTopRoles`)
-       - **Brak snippeta globalnego rankingu**
-       - **Brak powiadomień DM** do subskrybentów
-       - **Brak `logScoreUpdate`** (log rekordu do webhooka)
+     - **Podgląd IDENTYCZNY z `/update`** (od czerwca 2026): `/test` renderuje dokładnie ten sam stos embedów co `/update` dla danego serwera — z global snippetem, snippetem bossa, **wykresem progresu**, nowymi osiągnięciami, licznikiem subskrypcji i pozycjami (klan/global/boss). Realizowane przez **symulację read-only** stanu „po zapisie" (bez modyfikacji danych):
+       - Global ranking: `rankingService.simulateGlobalRanking(...)`; pozycja w klanie: `rankingService.simulateSortedPlayers(...)` → przekazana do `createRecordEmbeds({ sortedPlayersOverride })`
+       - Ranking bossa: `bossRecordService.simulateGlobalBossRanking(...)` → przekazany do `_buildBossSnippetData(..., bossRankingOverride)` i do Case B
+       - Osiągnięcia: `achievementService.processSubmission(..., { preview: true })` — liczy odblokowane bez zapisu (mutacje w pamięci odrzucane, `loadData` czyta świeżo z dysku)
+       - Wykres: do historii doklejany **symulowany punkt** nowego wyniku (by wykres był identyczny jak po zapisie)
+       - `previousBossRecord` czytany read-only (`getUserBossRecords`); subskrybenci liczeni read-only (DM **nie** wychodzi)
+       - **Cross-server**: `/test` symuluje też przypadek duplikatu globalnego z pobiciem rekordu bossa (preview, ephemeral)
+     - Pozostałe różnice dry-run (jak dotąd):
+       - Wynik wyświetlany jako **ephemeral** w `editReply` — bez publicznego `followUp`
+       - **Brak zapisu** do rankingu/boss_records/achievements/historii (wszystko symulowane)
+       - **Brak aktualizacji ról TOP**, **brak powiadomień DM**, **brak sesji CV/revert**, **brak `logScoreUpdate`**
      - Nadal działa: `logCommandUsage('test')`, `usageLimitService` (zlicza dzienny limit), `tokenUsageService` (rejestruje koszty AI), `_sendInvalidScreenReport` dla NOT_SIMILAR/FAKE_PHOTO
      - Respektuje `isAllowedChannel`, blokadę użytkownika (`userBlockService`) oraz globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 

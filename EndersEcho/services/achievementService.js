@@ -79,8 +79,9 @@ class AchievementService {
      * @param {{ scoreValue, bossName, isNewRecord, prevScoreValue, currentPosition }} ctx
      * @returns {Promise<string[]>}
      */
-    async processSubmission(guildId, userId, ctx) {
+    async processSubmission(guildId, userId, ctx, options = {}) {
         if (!ctx.isNewRecord) return [];
+        const preview = options.preview === true; // tryb /test — liczy odblokowane bez zapisu
 
         return this._enqueue(guildId, async () => {
             try {
@@ -133,7 +134,8 @@ class AchievementService {
                 p.lastRecordAt = nowIso;
                 p.lastRecordBeatAt = nowIso;
 
-                await this.saveData(guildId, data);
+                // Tryb preview (/test): nie zapisuj — mutacje w pamięci są odrzucane (loadData czyta świeżo z dysku)
+                if (!preview) await this.saveData(guildId, data);
                 return toShow;
             } catch {
                 return [];

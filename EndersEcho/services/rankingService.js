@@ -1155,6 +1155,7 @@ class RankingService {
             bossImageName = null,
             followerCount = 0,
             systemNotices = [],
+            sortedPlayersOverride = null, // /test (dryRun): symulowana lista graczy z nowym wynikiem (bez zapisu)
         } = opts;
 
         const msgs = messages || this.config.messages;
@@ -1176,7 +1177,7 @@ class RankingService {
         let isNewEntry = false;
         if (userId && guildId) {
             try {
-                const sortedPlayers = await this.getSortedPlayers(guildId);
+                const sortedPlayers = sortedPlayersOverride || await this.getSortedPlayers(guildId);
                 const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
                 if (userIndex !== -1) {
                     currentPosition = userIndex + 1;
@@ -1532,6 +1533,43 @@ class RankingService {
             .sort((a, b) => b.scoreValue - a.scoreValue);
         this._sortedCache.set(guildId, sorted);
         return sorted;
+    }
+
+    /**
+     * SYMULACJA (read-only, /test): posortowani gracze serwera jak GDYBY zapisano nowy wynik.
+     * Nie modyfikuje danych — klonuje aktualny ranking i nakłada nowy wynik gracza.
+     */
+    async simulateSortedPlayers(guildId, userId, userName, bestScore) {
+        const sorted = (await this.getSortedPlayers(guildId)).map(p => ({ ...p }));
+        const newScoreValue = this.parseScoreValue(bestScore);
+        const idx = sorted.findIndex(p => p.userId === userId);
+        if (idx !== -1) {
+            if (newScoreValue > (sorted[idx].scoreValue || 0)) {
+                sorted[idx] = { ...sorted[idx], score: bestScore, scoreValue: newScoreValue };
+            }
+        } else {
+            sorted.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue });
+        }
+        sorted.sort((a, b) => b.scoreValue - a.scoreValue);
+        return sorted;
+    }
+
+    /**
+     * SYMULACJA (read-only, /test): globalny ranking jak GDYBY zapisano nowy wynik na danym serwerze.
+     */
+    async simulateGlobalRanking(activeGuildIds, userId, userName, bestScore, sourceGuildId) {
+        const ranking = (await this.getGlobalRanking(activeGuildIds)).map(p => ({ ...p }));
+        const newScoreValue = this.parseScoreValue(bestScore);
+        const idx = ranking.findIndex(p => p.userId === userId);
+        if (idx !== -1) {
+            if (newScoreValue > (ranking[idx].scoreValue || 0)) {
+                ranking[idx] = { ...ranking[idx], score: bestScore, scoreValue: newScoreValue, sourceGuildId };
+            }
+        } else {
+            ranking.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, sourceGuildId });
+        }
+        ranking.sort((a, b) => b.scoreValue - a.scoreValue);
+        return ranking;
     }
 
     /**

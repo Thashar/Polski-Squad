@@ -110,6 +110,24 @@ class BossRecordService {
     }
 
     /**
+     * SYMULACJA (read-only, /test): globalny ranking bossa jak GDYBY zapisano nowy wynik gracza.
+     * Nie modyfikuje danych — klonuje aktualny ranking i nakłada nowy wynik.
+     */
+    async simulateGlobalBossRanking(allGuildIds, bossName, userId, scoreValue, score, username, sourceGuildId) {
+        const ranking = (await this.getGlobalBossRanking(allGuildIds, bossName)).map(p => ({ ...p }));
+        const idx = ranking.findIndex(p => p.userId === userId);
+        if (idx !== -1) {
+            if (scoreValue > (ranking[idx].scoreValue || 0)) {
+                ranking[idx] = { ...ranking[idx], score, scoreValue, sourceGuildId };
+            }
+        } else {
+            ranking.push({ userId, username, score, scoreValue, sourceGuildId });
+        }
+        ranking.sort((a, b) => b.scoreValue - a.scoreValue);
+        return ranking;
+    }
+
+    /**
      * Lista bossów które mają ≥1 rekord, filtrowana do znanych angielskich nazw.
      * Surowe/nieznane nazwy są niewidoczne w rankingach dopóki nie zostaną zmapowane.
      * @param {string[]} allGuildIds
