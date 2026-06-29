@@ -1311,6 +1311,7 @@ class RankingService {
         const embed4 = new EmbedBuilder()
             .setColor(embedColor)
             .setAuthor({ name: msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia', iconURL: systemInfoIcon })
+            .setThumbnail(systemInfoIcon) // ikona akceptacji (brak uwag) lub informacyjna (są komunikaty)
             .setTimestamp(); // stopka „Dziś o HH:MM"
         if (hasNotices) {
             for (const notice of systemNotices) {
