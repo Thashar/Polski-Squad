@@ -14,6 +14,11 @@ const OPERATIONS_TYPE = 'ocr.analyze';
  * Buduje usage payload do `/record` z `aiResult.tokenUsage` zwracanego przez
  * `aiOcrService`. Zwraca null gdy brak danych (np. AI OCR wyłączony).
  */
+function normalizeForSearch(str) {
+    if (!str) return '';
+    return str.normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
 function buildGeminiUsage(aiResult) {
     if (!aiResult?.tokenUsage) return null;
     const model = process.env.ENDERSECHO_GOOGLE_AI_MODEL || 'gemini-2.5-flash-preview-05-20';
@@ -448,14 +453,14 @@ class InteractionHandler {
      */
     async _handleAutocomplete(interaction) {
         if (interaction.commandName === 'ocr-on-off' && interaction.options.getFocused(true).name === 'guild') {
-            const focused = interaction.options.getFocused().toLowerCase();
+            const focused = normalizeForSearch(interaction.options.getFocused());
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
             const choices = [];
             for (const guildId of configuredIds) {
                 const discordGuild = interaction.client.guilds.cache.get(guildId);
                 if (!discordGuild) continue;
                 const name = discordGuild.name;
-                if (name.toLowerCase().includes(focused) || guildId.includes(focused)) {
+                if (normalizeForSearch(name).includes(focused) || guildId.includes(focused)) {
                     choices.push({ name: `${name} (${guildId})`, value: guildId });
                 }
             }
@@ -2699,7 +2704,7 @@ class InteractionHandler {
         const guildId = interaction.guildId;
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(guildId);
-        const query = interaction.fields.getTextInputValue('remove_query').trim().toLowerCase();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('remove_query').trim());
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             // Head Admin przeszukuje wszystkie serwery; Admin tylko swój
@@ -2712,7 +2717,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if ((p.username || p.userId).toLowerCase().includes(query)) {
+                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -2882,11 +2887,11 @@ class InteractionHandler {
         const msgs = this.msgs(guildId);
         const t = this._panelT(guildId);
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
-        const query = interaction.fields.getTextInputValue('unblock_query').trim().toLowerCase();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('unblock_query').trim());
         await interaction.deferReply({ flags: ['Ephemeral'] });
         const blocked = await this.userBlockService.getBlockedUsers();
         const scopedBlocked = isHeadAdmin ? blocked : blocked.filter(e => e.guildId === guildId);
-        const filtered = scopedBlocked.filter(e => e.username.toLowerCase().includes(query));
+        const filtered = scopedBlocked.filter(e => normalizeForSearch(e.username).includes(query));
         if (filtered.length === 0) {
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0xFF4444)
@@ -3080,7 +3085,7 @@ class InteractionHandler {
 
     async _handlePanelBlockSearch(interaction) {
         const t = this._panelT(interaction.guildId);
-        const query = interaction.fields.getTextInputValue('block_query').trim().toLowerCase();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('block_query').trim());
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
@@ -3090,7 +3095,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if ((p.username || p.userId).toLowerCase().includes(query)) {
+                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -3287,14 +3292,14 @@ class InteractionHandler {
 
     async _handlePanelOcrSearch(interaction) {
         const t = this._panelT(interaction.guildId);
-        const query = interaction.fields.getTextInputValue('ocr_query').trim().toLowerCase();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('ocr_query').trim());
         await interaction.deferUpdate();
         const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
         const matches = [];
         for (const guildId of configuredIds) {
             const guild = interaction.client.guilds.cache.get(guildId);
             const guildName = guild?.name || this.guildConfigService.getConfig(guildId)?.guildName || guildId;
-            if (!guildName.toLowerCase().includes(query)) continue;
+            if (!normalizeForSearch(guildName).includes(query)) continue;
             const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
             const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
             matches.push({ guildId, guildName, updateBlocked, testBlocked });
@@ -6766,12 +6771,12 @@ class InteractionHandler {
             const msgs        = this.msgs(guildId);
             const lang        = state?.lang || this._getProfileLang(guildId, guildId);
             const isPol       = lang === 'pol';
-            const query       = interaction.fields.getTextInputValue('profile_search_query').trim();
+            const query       = normalizeForSearch(interaction.fields.getTextInputValue('profile_search_query').trim());
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
             const matches = globalRanking.filter(p =>
-                (p.username || p.userId).toLowerCase().includes(query.toLowerCase())
+                normalizeForSearch(p.username || p.userId).includes(query)
             );
 
             if (matches.length > 0 && this.achievementService) {
@@ -9534,7 +9539,7 @@ class InteractionHandler {
     async _handlePanelAchDelSearch(interaction) {
         const guildId = interaction.guildId;
         const t = this._panelT(guildId);
-        const query = interaction.fields.getTextInputValue('ach_del_query').trim().toLowerCase();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('ach_del_query').trim());
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
             const searchGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
@@ -9544,7 +9549,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if ((p.username || p.userId).toLowerCase().includes(query)) {
+                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -10148,12 +10153,12 @@ class InteractionHandler {
 
     async _handlePanelBanGuildSearch(interaction) {
         const t = this._panelT(interaction.guildId);
-        const query = interaction.fields.getTextInputValue('ban_guild_query').toLowerCase().trim();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('ban_guild_query').trim());
         await interaction.deferReply({ flags: ['Ephemeral'] });
 
         const matches = [];
         for (const [guildId, guild] of interaction.client.guilds.cache) {
-            if (!guild.name.toLowerCase().includes(query)) continue;
+            if (!normalizeForSearch(guild.name).includes(query)) continue;
             if (this.guildBanService?.isBanned(guildId)) continue;
             matches.push({ guildId, guildName: guild.name });
         }
@@ -10660,7 +10665,7 @@ class InteractionHandler {
     }
 
     async _handleAchCheckModal(interaction) {
-        const query = interaction.fields.getTextInputValue('ach_check_query').toLowerCase().trim();
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('ach_check_query').trim());
         await interaction.deferUpdate();
         const t = this._panelT(interaction.guildId);
 
@@ -10669,7 +10674,7 @@ class InteractionHandler {
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
 
             const matches = globalRanking.filter(p =>
-                (p.username || '').toLowerCase().includes(query)
+                normalizeForSearch(p.username || '').includes(query)
             );
 
             const backRow = new ActionRowBuilder().addComponents(
