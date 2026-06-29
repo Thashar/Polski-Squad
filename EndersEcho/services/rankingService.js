@@ -1302,10 +1302,11 @@ class RankingService {
         }
 
         // ===== EMBED 4 — ℹ️ Informacje systemowe (komunikaty + zdjęcie analizy) =====
+        const hasNotices = Array.isArray(systemNotices) && systemNotices.length > 0;
         const embed4 = new EmbedBuilder()
             .setColor(embedColor)
             .setTitle(msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia');
-        if (Array.isArray(systemNotices) && systemNotices.length > 0) {
+        if (hasNotices) {
             for (const notice of systemNotices) {
                 embed4.addFields({ name: notice.name, value: notice.value, inline: false });
             }
@@ -1313,9 +1314,11 @@ class RankingService {
             embed4.setDescription(msgs.systemInfoAllGood || '✅ Zdjęcie zweryfikowane poprawnie — brak uwag.');
         }
         if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
-        if (botName || botIconUrl) {
-            embed4.setFooter({ text: botName || 'EndersEcho', ...(botIconUrl ? { iconURL: botIconUrl } : {}) });
-        }
+        // Ikona footera zależna od wyniku: brak uwag (zaakceptowano) vs jest informacja systemowa
+        const systemInfoIcon = hasNotices
+            ? 'https://cdn.discordapp.com/emojis/1297532628395622440.webp?size=128&animated=true'
+            : 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true';
+        embed4.setFooter({ text: botName || 'EndersEcho', iconURL: systemInfoIcon });
         embeds.push(embed4);
 
         // Guard: łączny limit 6000 znaków na wszystkie embedy w wiadomości
