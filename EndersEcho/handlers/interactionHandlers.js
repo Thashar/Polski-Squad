@@ -14,9 +14,100 @@ const OPERATIONS_TYPE = 'ocr.analyze';
  * Buduje usage payload do `/record` z `aiResult.tokenUsage` zwracanego przez
  * `aiOcrService`. Zwraca null gdy brak danych (np. AI OCR wyłączony).
  */
+// Znaki wyglądające jak łacina/cyfry ale będące innymi kodami Unicode
+const _HOMOGLYPHS = {
+    // Cyrylica homoglify (małe)
+    'а':'a','е':'e','о':'o','р':'p','с':'c','у':'y','х':'x',
+    'ѕ':'s','і':'i','ј':'j','ԁ':'d','ԛ':'q','ԝ':'w','ԟ':'w',
+    // Cyrylica homoglify (wielkie)
+    'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O',
+    'Р':'P','С':'C','Т':'T','У':'Y','Х':'X','Ѕ':'S','І':'I',
+    'Ј':'J','Ԁ':'D','Ԛ':'Q','Ԝ':'W',
+    // Greka homoglify (wielkie)
+    'Α':'A','Β':'B','Ε':'E','Ζ':'Z','Η':'H','Ι':'I','Κ':'K',
+    'Μ':'M','Ν':'N','Ο':'O','Ρ':'P','Τ':'T','Υ':'Y','Χ':'X',
+    // Greka homoglify (małe)
+    'α':'a','β':'b','ε':'e','ι':'i','ν':'v','ο':'o','ρ':'p',
+    'υ':'u','χ':'x','γ':'y',
+    // Małe majuskuły (small caps)
+    'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ꜰ':'f','ɢ':'g',
+    'ʜ':'h','ɪ':'i','ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m','ɴ':'n',
+    'ᴏ':'o','ᴘ':'p','ʀ':'r','ꜱ':'s','ᴛ':'t','ᴜ':'u','ᴠ':'v',
+    'ᴡ':'w','ʏ':'y','ᴢ':'z',
+    // Litery wykładnikowe (superscript)
+    'ᵃ':'a','ᵇ':'b','ᶜ':'c','ᵈ':'d','ᵉ':'e','ᶠ':'f','ᵍ':'g',
+    'ʰ':'h','ⁱ':'i','ʲ':'j','ᵏ':'k','ˡ':'l','ᵐ':'m','ⁿ':'n',
+    'ᵒ':'o','ᵖ':'p','ʳ':'r','ˢ':'s','ᵗ':'t','ᵘ':'u','ᵛ':'v',
+    'ʷ':'w','ˣ':'x','ʸ':'y','ᶻ':'z',
+    // Litery indeksowe (subscript)
+    'ₐ':'a','ₑ':'e','ₒ':'o','ₓ':'x',
+    // Cyfry wykładnikowe
+    '⁰':'0','¹':'1','²':'2','³':'3','⁴':'4',
+    '⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9',
+    // Cyfry indeksowe
+    '₀':'0','₁':'1','₂':'2','₃':'3','₄':'4',
+    '₅':'5','₆':'6','₇':'7','₈':'8','₉':'9',
+    // Symbole podobne do liter (letterlike)
+    'ℂ':'c','ℊ':'g','ℎ':'h','ℋ':'h','ℌ':'h','ℍ':'h',
+    'ℐ':'i','ℑ':'i','ℒ':'l','ℓ':'l','ℕ':'n','ℙ':'p',
+    'ℚ':'q','ℝ':'r','ℜ':'r','ℤ':'z','ℬ':'b','ℰ':'e',
+    'ℱ':'f','ℳ':'m','ℛ':'r',
+    // IPA i znaki fonetyczne podobne do łaciny
+    'ɑ':'a','ɒ':'a','ɓ':'b','ƀ':'b','ƃ':'b','ɔ':'c',
+    'ɖ':'d','ɗ':'d','ƌ':'d','ǝ':'e','ɛ':'e','ɜ':'e',
+    'ɡ':'g','ɣ':'g','ɦ':'h','ɧ':'h',
+    'ɨ':'i','ɩ':'i','ʝ':'j','ɫ':'l','ɬ':'l','ɭ':'l',
+    'ɯ':'m','ɱ':'m','ɲ':'n','ɳ':'n','ɵ':'o',
+    'ɹ':'r','ɻ':'r','ɾ':'r','ʂ':'s','ʃ':'s',
+    'ƭ':'t','ʈ':'t','ʊ':'u','ʋ':'v','ʌ':'v',
+    'ʍ':'w','ʎ':'y','ʐ':'z','ʑ':'z',
+    // Litery Regional Indicator (składowe flag emoji: 🇦–🇿)
+    '\u{1F1E6}':'a','\u{1F1E7}':'b','\u{1F1E8}':'c','\u{1F1E9}':'d',
+    '\u{1F1EA}':'e','\u{1F1EB}':'f','\u{1F1EC}':'g','\u{1F1ED}':'h',
+    '\u{1F1EE}':'i','\u{1F1EF}':'j','\u{1F1F0}':'k','\u{1F1F1}':'l',
+    '\u{1F1F2}':'m','\u{1F1F3}':'n','\u{1F1F4}':'o','\u{1F1F5}':'p',
+    '\u{1F1F6}':'q','\u{1F1F7}':'r','\u{1F1F8}':'s','\u{1F1F9}':'t',
+    '\u{1F1FA}':'u','\u{1F1FB}':'v','\u{1F1FC}':'w','\u{1F1FD}':'x',
+    '\u{1F1FE}':'y','\u{1F1FF}':'z',
+    // Otoczone litery (enclosed, te których NFKC nie łapie)
+    '\u{1F150}':'a','\u{1F151}':'b','\u{1F152}':'c','\u{1F153}':'d',
+    '\u{1F154}':'e','\u{1F155}':'f','\u{1F156}':'g','\u{1F157}':'h',
+    '\u{1F158}':'i','\u{1F159}':'j','\u{1F15A}':'k','\u{1F15B}':'l',
+    '\u{1F15C}':'m','\u{1F15D}':'n','\u{1F15E}':'o','\u{1F15F}':'p',
+    '\u{1F160}':'q','\u{1F161}':'r','\u{1F162}':'s','\u{1F163}':'t',
+    '\u{1F164}':'u','\u{1F165}':'v','\u{1F166}':'w','\u{1F167}':'x',
+    '\u{1F168}':'y','\u{1F169}':'z',
+    '\u{1F170}':'a','\u{1F171}':'b','\u{1F17E}':'o','\u{1F17F}':'p',
+};
+
 function normalizeForSearch(str) {
     if (!str) return '';
-    return str.normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    // Krok 1: NFKC — obsługuje czcionki matematyczne (𝓗𝓮𝓵𝓵𝓸), fullwidth (Ａｂｃ), halfwidth itp.
+    let s = str.normalize('NFKC');
+    // Krok 2: zamień homoglify (Cyrylica/Greka/small-caps/superscript/regional-indicator)
+    s = s.replace(/./gsu, ch => _HOMOGLYPHS[ch] ?? ch);
+    // Krok 3: NFD + usuń znaki diakrytyczne (ą→a, é→e, ñ→n itp.)
+    s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return s.toLowerCase();
+}
+
+// Sprawdza czy gracz pasuje do query — szuka po nazwie rankingowej ORAZ po nazwie Discord
+function playerMatchesQuery(p, query, client, guildId) {
+    if (!query) return true;
+    if (normalizeForSearch(p.username || '').includes(query)) return true;
+    if ((p.userId || '').includes(query)) return true;
+    const discordUser = client?.users?.cache?.get(p.userId);
+    if (discordUser) {
+        if (normalizeForSearch(discordUser.username || '').includes(query)) return true;
+        if (normalizeForSearch(discordUser.globalName || '').includes(query)) return true;
+    }
+    if (guildId) {
+        const member = client?.guilds?.cache?.get(guildId)?.members?.cache?.get(p.userId);
+        if (member?.nickname) {
+            if (normalizeForSearch(member.nickname).includes(query)) return true;
+        }
+    }
+    return false;
 }
 
 function buildGeminiUsage(aiResult) {
@@ -2717,7 +2808,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -3095,7 +3186,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -6776,7 +6867,7 @@ class InteractionHandler {
 
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
             const matches = globalRanking.filter(p =>
-                normalizeForSearch(p.username || p.userId).includes(query)
+                playerMatchesQuery(p, query, interaction.client, p.sourceGuildId || null)
             );
 
             if (matches.length > 0 && this.achievementService) {
@@ -9549,7 +9640,7 @@ class InteractionHandler {
                 const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
                 for (let i = 0; i < players.length; i++) {
                     const p = players[i];
-                    if (normalizeForSearch(p.username || p.userId).includes(query)) {
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
                         allMatches.push({ ...p, rank: i + 1, sgid, guildName });
                     }
                 }
@@ -10674,7 +10765,7 @@ class InteractionHandler {
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
 
             const matches = globalRanking.filter(p =>
-                normalizeForSearch(p.username || '').includes(query)
+                playerMatchesQuery(p, query, interaction.client, p.sourceGuildId || null)
             );
 
             const backRow = new ActionRowBuilder().addComponents(
