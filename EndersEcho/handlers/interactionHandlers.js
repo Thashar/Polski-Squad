@@ -3296,11 +3296,11 @@ class InteractionHandler {
         const matches = [];
         for (const guildId of configuredIds) {
             const guild = interaction.client.guilds.cache.get(guildId);
-            if (!guild) continue;
-            if (!guild.name.toLowerCase().includes(query)) continue;
+            const guildName = guild?.name || this.guildConfigService.getConfig(guildId)?.guildName || guildId;
+            if (!guildName.toLowerCase().includes(query)) continue;
             const updateBlocked = this.ocrBlockService.isBlocked(guildId, 'update');
             const testBlocked = this.ocrBlockService.isBlocked(guildId, 'test');
-            matches.push({ guildId, guildName: guild.name, updateBlocked, testBlocked });
+            matches.push({ guildId, guildName, updateBlocked, testBlocked });
         }
         if (matches.length === 0) {
             await interaction.editReply({
