@@ -403,6 +403,10 @@ class InteractionHandler {
                 await this._handlePanelRemoveSearch(interaction);
                 return;
             }
+            if (interaction.customId === 'panel_remove_score_search_modal') {
+                await this._handlePanelRemoveScoreSearch(interaction);
+                return;
+            }
             if (interaction.customId === 'panel_unblock_search_modal') {
                 await this._handlePanelUnblockSearch(interaction);
                 return;
@@ -2311,16 +2315,22 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const back = new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
         if (isHeadAdmin) {
-            return [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel(t('Zablokuj gracza', 'Block Player')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
-                back,
-            )];
+            return [
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel(t('Zablokuj gracza', 'Block Player')).setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🧹').setLabel(t('Usuń wynik', 'Remove Score')).setStyle(ButtonStyle.Danger),
+                ),
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel(t('Usuń osiągnięcia', 'Remove Achievements')).setStyle(ButtonStyle.Danger),
+                    back,
+                ),
+            ];
         }
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel(t('Usuń gracza z rankingu', 'Remove Player from Ranking')).setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🧹').setLabel(t('Usuń wynik', 'Remove Score')).setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_unblock').setEmoji('🔓').setLabel(t('Odblokuj gracza', 'Unblock Player')).setStyle(ButtonStyle.Secondary),
             back,
         )];
@@ -2938,6 +2948,269 @@ class InteractionHandler {
         } catch (err) {
             logger.error(`Błąd _handlePanelRemoveConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd usuwania gracza.', '❌ Error removing player.'), embeds: [], components: [] });
+        }
+    }
+
+    // ─── Usuń wynik (pojedynczy wpis z historii) ─────────────────────────────
+    async _handlePanelRemoveScore(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const modal = new ModalBuilder()
+            .setCustomId('panel_remove_score_search_modal')
+            .setTitle(t('Usuń wynik', 'Remove Score'));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('remove_score_query')
+                .setLabel(t('Fragment nicku gracza', 'Part of the player\'s nick'))
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder(t('np. Kowalski', 'e.g. Kowalski'))
+                .setRequired(true).setMinLength(1).setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handlePanelRemoveScoreSearch(interaction) {
+        const guildId = interaction.guildId;
+        const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
+        const t = this._panelT(guildId);
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('remove_score_query').trim());
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const searchGuildIds = isHeadAdmin
+                ? (this.guildConfigService?.getAllConfiguredGuildIds() || [guildId])
+                : [guildId];
+            const allMatches = [];
+            for (const sgid of searchGuildIds) {
+                const players = await this.rankingService.getSortedPlayers(sgid);
+                const guildName = interaction.client.guilds.cache.get(sgid)?.name || sgid;
+                for (let i = 0; i < players.length; i++) {
+                    const p = players[i];
+                    if (playerMatchesQuery(p, query, interaction.client, sgid)) {
+                        allMatches.push({ ...p, rank: i + 1, sgid, guildName });
+                    }
+                }
+            }
+            if (allMatches.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444)
+                        .setTitle(t('🗑️ Nie znaleziono gracza', '🗑️ Player Not Found'))
+                        .setDescription(t(`Brak gracza z nickiem zawierającym "**${query}**".`, `No player with nick containing "**${query}**".`))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+            const options = allMatches.slice(0, 25).map(p => ({
+                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                description: isHeadAdmin
+                    ? `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100)
+                    : `${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
+                value: `${p.userId}:${p.sgid}`,
+            }));
+            const subtitle = allMatches.length > 25
+                ? t(`Znaleziono ${allMatches.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${allMatches.length} — showing 25. Narrow your search.`)
+                : t(`Znaleziono ${allMatches.length} gracz(y).`, `Found ${allMatches.length} player(s).`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🗑️ Wybierz gracza', '🗑️ Select Player'))
+                    .setDescription(subtitle)],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('panel_remove_score_player')
+                            .setPlaceholder(t('Wybierz gracza...', 'Select a player...'))
+                            .addOptions(options)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                    )
+                ]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemoveScoreSearch (serwer "${interaction.guild?.name || guildId}"):`, err);
+            await interaction.editReply({ content: t('❌ Błąd wczytywania rankingu.', '❌ Error loading ranking.'), embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelRemoveScorePlayer(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const [targetUserId, targetGuildId] = interaction.values[0].split(':');
+        await interaction.deferUpdate();
+        try {
+            const entries = this.scoreHistoryService
+                ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId)
+                : [];
+            const players = await this.rankingService.getSortedPlayers(targetGuildId);
+            const displayName = players.find(p => p.userId === targetUserId)?.username || targetUserId;
+            if (entries.length === 0) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444)
+                        .setTitle(t('🗑️ Brak historii', '🗑️ No History'))
+                        .setDescription(t(`Gracz **${displayName}** nie ma zapisanych wyników w historii.`, `Player **${displayName}** has no saved score history.`))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+            const locale = (this.config.getGuildConfig(targetGuildId)?.lang === 'pol') ? 'pl-PL' : 'en-GB';
+            const sorted = entries.slice().sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 25);
+            const options = sorted.map(e => {
+                const tsMs = new Date(e.timestamp).getTime();
+                const dateStr = new Date(e.timestamp).toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric' });
+                return {
+                    label: `${e.score}`.slice(0, 100),
+                    description: `${dateStr}${e.bossName ? ' • ' + e.bossName : ''}`.slice(0, 100),
+                    value: `${targetUserId}:${targetGuildId}:${tsMs}`,
+                };
+            });
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🗑️ Wybierz wynik do usunięcia', '🗑️ Select Score to Remove'))
+                    .setDescription(t(`Gracz: **${displayName}** — ${entries.length} wpis(ów). Pokazuję najnowsze 25.`, `Player: **${displayName}** — ${entries.length} entr(ies). Showing latest 25.`))],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('panel_remove_score_entry')
+                            .setPlaceholder(t('Wybierz wynik...', 'Select a score...'))
+                            .addOptions(options)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                    )
+                ]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemoveScorePlayer:`, err);
+            await interaction.editReply({ content: t('❌ Błąd wczytywania historii.', '❌ Error loading history.'), embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelRemoveScoreEntry(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const [targetUserId, targetGuildId, tsMs] = interaction.values[0].split(':');
+        await interaction.deferUpdate();
+        try {
+            const entries = this.scoreHistoryService ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId) : [];
+            const entry = entries.find(e => String(new Date(e.timestamp).getTime()) === tsMs);
+            const players = await this.rankingService.getSortedPlayers(targetGuildId);
+            const displayName = players.find(p => p.userId === targetUserId)?.username || targetUserId;
+            const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+            const serverNote = guildName ? ` (${guildName})` : '';
+            if (!entry) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle(t('🗑️ Wpis nieaktualny', '🗑️ Entry Outdated')).setDescription(t('Ten wpis już nie istnieje. Spróbuj ponownie.', 'This entry no longer exists. Try again.'))],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
+                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                    )]
+                });
+                return;
+            }
+            const dateStr = new Date(entry.timestamp).toLocaleString((this.config.getGuildConfig(targetGuildId)?.lang === 'pol') ? 'pl-PL' : 'en-GB');
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('🗑️ Potwierdzenie usunięcia wyniku', '🗑️ Confirm Score Removal'))
+                    .setDescription(t(
+                        `Gracz: **${displayName}**${serverNote}\nWynik: **${entry.score}**\nData: ${dateStr}${entry.bossName ? `\nBoss: ${entry.bossName}` : ''}\n\nUsunąć ten wpis z historii? Jeśli to aktualny rekord gracza, ranking zostanie przeliczony do następnego najlepszego wyniku.`,
+                        `Player: **${displayName}**${serverNote}\nScore: **${entry.score}**\nDate: ${dateStr}${entry.bossName ? `\nBoss: ${entry.bossName}` : ''}\n\nRemove this entry from history? If it's the player's current record, the ranking will be recalculated to the next best score.`
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`panel_remove_score_confirm_${targetUserId}:${targetGuildId}:${tsMs}`).setEmoji('✅').setLabel(t('Usuń wynik', 'Remove Score')).setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemoveScoreEntry:`, err);
+            await interaction.editReply({ content: t('❌ Błąd wczytywania wpisu.', '❌ Error loading entry.'), embeds: [], components: [] });
+        }
+    }
+
+    async _handlePanelRemoveScoreConfirm(interaction, rawValue) {
+        // rawValue: userId:guildId:tsMs
+        const [targetUserId, targetGuildId, tsMsStr] = rawValue.split(':');
+        const tsMs = Number(tsMsStr);
+        const t = this._panelT(interaction.guildId);
+        await interaction.deferUpdate();
+        try {
+            const rankingBefore = await this.rankingService.loadRanking(targetGuildId);
+            const oldRecord = rankingBefore[targetUserId] || null;
+            const oldUsername = oldRecord?.username || targetUserId;
+
+            const removed = this.scoreHistoryService
+                ? await this.scoreHistoryService.removeEntryByTimestamp(targetGuildId, targetUserId, tsMs)
+                : null;
+
+            if (!removed) {
+                const { embed, components } = this._buildAdminPanel(interaction);
+                embed.setDescription(t('⚠️ Wpis nie istnieje (mógł zostać już usunięty).\n\n', '⚠️ Entry not found (may have been removed already).\n\n') + (embed.data.description || ''));
+                await interaction.editReply({ embeds: [embed], components });
+                return;
+            }
+
+            // Czy usunięty wpis był aktualnym rekordem? → przelicz ranking z pozostałej historii
+            let rankingChanged = false;
+            let newRecordInfo = null;
+            const removedVal = typeof removed.scoreValue === 'number' ? removed.scoreValue : this.rankingService.parseScoreValue(removed.score);
+            if (oldRecord && removedVal >= this.rankingService.parseScoreValue(oldRecord.score)) {
+                const remaining = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId);
+                let best = null;
+                for (const e of remaining) {
+                    const v = typeof e.scoreValue === 'number' ? e.scoreValue : this.rankingService.parseScoreValue(e.score);
+                    if (!best || v > best._v || (v === best._v && new Date(e.timestamp) > new Date(best.timestamp))) {
+                        best = { ...e, _v: v };
+                    }
+                }
+                if (!best) {
+                    await this.rankingService.revertUserRecord(targetGuildId, targetUserId, null);
+                } else {
+                    await this.rankingService.revertUserRecord(targetGuildId, targetUserId, {
+                        score: best.score,
+                        scoreValue: best._v,
+                        timestamp: best.timestamp,
+                        username: oldUsername,
+                        bossName: best.bossName || null,
+                        userId: targetUserId,
+                    });
+                    newRecordInfo = best.score;
+                }
+                rankingChanged = true;
+                try {
+                    const targetGuild = interaction.client.guilds.cache.get(targetGuildId);
+                    if (targetGuild) {
+                        const guildConfig = this.config.getGuildConfig(targetGuildId);
+                        const updatedPlayers = await this.rankingService.getSortedPlayers(targetGuildId);
+                        await this.roleService.updateTopRoles(targetGuild, updatedPlayers, guildConfig?.topRoles || null);
+                    }
+                } catch (roleErr) {
+                    logger.warn(`Błąd aktualizacji ról TOP po usunięciu wyniku: ${roleErr.message}`);
+                }
+            }
+
+            this.adminPanelService?.refresh();
+            const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+            const serverNote = guildName ? ` (${guildName})` : '';
+            let desc = t(
+                `Usunięto wynik **${removed.score}** gracza **${oldUsername}**${serverNote} z historii.`,
+                `Removed score **${removed.score}** of player **${oldUsername}**${serverNote} from history.`
+            );
+            if (rankingChanged) {
+                desc += newRecordInfo
+                    ? t(`\nRanking przeliczony — nowy rekord: **${newRecordInfo}**.`, `\nRanking recalculated — new record: **${newRecordInfo}**.`)
+                    : t(`\nBrak innych wyników — gracz usunięty z rankingu.`, `\nNo other scores — player removed from the ranking.`);
+            }
+            await this.logService.logMessage('success', `Usunięto wynik ${removed.score} gracza ${oldUsername} z historii (serwer ${guildName || targetGuildId})${rankingChanged ? ', ranking przeliczony' : ''} przez panel admina`, interaction);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('✅ Wynik usunięty', '✅ Score Removed')).setDescription(desc)],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelRemoveScoreConfirm:`, err);
+            await interaction.editReply({ content: t('❌ Błąd usuwania wyniku.', '❌ Error removing score.'), embeds: [], components: [] });
         }
     }
 
@@ -5004,6 +5277,8 @@ class InteractionHandler {
         if (customId === 'panel_remove') return 'Usuń gracza z rankingu';
         if (customId.startsWith('panel_remove_confirm_')) return 'Potwierdzenie usunięcia gracza';
         if (customId.startsWith('panel_remove_all_confirm_')) return 'Potwierdzenie usunięcia gracza z osiągnięciami';
+        if (customId === 'panel_remove_score') return 'Usuń wynik z historii';
+        if (customId.startsWith('panel_remove_score_confirm_')) return 'Potwierdzenie usunięcia wyniku';
         if (customId === 'panel_unblock') return 'Odblokuj gracza';
         if (customId === 'panel_block') return 'Zablokuj gracza';
         if (customId.startsWith('panel_block_time_')) return 'Ustaw czas blokady gracza';
@@ -5452,6 +5727,15 @@ class InteractionHandler {
             if (customId.startsWith('panel_remove_all_confirm_')) {
                 const rawValue = customId.replace('panel_remove_all_confirm_', '');
                 await this._handlePanelRemoveConfirm(interaction, rawValue, { resetAllAchievements: true });
+                return;
+            }
+            if (customId === 'panel_remove_score') {
+                await this._handlePanelRemoveScore(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_remove_score_confirm_')) {
+                const rawValue = customId.replace('panel_remove_score_confirm_', '');
+                await this._handlePanelRemoveScoreConfirm(interaction, rawValue);
                 return;
             }
             if (customId === 'panel_unblock') {
@@ -7416,6 +7700,15 @@ class InteractionHandler {
 
             if (customId === 'panel_remove_select') {
                 await this._handlePanelRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'panel_remove_score_player') {
+                await this._handlePanelRemoveScorePlayer(interaction);
+                return;
+            }
+            if (customId === 'panel_remove_score_entry') {
+                await this._handlePanelRemoveScoreEntry(interaction);
                 return;
             }
 

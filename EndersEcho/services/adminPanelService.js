@@ -444,6 +444,7 @@ class AdminPanelService {
             new ButtonBuilder().setCustomId('panel_block').setEmoji('🔒').setLabel('Zablokuj').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('cc_action_unblock').setEmoji('🔓').setLabel('Odblokuj').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_remove').setEmoji('🗑️').setLabel('Usuń gracza').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('panel_remove_score').setEmoji('🧹').setLabel('Usuń wynik').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🏆').setLabel('Usuń osiągnięcia').setStyle(ButtonStyle.Secondary),
         );
     }

@@ -55,6 +55,22 @@ class ScoreHistoryService {
         return removed;
     }
 
+    // Zwraca WSZYSTKIE wpisy gracza (bez filtra dni), posortowane chronologicznie. Używane przez panel "Usuń wynik".
+    async getAllUserEntries(guildId, userId) {
+        const entries = await this._load(guildId, userId);
+        return entries.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    }
+
+    // Usuwa wpis o danym timestampie (ms). Zwraca usunięty wpis lub null. Używane przez panel "Usuń wynik".
+    async removeEntryByTimestamp(guildId, userId, timestampMs) {
+        const entries = await this._load(guildId, userId);
+        const idx = entries.findIndex(e => new Date(e.timestamp).getTime() === timestampMs);
+        if (idx === -1) return null;
+        const [removed] = entries.splice(idx, 1);
+        await this._save(guildId, userId, entries);
+        return removed;
+    }
+
     // Zwraca wpisy z ostatnich maxDaysBack dni, posortowane chronologicznie
     async getUserHistory(guildId, userId, maxDaysBack = 90) {
         const entries = await this._load(guildId, userId);
