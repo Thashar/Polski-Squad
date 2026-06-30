@@ -186,7 +186,7 @@
 
 6. **Panel Admina** — dostępny przez `/manage`:
    - **Usuń gracza z rankingu (admin):** modal wyszukiwania nicku → przefiltrowana lista → potwierdzenie → usunięcie + aktualizacja ról TOP + wyczyszczenie wszystkich osiągnięć gracza (`achievementService.clearUserAchievements`). Head Admin może usunąć gracza z **dowolnego serwera** (cross-server).
-   - **Usuń wynik (admin) — `🧹 Usuń wynik`:** usuwa POJEDYNCZY wpis z historii wyników gracza (`data/guilds/{guildId}/wyniki/{userId}.json`). Flow: modal wyszukiwania nicku → wybór gracza (StringSelectMenu) → lista jego wyników z historii (najnowsze 25, etykieta = wynik, opis = data + boss) → potwierdzenie → usunięcie wpisu (`scoreHistoryService.removeEntryByTimestamp`). **Przeliczenie rankingu:** jeśli usuwany wpis był aktualnym rekordem gracza (`scoreValue >= ranking[userId].scoreValue`) → ranking ustawiany na najlepszy z POZOSTAŁYCH wpisów historii (`revertUserRecord`), a gdy brak innych — gracz usunięty z rankingu; w obu przypadkach aktualizacja ról TOP. **NIE rusza** rekordów bossów ani osiągnięć. Head Admin szuka cross-server, Admin tylko swój serwer. Dostępne też w Centrum Dowodzenia (`_buildUsersRow`).
+   - **Usuń wynik (admin) — `🧹 Usuń wynik`:** usuwa POJEDYNCZY wpis z historii wyników gracza (`data/guilds/{guildId}/wyniki/{userId}.json`). Flow: modal wyszukiwania nicku → wybór gracza (StringSelectMenu) → lista **WSZYSTKICH** jego wyników z historii (najnowsze najpierw, 25/stronę z **paginacją** ◀️/▶️ gdy >25; etykieta = wynik, opis = data + boss) → potwierdzenie → usunięcie wpisu (`scoreHistoryService.removeEntryByTimestamp`). **Przeliczenie rankingu:** jeśli usuwany wpis był aktualnym rekordem gracza (`scoreValue >= ranking[userId].scoreValue`) → ranking ustawiany na najlepszy z POZOSTAŁYCH wpisów historii (`revertUserRecord`), a gdy brak innych — gracz usunięty z rankingu; w obu przypadkach aktualizacja ról TOP. **Cofa też rekord bossa:** jeśli usuwany wpis był rekordem swojego bossa (`scoreValue === boss_record.scoreValue`) → rekord bossa ustawiany na najlepszy POZOSTAŁY wpis historii z tym samym `bossName` (`bossRecordService.revertBossRecord`), a gdy brak — rekord bossa usuwany. **NIE rusza** osiągnięć. Head Admin szuka cross-server, Admin tylko swój serwer. Dostępne też w Centrum Dowodzenia (`_buildUsersRow`).
    - **Odblokuj gracza (admin):** modal wyszukiwania nicku → przefiltrowana lista → odblokowanie. Persistencja: `data/user_blocks.json`. Jeśli blokada pochodzi od Head Admina (`blockedByHeadAdmin: true`) — zwykły Admin nie może odblokować.
    - **Zablokuj gracza (head admin):** modal wyszukiwania nicku cross-server → lista graczy → potwierdzenie → modal czasu blokady. Blokada zapisywana z flagą `blockedByHeadAdmin: true`.
    - **Zużycie tokenów (admin/head admin):** embed ze statystykami AI per serwer. Admin = swój serwer, Head Admin = wszystkie + breakdown
@@ -300,7 +300,8 @@
 | `panel_remove_score_search_modal` | Modal wyszukiwania (pole `remove_score_query`) |
 | `panel_remove_score_player` | StringSelectMenu — wybór gracza (value `userId:guildId`) |
 | `panel_remove_score_entry` | StringSelectMenu — wybór wyniku z historii (value `userId:guildId:tsMs`) |
-| `panel_remove_score_confirm_{userId}:{guildId}:{tsMs}` | Potwierdzenie usunięcia wyniku + przeliczenie rankingu |
+| `panel_remove_score_page_{userId}:{guildId}:{page}` | Paginacja listy wyników (◀️/▶️) |
+| `panel_remove_score_confirm_{userId}:{guildId}:{tsMs}` | Potwierdzenie usunięcia wyniku + przeliczenie rankingu + cofnięcie rekordu bossa |
 | `panel_remove_confirm_{userId}` | Potwierdzenie usunięcia |
 | `panel_unblock` | Jeśli brak zablokowanych: info; inaczej modal wyszukiwania |
 | `panel_unblock_search_modal` | Modal wyszukiwania (pole `unblock_query`) |
