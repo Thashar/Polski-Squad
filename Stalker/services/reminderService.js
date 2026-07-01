@@ -328,7 +328,7 @@ class ReminderService {
             publicInteraction: null,
             isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia
             cancelled: false, // flaga czy sesja została anulowana
-            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR
         };
 
         this.activeSessions.set(sessionId, session);
@@ -411,7 +411,7 @@ class ReminderService {
         // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
         if (this.ocrService && session.guildId && session.userId) {
             await this.ocrService.endOCRSession(session.guildId, session.userId, true);
-            logger.info(`[REMIND] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+            logger.info(`[REMIND] 🔓 Zakończono sesję OCR dla użytkownika ${session.userId}`);
         }
 
         this.activeSessions.delete(sessionId);

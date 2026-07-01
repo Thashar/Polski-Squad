@@ -16,15 +16,15 @@
      - **Checklist etapu wysyłki (`/remind`, `/punish`):** po kliknięciu „Wyślij przypomnienia" / „Dodaj punkty karne" pokazywana jest checklista kolejnych etapów (`buildSendChecklist()` w `interactionHandlers.js`): remind → `👥 Deduplikacja → 🏖️ Sprawdzanie urlopów → 📨 Wysyłanie przypomnień → 📊 Tracking`; punish → `👥 Deduplikacja → 🏖️ Sprawdzanie urlopów → 💀 Nakładanie kar`. Aktywny krok ma 🔄, ukończone ✅. Na kroku urlopów checklist zatrzymuje się, gdy pojawia się pytanie o urlopowiczów, i wznawia po decyzjach (wspólna ścieżka `finalizeAfterVacationDecisions()`).
      - **Dostarczalność DM (`/remind`):** `sendReminders()` zwraca listy `dmDelivered`/`dmFailed` (per osoba). Embed wyniku pokazuje pola `✅ DM dostarczone (N)` oraz `❌ DM nie dotarło (M) — zablokowany bot lub wyłączone DM` (helper `buildDmResultFields()`). Uwaga: osoby z niedostarczonym DM i tak dostają ping na kanale WARNING — nie dociera tylko wiadomość prywatna.
      - Walidacja wyników: 0–999999 (obsługuje wyniki 5-cyfrowe i wyższe)
-     - **Retry dla błędów 503 (przeciążone API): 10× z exponential backoff** (1s/2s/4s/8s/16s/32s/5s…5s) — po 10 nieudanych próbach rzuca `isAPIOverloaded=true`, wyświetla embed z komunikatem o przeciążeniu i opuszcza kolejkę OCR (bez dalszego przetwarzania). Inne retryable błędy (429/500/sieciowe): 3× retry bez zmian.
+     - **Retry dla błędów 503 (przeciążone API): 10× z exponential backoff** (1s/2s/4s/8s/16s/32s/5s…5s) — po 10 nieudanych próbach rzuca `isAPIOverloaded=true`, wyświetla embed z komunikatem o przeciążeniu i kończy sesję OCR (bez dalszego przetwarzania). Inne retryable błędy (429/500/sieciowe): 3× retry bez zmian.
      - Weryfikacja wersji promptów przez `PROMPT_VERSIONS` (Langfuse telemetria)
      - Inicjalizacja przez `llmAdapter` (wspólny wrapper `utils/llmAdapter.js`) + DI z `index.js`
 2. **Punkty** - `punishmentService.js`: 2pts=kara, 3pts=ban loterii, cron czyszczenie (pn 00:00). `/points` z ujemną wartością: gdy `points` spada do 0 → `lifetime_points` też zerowane do 0 (czyste konto); przy częściowym usunięciu → `lifetime_points` zmniejszane o tę samą liczbę. Odpowiedź pokazuje nowe `points` i status `lifetime_points`.
 3. **Urlopy** - `vacationService.js`: Przycisk → rola 15min, cooldown 6h
-4. **Kolejkowanie OCR** - `queueService.js`: Jeden user/guild, progress bar, 15min timeout, przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały kolejki** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora (row1: 📊 Faza 1, 📈 Faza 2, 🧪 Test [tylko admin], 📢 Remind, 💀 Punish; row4: raport wypalenia + 🚪 Wyjdź z kolejki), dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy aktualizowane równolegle. Jeden użytkownik może korzystać z OCR na raz w całym serwerze.
+4. **Równoległe sesje OCR** - `ocrService.js` (sekcja "SYSTEM RÓWNOLEGŁYCH SESJI OCR"): Wiele osób może jednocześnie korzystać z komend OCR (`/punish`, `/remind`, `/faza1`, `/faza2`, "Skanuj ekwipunek") — brak globalnej kolejki/blokady na serwer. Limit jest tylko per-użytkownik: jedna aktywna sesja na osobę naraz (`isOCRActive(guildId, userId)`), timeout 15 min (1 min dla skanu ekwipunku), przyciski komend. Anulowanie w trakcie przetwarzania: embed aktualizowany do stanu "❌ Sesja anulowana" z usuniętymi przyciskami po zakończeniu bieżącego zdjęcia. **Dwa kanały panelu OCR** — główny (ID: `1437122516974829679`) z pełnym zestawem przycisków moderatora (row1: 📊 Faza 1, 📈 Faza 2, 🧪 Test [tylko admin], 📢 Remind, 💀 Punish; row4: raport wypalenia + ❌ Anuluj moją sesję), dodatkowy (ID: `1491801320602992690`) z przyciskiem "🎒 Skanuj ekwipunek". Oba embedy pokazują listę **aktualnie aktywnych sesji** (nick, komenda, czas do wygaśnięcia) zamiast pozycji w kolejce, aktualizowane równolegle. Przycisk "❌ Anuluj moją sesję" (`queue_leave`) kończy wyłącznie sesję wywołującego, nie wpływa na innych.
 13. **Skan Ekwipunku (Core Stock)** - Przycisk "🎒 Skanuj ekwipunek" na kanale `1491801320602992690`:
    - Dostępny dla wszystkich członków klanu (targetRoles)
-   - Wchodzi do wspólnej kolejki OCR (1-minutowy timeout sesji)
+   - Uruchamia sesję OCR równolegle z innymi użytkownikami (1-minutowy timeout sesji, jedna sesja na osobę naraz)
    - Po dostaniu dostępu: użytkownik ma 1 minutę na wysłanie zdjęcia zakładki "Core Stock"
    - Analiza przez AI (Google Gemini Vision): wyciąga nazwę przedmiotu + pierwszą liczbę przed "/" (ilość "All")
    - Prompt AI: wyciąga JSON `{"Transmute Core": 29, ...}` z ekranu Core Stock
@@ -139,8 +139,8 @@
 - **Auto-naprawa przy starcie:** `imageUrlFixer.js` - wykrywa wpisy bez `url` (np. z transferu), pobiera wiadomość po `messageId` z kanału archiwum i uzupełnia brakujący URL. Uruchamia się przy każdym starcie bota.
 - **Uprawnienia:** Tylko administratorzy i moderatorzy (allowedPunishRoles)
 - **Detekcja klanu:** Automatyczna detekcja z roli użytkownika (admin/moderator musi mieć rolę klanową)
-- **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie kolejki OCR (drugi rząd przycisków)
-- **NIE używa kolejki OCR:** Komenda nie korzysta z systemu kolejkowania OCR (działa niezależnie)
+- **Dostępność:** Komenda `/img` + przycisk "📷 Dodaj zdjęcie rankingu" na embedzie panelu OCR (drugi rząd przycisków)
+- **NIE używa sesji OCR:** Komenda nie korzysta z systemu sesji OCR (działa niezależnie)
 - **Dostępne tygodnie:** Lista wszystkich tygodni z zapisanymi wynikami (Faza 1 LUB Faza 2) dla wybranego klanu (max 25)
 - **Logika agregacji:** Tygodnie z obu faz są łączone i deduplikowane, etykieta pokazuje które fazy są dostępne (F1, F2, F1+F2)
 - Obsługiwane formaty: PNG, JPG, JPEG, WEBP, GIF
