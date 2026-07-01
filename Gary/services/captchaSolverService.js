@@ -137,16 +137,29 @@ class CaptchaSolverService {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    // Klika przycisk natywnym DOM .click() wewnątrz kontekstu strony (page.evaluate), zamiast
+    // Puppeteer ElementHandle.click() - to drugie wymaga poprawnie policzonego bounding boxa
+    // i widoczności elementu, co w headless_shell (@sparticuz/chromium) czasem zawodzi
+    // ("Node is either not clickable or not an Element"), mimo że przycisk faktycznie jest widoczny.
+    // Jeśli to okno się nie zamknie, blokuje kliknięcia we wszystko pod spodem (w tym checkbox reCAPTCHA).
     async dismissCookieConsent(page) {
         try {
-            const buttons = await page.$$('button');
-            for (const btn of buttons) {
-                const text = await btn.evaluate(el => el.textContent.trim());
-                if (text.includes('Zgadzam się') || /^(accept|agree)/i.test(text)) {
-                    await btn.click();
-                    await this.sleep(800);
-                    return;
+            const clicked = await page.evaluate(() => {
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const target = buttons.find(b => {
+                    const text = (b.textContent || '').trim();
+                    return text.includes('Zgadzam się') || /^(accept|agree)/i.test(text);
+                });
+                if (target) {
+                    target.click();
+                    return true;
                 }
+                return false;
+            });
+
+            if (clicked) {
+                this.logger.info('🍪 Zamknięto okno zgody na cookies');
+                await this.sleep(800);
             }
         } catch (error) {
             this.logger.warn(`⚠️ Nie udało się zamknąć okna zgody na cookies: ${error.message}`);
