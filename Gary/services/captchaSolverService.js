@@ -90,7 +90,8 @@ class CaptchaSolverService {
             }
             const checkbox = await anchorFrame.$('#recaptcha-anchor');
             await checkbox.click();
-            await this.sleep(2500);
+            await page.waitForNetworkIdle({ idleTime: 600, timeout: 6000 }).catch(() => {});
+            await this.sleep(700);
 
             const solved = await this.resolveChallengeLoop(page, context);
             if (!solved) {
@@ -236,7 +237,13 @@ class CaptchaSolverService {
             if (verifyBtn) {
                 await verifyBtn.click().catch(() => {});
             }
-            await this.sleep(2000);
+
+            // Po weryfikacji reCAPTCHA czasem podmienia część kafelków na nowe obrazki (tryb dynamiczny,
+            // "Please also check the new images") - stały sleep bywał za krótki i zrzut ekranu łapał
+            // kafelki w trakcie ładowania (biały placeholder z checkmarkiem zamiast właściwego zdjęcia).
+            // Czekamy realnie na wyciszenie ruchu sieciowego (obrazki), plus mały bufor na animację fade-in.
+            await page.waitForNetworkIdle({ idleTime: 600, timeout: 6000 }).catch(() => {});
+            await this.sleep(700);
         }
 
         await this.sendMessage(context, { content: '❌ Przekroczono maksymalną liczbę prób rozwiązania captchy.' });
