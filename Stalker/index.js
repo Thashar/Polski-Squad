@@ -700,11 +700,13 @@ client.on(Events.MessageCreate, async (message) => {
 
                     // Jeśli edycja się nie powiodła, wyślij nową wiadomość
                     if (!editSuccess && channel) {
-                        await channel.send({
+                        const newMsg = await channel.send({
                             content: `<@${message.author.id}>`,
                             embeds: [confirmation.embed],
                             components: [confirmation.row]
                         });
+                        // Nowa wiadomość = nowe ID do weryfikacji właściciela sesji przy kolejnych kliknięciach
+                        ocrService.setSessionMessageId(message.guild.id, message.author.id, newMsg.id);
                     }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
@@ -812,12 +814,14 @@ client.on(Events.MessageCreate, async (message) => {
 
                     // Jeśli edycja się nie powiodła, wyślij nową wiadomość
                     if (!editSuccess && channelRemind) {
-                        await channelRemind.send({
+                        const newMsg = await channelRemind.send({
                             content: `<@${message.author.id}>`,
                             embeds: [confirmation.embed],
                             components: [confirmation.row],
                             files: confirmation.files
                         });
+                        // Nowa wiadomość = nowe ID do weryfikacji właściciela sesji przy kolejnych kliknięciach
+                        ocrService.setSessionMessageId(message.guild.id, message.author.id, newMsg.id);
                     }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości

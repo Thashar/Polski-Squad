@@ -1785,6 +1785,19 @@ class OCRService {
     }
 
     /**
+     * Zapisuje ID publicznej wiadomości powiązanej z sesją użytkownika.
+     * Używane do weryfikacji, czy klikający przycisk jest właścicielem TEJ KONKRETNEJ
+     * wiadomości - kilka osób może mieć równoległe sesje w tym samym kanale.
+     */
+    setSessionMessageId(guildId, userId, messageId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
+        if (active) {
+            active.messageId = messageId;
+        }
+    }
+
+    /**
      * Pobiera listę wszystkich aktywnych sesji na serwerze (do wyświetlania w embedzie)
      */
     getActiveSessions(guildId) {
