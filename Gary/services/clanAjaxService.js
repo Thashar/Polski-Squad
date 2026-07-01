@@ -1,6 +1,9 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const ProxyService = require('./proxyService');
+const BrowserFetchService = require('./browserFetchService');
+
+const CLAN_RANKING_URL = 'https://garrytools.com/rank/clans';
 
 class ClanAjaxService {
     constructor(config, logger) {
@@ -10,7 +13,9 @@ class ClanAjaxService {
         this.lastFetchTime = null;
         // ClanAjaxService uses proxy as fallback when receiving 403 errors
         this.proxyService = new ProxyService(config, logger);
-        
+        // Headless browser fallback for when Cloudflare blocks plain HTTP requests
+        this.browserFetchService = new BrowserFetchService(config, logger);
+
         // Create axios instance for AJAX requests
         this.axios = axios.create({
             timeout: 20000,
@@ -23,87 +28,104 @@ class ClanAjaxService {
         });
     }
 
+    parseClansFromHtml(html) {
+        const $ = cheerio.load(html);
+        const clans = [];
+
+        $('table tbody tr').each((index, row) => {
+            const cells = $(row).find('td');
+            if (cells.length >= 6) {
+                const rank = parseInt($(cells[0]).text().trim()) || 0;
+                const guildId = parseInt($(cells[1]).text().trim()) || 0;
+                const name = $(cells[2]).text().trim();
+                const level = parseInt($(cells[3]).text().trim()) || 1;
+                const members = $(cells[4]).text().trim();
+                const leader = $(cells[5]).text().trim();
+                const grade = cells.length > 6 ? $(cells[6]).text().trim() : '';
+                const score = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
+
+                if (name && guildId > 0) {
+                    clans.push({
+                        id: guildId,
+                        name: name,
+                        level: level,
+                        members: members,
+                        leader: leader,
+                        grade: grade,
+                        score: score,
+                        rank: rank,
+                        cleanName: this.cleanGuildName(name)
+                    });
+                }
+            }
+        });
+
+        return clans;
+    }
+
+    async fetchClansViaHttp() {
+        // First, get the main page to establish session
+        // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+        const sessionResponse = await this.proxyService.makeRequest(CLAN_RANKING_URL, {
+            headers: {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
+            }
+        });
+
+        // Extract cookies from the session
+        const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
+
+        // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
+        const response = await this.proxyService.makeRequest(CLAN_RANKING_URL, {
+            headers: {
+                'Cookie': cookies,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }
+        });
+
+        if (response.data && typeof response.data === 'string') {
+            return this.parseClansFromHtml(response.data);
+        }
+
+        this.logger.warn('⚠️ Invalid API response format for clan data');
+        return [];
+    }
+
+    async fetchClansViaBrowser() {
+        const html = await this.browserFetchService.fetchRenderedHtml(CLAN_RANKING_URL, {
+            waitForSelector: 'table tbody tr'
+        });
+        return this.parseClansFromHtml(html);
+    }
+
     async fetchClanData() {
         try {
             this.logger.info('📊 Fetching clan ranking data from AJAX API...');
-            
-            // First, get the main page to establish session
-            let sessionResponse;
-            
-            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
-            sessionResponse = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
-                headers: {
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8'
-                }
-            });
-            
-            // Extract cookies from the session
-            const cookies = sessionResponse.headers?.['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || '';
-            
-            // Try to get data through AJAX (this might require specific parameters)
-            // For now, let's try a different approach - check if there's a direct API
-            
-            // Alternative: Check if clan data is available in a different format
-            let response;
-            
-            // Użyj ulepszonego ProxyService z automatyczną obsługą 403 i losowym wyborem proxy
-            response = await this.proxyService.makeRequest('https://garrytools.com/rank/clans', {
-                headers: {
-                    'Cookie': cookies,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-                }
-            });
-            
-            if (response.data && typeof response.data === 'string') {
-                // Parse HTML response with cheerio
-                const $ = cheerio.load(response.data);
-                const clans = [];
-                
-                // Check if data is now loaded in the page (sometimes after session is established)
-                $('table tbody tr').each((index, row) => {
-                    const cells = $(row).find('td');
-                    if (cells.length >= 6) {
-                        const rank = parseInt($(cells[0]).text().trim()) || 0;
-                        const guildId = parseInt($(cells[1]).text().trim()) || 0;
-                        const name = $(cells[2]).text().trim();
-                        const level = parseInt($(cells[3]).text().trim()) || 1;
-                        const members = $(cells[4]).text().trim();
-                        const leader = $(cells[5]).text().trim();
-                        const grade = cells.length > 6 ? $(cells[6]).text().trim() : '';
-                        const score = cells.length > 7 ? parseInt($(cells[7]).text().trim()) || 0 : 0;
-                        
-                        if (name && guildId > 0) {
-                            clans.push({
-                                id: guildId,
-                                name: name,
-                                level: level,
-                                members: members,
-                                leader: leader,
-                                grade: grade,
-                                score: score,
-                                rank: rank,
-                                cleanName: this.cleanGuildName(name)
-                            });
-                        }
-                    }
-                });
-                
-                if (clans.length > 0) {
-                    this.clanData = clans;
-                    this.lastFetchTime = new Date();
-                    this.logger.info(`✅ Fetched ${clans.length} clans from ranking page`);
-                    return this.clanData;
-                } else {
-                    this.logger.warn('⚠️ No clan data found in HTML - table may be loaded dynamically');
-                    
-                    // TEMPORARY SOLUTION: Return fallback message for now
-                    // In the future, we need to implement proper AJAX handling or find alternative endpoint
-                    throw new Error('Clan ranking data is loaded dynamically and requires JavaScript execution. This feature is temporarily unavailable.');
-                }
-            } else {
-                this.logger.warn('⚠️ Invalid API response format for clan data');
-                return [];
+
+            let clans = [];
+            try {
+                clans = await this.fetchClansViaHttp();
+            } catch (httpError) {
+                this.logger.warn(`⚠️ HTTP fetch failed (${httpError.message}) - falling back to headless browser rendering...`);
             }
+
+            if (clans.length === 0) {
+                this.logger.warn('⚠️ No clan data found via HTTP - table is likely rendered with JavaScript, retrying with headless browser...');
+                clans = await this.fetchClansViaBrowser();
+            }
+
+            if (clans.length > 0) {
+                this.clanData = clans;
+                this.lastFetchTime = new Date();
+                this.logger.info(`✅ Fetched ${clans.length} clans from ranking page`);
+                return this.clanData;
+            }
+
+            // Headless browser also found nothing - surface the same error type
+            // callers already know how to display (see interactionHandlers.js isJavaScriptError)
+            const jsError = new Error('Clan ranking data is loaded dynamically and requires JavaScript execution. This feature is temporarily unavailable.');
+            jsError.isJavaScriptError = true;
+            throw jsError;
         } catch (error) {
             this.logger.error(`❌ Error fetching clan ranking data: ${error.message || 'Unknown error'}`);
             this.logger.error(`   Error type: ${error.constructor?.name || 'Unknown constructor'}`);
