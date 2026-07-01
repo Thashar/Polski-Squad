@@ -17,7 +17,12 @@ const chromium = require('@sparticuz/chromium');
 // też korzystają z os.tmpdir() i nie powinny być trwale przekierowane.
 const CHROMIUM_TMP_DIR = path.join(__dirname, '../temp/chromium');
 
-async function launchBrowser() {
+// proxyServerArg: opcjonalny "host:port" (bez danych logowania) do przekazania jako --proxy-server.
+// Uwierzytelnianie proxy trzeba ustawić osobno przez page.authenticate() po utworzeniu strony,
+// bo Chrome nie przyjmuje danych logowania bezpośrednio w tym argumencie.
+async function launchBrowser(proxyServerArg = null) {
+    const proxyArgs = proxyServerArg ? [`--proxy-server=${proxyServerArg}`] : [];
+
     if (process.platform === 'linux') {
         fs.mkdirSync(CHROMIUM_TMP_DIR, { recursive: true });
         const previousTmpDir = process.env.TMPDIR;
@@ -25,7 +30,7 @@ async function launchBrowser() {
 
         try {
             return await puppeteer.launch({
-                args: await puppeteer.defaultArgs({ args: chromium.args, headless: 'shell' }),
+                args: await puppeteer.defaultArgs({ args: [...chromium.args, ...proxyArgs], headless: 'shell' }),
                 defaultViewport: { width: 1920, height: 1080 },
                 executablePath: await chromium.executablePath(),
                 headless: 'shell'
@@ -41,7 +46,7 @@ async function launchBrowser() {
 
     return puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu', ...proxyArgs]
     });
 }
 

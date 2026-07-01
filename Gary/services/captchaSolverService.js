@@ -1,11 +1,13 @@
 const sharp = require('sharp');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const { launchBrowser } = require('./puppeteerLauncher');
+const ProxyService = require('./proxyService');
 
 const LUNAR_DETAILS_URL = 'https://garrytools.com/lunar/';
 const CHALLENGE_ROUND_TIMEOUT = 90000; // czas na jedną rundę (klikanie kafelków) w Discordzie
 const CHALLENGE_TOTAL_DEADLINE = 100000; // token reCAPTCHA jest ważny ok. 2 minuty od kliknięcia checkboxa
 const MAX_ROUNDS = 6;
+const MAX_PAGE_LOAD_ATTEMPTS = 3; // ile różnych proxy próbujemy, zanim uznamy że strona jest nieosiągalna
 
 // Rozwiązuje formularz "Lunar Details" (chroniony przez Google reCAPTCHA) przekazując
 // wyzwanie obrazkowe do rozwiązania administratorowi na Discordzie, zamiast próbować je ominąć automatycznie.
@@ -13,6 +15,62 @@ class CaptchaSolverService {
     constructor(config, logger) {
         this.config = config;
         this.logger = logger;
+        // Singleton - zwraca tę samą instancję co garrytoolsService, więc lista proxy z proxy.txt
+        // jest już wczytana i nie trzeba jej ładować drugi raz
+        this.proxyService = new ProxyService(config, logger);
+    }
+
+    // Serwer produkcyjny łączy się z garrytools.com bezpośrednio ze swojego IP, które Cloudflare
+    // blokuje (dlatego cała reszta kodu używa proxy z proxy.txt) - bez proxy Puppeteer dostaje inną
+    // stronę niż oczekiwana (brak formularza), więc próbujemy po kolei kilku proxy z tej samej puli.
+    async openLunarDetailsPage(guildIds) {
+        let lastError;
+
+        for (let attempt = 1; attempt <= MAX_PAGE_LOAD_ATTEMPTS; attempt++) {
+            let browser;
+            const proxyUrl = this.proxyService.getNextProxy();
+
+            try {
+                let proxyServerArg = null;
+                let proxyAuth = null;
+                if (proxyUrl) {
+                    const parsed = new URL(proxyUrl);
+                    proxyServerArg = `${parsed.protocol}//${parsed.hostname}:${parsed.port}`;
+                    if (parsed.username) {
+                        proxyAuth = { username: decodeURIComponent(parsed.username), password: decodeURIComponent(parsed.password) };
+                    }
+                }
+
+                browser = await launchBrowser(proxyServerArg);
+                const page = await browser.newPage();
+                if (proxyAuth) {
+                    await page.authenticate(proxyAuth);
+                }
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+                await page.setViewport({ width: 1920, height: 1080 });
+
+                await page.goto(LUNAR_DETAILS_URL, { waitUntil: 'networkidle2', timeout: 30000 });
+                await this.dismissCookieConsent(page);
+
+                await page.waitForSelector('input[name="clan_1"]', { timeout: 10000 });
+                await page.type('input[name="clan_1"]', guildIds[0].toString());
+                await page.type('input[name="clan_2"]', guildIds[1].toString());
+                await page.type('input[name="clan_3"]', guildIds[2].toString());
+                await page.type('input[name="clan_4"]', guildIds[3].toString());
+
+                this.logger.info(`🧩 Strona "Lunar Details" załadowana poprawnie (próba ${attempt}${proxyUrl ? `, proxy ${this.proxyService.maskProxy(proxyUrl)}` : ', bez proxy'})`);
+                return { browser, page };
+
+            } catch (error) {
+                lastError = error;
+                this.logger.warn(`⚠️ Próba ${attempt}/${MAX_PAGE_LOAD_ATTEMPTS} załadowania "Lunar Details" nie powiodła się${proxyUrl ? ` (proxy ${this.proxyService.maskProxy(proxyUrl)})` : ''}: ${error.message}`);
+                if (browser) {
+                    await browser.close().catch(() => {});
+                }
+            }
+        }
+
+        throw new Error(`Nie udało się załadować formularza "Lunar Details" po ${MAX_PAGE_LOAD_ATTEMPTS} próbach: ${lastError?.message}`);
     }
 
     // context: { interaction, channel, invokerId }
@@ -21,19 +79,9 @@ class CaptchaSolverService {
     async solveLunarDetailsGroupId(guildIds, context) {
         let browser;
         try {
-            browser = await launchBrowser();
-
-            const page = await browser.newPage();
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-            await page.setViewport({ width: 1920, height: 1080 });
-
-            await page.goto(LUNAR_DETAILS_URL, { waitUntil: 'networkidle2', timeout: 30000 });
-            await this.dismissCookieConsent(page);
-
-            await page.type('input[name="clan_1"]', guildIds[0].toString());
-            await page.type('input[name="clan_2"]', guildIds[1].toString());
-            await page.type('input[name="clan_3"]', guildIds[2].toString());
-            await page.type('input[name="clan_4"]', guildIds[3].toString());
+            const opened = await this.openLunarDetailsPage(guildIds);
+            browser = opened.browser;
+            const page = opened.page;
 
             await page.waitForSelector('iframe[src*="recaptcha"]', { timeout: 15000 });
             const anchorFrame = page.frames().find(f => f.url().includes('recaptcha') && f.url().includes('anchor'));
