@@ -2926,6 +2926,10 @@ class InteractionHandler {
                     this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, playerTimestamp)
                         .catch(e => logger.warn(`Błąd czyszczenia historii po usunięciu z rankingu: ${e.message}`));
                 }
+                if (this.bossRecordService) {
+                    await this.bossRecordService.removeAllUserBossRecords(targetGuildId, targetUserId)
+                        .catch(e => logger.warn(`Błąd usuwania rekordów bossów po usunięciu z rankingu: ${e.message}`));
+                }
                 const guildNameLog = targetGuild?.name || targetGuildId;
                 await this.logService.logMessage('success', `Gracz ${playerName} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${guildNameLog}) przez panel admina`, interaction);
             } catch (roleError) {
@@ -5313,6 +5317,10 @@ class InteractionHandler {
                 if (this.scoreHistoryService && playerTimestamp) {
                     this.scoreHistoryService.removeEntriesAfter(guildId, targetUser.id, playerTimestamp)
                         .catch(e => logger.warn(`Błąd czyszczenia historii po /remove: ${e.message}`));
+                }
+                if (this.bossRecordService) {
+                    await this.bossRecordService.removeAllUserBossRecords(guildId, targetUser.id)
+                        .catch(e => logger.warn(`Błąd usuwania rekordów bossów po /remove: ${e.message}`));
                 }
                 await this.logService.logMessage('success', `Gracz ${targetUser.tag} został usunięty z rankingu i zaktualizowano role TOP`, interaction);
             } catch (roleError) {

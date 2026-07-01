@@ -75,6 +75,21 @@ class BossRecordService {
     }
 
     /**
+     * Usuwa WSZYSTKIE rekordy bossów gracza na danym serwerze (np. przy usunięciu gracza z rankingu).
+     * @returns {number} liczba usuniętych rekordów bossów
+     */
+    async removeAllUserBossRecords(guildId, userId) {
+        return this._enqueue(guildId, async () => {
+            const data = await this._load(guildId);
+            if (!data[userId]) return 0;
+            const removed = Object.keys(data[userId]).length;
+            delete data[userId];
+            await this._save(guildId, data);
+            return removed;
+        });
+    }
+
+    /**
      * Read-only: czy podany wynik pobiłby istniejący rekord bossa gracza?
      * Używane w trybie dryRun (/test) — nie zapisuje niczego.
      */
