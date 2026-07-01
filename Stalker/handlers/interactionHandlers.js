@@ -23,15 +23,14 @@ function setSessionOwnerAuthor(embed, member, user) {
 /**
  * Tworzy dedykowany wątek dla sesji OCR - cała analiza (zdjęcia, postęp, potwierdzenia)
  * odbywa się w tym wątku, izolowana od innych równoległych sesji na tym samym kanale.
+ * Wątek tworzony jest bez wiadomości startowej (nie zaśmieca głównego kanału).
  * Wątek jest usuwany automatycznie przez ocrService po zakończeniu sesji.
  */
 async function createSessionThread(inter, ocrService, guildId, userId, threadTitle) {
-    const placeholderMessage = await inter.editReply({
-        content: '🧵 Sesja OCR rozpoczęta - kontynuuj w wątku poniżej.'
-    });
-    const thread = await placeholderMessage.startThread({
+    const thread = await inter.channel.threads.create({
         name: threadTitle,
-        autoArchiveDuration: 60
+        autoArchiveDuration: 60,
+        reason: `Sesja OCR: ${threadTitle}`
     });
     ocrService.setSessionThreadId(guildId, userId, thread.id);
     return thread;
@@ -219,7 +218,8 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         // Sprawdź czy TEN użytkownik ma już aktywną sesję OCR (inni mogą działać równolegle)
         const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
-        await interaction.deferReply({ ephemeral: false });
+        // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
+        await interaction.deferReply({ ephemeral: true });
 
         if (isOCRActive) {
             await interaction.editReply({
@@ -254,6 +254,9 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             session.publicInteraction = awaitingMessage;
             ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
 
+            // Potwierdzenie ephemeralne dla wywołującego
+            await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
+
             logger.info(`[PUNISH] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
 
@@ -282,7 +285,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         // Sprawdź czy TEN użytkownik ma już aktywną sesję OCR (inni mogą działać równolegle)
         const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
-        await interaction.deferReply({ ephemeral: false });
+        // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
+        await interaction.deferReply({ ephemeral: true });
 
         if (isOCRActive) {
             await interaction.editReply({
@@ -350,6 +354,9 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             });
             session.publicInteraction = awaitingMessage;
             ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
+
+            // Potwierdzenie ephemeralne dla wywołującego
+            await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
 
             logger.info(`[REMIND] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
@@ -3685,7 +3692,8 @@ async function handlePhase1Command(interaction, sharedState) {
     // Sprawdź czy TEN użytkownik ma już aktywną sesję OCR (inni mogą działać równolegle)
     const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
-    await interaction.deferReply({ ephemeral: false });
+    // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
+    await interaction.deferReply({ ephemeral: true });
 
     if (isOCRActive) {
         await interaction.editReply({
@@ -3753,6 +3761,8 @@ async function handlePhase1Command(interaction, sharedState) {
                         components: [warningEmbed.row]
                     });
                     ocrService.setSessionMessageId(guildId, userId, warningMessage.id);
+                    // Potwierdzenie ephemeralne dla wywołującego
+                    await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
                     return;
                 }
             }
@@ -3778,6 +3788,9 @@ async function handlePhase1Command(interaction, sharedState) {
             });
             session.publicInteraction = awaitingMessage;
             ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
+
+            // Potwierdzenie ephemeralne dla wywołującego
+            await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
 
             logger.info(`[PHASE1] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
@@ -4390,7 +4403,8 @@ async function handlePhase2Command(interaction, sharedState) {
     // Sprawdź czy TEN użytkownik ma już aktywną sesję OCR (inni mogą działać równolegle)
     const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
-    await interaction.deferReply({ ephemeral: false });
+    // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
+    await interaction.deferReply({ ephemeral: true });
 
     if (isOCRActive) {
         await interaction.editReply({
@@ -4458,6 +4472,8 @@ async function handlePhase2Command(interaction, sharedState) {
                         components: [warningEmbed.row]
                     });
                     ocrService.setSessionMessageId(guildId, userId, warningMessage.id);
+                    // Potwierdzenie ephemeralne dla wywołującego
+                    await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
                     return;
                 }
             }
@@ -4483,6 +4499,9 @@ async function handlePhase2Command(interaction, sharedState) {
             });
             session.publicInteraction = awaitingMessage;
             ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
+
+            // Potwierdzenie ephemeralne dla wywołującego
+            await inter.editReply({ content: `✅ Sesja rozpoczęta w wątku: <#${thread.id}>` });
 
             logger.info(`[PHASE2] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia z rundy 1/3 od ${inter.user.tag}`);
         };
