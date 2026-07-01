@@ -1298,7 +1298,14 @@ class InteractionHandler {
         try {
             const oldCount = this.garrytoolsService.proxyService.proxyList.length;
 
-            await this.garrytoolsService.proxyService.refreshProxyListFromWebshare();
+            // Główne źródło to lokalny plik proxy.txt; Webshare API jako fallback
+            const loadedFromFile = this.garrytoolsService.proxyService.loadProxyListFromFile();
+            let source = 'Local file (proxy.txt)';
+
+            if (!loadedFromFile) {
+                await this.garrytoolsService.proxyService.refreshProxyListFromWebshare();
+                source = 'Webshare API (fallback)';
+            }
 
             const newCount = this.garrytoolsService.proxyService.proxyList.length;
 
@@ -1306,11 +1313,11 @@ class InteractionHandler {
                 .setTitle('🔄 Proxy List Refreshed')
                 .setColor(0x00ff00)
                 .addFields([
-                    { name: '📥 Source', value: 'Webshare API', inline: true },
+                    { name: '📥 Source', value: source, inline: true },
                     { name: '📊 Previous Count', value: oldCount.toString(), inline: true },
                     { name: '📊 New Count', value: newCount.toString(), inline: true }
                 ])
-                .setDescription(`✅ Successfully refreshed proxy list from Webshare API.`)
+                .setDescription(`✅ Successfully refreshed proxy list from ${source}.`)
                 .setTimestamp();
 
             await interaction.editReply({ embeds: [embed] });

@@ -4,7 +4,7 @@
 1. **Lunar Mine** - `apiService.js`: Fetch garrytools.com/lunar, cheerio parse, 4 gildie, członkowie sorted by attack
 2. **Wyszukiwanie** - `guildSearchService.js`: Fuzzy matching (exact/startsWith/contains/levenshtein), tryby TOP500/GLOBAL
 3. **Cache** - `dataService.js`: Persistent JSON (clans, rank, members), refresh 24h/manual/start
-4. **Proxy** - `proxyService.js`: Webshare API, round-robin/random, health monitoring, failover
+4. **Proxy** - `proxyService.js`: Źródło listy = lokalny plik `proxy.txt` w głównym folderze projektu (`loadProxyListFromFile()`, `parseProxyLine()` — formaty: `user:pass@ip:port`, `http://...`, `ip:port`, `ip:port:user:pass`); Webshare API tylko jako fallback gdy plik niedostępny. Round-robin/random, health monitoring, failover. Ścieżka pliku konfigurowalna przez `GARY_PROXY_FILE` (domyślnie `../../proxy.txt`). `/proxy-refresh` przeładowuje z pliku
 5. **Paginacja** - 20/strona, 1h timeout, publiczna nawigacja
 6. **Cron** - Środa 18:45 `/lunarmine` auto-exec; 18:46 snapshot historii klanów + snapshot graczy LME
 7. **Historia klanów** - `clanHistoryService.js`: tygodniowe snapshoty TOP500, `data/clan_history.json`, max 25 tygodni; wykres SVG+sharp dla `/analyse`, `/lunarmine` (multi-klan), `/search` (top match); wymagane ≥2 tygodnie danych
@@ -17,7 +17,7 @@
 13. **Headless browser fallback** - `browserFetchService.js`: gdy `clanAjaxService.fetchClanData()` nie znajdzie wierszy tabeli przez zwykłe zapytanie HTTP/proxy (strona `rank/clans` renderowana przez JS, blokowana przez Cloudflare 403 na wszystkich proxy i połączeniu bezpośrednim), bot uruchamia headless Chromium (`puppeteer`), realnie renderuje stronę i dopiero z tak uzyskanego HTML parsuje tabelę (`parseClansFromHtml`, współdzielone z zapytaniem HTTP). Dopiero gdy fallback też nie znajdzie danych, rzucany jest `isJavaScriptError` obsługiwany w `interactionHandlers.js`
 
 **Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`), `/rivals` (wyszukiwanie rywali na podstawie Guild ID)
-**Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_LIST, WEBSHARE_URL
+**Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_FILE, PROXY_LIST, WEBSHARE_URL
 
 ---
 
@@ -33,7 +33,11 @@ GARY_ADMIN_ROLES=role1,role2
 # Proxy (opcjonalne)
 GARY_PROXY_ENABLED=true
 GARY_PROXY_STRATEGY=round-robin
+# Główne źródło listy proxy - plik w głównym folderze (domyślnie ../../proxy.txt)
+# Formaty linii: user:pass@ip:port | http://user:pass@ip:port | ip:port | ip:port:user:pass
+GARY_PROXY_FILE=proxy.txt
 GARY_PROXY_LIST=http://proxy1:port,http://proxy2:port
+# Webshare API - fallback gdy plik proxy niedostępny
 GARY_WEBSHARE_URL=https://proxy.webshare.io/api/v2/proxy/list/
 ```
 

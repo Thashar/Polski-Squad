@@ -88,7 +88,9 @@ module.exports = {
         enabled: process.env.GARY_PROXY_ENABLED === 'true',
         strategy: process.env.GARY_PROXY_STRATEGY || 'random', // 'round-robin' or 'random'
         retryAttempts: parseInt(process.env.GARY_PROXY_RETRY_ATTEMPTS) || 10,
-        // Webshare API endpoint for auto-updating proxy list
+        // Local proxy file (główne źródło listy proxy) - plik w głównym folderze projektu
+        proxyFilePath: process.env.GARY_PROXY_FILE || path.join(__dirname, '../../proxy.txt'),
+        // Webshare API endpoint for auto-updating proxy list (fallback jeśli plik niedostępny)
         webshareUrl: process.env.GARY_WEBSHARE_URL || '',
         // Fallback manual proxy list (used if webshare fails)
         proxyList: process.env.GARY_PROXY_LIST ? process.env.GARY_PROXY_LIST.split(',').map(p => p.trim()) : [],

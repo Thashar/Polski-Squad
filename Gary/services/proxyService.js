@@ -28,19 +28,32 @@ class ProxyService {
         // Wczytaj zapisane statusy proxy
         this.loadProxyStatuses();
 
-        // Auto-refresh proxy list from Webshare API on startup (tylko raz)
-        if (this.enabled && this.config.proxy?.refreshOnStartup && this.config.proxy?.webshareUrl) {
-            this.refreshProxyListFromWebshare().then(() => {
+        // Wczytaj listę proxy przy starcie: główne źródło to lokalny plik (proxy.txt),
+        // a Webshare API służy tylko jako fallback gdy plik jest niedostępny
+        if (this.enabled && this.config.proxy?.refreshOnStartup) {
+            const loadedFromFile = this.loadProxyListFromFile();
+
+            if (loadedFromFile) {
                 if (this.proxyList.length > 0) {
                     this.currentProxyIndex = Math.floor(Math.random() * this.proxyList.length);
                     this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
                 }
-            }).catch(error => {
-                this.logger.warn(`⚠️ Failed to refresh proxy list from Webshare: ${error.message}`);
-                if (this.proxyList.length > 0) {
-                    this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
-                }
-            });
+            } else if (this.config.proxy?.webshareUrl) {
+                // Fallback do Webshare API jeśli plik niedostępny lub pusty
+                this.refreshProxyListFromWebshare().then(() => {
+                    if (this.proxyList.length > 0) {
+                        this.currentProxyIndex = Math.floor(Math.random() * this.proxyList.length);
+                        this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+                    }
+                }).catch(error => {
+                    this.logger.warn(`⚠️ Failed to refresh proxy list from Webshare: ${error.message}`);
+                    if (this.proxyList.length > 0) {
+                        this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+                    }
+                });
+            } else if (this.proxyList.length > 0) {
+                this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
+            }
         } else if (this.enabled && this.proxyList.length > 0) {
             this.logger.info(`🎲 Proxy randomization: Starting at index ${this.currentProxyIndex}/${this.proxyList.length - 1}`);
         }
@@ -134,6 +147,92 @@ class ProxyService {
             fs.writeFileSync(this.proxyStatusFile, JSON.stringify(data, null, 2), 'utf8');
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania statusów proxy:', error.message);
+        }
+    }
+
+    /**
+     * Parsuje pojedynczą linię proxy do formatu URL: http://user:pass@ip:port
+     * Obsługiwane formaty:
+     *   user:pass@ip:port
+     *   http://user:pass@ip:port  (lub https://)
+     *   ip:port
+     *   ip:port:user:pass  (format Webshare)
+     * @param {string} line - Linia z pliku
+     * @returns {string|null} Proxy URL lub null gdy linia nieprawidłowa
+     */
+    parseProxyLine(line) {
+        // Ma już protokół - zwróć bez zmian
+        if (/^https?:\/\//i.test(line)) {
+            return line;
+        }
+        // Format z uwierzytelnianiem: user:pass@ip:port
+        if (line.includes('@')) {
+            return `http://${line}`;
+        }
+        // Formaty rozdzielone dwukropkami
+        const parts = line.split(':');
+        if (parts.length === 2) {
+            // ip:port (bez uwierzytelniania)
+            return `http://${line}`;
+        }
+        if (parts.length === 4) {
+            // ip:port:user:pass (format Webshare)
+            const [ip, port, username, password] = parts;
+            return `http://${username}:${password}@${ip}:${port}`;
+        }
+        return null;
+    }
+
+    /**
+     * Wczytuje listę proxy z lokalnego pliku (np. proxy.txt w głównym folderze).
+     * Plik jest głównym źródłem listy - nadpisuje listę wczytaną wcześniej.
+     * @returns {boolean} true jeśli wczytano przynajmniej jedno proxy
+     */
+    loadProxyListFromFile() {
+        try {
+            const filePath = this.config.proxy?.proxyFilePath;
+            if (!filePath) {
+                this.logger.warn('⚠️ Ścieżka pliku proxy nie jest skonfigurowana (proxyFilePath)');
+                return false;
+            }
+
+            if (!fs.existsSync(filePath)) {
+                this.logger.warn(`⚠️ Plik proxy nie istnieje: ${filePath}`);
+                return false;
+            }
+
+            const raw = fs.readFileSync(filePath, 'utf8');
+            const lines = raw.split(/\r?\n/)
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith('#'));
+
+            const newProxyList = [];
+            for (const line of lines) {
+                const proxyUrl = this.parseProxyLine(line);
+                if (proxyUrl) {
+                    newProxyList.push(proxyUrl);
+                } else {
+                    this.logger.warn(`⚠️ Pominięto nieprawidłową linię proxy: ${line}`);
+                }
+            }
+
+            if (newProxyList.length === 0) {
+                this.logger.warn(`⚠️ Nie znaleziono prawidłowych proxy w pliku: ${filePath}`);
+                return false;
+            }
+
+            const oldCount = this.proxyList.length;
+            this.proxyList = newProxyList;
+
+            // Zapisz zaktualizowaną listę (zachowuje statusy błędów proxy)
+            this.saveProxyStatuses();
+
+            this.logger.info(`📄 Wczytano listę proxy z pliku: ${oldCount} → ${newProxyList.length} proxy (${filePath})`);
+            return true;
+
+        } catch (error) {
+            this.logger.error(`❌ Błąd wczytywania listy proxy z pliku: ${error.message}`);
+            return false;
         }
     }
 

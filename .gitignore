@@ -4,6 +4,9 @@
 google-credentials.json
 token.json
 
+# Proxy list (zawiera dane logowania - NIE commitować!)
+proxy.txt
+
 # Node modules
 node_modules/
 .npm-fix-backup/
