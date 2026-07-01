@@ -305,16 +305,18 @@ class CaptchaSolverService {
                 time: CHALLENGE_ROUND_TIMEOUT
             });
 
+            const logUpdateError = (err) => this.logger.warn(`⚠️ Nie udało się zaktualizować wiadomości captchy: ${err.message}`);
+
             collector.on('collect', async (i) => {
                 if (i.customId === 'captcha_submit') {
                     collector.stop('submit');
-                    await i.update({ components: this.buildTileButtons(tileCount, selected, true) }).catch(() => {});
+                    await i.update({ components: this.buildTileButtons(tileCount, selected, true) }).catch(logUpdateError);
                     resolve(Array.from(selected));
                     return;
                 }
                 if (i.customId === 'captcha_cancel') {
                     collector.stop('cancel');
-                    await i.update({ content: '❌ Anulowano rozwiązywanie captchy.', embeds: [], components: [] }).catch(() => {});
+                    await i.update({ content: '❌ Anulowano rozwiązywanie captchy.', embeds: [], components: [] }).catch(logUpdateError);
                     resolve(null);
                     return;
                 }
@@ -324,12 +326,12 @@ class CaptchaSolverService {
                 } else {
                     selected.add(idx);
                 }
-                await i.update({ components: this.buildTileButtons(tileCount, selected) }).catch(() => {});
+                await i.update({ components: this.buildTileButtons(tileCount, selected) }).catch(logUpdateError);
             });
 
             collector.on('end', (_collected, reason) => {
                 if (reason !== 'submit' && reason !== 'cancel') {
-                    message.edit({ content: '⏱️ Czas na tę rundę minął.', embeds: [], components: [] }).catch(() => {});
+                    message.edit({ content: '⏱️ Czas na tę rundę minął.', embeds: [], components: [] }).catch(logUpdateError);
                     resolve(null);
                 }
             });

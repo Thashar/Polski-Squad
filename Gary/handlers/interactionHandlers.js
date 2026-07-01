@@ -207,6 +207,13 @@ class InteractionHandler {
     async handleButtonInteraction(interaction) {
         const buttonId = interaction.customId;
 
+        // Przyciski relay captchy (captcha_tile_N, captcha_submit, captcha_cancel) są obsługiwane
+        // wyłącznie przez dedykowany message component collector w captchaSolverService.js - nie
+        // odpowiadaj tutaj, inaczej ten handler skonsumuje interakcję zanim dotrze do kolektora
+        if (buttonId.startsWith('captcha_')) {
+            return;
+        }
+
         // Handle rivals detail buttons
         if (buttonId.startsWith('rivals_detail_')) {
             const parts = buttonId.split('_');
