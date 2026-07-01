@@ -32,7 +32,7 @@
   },
   "homepage": "https://github.com/Thashar/Test#readme",
   "overrides": {
-    "undici": ">=7.0.0"
+    "undici": "^6.27.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
