@@ -993,18 +993,23 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
-    // Automatyczne czyszczenie kanału panelu OCR - usuń wszystkie wiadomości od użytkowników
+    // Automatyczne czyszczenie kanału panelu OCR - usuń tylko wiadomości od osób z AKTYWNĄ sesją OCR.
+    // Kilka osób może mieć równoległe sesje na tym samym kanale - nie wolno usuwać wiadomości
+    // przypadkowych osób bez aktywnej sesji (np. wiadomość niezwiązana z żadną sesją).
     const queueChannelId = '1437122516974829679';
     if (message.channelId === queueChannelId && !message.author.bot) {
-        try {
-            await message.delete();
-            logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału panelu OCR`);
-        } catch (error) {
-            // Ignoruj błąd Unknown Message (10008) - wiadomość została już usunięta przez inny proces
-            if (error.code === 10008) {
-                return;
+        const hasActiveSession = ocrService.isOCRActive(message.guild.id, message.author.id);
+        if (hasActiveSession) {
+            try {
+                await message.delete();
+                logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału panelu OCR (aktywna sesja)`);
+            } catch (error) {
+                // Ignoruj błąd Unknown Message (10008) - wiadomość została już usunięta przez inny proces
+                if (error.code === 10008) {
+                    return;
+                }
+                logger.error(`[QUEUE-CLEANUP] ❌ Błąd usuwania wiadomości: ${error.message}`);
             }
-            logger.error(`[QUEUE-CLEANUP] ❌ Błąd usuwania wiadomości: ${error.message}`);
         }
     }
 });
