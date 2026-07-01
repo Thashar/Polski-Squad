@@ -5,8 +5,10 @@ const ProxyService = require('./proxyService');
 
 const LUNAR_DETAILS_URL = 'https://garrytools.com/lunar/';
 const CHALLENGE_ROUND_TIMEOUT = 90000; // czas na jedną rundę (klikanie kafelków) w Discordzie
-const CHALLENGE_TOTAL_DEADLINE = 100000; // token reCAPTCHA jest ważny ok. 2 minuty od kliknięcia checkboxa
-const MAX_ROUNDS = 6;
+// Realne rozwiązywanie przez człowieka w kilku rundach (przeglądanie obrazków + klikanie) trwa
+// dłużej niż wstępnie zakładane ~2 minuty ważności tokenu reCAPTCHA - stąd hojniejszy budżet
+const CHALLENGE_TOTAL_DEADLINE = 360000; // 6 minut łącznie na wszystkie rundy
+const MAX_ROUNDS = 8;
 const MAX_PAGE_LOAD_ATTEMPTS = 3; // ile różnych proxy próbujemy, zanim uznamy że strona jest nieosiągalna
 
 // Rozwiązuje formularz "Lunar Details" (chroniony przez Google reCAPTCHA) przekazując
