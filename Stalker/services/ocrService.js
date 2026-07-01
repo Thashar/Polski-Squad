@@ -1311,11 +1311,12 @@ class OCRService {
                 const guild = await this.client.guilds.fetch(guildId);
                 for (const session of sessions) {
                     const expiryTimestamp = Math.floor(session.expiresAt / 1000);
+                    const threadLink = session.threadId ? ` — <#${session.threadId}>` : '';
                     try {
                         const member = await guild.members.fetch(session.userId);
-                        description += `${member.displayName} - \`${session.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n`;
+                        description += `${member.displayName} - \`${session.commandName}\`${threadLink} (wygasa <t:${expiryTimestamp}:R>)\n`;
                     } catch (error) {
-                        description += `Użytkownik ${session.userId} - \`${session.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n`;
+                        description += `Użytkownik ${session.userId} - \`${session.commandName}\`${threadLink} (wygasa <t:${expiryTimestamp}:R>)\n`;
                     }
                 }
             } catch (error) {
@@ -1798,6 +1799,37 @@ class OCRService {
     }
 
     /**
+     * Zapisuje ID dedykowanego wątku sesji użytkownika (każda sesja OCR ma własny wątek).
+     */
+    setSessionThreadId(guildId, userId, threadId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
+        if (active) {
+            active.threadId = threadId;
+        }
+    }
+
+    /**
+     * Usuwa wątek sesji po krótkim opóźnieniu (żeby użytkownik zdążył zobaczyć finalną wiadomość).
+     */
+    deleteSessionThread(threadId, delayMs = 10000) {
+        if (!threadId) return;
+        setTimeout(async () => {
+            try {
+                if (!this.client) return;
+                const thread = await this.client.channels.fetch(threadId).catch(() => null);
+                if (thread) {
+                    await thread.delete();
+                    logger.info(`[OCR] 🗑️ Usunięto wątek sesji: ${threadId}`);
+                }
+            } catch (error) {
+                // Ignoruj - wątek mógł już zostać usunięty
+                logger.warn(`[OCR] ⚠️ Nie udało się usunąć wątku ${threadId}: ${error.message}`);
+            }
+        }, delayMs);
+    }
+
+    /**
      * Pobiera listę wszystkich aktywnych sesji na serwerze (do wyświetlania w embedzie)
      */
     getActiveSessions(guildId) {
@@ -1904,6 +1936,9 @@ class OCRService {
         }
         logger.info(`[OCR] 🔓 Użytkownik ${userId} zakończył OCR`);
 
+        // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć finalną wiadomość)
+        this.deleteSessionThread(active.threadId, immediate ? 5000 : 10000);
+
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
 
@@ -1928,6 +1963,9 @@ class OCRService {
             this.activeProcessing.delete(guildId);
         }
         logger.info(`[OCR] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+
+        // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć wiadomość o wygaśnięciu)
+        this.deleteSessionThread(active.threadId, 8000);
 
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);

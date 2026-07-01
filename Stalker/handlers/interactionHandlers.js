@@ -20,6 +20,23 @@ function setSessionOwnerAuthor(embed, member, user) {
     });
 }
 
+/**
+ * Tworzy dedykowany wątek dla sesji OCR - cała analiza (zdjęcia, postęp, potwierdzenia)
+ * odbywa się w tym wątku, izolowana od innych równoległych sesji na tym samym kanale.
+ * Wątek jest usuwany automatycznie przez ocrService po zakończeniu sesji.
+ */
+async function createSessionThread(inter, ocrService, guildId, userId, threadTitle) {
+    const placeholderMessage = await inter.editReply({
+        content: '🧵 Sesja OCR rozpoczęta - kontynuuj w wątku poniżej.'
+    });
+    const thread = await placeholderMessage.startThread({
+        name: threadTitle,
+        autoArchiveDuration: 60
+    });
+    ocrService.setSessionThreadId(guildId, userId, thread.id);
+    return thread;
+}
+
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, phaseService } = sharedState;
 
@@ -219,21 +236,25 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             const activeOCR = ocrService.getActiveOCRUser(guildId, userId);
             const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
 
-            // Utwórz sesję punishment
-            const sessionId = punishmentService.createSession(userId, guildId, inter.channelId, ocrExpiresAt);
-            const session = punishmentService.getSession(sessionId);
-            session.publicInteraction = inter;
+            // Utwórz dedykowany wątek dla tej sesji
+            const memberName = inter.member?.displayName || inter.user.username;
+            const thread = await createSessionThread(inter, ocrService, guildId, userId, `💀 Punish - ${memberName}`);
 
-            // Pokaż embed z prośbą o zdjęcia
+            // Utwórz sesję punishment (w wątku)
+            const sessionId = punishmentService.createSession(userId, guildId, thread.id, ocrExpiresAt);
+            const session = punishmentService.getSession(sessionId);
+
+            // Pokaż embed z prośbą o zdjęcia (w wątku)
             const awaitingEmbed = punishmentService.createAwaitingImagesEmbed();
             setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
-            const replyMessage = await inter.editReply({
+            const awaitingMessage = await thread.send({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
-            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+            session.publicInteraction = awaitingMessage;
+            ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
 
-            logger.info(`[PUNISH] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
+            logger.info(`[PUNISH] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
 
         await runSession(interaction);
@@ -312,21 +333,25 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             const activeOCR = ocrService.getActiveOCRUser(guildId, userId);
             const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
 
-            // Utwórz sesję przypomnienia
-            const sessionId = reminderService.createSession(userId, guildId, inter.channelId, userClanRoleId, ocrExpiresAt);
-            const session = reminderService.getSession(sessionId);
-            session.publicInteraction = inter;
+            // Utwórz dedykowany wątek dla tej sesji
+            const memberName = inter.member?.displayName || inter.user.username;
+            const thread = await createSessionThread(inter, ocrService, guildId, userId, `📢 Remind - ${memberName}`);
 
-            // Pokaż embed z prośbą o zdjęcia
+            // Utwórz sesję przypomnienia (w wątku)
+            const sessionId = reminderService.createSession(userId, guildId, thread.id, userClanRoleId, ocrExpiresAt);
+            const session = reminderService.getSession(sessionId);
+
+            // Pokaż embed z prośbą o zdjęcia (w wątku)
             const awaitingEmbed = reminderService.createAwaitingImagesEmbed();
             setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
-            const replyMessage = await inter.editReply({
+            const awaitingMessage = await thread.send({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
-            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+            session.publicInteraction = awaitingMessage;
+            ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
 
-            logger.info(`[REMIND] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
+            logger.info(`[REMIND] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
 
         await runSession(interaction);
@@ -3698,6 +3723,10 @@ async function handlePhase1Command(interaction, sharedState) {
             const activeOCR = ocrService.getActiveOCRUser(guildId, userId);
             const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
 
+            // Utwórz dedykowany wątek dla tej sesji
+            const memberName = inter.member?.displayName || inter.user.username;
+            const thread = await createSessionThread(inter, ocrService, guildId, userId, `📊 Faza 1 - ${memberName}`);
+
             // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
             const weekInfo = phaseService.getCurrentWeekInfo();
             const existingData = await databaseService.checkPhase1DataExists(
@@ -3708,7 +3737,7 @@ async function handlePhase1Command(interaction, sharedState) {
             );
 
             if (existingData.exists) {
-                // Pokaż ostrzeżenie z przyciskami
+                // Pokaż ostrzeżenie z przyciskami (w wątku)
                 const warningEmbed = await phaseService.createOverwriteWarningEmbed(
                     inter.guild.id,
                     weekInfo,
@@ -3719,38 +3748,38 @@ async function handlePhase1Command(interaction, sharedState) {
 
                 if (warningEmbed) {
                     setSessionOwnerAuthor(warningEmbed.embed, inter.member, inter.user);
-                    const replyMessage = await inter.editReply({
+                    const warningMessage = await thread.send({
                         embeds: [warningEmbed.embed],
                         components: [warningEmbed.row]
                     });
-                    ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+                    ocrService.setSessionMessageId(guildId, userId, warningMessage.id);
                     return;
                 }
             }
 
-            // Utwórz sesję
+            // Utwórz sesję (w wątku)
             const sessionId = phaseService.createSession(
                 inter.user.id,
                 inter.guild.id,
-                inter.channelId,
+                thread.id,
                 1, // phase
                 ocrExpiresAt // timestamp OCR
             );
 
             const session = phaseService.getSession(sessionId);
-            session.publicInteraction = inter;
             session.clan = userClan;
 
-            // Pokaż embed z prośbą o zdjęcia (PUBLICZNY)
+            // Pokaż embed z prośbą o zdjęcia (w wątku)
             const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
             setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
-            const replyMessage = await inter.editReply({
+            const awaitingMessage = await thread.send({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
-            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+            session.publicInteraction = awaitingMessage;
+            ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
 
-            logger.info(`[PHASE1] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
+            logger.info(`[PHASE1] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${inter.user.tag}`);
         };
 
         await runSession(interaction);
@@ -4399,6 +4428,10 @@ async function handlePhase2Command(interaction, sharedState) {
             const activeOCR = ocrService.getActiveOCRUser(guildId, userId);
             const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
 
+            // Utwórz dedykowany wątek dla tej sesji
+            const memberName = inter.member?.displayName || inter.user.username;
+            const thread = await createSessionThread(inter, ocrService, guildId, userId, `📈 Faza 2 - ${memberName}`);
+
             // Sprawdź czy dane dla tego tygodnia i klanu już istnieją
             const weekInfo = phaseService.getCurrentWeekInfo();
             const existingData = await databaseService.checkPhase2DataExists(
@@ -4409,7 +4442,7 @@ async function handlePhase2Command(interaction, sharedState) {
             );
 
             if (existingData.exists) {
-                // Pokaż ostrzeżenie z przyciskami
+                // Pokaż ostrzeżenie z przyciskami (w wątku)
                 const warningEmbed = await phaseService.createOverwriteWarningEmbed(
                     inter.guild.id,
                     weekInfo,
@@ -4420,38 +4453,38 @@ async function handlePhase2Command(interaction, sharedState) {
 
                 if (warningEmbed) {
                     setSessionOwnerAuthor(warningEmbed.embed, inter.member, inter.user);
-                    const replyMessage = await inter.editReply({
+                    const warningMessage = await thread.send({
                         embeds: [warningEmbed.embed],
                         components: [warningEmbed.row]
                     });
-                    ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+                    ocrService.setSessionMessageId(guildId, userId, warningMessage.id);
                     return;
                 }
             }
 
-            // Utwórz sesję dla fazy 2
+            // Utwórz sesję dla fazy 2 (w wątku)
             const sessionId = phaseService.createSession(
                 inter.user.id,
                 inter.guild.id,
-                inter.channelId,
+                thread.id,
                 2, // phase 2
                 ocrExpiresAt // timestamp OCR
             );
 
             const session = phaseService.getSession(sessionId);
-            session.publicInteraction = inter;
             session.clan = userClan;
 
-            // Pokaż embed z prośbą o zdjęcia dla rundy 1 (PUBLICZNY)
+            // Pokaż embed z prośbą o zdjęcia dla rundy 1 (w wątku)
             const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
             setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
-            const replyMessage = await inter.editReply({
+            const awaitingMessage = await thread.send({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
-            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
+            session.publicInteraction = awaitingMessage;
+            ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
 
-            logger.info(`[PHASE2] ✅ Sesja utworzona, czekam na zdjęcia z rundy 1/3 od ${inter.user.tag}`);
+            logger.info(`[PHASE2] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia z rundy 1/3 od ${inter.user.tag}`);
         };
 
         await runSession(interaction);
