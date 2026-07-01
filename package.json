@@ -42,6 +42,7 @@
     "@opentelemetry/resources": "^2.8.0",
     "@opentelemetry/sdk-node": "^0.219.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
+    "@sparticuz/chromium": "^143.0.4",
     "archiver": "^7.0.1",
     "axios": "^1.13.5",
     "cheerio": "^1.2.0",

@@ -1,6 +1,6 @@
-const puppeteer = require('puppeteer');
 const sharp = require('sharp');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { launchBrowser } = require('./puppeteerLauncher');
 
 const LUNAR_DETAILS_URL = 'https://garrytools.com/lunar/';
 const CHALLENGE_ROUND_TIMEOUT = 90000; // czas na jedną rundę (klikanie kafelków) w Discordzie
@@ -21,10 +21,7 @@ class CaptchaSolverService {
     async solveLunarDetailsGroupId(guildIds, context) {
         let browser;
         try {
-            browser = await puppeteer.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-            });
+            browser = await launchBrowser();
 
             const page = await browser.newPage();
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');

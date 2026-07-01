@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('./puppeteerLauncher');
 
 // Renders pages with a real headless browser for endpoints that are gated behind
 // Cloudflare's JS challenge and cannot be reached with plain HTTP requests.
@@ -14,10 +14,7 @@ class BrowserFetchService {
 
         try {
             this.logger.info(`🌐 Launching headless browser to render ${url}...`);
-            browser = await puppeteer.launch({
-                headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-            });
+            browser = await launchBrowser();
 
             const page = await browser.newPage();
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
