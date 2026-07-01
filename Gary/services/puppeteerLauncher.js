@@ -1,7 +1,14 @@
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const chromium = require('@sparticuz/chromium');
+
+// puppeteer-extra + stealth plugin maskuje typowe ślady automatyzacji wykrywane przez reCAPTCHA
+// (np. navigator.webdriver=true, brakujące pluginy/mimeTypes, niespójności Chrome runtime) - bez
+// tego reCAPTCHA traktuje sesję jako wysokiego ryzyka i potrafi w kółko serwować nowe rundy wyzwania
+// niezależnie od poprawności odpowiedzi. Interfejs jest kompatybilny ze zwykłym pakietem "puppeteer".
+puppeteer.use(StealthPlugin());
 
 // Serwer produkcyjny (Pterodactyl, Linux) nie ma zainstalowanych bibliotek systemowych
 // (libatk, libnss3 itd.) wymaganych przez zwykłe headless Chrome pobrane przez puppeteer,
