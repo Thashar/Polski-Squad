@@ -22,15 +22,14 @@ class OCRService {
         // Inicjalizuj AI OCR Service (opcjonalny) — Google Gemini przez llmAdapter
         this.aiOcrService = new AIOCRService(config, llmAdapter);
 
-        // System kolejkowania OCR - wspólny dla wszystkich komend używających OCR
-        this.activeProcessing = new Map(); // guildId → {userId, commandName, expiresAt, timeout}
-        this.waitingQueue = new Map(); // guildId → [{userId, addedAt, commandName, interaction, autoStartFn}]
+        // System sesji OCR - równoległe sesje, jeden użytkownik = jedna aktywna sesja naraz
+        this.activeProcessing = new Map(); // guildId → Map<userId, {commandName, expiresAt, timeout}>
 
-        // Wyświetlanie kolejki
-        this.queueMessageId = null; // ID wiadomości z embdem kolejki
+        // Wyświetlanie aktywnych sesji
+        this.queueMessageId = null; // ID wiadomości z embedem aktywnych sesji
         this.queueChannelId = this.config.queueChannelId;
 
-        // Kanał ekwipunku (drugi embed kolejki z przyciskiem "Skanuj ekwipunek")
+        // Kanał ekwipunku (drugi embed z przyciskiem "Skanuj ekwipunek")
         this.equipmentMessageId = null;
         this.equipmentChannelId = this.config.equipmentChannelId;
 
@@ -1281,70 +1280,49 @@ class OCRService {
         }
     }
 
-    // ==================== WYŚWIETLANIE KOLEJKI OCR ====================
+    // ==================== WYŚWIETLANIE AKTYWNYCH SESJI OCR ====================
 
     /**
-     * Tworzy embed z aktualną kolejką OCR
+     * Tworzy embed z listą aktualnie aktywnych (równoległych) sesji OCR
      */
-    async createQueueEmbed(guildId) {
-        const queue = this.waitingQueue.get(guildId) || [];
-        const active = this.activeProcessing.get(guildId);
+    async createActiveSessionsEmbed(guildId) {
+        const sessions = this.getActiveSessions(guildId);
 
         // Dynamiczny kolor embeda
-        let embedColor = '#00FF00'; // Zielony (domyślnie - pusta kolejka)
-
-        if (active) {
-            // Jeśli coś jest w użyciu
-            if (queue.length > 2) {
-                embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby w kolejce)
-            } else {
-                embedColor = '#FFA500'; // Żółty (w użyciu, max 2 osoby)
-            }
-        } else if (queue.length > 2) {
-            embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby czeka)
-        } else if (queue.length > 0) {
-            embedColor = '#FFA500'; // Żółty (1-2 osoby czekają)
+        let embedColor = '#00FF00'; // Zielony (domyślnie - brak aktywnych sesji)
+        if (sessions.length > 2) {
+            embedColor = '#FF0000'; // Czerwony (więcej niż 2 osoby naraz)
+        } else if (sessions.length > 0) {
+            embedColor = '#FFA500'; // Żółty (1-2 osoby)
         }
 
         const embed = new EmbedBuilder()
-            .setTitle('📋 Kolejka OCR')
+            .setTitle('📋 Panel OCR')
             .setColor(embedColor)
             .setTimestamp()
             .setFooter({ text: 'Aktualizowane automatycznie' });
 
         let description = '';
 
-        // Aktywne przetwarzanie
-        if (active) {
+        if (sessions.length > 0) {
+            description += `🔒 **Aktywne sesje:** (${sessions.length})\n\n`;
+
             try {
                 const guild = await this.client.guilds.fetch(guildId);
-                const member = await guild.members.fetch(active.userId);
-                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
-                description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `${member.displayName} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
-            } catch (error) {
-                const expiryTimestamp = Math.floor(active.expiresAt / 1000);
-                description += `🔒 **Aktualnie w użyciu:**\n`;
-                description += `Użytkownik ${active.userId} - \`${active.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n\n`;
-            }
-        }
-
-        // Kolejka oczekujących
-        if (queue.length > 0) {
-            description += `⏳ **Kolejka oczekujących:** (${queue.length})\n\n`;
-
-            const guild = await this.client.guilds.fetch(guildId);
-            for (let i = 0; i < queue.length; i++) {
-                const person = queue[i];
-                try {
-                    const member = await guild.members.fetch(person.userId);
-                    description += `**${i + 1}.** ${member.displayName} - \`${person.commandName}\`\n`;
-                } catch (error) {
-                    description += `**${i + 1}.** Użytkownik ${person.userId} - \`${person.commandName}\`\n`;
+                for (const session of sessions) {
+                    const expiryTimestamp = Math.floor(session.expiresAt / 1000);
+                    try {
+                        const member = await guild.members.fetch(session.userId);
+                        description += `${member.displayName} - \`${session.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n`;
+                    } catch (error) {
+                        description += `Użytkownik ${session.userId} - \`${session.commandName}\` (wygasa <t:${expiryTimestamp}:R>)\n`;
+                    }
                 }
+            } catch (error) {
+                logger.warn('[OCR] ⚠️ Błąd pobierania danych gildii dla embeda sesji:', error.message);
             }
-        } else if (!active) {
-            description += `✅ **Kolejka pusta**\n\nOCR jest dostępny do użycia!`;
+        } else {
+            description += `✅ **Brak aktywnych sesji**\n\nOCR jest dostępny do użycia! Wiele osób może korzystać jednocześnie.`;
         }
 
         embed.setDescription(description || 'Brak danych');
@@ -1352,7 +1330,7 @@ class OCRService {
     }
 
     /**
-     * Aktualizuje wyświetlanie kolejki na kanale
+     * Aktualizuje wyświetlanie panelu OCR na kanale
      */
     async updateQueueDisplay(guildId) {
         // Aktualizuj oba kanały równolegle
@@ -1363,7 +1341,7 @@ class OCRService {
     }
 
     /**
-     * Aktualizuje embed kolejki na głównym kanale OCR
+     * Aktualizuje embed panelu OCR na głównym kanale
      */
     async _updateMainQueueChannel(guildId) {
         try {
@@ -1371,11 +1349,11 @@ class OCRService {
 
             const channel = await this.client.channels.fetch(this.queueChannelId);
             if (!channel) {
-                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                logger.warn('[OCR] ⚠️ Nie znaleziono kanału panelu OCR');
                 return;
             }
 
-            const embed = await this.createQueueEmbed(guildId);
+            const embed = await this.createActiveSessionsEmbed(guildId);
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
             const faza1Button = new ButtonBuilder()
@@ -1404,8 +1382,8 @@ class OCRService {
 
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('Wyjdź z kolejki')
-                .setEmoji('🚪')
+                .setLabel('Anuluj moją sesję')
+                .setEmoji('❌')
                 .setStyle(ButtonStyle.Danger);
 
             const dodajButton = new ButtonBuilder()
@@ -1466,22 +1444,22 @@ class OCRService {
                 try {
                     const message = await channel.messages.fetch(this.queueMessageId);
                     await message.edit({ embeds: [embed], components: [row1, row2, row3, row4] });
-                    logger.info('[OCR-QUEUE] 📝 Zaktualizowano embed kolejki');
+                    logger.info('[OCR] 📝 Zaktualizowano embed panelu OCR');
                     return;
                 } catch (error) {
-                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda, tworzę nowy jako pierwszą wiadomość');
+                    logger.warn('[OCR] ⚠️ Nie można zaktualizować embeda, tworzę nowy jako pierwszą wiadomość');
                     this.queueMessageId = null;
                 }
             }
 
-            logger.warn('[OCR-QUEUE] ⚠️ Brak embeda kolejki - zostanie utworzony podczas inicjalizacji');
+            logger.warn('[OCR] ⚠️ Brak embeda panelu OCR - zostanie utworzony podczas inicjalizacji');
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji głównego kanału kolejki:', error);
+            logger.error('[OCR] ❌ Błąd aktualizacji głównego kanału panelu OCR:', error);
         }
     }
 
     /**
-     * Aktualizuje embed kolejki na kanale ekwipunku (z przyciskiem "Skanuj ekwipunek")
+     * Aktualizuje embed panelu OCR na kanale ekwipunku (z przyciskiem "Skanuj ekwipunek")
      */
     async _updateEquipmentChannel(guildId) {
         try {
@@ -1490,7 +1468,7 @@ class OCRService {
             const channel = await this.client.channels.fetch(this.equipmentChannelId);
             if (!channel) return;
 
-            const embed = await this.createQueueEmbed(guildId);
+            const embed = await this.createActiveSessionsEmbed(guildId);
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
             const scanButton = new ButtonBuilder()
@@ -1501,8 +1479,8 @@ class OCRService {
 
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('Wyjdź z kolejki')
-                .setEmoji('🚪')
+                .setLabel('Anuluj moją sesję')
+                .setEmoji('❌')
                 .setStyle(ButtonStyle.Danger);
 
             const rankingButton = new ButtonBuilder()
@@ -1520,109 +1498,33 @@ class OCRService {
                     await message.edit({ embeds: [embed], components: [row1, row2] });
                     return;
                 } catch (error) {
-                    logger.warn('[OCR-QUEUE] ⚠️ Nie można zaktualizować embeda ekwipunku');
+                    logger.warn('[OCR] ⚠️ Nie można zaktualizować embeda ekwipunku');
                     this.equipmentMessageId = null;
                 }
             }
 
-            logger.warn('[OCR-QUEUE] ⚠️ Brak embeda ekwipunku - zostanie utworzony podczas inicjalizacji');
+            logger.warn('[OCR] ⚠️ Brak embeda ekwipunku - zostanie utworzony podczas inicjalizacji');
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd aktualizacji kanału ekwipunku:', error);
+            logger.error('[OCR] ❌ Błąd aktualizacji kanału ekwipunku:', error);
         }
     }
 
 
     /**
-     * Czyści wiadomości z kanału kolejki (zostawia tylko pierwszą z embedem)
-     */
-    async cleanupQueueChannelMessages() {
-        try {
-            if (!this.client || !this.queueChannelId) {
-                return;
-            }
-
-            const channel = await this.client.channels.fetch(this.queueChannelId);
-            if (!channel) {
-                return;
-            }
-
-            // Pobierz wszystkie wiadomości z kanału
-            const messages = await channel.messages.fetch({ limit: 100 });
-
-            let deletedCount = 0;
-            for (const [messageId, message] of messages) {
-                // Pomiń pierwszą wiadomość z embedem kolejki
-                if (messageId === this.queueMessageId) {
-                    continue;
-                }
-
-                // Usuń wszystkie inne wiadomości
-                try {
-                    await message.delete();
-                    deletedCount++;
-                } catch (error) {
-                    // Ignoruj błędy usuwania (np. brak uprawnień)
-                }
-            }
-
-            if (deletedCount > 0) {
-                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono ${deletedCount} wiadomości z kanału kolejki`);
-            }
-        } catch (error) {
-            // Ignoruj błędy czyszczenia
-        }
-    }
-
-    async cleanupEquipmentChannelMessages() {
-        try {
-            if (!this.client || !this.equipmentChannelId) {
-                return;
-            }
-
-            const channel = await this.client.channels.fetch(this.equipmentChannelId);
-            if (!channel) {
-                return;
-            }
-
-            const messages = await channel.messages.fetch({ limit: 100 });
-
-            let deletedCount = 0;
-            for (const [messageId, message] of messages) {
-                if (messageId === this.equipmentMessageId) {
-                    continue;
-                }
-
-                try {
-                    await message.delete();
-                    deletedCount++;
-                } catch (error) {
-                    // Ignoruj błędy usuwania
-                }
-            }
-
-            if (deletedCount > 0) {
-                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono ${deletedCount} wiadomości z kanału ekwipunku`);
-            }
-        } catch (error) {
-            // Ignoruj błędy czyszczenia
-        }
-    }
-
-    /**
-     * Czyści wszystkie wiadomości z kanału kolejki OCR
+     * Czyści wszystkie wiadomości z kanału panelu OCR
      */
     async cleanupQueueChannel() {
         try {
             if (!this.client || !this.queueChannelId) {
-                logger.warn('[OCR-QUEUE] ⚠️ Brak klienta lub kanału kolejki do wyczyszczenia');
+                logger.warn('[OCR] ⚠️ Brak klienta lub kanału panelu OCR do wyczyszczenia');
                 return;
             }
 
-            logger.info('[OCR-QUEUE] 🧹 Rozpoczynam czyszczenie kanału kolejki...');
+            logger.info('[OCR] 🧹 Rozpoczynam czyszczenie kanału panelu OCR...');
 
             const channel = await this.client.channels.fetch(this.queueChannelId);
             if (!channel) {
-                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                logger.warn('[OCR] ⚠️ Nie znaleziono kanału panelu OCR');
                 return;
             }
 
@@ -1630,7 +1532,7 @@ class OCRService {
             const messages = await channel.messages.fetch({ limit: 100 });
 
             if (messages.size === 0) {
-                logger.info('[OCR-QUEUE] ✅ Kanał kolejki jest już pusty');
+                logger.info('[OCR] ✅ Kanał panelu OCR jest już pusty');
                 // Wyślij nowy embed
                 await this.updateQueueDisplay(channel.guildId);
                 return;
@@ -1643,57 +1545,57 @@ class OCRService {
                     await message.delete();
                     deletedCount++;
                 } catch (error) {
-                    logger.warn(`[OCR-QUEUE] ⚠️ Nie można usunąć wiadomości ${messageId}: ${error.message}`);
+                    logger.warn(`[OCR] ⚠️ Nie można usunąć wiadomości ${messageId}: ${error.message}`);
                 }
             }
 
-            logger.info(`[OCR-QUEUE] 🗑️ Usunięto ${deletedCount} wiadomości z kanału kolejki`);
+            logger.info(`[OCR] 🗑️ Usunięto ${deletedCount} wiadomości z kanału panelu OCR`);
 
-            // Resetuj ID embeda kolejki
+            // Resetuj ID embeda panelu OCR
             this.queueMessageId = null;
 
-            // Wyślij nowy embed kolejki
+            // Wyślij nowy embed panelu OCR
             await this.updateQueueDisplay(channel.guildId);
 
-            logger.info('[OCR-QUEUE] ✅ Czyszczenie kanału kolejki zakończone');
+            logger.info('[OCR] ✅ Czyszczenie kanału panelu OCR zakończone');
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd czyszczenia kanału kolejki:', error);
+            logger.error('[OCR] ❌ Błąd czyszczenia kanału panelu OCR:', error);
         }
     }
 
     /**
-     * Inicjalizuje wyświetlanie kolejki podczas startu bota
+     * Inicjalizuje wyświetlanie panelu OCR podczas startu bota
      */
     async initializeQueueDisplay(client) {
         try {
             if (!this.queueChannelId) {
-                logger.warn('[OCR-QUEUE] ⚠️ Brak skonfigurowanego kanału kolejki');
+                logger.warn('[OCR] ⚠️ Brak skonfigurowanego kanału panelu OCR');
                 return;
             }
 
-            logger.info('[OCR-QUEUE] 🚀 Inicjalizacja wyświetlania kolejki...');
+            logger.info('[OCR] 🚀 Inicjalizacja wyświetlania panelu OCR...');
 
             const channel = await client.channels.fetch(this.queueChannelId);
             if (!channel) {
-                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału kolejki');
+                logger.warn('[OCR] ⚠️ Nie znaleziono kanału panelu OCR');
                 return;
             }
 
             // Pobierz wszystkie wiadomości z kanału
             const messages = await channel.messages.fetch({ limit: 100 });
 
-            // Znajdź PIERWSZĄ wiadomość od bota z embedem kolejki (najstarsza)
+            // Znajdź PIERWSZĄ wiadomość od bota z embedem panelu OCR (najstarsza)
             let queueMessage = null;
             for (const [messageId, message] of messages) {
                 if (message.author.id === client.user.id &&
                     message.embeds.length > 0 &&
-                    message.embeds[0].title === '📋 Kolejka OCR') {
+                    (message.embeds[0].title === '📋 Panel OCR' || message.embeds[0].title === '📋 Kolejka OCR')) {
                     queueMessage = message;
                     // Nie break - chcemy znaleźć najstarszą (iterujemy od najnowszych do najstarszych)
                 }
             }
 
-            const embed = await this.createQueueEmbed(channel.guildId);
+            const embed = await this.createActiveSessionsEmbed(channel.guildId);
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
             // Przyciski w jednym rzędzie
@@ -1723,8 +1625,8 @@ class OCRService {
 
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('Wyjdź z kolejki')
-                .setEmoji('🚪')
+                .setLabel('Anuluj moją sesję')
+                .setEmoji('❌')
                 .setStyle(ButtonStyle.Danger);
 
             const dodajButton = new ButtonBuilder()
@@ -1785,25 +1687,25 @@ class OCRService {
                 // Zaktualizuj istniejący embed
                 await queueMessage.edit({ embeds: [embed], components: [row1, row2, row3, row4] });
                 this.queueMessageId = queueMessage.id;
-                logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed kolejki (ID: ' + queueMessage.id + ')');
+                logger.info('[OCR] ✅ Zaktualizowano istniejący embed panelu OCR (ID: ' + queueMessage.id + ')');
             } else {
                 // Wyślij nowy embed jako pierwszą wiadomość
                 const message = await channel.send({ embeds: [embed], components: [row1, row2, row3, row4] });
                 this.queueMessageId = message.id;
-                logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed kolejki (ID: ' + message.id + ')');
+                logger.info('[OCR] ✅ Utworzono nowy embed panelu OCR (ID: ' + message.id + ')');
             }
 
-            logger.info('[OCR-QUEUE] ✅ Inicjalizacja wyświetlania kolejki zakończona');
+            logger.info('[OCR] ✅ Inicjalizacja wyświetlania panelu OCR zakończona');
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd inicjalizacji wyświetlania kolejki:', error);
+            logger.error('[OCR] ❌ Błąd inicjalizacji wyświetlania panelu OCR:', error);
         }
 
-        // Zainicjalizuj kanał ekwipunku (drugi embed kolejki)
+        // Zainicjalizuj kanał ekwipunku (drugi embed panelu OCR)
         await this._initializeEquipmentChannel(client);
     }
 
     /**
-     * Inicjalizuje embed kolejki na kanale ekwipunku
+     * Inicjalizuje embed panelu OCR na kanale ekwipunku
      */
     async _initializeEquipmentChannel(client) {
         try {
@@ -1811,7 +1713,7 @@ class OCRService {
 
             const channel = await client.channels.fetch(this.equipmentChannelId);
             if (!channel) {
-                logger.warn('[OCR-QUEUE] ⚠️ Nie znaleziono kanału ekwipunku');
+                logger.warn('[OCR] ⚠️ Nie znaleziono kanału ekwipunku');
                 return;
             }
 
@@ -1821,12 +1723,12 @@ class OCRService {
             for (const [, message] of messages) {
                 if (message.author.id === client.user.id &&
                     message.embeds.length > 0 &&
-                    message.embeds[0].title === '📋 Kolejka OCR') {
+                    (message.embeds[0].title === '📋 Panel OCR' || message.embeds[0].title === '📋 Kolejka OCR')) {
                     equipmentMessage = message;
                 }
             }
 
-            const embed = await this.createQueueEmbed(channel.guildId);
+            const embed = await this.createActiveSessionsEmbed(channel.guildId);
             const { ButtonBuilder, ActionRowBuilder, ButtonStyle } = require('discord.js');
 
             const scanButton = new ButtonBuilder()
@@ -1837,8 +1739,8 @@ class OCRService {
 
             const leaveQueueButton = new ButtonBuilder()
                 .setCustomId('queue_leave')
-                .setLabel('Wyjdź z kolejki')
-                .setEmoji('🚪')
+                .setLabel('Anuluj moją sesję')
+                .setEmoji('❌')
                 .setStyle(ButtonStyle.Danger);
 
             const rankingButton = new ButtonBuilder()
@@ -1853,36 +1755,44 @@ class OCRService {
             if (equipmentMessage) {
                 await equipmentMessage.edit({ embeds: [embed], components: [row1, row2] });
                 this.equipmentMessageId = equipmentMessage.id;
-                logger.info('[OCR-QUEUE] ✅ Zaktualizowano istniejący embed ekwipunku (ID: ' + equipmentMessage.id + ')');
+                logger.info('[OCR] ✅ Zaktualizowano istniejący embed ekwipunku (ID: ' + equipmentMessage.id + ')');
             } else {
                 const message = await channel.send({ embeds: [embed], components: [row1, row2] });
                 this.equipmentMessageId = message.id;
-                logger.info('[OCR-QUEUE] ✅ Utworzono nowy embed ekwipunku (ID: ' + message.id + ')');
+                logger.info('[OCR] ✅ Utworzono nowy embed ekwipunku (ID: ' + message.id + ')');
             }
         } catch (error) {
-            logger.error('[OCR-QUEUE] ❌ Błąd inicjalizacji kanału ekwipunku:', error);
+            logger.error('[OCR] ❌ Błąd inicjalizacji kanału ekwipunku:', error);
         }
     }
 
-    // ==================== SYSTEM KOLEJKOWANIA OCR ====================
+    // ==================== SYSTEM RÓWNOLEGŁYCH SESJI OCR ====================
 
     /**
-     * Sprawdza czy ktoś obecnie używa OCR
+     * Sprawdza czy DANY użytkownik ma już aktywną sesję OCR (nie blokuje innych użytkowników)
      */
-    isOCRActive(guildId) {
-        return this.activeProcessing.has(guildId);
+    isOCRActive(guildId, userId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        return !!(guildSessions && guildSessions.has(userId));
     }
 
     /**
-     * Pobiera info kto obecnie używa OCR
+     * Pobiera info o aktywnej sesji danego użytkownika
      */
-    getActiveOCRUser(guildId) {
-        return this.activeProcessing.get(guildId);
+    getActiveOCRUser(guildId, userId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        return guildSessions ? guildSessions.get(userId) : undefined;
     }
 
     /**
-     * Rozpoczyna sesję OCR dla użytkownika
+     * Pobiera listę wszystkich aktywnych sesji na serwerze (do wyświetlania w embedzie)
      */
+    getActiveSessions(guildId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        if (!guildSessions) return [];
+        return Array.from(guildSessions.entries()).map(([userId, session]) => ({ userId, ...session }));
+    }
+
     /**
      * Określa timeout dla sesji na podstawie komendy
      */
@@ -1895,15 +1805,14 @@ class OCRService {
         return 15 * 60 * 1000;
     }
 
+    /**
+     * Rozpoczyna sesję OCR dla użytkownika (równolegle z sesjami innych użytkowników)
+     */
     async startOCRSession(guildId, userId, commandName) {
-        // Usuń z kolejki jeśli tam jest
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-            const index = queue.findIndex(item => item.userId === userId);
-            if (index !== -1) {
-                queue.splice(index, 1);
-            }
+        if (!this.activeProcessing.has(guildId)) {
+            this.activeProcessing.set(guildId, new Map());
         }
+        const guildSessions = this.activeProcessing.get(guildId);
 
         // Określ timeout na podstawie komendy
         const timeoutDuration = this.getSessionTimeout(commandName);
@@ -1911,15 +1820,15 @@ class OCRService {
 
         // Ustaw timeout który wywoła wygaśnięcie sesji
         const timeout = setTimeout(async () => {
-            logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${commandName})`);
+            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${commandName})`);
             await this.expireOCRSession(guildId, userId);
         }, timeoutDuration);
 
-        this.activeProcessing.set(guildId, { userId, commandName, expiresAt, timeout });
+        guildSessions.set(userId, { commandName, expiresAt, timeout });
         const minutes = timeoutDuration / (60 * 1000);
-        logger.info(`[OCR-QUEUE] 🔒 Użytkownik ${userId} rozpoczął ${commandName} (timeout: ${minutes} min)`);
+        logger.info(`[OCR] 🔒 Użytkownik ${userId} rozpoczął ${commandName} (timeout: ${minutes} min, aktywnych sesji: ${guildSessions.size})`);
 
-        // Aktualizuj wyświetlanie kolejki
+        // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
     }
 
@@ -1927,9 +1836,10 @@ class OCRService {
      * Odnawia timeout sesji OCR (wywoływane przy każdym kliknięciu przycisku)
      */
     async refreshOCRSession(guildId, userId) {
-        const active = this.activeProcessing.get(guildId);
-        if (!active || active.userId !== userId) {
-            return; // Nie ta sesja lub sesja nie istnieje
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
+        if (!active) {
+            return; // Sesja nie istnieje
         }
 
         // Wyczyść stary timeout
@@ -1943,29 +1853,30 @@ class OCRService {
 
         // Ustaw nowy timeout
         const timeout = setTimeout(async () => {
-            logger.warn(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
             await this.expireOCRSession(guildId, userId);
         }, timeoutDuration);
 
         // Zaktualizuj sesję z nowym timeoutem
         active.expiresAt = expiresAt;
         active.timeout = timeout;
-        this.activeProcessing.set(guildId, active);
+        guildSessions.set(userId, active);
 
         const minutes = timeoutDuration / (60 * 1000);
-        logger.info(`[OCR-QUEUE] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
+        logger.info(`[OCR] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
 
-        // Aktualizuj wyświetlanie kolejki (odświeża timestamp w embedzie)
+        // Aktualizuj wyświetlanie aktywnych sesji (odświeża timestamp w embedzie)
         await this.updateQueueDisplay(guildId);
     }
 
     /**
-     * Kończy sesję OCR i powiadamia następną osobę w kolejce
+     * Kończy sesję OCR danego użytkownika (nie wpływa na sesje innych osób)
      */
     async endOCRSession(guildId, userId, immediate = false) {
-        const active = this.activeProcessing.get(guildId);
-        if (!active || active.userId !== userId) {
-            return; // Nie ten użytkownik
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
+        if (!active) {
+            return; // Sesja już zakończona
         }
 
         // Wyczyść timeout jeśli istnieje
@@ -1974,48 +1885,36 @@ class OCRService {
         }
 
         // Usuń z aktywnego przetwarzania NATYCHMIAST (zapobiega wielokrotnym kliknięciom)
-        this.activeProcessing.delete(guildId);
-        logger.info(`[OCR-QUEUE] 🔓 Użytkownik ${userId} zakończył OCR`);
+        guildSessions.delete(userId);
+        if (guildSessions.size === 0) {
+            this.activeProcessing.delete(guildId);
+        }
+        logger.info(`[OCR] 🔓 Użytkownik ${userId} zakończył OCR`);
 
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
 
-        // Opóźnienie przed czyszczeniem kanału i powiadomieniem następnej osoby
-        const delay = immediate ? 0 : 5000; // 5 sekund jeśli nie immediate
-
-        if (delay > 0) {
-            logger.info(`[OCR-QUEUE] ⏳ Oczekiwanie 5 sekund przed czyszczeniem kanału kolejki...`);
-            await new Promise(resolve => setTimeout(resolve, delay));
-            logger.info(`[OCR-QUEUE] 🧹 Czyszczenie kanału i powiadamianie kolejnej osoby...`);
-        }
-
-        // Wyczyść kanał kolejki (usuń wszystkie wiadomości oprócz pierwszej z embedem)
-        await Promise.all([
-            this.cleanupQueueChannelMessages(),
-            this.cleanupEquipmentChannelMessages()
-        ]);
-
-        // Aktualizuj wyświetlanie kolejki
+        // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
-
-        // Auto-start sesji dla następnej osoby w kolejce
-        await this.autoStartNextInQueue(guildId);
     }
 
     /**
-     * Wygasa aktywną sesję OCR (timeout 15 minut)
+     * Wygasa aktywną sesję OCR danego użytkownika (timeout)
      */
     async expireOCRSession(guildId, userId) {
-        const active = this.activeProcessing.get(guildId);
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
 
-        // Sprawdź czy to nadal ta sama sesja
-        if (!active || active.userId !== userId) {
-            return; // Sesja już zakończona lub inna osoba
+        if (!active) {
+            return; // Sesja już zakończona
         }
 
         // Usuń z aktywnego przetwarzania
-        this.activeProcessing.delete(guildId);
-        logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+        guildSessions.delete(userId);
+        if (guildSessions.size === 0) {
+            this.activeProcessing.delete(guildId);
+        }
+        logger.info(`[OCR] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
 
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
@@ -2027,7 +1926,7 @@ class OCRService {
             if (reminderSession) {
                 stopGhostPing(reminderSession);
                 await this.reminderService.cleanupSession(reminderSession.sessionId);
-                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /remind dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję /remind dla ${userId} (timeout)`);
             }
         }
 
@@ -2037,7 +1936,7 @@ class OCRService {
             if (punishSession) {
                 stopGhostPing(punishSession);
                 await this.punishmentService.cleanupSession(punishSession.sessionId);
-                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję /punish dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję /punish dla ${userId} (timeout)`);
             }
         }
 
@@ -2047,173 +1946,14 @@ class OCRService {
             if (phaseSession) {
                 stopGhostPing(phaseSession);
                 await this.phaseService.cleanupSession(phaseSession.sessionId);
-                logger.info(`[OCR-QUEUE] 🧹 Wyczyszczono sesję phase dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję phase dla ${userId} (timeout)`);
             }
         }
 
-        logger.info(`[OCR-QUEUE] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+        logger.info(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
 
-
-        // Wyczyść kanał kolejki
-        await Promise.all([
-            this.cleanupQueueChannelMessages(),
-            this.cleanupEquipmentChannelMessages()
-        ]);
-
-        // Aktualizuj wyświetlanie kolejki
+        // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
-
-        // Auto-start sesji dla następnej osoby w kolejce
-        await this.autoStartNextInQueue(guildId);
-    }
-
-    /**
-     * Sprawdza czy kolejka OCR jest pusta
-     */
-    isQueueEmpty(guildId) {
-        if (!this.waitingQueue.has(guildId)) {
-            return true;
-        }
-        const queue = this.waitingQueue.get(guildId);
-        return queue.length === 0;
-    }
-
-    /**
-     * Dodaje użytkownika do kolejki OCR
-     */
-    async addToOCRQueue(guildId, userId, commandName, interaction, autoStartFn) {
-        if (!this.waitingQueue.has(guildId)) {
-            this.waitingQueue.set(guildId, []);
-        }
-
-        const queue = this.waitingQueue.get(guildId);
-
-        // Sprawdź czy już jest w kolejce
-        if (queue.find(item => item.userId === userId)) {
-            return { position: queue.findIndex(item => item.userId === userId) + 1 };
-        }
-
-        queue.push({ userId, addedAt: Date.now(), commandName, interaction, autoStartFn });
-        const position = queue.length;
-
-        logger.info(`[OCR-QUEUE] ➕ ${userId} dodany do kolejki OCR (pozycja: ${position}, komenda: ${commandName})`);
-
-        // Aktualizuj wyświetlanie kolejki
-        await this.updateQueueDisplay(guildId);
-
-        return { position };
-    }
-
-    /**
-     * Automatycznie startuje sesję OCR dla następnej osoby w kolejce
-     */
-    async autoStartNextInQueue(guildId) {
-        if (!this.waitingQueue.has(guildId)) return;
-
-        const queue = this.waitingQueue.get(guildId);
-        if (queue.length === 0) {
-            this.waitingQueue.delete(guildId);
-            return;
-        }
-
-        const nextPerson = queue.shift();
-        if (queue.length === 0) {
-            this.waitingQueue.delete(guildId);
-        }
-
-        const { userId, commandName, interaction, autoStartFn } = nextPerson;
-        logger.info(`[OCR-QUEUE] 🚀 Auto-start sesji dla ${userId} (${commandName})`);
-
-
-
-        // Wyślij ghost ping na odpowiednim kanale
-        try {
-            const pingChannelId = commandName === 'Skanuj ekwipunek'
-                ? this.equipmentChannelId
-                : this.queueChannelId;
-            if (this.client && pingChannelId) {
-                const pingChannel = await this.client.channels.fetch(pingChannelId);
-                if (pingChannel) {
-                    await pingChannel.send(`<@${userId}> ✅ Twoja kolej! Sesja \`${commandName}\` została automatycznie uruchomiona.`);
-                }
-            }
-        } catch (error) {
-            logger.warn(`[OCR-QUEUE] ⚠️ Nie można wysłać ghost pinga: ${error.message}`);
-        }
-
-        // Wywołaj callback sesji
-        if (autoStartFn && interaction) {
-            try {
-                await autoStartFn(interaction);
-            } catch (error) {
-                logger.error(`[OCR-QUEUE] ❌ Błąd auto-start dla ${userId}:`, error.message);
-                await this.endOCRSession(guildId, userId, true);
-            }
-        }
-    }
-
-    /**
-     * Powiadamia użytkownika o pozycji w kolejce
-     */
-    async notifyQueuePosition(guildId, userId, position, commandName) {
-        try {
-            if (!this.client) return;
-
-            const queue = this.waitingQueue.get(guildId) || [];
-            const peopleAhead = queue.slice(0, position - 1);
-
-            let description = `Ktoś obecnie używa komendy OCR.\n\n`;
-            description += `📊 **Twoja pozycja w kolejce:** ${position}\n`;
-            description += `👥 **Łącznie osób w kolejce:** ${queue.length}\n\n`;
-
-            if (peopleAhead.length > 0) {
-                description += `⏳ **Osoby przed Tobą:**\n`;
-                for (let i = 0; i < peopleAhead.length; i++) {
-                    const person = peopleAhead[i];
-                    const member = await this.client.users.fetch(person.userId);
-                    description += `${i + 1}. ${member.tag} - \`${person.commandName}\`\n`;
-                }
-            }
-
-            description += `\n💡 **Dostaniesz powiadomienie gdy będzie Twoja kolej.**`;
-
-            const user = await this.client.users.fetch(userId);
-            await user.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('⏳ Jesteś w kolejce OCR')
-                    .setDescription(description)
-                    .setColor('#FFA500')
-                    .setTimestamp()
-                ]
-            });
-        } catch (error) {
-            logger.error(`[OCR-QUEUE] ❌ Błąd powiadomienia o kolejce:`, error.message);
-        }
-    }
-
-    /**
-     * Usuwa użytkownika z kolejki (anulowanie)
-     */
-    async removeFromOCRQueue(guildId, userId) {
-        // Usuń z kolejki
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-            const index = queue.findIndex(item => item.userId === userId);
-            if (index !== -1) {
-                queue.splice(index, 1);
-                logger.info(`[OCR-QUEUE] ➖ Usunięto ${userId} z kolejki OCR`);
-
-                if (queue.length === 0) {
-                    this.waitingQueue.delete(guildId);
-                }
-
-                // Aktualizuj wyświetlanie kolejki
-                await this.updateQueueDisplay(guildId);
-                return true;
-            }
-        }
-
-        return false;
     }
 
 }

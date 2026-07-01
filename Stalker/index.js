@@ -291,7 +291,7 @@ client.once(Events.ClientReady, async () => {
     }
 
     await ocrService.initializeOCR();
-    ocrService.setClient(client); // Ustaw klienta dla systemu kolejkowania OCR
+    ocrService.setClient(client); // Ustaw klienta dla systemu równoległych sesji OCR
     await messageCleanupService.init();
     await raportCleanupService.initialize();
     await broadcastMessageService.initialize();
@@ -319,11 +319,11 @@ client.once(Events.ClientReady, async () => {
     // Rejestracja komend slash
     await registerSlashCommands(client);
 
-    // Inicjalizacja wyświetlania kolejki OCR
+    // Inicjalizacja panelu OCR (lista aktywnych sesji)
     try {
         await ocrService.initializeQueueDisplay(client);
     } catch (error) {
-        logger.error(`❌ Błąd inicjalizacji wyświetlania kolejki OCR: ${error.message}`);
+        logger.error(`❌ Błąd inicjalizacji panelu OCR: ${error.message}`);
     }
 
     // Sprawdź i upewnij się, że wiadomość o urlopach jest ostatnia na kanale
@@ -989,12 +989,12 @@ client.on(Events.MessageCreate, async (message) => {
         }
     }
 
-    // Automatyczne czyszczenie kanału kolejki - usuń wszystkie wiadomości od użytkowników
+    // Automatyczne czyszczenie kanału panelu OCR - usuń wszystkie wiadomości od użytkowników
     const queueChannelId = '1437122516974829679';
     if (message.channelId === queueChannelId && !message.author.bot) {
         try {
             await message.delete();
-            logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału kolejki`);
+            logger.info(`[QUEUE-CLEANUP] 🧹 Usunięto wiadomość od ${message.author.tag} z kanału panelu OCR`);
         } catch (error) {
             // Ignoruj błąd Unknown Message (10008) - wiadomość została już usunięta przez inny proces
             if (error.code === 10008) {

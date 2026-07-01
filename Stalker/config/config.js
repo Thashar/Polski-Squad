@@ -170,7 +170,7 @@ module.exports = {
         cooldownHours: 6
     },
 
-    // Kanał wyświetlania kolejki OCR
+    // Kanał panelu OCR (aktywne sesje)
     queueChannelId: '1437122516974829679',
 
     // Kanał skanowania ekwipunku (Core Stock)

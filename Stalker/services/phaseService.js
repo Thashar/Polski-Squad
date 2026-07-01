@@ -16,322 +16,6 @@ class PhaseService {
         this.client = client;
         this.activeSessions = new Map(); // sessionId → session data
         this.tempDir = path.join(__dirname, '..', 'temp', 'phase1');
-        this.activeProcessing = new Map(); // guildId → userId (kto obecnie przetwarza)
-        this.waitingQueue = new Map(); // guildId → [{userId, addedAt}] (uporządkowana kolejka FIFO)
-        this.queueReservation = new Map(); // guildId → {userId, expiresAt, timeout} (rezerwacja dla pierwszej osoby)
-    }
-
-    /**
-     * Sprawdza czy ktoś obecnie przetwarza w danym guild
-     */
-    isProcessingActive(guildId) {
-        return this.activeProcessing.has(guildId);
-    }
-
-    /**
-     * Pobiera ID użytkownika który obecnie przetwarza
-     */
-    getActiveProcessor(guildId) {
-        return this.activeProcessing.get(guildId);
-    }
-
-    /**
-     * Ustawia aktywne przetwarzanie
-     */
-    setActiveProcessing(guildId, userId) {
-        this.activeProcessing.set(guildId, userId);
-        logger.info(`[PHASE1] 🔒 Użytkownik ${userId} zablokował przetwarzanie dla guild ${guildId}`);
-    }
-
-    /**
-     * Dodaje użytkownika do kolejki czekających
-     */
-    async addToWaitingQueue(guildId, userId) {
-        if (!this.waitingQueue.has(guildId)) {
-            this.waitingQueue.set(guildId, []);
-        }
-
-        const queue = this.waitingQueue.get(guildId);
-
-        // Sprawdź czy użytkownik już jest w kolejce
-        if (queue.find(item => item.userId === userId)) {
-            logger.warn(`[QUEUE] ⚠️ Użytkownik ${userId} jest już w kolejce dla guild ${guildId}`);
-            return;
-        }
-
-        queue.push({ userId, addedAt: Date.now() });
-        const position = queue.length;
-
-        logger.info(`[QUEUE] ➕ Użytkownik ${userId} dodany do kolejki (pozycja: ${position}) dla guild ${guildId}`);
-
-    }
-
-    /**
-     * Usuwa aktywne przetwarzanie i powiadamia czekających
-     */
-    async clearActiveProcessing(guildId) {
-        this.activeProcessing.delete(guildId);
-        logger.info(`[PHASE] 🔓 Odblokowano przetwarzanie dla guild ${guildId}`);
-
-        // Sprawdź czy są osoby w kolejce
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-
-            if (queue.length > 0) {
-                // Pobierz pierwszą osobę z kolejki
-                const nextPerson = queue[0];
-                logger.info(`[QUEUE] 📢 Następna osoba w kolejce: ${nextPerson.userId}`);
-
-                // Stwórz rezerwację na 5 minut
-                await this.createQueueReservation(guildId, nextPerson.userId);
-
-                // Powiadom pozostałe osoby w kolejce o zmianie pozycji
-                for (let i = 1; i < queue.length; i++) {
-                    await this.notifyQueuePosition(guildId, queue[i].userId, i);
-                }
-            } else {
-                // Brak osób w kolejce - wyczyść
-                this.waitingQueue.delete(guildId);
-            }
-        }
-    }
-
-    /**
-     * Tworzy rezerwację dla pierwszej osoby w kolejce (5 min)
-     */
-    async createQueueReservation(guildId, userId) {
-        // Wyczyść poprzednią rezerwację jeśli istnieje
-        if (this.queueReservation.has(guildId)) {
-            const oldReservation = this.queueReservation.get(guildId);
-            if (oldReservation.timeout) {
-                clearTimeout(oldReservation.timeout);
-            }
-        }
-
-        const expiresAt = Date.now() + (3 * 60 * 1000); // 3 minuty
-
-        // Timeout który usuwa rezerwację i powiadamia następną osobę
-        const timeout = setTimeout(async () => {
-            logger.warn(`[QUEUE] ⏰ Rezerwacja wygasła dla użytkownika ${userId}`);
-            await this.expireReservation(guildId, userId);
-        }, 3 * 60 * 1000);
-
-        this.queueReservation.set(guildId, { userId, expiresAt, timeout });
-
-        // Powiadom użytkownika że może użyć komendy
-        try {
-            const user = await this.client.users.fetch(userId);
-            const expiryTimestamp = Math.floor(expiresAt / 1000);
-            await user.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ Twoja kolej!')
-                    .setDescription(`Możesz teraz użyć komendy \`/faza1\` lub \`/faza2\`.\n\n⏱️ Masz czas do: <t:${expiryTimestamp}:R>\n\n⚠️ **Jeśli nie użyjesz komendy w ciągu 3 minut, Twoja kolej przepadnie.**`)
-                    .setColor('#00FF00')
-                    .setTimestamp()
-                ]
-            });
-            logger.info(`[QUEUE] ✅ Powiadomiono użytkownika ${userId} o jego kolejce`);
-        } catch (error) {
-            logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId}:`, error.message);
-        }
-    }
-
-    /**
-     * Wygasa rezerwację i przechodzi do następnej osoby
-     */
-    async expireReservation(guildId, userId) {
-        // Usuń rezerwację
-        this.queueReservation.delete(guildId);
-
-        // Usuń użytkownika z kolejki
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-            const index = queue.findIndex(item => item.userId === userId);
-
-            if (index !== -1) {
-                queue.splice(index, 1);
-                logger.info(`[QUEUE] ➖ Użytkownik ${userId} usunięty z kolejki (timeout)`);
-
-                // Powiadom użytkownika że stracił kolejkę
-                try {
-                    const user = await this.client.users.fetch(userId);
-                    await user.send({
-                        embeds: [new EmbedBuilder()
-                            .setTitle('⏰ Czas minął')
-                            .setDescription('Nie użyłeś komendy w ciągu 3 minut. Twoja kolej przepadła.\n\nMożesz użyć komendy ponownie, aby dołączyć na koniec kolejki.')
-                            .setColor('#FF0000')
-                            .setTimestamp()
-                        ]
-                    });
-                } catch (error) {
-                    logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId} o wygaśnięciu:`, error.message);
-                }
-            }
-
-            // Powiadom następną osobę jeśli jest
-            if (queue.length > 0) {
-                const nextPerson = queue[0];
-                await this.createQueueReservation(guildId, nextPerson.userId);
-
-                // WYŁĄCZONE: Powiadamianie pozostałych osób o zmianie pozycji
-            } else {
-                this.waitingQueue.delete(guildId);
-            }
-        }
-    }
-
-    /**
-     * Powiadamia użytkownika o jego pozycji w kolejce
-     */
-    async notifyQueuePosition(guildId, userId, position) {
-        try {
-            const guild = await this.client.guilds.fetch(guildId);
-            const user = await this.client.users.fetch(userId);
-            const activeUserId = this.activeProcessing.get(guildId);
-
-            let description = `Twoja pozycja w kolejce: **${position}**\n\n`;
-
-            if (activeUserId) {
-                try {
-                    const activeMember = await guild.members.fetch(activeUserId);
-                    description += `🔒 Obecnie używa: **${activeMember.displayName}**\n`;
-                } catch (err) {
-                    description += `🔒 Obecnie system jest zajęty\n`;
-                }
-            }
-
-            // Dodaj informację o osobach przed użytkownikiem
-            if (this.waitingQueue.has(guildId)) {
-                const queue = this.waitingQueue.get(guildId);
-                const peopleAhead = queue.slice(0, position - 1);
-
-                if (peopleAhead.length > 0) {
-                    description += `\n👥 Przed Tobą w kolejce:\n`;
-                    for (let i = 0; i < Math.min(peopleAhead.length, 3); i++) {
-                        try {
-                            const personMember = await guild.members.fetch(peopleAhead[i].userId);
-                            description += `${i + 1}. **${personMember.displayName}**\n`;
-                        } catch (err) {
-                            description += `${i + 1}. *Użytkownik*\n`;
-                        }
-                    }
-
-                    if (peopleAhead.length > 3) {
-                        description += `... i ${peopleAhead.length - 3} innych\n`;
-                    }
-                }
-            }
-
-            description += `\n✅ Dostaniesz powiadomienie, gdy będzie Twoja kolej.`;
-
-            await user.send({
-                embeds: [new EmbedBuilder()
-                    .setTitle('📋 Jesteś w kolejce')
-                    .setDescription(description)
-                    .setColor('#FFA500')
-                    .setTimestamp()
-                ]
-            });
-
-            logger.info(`[QUEUE] 📬 Powiadomiono użytkownika ${userId} o pozycji ${position}`);
-        } catch (error) {
-            logger.error(`[QUEUE] ❌ Nie udało się powiadomić użytkownika ${userId} o pozycji:`, error.message);
-        }
-    }
-
-    /**
-     * Sprawdza czy użytkownik ma rezerwację
-     */
-    hasReservation(guildId, userId) {
-        if (!this.queueReservation.has(guildId)) {
-            return false;
-        }
-        const reservation = this.queueReservation.get(guildId);
-        return reservation.userId === userId && reservation.expiresAt > Date.now();
-    }
-
-    /**
-     * Pobiera informacje o kolejce dla użytkownika (do wyświetlenia w kanale)
-     */
-    async getQueueInfo(guildId, userId) {
-        const guild = await this.client.guilds.fetch(guildId);
-        const activeUserId = this.activeProcessing.get(guildId);
-        const queue = this.waitingQueue.get(guildId) || [];
-        const userIndex = queue.findIndex(item => item.userId === userId);
-        const position = userIndex + 1;
-
-        let description = '';
-
-        // Informacja o osobie obecnie używającej
-        if (activeUserId) {
-            try {
-                const activeMember = await guild.members.fetch(activeUserId);
-                description += `🔒 **Obecnie używa:** ${activeMember.displayName}\n\n`;
-            } catch (err) {
-                description += `🔒 **System jest obecnie zajęty**\n\n`;
-            }
-        }
-
-        // Pozycja użytkownika
-        description += `📋 **Twoja pozycja w kolejce:** ${position}\n`;
-        description += `👥 **Łącznie osób w kolejce:** ${queue.length}\n\n`;
-
-        // Lista osób przed użytkownikiem
-        const peopleAhead = queue.slice(0, userIndex);
-        if (peopleAhead.length > 0) {
-            description += `**Osoby przed Tobą:**\n`;
-            const displayLimit = Math.min(peopleAhead.length, 3);
-
-            for (let i = 0; i < displayLimit; i++) {
-                try {
-                    const personMember = await guild.members.fetch(peopleAhead[i].userId);
-                    description += `${i + 1}. ${personMember.displayName}\n`;
-                } catch (err) {
-                    description += `${i + 1}. *Użytkownik*\n`;
-                }
-            }
-
-            if (peopleAhead.length > 3) {
-                description += `... i ${peopleAhead.length - 3} innych\n`;
-            }
-            description += `\n`;
-        }
-
-        description += `✅ **Dostaniesz powiadomienie na priv** gdy będzie Twoja kolej.`;
-
-        return { description, position, queueLength: queue.length };
-    }
-
-    /**
-     * Usuwa użytkownika z kolejki po użyciu komendy
-     */
-    removeFromQueue(guildId, userId) {
-        // Wyczyść rezerwację
-        if (this.queueReservation.has(guildId)) {
-            const reservation = this.queueReservation.get(guildId);
-            if (reservation.userId === userId) {
-                if (reservation.timeout) {
-                    clearTimeout(reservation.timeout);
-                }
-                this.queueReservation.delete(guildId);
-                logger.info(`[QUEUE] ✅ Usunięto rezerwację dla użytkownika ${userId}`);
-            }
-        }
-
-        // Usuń z kolejki
-        if (this.waitingQueue.has(guildId)) {
-            const queue = this.waitingQueue.get(guildId);
-            const index = queue.findIndex(item => item.userId === userId);
-
-            if (index !== -1) {
-                queue.splice(index, 1);
-                logger.info(`[QUEUE] ➖ Użytkownik ${userId} usunięty z kolejki (rozpoczął używanie)`);
-            }
-
-            if (queue.length === 0) {
-                this.waitingQueue.delete(guildId);
-            }
-        }
     }
 
     /**
@@ -402,7 +86,7 @@ class PhaseService {
             roleNicksSnapshotPath: null, // ścieżka do snapshotu nicków z roli
             isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia (blokuje anulowanie)
             cancelled: false, // flaga czy sesja została anulowana (do sprawdzania w pętli)
-            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR
         };
 
         this.activeSessions.set(sessionId, session);
@@ -539,13 +223,10 @@ class PhaseService {
             session.downloadedFiles = null;
         }
 
-        // Odblokuj przetwarzanie dla tego guild (ghost ping queue)
-        await this.clearActiveProcessing(session.guildId);
-
-        // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
+        // Zakończ sesję OCR (nie wpływa na sesje innych użytkowników)
         if (this.ocrService && session.guildId && session.userId) {
             await this.ocrService.endOCRSession(session.guildId, session.userId, true);
-            logger.info(`[PHASE${session.phase || 1}] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+            logger.info(`[PHASE${session.phase || 1}] 🔓 Zakończono sesję OCR dla użytkownika ${session.userId}`);
         }
 
         // Usuń sesję z mapy
@@ -1206,9 +887,9 @@ class PhaseService {
                 if (editError.code === 10008 || editError.message?.includes('Unknown Message')) {
                     logger.warn('[PHASE] ⚠️ Wiadomość postępu usunięta - kontynuuję przetwarzanie bez aktualizacji postępu');
                     // Nie przerywaj - index.js wyśle nową wiadomość po zakończeniu
-                // Interakcja wygasła - anuluj sesję i odblokuj kolejkę
+                // Interakcja wygasła - anuluj sesję
                 } else if (editError.code === 10015 || editError.message?.includes('Unknown Webhook') || editError.message?.includes('Invalid Webhook Token')) {
-                    logger.warn('[PHASE] ⏰ Interakcja wygasła, anuluję sesję i odblokowuję kolejkę');
+                    logger.warn('[PHASE] ⏰ Interakcja wygasła, anuluję sesję');
 
                     // Wyślij informację do kanału
                     try {
@@ -1227,9 +908,8 @@ class PhaseService {
                         logger.error('[PHASE] Nie udało się wysłać informacji o wygaśnięciu sesji:', channelError.message);
                     }
 
-                    // Wyczyść sesję i odblokuj przetwarzanie
+                    // Wyczyść sesję
                     await this.cleanupSession(session.sessionId);
-                    this.clearActiveProcessing(session.guildId);
 
                     return; // Przerwij przetwarzanie
                 } else {

@@ -358,7 +358,7 @@ class PunishmentService {
             createdAt: Date.now(),
             timeout: null,
             publicInteraction: null,
-            ocrExpiresAt // timestamp wygaśnięcia sesji OCR (z kolejki OCR)
+            ocrExpiresAt // timestamp wygaśnięcia sesji OCR
         };
 
         this.activeSessions.set(sessionId, session);
@@ -434,7 +434,7 @@ class PunishmentService {
         // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
         if (this.ocrService && session.guildId && session.userId) {
             await this.ocrService.endOCRSession(session.guildId, session.userId, true);
-            logger.info(`[PUNISH] 🔓 Zwolniono kolejkę OCR dla użytkownika ${session.userId}`);
+            logger.info(`[PUNISH] 🔓 Zakończono sesję OCR dla użytkownika ${session.userId}`);
         }
 
         this.activeSessions.delete(sessionId);
