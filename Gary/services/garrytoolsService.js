@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const ProxyService = require('./proxyService');
+const CaptchaSolverService = require('./captchaSolverService');
 
 class GarrytoolsService {
     constructor(config, logger) {
@@ -8,6 +9,7 @@ class GarrytoolsService {
         this.logger = logger;
         this.baseUrl = 'https://garrytools.com/lunar/';
         this.proxyService = new ProxyService(config, logger);
+        this.captchaSolverService = new CaptchaSolverService(config, logger);
         // GarrytoolsService ALWAYS uses proxy for lunar mine operations
         this.useProxy = true;
         
@@ -78,107 +80,25 @@ class GarrytoolsService {
         }
     }
 
-    async getGroupId(guildIds) {
+    // Formularz "Lunar Details" jest chroniony przez Google reCAPTCHA, więc Group ID
+    // pobieramy przez prawdziwą przeglądarkę (Puppeteer), a wyzwanie obrazkowe jest
+    // przekazywane do rozwiązania administratorowi na Discordzie.
+    // context: { interaction, channel, invokerId } - z interaction wyzwanie jest ephemeral (widoczne tylko dla invokera)
+    async getGroupId(guildIds, context) {
         if (!Array.isArray(guildIds) || guildIds.length !== 4) {
             throw new Error('Exactly 4 Guild IDs are required');
         }
-        
-        this.logger.info(`🔍 Processing Guild IDs: ${guildIds.join(', ')}`);
-        
-        try {
-            // Use proxy service for requests
-            const mainPageResponse = await this.makeRequest(this.baseUrl);
-            const $ = cheerio.load(mainPageResponse.data);
-            
-            const forms = $('form');
-            if (forms.length === 0) {
-                throw new Error('No form found on Lunar Details page');
-            }
-            
-            const inputs = $('input[type!="hidden"]');
-            const fieldNames = [];
-            inputs.each((i, input) => {
-                const name = $(input).attr('name');
-                if (name) {
-                    fieldNames.push(name);
-                }
-            });
-            
-            if (fieldNames.length < 4) {
-                throw new Error(`Found only ${fieldNames.length} form fields, required 4`);
-            }
-            
-            const formData = new URLSearchParams();
-            for (let i = 0; i < 4 && i < fieldNames.length; i++) {
-                formData.append(fieldNames[i], guildIds[i].toString());
-            }
-            
-            $('input[type="hidden"]').each((i, element) => {
-                const name = $(element).attr('name');
-                const value = $(element).attr('value');
-                if (name && value) {
-                    formData.append(name, value);
-                }
-            });
-            
-            const csrfToken = $('meta[name="csrf-token"]').attr('content');
-            if (csrfToken) {
-                formData.append('_token', csrfToken);
-            }
-            
-            const response = await this.makePostRequest(this.baseUrl, formData, {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Referer': this.baseUrl,
-                    'Origin': 'https://garrytools.com'
-                },
-                maxRedirects: 10,
-                validateStatus: (status) => status < 500
-            });
+        if (!context || (!context.interaction && !context.channel)) {
+            throw new Error('interaction or channel is required to relay the reCAPTCHA challenge for solving');
+        }
 
-            const finalUrl = response.request.res.responseUrl || response.config.url;
-            let groupId = this.extractGroupIdFromUrl(finalUrl);
-            if (groupId) {
-                return groupId;
-            }
-            
-            if (response.headers.location) {
-                groupId = this.extractGroupIdFromUrl(response.headers.location);
-                if (groupId) {
-                    return groupId;
-                }
-            }
-            
-            const responseHtml = cheerio.load(response.data);
-            const detailLink = responseHtml('a[href*="/detail/"]').first().attr('href');
-            if (detailLink) {
-                groupId = this.extractGroupIdFromUrl(detailLink);
-                if (groupId) {
-                    return groupId;
-                }
-            }
-            
-            const tempId = this.generateTempGroupId(guildIds);
-            return tempId;
-            
+        this.logger.info(`🔍 Processing Guild IDs: ${guildIds.join(', ')}`);
+
+        try {
+            return await this.captchaSolverService.solveLunarDetailsGroupId(guildIds, context);
         } catch (error) {
             throw new Error(`Error retrieving Group ID: ${error.message}`);
         }
-    }
-
-    extractGroupIdFromUrl(text) {
-        if (!text) return null;
-        const match = text.match(/detail\/(\d{6})/);
-        return match ? match[1] : null;
-    }
-
-    generateTempGroupId(guildIds) {
-        const combined = guildIds.join('');
-        let hash = 0;
-        for (let i = 0; i < combined.length; i++) {
-            hash = ((hash << 5) - hash + combined.charCodeAt(i)) & 0xffffff;
-        }
-        return String(Math.abs(hash) % 900000 + 100000);
     }
 
     async fetchGroupDetails(groupId) {
@@ -541,42 +461,6 @@ class GarrytoolsService {
         if (!value || value === '-') return 0;
         const cleanValue = value.toString().replace(/[^\d]/g, '');
         return parseInt(cleanValue) || 0;
-    }
-
-    async processMultipleGuilds(guildIds) {
-        try {
-            this.logger.info(`🔍 Processing Guild IDs: ${guildIds.join(', ')}`);
-            
-            const groupId = await this.getGroupId(guildIds);
-            
-            const result = await this.fetchGroupDetails(groupId);
-            this.logger.info(`📊 Found ${result.guilds.length} guilds`);
-            
-            return result.guilds;
-            
-        } catch (error) {
-            this.logger.error('Error processing guilds:', error.message);
-            throw new Error(`Multiple guilds processing failed: ${error.message}`);
-        }
-    }
-
-    async analyzeSingleGuild(userGuildId) {
-        this.logger.info(`🔍 Analyzing Guild ID: ${userGuildId} with substitution logic`);
-
-        try {
-            const fixedGuilds = [42576, 42566, 42575, 42560];
-            const modifiedGuilds = this.modifyGuildIds(userGuildId, fixedGuilds);
-
-            const groupId = await this.getGroupId(modifiedGuilds);
-
-            const result = await this.fetchGroupDetails(groupId);
-            this.logger.info(`📊 Found ${result.guilds.length} guilds`);
-
-            return result;
-        } catch (error) {
-            this.logger.error(`❌ Error during Guild ID ${userGuildId} analysis:`, error.message);
-            throw new Error(`Guild ID ${userGuildId} analysis failed: ${error.message}`);
-        }
     }
 
     async getRivalsData(clanId) {

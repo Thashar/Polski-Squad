@@ -1,6 +1,6 @@
 ### 🎮 Gary Bot
 
-**10 Systemów:**
+**11 Systemów:**
 1. **Lunar Mine** - `apiService.js`: Fetch garrytools.com/lunar, cheerio parse, 4 gildie, członkowie sorted by attack
 2. **Wyszukiwanie** - `guildSearchService.js`: Fuzzy matching (exact/startsWith/contains/levenshtein), tryby TOP500/GLOBAL
 3. **Cache** - `dataService.js`: Persistent JSON (clans, rank, members), refresh 24h/manual/start
@@ -15,9 +15,10 @@
 11. **Wykresy historii** - `generateMultiClanHistoryChart` i `generateGuildMetricChart` zawierają delta wartości (zmiana względem poprzedniego tygodnia) nad każdym punktem: zielony dla wzrostu (+N), czerwony dla spadku (-N)
 12. **Paginacja członków LME** - `/lunarmine` wyświetla wszystkich członków w jednym embed z paginacją publiczną (każda strona = jeden klan); przyciski `lme_prev::ID`, `lme_next::ID` dostępne dla wszystkich bez sprawdzania uprawnień
 13. **Headless browser fallback** - `browserFetchService.js`: gdy `clanAjaxService.fetchClanData()` nie znajdzie wierszy tabeli przez zwykłe zapytanie HTTP/proxy (strona `rank/clans` renderowana przez JS, blokowana przez Cloudflare 403 na wszystkich proxy i połączeniu bezpośrednim), bot uruchamia headless Chromium (`puppeteer`), realnie renderuje stronę i dopiero z tak uzyskanego HTML parsuje tabelę (`parseClansFromHtml`, współdzielone z zapytaniem HTTP). Dopiero gdy fallback też nie znajdzie danych, rzucany jest `isJavaScriptError` obsługiwany w `interactionHandlers.js`
+14. **Captcha relay (Lunar Details)** - `captchaSolverService.js`: formularz "Lunar Details" na garrytools.com (używany przez `getGroupId()` dla `/lunarmine`, `/analyse`, `/lme-snapshot`, przycisk szczegółów w `/rivals`) jest chroniony Google reCAPTCHA v2 (checkbox + wyzwanie obrazkowe 3×3 lub 4×4, escaluje natychmiast po kliknięciu checkboxa). Bot uruchamia Puppeteer, wypełnia 4 Guild ID, klika checkbox, a wyzwanie obrazkowe przekazuje do rozwiązania: zrzut ekranu widgetu (`iframe[src*="bframe"]`) numerowany przez sharp+SVG na podstawie prawdziwych bounding boxów kafelków (`.rc-imageselect-tile`, odporne na wysokość nagłówka/stopki), przyciski 1-N + ✅ Zatwierdź/❌ Anuluj (max 5 rows/25 przycisków - limit Discorda). Widoczność zależy od `context` przekazanego do `getGroupId(guildIds, context)`: `{ interaction }` → wyzwanie wysyłane jako **ephemeral followUp** (widoczne tylko dla wywołującego, używane przez `/lunarmine`, `/analyse`, przycisk `/rivals`, ręczny `/lme-snapshot`); `{ channel, invokerId }` → zwykła wiadomość na kanale (używane tylko przez cotygodniowy cron, który nie ma interakcji Discorda) - cron wysyła prośbę na dedykowany kanał admina `adminCaptchaChannelId` (env `GARY_ADMIN_CAPTCHA_CHANNEL_ID`, domyślnie `1263240344871370804`), pobierany przez `client.channels.fetch()` w `index.js`, oddzielny od wątku wyników; jeśli fetch się nie powiedzie, spada z powrotem na wątek wyników. Do 6 rund, deadline 100s (token reCAPTCHA ważny ~2 min od kliknięcia checkboxa), 90s na rundę. Po rozwiązaniu klika "Show Details" i wyciąga prawdziwe Group ID z URL przekierowania (`extractGroupIdFromUrl`) - dalsza część (`fetchGroupDetails`) działa jak wcześniej przez axios+proxy, bo strony `/detail/{id}` nie mają captchy. Cron nie gwarantuje, że ktoś zdąży rozwiązać captchę w porę - w takim wypadku tylko snapshot TOP500 (osobny endpoint bez captchy) i tak się zapisze
 
 **Komendy:** `/lunarmine`, `/search`, `/analyse`, `/player`, `/ee`, `/refresh`, `/proxy-test`, `/proxy-stats`, `/proxy-refresh`, `/lme-snapshot` (admin — ręczny snapshot + zapis historii, podmieniona `/test`), `/rivals` (wyszukiwanie rywali na podstawie Guild ID)
-**Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_FILE, PROXY_LIST, WEBSHARE_URL
+**Env:** TOKEN, CLIENT_ID, ALLOWED_CHANNEL_ID, ADMIN_CAPTCHA_CHANNEL_ID, ADMIN_ROLES, PROXY_ENABLED, PROXY_STRATEGY, PROXY_FILE, PROXY_LIST, WEBSHARE_URL
 
 ---
 
@@ -29,6 +30,8 @@ GARY_TOKEN=bot_token_here
 GARY_CLIENT_ID=client_id
 GARY_ALLOWED_CHANNEL_ID=channel1,channel2
 GARY_ADMIN_ROLES=role1,role2
+# Kanał admina na który trafia prośba o rozwiązanie captchy przy cotygodniowym cronie (brak interakcji = brak ephemeral)
+GARY_ADMIN_CAPTCHA_CHANNEL_ID=channel_id
 
 # Proxy (opcjonalne)
 GARY_PROXY_ENABLED=true

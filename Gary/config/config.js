@@ -22,10 +22,14 @@ if (missingVars.length > 0) {
 module.exports = {
     token: process.env.GARY_TOKEN,
     clientId: process.env.GARY_CLIENT_ID,
-    allowedChannelIds: process.env.GARY_ALLOWED_CHANNEL_ID ? 
-        process.env.GARY_ALLOWED_CHANNEL_ID.split(',').map(id => id.trim()) : 
+    allowedChannelIds: process.env.GARY_ALLOWED_CHANNEL_ID ?
+        process.env.GARY_ALLOWED_CHANNEL_ID.split(',').map(id => id.trim()) :
         [],
-    
+
+    // Kanał, na który trafia prośba o rozwiązanie captchy podczas cotygodniowego crona
+    // (Środa 18:45) - tam nie ma interakcji Discorda, więc nie może być ephemeral
+    adminCaptchaChannelId: process.env.GARY_ADMIN_CAPTCHA_CHANNEL_ID || '1263240344871370804',
+
     // Lunar Mine Settings
     lunarMineSettings: {
         autoRefresh: true,

@@ -232,8 +232,19 @@ cron.schedule('45 18 * * 3', async () => {
         logger.info(`📅 ✅ Thread cleared, deleted ${deletedTotal} messages`);
         logger.info('📅 Running scheduled analysis...');
 
+        // Ten cron nie ma powiązanej interakcji Discorda, więc wyzwanie reCAPTCHA nie może być
+        // ephemeral - trafia zwykłą wiadomością na dedykowany kanał admina zamiast do wątku wyników
+        let captchaChannel = null;
+        if (config.adminCaptchaChannelId) {
+            try {
+                captchaChannel = await client.channels.fetch(config.adminCaptchaChannelId);
+            } catch (fetchError) {
+                logger.warn(`📅 ⚠️ Could not fetch admin captcha channel (${config.adminCaptchaChannelId}): ${fetchError.message}`);
+            }
+        }
+
         // Run the scheduled Lunar Mine analysis
-        await interactionHandler.runScheduledLunarMine(thread, guildIds);
+        await interactionHandler.runScheduledLunarMine(thread, guildIds, { captchaChannel });
 
         logger.info('📅 ========================================');
         logger.info('📅 ✅ Weekly Lunar Mine analysis completed');

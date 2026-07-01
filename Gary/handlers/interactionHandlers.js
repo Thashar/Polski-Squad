@@ -353,11 +353,11 @@ class InteractionHandler {
         try {
             this.logger.info(`Starting Lunar Mine Expedition analysis for Guild IDs: ${guildIds.join(', ')}`);
             
-            const groupId = await this.garrytoolsService.getGroupId(guildIds);
+            const groupId = await this.garrytoolsService.getGroupId(guildIds, { interaction });
             this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
-            
+
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
-            
+
             if (!details.guilds || details.guilds.length === 0) {
                 await interaction.editReply('❌ No Lunar Mine Expedition data found for the provided Guild IDs.');
                 return;
@@ -452,9 +452,9 @@ class InteractionHandler {
             
             const modifiedGuildIds = this.garrytoolsService.modifyGuildIds(userGuildId, this.FIXED_GUILDS);
             
-            const groupId = await this.garrytoolsService.getGroupId(modifiedGuildIds);
+            const groupId = await this.garrytoolsService.getGroupId(modifiedGuildIds, { interaction });
             this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
-            
+
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
 
             const guild = details.guilds.find(g => g.guildId === userGuildId);
@@ -825,14 +825,20 @@ class InteractionHandler {
      * Run scheduled Lunar Mine analysis and send results to a channel
      * @param {Object} channel - Discord channel/thread to send results to
      * @param {Array} guildIds - Array of guild IDs to analyze
+     * @param {Object} [options] - { interaction } for ephemeral captcha (admin-triggered /lme-snapshot),
+     *                              or { captchaChannel } for a plain (non-ephemeral) captcha post - used by the
+     *                              unattended Wednesday cron, which has no interaction to reply to
      */
-    async runScheduledLunarMine(channel, guildIds) {
+    async runScheduledLunarMine(channel, guildIds, options = {}) {
         try {
             this.logger.info(`📅 Running scheduled Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
             this.logger.info(`📅 Target channel: ${channel.name} (${channel.id})`);
 
             this.logger.info('📅 Step 1: Getting Group ID from Garrytools...');
-            const groupId = await this.garrytoolsService.getGroupId(guildIds);
+            const captchaContext = options.interaction
+                ? { interaction: options.interaction }
+                : { channel: options.captchaChannel || channel, invokerId: options.invokerId || null };
+            const groupId = await this.garrytoolsService.getGroupId(guildIds, captchaContext);
             this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
 
             this.logger.info('📅 Step 2: Fetching group details...');
@@ -1497,7 +1503,7 @@ class InteractionHandler {
 
             // Run the scheduled Lunar Mine analysis (fetches data, saves guild/player snapshots, posts charts)
             this.logger.info('📸 LME-SNAPSHOT: Running Lunar Mine analysis...');
-            await this.runScheduledLunarMine(thread, guildIds);
+            await this.runScheduledLunarMine(thread, guildIds, { interaction });
 
             // Also save TOP500 clan history snapshot (normally done by separate 18:46 cron)
             await interaction.editReply(`✅ Step 3/3: Analysis done. Saving TOP500 clan history snapshot...`);
@@ -2743,7 +2749,7 @@ class InteractionHandler {
 
             // Use the same logic as /analyse - fetch group details
             const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, this.FIXED_GUILDS);
-            const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds);
+            const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds, { interaction });
             const details = await this.garrytoolsService.fetchGroupDetails(groupId);
 
             const guild = details.guilds.find(g => g.guildId === guildId);
