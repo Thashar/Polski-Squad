@@ -9,6 +9,17 @@ const logger = createBotLogger('Stalker');
 
 const confirmationData = new Map();
 
+/**
+ * Oznacza embed autorem sesji, żeby przy kilku równoległych sesjach OCR na tym samym
+ * kanale było od razu widać, czyj jest dany panel.
+ */
+function setSessionOwnerAuthor(embed, member, user) {
+    embed.setAuthor({
+        name: `Sesja: ${member?.displayName || user.username}`,
+        iconURL: user.displayAvatarURL()
+    });
+}
+
 async function handleInteraction(interaction, sharedState, config) {
     const { client, databaseService, ocrService, punishmentService, reminderService, phaseService } = sharedState;
 
@@ -215,10 +226,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
 
             // Pokaż embed z prośbą o zdjęcia
             const awaitingEmbed = punishmentService.createAwaitingImagesEmbed();
-            await inter.editReply({
+            setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
+            const replyMessage = await inter.editReply({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
+            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
 
             logger.info(`[PUNISH] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
         };
@@ -306,10 +319,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
 
             // Pokaż embed z prośbą o zdjęcia
             const awaitingEmbed = reminderService.createAwaitingImagesEmbed();
-            await inter.editReply({
+            setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
+            const replyMessage = await inter.editReply({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
+            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
 
             logger.info(`[REMIND] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
         };
@@ -654,6 +669,32 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
 async function handleButton(interaction, sharedState) {
     const { config, databaseService, punishmentService, phaseService } = sharedState;
 
+    // ============ WERYFIKACJA WŁAŚCICIELA SESJI (publiczne panele /punish, /remind, /faza1, /faza2) ============
+    // Kilka osób może mieć równoległe sesje OCR na tym samym kanale. Sprawdzenie samego
+    // "czy klikający ma jakąkolwiek aktywną sesję" NIE WYSTARCZY - trzeba zweryfikować,
+    // że kliknięta wiadomość faktycznie należy do JEGO sesji, inaczej osoba z własną
+    // aktywną sesją mogłaby przypadkowo nadpisać panel innej osoby.
+    const sessionOwnerPrefixes = ['punish_', 'remind_', 'phase1_', 'phase2_'];
+    if (interaction.guildId && sessionOwnerPrefixes.some(prefix => interaction.customId.startsWith(prefix))) {
+        const ocrSession = sharedState.ocrService.getActiveOCRUser(interaction.guildId, interaction.user.id);
+
+        if (!ocrSession) {
+            await interaction.reply({
+                content: '❌ Nie masz aktywnej sesji OCR. To panel innej osoby.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        if (ocrSession.messageId && interaction.message?.id !== ocrSession.messageId) {
+            await interaction.reply({
+                content: '❌ To nie jest Twoja sesja OCR.',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+    }
+
     if (interaction.customId === GIFTCODE_BUTTON_ID) {
         await handleGiftcodeAddIdButton(interaction, sharedState);
         return;
@@ -868,6 +909,7 @@ async function handleButton(interaction, sharedState) {
         sharedState.reminderService.refreshSessionTimeout(session.sessionId);
 
         const awaitingEmbed = sharedState.reminderService.createAwaitingImagesEmbed();
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
 
         await interaction.update({
             embeds: [awaitingEmbed.embed],
@@ -1427,6 +1469,7 @@ async function handleButton(interaction, sharedState) {
         sharedState.punishmentService.refreshSessionTimeout(session.sessionId);
 
         const awaitingEmbed = sharedState.punishmentService.createAwaitingImagesEmbed();
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
 
         await interaction.update({
             embeds: [awaitingEmbed.embed],
@@ -3675,10 +3718,12 @@ async function handlePhase1Command(interaction, sharedState) {
                 );
 
                 if (warningEmbed) {
-                    await inter.editReply({
+                    setSessionOwnerAuthor(warningEmbed.embed, inter.member, inter.user);
+                    const replyMessage = await inter.editReply({
                         embeds: [warningEmbed.embed],
                         components: [warningEmbed.row]
                     });
+                    ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
                     return;
                 }
             }
@@ -3698,10 +3743,12 @@ async function handlePhase1Command(interaction, sharedState) {
 
             // Pokaż embed z prośbą o zdjęcia (PUBLICZNY)
             const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
-            await inter.editReply({
+            setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
+            const replyMessage = await inter.editReply({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
+            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
 
             logger.info(`[PHASE1] ✅ Sesja utworzona, czekam na zdjęcia od ${inter.user.tag}`);
         };
@@ -3784,6 +3831,7 @@ async function handlePhase1OverwriteButton(interaction, sharedState) {
     session.clan = userClan;
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
+    setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
     await interaction.update({
         embeds: [awaitingEmbed.embed],
         components: [awaitingEmbed.row]
@@ -3838,6 +3886,7 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
         phaseService.refreshSessionTimeout(session.sessionId);
 
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed();
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
         await interaction.update({
             embeds: [awaitingEmbed.embed],
             components: [awaitingEmbed.row]
@@ -4370,10 +4419,12 @@ async function handlePhase2Command(interaction, sharedState) {
                 );
 
                 if (warningEmbed) {
-                    await inter.editReply({
+                    setSessionOwnerAuthor(warningEmbed.embed, inter.member, inter.user);
+                    const replyMessage = await inter.editReply({
                         embeds: [warningEmbed.embed],
                         components: [warningEmbed.row]
                     });
+                    ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
                     return;
                 }
             }
@@ -4393,10 +4444,12 @@ async function handlePhase2Command(interaction, sharedState) {
 
             // Pokaż embed z prośbą o zdjęcia dla rundy 1 (PUBLICZNY)
             const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
-            await inter.editReply({
+            setSessionOwnerAuthor(awaitingEmbed.embed, inter.member, inter.user);
+            const replyMessage = await inter.editReply({
                 embeds: [awaitingEmbed.embed],
                 components: [awaitingEmbed.row]
             });
+            ocrService.setSessionMessageId(guildId, userId, replyMessage.id);
 
             logger.info(`[PHASE2] ✅ Sesja utworzona, czekam na zdjęcia z rundy 1/3 od ${inter.user.tag}`);
         };
@@ -4475,6 +4528,7 @@ async function handlePhase2OverwriteButton(interaction, sharedState) {
     session.clan = userClan;
 
     const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, 1);
+    setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
     await interaction.update({
         embeds: [awaitingEmbed.embed],
         components: [awaitingEmbed.row]
@@ -4520,6 +4574,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         phaseService.refreshSessionTimeout(session.sessionId);
 
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
         await interaction.update({
             embeds: [awaitingEmbed.embed],
             components: [awaitingEmbed.row]
@@ -5001,6 +5056,8 @@ async function showPhase2FinalSummaryNewMessage(channel, session, phaseService, 
         // Zaktualizuj session.publicInteraction na nową wiadomość
         session.publicInteraction = newMessage;
         session.stage = 'final_confirmation';
+        // Nowa wiadomość = nowe ID do weryfikacji właściciela sesji przy kolejnych kliknięciach
+        ocrService.setSessionMessageId(session.guildId, session.userId, newMessage.id);
 
         logger.info(`[PHASE2] ✅ Finalne podsumowanie wysłane jako nowa wiadomość: ${newMessage.id}`);
 
@@ -5119,6 +5176,7 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
 
         // Wyślij NOWĄ wiadomość do kanału dla następnej rundy
         const awaitingEmbed = phaseService.createAwaitingImagesEmbed(2, session.currentRound);
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
         const channel = await interaction.guild.channels.fetch(session.channelId);
         const newMessage = await channel.send({
             content: '',
@@ -5128,6 +5186,8 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
 
         // Zaktualizuj session.publicInteraction na nową wiadomość
         session.publicInteraction = newMessage;
+        // Nowa wiadomość = nowe ID do weryfikacji właściciela sesji przy kolejnych kliknięciach
+        ocrService.setSessionMessageId(interaction.guild.id, interaction.user.id, newMessage.id);
 
         logger.info(`[PHASE2] 🔄 Przechodzę do rundy ${session.currentRound}/3 (nowa wiadomość: ${newMessage.id})`);
     } else {
