@@ -1810,21 +1810,52 @@ class OCRService {
     }
 
     /**
-     * Usuwa wątek sesji po krótkim opóźnieniu (żeby użytkownik zdążył zobaczyć finalną wiadomość).
+     * Zapisuje ID systemowej wiadomości "X rozpoczął wątek: ..." na kanale macierzystym,
+     * żeby można ją było usunąć razem z wątkiem po zakończeniu sesji.
      */
-    deleteSessionThread(threadId, delayMs = 10000) {
+    setSessionSystemMessageId(guildId, userId, systemMessageId) {
+        const guildSessions = this.activeProcessing.get(guildId);
+        const active = guildSessions ? guildSessions.get(userId) : undefined;
+        if (active) {
+            active.systemMessageId = systemMessageId;
+        }
+    }
+
+    /**
+     * Usuwa wątek sesji (oraz systemową wiadomość "rozpoczął wątek" na kanale macierzystym)
+     * po krótkim opóźnieniu (żeby użytkownik zdążył zobaczyć finalną wiadomość).
+     */
+    deleteSessionThread(threadId, systemMessageId, delayMs = 10000) {
         if (!threadId) return;
         setTimeout(async () => {
+            let parentId = null;
             try {
                 if (!this.client) return;
                 const thread = await this.client.channels.fetch(threadId).catch(() => null);
                 if (thread) {
+                    parentId = thread.parentId;
                     await thread.delete();
                     logger.info(`[OCR] 🗑️ Usunięto wątek sesji: ${threadId}`);
                 }
             } catch (error) {
                 // Ignoruj - wątek mógł już zostać usunięty
                 logger.warn(`[OCR] ⚠️ Nie udało się usunąć wątku ${threadId}: ${error.message}`);
+            }
+
+            if (systemMessageId && parentId) {
+                try {
+                    const parentChannel = await this.client.channels.fetch(parentId).catch(() => null);
+                    if (parentChannel) {
+                        const systemMessage = await parentChannel.messages.fetch(systemMessageId).catch(() => null);
+                        if (systemMessage) {
+                            await systemMessage.delete();
+                            logger.info(`[OCR] 🗑️ Usunięto systemową wiadomość o utworzeniu wątku: ${systemMessageId}`);
+                        }
+                    }
+                } catch (error) {
+                    // Ignoruj - wiadomość mogła już zostać usunięta
+                    logger.warn(`[OCR] ⚠️ Nie udało się usunąć systemowej wiadomości ${systemMessageId}: ${error.message}`);
+                }
             }
         }, delayMs);
     }
@@ -1937,7 +1968,7 @@ class OCRService {
         logger.info(`[OCR] 🔓 Użytkownik ${userId} zakończył OCR`);
 
         // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć finalną wiadomość)
-        this.deleteSessionThread(active.threadId, immediate ? 5000 : 10000);
+        this.deleteSessionThread(active.threadId, active.systemMessageId, immediate ? 5000 : 10000);
 
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);
@@ -1965,7 +1996,7 @@ class OCRService {
         logger.info(`[OCR] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
 
         // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć wiadomość o wygaśnięciu)
-        this.deleteSessionThread(active.threadId, 8000);
+        this.deleteSessionThread(active.threadId, active.systemMessageId, 8000);
 
         // Wyczyść osierocone pliki temp z processed_ocr/
         await cleanupOrphanedTempFiles(this.processedDir, 10 * 60 * 1000, logger);

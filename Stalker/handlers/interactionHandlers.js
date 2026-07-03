@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, AttachmentBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, AttachmentBuilder, MessageType } = require('discord.js');
 const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
@@ -33,6 +33,22 @@ async function createSessionThread(inter, ocrService, guildId, userId, threadTit
         reason: `Sesja OCR: ${threadTitle}`
     });
     ocrService.setSessionThreadId(guildId, userId, thread.id);
+
+    // Discord wysyła na kanał macierzysty systemową wiadomość "X rozpoczął wątek: ...".
+    // Zapisujemy jej ID, żeby usunąć ją razem z wątkiem po zakończeniu sesji - inaczej
+    // zaśmieca kanał z embedem listy aktywnych sesji.
+    try {
+        const recentMessages = await inter.channel.messages.fetch({ limit: 5 });
+        const systemMessage = recentMessages.find(
+            m => m.type === MessageType.ThreadCreated && m.content === thread.name
+        );
+        if (systemMessage) {
+            ocrService.setSessionSystemMessageId(guildId, userId, systemMessage.id);
+        }
+    } catch (error) {
+        logger.warn(`[OCR] ⚠️ Nie udało się odnaleźć systemowej wiadomości o utworzeniu wątku: ${error.message}`);
+    }
+
     return thread;
 }
 
