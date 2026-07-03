@@ -119,7 +119,9 @@
      - Snapshot poprzednich pozycji → zmiany ▲/▼/=/🆕 przy każdym graczu
      - Boss okresu: najczęstszy boss z ostatnich 10 wpisów historii wyników (`wyniki/`)
      - Wysyłany na każdy serwer z `globalTopNotifications !== false` do `allowedChannelId`
-     - Konfiguracja przez panel admina → **📅 Interwał TOP10** (tylko head admin) → modal z datą i godziną pierwszego raportu (format `DD.MM.RRRR GG:MM`); puste pole = wyłącz harmonogram
+     - Konfiguracja przez panel admina → **📅 Interwał TOP10** (tylko head admin) → modal z datą i godziną punktu odniesienia (format `DD.MM.RRRR GG:MM`); puste pole = wyłącz harmonogram
+     - **`setSchedule()` nie resetuje pozycji w cyklu, gdy data się nie zmienia** — samo otwarcie i zatwierdzenie modala z tą samą (prefilled) datą nie zeruje już `triggerCount`. Wcześniej każde zatwierdzenie modala (nawet bez zmiany daty, np. tylko żeby podejrzeć harmonogram) bezwarunkowo zerowało `triggerCount`, co po cichu przesuwało pozycję 4-dniowej przerwy względem realnego końca sezonu — obserwowalny efekt: raport przychodzący dzień za wcześnie/za późno w kolejnym sezonie.
+     - **Podana data może być w przeszłości** — traktowana jest jako punkt odniesienia (np. faktyczny, znany koniec bossa), a harmonogram (`setSchedule()`) sam przewija się wg wzorca 9×3 dni + 4 dni przerwy do najbliższego przyszłego terminu (`_stepOnce()` w pętli), **bez wysyłania** pominiętych po drodze raportów — pozwala to poprawnie zrekalibrować cykl po wykryciu rozjazdu, wpisując realną, znaną datę zamiast liczyć ręcznie następny przyszły termin. Potwierdzenie w panelu pokazuje realnie wyliczony najbliższy termin po przewinięciu.
      - **Format embeda:** TOP 3 — blok blockquote z paskiem postępu `█░` (% względem lidera) i kolorowym wskaźnikiem zmiany `▲/▼`; pozycje 4–10 — kompaktowa jednolinijkowa z tagiem serwera
      - **Komenda /generate (head admin):** `buildOnDemandEmbed()` — generuje ten sam embed bez aktualizacji snapshootu/harmonogramu i wysyła go na `allowedChannelId` serwera; widoczna tylko dla adminów (`setDefaultMemberPermissions(Administrator)`), wykonać może wyłącznie head admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
 

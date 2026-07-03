@@ -66,15 +66,34 @@ class GlobalTop10Service {
 
     /**
      * Ustawia harmonogram. Wywoływane z panelu admina.
-     * @param {string} firstTriggerIso  ISO string pierwszego raportu
+     * Jeśli podana data jest tożsama z aktualnie zapisanym `nextTrigger` — nic się nie zmienia
+     * (zapobiega przypadkowemu wyzerowaniu pozycji w cyklu przy samym otwarciu i zatwierdzeniu
+     * modala bez faktycznej zmiany daty).
+     * Jeśli podana data jest w przeszłości — traktowana jest jako punkt odniesienia (np. faktyczny
+     * koniec bossa) i harmonogram jest przewijany wg wzorca 9×3 dni + 4 dni przerwy do najbliższego
+     * przyszłego terminu, bez wysyłania pominiętych po drodze raportów. Pozwala to poprawnie
+     * zrekalibrować cykl względem realnego kalendarza sezonu.
+     * @param {string} firstTriggerIso  ISO string punktu odniesienia (może być w przeszłości)
      */
     setSchedule(firstTriggerIso) {
+        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso) {
+            logger.info('[GlobalTop10] Harmonogram bez zmian — pomijam reset cyklu');
+            return;
+        }
+
         this._cfg.enabled      = true;
         this._cfg.firstTrigger = firstTriggerIso;
         this._cfg.nextTrigger  = firstTriggerIso;
         this._cfg.triggerCount = 0;
+
+        let skipped = 0;
+        while (new Date(this._cfg.nextTrigger).getTime() <= Date.now()) {
+            this._stepOnce();
+            skipped++;
+        }
+
         this._save();
-        logger.info(`[GlobalTop10] Harmonogram ustawiony: pierwszy raport ${firstTriggerIso}`);
+        logger.info(`[GlobalTop10] Harmonogram ustawiony: punkt odniesienia ${firstTriggerIso}, kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
     }
 
     disableSchedule() {
@@ -85,16 +104,25 @@ class GlobalTop10Service {
 
     _nextIntervalMs() {
         // Interwał PO bieżącym raporcie — liczony na triggerCount, jaki będzie obowiązywał
-        // zaraz po jego wysłaniu (zgodnie z _advanceTrigger, który inkrementuje przed obliczeniem).
+        // zaraz po jego wysłaniu (zgodnie z _stepOnce, który inkrementuje przed obliczeniem).
         const pos = ((this._cfg.triggerCount || 0) + 1) % CYCLE_LEN;
         return pos === CYCLE_LEN - 1 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
     }
 
-    _advanceTrigger() {
+    /**
+     * Jeden krok postępu harmonogramu (inkrementacja triggerCount + przesunięcie nextTrigger
+     * o właściwy interwał). Używane zarówno przez realny tick (_advanceTrigger), jak i przez
+     * przewijanie zaległych terminów w setSchedule() — bez zapisu do pliku (save robi wywołujący).
+     */
+    _stepOnce() {
         const intervalMs = this._nextIntervalMs();
         this._cfg.triggerCount = (this._cfg.triggerCount || 0) + 1;
         const now = new Date(this._cfg.nextTrigger || Date.now());
         this._cfg.nextTrigger = new Date(now.getTime() + intervalMs).toISOString();
+    }
+
+    _advanceTrigger() {
+        this._stepOnce();
         this._save();
     }
 
