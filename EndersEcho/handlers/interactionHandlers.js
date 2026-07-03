@@ -2264,6 +2264,43 @@ class InteractionHandler {
         return (pol, eng) => isPol ? pol : eng;
     }
 
+    /**
+     * Rozbija datę na składowe wg strefy Europe/Warsaw (uwzględnia CET/CEST).
+     */
+    _warsawParts(date) {
+        const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Europe/Warsaw', hour12: false,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        const parts = fmt.formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+        if (parts.hour === '24') parts.hour = '00';
+        return parts;
+    }
+
+    /**
+     * Konwertuje datę/godzinę podaną jako czas lokalny Europe/Warsaw (np. z modala admina)
+     * na poprawny instant UTC — uwzględnia przesunięcie CET/CEST. Bez tego naiwne parsowanie
+     * jako UTC (samo doklejenie 'Z') zapisywało harmonogram przesunięty o 1-2h względem tego,
+     * co admin faktycznie wpisał.
+     */
+    _warsawToUtc(yyyy, mm, dd, hh, min) {
+        const guess = new Date(Date.UTC(+yyyy, +mm - 1, +dd, +hh, +min, 0));
+        const p = this._warsawParts(guess);
+        const asWarsaw = new Date(Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second));
+        const diff = guess.getTime() - asWarsaw.getTime();
+        return new Date(guess.getTime() + diff);
+    }
+
+    /**
+     * Formatuje datę do wyświetlenia w czasie Europe/Warsaw (DD.MM.RRRR GG:MM), niezależnie
+     * od strefy czasowej, w jakiej działa proces bota.
+     */
+    _fmtWarsaw(date) {
+        const p = this._warsawParts(date);
+        return `${p.day}.${p.month}.${p.year} ${p.hour}:${p.minute}`;
+    }
+
     _buildAdminPanel(interaction) {
         const isHeadAdmin = this._isHeadAdmin(interaction.user.id);
         const t = this._panelT(interaction.guildId);
@@ -5959,12 +5996,7 @@ class InteractionHandler {
                     return;
                 }
                 const cfg = this.globalTop10Service.getConfig();
-                const currentVal = cfg.nextTrigger
-                    ? (() => {
-                        const d = new Date(cfg.nextTrigger);
-                        return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-                    })()
-                    : '';
+                const currentVal = cfg.nextTrigger ? this._fmtWarsaw(new Date(cfg.nextTrigger)) : '';
                 const t = this._panelT(interaction.guildId);
                 const modal = new ModalBuilder()
                     .setCustomId('top10_interval_modal')
@@ -11355,7 +11387,11 @@ class InteractionHandler {
         }
 
         const [, dd, mm, yyyy, hh, min] = match;
-        const date = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}T${hh.padStart(2,'0')}:${min}:00Z`);
+        // Podana data/godzina to czas lokalny Europe/Warsaw (tak jak wszędzie indziej w bocie,
+        // np. fmtTs w Centrum Dowodzenia) — konwertowana na poprawny instant UTC z uwzględnieniem
+        // CET/CEST. Naiwne parsowanie jako UTC (samo doklejenie 'Z') zapisywałoby harmonogram
+        // przesunięty o 1-2h względem tego, co admin faktycznie wpisał.
+        const date = this._warsawToUtc(yyyy, mm, dd, hh, min);
         if (isNaN(date.getTime())) {
             await interaction.editReply({ content: t('❌ Podana data jest nieprawidłowa.', '❌ The provided date is invalid.') });
             return;
@@ -11370,10 +11406,7 @@ class InteractionHandler {
         const cfg = this.globalTop10Service.getConfig();
 
         const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
-        const fmtNext = (() => {
-            const d = new Date(cfg.nextTrigger);
-            return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-        })();
+        const fmtNext = this._fmtWarsaw(new Date(cfg.nextTrigger));
 
         const recalibrationNote = wasPast
             ? t(`\n⏪ Punkt odniesienia był w przeszłości — harmonogram przewinięty bez wysyłania zaległych raportów.\n➡️ Najbliższy kolejny raport: **${fmtNext}**`,
