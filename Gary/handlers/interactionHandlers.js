@@ -987,19 +987,25 @@ class InteractionHandler {
             }
         } while (deleted && deleted.size >= 2);
 
-        await this.runScheduledLunarMine(thread, this.LME_SNAPSHOT_GUILD_IDS, details);
+        // Pobierz dane TOP500 tylko raz - są potrzebne zarówno do wzbogacenia snapshotu gildii o score
+        // (wewnątrz runScheduledLunarMine), jak i do zapisu snapshotu TOP500 poniżej. Wcześniej te same
+        // dane były pobierane dwukrotnie (osobny fetch w obu miejscach), co bez potrzeby zużywało
+        // dodatkowe proxy z puli i przyspieszało ich blokowanie przez Cloudflare.
+        let top500Clans = [];
+        try {
+            await this.clanService.fetchClanData();
+            top500Clans = this.clanService.getClanData();
+        } catch (err) {
+            this.logger.warn(`📅 Nie udało się pobrać danych TOP500: ${err.message}`);
+        }
+
+        await this.runScheduledLunarMine(thread, this.LME_SNAPSHOT_GUILD_IDS, details, top500Clans);
 
         // Zapisz też snapshot historii TOP500 (normalnie robi to osobny cron o 18:50, ale zapis jest idempotentny per tydzień)
         let snapshotCount = 0;
-        try {
-            await this.clanService.fetchClanData();
-            const snapshotClans = this.clanService.getClanData();
-            if (snapshotClans.length > 0) {
-                this.clanHistoryService.saveSnapshot(snapshotClans);
-                snapshotCount = snapshotClans.length;
-            }
-        } catch (err) {
-            this.logger.warn(`📅 Nie udało się zapisać snapshotu TOP500: ${err.message}`);
+        if (top500Clans.length > 0) {
+            this.clanHistoryService.saveSnapshot(top500Clans);
+            snapshotCount = top500Clans.length;
         }
 
         await interaction.editReply({
@@ -1023,8 +1029,9 @@ class InteractionHandler {
      * @param {Object} channel - Discord channel/thread to send results to
      * @param {Array} guildIds - Guild IDs analyzed (used only for logging/error messages)
      * @param {Object} details - Wynik garrytoolsService.fetchGroupDetails(groupId)
+     * @param {Array} [top500Clans] - Opcjonalnie już pobrane dane TOP500 (unika ponownego fetchClanData())
      */
-    async runScheduledLunarMine(channel, guildIds, details) {
+    async runScheduledLunarMine(channel, guildIds, details, top500Clans = null) {
         try {
             this.logger.info(`📅 Publishing Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
             this.logger.info(`📅 Target channel: ${channel.name} (${channel.id})`);
@@ -1082,9 +1089,13 @@ class InteractionHandler {
                 try {
                     this.logger.info('📅 Step 6: Saving guild & player snapshots and generating history charts...');
 
-                    // Pobierz score z TOP500 dla 4 klanów PS
+                    // Pobierz score z TOP500 dla 4 klanów PS - wykorzystaj przekazane dane, jeśli dostępne,
+                    // żeby nie odpytywać ponownie tego samego endpointu (oszczędność proxy)
                     let scoreMap = null;
-                    if (this.clanService) {
+                    if (top500Clans && top500Clans.length > 0) {
+                        scoreMap = new Map(top500Clans.map(c => [c.id, c.score]));
+                        this.logger.info(`📅 Step 6: Wykorzystano przekazane dane TOP500 (${top500Clans.length} klanów)`);
+                    } else if (this.clanService) {
                         try {
                             await this.clanService.fetchClanData();
                             const top500 = this.clanService.getClanData();
