@@ -227,22 +227,13 @@ class InteractionHandler {
             return;
         }
 
-        // Handle rivals detail buttons
-        if (buttonId.startsWith('rivals_detail_')) {
-            const parts = buttonId.split('_');
-            const guildId = parseInt(parts[2]);
-            const authorizedUserId = parts[3];
-
-            // Check if the user clicking is the one who invoked the command
-            if (interaction.user.id !== authorizedUserId) {
-                await interaction.reply({
-                    content: '❌ Only the person who used the command can view details!',
-                    ephemeral: true
-                });
+        // Ręczne podanie Group ID dla /lunarmine i /analyse (captcha nie jest już rozwiązywana automatycznie)
+        if (buttonId.startsWith('manual_group_button::')) {
+            if (!hasPermission(interaction, this.config.authorizedRoles)) {
+                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', ephemeral: true });
                 return;
             }
-
-            await this.handleRivalsDetailButton(interaction, guildId);
+            await this.showManualGroupIdModal(interaction, buttonId);
             return;
         }
 
@@ -367,22 +358,18 @@ class InteractionHandler {
         await interaction.showModal(modal);
     }
 
-    async processLunarMineCommand(interaction, guildIds) {
-        await interaction.deferReply();
-        
+    /**
+     * Publikuje wynik analizy /lunarmine (dane już pobrane i zweryfikowane po ręcznym podaniu Group ID
+     * przez processManualGroupIdSubmit) - odpowiedzi idą jako followUp, bo interakcja modalu z ID
+     * jest odpowiadana wcześniej (ephemeral status), a te wyniki mają być publiczne jak dawniej.
+     */
+    async renderLunarMineResults(interaction, details) {
         try {
-            this.logger.info(`Starting Lunar Mine Expedition analysis for Guild IDs: ${guildIds.join(', ')}`);
-            
-            const groupId = await this.garrytoolsService.getGroupId(guildIds, { interaction });
-            this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
-
-            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
-
             if (!details.guilds || details.guilds.length === 0) {
-                await interaction.editReply('❌ No Lunar Mine Expedition data found for the provided Guild IDs.');
+                await interaction.followUp('❌ No Lunar Mine Expedition data found for the provided Guild IDs.');
                 return;
             }
-            
+
             const sortedClans = details.guilds.sort((a, b) => b.totalPower - a.totalPower);
 
             const overviewEmbed = new EmbedBuilder()
@@ -410,8 +397,8 @@ class InteractionHandler {
                     inline: false
                 });
             });
-            
-            await interaction.editReply({ embeds: [overviewEmbed] });
+
+            await interaction.followUp({ embeds: [overviewEmbed] });
 
             // Multi-clan history chart — send after overview if history exists for any guild
             if (this.clanHistoryService) {
@@ -436,10 +423,10 @@ class InteractionHandler {
             await this.sendCombinedMembersListPaginated(interaction, sortedClans);
 
             this.logger.info('Lunar Mine Expedition analysis completed successfully!');
-            
+
         } catch (error) {
             this.logger.error('Error during Lunar Mine Expedition analysis:', error);
-            await interaction.editReply('❌ An error occurred during expedition analysis. Check if the provided Guild IDs are correct and if the expedition is active.');
+            await interaction.followUp('❌ An error occurred during expedition analysis. Check if the provided Guild IDs are correct and if the expedition is active.');
         }
     }
 
@@ -464,22 +451,15 @@ class InteractionHandler {
         await interaction.showModal(modal);
     }
 
-    async processAnalyseCommand(interaction, userGuildId) {
-        await interaction.deferReply();
-
+    /**
+     * Publikuje wynik /analyse (dane już pobrane i zweryfikowane po ręcznym podaniu Group ID) - jako
+     * followUp, bo interakcja modalu z ID jest odpowiadana wcześniej (ephemeral status).
+     */
+    async renderAnalyseResult(interaction, details, userGuildId) {
         try {
-            this.logger.info(`🔍 Analyzing Guild ID: ${userGuildId} with substitution logic`);
-            
-            const modifiedGuildIds = this.garrytoolsService.modifyGuildIds(userGuildId, this.FIXED_GUILDS);
-            
-            const groupId = await this.garrytoolsService.getGroupId(modifiedGuildIds, { interaction });
-            this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
-
-            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
-
             const guild = details.guilds.find(g => g.guildId === userGuildId);
             if (!guild) {
-                await interaction.editReply(`❌ Guild with ID ${userGuildId} not found in results. Available guilds: ${details.guilds.map(g => g.guildId).join(', ')}`);
+                await interaction.followUp(`❌ Guild with ID ${userGuildId} not found in results. Available guilds: ${details.guilds.map(g => g.guildId).join(', ')}`);
                 return;
             }
 
@@ -499,7 +479,7 @@ class InteractionHandler {
                 .setDescription(guildSummary)
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed] });
+            await interaction.followUp({ embeds: [embed] });
 
             // Clan history chart — send after the embed if history exists
             if (this.clanHistoryService) {
@@ -520,10 +500,10 @@ class InteractionHandler {
             await this.sendGuildMembersList(interaction, guild);
 
             this.logger.info(`✅ Analysis of ${userGuildId} sent to ${interaction.user.tag}`);
-            
+
         } catch (error) {
             this.logger.error(`❌ Error during Guild ID ${userGuildId} analysis:`, error);
-            
+
             const errorEmbed = new EmbedBuilder()
                 .setTitle('❌ Analysis Error')
                 .setDescription(`Failed to analyze Guild ID: ${userGuildId}`)
@@ -531,7 +511,7 @@ class InteractionHandler {
                 .setColor(0xff0000)
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [errorEmbed] });
+            await interaction.followUp({ embeds: [errorEmbed] });
         }
     }
 
@@ -556,8 +536,9 @@ class InteractionHandler {
                     return;
                 }
 
+                // Captcha nie jest już rozwiązywana automatycznie - poproś o ręczne podanie Group ID
                 const guildIds = [guild1, guild2, guild3, guild4];
-                await this.processLunarMineCommand(interaction, guildIds);
+                await this.requestManualGroupId(interaction, guildIds, 'lunarmine');
             }
             else if (modalId === 'analyse_modal') {
                 const guildId = parseInt(interaction.fields.getTextInputValue('guildid'));
@@ -567,7 +548,9 @@ class InteractionHandler {
                     return;
                 }
 
-                await this.processAnalyseCommand(interaction, guildId);
+                // Captcha nie jest już rozwiązywana automatycznie - poproś o ręczne podanie Group ID
+                const modifiedGuildIds = this.garrytoolsService.modifyGuildIds(guildId, this.FIXED_GUILDS);
+                await this.requestManualGroupId(interaction, modifiedGuildIds, 'analyse', guildId);
             }
             else if (modalId === 'search_modal') {
                 const guildName = interaction.fields.getTextInputValue('name');
@@ -600,6 +583,10 @@ class InteractionHandler {
             else if (modalId === 'lme_manual_id_modal') {
                 const rawId = interaction.fields.getTextInputValue('lme_group_id').trim();
                 await this.processLmeManualSnapshot(interaction, rawId);
+            }
+            else if (modalId.startsWith('manual_group_modal::')) {
+                const rawId = interaction.fields.getTextInputValue('manual_group_id').trim();
+                await this.processManualGroupIdSubmit(interaction, modalId, rawId);
             }
         } catch (error) {
             this.logger.error('❌ Error handling modal submit:', error);
@@ -898,7 +885,8 @@ class InteractionHandler {
     }
 
     // Akceptuje zarówno sam numer ID, jak i wklejony cały link do garrytools.com/lunar/detail/<ID>
-    extractLmeGroupId(rawInput) {
+    // Używane przez wszystkie miejsca, gdzie Group ID jest podawane ręcznie (snapshot, /lunarmine, /analyse)
+    extractGroupIdFromInput(rawInput) {
         if (!rawInput) return null;
         const match = rawInput.match(/(\d{4,8})/);
         return match ? match[1] : null;
@@ -913,7 +901,7 @@ class InteractionHandler {
     async processLmeManualSnapshot(interaction, rawId) {
         await interaction.deferReply({ ephemeral: true });
 
-        const groupId = this.extractLmeGroupId(rawId);
+        const groupId = this.extractGroupIdFromInput(rawId);
         if (!groupId) {
             await interaction.editReply('❌ Nie rozpoznano ID. Podaj sam numer ID lub pełny link do `garrytools.com/lunar/detail/<ID>`.');
             return;
@@ -1021,6 +1009,118 @@ class InteractionHandler {
                 ])
                 .setTimestamp()]
         });
+    }
+
+    /**
+     * Ogólny mechanizm ręcznego podania Group ID - używany przez /lunarmine i /analyse zamiast
+     * automatycznego rozwiązywania captchy (klikanie kafelków przez Puppeteer zostało odłączone,
+     * bo powodowało blokowanie IP serwera przez Cloudflare). Prosi o zestaw Guild ID, które trzeba
+     * samodzielnie wpisać na garrytools.com, rozwiązać tam captchę i zwrócić ID z linku wynikowego.
+     * `kind` określa co zrobić po weryfikacji ('lunarmine' lub 'analyse'), `extra` to dodatkowy
+     * kontekst (dla 'analyse' - oryginalne Guild ID podane przez użytkownika, przed podstawieniem).
+     */
+    async requestManualGroupId(interaction, guildIds, kind, extra) {
+        const embed = new EmbedBuilder()
+            .setTitle('🧩 Wymagane ręczne podanie ID')
+            .setColor(0x3498db)
+            .setDescription(
+                `Formularz "Lunar Details" na garrytools.com jest chroniony captchą, którą trzeba rozwiązać ręcznie.\n\n` +
+                `**Instrukcja:**\n` +
+                `1. Wejdź na https://garrytools.com/lunar/ i wypełnij formularz tymi Guild ID:\n` +
+                `\`${guildIds.join(', ')}\`\n` +
+                `2. Rozwiąż captchę reCAPTCHA.\n` +
+                `3. Po przekierowaniu skopiuj ID z linku (\`garrytools.com/lunar/detail/<ID>\`).\n` +
+                `4. Kliknij przycisk poniżej i podaj to ID.`
+            )
+            .setTimestamp();
+
+        const idsPart = guildIds.join('-');
+        const customId = `manual_group_button::${kind}::${idsPart}${extra !== undefined && extra !== null ? `::${extra}` : ''}`;
+
+        const button = new ButtonBuilder()
+            .setCustomId(customId)
+            .setLabel('🔑 Podaj ID')
+            .setStyle(ButtonStyle.Primary);
+
+        await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)], ephemeral: true });
+    }
+
+    async showManualGroupIdModal(interaction, buttonId) {
+        const payload = buttonId.replace('manual_group_button::', '');
+
+        const modal = new ModalBuilder()
+            .setCustomId(`manual_group_modal::${payload}`)
+            .setTitle('🔑 Podaj Group ID');
+
+        const idInput = new TextInputBuilder()
+            .setCustomId('manual_group_id')
+            .setLabel('ID z linku garrytools.com/lunar/detail/ID')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('np. 123456 (można wkleić też cały link)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(100);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+        await interaction.showModal(modal);
+    }
+
+    /**
+     * Obsługuje modal ze zgłoszonym ręcznie Group ID dla /lunarmine i /analyse. Weryfikuje, czy dane
+     * pod tym ID dotyczą dokładnie oczekiwanego zestawu Guild ID (zakodowanego w customId modalu),
+     * po czym renderuje wynik tak jak dawniej robiły to processLunarMineCommand/processAnalyseCommand.
+     */
+    async processManualGroupIdSubmit(interaction, modalId, rawId) {
+        await interaction.deferReply({ ephemeral: true });
+
+        const groupId = this.extractGroupIdFromInput(rawId);
+        if (!groupId) {
+            await interaction.editReply('❌ Nie rozpoznano ID. Podaj sam numer ID lub pełny link do `garrytools.com/lunar/detail/<ID>`.');
+            return;
+        }
+
+        const payload = modalId.replace('manual_group_modal::', '');
+        const [kind, idsStr, extraStr] = payload.split('::');
+        const guildIds = idsStr.split('-').map(id => parseInt(id, 10));
+        const extra = extraStr !== undefined ? parseInt(extraStr, 10) : null;
+
+        let details;
+        try {
+            details = await this.garrytoolsService.fetchGroupDetails(groupId);
+        } catch (error) {
+            this.logger.error(`❌ Nie udało się pobrać danych dla ID ${groupId}:`, error.message);
+            await interaction.editReply(`❌ Nie udało się pobrać danych dla ID \`${groupId}\`: ${error.message}`);
+            return;
+        }
+
+        if (!details.guilds || details.guilds.length === 0) {
+            await interaction.editReply(`❌ Brak danych dla ID \`${groupId}\`. Sprawdź czy captcha została poprawnie rozwiązana.`);
+            return;
+        }
+
+        const expected = new Set(guildIds);
+        const found = new Set(details.guilds.map(g => g.guildId));
+        const matches = expected.size === found.size && [...expected].every(id => found.has(id));
+
+        if (!matches) {
+            await interaction.editReply(
+                `❌ To nie są szukane klany!\n` +
+                `**Oczekiwane Guild ID:** ${guildIds.join(', ')}\n` +
+                `**Otrzymane Guild ID:** ${[...found].join(', ')}\n\n` +
+                `Sprawdź czy formularz "Lunar Details" został wypełniony poprawnymi ID i spróbuj ponownie.`
+            );
+            return;
+        }
+
+        await interaction.editReply(`✅ Zweryfikowano ID \`${groupId}\`. Publikuję wyniki...`);
+
+        if (kind === 'lunarmine') {
+            await this.renderLunarMineResults(interaction, details);
+        } else if (kind === 'analyse') {
+            await this.renderAnalyseResult(interaction, details, extra);
+        } else {
+            await interaction.editReply('❌ Nieznany typ żądania.');
+        }
     }
 
     /**
@@ -2636,71 +2736,12 @@ class InteractionHandler {
                 });
             }
 
-            // Create buttons for likely matches
-            const likelyButtons = [];
-            const likelyRivalsForButtons = rivalsData.likelyMatches
-                .filter(r => !r.isUserGuild) // Skip user's own guild
-                .slice(0, 10); // Max 10 buttons
+            // Przyciski "🔍 szczegóły" pod poszczególnymi klanami zostały usunięte - wymagały
+            // rozwiązywania captchy (ta sama chroniona forma "Lunar Details"), a nie były do tego
+            // niezbędne, skoro powyższe embedy już pokazują wszystkie kluczowe dane rywali.
+            await interaction.editReply({ embeds: [likelyEmbed] });
 
-            for (const rival of likelyRivalsForButtons) {
-                const button = new ButtonBuilder()
-                    .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
-                    .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔍');
-                likelyButtons.push(button);
-            }
-
-            // Split likely buttons into rows (max 5 per row)
-            const likelyRows = [];
-            if (likelyButtons.length > 0) {
-                const row1 = new ActionRowBuilder().addComponents(likelyButtons.slice(0, 5));
-                likelyRows.push(row1);
-
-                if (likelyButtons.length > 5) {
-                    const row2 = new ActionRowBuilder().addComponents(likelyButtons.slice(5, 10));
-                    likelyRows.push(row2);
-                }
-            }
-
-            // Send likely embed with its buttons
-            await interaction.editReply({
-                embeds: [likelyEmbed],
-                components: likelyRows
-            });
-
-            // Create buttons for unlikely matches
-            const unlikelyButtons = [];
-            const unlikelyRivalsForButtons = rivalsData.unlikelyMatches
-                .filter(r => !r.isUserGuild) // Skip user's own guild
-                .slice(0, 10); // Max 10 buttons
-
-            for (const rival of unlikelyRivalsForButtons) {
-                const button = new ButtonBuilder()
-                    .setCustomId(`rivals_detail_${rival.guildId}_${interaction.user.id}`)
-                    .setLabel(`${rival.name.substring(0, 20)}`) // Max 80 chars, truncate to 20
-                    .setStyle(ButtonStyle.Secondary)
-                    .setEmoji('🔍');
-                unlikelyButtons.push(button);
-            }
-
-            // Split unlikely buttons into rows (max 5 per row)
-            const unlikelyRows = [];
-            if (unlikelyButtons.length > 0) {
-                const row1 = new ActionRowBuilder().addComponents(unlikelyButtons.slice(0, 5));
-                unlikelyRows.push(row1);
-
-                if (unlikelyButtons.length > 5) {
-                    const row2 = new ActionRowBuilder().addComponents(unlikelyButtons.slice(5, 10));
-                    unlikelyRows.push(row2);
-                }
-            }
-
-            // Send unlikely embed with its buttons
-            await interaction.followUp({
-                embeds: [unlikelyEmbed],
-                components: unlikelyRows
-            });
+            await interaction.followUp({ embeds: [unlikelyEmbed] });
 
             // Generate charts for rivals
             if (this.clanHistoryService) {
@@ -2739,89 +2780,6 @@ class InteractionHandler {
         }
     }
 
-    async handleRivalsDetailButton(interaction, guildId) {
-        await interaction.deferReply({ ephemeral: false });
-
-        try {
-            this.logger.info(`🔍 Fetching detailed data for Guild ID: ${guildId}`);
-
-            // Use the same logic as /analyse - fetch group details
-            const modifiedGuilds = this.garrytoolsService.modifyGuildIds(guildId, this.FIXED_GUILDS);
-            const groupId = await this.garrytoolsService.getGroupId(modifiedGuilds, { interaction });
-            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
-
-            const guild = details.guilds.find(g => g.guildId === guildId);
-            if (!guild) {
-                await interaction.editReply({
-                    content: `❌ Guild with ID ${guildId} not found in results.`
-                });
-                return;
-            }
-
-            // Create detailed embed (similar to /analyse)
-            const guildSummary =
-                `**👥 Members:** ${guild.members.length}\n` +
-                `**⚔️ Total Power:** ${formatNumber(guild.totalPower, 2)}\n` +
-                `**<:II_RC:1385139885924421653><:II_TransmuteCore:1458440558602092647> RC+TC:** ${guild.totalRelicCores}+\n` +
-                `**🏆 Rank:** ${guild.rank ? `#${guild.rank}` : 'N/A'}\n` +
-                `**⭐ Level:** ${guild.level || 'N/A'}\n` +
-                `**🔥 Grade Score:** ${guild.gradeScore || '0%'}\n` +
-                `**💥 Grade:** ${guild.grade || 'N/A'}\n` +
-                `**🆔 Guild ID:** ${guild.guildId || 'N/A'}`;
-
-            const embed = new EmbedBuilder()
-                .setTitle(`🏰 ${guild.title}`)
-                .setColor(0x8B4513)
-                .setDescription(guildSummary)
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [embed] });
-
-            // Send member list as followUp (ephemeral)
-            if (guild.members && guild.members.length > 0) {
-                const sortedMembers = guild.members.sort((a, b) => b.attack - a.attack);
-                const maxMembersPerField = 10;
-                const chunks = [];
-                for (let i = 0; i < sortedMembers.length; i += maxMembersPerField) {
-                    chunks.push(sortedMembers.slice(i, i + maxMembersPerField));
-                }
-
-                const memberEmbed = new EmbedBuilder()
-                    .setColor(0x3498DB)
-                    .setDescription(`# ${guild.title}\nTotal members: ${sortedMembers.length} • Sorted by attack power`)
-                    .setFooter({ text: `Guild ID: ${guild.guildId}` })
-                    .setTimestamp();
-
-                chunks.forEach((chunk) => {
-                    const memberText = chunk.map(member =>
-                        `${member.rank}. **${member.name}** - ${formatNumber(member.attack, 2)} (${member.relicCores}+ ${this.CORES_ICON})`
-                    ).join('\n');
-
-                    memberEmbed.addFields({
-                        name: '\u200b',
-                        value: memberText || 'No data',
-                        inline: false
-                    });
-                });
-
-                await interaction.followUp({ embeds: [memberEmbed] });
-            }
-
-            this.logger.info(`✅ Detailed analysis of ${guildId} sent to ${interaction.user.tag}`);
-
-        } catch (error) {
-            this.logger.error(`❌ Error fetching details for Guild ID ${guildId}:`, error);
-
-            const errorEmbed = new EmbedBuilder()
-                .setTitle('❌ Details Fetch Error')
-                .setDescription(`Failed to fetch details for Guild ID: ${guildId}`)
-                .addFields({ name: 'Error Details', value: error.message })
-                .setColor(0xff0000)
-                .setTimestamp();
-
-            await interaction.editReply({ embeds: [errorEmbed], ephemeral: true });
-        }
-    }
 }
 
 module.exports = InteractionHandler;
