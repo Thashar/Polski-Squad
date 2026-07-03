@@ -5965,6 +5965,7 @@ class InteractionHandler {
                         return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
                     })()
                     : '';
+                const currentReportNumber = cfg.enabled ? String(((cfg.triggerCount || 0) % 9) + 1) : '1';
                 const t = this._panelT(interaction.guildId);
                 const modal = new ModalBuilder()
                     .setCustomId('top10_interval_modal')
@@ -5979,6 +5980,16 @@ class InteractionHandler {
                             .setValue(currentVal)
                             .setRequired(false)
                             .setMaxLength(20)
+                    ),
+                    new ActionRowBuilder().addComponents(
+                        new TextInputBuilder()
+                            .setCustomId('top10_report_number')
+                            .setLabel(t('Numer bossa w sezonie (1-9)', 'Boss number in season (1-9)'))
+                            .setStyle(TextInputStyle.Short)
+                            .setPlaceholder('1 = pierwszy boss sezonu (domyślnie)')
+                            .setValue(currentReportNumber)
+                            .setRequired(false)
+                            .setMaxLength(2)
                     )
                 );
                 await interaction.showModal(modal);
@@ -11364,7 +11375,15 @@ class InteractionHandler {
         // koniec bossa), harmonogram sam przewinie się do najbliższego przyszłego terminu.
         const wasPast = date.getTime() <= Date.now();
 
-        this.globalTop10Service.setSchedule(date.toISOString());
+        // Numer bossa w sezonie (1-9) reprezentowany przez podaną datę. Puste pole / błędna
+        // wartość → domyślnie 1 (pierwszy boss sezonu), zachowując dotychczasowe zachowanie.
+        const rawReportNumber = (interaction.fields.getTextInputValue('top10_report_number') || '').trim();
+        let reportNumber = parseInt(rawReportNumber, 10);
+        if (!Number.isInteger(reportNumber) || reportNumber < 1 || reportNumber > 9) {
+            reportNumber = 1;
+        }
+
+        this.globalTop10Service.setSchedule(date.toISOString(), reportNumber);
         const cfg = this.globalTop10Service.getConfig();
 
         const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
@@ -11380,8 +11399,8 @@ class InteractionHandler {
 
         await interaction.editReply({
             content: t(
-                `✅ Harmonogram TOP10 ustawiony.\n📅 Punkt odniesienia: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)${recalibrationNote}`,
-                `✅ TOP10 schedule set.\n📅 Reference point: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)${recalibrationNote}`
+                `✅ Harmonogram TOP10 ustawiony.\n📅 Punkt odniesienia: **${formatted}** (boss #${reportNumber} sezonu)\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)${recalibrationNote}`,
+                `✅ TOP10 schedule set.\n📅 Reference point: **${formatted}** (season boss #${reportNumber})\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)${recalibrationNote}`
             )
         });
     }
