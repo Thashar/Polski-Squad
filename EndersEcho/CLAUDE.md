@@ -113,12 +113,15 @@
      - Warunek: pozycja globalna gracza zmieniła się (dotyczy WSZYSTKICH graczy, nie tylko TOP10 serwera)
      - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
    - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:
-     - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
+     - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10) — dopasowane do sezonu 28-dniowego (9 bossów × 3 dni + 1 dzień odpoczynku); wymaga ręcznego ustawienia pierwszego raportu (panel → 📅 Interwał TOP10) dokładnie na koniec pierwszego bossa sezonu, harmonogram nie synchronizuje się automatycznie z realnym kalendarzem sezonu
+     - Stopka embeda „Next report in X days” liczy interwał na podstawie `triggerCount + 1` (ten sam wzór, którego użyje późniejszy `_advanceTrigger()`) — bez tego przesunięcia stopka pokazywała błędną liczbę dni dokładnie na granicy sezonu (3 zamiast 4 po 9. raporcie, 4 zamiast 3 po 1. raporcie nowego sezonu)
      - Konfiguracja w `data/global_top10_config.json` (enabled, nextTrigger, triggerCount, lastSnapshot)
      - Snapshot poprzednich pozycji → zmiany ▲/▼/=/🆕 przy każdym graczu
      - Boss okresu: najczęstszy boss z ostatnich 10 wpisów historii wyników (`wyniki/`)
      - Wysyłany na każdy serwer z `globalTopNotifications !== false` do `allowedChannelId`
-     - Konfiguracja przez panel admina → **📅 Interwał TOP10** (tylko head admin) → modal z datą i godziną pierwszego raportu (format `DD.MM.RRRR GG:MM`); puste pole = wyłącz harmonogram
+     - Konfiguracja przez panel admina → **📅 Interwał TOP10** (tylko head admin) → modal z datą i godziną punktu odniesienia (format `DD.MM.RRRR GG:MM`); puste pole = wyłącz harmonogram
+     - **`setSchedule()` nie resetuje pozycji w cyklu, gdy data się nie zmienia** — samo otwarcie i zatwierdzenie modala z tą samą (prefilled) datą nie zeruje już `triggerCount`. Wcześniej każde zatwierdzenie modala (nawet bez zmiany daty, np. tylko żeby podejrzeć harmonogram) bezwarunkowo zerowało `triggerCount`, co po cichu przesuwało pozycję 4-dniowej przerwy względem realnego końca sezonu — obserwowalny efekt: raport przychodzący dzień za wcześnie/za późno w kolejnym sezonie.
+     - **Podana data może być w przeszłości** — traktowana jest jako punkt odniesienia (np. faktyczny, znany koniec bossa), a harmonogram (`setSchedule()`) sam przewija się wg wzorca 9×3 dni + 4 dni przerwy do najbliższego przyszłego terminu (`_stepOnce()` w pętli), **bez wysyłania** pominiętych po drodze raportów — pozwala to poprawnie zrekalibrować cykl po wykryciu rozjazdu, wpisując realną, znaną datę zamiast liczyć ręcznie następny przyszły termin. Potwierdzenie w panelu pokazuje realnie wyliczony najbliższy termin po przewinięciu.
      - **Format embeda:** TOP 3 — blok blockquote z paskiem postępu `█░` (% względem lidera) i kolorowym wskaźnikiem zmiany `▲/▼`; pozycje 4–10 — kompaktowa jednolinijkowa z tagiem serwera
      - **Komenda /generate (head admin):** `buildOnDemandEmbed()` — generuje ten sam embed bez aktualizacji snapshootu/harmonogramu i wysyła go na `allowedChannelId` serwera; widoczna tylko dla adminów (`setDefaultMemberPermissions(Administrator)`), wykonać może wyłącznie head admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
 

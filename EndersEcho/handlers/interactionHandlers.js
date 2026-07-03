@@ -5973,7 +5973,7 @@ class InteractionHandler {
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
                             .setCustomId('top10_first_trigger')
-                            .setLabel(t('Data i godzina pierwszego raportu', 'Date and time of first report'))
+                            .setLabel(t('Data/godzina raportu (można wstecz)', 'Report date/time (past OK)'))
                             .setStyle(TextInputStyle.Short)
                             .setPlaceholder('DD.MM.RRRR GG:MM  np. 10.05.2026 20:00')
                             .setValue(currentVal)
@@ -11360,18 +11360,28 @@ class InteractionHandler {
             await interaction.editReply({ content: t('❌ Podana data jest nieprawidłowa.', '❌ The provided date is invalid.') });
             return;
         }
-        if (date.getTime() < Date.now()) {
-            await interaction.editReply({ content: t('❌ Data pierwszego raportu nie może być w przeszłości.', '❌ The first report date cannot be in the past.') });
-            return;
-        }
+        // Data w przeszłości jest dozwolona — traktowana jako punkt odniesienia (np. faktyczny
+        // koniec bossa), harmonogram sam przewinie się do najbliższego przyszłego terminu.
+        const wasPast = date.getTime() <= Date.now();
 
         this.globalTop10Service.setSchedule(date.toISOString());
+        const cfg = this.globalTop10Service.getConfig();
 
         const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
+        const fmtNext = (() => {
+            const d = new Date(cfg.nextTrigger);
+            return `${d.getDate().toString().padStart(2,'0')}.${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getFullYear()} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+        })();
+
+        const recalibrationNote = wasPast
+            ? t(`\n⏪ Punkt odniesienia był w przeszłości — harmonogram przewinięty bez wysyłania zaległych raportów.\n➡️ Najbliższy kolejny raport: **${fmtNext}**`,
+                `\n⏪ Reference point was in the past — schedule fast-forwarded without sending backlog reports.\n➡️ Next upcoming report: **${fmtNext}**`)
+            : '';
+
         await interaction.editReply({
             content: t(
-                `✅ Harmonogram TOP10 ustawiony.\n📅 Pierwszy raport: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)`,
-                `✅ TOP10 schedule set.\n📅 First report: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)`
+                `✅ Harmonogram TOP10 ustawiony.\n📅 Punkt odniesienia: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)${recalibrationNote}`,
+                `✅ TOP10 schedule set.\n📅 Reference point: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)${recalibrationNote}`
             )
         });
     }
