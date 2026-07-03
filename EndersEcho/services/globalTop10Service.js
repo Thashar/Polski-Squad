@@ -84,14 +84,17 @@ class GlobalTop10Service {
     }
 
     _nextIntervalMs() {
-        const pos = (this._cfg.triggerCount || 0) % CYCLE_LEN;
+        // Interwał PO bieżącym raporcie — liczony na triggerCount, jaki będzie obowiązywał
+        // zaraz po jego wysłaniu (zgodnie z _advanceTrigger, który inkrementuje przed obliczeniem).
+        const pos = ((this._cfg.triggerCount || 0) + 1) % CYCLE_LEN;
         return pos === CYCLE_LEN - 1 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
     }
 
     _advanceTrigger() {
+        const intervalMs = this._nextIntervalMs();
         this._cfg.triggerCount = (this._cfg.triggerCount || 0) + 1;
         const now = new Date(this._cfg.nextTrigger || Date.now());
-        this._cfg.nextTrigger = new Date(now.getTime() + this._nextIntervalMs()).toISOString();
+        this._cfg.nextTrigger = new Date(now.getTime() + intervalMs).toISOString();
         this._save();
     }
 

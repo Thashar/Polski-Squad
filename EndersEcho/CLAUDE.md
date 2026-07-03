@@ -113,7 +113,8 @@
      - Warunek: pozycja globalna gracza zmieniła się (dotyczy WSZYSTKICH graczy, nie tylko TOP10 serwera)
      - Zawiera: kierunek zmiany (▲/▼), stara → nowa pozycja, 3 linie rankingu globalnego (gracz powyżej, gracz, gracz poniżej) w formacie identycznym jak `/ranking → 🌐 Global`
    - **Cykliczny raport Global TOP10** (`globalTop10Service`) — `services/globalTop10Service.js`:
-     - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
+     - Interwał: 9 raportów co 3 dni, potem 4 dni przerwy, powtórz (cykl 10) — dopasowane do sezonu 28-dniowego (9 bossów × 3 dni + 1 dzień odpoczynku); wymaga ręcznego ustawienia pierwszego raportu (panel → 📅 Interwał TOP10) dokładnie na koniec pierwszego bossa sezonu, harmonogram nie synchronizuje się automatycznie z realnym kalendarzem sezonu
+     - Stopka embeda „Next report in X days” liczy interwał na podstawie `triggerCount + 1` (ten sam wzór, którego użyje późniejszy `_advanceTrigger()`) — bez tego przesunięcia stopka pokazywała błędną liczbę dni dokładnie na granicy sezonu (3 zamiast 4 po 9. raporcie, 4 zamiast 3 po 1. raporcie nowego sezonu)
      - Konfiguracja w `data/global_top10_config.json` (enabled, nextTrigger, triggerCount, lastSnapshot)
      - Snapshot poprzednich pozycji → zmiany ▲/▼/=/🆕 przy każdym graczu
      - Boss okresu: najczęstszy boss z ostatnich 10 wpisów historii wyników (`wyniki/`)
