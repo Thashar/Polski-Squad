@@ -119,146 +119,39 @@ cron.schedule('50 18 * * 3', async () => {
 // Weekly Lunar Mine analysis - every Wednesday at 18:45 Poland time
 // Thread ID: 1441152540581564508
 // Guild IDs: 42578, 202226, 125634, 11616
+// Captcha na garrytools.com nie jest już rozwiązywana automatycznie - cron tylko wysyła na kanał
+// admina prośbę o ręczne ID (przycisk -> modal). Czyszczenie wątku, pobranie danych i publikacja
+// wyników odbywa się dopiero po podaniu ID przez interactionHandler.processLmeManualSnapshot.
 cron.schedule('45 18 * * 3', async () => {
     try {
-        logger.info('📅 ========================================');
-        logger.info('📅 Starting weekly Lunar Mine analysis...');
-        logger.info('📅 ========================================');
+        logger.info('📅 Weekly Lunar Mine: requesting manual Group ID from admin...');
 
-        const threadId = '1441152540581564508';
-        const guildIds = [42578, 202226, 125634, 11616];
-
-        logger.info(`📅 Configuration:`);
-        logger.info(`📅 - Thread ID: ${threadId}`);
-        logger.info(`📅 - Guild IDs: ${guildIds.join(', ')}`);
-        logger.info(`📅 - Client ready: ${client.isReady()}`);
-        logger.info(`📅 - Client user: ${client.user?.tag || 'Not logged in'}`);
-
-        // Fetch the thread
-        logger.info(`📅 Attempting to fetch thread ${threadId}...`);
-        const thread = await client.channels.fetch(threadId);
-
-        if (!thread) {
-            logger.error(`📅 ❌ Could not find thread ${threadId}`);
-            logger.error('📅 Possible reasons:');
-            logger.error('📅 - Thread ID is incorrect');
-            logger.error('📅 - Bot does not have access to the thread');
-            logger.error('📅 - Thread has been deleted or archived');
-            await logService.logError(new Error(`Thread ${threadId} not found`), 'weekly Lunar Mine cron');
-            return;
-        }
-
-        logger.info(`📅 ✅ Thread found: ${thread.name} (ID: ${thread.id})`);
-        logger.info(`📅 Thread type: ${thread.type}`);
-        logger.info(`📅 Thread parent: ${thread.parent?.name || 'No parent'}`);
-
-        // Try to join the thread if not already a member
-        try {
-            if (thread.joinable) {
-                logger.info('📅 Attempting to join thread...');
-                await thread.join();
-                logger.info('📅 ✅ Successfully joined thread');
-            }
-        } catch (joinError) {
-            logger.warn(`📅 Could not join thread: ${joinError.message}`);
-        }
-
-        // Check permissions
-        const permissions = thread.permissionsFor(client.user);
-        logger.info(`📅 Checking bot permissions in thread...`);
-        logger.info(`📅 Permissions object: ${permissions ? 'exists' : 'null'}`);
-
-        if (!permissions) {
-            logger.warn('📅 ⚠️ Could not get permissions, attempting to continue anyway...');
-        } else {
-            const hasSend = permissions.has('SendMessages');
-            const hasManage = permissions.has('ManageMessages');
-            const hasRead = permissions.has('ReadMessageHistory');
-
-            logger.info(`📅 - Send Messages: ${hasSend}`);
-            logger.info(`📅 - Manage Messages: ${hasManage}`);
-            logger.info(`📅 - Read Message History: ${hasRead}`);
-            logger.info(`📅 - All permissions bitfield: ${permissions.bitfield}`);
-
-            // Try to test actual permissions by attempting operations
-            if (!hasSend || !hasManage || !hasRead) {
-                logger.warn('📅 ⚠️ Permission check failed, attempting test message...');
-
-                try {
-                    // Try sending a test message
-                    const testMsg = await thread.send('📅 Testing permissions...');
-                    await testMsg.delete();
-                    logger.info('📅 ✅ Successfully sent and deleted test message - permissions are OK!');
-                } catch (testError) {
-                    logger.error(`📅 ❌ Failed to send test message: ${testError.message}`);
-                    logger.error('📅 Bot does not have required permissions in thread');
-                    await logService.logError(new Error(`Insufficient permissions: ${testError.message}`), 'weekly Lunar Mine cron');
-                    return;
-                }
-            }
-        }
-
-        // Delete all messages in the thread (bulk delete)
-        logger.info('📅 🗑️ Clearing thread messages...');
-        let deletedTotal = 0;
-        let deleted;
-        do {
-            const messages = await thread.messages.fetch({ limit: 100 });
-            if (messages.size === 0) break;
-
-            // Filter messages younger than 14 days (Discord limitation)
-            const deletable = messages.filter(msg =>
-                Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000
-            );
-
-            if (deletable.size > 0) {
-                deleted = await thread.bulkDelete(deletable, true);
-                deletedTotal += deleted.size;
-                logger.info(`📅 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal})`);
-            } else {
-                // For older messages, delete one by one
-                for (const [, msg] of messages) {
-                    try {
-                        await msg.delete();
-                        deletedTotal++;
-                    } catch (e) {
-                        logger.warn(`📅 Could not delete old message: ${e.message}`);
-                    }
-                }
-                break;
-            }
-        } while (deleted && deleted.size >= 2);
-
-        logger.info(`📅 ✅ Thread cleared, deleted ${deletedTotal} messages`);
-        logger.info('📅 Running scheduled analysis...');
-
-        // Ten cron nie ma powiązanej interakcji Discorda, więc wyzwanie reCAPTCHA nie może być
-        // ephemeral - trafia zwykłą wiadomością na dedykowany kanał admina zamiast do wątku wyników
-        let captchaChannel = null;
+        let targetChannel = null;
         if (config.adminCaptchaChannelId) {
             try {
-                captchaChannel = await client.channels.fetch(config.adminCaptchaChannelId);
+                targetChannel = await client.channels.fetch(config.adminCaptchaChannelId);
             } catch (fetchError) {
                 logger.warn(`📅 ⚠️ Could not fetch admin captcha channel (${config.adminCaptchaChannelId}): ${fetchError.message}`);
             }
         }
 
-        // Run the scheduled Lunar Mine analysis
-        await interactionHandler.runScheduledLunarMine(thread, guildIds, { captchaChannel });
+        if (!targetChannel) {
+            targetChannel = await client.channels.fetch('1441152540581564508').catch(() => null);
+        }
 
-        logger.info('📅 ========================================');
-        logger.info('📅 ✅ Weekly Lunar Mine analysis completed');
-        logger.info('📅 ========================================');
-        await logService.logInfo('📅 Weekly Lunar Mine analysis completed');
+        if (!targetChannel) {
+            logger.error('📅 ❌ Could not find any channel to post the manual ID request');
+            await logService.logError(new Error('No channel available for manual LME ID request'), 'weekly Lunar Mine cron');
+            return;
+        }
+
+        await interactionHandler.sendLmeManualIdRequest(targetChannel);
+
+        logger.info('📅 ✅ Manual ID request sent, waiting for admin to submit Group ID');
+        await logService.logInfo('📅 Weekly Lunar Mine: czekam na ręczne podanie ID przez admina');
 
     } catch (error) {
-        logger.error('📅 ========================================');
-        logger.error('📅 ❌ Error during weekly Lunar Mine analysis');
-        logger.error('📅 ========================================');
-        logger.error('📅 Error type:', error.name);
-        logger.error('📅 Error message:', error.message);
-        logger.error('📅 Error stack:', error.stack);
-        logger.error('📅 ========================================');
+        logger.error('📅 ❌ Error during weekly Lunar Mine cron:', error.message);
         await logService.logError(error, 'weekly Lunar Mine cron job');
     }
 }, {

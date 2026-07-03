@@ -18,6 +18,9 @@ class InteractionHandler {
         this.paginationData = new Map();
         this.CORES_ICON = 'RC';
         this.FIXED_GUILDS = [10256, 12554, 20145];
+        // Cotygodniowy snapshot Lunar Mine - captcha rozwiązywana ręcznie przez admina (patrz sendLmeManualIdRequest/processLmeManualSnapshot)
+        this.LME_SNAPSHOT_THREAD_ID = '1441152540581564508';
+        this.LME_SNAPSHOT_GUILD_IDS = [42578, 202226, 125634, 11616];
         this.LME_PAGINATION_FILE = path.join(__dirname, '..', 'data', 'lme_pagination.json');
         this._loadLmePagination();
         
@@ -211,6 +214,16 @@ class InteractionHandler {
         // wyłącznie przez dedykowany message component collector w captchaSolverService.js - nie
         // odpowiadaj tutaj, inaczej ten handler skonsumuje interakcję zanim dotrze do kolektora
         if (buttonId.startsWith('captcha_')) {
+            return;
+        }
+
+        // Ręczne podanie ID cotygodniowego snapshotu Lunar Mine (zamiast rozwiązywania captchy automatycznie)
+        if (buttonId === 'lme_manual_id_button') {
+            if (!hasPermission(interaction, this.config.authorizedRoles)) {
+                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', ephemeral: true });
+                return;
+            }
+            await this.showLmeManualIdModal(interaction);
             return;
         }
 
@@ -584,6 +597,10 @@ class InteractionHandler {
 
                 await this.processRivalsCommand(interaction, clanId);
             }
+            else if (modalId === 'lme_manual_id_modal') {
+                const rawId = interaction.fields.getTextInputValue('lme_group_id').trim();
+                await this.processLmeManualSnapshot(interaction, rawId);
+            }
         } catch (error) {
             this.logger.error('❌ Error handling modal submit:', error);
             if (!interaction.replied && !interaction.deferred) {
@@ -829,28 +846,189 @@ class InteractionHandler {
     }
 
     /**
-     * Run scheduled Lunar Mine analysis and send results to a channel
-     * @param {Object} channel - Discord channel/thread to send results to
-     * @param {Array} guildIds - Array of guild IDs to analyze
-     * @param {Object} [options] - { interaction } for ephemeral captcha (admin-triggered /lme-snapshot),
-     *                              or { captchaChannel } for a plain (non-ephemeral) captcha post - used by the
-     *                              unattended Wednesday cron, which has no interaction to reply to
+     * Wysyła na wskazany kanał (kanał admina) embed z instrukcją oraz przycisk, po którego kliknięciu
+     * admin może podać (przez modal) ID uzyskane po ręcznym rozwiązaniu captchy na garrytools.com.
+     * Używane zarówno przez cotygodniowy cron, jak i przez komendę `/lme-snapshot`.
      */
-    async runScheduledLunarMine(channel, guildIds, options = {}) {
+    async sendLmeManualIdRequest(channel) {
         try {
-            this.logger.info(`📅 Running scheduled Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
+            const embed = new EmbedBuilder()
+                .setTitle('🧩 Wymagane ręczne podanie ID Lunar Mine')
+                .setColor(0x3498db)
+                .setDescription(
+                    `Cotygodniowy snapshot Lunar Mine wymaga ręcznego rozwiązania captchy.\n\n` +
+                    `**Instrukcja:**\n` +
+                    `1. Wejdź na https://garrytools.com/lunar/ i wypełnij formularz "Lunar Details" tymi Guild ID:\n` +
+                    `\`${this.LME_SNAPSHOT_GUILD_IDS.join(', ')}\`\n` +
+                    `2. Rozwiąż captchę reCAPTCHA.\n` +
+                    `3. Po przekierowaniu skopiuj ID z linku (\`garrytools.com/lunar/detail/<ID>\`).\n` +
+                    `4. Kliknij przycisk poniżej i podaj to ID.`
+                )
+                .setTimestamp();
+
+            const button = new ButtonBuilder()
+                .setCustomId('lme_manual_id_button')
+                .setLabel('🔑 Podaj ID')
+                .setStyle(ButtonStyle.Primary);
+
+            await channel.send({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)] });
+            this.logger.info(`📅 ✅ Wysłano prośbę o ręczne ID do kanału ${channel.name || channel.id}`);
+        } catch (error) {
+            this.logger.error('📅 ❌ Nie udało się wysłać prośby o ręczne ID:', error.message);
+            await this.logService.logError(error, 'sendLmeManualIdRequest');
+        }
+    }
+
+    async showLmeManualIdModal(interaction) {
+        const modal = new ModalBuilder()
+            .setCustomId('lme_manual_id_modal')
+            .setTitle('🌙 Ręczny snapshot Lunar Mine');
+
+        const idInput = new TextInputBuilder()
+            .setCustomId('lme_group_id')
+            .setLabel('ID z linku garrytools.com/lunar/detail/ID')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('np. 123456 (można wkleić też cały link)')
+            .setRequired(true)
+            .setMinLength(1)
+            .setMaxLength(100);
+
+        modal.addComponents(new ActionRowBuilder().addComponents(idInput));
+        await interaction.showModal(modal);
+    }
+
+    // Akceptuje zarówno sam numer ID, jak i wklejony cały link do garrytools.com/lunar/detail/<ID>
+    extractLmeGroupId(rawInput) {
+        if (!rawInput) return null;
+        const match = rawInput.match(/(\d{4,8})/);
+        return match ? match[1] : null;
+    }
+
+    /**
+     * Obsługuje modal ze zgłoszonym ręcznie ID (po tym jak admin sam rozwiązał captchę na garrytools.com).
+     * Weryfikuje, czy dane pod tym ID dotyczą szukanych klanów, po czym czyści wątek wyników,
+     * publikuje analizę i zapisuje snapshoty historii. Wywoływane zarówno z przycisku na kanale admina
+     * (cotygodniowy cron), jak i bezpośrednio z komendy `/lme-snapshot`.
+     */
+    async processLmeManualSnapshot(interaction, rawId) {
+        await interaction.deferReply({ ephemeral: true });
+
+        const groupId = this.extractLmeGroupId(rawId);
+        if (!groupId) {
+            await interaction.editReply('❌ Nie rozpoznano ID. Podaj sam numer ID lub pełny link do `garrytools.com/lunar/detail/<ID>`.');
+            return;
+        }
+
+        let details;
+        try {
+            details = await this.garrytoolsService.fetchGroupDetails(groupId);
+        } catch (error) {
+            this.logger.error(`📅 ❌ Nie udało się pobrać danych dla ID ${groupId}:`, error.message);
+            await interaction.editReply(`❌ Nie udało się pobrać danych dla ID \`${groupId}\`: ${error.message}`);
+            return;
+        }
+
+        if (!details.guilds || details.guilds.length === 0) {
+            await interaction.editReply(`❌ Brak danych dla ID \`${groupId}\`. Sprawdź czy captcha została poprawnie rozwiązana.`);
+            return;
+        }
+
+        const expected = new Set(this.LME_SNAPSHOT_GUILD_IDS);
+        const found = new Set(details.guilds.map(g => g.guildId));
+        const matches = expected.size === found.size && [...expected].every(id => found.has(id));
+
+        if (!matches) {
+            await interaction.editReply(
+                `❌ To nie są szukane klany!\n` +
+                `**Oczekiwane Guild ID:** ${this.LME_SNAPSHOT_GUILD_IDS.join(', ')}\n` +
+                `**Otrzymane Guild ID:** ${[...found].join(', ')}\n\n` +
+                `Sprawdź czy formularz "Lunar Details" został wypełniony poprawnymi ID i spróbuj ponownie.`
+            );
+            return;
+        }
+
+        await interaction.editReply(`✅ Zweryfikowano ID \`${groupId}\`. Przygotowuję wątek i publikuję wyniki...`);
+
+        const thread = await interaction.client.channels.fetch(this.LME_SNAPSHOT_THREAD_ID).catch(() => null);
+        if (!thread) {
+            await interaction.editReply(`❌ Nie znaleziono wątku o ID ${this.LME_SNAPSHOT_THREAD_ID}.`);
+            return;
+        }
+
+        try {
+            if (thread.joinable) await thread.join();
+        } catch (joinError) {
+            this.logger.warn(`📅 Nie udało się dołączyć do wątku: ${joinError.message}`);
+        }
+
+        // Czyszczenie wątku (bulk delete, pomijając wiadomości systemowe i starsze niż 14 dni - limit Discorda)
+        let deletedTotal = 0;
+        let deleted;
+        do {
+            const messages = await thread.messages.fetch({ limit: 100 });
+            if (messages.size === 0) break;
+
+            const deletable = messages.filter(msg =>
+                Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000 && !msg.system
+            );
+
+            if (deletable.size > 0) {
+                deleted = await thread.bulkDelete(deletable, true);
+                deletedTotal += deleted.size;
+            } else {
+                for (const [, msg] of messages) {
+                    if (msg.system) continue;
+                    try {
+                        await msg.delete();
+                        deletedTotal++;
+                    } catch (_) { /* ignore */ }
+                }
+                break;
+            }
+        } while (deleted && deleted.size >= 2);
+
+        await this.runScheduledLunarMine(thread, this.LME_SNAPSHOT_GUILD_IDS, details);
+
+        // Zapisz też snapshot historii TOP500 (normalnie robi to osobny cron o 18:50, ale zapis jest idempotentny per tydzień)
+        let snapshotCount = 0;
+        try {
+            await this.clanService.fetchClanData();
+            const snapshotClans = this.clanService.getClanData();
+            if (snapshotClans.length > 0) {
+                this.clanHistoryService.saveSnapshot(snapshotClans);
+                snapshotCount = snapshotClans.length;
+            }
+        } catch (err) {
+            this.logger.warn(`📅 Nie udało się zapisać snapshotu TOP500: ${err.message}`);
+        }
+
+        await interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setTitle('✅ Snapshot Lunar Mine ukończony')
+                .setColor(0x00ff00)
+                .setDescription('Wyniki opublikowane w wątku, historia zapisana.')
+                .addFields([
+                    { name: '🗑️ Usunięte wiadomości', value: deletedTotal.toString(), inline: true },
+                    { name: '🎯 Przeanalizowane klany', value: this.LME_SNAPSHOT_GUILD_IDS.length.toString(), inline: true },
+                    { name: '📸 Zapisane klany TOP500', value: snapshotCount.toString(), inline: true },
+                    { name: '📍 Wątek', value: thread.name, inline: false }
+                ])
+                .setTimestamp()]
+        });
+    }
+
+    /**
+     * Publikuje analizę Lunar Mine (na podstawie już pobranych danych) na wskazanym kanale/wątku
+     * oraz zapisuje snapshoty historii gildii/graczy i wykresy.
+     * @param {Object} channel - Discord channel/thread to send results to
+     * @param {Array} guildIds - Guild IDs analyzed (used only for logging/error messages)
+     * @param {Object} details - Wynik garrytoolsService.fetchGroupDetails(groupId)
+     */
+    async runScheduledLunarMine(channel, guildIds, details) {
+        try {
+            this.logger.info(`📅 Publishing Lunar Mine analysis for Guild IDs: ${guildIds.join(', ')}`);
             this.logger.info(`📅 Target channel: ${channel.name} (${channel.id})`);
-
-            this.logger.info('📅 Step 1: Getting Group ID from Garrytools...');
-            const captchaContext = options.interaction
-                ? { interaction: options.interaction }
-                : { channel: options.captchaChannel || channel, invokerId: options.invokerId || null };
-            const groupId = await this.garrytoolsService.getGroupId(guildIds, captchaContext);
-            this.logger.info(`📊 Retrieved Group ID: ${groupId}`);
-
-            this.logger.info('📅 Step 2: Fetching group details...');
-            const details = await this.garrytoolsService.fetchGroupDetails(groupId);
-            this.logger.info(`📊 Fetched details for ${details.guilds?.length || 0} guilds`);
+            this.logger.info(`📊 Details for ${details.guilds?.length || 0} guilds`);
 
             if (!details.guilds || details.guilds.length === 0) {
                 this.logger.error('📅 ❌ No guilds found in expedition data');
@@ -1361,207 +1539,9 @@ class InteractionHandler {
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-            this.logger.info('📸 LME: Starting weekly Lunar Mine automation test...');
-
-            const threadId = '1441152540581564508';
-            const guildIds = [42578, 202226, 125634, 11616];
-
-            this.logger.info(`📸 LME: Attempting to fetch thread ${threadId}...`);
-
-            // Fetch the thread
-            const thread = await interaction.client.channels.fetch(threadId);
-
-            if (!thread) {
-                this.logger.error(`📸 LME: ❌ Could not find thread ${threadId}`);
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('❌ Test Failed')
-                        .setColor(0xff0000)
-                        .setDescription(`Could not find thread with ID: ${threadId}`)
-                        .addFields([
-                            { name: 'Error', value: 'Thread not found or bot lacks access', inline: false },
-                            { name: 'Thread ID', value: threadId, inline: false }
-                        ])
-                        .setTimestamp()]
-                });
-                return;
-            }
-
-            this.logger.info(`📸 LME: ✅ Thread found: ${thread.name}`);
-
-            // Try to join the thread if not already a member
-            try {
-                if (thread.joinable) {
-                    this.logger.info('📸 LME: Attempting to join thread...');
-                    await thread.join();
-                    this.logger.info('📸 LME: ✅ Successfully joined thread');
-                }
-            } catch (joinError) {
-                this.logger.warn(`📸 LME: Could not join thread: ${joinError.message}`);
-            }
-
-            // Check bot permissions
-            const permissions = thread.permissionsFor(interaction.client.user);
-            this.logger.info(`📸 LME: Checking permissions...`);
-            this.logger.info(`📸 LME: Permissions object: ${permissions ? 'exists' : 'null'}`);
-
-            if (!permissions) {
-                this.logger.error('📸 LME: ❌ Could not get permissions for bot in thread');
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⚠️ Test Warning')
-                        .setColor(0xffaa00)
-                        .setDescription('Could not verify permissions, attempting to continue anyway...')
-                        .setTimestamp()]
-                });
-            } else {
-                const hasSend = permissions.has('SendMessages');
-                const hasManage = permissions.has('ManageMessages');
-                const hasRead = permissions.has('ReadMessageHistory');
-
-                this.logger.info(`📸 LME: - Send Messages: ${hasSend}`);
-                this.logger.info(`📸 LME: - Manage Messages: ${hasManage}`);
-                this.logger.info(`📸 LME: - Read Message History: ${hasRead}`);
-                this.logger.info(`📸 LME: - All permissions bitfield: ${permissions.bitfield}`);
-
-                // Try to test actual permissions by attempting operations
-                if (!hasSend || !hasManage || !hasRead) {
-                    this.logger.warn('📸 LME: ⚠️ Permission check failed, but attempting test message...');
-
-                    try {
-                        // Try sending a test message
-                        const testMsg = await thread.send('🧪 Testing permissions...');
-                        await testMsg.delete();
-                        this.logger.info('📸 LME: ✅ Successfully sent and deleted test message - permissions are OK!');
-                    } catch (testError) {
-                        this.logger.error(`📸 LME: ❌ Failed to send test message: ${testError.message}`);
-
-                        const missingPerms = [];
-                        if (!hasSend) missingPerms.push('Send Messages');
-                        if (!hasManage) missingPerms.push('Manage Messages');
-                        if (!hasRead) missingPerms.push('Read Message History');
-
-                        await interaction.editReply({
-                            embeds: [new EmbedBuilder()
-                                .setTitle('❌ Test Failed - Insufficient Permissions')
-                                .setColor(0xff0000)
-                                .setDescription('Bot lacks required permissions in the target thread')
-                                .addFields([
-                                    { name: 'Missing Permissions', value: missingPerms.join('\n'), inline: false },
-                                    { name: 'Thread', value: `${thread.name} (${threadId})`, inline: false },
-                                    { name: 'Error', value: testError.message, inline: false }
-                                ])
-                                .setTimestamp()]
-                        });
-                        return;
-                    }
-                }
-            }
-
-            await interaction.editReply('⏳ Step 1/3: Permissions verified. Clearing thread messages...');
-
-            // Delete all messages in the thread (bulk delete)
-            this.logger.info('📸 LME: 🗑️ Clearing thread messages...');
-            let deletedTotal = 0;
-            let skippedSystem = 0;
-            let deleted;
-            do {
-                const messages = await thread.messages.fetch({ limit: 100 });
-                if (messages.size === 0) break;
-
-                // Count system messages
-                const systemMessages = messages.filter(msg => msg.system);
-                skippedSystem += systemMessages.size;
-
-                // Filter messages younger than 14 days (Discord limitation) AND exclude system messages
-                const deletable = messages.filter(msg =>
-                    Date.now() - msg.createdTimestamp < 14 * 24 * 60 * 60 * 1000 &&
-                    !msg.system  // Exclude system messages (join, pin, etc.)
-                );
-
-                if (deletable.size > 0) {
-                    deleted = await thread.bulkDelete(deletable, true);
-                    deletedTotal += deleted.size;
-                    this.logger.info(`📸 LME: 🗑️ Deleted ${deleted.size} messages (total: ${deletedTotal}, skipped ${skippedSystem} system messages)`);
-                } else {
-                    // For older messages, delete one by one (skip system messages)
-                    for (const [, msg] of messages) {
-                        if (msg.system) {
-                            skippedSystem++;
-                            continue;
-                        }
-                        try {
-                            await msg.delete();
-                            deletedTotal++;
-                        } catch (e) {
-                            this.logger.warn(`📸 LME: Could not delete old message: ${e.message}`);
-                        }
-                    }
-                    break;
-                }
-            } while (deleted && deleted.size >= 2);
-
-            this.logger.info(`📸 LME: ✅ Thread cleared, deleted ${deletedTotal} messages`);
-
-            await interaction.editReply(`✅ Step 2/3: Cleared ${deletedTotal} messages. Running Lunar Mine analysis...`);
-
-            // Run the scheduled Lunar Mine analysis (fetches data, saves guild/player snapshots, posts charts)
-            this.logger.info('📸 LME-SNAPSHOT: Running Lunar Mine analysis...');
-            await this.runScheduledLunarMine(thread, guildIds, { interaction });
-
-            // Also save TOP500 clan history snapshot (normally done by separate 18:46 cron)
-            await interaction.editReply(`✅ Step 3/3: Analysis done. Saving TOP500 clan history snapshot...`);
-            await this.clanService.fetchClanData();
-            const snapshotClans = this.clanService.getClanData();
-            let snapshotCount = 0;
-            if (snapshotClans.length > 0) {
-                this.clanHistoryService.saveSnapshot(snapshotClans);
-                snapshotCount = snapshotClans.length;
-                this.logger.info(`📸 LME-SNAPSHOT: ✅ TOP500 snapshot saved: ${snapshotCount} clans`);
-            }
-
-            this.logger.info('📸 LME-SNAPSHOT: ✅ Completed successfully!');
-
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('✅ LME Snapshot Completed')
-                    .setColor(0x00ff00)
-                    .setDescription('Snapshot Lunar Mine wykonany. Stalker może teraz zaktualizować historię walk przez `/lme-snapshot`.')
-                    .addFields([
-                        { name: '🗑️ Messages Deleted', value: deletedTotal.toString(), inline: true },
-                        { name: '⏭️ System Messages Skipped', value: skippedSystem.toString(), inline: true },
-                        { name: '🎯 Guilds Analyzed', value: guildIds.length.toString(), inline: true },
-                        { name: '📸 TOP500 Clans Saved', value: snapshotCount.toString(), inline: true },
-                        { name: '📍 Thread', value: `${thread.name}`, inline: false }
-                    ])
-                    .setTimestamp()]
-            });
-
-            await this.logService.logInfo('📸 LME-SNAPSHOT: Completed successfully');
-
-        } catch (error) {
-            this.logger.error('📸 LME: ❌ Error during test:', error);
-            this.logger.error('📸 LME: Error stack:', error.stack);
-            this.logger.error('📸 LME: Error message:', error.message);
-
-            await this.logService.logError(error, 'weekly Lunar Mine test');
-
-            await interaction.editReply({
-                embeds: [new EmbedBuilder()
-                    .setTitle('❌ Test Failed')
-                    .setColor(0xff0000)
-                    .setDescription('An error occurred during the automation test')
-                    .addFields([
-                        { name: 'Error Type', value: error.name || 'Unknown', inline: true },
-                        { name: 'Error Message', value: error.message || 'No message', inline: false },
-                        { name: 'Stack Trace', value: '```' + (error.stack?.substring(0, 900) || 'No stack trace') + '```', inline: false }
-                    ])
-                    .setTimestamp()]
-            });
-        }
+        // Captcha nie jest już rozwiązywana automatycznie - admin sam rozwiązuje ją na garrytools.com
+        // i od razu podaje uzyskane ID przez modal (dalsze kroki w processLmeManualSnapshot)
+        await this.showLmeManualIdModal(interaction);
     }
 
     async handleSearchCommand(interaction) {
