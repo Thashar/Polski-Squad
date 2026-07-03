@@ -67,25 +67,19 @@ class GlobalTop10Service {
     // ── schedule management ────────────────────────────────────────────────────
 
     /**
-     * Ustawia harmonogram. Wywoływane z panelu admina.
-     * @param {string} firstTriggerIso  ISO string punktu odniesienia (może być w przeszłości)
-     * @param {number} reportNumber     Którym raportem sezonu (1-CYCLE_LEN, domyślnie 1 = pierwszy
-     *                                  boss sezonu) jest podana data. Pozwala zrekalibrować cykl
-     *                                  gdy punkt odniesienia to NIE pierwszy boss sezonu (np. 7. boss) —
-     *                                  bez tego harmonogram zawsze zakładałby "pierwszy raport"
-     *                                  i błędnie przesunąłby kolejne 4-dniowe przerwy.
+     * Ustawia harmonogram. Wywoływane z panelu admina. Podana data to zawsze początek
+     * cyklu (pierwszy boss sezonu, triggerCount=0).
      *
-     * Jeśli podana data i numer raportu są tożsame z aktualną konfiguracją — nic się nie zmienia
+     * Jeśli podana data jest tożsama z aktualnie zapisanym `nextTrigger` — nic się nie zmienia
      * (zapobiega przypadkowemu wyzerowaniu pozycji w cyklu przy samym otwarciu i zatwierdzeniu
-     * modala bez faktycznej zmiany).
+     * modala bez faktycznej zmiany daty).
      * Jeśli podana data jest w przeszłości — traktowana jest jako punkt odniesienia (np. faktyczny
-     * koniec bossa) i harmonogram jest przewijany wg wzorca 9×3 dni + 4 dni przerwy do najbliższego
+     * początek sezonu) i harmonogram jest przewijany wg wzorca 9×3 dni + 4 dni przerwy do najbliższego
      * przyszłego terminu, bez wysyłania pominiętych po drodze raportów.
+     * @param {string} firstTriggerIso  ISO string początku cyklu (może być w przeszłości)
      */
-    setSchedule(firstTriggerIso, reportNumber = 1) {
-        const startCount = ((reportNumber - 1) % CYCLE_LEN + CYCLE_LEN) % CYCLE_LEN;
-
-        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso && this._cfg.triggerCount === startCount) {
+    setSchedule(firstTriggerIso) {
+        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso && this._cfg.triggerCount === 0) {
             logger.info('[GlobalTop10] Harmonogram bez zmian — pomijam reset cyklu');
             return;
         }
@@ -93,7 +87,7 @@ class GlobalTop10Service {
         this._cfg.enabled      = true;
         this._cfg.firstTrigger = firstTriggerIso;
         this._cfg.nextTrigger  = firstTriggerIso;
-        this._cfg.triggerCount = startCount;
+        this._cfg.triggerCount = 0;
 
         let skipped = 0;
         while (new Date(this._cfg.nextTrigger).getTime() <= Date.now()) {
@@ -102,7 +96,7 @@ class GlobalTop10Service {
         }
 
         this._save();
-        logger.info(`[GlobalTop10] Harmonogram ustawiony: punkt odniesienia ${firstTriggerIso} (raport #${reportNumber} sezonu), kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
+        logger.info(`[GlobalTop10] Harmonogram ustawiony: początek cyklu ${firstTriggerIso}, kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
     }
 
     disableSchedule() {
