@@ -8,8 +8,10 @@ const { formatMessage } = require('../utils/helpers');
 
 const logger = createBotLogger('EndersEcho');
 
-// Interwał: 9 × 3 dni, potem 4 dni przerwy, powtórz (cykl 10)
-const CYCLE_LEN          = 10;
+// Interwał: 9 raportów (bossów) na sezon, co 3 dni, potem 4 dni przerwy (dzień odpoczynku + boss1 nowego sezonu), powtórz
+// UWAGA: CYCLE_LEN = liczba RAPORTÓW w sezonie (9), NIE liczba wszystkich pozycji cyklu (poprzednio błędnie 10,
+// co wstawiało dodatkowy, 10. raport przed każdą kolejną przerwą i przesuwało harmonogram o cały sezon w przód)
+const CYCLE_LEN          = 9;
 const REPORT_INTERVAL_MS = 3 * 24 * 60 * 60 * 1000; // 3 dni
 const BREAK_INTERVAL_MS  = 4 * 24 * 60 * 60 * 1000;  // 4 dni
 
@@ -66,17 +68,24 @@ class GlobalTop10Service {
 
     /**
      * Ustawia harmonogram. Wywoływane z panelu admina.
-     * Jeśli podana data jest tożsama z aktualnie zapisanym `nextTrigger` — nic się nie zmienia
+     * @param {string} firstTriggerIso  ISO string punktu odniesienia (może być w przeszłości)
+     * @param {number} reportNumber     Którym raportem sezonu (1-CYCLE_LEN, domyślnie 1 = pierwszy
+     *                                  boss sezonu) jest podana data. Pozwala zrekalibrować cykl
+     *                                  gdy punkt odniesienia to NIE pierwszy boss sezonu (np. 7. boss) —
+     *                                  bez tego harmonogram zawsze zakładałby "pierwszy raport"
+     *                                  i błędnie przesunąłby kolejne 4-dniowe przerwy.
+     *
+     * Jeśli podana data i numer raportu są tożsame z aktualną konfiguracją — nic się nie zmienia
      * (zapobiega przypadkowemu wyzerowaniu pozycji w cyklu przy samym otwarciu i zatwierdzeniu
-     * modala bez faktycznej zmiany daty).
+     * modala bez faktycznej zmiany).
      * Jeśli podana data jest w przeszłości — traktowana jest jako punkt odniesienia (np. faktyczny
      * koniec bossa) i harmonogram jest przewijany wg wzorca 9×3 dni + 4 dni przerwy do najbliższego
-     * przyszłego terminu, bez wysyłania pominiętych po drodze raportów. Pozwala to poprawnie
-     * zrekalibrować cykl względem realnego kalendarza sezonu.
-     * @param {string} firstTriggerIso  ISO string punktu odniesienia (może być w przeszłości)
+     * przyszłego terminu, bez wysyłania pominiętych po drodze raportów.
      */
-    setSchedule(firstTriggerIso) {
-        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso) {
+    setSchedule(firstTriggerIso, reportNumber = 1) {
+        const startCount = ((reportNumber - 1) % CYCLE_LEN + CYCLE_LEN) % CYCLE_LEN;
+
+        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso && this._cfg.triggerCount === startCount) {
             logger.info('[GlobalTop10] Harmonogram bez zmian — pomijam reset cyklu');
             return;
         }
@@ -84,7 +93,7 @@ class GlobalTop10Service {
         this._cfg.enabled      = true;
         this._cfg.firstTrigger = firstTriggerIso;
         this._cfg.nextTrigger  = firstTriggerIso;
-        this._cfg.triggerCount = 0;
+        this._cfg.triggerCount = startCount;
 
         let skipped = 0;
         while (new Date(this._cfg.nextTrigger).getTime() <= Date.now()) {
@@ -93,7 +102,7 @@ class GlobalTop10Service {
         }
 
         this._save();
-        logger.info(`[GlobalTop10] Harmonogram ustawiony: punkt odniesienia ${firstTriggerIso}, kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
+        logger.info(`[GlobalTop10] Harmonogram ustawiony: punkt odniesienia ${firstTriggerIso} (raport #${reportNumber} sezonu), kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
     }
 
     disableSchedule() {
@@ -103,10 +112,12 @@ class GlobalTop10Service {
     }
 
     _nextIntervalMs() {
-        // Interwał PO bieżącym raporcie — liczony na triggerCount, jaki będzie obowiązywał
-        // zaraz po jego wysłaniu (zgodnie z _stepOnce, który inkrementuje przed obliczeniem).
-        const pos = ((this._cfg.triggerCount || 0) + 1) % CYCLE_LEN;
-        return pos === CYCLE_LEN - 1 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
+        // Interwał PO bieżącym raporcie — liczony na numerze raportu, jaki właśnie zostanie/został
+        // wysłany (triggerCount+1, zgodnie z _stepOnce, który inkrementuje przed obliczeniem).
+        // Przerwa następuje po KAŻDYM 9. raporcie sezonu (numer podzielny przez CYCLE_LEN=9),
+        // nie po co 10. — inaczej sezon dostawałby dodatkowy raport i przesuwał harmonogram.
+        const reportNumber = (this._cfg.triggerCount || 0) + 1;
+        return reportNumber % CYCLE_LEN === 0 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
     }
 
     /**
