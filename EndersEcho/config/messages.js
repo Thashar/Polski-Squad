@@ -61,10 +61,10 @@ const pol = {
     // Nowy rekord — ogłoszenie ephemeral
     newRecordConfirmed: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.',
     newRecordFallback: '🏆 **NOWY REKORD!**\n**Gracz:** {username}\n**Nowy rekord:** {score}\n**Poprzedni:** {previous}\n\n*Błąd wysyłania pełnego embed*',
-    resultNotBeatenCrossServer: '❌ Nie pobito rekordu — taki sam wynik (**{score}**) widnieje już na serwerze **{guildName}**.',
-    crossServerScoreRemovedField: '🗑️ Poprzedni wynik zostanie ukryty',
-    crossServerScoreRemovedValue: 'Wynik **{score}** na serwerze **{guildName}** nie będzie widoczny w rankingu. Twoja historia wciąż będzie zachowana.',
-    crossServerBossKeptField: 'Rekord globalny bez zmian',
+    resultNotBeatenCrossServer: '❌ Nie pobito rekordu — masz już wyższy wynik (**{score}**) na serwerze **{guildName}**.',
+    crossServerScoreRemovedNotice: '⚠️ Twój ostatni wynik **{score}** na serwerze **{oldGuildName}** nie będzie już widoczny w rankingu serwera.\nOd teraz figurujesz w rankingu na serwerze **{newGuildName}**.\nTwoja historia wyników została zachowana.',
+    crossServerMigratedNotice: 'Wynik został zmigrowany\nWynik został przeniesiony z rankingu serwera **{oldGuildName}** na ranking serwera **{newGuildName}**.\nTwoja historia wyników została zachowana.',
+    crossServerBossKeptField: 'Rekord globalny pozostał bez zmian',
     crossServerBossKeptValue: 'Twój najlepszy wynik **{score}** pozostaje na serwerze **{guildName}** — nie został przeniesiony. Tutaj ustawiłeś jedynie nowy rekord na tym bossie.',
     noRecordFallback: '❌ Nie pobito rekordu\n**Gracz:** {username}\n**Wynik:** {score}\n**Obecny rekord:** {current}\n\n*Błąd wysyłania embed z obrazem*',
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
@@ -294,6 +294,8 @@ const pol = {
     analyzeResultNoRecord: 'Nie pobito rekordu',
     analyzeResultUnknown: 'nieznany',
     analyzeManualAnnouncement: '<@{userId}> Twój wynik został zweryfikowany manualnie przez administratora **{adminName}**.',
+    analyzeFailNoRecordMessage: '❌ **{userName}** nie pobił rekordu',
+    analyzeFailReasonField: 'Powód odrzucenia',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Komendy **{commands}** wyłączone na serwerze **{serverName}**.',
@@ -342,8 +344,8 @@ const pol = {
     bossRecordUpdated: '👾 Nowy rekord na bossie',
     bossRecordOnlyStatus: '👾 Pobito rekord na bossie! Rekord globalny bez zmian (obecny: {currentScore})',
     unknownBossAccepted: '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.',
-    unknownBossRankingNotice: '⚠️ Wykryto **nową nazwę bossa**: *{bossName}*\nWynik **nie pojawi się w rankingu bossów** do czasu weryfikacji przez admina.\nPo weryfikacji: nazwa zostanie dodana jako alias lub wynik zostanie cofnięty do poprzedniego stanu.',
-    unknownBossRankingField: '⚠️ Niezweryfikowana nazwa bossa',
+    unknownBossRankingNotice: 'Wykryto **nową nazwę bossa**: *{bossName}*\nWynik **nie pojawi się w rankingu bossów** do czasu weryfikacji przez admina.\nPo weryfikacji: nazwa zostanie dodana jako alias lub wynik zostanie cofnięty do poprzedniego stanu.',
+    unknownBossRankingField: 'Niezweryfikowana nazwa bossa',
     bossRecordOnlyConfirmed: '✅ **Nowy rekord na bossie ogłoszony!** 👾 Twój wynik na tym bossie został opublikowany.',
     bossRecordPublicTitle: '👾 Nowy Rekord Bossa!',
 
@@ -442,10 +444,10 @@ const eng = {
     // New record — ephemeral announcement
     newRecordConfirmed: '✅ **New record set and announced!**\n🏆 Congratulations! Your score has been published for everyone.',
     newRecordFallback: '🏆 **NEW RECORD!**\n**Player:** {username}\n**New record:** {score}\n**Previous:** {previous}\n\n*Error sending full embed*',
-    resultNotBeatenCrossServer: '❌ Record not beaten — same score (**{score}**) already exists on server **{guildName}**.',
-    crossServerScoreRemovedField: '🗑️ Previous score will be hidden',
-    crossServerScoreRemovedValue: 'Score **{score}** on server **{guildName}** will no longer be visible in the ranking. Your history will still be preserved.',
-    crossServerBossKeptField: 'Global record unchanged',
+    resultNotBeatenCrossServer: '❌ Record not beaten — you already have a higher score (**{score}**) on server **{guildName}**.',
+    crossServerScoreRemovedNotice: '⚠️ Your last score **{score}** on server **{oldGuildName}** will no longer be visible in the server ranking.\nFrom now on you appear in the ranking on server **{newGuildName}**.\nYour score history has been preserved.',
+    crossServerMigratedNotice: 'Your score has been migrated\nYour score has been moved from the ranking of server **{oldGuildName}** to the ranking of server **{newGuildName}**.\nYour score history has been preserved.',
+    crossServerBossKeptField: 'Global record remains unchanged',
     crossServerBossKeptValue: 'Your best score **{score}** stays on server **{guildName}** — it was not moved. Here you only set a new record on this boss.',
     noRecordFallback: '❌ Record not beaten\n**Player:** {username}\n**Score:** {score}\n**Current record:** {current}\n\n*Error sending embed with image*',
     rankingImageCaption: '📎 **Original result image:**',
@@ -675,6 +677,8 @@ const eng = {
     analyzeResultNoRecord: 'No record broken',
     analyzeResultUnknown: 'unknown',
     analyzeManualAnnouncement: '<@{userId}> Your score was manually verified by administrator **{adminName}**.',
+    analyzeFailNoRecordMessage: '❌ **{userName}** did not beat the record',
+    analyzeFailReasonField: 'Rejection reason',
 
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Commands **{commands}** disabled on server **{serverName}**.',
@@ -723,8 +727,8 @@ const eng = {
     bossRecordUpdated: '👾 New Boss Record',
     bossRecordOnlyStatus: '👾 Boss record beaten! Global record unchanged (current: {currentScore})',
     unknownBossAccepted: '⚠️ Score noted — boss name unrecognized. After admin verification, the entry will be updated or removed from the ranking.',
-    unknownBossRankingNotice: '⚠️ **New boss name** detected: *{bossName}*\nThe score **won\'t appear in the boss ranking** until verified by an admin.\nAfter verification: the name will be added as an alias or the score will be reverted.',
-    unknownBossRankingField: '⚠️ Unverified Boss Name',
+    unknownBossRankingNotice: '**New boss name** detected: *{bossName}*\nThe score **won\'t appear in the boss ranking** until verified by an admin.\nAfter verification: the name will be added as an alias or the score will be reverted.',
+    unknownBossRankingField: 'Unverified Boss Name',
     bossRecordOnlyConfirmed: '✅ **New boss record announced!** 👾 Your score on this boss has been published.',
     bossRecordPublicTitle: '👾 New Boss Record!',
 

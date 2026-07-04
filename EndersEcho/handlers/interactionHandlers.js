@@ -4330,8 +4330,10 @@ class InteractionHandler {
             const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
             const _prevGlobalUser = prevGlobalRanking?.find(p => p.userId === userId) || null;
 
-            // Duplikat cross-server: gracz ma już taki sam (lub lepszy) wynik na innym serwerze — nie zapisuj do rankingu globalnego
-            if (_prevGlobalUser && _prevGlobalUser.scoreValue >= _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
+            // Duplikat cross-server: gracz ma już lepszy wynik na innym serwerze — nie zapisuj do rankingu globalnego.
+            // Dokładne wyrównanie (===) NIE wchodzi w ten blok — trafia do normalnego flow niżej i jest traktowane
+            // jako migracja wpisu (usunięcie z poprzedniego serwera, zapis na nowym).
+            if (_prevGlobalUser && _prevGlobalUser.scoreValue > _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
                 const sourceGuildId = _prevGlobalUser.sourceGuildId;
                 const sourceGuildName = interaction.client.guilds.cache.get(sourceGuildId)?.name || sourceGuildId;
 
@@ -4448,7 +4450,7 @@ class InteractionHandler {
                     }];
                     if (wasUnknownBossCs) {
                         const noticeVal = formatMessage(
-                            msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                            msgs.unknownBossRankingNotice || 'Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                             { bossName }
                         );
                         csSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
@@ -4549,6 +4551,9 @@ class InteractionHandler {
             // Zapamiętaj poprzedni rekord przed nadpisaniem (potrzebne do community verification)
             const previousRecordSnapshot = dryRun ? null : await this.rankingService.getUserRecord(guildId, userId);
 
+            // Dokładne wyrównanie globalnego wyniku z innego serwera — wpis migruje z poprzedniego serwera na ten
+            const isCrossServerTieMigration = !!(_prevGlobalUser && _prevGlobalUser.scoreValue === _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId);
+
             let isNewRecord;
             let currentScore;
             let newRecordTimestamp = null;
@@ -4570,6 +4575,17 @@ class InteractionHandler {
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
+                // Migracja wpisu: przy dokładnym wyrównaniu wyniku _removeWeakerScoresFromOtherGuilds (porównanie "<")
+                // nie usuwa wpisu na poprzednim serwerze — trzeba to zrobić jawnie.
+                if (isCrossServerTieMigration && isNewRecord) {
+                    try {
+                        await this.rankingService.removePlayerFromRanking(userId, _prevGlobalUser.sourceGuildId);
+                        if (!affectedGuildIds.includes(_prevGlobalUser.sourceGuildId)) affectedGuildIds.push(_prevGlobalUser.sourceGuildId);
+                        gl.info(`🔁 Migracja wyniku gracza "${userName}" — usunięto wpis z poprzedniego serwera po wyrównaniu wyniku`);
+                    } catch (migrateErr) {
+                        gl.warn(`⚠️ Błąd migracji wpisu cross-server: ${migrateErr.message}`);
+                    }
+                }
                 // Aktualizuj panel Centrum Dowodzenia po każdym zapisie (nowy rekord lub nie)
                 if (this.adminPanelService) {
                     this.adminPanelService.setLastRecord(userName, bestScore, bossName, guildId);
@@ -4783,10 +4799,10 @@ class InteractionHandler {
                 const bossSystemNotices = [];
                 if (wasUnknownBoss) {
                     const noticeVal = formatMessage(
-                        msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                        msgs.unknownBossRankingNotice || 'Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                         { bossName }
                     );
-                    bossSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
+                    bossSystemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
                 }
 
                 // Ikona bossa (Embed 3) — gdy boss znany
@@ -4983,18 +4999,31 @@ class InteractionHandler {
             const systemNotices = [];
             if (wasUnknownBoss && isNewBossRecord && bossName) {
                 const noticeVal = formatMessage(
-                    msgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                    msgs.unknownBossRankingNotice || 'Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                     { bossName }
                 );
-                systemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
+                systemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
             }
+            // Poprzedni wynik na innym serwerze zostaje ukryty (nowy wynik jest ściśle lepszy) — nadpisuje opis Embedu 4
+            let crossServerScoreRemovedNote = null;
             if (_prevGlobalUser && _newScoreValue > _prevGlobalUser.scoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
                 const removedGuildName = interaction.client.guilds.cache.get(_prevGlobalUser.sourceGuildId)?.name
                     || _prevGlobalUser.sourceGuildId;
-                systemNotices.push({
-                    name: msgs.crossServerScoreRemovedField,
-                    value: formatMessage(msgs.crossServerScoreRemovedValue, { score: _prevGlobalUser.score, guildName: removedGuildName }),
-                });
+                const newGuildName = interaction.guild?.name || guildId;
+                crossServerScoreRemovedNote = `${msgs.systemInfoAllGood}\n${formatMessage(msgs.crossServerScoreRemovedNotice, {
+                    score: _prevGlobalUser.score,
+                    oldGuildName: removedGuildName,
+                    newGuildName,
+                })}`;
+            }
+
+            // Dokładne wyrównanie wyniku z innego serwera — wpis migruje na ten serwer, nadpisuje opis Embedu 4
+            let crossServerMigratedNote = null;
+            if (isCrossServerTieMigration) {
+                const oldGuildName = interaction.client.guilds.cache.get(_prevGlobalUser.sourceGuildId)?.name
+                    || _prevGlobalUser.sourceGuildId;
+                const newGuildName = interaction.guild?.name || guildId;
+                crossServerMigratedNote = formatMessage(msgs.crossServerMigratedNotice, { oldGuildName, newGuildName });
             }
 
             // === Licznik subskrybentów (Embed 1) === (read-only; w /test pokazujemy taki sam licznik, DM nie wychodzi)
@@ -5075,6 +5104,8 @@ class InteractionHandler {
                 bossImageName,
                 followerCount: recordSubscribers.length,
                 systemNotices,
+                crossServerScoreRemovedNote,
+                crossServerMigratedNote,
                 // /test (dryRun): symulowana pozycja w klanie (nowy wynik bez zapisu), by była identyczna jak po /update
                 sortedPlayersOverride: dryRun
                     ? await this.rankingService.simulateSortedPlayers(guildId, userId, userName, bestScore)
@@ -9137,7 +9168,27 @@ class InteractionHandler {
             if (!aiResult.isValidVictory || !aiResult.score) {
                 gl.warn(`⚠️ [Analizuj] Wynik OCR nieprawidłowy — isValidVictory=${aiResult.isValidVictory}, score=${aiResult.score}, error=${aiResult.error}`);
                 const extraInfo = formatMessage(targetMsgs.analyzeResultFail, { adminName, error: aiResult.error || targetMsgs.analyzeResultUnknown });
-                await applyToCurrentMsg(extraInfo);
+
+                // Ephemeral w konwencji ogłoszenia wyników: Embed 1 = "nie pobił rekordu" + awatar, Embed 2 = powód odrzucenia
+                const targetUserAvatarUrl = await interaction.client.users.fetch(targetUserId)
+                    .then(u => u.displayAvatarURL()).catch(() => null);
+                const failEmbed1 = new EmbedBuilder()
+                    .setColor(0xff9900)
+                    .setAuthor({ name: userName, iconURL: targetUserAvatarUrl || undefined })
+                    .setDescription(formatMessage(targetMsgs.analyzeFailNoRecordMessage, { userName }));
+                const failEmbed2 = new EmbedBuilder()
+                    .setColor(0xFF0000)
+                    .setAuthor({
+                        name: targetMsgs.analyzeFailReasonField,
+                        iconURL: 'https://cdn.discordapp.com/emojis/1522935902295556127.webp?size=128',
+                    })
+                    .setDescription(aiResult.error || targetMsgs.analyzeResultUnknown);
+
+                const updatedEmbeds = this._buildActionEmbeds(
+                    origMsg.embeds, targetMsgs, serverName, 'analyzed', adminName, extraInfo
+                );
+                await origMsg.edit({ embeds: updatedEmbeds, components: [] }).catch(() => {});
+                await interaction.editReply({ embeds: [failEmbed1, failEmbed2], components: [] }).catch(() => {});
                 await applyToOtherMsg(extraInfo);
                 try {
                     this.logService.sendOcrAnalysisEmbed(targetGuildId, {
@@ -9350,10 +9401,10 @@ class InteractionHandler {
                         const analyzeSystemNotices = [];
                         if (analyzeWasUnknownBoss && isNewBossRecord && aiResult.bossName) {
                             const noticeVal = formatMessage(
-                                targetMsgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                                targetMsgs.unknownBossRankingNotice || 'Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
                                 { bossName: aiResult.bossName }
                             );
-                            analyzeSystemNotices.push({ name: targetMsgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
+                            analyzeSystemNotices.push({ name: targetMsgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
                         }
 
                         // Licznik subskrybentów (Embed 1)

@@ -1006,6 +1006,8 @@ class RankingService {
             systemNotices = [],
             sortedPlayersOverride = null, // /test (dryRun): symulowana lista graczy z nowym wynikiem (bez zapisu)
             manualVerificationNote = null, // panel Analizuj: zastępuje domyślny tekst "brak uwag" w Embedzie 4
+            crossServerScoreRemovedNote = null, // cross-server: nowy wynik ściśle lepszy — poprzedni serwer traci wpis
+            crossServerMigratedNote = null, // cross-server: dokładne wyrównanie wyniku — wpis migruje na ten serwer
         } = opts;
 
         const msgs = messages || this.config.messages;
@@ -1154,24 +1156,35 @@ class RankingService {
         }
 
         // ===== EMBED 4 — ℹ️ Informacje systemowe (komunikaty + zdjęcie analizy) =====
-        const hasNotices = Array.isArray(systemNotices) && systemNotices.length > 0;
-        // Ikona statusu w polu ikony embeda (author): zaakceptowano (brak uwag) vs informacja systemowa
-        const systemInfoIcon = hasNotices
+        const hasFieldNotices = Array.isArray(systemNotices) && systemNotices.length > 0;
+        const specialDescription = manualVerificationNote || crossServerScoreRemovedNote || crossServerMigratedNote || null;
+        // Ikona statusu w polu ikony embeda (author): manualna weryfikacja > uwagi/komunikaty > zaakceptowano bez uwag
+        const systemInfoIcon = manualVerificationNote
             ? 'https://cdn.discordapp.com/emojis/1297532628395622440.webp?size=128&animated=true'
-            : 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true';
+            : (hasFieldNotices || crossServerScoreRemovedNote || crossServerMigratedNote)
+                ? 'https://cdn.discordapp.com/emojis/1522939660278435993.webp?size=128'
+                : 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true';
         const embed4 = new EmbedBuilder()
             .setColor(embedColor)
             .setAuthor({ name: msgs.systemInfoEmbedTitle || 'ℹ️ Analiza zgłoszenia', iconURL: systemInfoIcon })
-            .setThumbnail(systemInfoIcon) // ikona akceptacji (brak uwag) lub informacyjna (są komunikaty)
+            .setThumbnail(systemInfoIcon) // ikona akceptacji / manualnej weryfikacji / komunikatu
             .setTimestamp(); // stopka „Dziś o HH:MM"
-        if (hasNotices) {
+        if (specialDescription) {
+            embed4.setDescription(specialDescription);
+            if (hasFieldNotices) {
+                for (const notice of systemNotices) {
+                    const noticeValue = String(notice.value).split('. ').join('.\n');
+                    embed4.addFields({ name: notice.name, value: noticeValue, inline: false });
+                }
+            }
+        } else if (hasFieldNotices) {
             for (const notice of systemNotices) {
                 // Każde zdanie komunikatu systemowego w nowym wierszu (łamanie po ". ")
                 const noticeValue = String(notice.value).split('. ').join('.\n');
                 embed4.addFields({ name: notice.name, value: noticeValue, inline: false });
             }
         } else {
-            embed4.setDescription(manualVerificationNote || msgs.systemInfoAllGood || 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.');
+            embed4.setDescription(msgs.systemInfoAllGood || 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.');
         }
         if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
         embeds.push(embed4);
