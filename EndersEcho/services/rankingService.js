@@ -910,18 +910,6 @@ class RankingService {
         }
     }
 
-    /**
-     * Tworzy embed nowego rekordu
-     * @param {string} userName
-     * @param {string} bestScore
-     * @param {string} userAvatarUrl
-     * @param {string} attachmentName
-     * @param {string|null} previousScore
-     * @param {string|null} userId
-     * @param {string|null} guildId
-     * @param {Object|null} messages
-     * @returns {Promise<EmbedBuilder>}
-     */
     getPositionColor(position) {
         if (!position) return 0x57F287;
         if (position === 1) return 0xFFD700;
@@ -974,145 +962,6 @@ class RankingService {
         return parts.join(' ');
     }
 
-    async createRecordEmbed(userName, bestScore, userAvatarUrl, attachmentName, previousScore = null, userId = null, guildId = null, messages = null, guild = null, guildTopRoles = null, previousTimestamp = null, rolePositions = [], achievementsFieldValue = null, globalSnippetData = null, bossRecordData = null, rankingOverride = null, bossSnippetData = null) {
-        const msgs = messages || this.config.messages;
-
-        // Oblicz postęp i poprawę w jednej linii
-        let progressText = bestScore;
-        if (previousScore) {
-            const previousScoreValue = this.parseScoreValue(previousScore);
-            const newScoreValue = this.parseScoreValue(bestScore);
-            const improvement = newScoreValue - previousScoreValue;
-            const newScoreUnit = this.getScoreUnit(bestScore);
-            const improvementText = this.formatProgressInUnit(improvement, newScoreUnit);
-            progressText = `${previousScore} ➜ ${bestScore} (${improvementText})`;
-        }
-
-        // Pobierz pozycję w rankingu
-        let currentPosition = null;
-        let positionChange = 0;
-        let isNewEntry = false;
-
-        if (userId && guildId) {
-            try {
-                const sortedPlayers = await this.getSortedPlayers(guildId);
-                const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
-
-                if (userIndex !== -1) {
-                    currentPosition = userIndex + 1;
-
-                    if (previousScore) {
-                        const tempPlayers = [...sortedPlayers];
-                        const userPlayer = tempPlayers.find(p => p.userId === userId);
-                        if (userPlayer) {
-                            userPlayer.scoreValue = this.parseScoreValue(previousScore);
-                            tempPlayers.sort((a, b) => b.scoreValue - a.scoreValue);
-                            const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
-                            positionChange = (previousIndex + 1) - currentPosition;
-                        }
-                    } else {
-                        isNewEntry = true;
-                    }
-                }
-            } catch (error) {
-                logger.error('Błąd pobierania pozycji w rankingu:', error);
-            }
-        }
-
-        // Rola i ikona roli
-        const positionRole = currentPosition ? this.getPositionRole(currentPosition, guildTopRoles, guild) : null;
-
-        // Kolor i medal wg pozycji
-        const embedColor = this.getPositionColor(currentPosition);
-        const medal = this.getPositionMedal(currentPosition);
-
-        // Buduj opis z wszystkimi danymi
-        let descLines = [];
-        descLines.push(formatMessage(msgs.recordDescription, { username: userName }));
-        descLines.push('');
-
-        if (previousScore) {
-            descLines.push(`**${msgs.recordProgress}:** ${progressText}`);
-        } else {
-            descLines.push(`**${msgs.recordNewScore}:** ${bestScore}`);
-        }
-
-        if (currentPosition !== null) {
-            let posLine = `**${msgs.recordRanking}:** ${medal} #${currentPosition}`;
-            if (positionChange > 0) {
-                posLine += `  *(${msgs.recordPromotionBy} +${positionChange})*`;
-            } else if (isNewEntry) {
-                posLine += `  *(${msgs.recordNewEntry})*`;
-            }
-            descLines.push(posLine);
-        }
-
-        if (rolePositions?.length > 0) {
-            for (const rp of rolePositions) {
-                descLines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
-            }
-        }
-
-        const timeSince = this.formatTimeSince(previousTimestamp);
-        if (timeSince) {
-            descLines.push(`*(${msgs.recordPreviousRecordAgo}: ${timeSince} ${msgs.recordAgo})*`);
-        }
-
-        const description = descLines.join('\n');
-
-        // Author: ikona roli jeśli dostępna
-        let authorData = null;
-        if (positionRole) {
-            const roleIconUrl = positionRole.iconURL({ size: 256 });
-            if (roleIconUrl) {
-                authorData = { name: positionRole.name, iconURL: roleIconUrl };
-            } else if (positionRole.unicodeEmoji) {
-                authorData = { name: `${positionRole.unicodeEmoji} ${positionRole.name}` };
-            } else {
-                authorData = { name: positionRole.name };
-            }
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(embedColor)
-            .setTitle(msgs.recordTitle)
-            .setDescription(description)
-            .setThumbnail(userAvatarUrl)
-            .setTimestamp()
-            .setImage(`attachment://${attachmentName}`);
-
-        if (authorData) {
-            embed.setAuthor(authorData);
-        }
-
-        if (globalSnippetData) {
-            embed.addFields({ name: globalSnippetData.title, value: globalSnippetData.description, inline: false });
-        }
-
-        // Per-boss rekord (przed snippetem bossa)
-        if (bossRecordData?.isNewBossRecord && bossRecordData.bossName) {
-            const fieldName = `${msgs.bossRecordField || '👾 Rekord na bossie'}: \`\`${bossRecordData.bossName}\`\``;
-            let bossFieldVal;
-            if (bossRecordData.previousBossRecord) {
-                bossFieldVal = `${bossRecordData.previousBossRecord.score} ➜ ${bestScore}`;
-            } else {
-                bossFieldVal = `${bestScore} *(${msgs.bossRecordFirst || 'pierwszy wynik na tym bossie!'})*`;
-            }
-            embed.addFields({ name: fieldName, value: bossFieldVal, inline: false });
-        }
-
-        if (bossSnippetData) {
-            embed.addFields({ name: bossSnippetData.title, value: bossSnippetData.description, inline: false });
-        }
-
-        if (achievementsFieldValue) {
-            const fieldName = msgs.achievementsNewField || '🎉 Nowe osiągnięcia';
-            embed.addFields({ name: fieldName, value: achievementsFieldValue, inline: false });
-        }
-
-        return embed;
-    }
-
     /**
      * Wieloembedowe ogłoszenie rekordu dla /update (4 embedy wg rodzajów rankingów).
      *
@@ -1156,6 +1005,7 @@ class RankingService {
             followerCount = 0,
             systemNotices = [],
             sortedPlayersOverride = null, // /test (dryRun): symulowana lista graczy z nowym wynikiem (bez zapisu)
+            manualVerificationNote = null, // panel Analizuj: zastępuje domyślny tekst "brak uwag" w Embedzie 4
         } = opts;
 
         const msgs = messages || this.config.messages;
@@ -1321,7 +1171,7 @@ class RankingService {
                 embed4.addFields({ name: notice.name, value: noticeValue, inline: false });
             }
         } else {
-            embed4.setDescription(msgs.systemInfoAllGood || 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.');
+            embed4.setDescription(manualVerificationNote || msgs.systemInfoAllGood || 'Zdjęcie zweryfikowane poprawnie.\nWynik zapisany w rankingu.');
         }
         if (screenshotName) embed4.setImage(`attachment://${screenshotName}`);
         embeds.push(embed4);

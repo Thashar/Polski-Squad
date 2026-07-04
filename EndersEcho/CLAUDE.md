@@ -107,7 +107,7 @@
      - **Guard 6000 znaków** (`_enforceEmbedCharLimit`) — przycina opisy/pola od końca, by zmieścić się w limicie wiadomości
      - **Ścieżka tylko-rekord-bossa** (globalny ranking niezmieniony): stos bez Embedu 2 (1 + 3 + 4)
      - **DM subskrybentów** (`createDmNotifEmbeds`): **cały stos embedów**; Embed 1 przekształcony (tytuł → author „pobił rekord", pola porównania z wynikiem subskrybenta), pozostałe embedy klonowane; załączniki odtwarzane z tymi samymi nazwami
-     - **Uwaga:** ścieżka admina `/analizuj` (panel) nadal używa starej, jednoembedowej `createRecordEmbed` (`createRecordEmbeds` dotyczy `/update` i `/test`)
+     - **Ścieżka admina „Analizuj" (panel raportów odrzuconych):** używa tego samego stosu 4 embedów (`createRecordEmbeds`) co `/update`/`/test` — snippet globalny, snippet/ikona bossa, wykres progresu, osiągnięcia, licznik subskrypcji, DM do subskrybentów. **Embed 4** zamiast `systemInfoAllGood` pokazuje notkę `analyzeManualAnnouncement` („Twój wynik został zweryfikowany manualnie przez administratora **{adminName}**.") — przekazywaną przez opcję `manualVerificationNote` w `createRecordEmbeds`. Ta sama treść jest też `content` wiadomości ogłoszenia (ping do gracza). Rekord bossa bez globalnego → cały stos w kolorze teal (`0x1ABC9C`).
    - **Snippet globalny** (`globalTop10Service.buildSnippetFieldData`):
      - Wbudowany jako opis Embedu 2 (ranking globalny)
      - Warunek: pozycja globalna gracza zmieniła się (dotyczy WSZYSTKICH graczy, nie tylko TOP10 serwera)

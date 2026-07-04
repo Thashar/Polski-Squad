@@ -9157,6 +9157,13 @@ class InteractionHandler {
 
             gl.success(`✅ [Analizuj] AI OCR: wynik="${aiResult.score}", boss="${aiResult.bossName}"`);
 
+            // Stan globalny przed zapisem — potrzebny do snippetu globalnego (Embed 2)
+            const _analyzePrevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+            const _analyzePrevGlobalPosition = (() => {
+                const i = _analyzePrevGlobalRanking?.findIndex(p => p.userId === targetUserId);
+                return i !== -1 ? i + 1 : null;
+            })();
+
             const { isNewRecord, currentScore, ranking: updatedRanking, affectedGuildIds: analyzeAffectedGuilds = [] } = await this.rankingService.updateUserRanking(
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
@@ -9300,46 +9307,170 @@ class InteractionHandler {
                             ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, guildCfgAnnounce?.lang || 'eng')
                             : null;
 
-                        let resultEmbed;
+                        const analyzeWasUnknownBoss = aiResult.wasUnknownBoss === true;
+
+                        // Pozycje w rankingach ról (Embed 1)
+                        let analyzeRolePositions = [];
+                        try {
+                            const targetMember = targetGuildObj ? await targetGuildObj.members.fetch(targetUserId).catch(() => null) : null;
+                            analyzeRolePositions = await this._computeRolePositions(targetGuildId, targetUserId, targetGuildObj, targetMember?.roles?.cache);
+                        } catch {}
+
+                        // Snippet globalny (Embed 2) — tylko gdy zmieniła się pozycja w rankingu globalnym
+                        let analyzeGlobalSnippetData = null;
                         if (isNewRecord) {
-                            resultEmbed = await this.rankingService.createRecordEmbed(
-                                userName, aiResult.score, userAvatarUrl, announceName,
-                                currentScore?.score ?? null, targetUserId, targetGuildId,
-                                targetMsgs, targetGuildObj, guildCfgAnnounce?.topRoles ?? null,
-                                currentScore?.timestamp ?? null, [], analyzeAchFieldValue
-                            );
-                        } else {
-                            // Rekord bossa bez globalnego — teal embed
-                            resultEmbed = await this.rankingService.createRecordEmbed(
-                                userName, aiResult.score, userAvatarUrl, announceName,
-                                null, null, null, targetMsgs, targetGuildObj, null, null, [],
-                                analyzeAchFieldValue, null,
-                                { isNewBossRecord: true, previousBossRecord, bossName: aiResult.bossName }
-                            );
-                            resultEmbed.setColor(0x1ABC9C);
+                            try {
+                                const analyzeConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                                const analyzeActiveGuildIds = analyzeConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid));
+                                const analyzeNewGlobalRanking = await this.rankingService.getGlobalRanking(new Set(analyzeActiveGuildIds));
+                                analyzeGlobalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
+                                    targetUserId, analyzeNewGlobalRanking, _analyzePrevGlobalPosition, targetMsgs, interaction.client
+                                );
+                            } catch (snippetErr) {
+                                gl.warn(`⚠️ [Analizuj] Błąd snippeta globalnego: ${snippetErr.message}`);
+                            }
                         }
 
-                        const announcementContent = formatMessage(targetMsgs.analyzeManualAnnouncement, {
+                        // Snippet rankingu bossa (Embed 3) — gdy pobito rekord bossa i boss jest znany
+                        let analyzeBossSnippetData = null;
+                        if (isNewBossRecord && aiResult.bossName && !analyzeWasUnknownBoss) {
+                            try {
+                                const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
+                                    || Array.from(interaction.client.guilds.cache.keys());
+                                const bossResult = await this._buildBossSnippetData(
+                                    targetUserId, aiResult.bossName, previousBossRecord, allGuildIdsForBoss, targetMsgs, interaction.client
+                                );
+                                analyzeBossSnippetData = bossResult.snippetData;
+                            } catch (bossSnippetErr) {
+                                gl.warn(`⚠️ [Analizuj] Błąd snippeta bossa: ${bossSnippetErr.message}`);
+                            }
+                        }
+
+                        // Komunikaty systemowe (Embed 4)
+                        const analyzeSystemNotices = [];
+                        if (analyzeWasUnknownBoss && isNewBossRecord && aiResult.bossName) {
+                            const noticeVal = formatMessage(
+                                targetMsgs.unknownBossRankingNotice || '⚠️ Wykryto nową nazwę bossa: *{bossName}*\nWynik nie pojawi się w rankingu bossów do czasu weryfikacji przez admina.',
+                                { bossName: aiResult.bossName }
+                            );
+                            analyzeSystemNotices.push({ name: targetMsgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
+                        }
+
+                        // Licznik subskrybentów (Embed 1)
+                        let analyzeSubscribers = [];
+                        try {
+                            analyzeSubscribers = await this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId);
+                        } catch (subErr) {
+                            gl.warn(`⚠️ [Analizuj] Nie udało się pobrać subskrybentów: ${subErr.message}`);
+                        }
+
+                        // Wykres progresu (Embed 2) — tylko gdy zmiana w globalnym rankingu
+                        let analyzeChartAttachment = null;
+                        let analyzeChartName = null;
+                        if (analyzeGlobalSnippetData && this.scoreHistoryService && this.chartService) {
+                            try {
+                                const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [targetGuildId];
+                                const analyzeHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, targetUserId, 365);
+                                if (analyzeHistory.length >= 2) {
+                                    const guildTagMap = {};
+                                    const guildNameMap = {};
+                                    for (const g of (this.guildConfigService?.getAllConfiguredGuilds() || [])) {
+                                        const discordName = interaction.client.guilds.cache.get(g.id)?.name;
+                                        guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
+                                        guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
+                                    }
+                                    const chartBuffer = await this.chartService.generateScoreHistoryChart(analyzeHistory, userName, targetMsgs.chartTitle, guildTagMap, guildNameMap);
+                                    if (chartBuffer) {
+                                        analyzeChartName = 'score_history.png';
+                                        analyzeChartAttachment = new AttachmentBuilder(chartBuffer, { name: analyzeChartName });
+                                    }
+                                }
+                            } catch (chartErr) {
+                                gl.warn(`⚠️ [Analizuj] Błąd generowania wykresu progresu: ${chartErr.message}`);
+                            }
+                        }
+
+                        // Ikona bossa (Embed 3) — gdy pobito rekord bossa i boss znany
+                        let analyzeBossImageAttachment = null;
+                        let analyzeBossImageName = null;
+                        if (isNewBossRecord && aiResult.bossName && !analyzeWasUnknownBoss && this.bossAliasService) {
+                            try {
+                                const imgPath = this.bossAliasService.getBossImagePath(aiResult.bossName);
+                                if (imgPath) {
+                                    const buf = await fs.readFile(path.join(__dirname, '../data/boss_images', imgPath));
+                                    analyzeBossImageName = imgPath;
+                                    analyzeBossImageAttachment = new AttachmentBuilder(buf, { name: imgPath });
+                                }
+                            } catch { /* bez ikony bossa */ }
+                        }
+
+                        const _analyzeBotUser = interaction.client.user;
+                        const manualVerificationNote = formatMessage(targetMsgs.analyzeManualAnnouncement, {
                             userId: targetUserId,
                             adminName,
                         });
 
+                        // Stos 4 embedów — identyczny format co /update, z manualną notką w Embedzie 4
+                        const resultEmbeds = await this.rankingService.createRecordEmbeds({
+                            userName,
+                            bestScore: aiResult.score,
+                            userAvatarUrl,
+                            screenshotName: announceName,
+                            previousScore: currentScore ? currentScore.score : null,
+                            userId: targetUserId,
+                            guildId: targetGuildId,
+                            messages: targetMsgs,
+                            guild: targetGuildObj,
+                            guildTopRoles: guildCfgAnnounce?.topRoles || null,
+                            previousTimestamp: currentScore ? currentScore.timestamp : null,
+                            rolePositions: analyzeRolePositions,
+                            achievementsFieldValue: analyzeAchFieldValue,
+                            globalSnippetData: analyzeGlobalSnippetData,
+                            bossRecordData: isNewBossRecord && !analyzeWasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName: aiResult.bossName } : null,
+                            bossSnippetData: analyzeBossSnippetData,
+                            bossName: aiResult.bossName,
+                            botName: _analyzeBotUser?.username || null,
+                            botIconUrl: _analyzeBotUser?.displayAvatarURL() || null,
+                            chartName: analyzeChartName,
+                            bossImageName: analyzeBossImageName,
+                            followerCount: analyzeSubscribers.length,
+                            systemNotices: analyzeSystemNotices,
+                            manualVerificationNote,
+                        });
+
+                        // Rekord bossa bez globalnego — teal embed (jak dla /update)
+                        if (!isNewRecord && isNewBossRecord) {
+                            for (const e of resultEmbeds) e.setColor(0x1ABC9C);
+                        }
+
+                        const announcementContent = manualVerificationNote;
+
+                        const analyzeFiles = [fileAttachment];
+                        if (analyzeChartAttachment) analyzeFiles.push(analyzeChartAttachment);
+                        if (analyzeBossImageAttachment) analyzeFiles.push(analyzeBossImageAttachment);
+
                         analyzePublicMsg = await announcementChannel.send({
                             content: announcementContent,
-                            embeds: [resultEmbed],
-                            files: [fileAttachment],
+                            embeds: resultEmbeds,
+                            files: analyzeFiles,
                         });
                         gl.info(`✅ [Analizuj] Ogłoszenie wysłane na kanał ${announcementChannelId}`);
 
-                        // DM do subskrybentów
-                        if (this.notificationService && analyzePublicMsg) {
+                        // DM do subskrybentów — cały stos embedów (jak dla /update)
+                        if (this.notificationService && analyzePublicMsg && analyzeSubscribers.length > 0) {
                             try {
-                                const subscribers = await this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId);
-                                for (const sub of subscribers) {
+                                const guildRanking = await this.rankingService.loadRanking(targetGuildId);
+                                for (const subscriberId of analyzeSubscribers) {
                                     try {
-                                        const dmUser = await interaction.client.users.fetch(sub.subscriberId);
-                                        const dmEmbed = this.rankingService.createDmNotifEmbed(resultEmbed, targetMsgs);
-                                        await dmUser.send({ embeds: [dmEmbed], files: [new AttachmentBuilder(tempPath, { name: announceName })] });
+                                        const dmUser = await interaction.client.users.fetch(subscriberId);
+                                        const subscriberScore = guildRanking[subscriberId]?.score || null;
+                                        const dmEmbeds = this.rankingService.createDmNotifEmbeds(
+                                            resultEmbeds, userName, userAvatarUrl, aiResult.score, subscriberScore, targetMsgs
+                                        );
+                                        const dmFiles = [new AttachmentBuilder(tempPath, { name: announceName })];
+                                        if (analyzeChartAttachment) dmFiles.push(new AttachmentBuilder(analyzeChartAttachment.attachment, { name: analyzeChartName }));
+                                        if (analyzeBossImageAttachment) dmFiles.push(new AttachmentBuilder(analyzeBossImageAttachment.attachment, { name: analyzeBossImageName }));
+                                        await dmUser.send({ embeds: dmEmbeds, files: dmFiles });
                                     } catch {}
                                 }
                             } catch {}
