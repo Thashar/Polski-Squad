@@ -135,7 +135,7 @@ function _shieldSvg(pos) {
 </svg>`;
 }
 
-/** #11–30 — turkusowy heksagon. */
+/** #11–30 — fioletowy heksagon. */
 function _hexSvg(pos) {
     const cx = 128, cy = 130;
     const hexPts = (R) => {
@@ -149,13 +149,13 @@ function _hexSvg(pos) {
     return `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2BD9B0"/>
-      <stop offset="1" stop-color="#149C7E"/>
+      <stop offset="0" stop-color="#B072D8"/>
+      <stop offset="1" stop-color="#7B3FA8"/>
     </linearGradient>
   </defs>
-  <polygon points="${hexPts(96)}" fill="url(#bg)" stroke="#0B6B57" stroke-width="7" stroke-linejoin="round"/>
+  <polygon points="${hexPts(96)}" fill="url(#bg)" stroke="#4E2470" stroke-width="7" stroke-linejoin="round"/>
   <polygon points="${hexPts(79)}" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-opacity="0.22"/>
-  ${_numberText(pos, cx, cy, _numberFontSize(pos), '#FFFFFF', '#0B6B57')}
+  ${_numberText(pos, cx, cy, _numberFontSize(pos), '#FFFFFF', '#4E2470')}
 </svg>`;
 }
 
