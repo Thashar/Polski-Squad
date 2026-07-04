@@ -126,11 +126,11 @@ function _shieldSvg(pos) {
       <stop offset="1" stop-color="#4752C4"/>
     </linearGradient>
   </defs>
-  <path d="M128,22 C154,38 180,44 200,47 L200,118 C200,172 170,210 128,234 C86,210 56,172 56,118 L56,47 C76,44 102,38 128,22 Z"
+  <path d="M128,26 C162,42 194,48 220,51 L220,114 C220,164 186,200 128,230 C70,200 36,164 36,114 L36,51 C62,48 94,42 128,26 Z"
         fill="url(#bg)" stroke="#2C3680" stroke-width="7" stroke-linejoin="round"/>
-  <path d="M128,38 C150,51 172,56 186,58 L186,116 C186,162 161,194 128,214 C95,194 70,162 70,116 L70,58 C84,56 106,51 128,38 Z"
+  <path d="M128,42 C156,54 182,59 204,61 L204,112 C204,154 176,184 128,210 C80,184 52,154 52,112 L52,61 C74,59 100,54 128,42 Z"
         fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-opacity="0.22"/>
-  ${_star(cx, 66, 14, 5.8, '#FFFFFF', 0.9)}
+  ${_star(cx, 70, 14, 5.8, '#FFFFFF', 0.9)}
   ${_numberText(pos, cx, cy + 4, _numberFontSize(pos), '#FFFFFF', '#2C3680')}
 </svg>`;
 }
