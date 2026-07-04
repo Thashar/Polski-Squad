@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
+const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -5065,6 +5066,21 @@ class InteractionHandler {
                 }
             }
 
+            // === Ikona pozycji globalnej (thumbnail Embedu 2) — grafika generowana z numerem pozycji ===
+            let positionIconAttachment = null;
+            let positionIconName = null;
+            if (globalSnippetData?.newGlobalPosition) {
+                try {
+                    const iconBuffer = await generatePositionIcon(globalSnippetData.newGlobalPosition);
+                    if (iconBuffer) {
+                        positionIconName = 'global_position.png';
+                        positionIconAttachment = new AttachmentBuilder(iconBuffer, { name: positionIconName });
+                    }
+                } catch (iconErr) {
+                    gl.warn(`⚠️ Błąd generowania ikony pozycji globalnej: ${iconErr.message}`);
+                }
+            }
+
             // === Ikona bossa (Embed 3) — gdy pobito rekord bossa i boss znany ===
             let bossImageAttachment = null;
             let bossImageName = null;
@@ -5101,6 +5117,7 @@ class InteractionHandler {
                 botName: _botUser?.username || null,
                 botIconUrl: _botUser?.displayAvatarURL() || null,
                 chartName,
+                globalPositionIconName: positionIconName,
                 bossImageName,
                 followerCount: recordSubscribers.length,
                 systemNotices,
@@ -5114,6 +5131,7 @@ class InteractionHandler {
 
             const publicFiles = [imageAttachment];
             if (chartAttachment) publicFiles.push(chartAttachment);
+            if (positionIconAttachment) publicFiles.push(positionIconAttachment);
             if (bossImageAttachment) publicFiles.push(bossImageAttachment);
 
             let _newRecordPublicMsg = null;
@@ -5297,6 +5315,7 @@ class InteractionHandler {
                             // Odtwórz załączniki z tymi samymi nazwami, by setImage/thumbnail się rozwiązały
                             const dmFiles = [new AttachmentBuilder(tempImagePath, { name: imageAttachment.name })];
                             if (chartAttachment) dmFiles.push(new AttachmentBuilder(chartAttachment.attachment, { name: chartName }));
+                            if (positionIconAttachment) dmFiles.push(new AttachmentBuilder(positionIconAttachment.attachment, { name: positionIconName }));
                             if (bossImageAttachment) dmFiles.push(new AttachmentBuilder(bossImageAttachment.attachment, { name: bossImageName }));
                             await subscriberUser.send({ embeds: dmEmbeds, files: dmFiles });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
@@ -9441,6 +9460,21 @@ class InteractionHandler {
                             }
                         }
 
+                        // Ikona pozycji globalnej (thumbnail Embedu 2) — grafika generowana z numerem pozycji
+                        let analyzePositionIconAttachment = null;
+                        let analyzePositionIconName = null;
+                        if (analyzeGlobalSnippetData?.newGlobalPosition) {
+                            try {
+                                const iconBuffer = await generatePositionIcon(analyzeGlobalSnippetData.newGlobalPosition);
+                                if (iconBuffer) {
+                                    analyzePositionIconName = 'global_position.png';
+                                    analyzePositionIconAttachment = new AttachmentBuilder(iconBuffer, { name: analyzePositionIconName });
+                                }
+                            } catch (iconErr) {
+                                gl.warn(`⚠️ [Analizuj] Błąd generowania ikony pozycji globalnej: ${iconErr.message}`);
+                            }
+                        }
+
                         // Ikona bossa (Embed 3) — gdy pobito rekord bossa i boss znany
                         let analyzeBossImageAttachment = null;
                         let analyzeBossImageName = null;
@@ -9483,6 +9517,7 @@ class InteractionHandler {
                             botName: _analyzeBotUser?.username || null,
                             botIconUrl: _analyzeBotUser?.displayAvatarURL() || null,
                             chartName: analyzeChartName,
+                            globalPositionIconName: analyzePositionIconName,
                             bossImageName: analyzeBossImageName,
                             followerCount: analyzeSubscribers.length,
                             systemNotices: analyzeSystemNotices,
@@ -9498,6 +9533,7 @@ class InteractionHandler {
 
                         const analyzeFiles = [fileAttachment];
                         if (analyzeChartAttachment) analyzeFiles.push(analyzeChartAttachment);
+                        if (analyzePositionIconAttachment) analyzeFiles.push(analyzePositionIconAttachment);
                         if (analyzeBossImageAttachment) analyzeFiles.push(analyzeBossImageAttachment);
 
                         analyzePublicMsg = await announcementChannel.send({
@@ -9520,6 +9556,7 @@ class InteractionHandler {
                                         );
                                         const dmFiles = [new AttachmentBuilder(tempPath, { name: announceName })];
                                         if (analyzeChartAttachment) dmFiles.push(new AttachmentBuilder(analyzeChartAttachment.attachment, { name: analyzeChartName }));
+                                        if (analyzePositionIconAttachment) dmFiles.push(new AttachmentBuilder(analyzePositionIconAttachment.attachment, { name: analyzePositionIconName }));
                                         if (analyzeBossImageAttachment) dmFiles.push(new AttachmentBuilder(analyzeBossImageAttachment.attachment, { name: analyzeBossImageName }));
                                         await dmUser.send({ embeds: dmEmbeds, files: dmFiles });
                                     } catch {}

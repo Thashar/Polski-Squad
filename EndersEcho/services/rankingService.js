@@ -1001,6 +1001,7 @@ class RankingService {
             botName = null,
             botIconUrl = null,
             chartName = null,
+            globalPositionIconName = null, // wygenerowana grafika pozycji globalnej (thumbnail Embedu 2)
             bossImageName = null,
             followerCount = 0,
             systemNotices = [],
@@ -1118,7 +1119,10 @@ class RankingService {
                 .setColor(embedColor)
                 .setAuthor({ name: msgs.globalRankingEmbedTitle || '🌍 Ranking globalny', iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128' });
             embed2.setDescription(globalSnippetData.description);
-            embed2.setThumbnail('https://cdn.discordapp.com/attachments/1194396792981311489/1521294323725893693/1782775198114.png');
+            // Thumbnail: wygenerowana grafika z pozycją globalną (positionIconService); fallback = statyczna ikona
+            embed2.setThumbnail(globalPositionIconName
+                ? `attachment://${globalPositionIconName}`
+                : 'https://cdn.discordapp.com/attachments/1194396792981311489/1521294323725893693/1782775198114.png');
             if (chartName) embed2.setImage(`attachment://${chartName}`);
             embeds.push(embed2);
         }
