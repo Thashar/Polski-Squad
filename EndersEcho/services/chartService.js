@@ -141,21 +141,39 @@ function buildAreaPath(points, baseY) {
 async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}, guildNameMap = {}) {
     const sharp = require('sharp');
 
-    const raw = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const rawAll = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    if (rawAll.length === 0) return null;
 
-    // Deduplikacja per dzień UTC — jeden punkt per dzień (najwyższy wynik)
-    const dayBestMap = new Map();
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const newestT = new Date(rawAll[rawAll.length - 1].timestamp).getTime();
+    // Okno historii: max ostatni rok (względem najnowszego wpisu)
+    const raw = rawAll.filter(e => new Date(e.timestamp).getTime() >= newestT - 365 * DAY_MS);
+    // Granica stref: 3 miesiące wstecz — świeższe wpisy per dzień, starsze zagregowane per miesiąc
+    const boundaryT = newestT - 90 * DAY_MS;
+
+    const dayBestMap = new Map();   // strefa świeża (ostatnie 3 mies.): najwyższy wynik dnia
+    const monthBestMap = new Map(); // strefa archiwum (starsze): najwyższy wynik miesiąca
     for (const entry of raw) {
         const d = new Date(entry.timestamp);
-        const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
-        const prev = dayBestMap.get(key);
-        if (!prev || entry.scoreValue > prev.scoreValue) dayBestMap.set(key, entry);
+        if (d.getTime() >= boundaryT) {
+            const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}-${d.getUTCDate()}`;
+            const prev = dayBestMap.get(key);
+            if (!prev || entry.scoreValue > prev.scoreValue) dayBestMap.set(key, entry);
+        } else {
+            const key = `${d.getUTCFullYear()}-${d.getUTCMonth()}`;
+            const prev = monthBestMap.get(key);
+            if (!prev || entry.scoreValue > prev.scoreValue) monthBestMap.set(key, entry);
+        }
     }
-    const sorted = [...dayBestMap.values()].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    const hasArchive = monthBestMap.size > 0;
+    const sorted = [
+        ...[...monthBestMap.values()].map(e => ({ ...e, isMonthly: true })),
+        ...dayBestMap.values(),
+    ].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     if (sorted.length < 2) return null;
 
-    const W = 900, H = 330;
-    const M = { top: 52, right: 32, bottom: 95, left: 85 };
+    const W = 900, H = 350;
+    const M = { top: 64, right: 32, bottom: 95, left: 85 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
     const baseY = M.top + cH;
@@ -185,6 +203,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
         lbl: formatDateLabel(d.timestamp),
         guildId: d.guildId || '__single__',
         timestamp: d.timestamp,
+        isMonthly: d.isMonthly === true,
     }));
 
     // Przypisz kolory do unikalnych guildId (w kolejności pierwszego wystąpienia)
@@ -283,24 +302,50 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
         ].join('\n    ');
     }).join('\n    ');
 
-    // --- Kropki z etykietami wyników (detekcja kolizji) ---
-    const labelOffsets = pts.map(() => 12);
-    for (let i = 1; i < pts.length; i++) {
-        const prevLabelY = pts[i - 1].y - labelOffsets[i - 1];
-        const desiredLabelY = pts[i].y - 12;
-        if (Math.abs(desiredLabelY - prevLabelY) < 12) {
-            const adjusted = Math.max(M.top - 8, Math.min(prevLabelY - 12, desiredLabelY));
-            labelOffsets[i] = pts[i].y - adjusted;
+    // --- Etykiety wyników z odchudzaniem (decluttering) ---
+    // Priorytet etykiety: punkty miesięczne (archiwum), pierwszy punkt, globalne maksimum.
+    // Pozostałe punkty dzienne dostają etykietę tylko gdy odstęp od poprzedniej >= 42px.
+    // Ostatni punkt ma osobny badge (bez zwykłej etykiety).
+    const maxIdx = sorted.reduce((best, e, i) => e.scoreValue > sorted[best].scoreValue ? i : best, 0);
+    const showLabel = new Array(pts.length).fill(false);
+    let lastLabelX = -Infinity;
+    for (let i = 0; i < pts.length - 1; i++) {
+        const priority = pts[i].isMonthly || i === 0 || i === maxIdx;
+        if (priority || pts[i].x - lastLabelX >= 42) {
+            showLabel[i] = true;
+            lastLabelX = pts[i].x;
         }
+    }
+
+    // Kolizje pionowe wśród wyświetlanych etykiet (tylko sąsiedztwo w poziomie)
+    const labelOffsets = pts.map(() => 13);
+    let prevLabeledIdx = -1;
+    for (let i = 0; i < pts.length; i++) {
+        if (!showLabel[i]) continue;
+        if (prevLabeledIdx >= 0 && pts[i].x - pts[prevLabeledIdx].x < 46) {
+            const prevLabelY = pts[prevLabeledIdx].y - labelOffsets[prevLabeledIdx];
+            const desiredLabelY = pts[i].y - 13;
+            if (Math.abs(desiredLabelY - prevLabelY) < 12) {
+                const adjusted = Math.max(M.top - 6, Math.min(prevLabelY - 12, desiredLabelY));
+                labelOffsets[i] = pts[i].y - adjusted;
+            }
+        }
+        prevLabeledIdx = i;
     }
 
     const dotsSvg = pts.map((p, idx) => {
         const color = guildColorMap[p.guildId];
-        const labelY = (p.y - labelOffsets[idx]).toFixed(1);
-        return [
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#1E1F22" stroke="${color}" stroke-width="2"/>`,
-            `<text x="${p.x.toFixed(1)}" y="${labelY}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${escapeXml(p.score)}</text>`,
-        ].join('\n    ');
+        const parts = [];
+        if (p.isMonthly) {
+            // Punkt miesięczny (archiwum) — romb
+            parts.push(`<polygon points="${p.x.toFixed(1)},${(p.y - 5.5).toFixed(1)} ${(p.x + 5.5).toFixed(1)},${p.y.toFixed(1)} ${p.x.toFixed(1)},${(p.y + 5.5).toFixed(1)} ${(p.x - 5.5).toFixed(1)},${p.y.toFixed(1)}" fill="#242529" stroke="${color}" stroke-width="2"/>`);
+        } else {
+            parts.push(`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="#1E1F22" stroke="${color}" stroke-width="2"/>`);
+        }
+        if (showLabel[idx]) {
+            parts.push(`<text x="${p.x.toFixed(1)}" y="${(p.y - labelOffsets[idx]).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1" text-anchor="middle">${escapeXml(p.score)}</text>`);
+        }
+        return parts.join('\n    ');
     }).join('\n    ');
 
     // --- Legenda (dół wykresu) ---
@@ -328,13 +373,43 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
     // --- Header ---
     const firstDate = formatDateLabel(sorted[0].timestamp);
     const lastDate = formatDateLabel(sorted[sorted.length - 1].timestamp);
-    const year = formatDateYear(sorted[sorted.length - 1].timestamp);
-    const headerRight = `${firstDate} – ${lastDate} ${year}`;
+    const yearFirst = formatDateYear(sorted[0].timestamp);
+    const yearLast = formatDateYear(sorted[sorted.length - 1].timestamp);
+    const headerRight = yearFirst === yearLast
+        ? `${firstDate} – ${lastDate} ${yearLast}`
+        : `${firstDate}.${yearFirst} – ${lastDate}.${yearLast}`;
 
-    // --- Ostatni punkt: duże koło wyróżnienia ---
+    // --- Statystyka wzrostu w nagłówku (pierwszy wynik → aktualny + %) ---
+    const firstVal = sorted[0].scoreValue;
+    const lastVal = sorted[sorted.length - 1].scoreValue;
+    const growthPct = firstVal > 0 ? ((lastVal / firstVal) - 1) * 100 : 0;
+    const growthTxt = `${sorted[0].score || formatYLabel(firstVal)} → ${sorted[sorted.length - 1].score || formatYLabel(lastVal)}  (${growthPct >= 0 ? '+' : ''}${Math.round(growthPct)}%)`;
+
+    // --- Strefa archiwum (dane starsze niż 3 mies.): ciemniejsze tło + granica + podpisy stref ---
+    let archiveZoneSvg = '';
+    if (hasArchive) {
+        const bX = toX(boundaryT);
+        archiveZoneSvg = [
+            `<rect x="${M.left}" y="${M.top}" width="${(bX - M.left).toFixed(1)}" height="${cH}" fill="#242529"/>`,
+            `<line x1="${bX.toFixed(1)}" y1="${M.top}" x2="${bX.toFixed(1)}" y2="${baseY}" stroke="#4E5058" stroke-width="1" stroke-dasharray="5,4"/>`,
+            `<text x="${(bX - 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85" text-anchor="end">max / mies.</text>`,
+            `<text x="${(bX + 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85">ostatnie 3 mies.</text>`,
+        ].join('\n  ');
+    }
+
+    // --- Ostatni punkt: wyróżnienie + badge z aktualnym rekordem ---
     const lastPt = pts[pts.length - 1];
     const lastColor = guildColorMap[lastPt.guildId];
-    const lastHighlight = `<circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="6" fill="${lastColor}" opacity="0.25"/>`;
+    const lastLblTxt = escapeXml(lastPt.score);
+    const lastBadgeW = Math.max(lastLblTxt.length * 7 + 16, 34);
+    const lastBadgeX = Math.min(W - M.right - lastBadgeW, Math.max(M.left, lastPt.x - lastBadgeW / 2));
+    const lastBadgeY = Math.max(M.top - 2, lastPt.y - 34);
+    const lastHighlight = [
+        `<circle cx="${lastPt.x.toFixed(1)}" cy="${lastPt.y.toFixed(1)}" r="7" fill="${lastColor}" opacity="0.25"/>`,
+        `<line x1="${lastPt.x.toFixed(1)}" y1="${(lastBadgeY + 18).toFixed(1)}" x2="${lastPt.x.toFixed(1)}" y2="${(lastPt.y - 6).toFixed(1)}" stroke="${lastColor}" stroke-width="1" opacity="0.6"/>`,
+        `<rect x="${lastBadgeX.toFixed(1)}" y="${lastBadgeY.toFixed(1)}" width="${lastBadgeW}" height="18" rx="9" fill="${lastColor}"/>`,
+        `<text x="${(lastBadgeX + lastBadgeW / 2).toFixed(1)}" y="${(lastBadgeY + 13).toFixed(1)}" font-family="Arial,sans-serif" font-size="10.5" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${lastLblTxt}</text>`,
+    ].join('\n    ');
 
     const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -347,13 +422,17 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
   <!-- Tło -->
   <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
 
+  <!-- Strefa archiwum (przed siatką) -->
+  ${archiveZoneSvg}
+
   <!-- Separator nagłówka -->
   <line x1="${M.left}" y1="${M.top - 10}" x2="${W - M.right}" y2="${M.top - 10}" stroke="#2B2D31" stroke-width="1"/>
 
   <!-- Nagłówek -->
   <text x="${M.left}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#E3E5E8" font-weight="bold">${escapeXml(username)}</text>
-  <text x="${W / 2}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(chartTitle)}</text>
+  <text x="${W / 2}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${escapeXml(stripEmoji(chartTitle))}</text>
   <text x="${W - M.right}" y="32" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(headerRight)}</text>
+  <text x="${W / 2}" y="48" font-family="Arial,sans-serif" font-size="10" fill="#7A7E85" text-anchor="middle">${escapeXml(growthTxt)}</text>
 
   <!-- Siatka -->
   ${gridLines}
