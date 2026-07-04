@@ -4263,19 +4263,23 @@ class InteractionHandler {
                 _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason, revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
                 const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
                 if (_notSimilarImgUrl) _ocrEmbedParams.imageUrl = _notSimilarImgUrl;
-                const notSimilarDesc = aiResult.rejectionReason
-                    ? `**${msgs.testNotSimilarReasonLabel}:** ${aiResult.rejectionReason}`
-                    : null;
                 const _rejExt1 = path.extname(tempImagePath).slice(1) || 'png';
                 const _rejName1 = `rejected_${Date.now()}.${_rejExt1}`;
+                const notSimilarReasonText = aiResult.rejectionReason
+                    || this._mapRejectionReason('NOT_SIMILAR', msgs).text;
+                const notSimilarEmbeds = this.rankingService.createNoRecordEmbeds({
+                    userName: displayNameForLog,
+                    userAvatarUrl: interaction.user.displayAvatarURL(),
+                    screenshotName: _rejName1,
+                    reasonLabel: msgs.analyzeFailReasonField,
+                    reasonText: notSimilarReasonText,
+                    messages: msgs,
+                    color1: 0xff9900,
+                    color2: 0xFF0000,
+                });
                 await interaction.editReply({
                     content: '',
-                    embeds: [new EmbedBuilder()
-                        .setColor(0xFF0000)
-                        .setTitle(msgs.testNotSimilarTitle)
-                        .setDescription(notSimilarDesc)
-                        .setImage(`attachment://${_rejName1}`)
-                        .setTimestamp()],
+                    embeds: notSimilarEmbeds,
                     files: [new AttachmentBuilder(tempImagePath, { name: _rejName1 })],
                 });
                 return;
@@ -4288,12 +4292,20 @@ class InteractionHandler {
                 if (_validationImgUrl) _ocrEmbedParams.imageUrl = _validationImgUrl;
                 const _rejExt2 = path.extname(tempImagePath).slice(1) || 'png';
                 const _rejName2 = `rejected_${Date.now()}.${_rejExt2}`;
+                const { text: invalidReasonText, color: invalidReasonColor } = this._mapRejectionReason(aiResult.error || 'VALIDATION_FAILED', msgs);
+                const invalidEmbeds = this.rankingService.createNoRecordEmbeds({
+                    userName: displayNameForLog,
+                    userAvatarUrl: interaction.user.displayAvatarURL(),
+                    screenshotName: _rejName2,
+                    reasonLabel: msgs.analyzeFailReasonField,
+                    reasonText: invalidReasonText,
+                    messages: msgs,
+                    color1: 0xff9900,
+                    color2: invalidReasonColor,
+                });
                 await interaction.editReply({
-                    content: msgs.invalidScreenshot,
-                    embeds: [new EmbedBuilder()
-                        .setColor(0xFF0000)
-                        .setImage(`attachment://${_rejName2}`)
-                        .setTimestamp()],
+                    content: '',
+                    embeds: invalidEmbeds,
                     files: [new AttachmentBuilder(tempImagePath, { name: _rejName2 })],
                 });
                 return;
@@ -4527,22 +4539,18 @@ class InteractionHandler {
                 const imageAttachment = new AttachmentBuilder(tempImagePath, {
                     name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
                 });
-                const crossServerEmbed = new EmbedBuilder()
-                    .setColor(0xff9900)
-                    .setTitle(msgs.resultTitle)
-                    .addFields([
-                        { name: msgs.resultPlayer, value: userName, inline: true },
-                        { name: msgs.resultScore, value: bestScore, inline: true },
-                    ])
-                    .setTimestamp();
-                if (bossName) crossServerEmbed.addFields({ name: msgs.recordBoss, value: bossName, inline: false });
-                crossServerEmbed.addFields({
-                    name: msgs.resultStatus,
-                    value: formatMessage(msgs.resultNotBeatenCrossServer, { score: _prevGlobalUser.score, guildName: sourceGuildName }),
-                    inline: false
+                const crossServerReasonLines = [];
+                if (bossName) crossServerReasonLines.push(`\`${bossName}\``);
+                crossServerReasonLines.push(formatMessage(msgs.resultNotBeatenCrossServer, { score: _prevGlobalUser.score, guildName: sourceGuildName }));
+                const crossServerEmbeds = this.rankingService.createNoRecordEmbeds({
+                    userName,
+                    userAvatarUrl: interaction.user.displayAvatarURL(),
+                    screenshotName: imageAttachment.name,
+                    reasonLabel: msgs.resultDetailsField,
+                    reasonText: crossServerReasonLines.join('\n'),
+                    messages: msgs,
                 });
-                crossServerEmbed.setImage(`attachment://${imageAttachment.name}`);
-                await interaction.editReply({ embeds: [crossServerEmbed], files: [imageAttachment] });
+                await interaction.editReply({ embeds: crossServerEmbeds, files: [imageAttachment] });
                 _ocrEmbedParams = { type: 'cross_server', userName, userId, score: bestScore, bossName, commandName, previousScore: _prevGlobalUser.score };
                 gl.info(`✅ ${this.logService.nickLink(userName, userId)} Duplikat cross-server (nie zapisano) — serwer: "${sourceGuildName}"`);
                 return;
@@ -4667,12 +4675,25 @@ class InteractionHandler {
                         name: `wynik_${safeUserName}_${Date.now()}.${fileExtension}`
                     });
 
-                    const resultEmbed = this.rankingService.createResultEmbed(
-                        userName, bestScore, currentScore.score, imageAttachment.name, bossName, msgs
-                    );
+                    const currentScoreValue = this.rankingService.parseScoreValue(currentScore.score);
+                    const newScoreValueForDiff = this.rankingService.parseScoreValue(bestScore);
+                    const diffText = this.rankingService.formatScore(Math.abs(currentScoreValue - newScoreValueForDiff));
+                    const noRecordReasonLines = [];
+                    if (bossName) noRecordReasonLines.push(`\`${bossName}\``);
+                    noRecordReasonLines.push(formatMessage(msgs.resultNotBeaten, { currentScore: currentScore.score }));
+                    noRecordReasonLines.push(formatMessage(msgs.resultDifference, { diff: diffText }));
+
+                    const resultEmbeds = this.rankingService.createNoRecordEmbeds({
+                        userName,
+                        userAvatarUrl: interaction.user.displayAvatarURL(),
+                        screenshotName: imageAttachment.name,
+                        reasonLabel: msgs.resultDetailsField,
+                        reasonText: noRecordReasonLines.join('\n'),
+                        messages: msgs,
+                    });
 
                     try {
-                        await interaction.editReply({ embeds: [resultEmbed], files: [imageAttachment] });
+                        await interaction.editReply({ embeds: resultEmbeds, files: [imageAttachment] });
                         gl.info('✅ Wysłano embed z wynikiem (brak rekordu)');
                     } catch (editReplyError) {
                         gl.error(`❌ Błąd podczas wysyłania embed (brak rekordu): ${editReplyError.message}`);
@@ -4707,20 +4728,22 @@ class InteractionHandler {
                 if (!isNewBossRecord) {
                     // Case A: boss nierozpoznany, brak poprawy rekordu bossa — reply only, żółty warning
                     const statusVal = msgs.unknownBossAccepted || '⚠️ Wynik zapamiętany — nazwa bossa nierozpoznana. Po weryfikacji przez admina wpis zostanie zaktualizowany lub usunięty z rankingu.';
-                    const warnEmbed = new EmbedBuilder()
-                        .setColor(0xFEE75C)
-                        .setTitle(msgs.resultTitle)
-                        .addFields([
-                            { name: msgs.resultPlayer, value: userName, inline: true },
-                            { name: msgs.resultScore, value: bestScore, inline: true },
-                            { name: msgs.resultStatus, value: statusVal, inline: false },
-                        ])
-                        .setImage(`attachment://${imageAttachmentAlt.name}`)
-                        .setTimestamp();
-                    if (bossName) warnEmbed.addFields({ name: msgs.recordBoss, value: bossName, inline: false });
+                    const unknownBossReasonLines = [];
+                    if (bossName) unknownBossReasonLines.push(`\`${bossName}\``);
+                    unknownBossReasonLines.push(`**${msgs.resultScore}:** ${bestScore}`);
+                    unknownBossReasonLines.push(statusVal);
+                    const warnEmbeds = this.rankingService.createNoRecordEmbeds({
+                        userName,
+                        userAvatarUrl: interaction.user.displayAvatarURL(),
+                        screenshotName: imageAttachmentAlt.name,
+                        reasonLabel: msgs.resultDetailsField,
+                        reasonText: unknownBossReasonLines.join('\n'),
+                        messages: msgs,
+                        color1: 0xFEE75C,
+                    });
                     _ocrEmbedParams = { type: 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                     gl.info(`⚠️ [/${commandName}] Wynik zaakceptowany z nierozpoznanym bossem (bez poprawy rekordu): "${bossName || '???'}"`);
-                    await interaction.editReply({ embeds: [warnEmbed], files: [imageAttachmentAlt] });
+                    await interaction.editReply({ embeds: warnEmbeds, files: [imageAttachmentAlt] });
                     return;
                 }
 
@@ -9172,23 +9195,20 @@ class InteractionHandler {
                 // Ephemeral w konwencji ogłoszenia wyników: Embed 1 = "nie pobił rekordu" + awatar, Embed 2 = powód odrzucenia
                 const targetUserAvatarUrl = await interaction.client.users.fetch(targetUserId)
                     .then(u => u.displayAvatarURL()).catch(() => null);
-                const failEmbed1 = new EmbedBuilder()
-                    .setColor(0xff9900)
-                    .setAuthor({ name: userName, iconURL: targetUserAvatarUrl || undefined })
-                    .setDescription(formatMessage(targetMsgs.analyzeFailNoRecordMessage, { userName }));
-                const failEmbed2 = new EmbedBuilder()
-                    .setColor(0xFF0000)
-                    .setAuthor({
-                        name: targetMsgs.analyzeFailReasonField,
-                        iconURL: 'https://cdn.discordapp.com/emojis/1522935902295556127.webp?size=128',
-                    })
-                    .setDescription(aiResult.error || targetMsgs.analyzeResultUnknown);
+                const failEmbeds = this.rankingService.createNoRecordEmbeds({
+                    userName,
+                    userAvatarUrl: targetUserAvatarUrl,
+                    reasonLabel: targetMsgs.analyzeFailReasonField,
+                    reasonText: aiResult.error || targetMsgs.analyzeResultUnknown,
+                    messages: targetMsgs,
+                    color2: 0xFF0000,
+                });
 
                 const updatedEmbeds = this._buildActionEmbeds(
                     origMsg.embeds, targetMsgs, serverName, 'analyzed', adminName, extraInfo
                 );
                 await origMsg.edit({ embeds: updatedEmbeds, components: [] }).catch(() => {});
-                await interaction.editReply({ embeds: [failEmbed1, failEmbed2], components: [] }).catch(() => {});
+                await interaction.editReply({ embeds: failEmbeds, components: [] }).catch(() => {});
                 await applyToOtherMsg(extraInfo);
                 try {
                     this.logService.sendOcrAnalysisEmbed(targetGuildId, {
@@ -9736,6 +9756,22 @@ class InteractionHandler {
         } catch { /* fire-and-forget, nie przerywaj głównego flow */ }
     }
 
+    // Mapuje kod odrzucenia OCR na czytelny tekst + kolor — współdzielone przez raport admina i ephemeral gracza
+    _mapRejectionReason(reason, msgs) {
+        const reasonMap = {
+            'FAKE_PHOTO': msgs.reportReasonFakePhoto,
+            'INVALID_SCREENSHOT': msgs.reportReasonInvalidScreenshot,
+            'NO_REQUIRED_WORDS': msgs.reportReasonNoRequiredWords,
+            'NOT_SIMILAR': msgs.reportReasonNotSimilar,
+            'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
+            'BEST_EXCEEDS_TOTAL': msgs.reportReasonBestExceedsTotal,
+        };
+        return {
+            text: reasonMap[reason] || `🟠 ${reason}`,
+            color: reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00,
+        };
+    }
+
     async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
         const hasGlobal = !!this.config.rejectedChannelId;
         const guildCfg = this.config.getGuildConfig(interaction.guildId);
@@ -9768,16 +9804,7 @@ class InteractionHandler {
                 }
             } catch {}
 
-            const reasonMap = {
-                'FAKE_PHOTO': msgs.reportReasonFakePhoto,
-                'INVALID_SCREENSHOT': msgs.reportReasonInvalidScreenshot,
-                'NO_REQUIRED_WORDS': msgs.reportReasonNoRequiredWords,
-                'NOT_SIMILAR': msgs.reportReasonNotSimilar,
-                'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
-                'BEST_EXCEEDS_TOTAL': msgs.reportReasonBestExceedsTotal,
-            };
-            const reasonText = reasonMap[reason] || `🟠 ${reason}`;
-            const color = reason === 'FAKE_PHOTO' ? 0xFF0000 : 0xFF8C00;
+            const { text: reasonText, color } = this._mapRejectionReason(reason, msgs);
 
             const ext = path.extname(imagePath) || '.png';
             const fileName = `rejected_${Date.now()}${ext}`;

@@ -56,7 +56,6 @@ const pol = {
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR niedostępny, używam tradycyjnego OCR...',
     fakePhotoDetected: '🚫 **WYKRYTO PODROBIONE ZDJĘCIE!**\n\nTwoje zdjęcie zostało zidentyfikowane jako sfałszowane lub zmodyfikowane. Wynik nie zostanie przyjęty.\n\n⚠️ Przerabianie screenshotów jest niedozwolone!',
-    invalidScreenshot: '❌ Niepoprawny screenshot. Upewnij się, że zdjęcie zawiera ekran po zakończeniu walki Ender\'s Echo!',
 
     // Nowy rekord — ogłoszenie ephemeral
     newRecordConfirmed: '✅ **Nowy rekord został pobity i pozytywnie ogłoszony!**\n🏆 Gratulacje! Twój wynik został opublikowany dla wszystkich.',
@@ -70,12 +69,10 @@ const pol = {
     rankingImageCaption: '📎 **Oryginalny obraz wyniku:**',
 
     // Embed — wynik (bez rekordu)
-    resultTitle: '📊 Wynik przeanalizowany',
-    resultPlayer: 'Gracz',
     resultScore: 'Wynik z obrazu',
-    resultStatus: 'Status',
     resultNotBeaten: '❌ Nie pobito rekordu (obecny: {currentScore})',
     resultDifference: '**Różnica:** {diff}',
+    resultDetailsField: 'Szczegóły wyniku',
 
     // Embed — nowy rekord
     recordTitle: '🏆 GRATULACJE!',
@@ -90,7 +87,6 @@ const pol = {
     recordPreviousRecordAgo: 'poprzedni rekord',
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
-    recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSKRYPCJE:',
 
     // Wieloembedowe ogłoszenie /update (nagłówki sekcji)
@@ -201,9 +197,6 @@ const pol = {
 
     // /test — wymagania i weryfikacja
     testAiOcrRequired: '❌ Komenda `/test` wymaga włączonego AI OCR (`USE_ENDERSECHO_AI_OCR=true`).',
-    testNotSimilarTitle: '❌ Zdjęcie nie pasuje do wzorca',
-    testNotSimilarDescription: 'AI uznało, że przesłany screenshot nie przedstawia ekranu wyników bossa.',
-    testNotSimilarReasonLabel: '🔍 Powód odrzucenia',
     analyzeBtn: 'Analizuj',
 
     // Rankingi ról
@@ -439,7 +432,6 @@ const eng = {
     // AI OCR
     aiOcrUnavailable: '⚠️ AI OCR unavailable, falling back to traditional OCR...',
     fakePhotoDetected: '🚫 **FAKE PHOTO DETECTED!**\n\nYour image has been identified as falsified or modified. The score will not be accepted.\n\n⚠️ Editing screenshots is not allowed!',
-    invalidScreenshot: '❌ Invalid screenshot. Make sure the image shows the end-of-run screen for Ender\'s Echo!',
 
     // New record — ephemeral announcement
     newRecordConfirmed: '✅ **New record set and announced!**\n🏆 Congratulations! Your score has been published for everyone.',
@@ -453,12 +445,10 @@ const eng = {
     rankingImageCaption: '📎 **Original result image:**',
 
     // Embed — result (no record)
-    resultTitle: '📊 Result Analysed',
-    resultPlayer: 'Player',
     resultScore: 'Score from image',
-    resultStatus: 'Status',
     resultNotBeaten: '❌ Record not beaten (current: {currentScore})',
     resultDifference: '**Difference:** {diff}',
+    resultDetailsField: 'Score details',
 
     // Embed — new record
     recordTitle: '🏆 CONGRATULATIONS!',
@@ -473,7 +463,6 @@ const eng = {
     recordPreviousRecordAgo: 'previous record',
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
-    recordBoss: '👹 Boss',
     recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
 
     // Multi-embed /update announcement (section headers)
@@ -584,9 +573,6 @@ const eng = {
 
     // /test — requirements and verification
     testAiOcrRequired: '❌ The `/test` command requires AI OCR to be enabled (`USE_ENDERSECHO_AI_OCR=true`).',
-    testNotSimilarTitle: '❌ Screenshot does not match the template',
-    testNotSimilarDescription: 'The AI determined that the submitted screenshot does not show a boss result screen.',
-    testNotSimilarReasonLabel: '🔍 Rejection reason',
     analyzeBtn: 'Analyze',
 
     // Role rankings

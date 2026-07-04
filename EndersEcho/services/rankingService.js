@@ -855,59 +855,43 @@ class RankingService {
     }
 
     /**
-     * Tworzy embed wyniku (bez pobicia rekordu)
-     * @param {string} userName
-     * @param {string} bestScore
-     * @param {string} currentScore
-     * @param {string|null} attachmentName
-     * @param {string|null} bossName
-     * @param {Object|null} messages
-     * @returns {EmbedBuilder}
+     * Buduje 2-embedowy komunikat "brak rekordu" — wspólna konwencja dla odrzuconych screenów
+     * i zaakceptowanych, ale nierekordowych wyników. Embed 1: avatar gracza + "nie pobił rekordu"
+     * (jak Embed 1 stosu ogłoszenia rekordu). Embed 2: powód/szczegóły + zrzut ekranu, z dedykowaną
+     * ikoną statusu w author/thumbnail. Brak Embedu 2/3 ze stosu rekordu (global/boss) — nic nie pobito.
+     * @param {Object} opts
+     * @returns {EmbedBuilder[]}
      */
-    createResultEmbed(userName, bestScore, currentScore, attachmentName = null, bossName = null, messages = null) {
+    createNoRecordEmbeds(opts = {}) {
+        const {
+            userName,
+            userAvatarUrl = null,
+            screenshotName = null,
+            reasonLabel,
+            reasonText,
+            messages = null,
+            color1 = 0xff9900,
+            color2 = color1,
+        } = opts;
         const msgs = messages || this.config.messages;
+        const REASON_ICON = 'https://cdn.discordapp.com/emojis/1522935902295556127.webp?size=128';
 
-        if (this.config.ocr.detailedLogging.enabled) {
-            logger.info(`🔍 DEBUG: createResultEmbed - userName: "${userName}", bestScore: "${bestScore}", currentScore: "${currentScore}"`);
-        }
+        const embed1 = new EmbedBuilder()
+            .setColor(color1)
+            .setAuthor({ name: userName, iconURL: userAvatarUrl || undefined })
+            .setThumbnail(userAvatarUrl || null)
+            .setDescription(formatMessage(msgs.analyzeFailNoRecordMessage, { userName }))
+            .setTimestamp();
 
-        try {
-            const currentScoreValue = currentScore ? this.parseScoreValue(currentScore) : 0;
-            const newScoreValue = this.parseScoreValue(bestScore);
-            const difference = currentScoreValue - newScoreValue;
-            const differenceText = difference > 0
-                ? `+${this.formatScore(difference)}`
-                : this.formatScore(Math.abs(difference));
+        const embed2 = new EmbedBuilder()
+            .setColor(color2)
+            .setAuthor({ name: reasonLabel, iconURL: REASON_ICON })
+            .setThumbnail(REASON_ICON)
+            .setDescription(reasonText)
+            .setTimestamp();
+        if (screenshotName) embed2.setImage(`attachment://${screenshotName}`);
 
-            const statusMessage = formatMessage(msgs.resultNotBeaten, { currentScore: currentScore || msgs.unknownBoss });
-            const fullStatusValue = statusMessage + '\n' + formatMessage(msgs.resultDifference, { diff: differenceText });
-
-            const fields = [
-                { name: msgs.resultPlayer, value: userName, inline: true },
-                { name: msgs.resultScore, value: bestScore, inline: true }
-            ];
-
-            if (bossName) {
-                fields.push({ name: msgs.recordBoss, value: bossName, inline: false });
-            }
-
-            fields.push({ name: msgs.resultStatus, value: fullStatusValue, inline: false });
-
-            const embed = new EmbedBuilder()
-                .setColor(0xff9900)
-                .setTitle(msgs.resultTitle)
-                .addFields(fields)
-                .setTimestamp();
-
-            if (attachmentName) {
-                embed.setImage(`attachment://${attachmentName}`);
-            }
-
-            return embed;
-        } catch (error) {
-            logger.error('🔍 DEBUG: Błąd w createResultEmbed:', error.message);
-            throw error;
-        }
+        return [embed1, embed2];
     }
 
     getPositionColor(position) {
