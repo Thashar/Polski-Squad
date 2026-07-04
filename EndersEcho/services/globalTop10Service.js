@@ -421,6 +421,7 @@ class GlobalTop10Service {
 
         return {
             title,
+            newGlobalPosition,
             description: `**${msgs.snippetPositionChange || 'Zmiana pozycji:'}** ${direction} ${prevLabel} → #${newGlobalPosition}\n\n${lines.join('\n\n')}`
         };
     }
