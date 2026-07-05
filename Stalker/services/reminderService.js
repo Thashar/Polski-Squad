@@ -1171,7 +1171,10 @@ class ReminderService {
 
             session.currentStepKey = 'processing';
             const filepaths = downloadedFiles.map(f => f.filepath);
-            const aiResult = await aiOcrService.analyzeResultsImagesBatch(filepaths, clanNicks);
+            // Tryb CX: bez górnej granicy wyniku (obrażenia CX > 999999) - liczy się tylko nick
+            const aiResult = await aiOcrService.analyzeResultsImagesBatch(
+                filepaths, clanNicks, session.cxMode ? { anyScore: true } : {}
+            );
 
             if (!session.cancelled) {
                 session.currentStepKey = 'analyzing';

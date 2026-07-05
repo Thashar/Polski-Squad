@@ -156,9 +156,10 @@ Jeśli nie możesz odczytać wyników lub zdjęcie nie zawiera wyników graczy, 
      * odczytanych nicków ze screenów do najbliższego nicku Discord.
      * @param {string[]} imagePaths - Ścieżki do obrazów
      * @param {string[]} clanNicks - Lista nicków członków roli klanowej z Discorda
+     * @param {{anyScore?: boolean}} [options] - anyScore (RemindCX): bez górnej granicy wyniku, liczy się tylko nick
      * @returns {Promise<{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}>}
      */
-    async analyzeResultsImagesBatch(imagePaths, clanNicks = []) {
+    async analyzeResultsImagesBatch(imagePaths, clanNicks = [], options = {}) {
         if (!this.enabled) {
             throw new Error('AI OCR nie jest włączony');
         }
@@ -204,7 +205,7 @@ Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników gracz
             logger.info('[AI OCR - Batch] Odpowiedź Gemini:');
             logger.info(res.text);
 
-            const result = this.parseAIResponse(res.text);
+            const result = this.parseAIResponse(res.text, options);
             logger.info(`[AI OCR - Batch] Wynik parsowania: ${result.players.length} graczy`);
 
             return result;
@@ -218,9 +219,10 @@ Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników gracz
     /**
      * Parsuje odpowiedź AI i wyciąga listę graczy z wynikami
      * @param {string} responseText
+     * @param {{anyScore?: boolean}} [options] - anyScore (RemindCX): bez górnej granicy wyniku, liczy się tylko nick
      * @returns {{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}}
      */
-    parseAIResponse(responseText) {
+    parseAIResponse(responseText, options = {}) {
         const lowerResponse = responseText.toLowerCase();
 
         const invalidKeywords = [
@@ -271,7 +273,8 @@ Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników gracz
                 if (scoreMatch && playerName.length > 0) {
                     const score = parseInt(scoreMatch[0]);
 
-                    if (score >= 0 && score <= 999999) {
+                    // anyScore (RemindCX): obrażenia na bossie CX przekraczają 999999 - liczy się tylko nick
+                    if (score >= 0 && (options.anyScore || score <= 999999)) {
                         players.push({
                             playerName: playerName,
                             score: score
