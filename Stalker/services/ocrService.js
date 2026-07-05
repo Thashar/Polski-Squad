@@ -259,7 +259,7 @@ class OCRService {
         }
     }
 
-    async extractPlayersFromText(text, guild = null, requestingMember = null) {
+    async extractPlayersFromText(text, guild = null, requestingMember = null, matchAllNicks = false) {
         try {
             logger.info('Analiza tekstu');
             logger.info('🎯 Nowa logika: nick z roli → OCR → sprawdzanie końca linii...');
@@ -394,18 +394,19 @@ class OCRService {
                         }
                     }
                     
-                    if (endResult.type === 'zero' || endResult.type === 'unknown') {
-                        // Sprawdź czy ten nick z zerem już został przetworzony
+                    // matchAllNicks (RemindCX): zbieramy KAŻDY dopasowany nick niezależnie od wyniku
+                    if (matchAllNicks || endResult.type === 'zero' || endResult.type === 'unknown') {
+                        // Sprawdź czy ten nick już został przetworzony
                         if (processedNicks.has(bestMatch.displayName)) {
                             continue;
                         }
-                        
+
                         // Sprawdź czy na końcu linii jest symbol © (niepewność)
                         const hasUncertainty = line.trim().endsWith('©');
-                        
+
                         // Dodaj nick do zbioru przetworzonych
                         processedNicks.add(bestMatch.displayName);
-                        
+
                         confirmedPlayers.push({
                             detectedNick: bestMatch.displayName,
                             user: bestMatch,
@@ -414,8 +415,8 @@ class OCRService {
                             endValue: endResult.value,
                             uncertain: hasUncertainty
                         });
-                        
-                        logger.info(`   ✅ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) POTWIERDZONE ZERO!`);
+
+                        logger.info(`   ✅ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) ${matchAllNicks ? 'WYKRYTY NICK' : 'POTWIERDZONE ZERO!'}`);
                     } else if (endResult.type === 'negative') {
                         logger.info(`   ❌ Linia ${lineNumber}: "${bestMatch.displayName}" (${(bestSimilarity * 100).toFixed(1)}%) Wynik negatywny: ${endResult.value}`);
                     }
@@ -1375,6 +1376,12 @@ class OCRService {
                 .setEmoji('📢')
                 .setStyle(ButtonStyle.Secondary);
 
+            const remindCxButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_remindcx')
+                .setLabel('RemindCX')
+                .setEmoji('💎')
+                .setStyle(ButtonStyle.Secondary);
+
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
@@ -1430,7 +1437,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
+                .addComponents(faza1Button, faza2Button, remindButton, remindCxButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);
@@ -1618,6 +1625,12 @@ class OCRService {
                 .setEmoji('📢')
                 .setStyle(ButtonStyle.Secondary);
 
+            const remindCxButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_remindcx')
+                .setLabel('RemindCX')
+                .setEmoji('💎')
+                .setStyle(ButtonStyle.Secondary);
+
             const punishButton = new ButtonBuilder()
                 .setCustomId('queue_cmd_punish')
                 .setLabel('Punish')
@@ -1673,7 +1686,7 @@ class OCRService {
                 .setStyle(ButtonStyle.Danger);
 
             const row1 = new ActionRowBuilder()
-                .addComponents(faza1Button, faza2Button, remindButton, punishButton);
+                .addComponents(faza1Button, faza2Button, remindButton, remindCxButton, punishButton);
 
             const row2 = new ActionRowBuilder()
                 .addComponents(dodajButton, modyfikujButton, imgButton);

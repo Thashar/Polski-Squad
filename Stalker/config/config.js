@@ -53,6 +53,17 @@ module.exports = {
         hour: 17,
         minute: 50
     },
+
+    // Boss CX - okno powiadomień RemindCX: od wtorku 18:00 do środy 17:45 (czas polski)
+    cxBoss: {
+        windowStartDay: 2,      // wtorek (0=niedziela)
+        windowStartHour: 18,
+        windowStartMinute: 0,
+        deadline: {
+            hour: 17,
+            minute: 45
+        }
+    },
     
     // Role uprawnione do karania
     allowedPunishRoles: [

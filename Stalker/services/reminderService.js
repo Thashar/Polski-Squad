@@ -147,10 +147,116 @@ class ReminderService {
         }
     }
 
+    /**
+     * Wysyła powiadomienia RemindCX (boss CX) - jak sendReminders, ale:
+     * - DM BEZ przycisku potwierdzenia odbioru (i bez rejestracji w activeReminderDMs)
+     * - komunikat dotyczy bossa CX i utraty wszystkich nagród
+     */
+    async sendCxReminders(guild, foundUsers) {
+        try {
+            const timeUntilDeadline = this.calculateTimeUntilCxDeadline();
+            const roleGroups = new Map();
+            let sentMessages = 0;
+
+            const dmDelivered = [];
+            const dmFailed = [];
+
+            // Grupuj użytkowników według ról klanowych
+            for (const userData of foundUsers) {
+                const member = userData.user.member;
+
+                if (!member) {
+                    logger.warn(`[REMINDCX] ⚠️ Brak member dla użytkownika: ${userData.detectedNick}`);
+                    continue;
+                }
+
+                for (const [roleKey, roleId] of Object.entries(this.config.targetRoles)) {
+                    if (member.roles.cache.has(roleId)) {
+                        if (!roleGroups.has(roleKey)) {
+                            roleGroups.set(roleKey, []);
+                        }
+                        roleGroups.get(roleKey).push(member);
+                        break;
+                    }
+                }
+            }
+
+            for (const [roleKey, members] of roleGroups) {
+                const roleId = this.config.targetRoles[roleKey];
+                const warningChannelId = this.config.warningChannels[roleId];
+
+                if (!warningChannelId) continue;
+
+                const warningChannel = guild.channels.cache.get(warningChannelId);
+                if (!warningChannel) continue;
+
+                const userMentions = members.map(member => member.toString()).join(' ');
+                const timeMessage = messages.formatCxTimeMessage(timeUntilDeadline);
+
+                await warningChannel.send(messages.cxReminderMessage(timeMessage, userMentions));
+                sentMessages++;
+
+                logger.info(`[REMINDCX] ✅ Wysłano powiadomienie CX do kanału ${warningChannel.name} dla ${members.length} użytkowników`);
+
+                // DM bez przycisku potwierdzenia i bez trackingu odbioru
+                for (const member of members) {
+                    try {
+                        const dmMessage = messages.cxReminderMessage(timeMessage, '');
+                        await member.send({ content: dmMessage });
+                        dmDelivered.push(member.displayName);
+                        logger.info(`[REMINDCX] 📨 Wysłano DM do ${member.user.tag}`);
+                    } catch (dmError) {
+                        dmFailed.push(member.displayName);
+                        logger.warn(`[REMINDCX] ⚠️ Nie udało się wysłać DM do ${member.user.tag}: ${dmError.message}`);
+                    }
+                }
+            }
+
+            logger.info(`[REMINDCX] ✅ Wysłano ${sentMessages} powiadomień CX dla ${foundUsers.length} użytkowników`);
+
+            return {
+                sentMessages,
+                roleGroups: roleGroups.size,
+                totalUsers: foundUsers.length,
+                dmDelivered,
+                dmFailed
+            };
+        } catch (error) {
+            logger.error('[REMINDCX] ❌ Błąd wysyłania powiadomień CX:', error.message);
+            throw error;
+        }
+    }
+
+    /**
+     * Czas pozostały do deadline bossa CX (17:45 czasu polskiego)
+     */
+    calculateTimeUntilCxDeadline() {
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+
+        const deadline = new Date(polandTime);
+        deadline.setHours(this.config.cxBoss.deadline.hour, this.config.cxBoss.deadline.minute, 0, 0);
+
+        if (polandTime >= deadline) {
+            deadline.setDate(deadline.getDate() + 1);
+        }
+
+        const timeDiff = deadline - polandTime;
+        const totalMinutes = Math.floor(timeDiff / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+
+        return {
+            totalMinutes,
+            hours,
+            minutes
+        };
+    }
+
     calculateTimeUntilDeadline() {
         const now = new Date();
         const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
-        
+
         const deadline = new Date(polandTime);
         deadline.setHours(this.config.bossDeadline.hour, this.config.bossDeadline.minute, 0, 0);
         
@@ -308,9 +414,11 @@ class ReminderService {
     // ============ ZARZĄDZANIE SESJAMI ============
 
     /**
-     * Tworzy nową sesję dla /remind
+     * Tworzy nową sesję dla /remind (lub RemindCX gdy cxMode=true)
+     * W trybie CX uniqueNicks przechowuje graczy WYKRYTYCH na zdjęciach,
+     * a powiadomienia trafiają do tych, których BRAKUJE (getCxMissingUsers).
      */
-    createSession(userId, guildId, channelId, userClanRoleId, ocrExpiresAt = null) {
+    createSession(userId, guildId, channelId, userClanRoleId, ocrExpiresAt = null, cxMode = false) {
         const sessionId = `remind_${userId}_${Date.now()}`;
 
         const session = {
@@ -328,7 +436,9 @@ class ReminderService {
             publicInteraction: null,
             isProcessing: false, // flaga czy aktualnie przetwarza zdjęcia
             cancelled: false, // flaga czy sesja została anulowana
-            ocrExpiresAt // timestamp wygaśnięcia sesji OCR
+            ocrExpiresAt, // timestamp wygaśnięcia sesji OCR
+            cxMode, // tryb RemindCX (boss CX - szukamy brakujących graczy, nie zer)
+            cxRoleNicks: [] // pełna lista członków roli klanowej (do wyliczenia brakujących)
         };
 
         this.activeSessions.set(sessionId, session);
@@ -347,6 +457,24 @@ class ReminderService {
      */
     getSession(sessionId) {
         return this.activeSessions.get(sessionId);
+    }
+
+    /**
+     * Tryb CX: zwraca członków roli klanowej, których NIE wykryto na zdjęciach
+     * (posiadają rolę klanową, ale brakuje ich na screenach z bossa CX)
+     */
+    getCxMissingUsers(session) {
+        const roleNicks = session.cxRoleNicks || [];
+        return roleNicks
+            .filter(rn => rn.member && !session.uniqueNicks.has(rn.displayName))
+            .map(rn => ({
+                detectedNick: rn.displayName,
+                user: rn,
+                confirmed: true,
+                line: '',
+                endValue: '',
+                uncertain: false
+            }));
     }
 
     /**
@@ -441,14 +569,17 @@ class ReminderService {
     /**
      * Tworzy embed z prośbą o zdjęcia
      */
-    createAwaitingImagesEmbed() {
+    createAwaitingImagesEmbed(cxMode = false) {
         const embed = new EmbedBuilder()
-            .setTitle('📸 Wyślij zdjęcia do analizy')
+            .setTitle(cxMode ? '📸 Wyślij zdjęcia do analizy (Boss CX)' : '📸 Wyślij zdjęcia do analizy')
             .setDescription(
                 '**Instrukcja:**\n' +
                 '1. Wyślij zdjęcia jako załączniki na tym kanale (możesz wysłać wiele zdjęć jednocześnie)\n' +
-                '2. Bot automatycznie je przeanalizuje\n' +
-                '3. Po przeanalizowaniu wszystkich zdjęć potwierdź wysłanie przypomnienia\n\n' +
+                (cxMode
+                    ? '2. Bot znajdzie nicki na zdjęciach i ustali, których członków klanu BRAKUJE\n' +
+                      '3. Po przeanalizowaniu wszystkich zdjęć potwierdź wysłanie powiadomień CX\n\n'
+                    : '2. Bot automatycznie je przeanalizuje\n' +
+                      '3. Po przeanalizowaniu wszystkich zdjęć potwierdź wysłanie przypomnienia\n\n') +
                 '**Uwaga:** Wiadomość ze zdjęciami zostanie automatycznie usunięta po przetworzeniu.'
             )
             .setColor('#FFA500')
@@ -467,7 +598,8 @@ class ReminderService {
     }
 
     /**
-     * Tworzy embed z końcowym potwierdzeniem i listą graczy
+     * Tworzy embed z końcowym potwierdzeniem i listą graczy.
+     * Tryb CX: lista graczy, których BRAKUJE na zdjęciach (posiadają rolę klanową).
      */
     createFinalConfirmationEmbed(session) {
         const foundUsers = [];
@@ -480,23 +612,46 @@ class ReminderService {
         const uniqueNicks = Array.from(session.uniqueNicks);
 
         let description = `**Przeanalizowano:** ${session.processedImages.length} ${session.processedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}\n`;
-        description += `**Znaleziono:** ${uniqueNicks.length} ${uniqueNicks.length === 1 ? 'unikalny nick' : 'unikalnych nicków'} z wynikiem 0\n\n`;
+        let actionableCount; // liczba osób do powiadomienia (decyduje o przyciskach)
 
-        if (uniqueNicks.length > 0) {
-            description += `**📋 Lista graczy z zerem:**\n`;
-            // Pokaż maksymalnie 20 nicków w embedzie (limit Discord)
-            const displayNicks = uniqueNicks.slice(0, 20);
-            description += displayNicks.map(nick => `• ${nick}`).join('\n');
+        if (session.cxMode) {
+            const missingUsers = this.getCxMissingUsers(session);
+            actionableCount = missingUsers.length;
 
-            if (uniqueNicks.length > 20) {
-                description += `\n... i ${uniqueNicks.length - 20} więcej`;
+            description += `**Wykryto na zdjęciach:** ${uniqueNicks.length} z ${(session.cxRoleNicks || []).length} członków klanu\n`;
+            description += `**Brakuje:** ${missingUsers.length} ${missingUsers.length === 1 ? 'gracz' : 'graczy'}\n\n`;
+
+            if (missingUsers.length > 0) {
+                description += `**📋 Lista graczy, których brakuje (boss CX):**\n`;
+                const displayMissing = missingUsers.slice(0, 20);
+                description += displayMissing.map(u => `• ${u.detectedNick}`).join('\n');
+
+                if (missingUsers.length > 20) {
+                    description += `\n... i ${missingUsers.length - 20} więcej`;
+                }
+            } else {
+                description += `✅ Wszyscy członkowie klanu są na zdjęciach - nie ma komu wysłać powiadomienia`;
             }
         } else {
-            description += `❌ Nie znaleziono żadnych graczy z wynikiem 0`;
+            actionableCount = uniqueNicks.length;
+            description += `**Znaleziono:** ${uniqueNicks.length} ${uniqueNicks.length === 1 ? 'unikalny nick' : 'unikalnych nicków'} z wynikiem 0\n\n`;
+
+            if (uniqueNicks.length > 0) {
+                description += `**📋 Lista graczy z zerem:**\n`;
+                // Pokaż maksymalnie 20 nicków w embedzie (limit Discord)
+                const displayNicks = uniqueNicks.slice(0, 20);
+                description += displayNicks.map(nick => `• ${nick}`).join('\n');
+
+                if (uniqueNicks.length > 20) {
+                    description += `\n... i ${uniqueNicks.length - 20} więcej`;
+                }
+            } else {
+                description += `❌ Nie znaleziono żadnych graczy z wynikiem 0`;
+            }
         }
 
         const embed = new EmbedBuilder()
-            .setTitle('✅ Analiza zakończona')
+            .setTitle(session.cxMode ? '✅ Analiza CX zakończona' : '✅ Analiza zakończona')
             .setDescription(description)
             .setColor('#FFA500')
             .setTimestamp();
@@ -518,8 +673,8 @@ class ReminderService {
         // Zdjęcia są teraz poza embedem - jako osobne załączniki w wiadomości
 
         let row;
-        if (uniqueNicks.length === 0) {
-            // Brak graczy z zerem - tylko przycisk Zakończ
+        if (actionableCount === 0) {
+            // Nikogo nie trzeba powiadamiać - tylko przycisk Zakończ
             const endButton = new ButtonBuilder()
                 .setCustomId('remind_cancel_session')
                 .setLabel('✅ Zakończ')
@@ -528,10 +683,10 @@ class ReminderService {
             row = new ActionRowBuilder()
                 .addComponents(endButton);
         } else {
-            // Są gracze z zerem - standardowe przyciski
+            // Są gracze do powiadomienia - standardowe przyciski
             const confirmButton = new ButtonBuilder()
                 .setCustomId('remind_complete_yes')
-                .setLabel('✅ Wyślij przypomnienia')
+                .setLabel(session.cxMode ? '✅ Wyślij powiadomienia CX' : '✅ Wyślij przypomnienia')
                 .setStyle(ButtonStyle.Success);
 
             const cancelButton = new ButtonBuilder()
@@ -705,6 +860,11 @@ class ReminderService {
         // Odśwież cache członków przed przetwarzaniem
         await safeFetchMembers(guild, logger);
 
+        if (session.cxMode) {
+            // Zapamiętaj pełną listę klanu - potrzebna do wyliczenia brakujących graczy
+            session.cxRoleNicks = await ocrService.getRoleNicks(guild, member);
+        }
+
         const results = [];
 
         // Progress bar - aktualizacja na żywo
@@ -769,8 +929,8 @@ class ReminderService {
                 // Przetwórz zdjęcie przez OCR
                 const text = await ocrService.processImageFromFile(file.filepath);
 
-                // Wyodrębnij graczy z wynikiem 0
-                const foundPlayers = await ocrService.extractPlayersFromText(text, guild, member);
+                // Wyodrębnij graczy: tryb CX = wszystkie wykryte nicki, klasyczny = gracze z wynikiem 0
+                const foundPlayers = await ocrService.extractPlayersFromText(text, guild, member, session.cxMode);
 
                 // Zapisz aktualny rozmiar przed dodaniem nowych nicków
                 const uniqueBeforeThisImage = session.uniqueNicks.size;
@@ -929,7 +1089,7 @@ class ReminderService {
             { key: 'downloading', icon: '📥', label: 'Pobieranie zdjęć' },
             { key: 'sending',     icon: '🤖', label: 'Wysyłanie do AI' },
             { key: 'processing',  icon: '⚙️', label: 'Przetwarzanie przez AI' },
-            { key: 'analyzing',   icon: '📊', label: 'Analiza wyników (gracze z zerem)' }
+            { key: 'analyzing',   icon: '📊', label: session.cxMode ? 'Analiza wyników (wykryci gracze)' : 'Analiza wyników (gracze z zerem)' }
         ];
         session.batchTotalImages = totalImages;
         session.currentStepKey = 'downloading';
@@ -972,6 +1132,10 @@ class ReminderService {
             for (const rn of roleNicks) {
                 if (!nickToMember.has(rn.displayName)) nickToMember.set(rn.displayName, rn);
             }
+            if (session.cxMode) {
+                // Zapamiętaj pełną listę klanu - potrzebna do wyliczenia brakujących graczy
+                session.cxRoleNicks = roleNicks;
+            }
             logger.info(`[REMIND] 👥 Nicki klanu do promptu AI: ${clanNicks.length}`);
 
             session.currentStepKey = 'sending';
@@ -989,12 +1153,14 @@ class ReminderService {
                 const rawPlayers = (aiResult && aiResult.isValid && Array.isArray(aiResult.players)) ? aiResult.players : [];
                 // Przydział 1:1 nicków AI → klanowych
                 const assigned = assignNicksToClan(rawPlayers, clanNicks, logger);
-                // Tylko gracze z wynikiem 0 (do przypomnień)
-                const zeroPlayers = assigned.filter(p => Number(p.score) === 0);
+                // Tryb CX: WSZYSCY wykryci gracze (szukamy brakujących); klasyczny: tylko z wynikiem 0
+                const relevantPlayers = session.cxMode
+                    ? assigned
+                    : assigned.filter(p => Number(p.score) === 0);
 
                 const players = [];
                 const uniqueBefore = session.uniqueNicks.size;
-                for (const zp of zeroPlayers) {
+                for (const zp of relevantPlayers) {
                     const roleNick = nickToMember.get(zp.playerName);
                     if (!roleNick || !roleNick.member) {
                         logger.warn(`[REMIND] ⚠️ Brak membera dla "${zp.playerName}" - pomijam`);
@@ -1005,7 +1171,7 @@ class ReminderService {
                         user: roleNick,
                         confirmed: true,
                         line: '',
-                        endValue: '0',
+                        endValue: session.cxMode ? String(zp.score ?? '') : '0',
                         uncertain: false
                     });
                     session.uniqueNicks.add(roleNick.displayName);
@@ -1026,7 +1192,7 @@ class ReminderService {
                     });
                 });
 
-                logger.info(`[REMIND] ✅ Batch: ${players.length} graczy z zerem (unikalnych łącznie: ${session.uniqueNicks.size})`);
+                logger.info(`[REMIND] ✅ Batch: ${players.length} ${session.cxMode ? 'wykrytych graczy' : 'graczy z zerem'} (unikalnych łącznie: ${session.uniqueNicks.size})`);
                 session.currentStepKey = 'done';
                 await this.updateBatchProgress(session);
             } else {
@@ -1124,7 +1290,7 @@ class ReminderService {
                 .setTitle(isDone ? '✅ Analiza zakończona' : '⏳ Przetwarzanie zdjęć...')
                 .setDescription(`${stepLines}\n\n🤖 Analiza AI: **${session.batchTotalImages}** ${imgWord} w jednym zapytaniu`)
                 .setColor(isDone ? '#00FF00' : '#FFA500')
-                .addFields({ name: '👥 Suma graczy z zerem', value: `${session.uniqueNicks.size}`, inline: true })
+                .addFields({ name: session.cxMode ? '👥 Wykrytych graczy' : '👥 Suma graczy z zerem', value: `${session.uniqueNicks.size}`, inline: true })
                 .setTimestamp();
 
             const cancelRow = new ActionRowBuilder().addComponents(
