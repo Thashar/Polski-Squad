@@ -184,7 +184,7 @@ class NicknameManagerService {
         const fallenPattern = /^Upadły /;
         const infernalPattern = /^Piekielny /;
         const flagNicknames = [
-            "Slava Ukrainu!",
+            "Хуй Україні!",
             "POLSKA GUROM!",
             "עם ישראל חי!",
             "American Dream",

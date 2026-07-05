@@ -18,7 +18,7 @@ class ReactionRoleService {
         
         // Lista nicków flag do walidacji
         this.flagNicknames = [
-            "Slava Ukrainu!",
+            "Хуй Україні!",
             "POLSKA GUROM!",
             "Shalom!",
             "American Dream",
@@ -229,7 +229,7 @@ class ReactionRoleService {
     async setUkrainianNickname(member) {
         try {
             const userId = member.user.id;
-            const ukrainianNick = "Slava Ukrainu!";
+            const ukrainianNick = "Хуй Україні!";
 
             // Walidacja przez centralny system
             const validation = await this.nicknameManager.validateEffectApplication(
