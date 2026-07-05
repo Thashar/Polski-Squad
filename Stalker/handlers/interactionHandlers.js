@@ -392,6 +392,231 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
     }
 }
 
+async function handleRemindCxCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
+    try {
+        // ===== SPRAWDZENIE WŁASNEJ AKTYWNEJ SESJI OCR (przed deferReply) =====
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        const commandName = '/remindcx';
+
+        // Sprawdź czy TEN użytkownik ma już aktywną sesję OCR (inni mogą działać równolegle)
+        const isOCRActive = ocrService.isOCRActive(guildId, userId);
+
+        // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
+        await interaction.deferReply({ ephemeral: true });
+
+        if (isOCRActive) {
+            await interaction.editReply({
+                content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.'
+            });
+            return;
+        }
+
+        // Znajdź rolę klanu użytkownika
+        let userClanRoleId = null;
+        for (const [roleKey, roleId] of Object.entries(config.targetRoles)) {
+            if (interaction.member.roles.cache.has(roleId)) {
+                userClanRoleId = roleId;
+                break;
+            }
+        }
+
+        if (!userClanRoleId) {
+            await interaction.editReply({
+                content: '❌ Nie masz żadnej z ról klanowych. Tylko członkowie klanów mogą używać RemindCX.'
+            });
+            return;
+        }
+
+        // Sprawdź okno CX (wtorek 18:00 → środa 17:45) oraz limit jednorazowego użycia
+        const canSend = await reminderUsageService.canSendCxReminder(userClanRoleId);
+
+        if (!canSend.canSend) {
+            const errorEmbed = new EmbedBuilder()
+                .setTitle('💎 Powiadomienie o bossie CX')
+                .setDescription(canSend.reason)
+                .setColor('#ff0000')
+                .setTimestamp()
+                .setFooter({ text: 'RemindCX: dostępne od wtorku 18:00 do środy 17:45 | tylko 1 raz na okno' });
+
+            await interaction.editReply({
+                embeds: [errorEmbed]
+            });
+            return;
+        }
+
+        await ocrService.startOCRSession(guildId, userId, commandName);
+        logger.info(`[OCR] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
+
+        // Pobierz timestamp wygaśnięcia OCR
+        const activeOCR = ocrService.getActiveOCRUser(guildId, userId);
+        const ocrExpiresAt = activeOCR ? activeOCR.expiresAt : null;
+
+        // Utwórz dedykowany wątek dla tej sesji
+        const memberName = interaction.member?.displayName || interaction.user.username;
+        const thread = await createSessionThread(interaction, ocrService, guildId, userId, `💎 RemindCX - ${memberName}`);
+
+        // Utwórz sesję w trybie CX (w wątku)
+        const sessionId = reminderService.createSession(userId, guildId, thread.id, userClanRoleId, ocrExpiresAt, true);
+        const session = reminderService.getSession(sessionId);
+
+        // Pokaż embed z prośbą o zdjęcia (w wątku)
+        const awaitingEmbed = reminderService.createAwaitingImagesEmbed(true);
+        setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
+        const awaitingMessage = await thread.send({
+            embeds: [awaitingEmbed.embed],
+            components: [awaitingEmbed.row]
+        });
+        session.publicInteraction = awaitingMessage;
+        ocrService.setSessionMessageId(guildId, userId, awaitingMessage.id);
+
+        // Potwierdzenie ephemeralne dla wywołującego
+        await interaction.editReply({ content: `✅ Sesja RemindCX rozpoczęta w wątku: <#${thread.id}>` });
+
+        logger.info(`[REMINDCX] ✅ Sesja utworzona (wątek: ${thread.id}), czekam na zdjęcia od ${interaction.user.tag}`);
+
+    } catch (error) {
+        logger.error('[REMINDCX] ❌ Błąd RemindCX:', error);
+
+        // Zakończ sesję OCR w przypadku błędu
+        const guildId = interaction.guild.id;
+        const userId = interaction.user.id;
+        await ocrService.endOCRSession(guildId, userId, true);
+        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+
+        await interaction.editReply({ content: messages.errors.ocrError });
+    }
+}
+
+/**
+ * Finalizacja sesji RemindCX po kliknięciu "Wyślij powiadomienia CX".
+ * Wysyła powiadomienia (kanał WARNING + DM bez przycisku potwierdzenia) do graczy,
+ * których BRAKUJE na zdjęciach, a posiadają rolę klanową. Bez sprawdzania urlopów
+ * i bez trackingu potwierdzeń odbioru.
+ */
+async function handleRemindCxCompleteSend(interaction, session, sharedState) {
+    // Natychmiast pokaż checklistę wysyłki (usuwa przyciski)
+    await interaction.update({
+        content: buildSendChecklist('remindcx', 'dedup'),
+        embeds: [],
+        components: []
+    });
+
+    // Wyznacz brakujących graczy (mają rolę klanową, nie wykryto ich na zdjęciach)
+    const missingUsers = sharedState.reminderService.getCxMissingUsers(session);
+
+    logger.info(`[REMINDCX] 📊 Brakujących graczy do powiadomienia: ${missingUsers.length}`);
+
+    if (missingUsers.length === 0) {
+        stopGhostPing(session);
+
+        await interaction.editReply({
+            content: '✅ Wszyscy członkowie klanu są na zdjęciach - nie ma komu wysłać powiadomienia CX.',
+            embeds: [],
+            components: []
+        });
+
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        await sharedState.reminderService.cleanupSession(session.sessionId);
+        return;
+    }
+
+    // Ponowna weryfikacja okna i limitu jednorazowego użycia (sesja mogła trwać dłużej)
+    const canSend = await sharedState.reminderUsageService.canSendCxReminder(session.userClanRoleId);
+    if (!canSend.canSend) {
+        stopGhostPing(session);
+
+        await interaction.editReply({
+            content: canSend.reason,
+            embeds: [],
+            components: []
+        });
+
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+        await sharedState.reminderService.cleanupSession(session.sessionId);
+        return;
+    }
+
+    try {
+        // Checklist: krok wysyłki
+        await interaction.editReply({ content: buildSendChecklist('remindcx', 'sending'), embeds: [], components: [] });
+
+        const reminderResult = await sharedState.reminderService.sendCxReminders(interaction.guild, missingUsers);
+
+        // Zarejestruj użycie RemindCX (tylko 1 raz na okno per klan)
+        await sharedState.reminderUsageService.recordCxUsage(session.userClanRoleId, session.userId);
+
+        stopGhostPing(session);
+        await sharedState.reminderService.cleanupSession(session.sessionId);
+
+        // Czas do deadline CX
+        const timeLeft = sharedState.reminderService.calculateTimeUntilCxDeadline();
+        const timeMessage = messages.formatCxTimeMessage(timeLeft);
+
+        const userList = missingUsers
+            .filter(userData => userData.user && userData.user.member)
+            .map(userData => `• ${userData.user.member.displayName}`)
+            .join('\n');
+
+        const successEmbed = new EmbedBuilder()
+            .setTitle('✅ Powiadomienia CX wysłane')
+            .setDescription(
+                `💎 **Wysłano powiadomienia o bossie CX do ${missingUsers.length} ${missingUsers.length === 1 ? 'osoby' : 'osób'}:**\n\n` +
+                `${userList}\n\n` +
+                `⏰ ${timeMessage}`
+            )
+            .setColor('#00ff00')
+            .addFields(...buildDmResultFields(reminderResult))
+            .setFooter({ text: `Wykonano przez ${interaction.user.tag}${sharedState.config.cxBoss.unlimited ? '' : ' | RemindCX można użyć tylko raz na okno'}` });
+
+        try {
+            await interaction.editReply({
+                content: null,
+                embeds: [successEmbed],
+                components: []
+            });
+        } catch (editError) {
+            if (editError.code === 10008) {
+                logger.warn('[REMINDCX] ⚠️ Interakcja wygasła, nie można zaktualizować wiadomości');
+            } else {
+                logger.error(`[REMINDCX] ⚠️ Błąd aktualizacji wiadomości: ${editError.message}`);
+            }
+        }
+
+        logger.info(`[REMINDCX] ✅ Powiadomienia CX wysłane przez ${interaction.user.tag}`);
+
+        // Zakończ sesję OCR natychmiast
+        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+
+    } catch (error) {
+        logger.error(`[REMINDCX] ❌ Błąd wysyłania powiadomień CX: ${error?.message}`);
+        logger.error(`[REMINDCX] ❌ Stack: ${error?.stack}`);
+
+        try {
+            stopGhostPing(session);
+        } catch (stopError) {
+            logger.error(`[REMINDCX] ⚠️ Błąd zatrzymywania ghost ping: ${stopError.message}`);
+        }
+
+        try {
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas wysyłania powiadomień CX.',
+                embeds: [],
+                components: []
+            });
+        } catch (replyError) {
+            logger.error(`[REMINDCX] ⚠️ Nie można zaktualizować interakcji: ${replyError.message}`);
+        }
+
+        try {
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+        } catch (cleanupError) {
+            logger.error(`[REMINDCX] ⚠️ Błąd czyszczenia sesji: ${cleanupError.message}`);
+        }
+    }
+}
+
 async function handlePunishmentCommand(interaction, config, databaseService, punishmentService) {
     const category = interaction.options.getString('category');
     const roleId = config.targetRoles[category];
@@ -956,7 +1181,7 @@ async function handleButton(interaction, sharedState) {
         session.stage = 'awaiting_images';
         sharedState.reminderService.refreshSessionTimeout(session.sessionId);
 
-        const awaitingEmbed = sharedState.reminderService.createAwaitingImagesEmbed();
+        const awaitingEmbed = sharedState.reminderService.createAwaitingImagesEmbed(session.cxMode);
         setSessionOwnerAuthor(awaitingEmbed.embed, interaction.member, interaction.user);
 
         await interaction.update({
@@ -985,6 +1210,12 @@ async function handleButton(interaction, sharedState) {
 
         // Odśwież timeout sesji OCR
         await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+
+        // Tryb CX - osobna, uproszczona ścieżka wysyłki (bez urlopów i bez trackingu potwierdzeń)
+        if (session.cxMode) {
+            await handleRemindCxCompleteSend(interaction, session, sharedState);
+            return;
+        }
 
         // Natychmiast pokaż checklistę wysyłki (usuwa przyciski)
         await interaction.update({
@@ -1270,6 +1501,11 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_remind') {
         await handleRemindCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.reminderService, sharedState.reminderUsageService);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_remindcx') {
+        await handleRemindCxCommand(interaction, sharedState.config, sharedState.ocrService, sharedState.reminderService, sharedState.reminderUsageService);
         return;
     }
 
@@ -11423,6 +11659,10 @@ const SEND_CHECKLIST_STEPS = {
         { key: 'sending',  label: '📨 Wysyłanie przypomnień (DM + ping)' },
         { key: 'tracking', label: '📊 Tworzenie trackingu potwierdzeń' }
     ],
+    remindcx: [
+        { key: 'dedup',   label: '👥 Ustalanie brakujących graczy' },
+        { key: 'sending', label: '📨 Wysyłanie powiadomień CX (DM + ping)' }
+    ],
     punish: [
         { key: 'dedup',     label: '👥 Deduplikacja użytkowników' },
         { key: 'vacation',  label: '🏖️ Sprawdzanie urlopów' },
@@ -11432,7 +11672,7 @@ const SEND_CHECKLIST_STEPS = {
 
 /**
  * Buduje checklistę etapu wysyłki (po potwierdzeniu) - aktywny krok ma 🔄, ukończone ✅.
- * @param {'remind'|'punish'} type
+ * @param {'remind'|'remindcx'|'punish'} type
  * @param {string} currentKey - klucz aktualnego kroku lub 'done' dla wszystkich ukończonych
  */
 function buildSendChecklist(type, currentKey) {
@@ -11447,7 +11687,9 @@ function buildSendChecklist(type, currentKey) {
         else marker = '⬜';
         return `${marker} ${s.label}${(!isDone && i === idx) ? '...' : ''}`;
     });
-    const title = type === 'remind' ? '📨 Wysyłanie przypomnień' : '💀 Nakładanie kar';
+    const title = type === 'remind' ? '📨 Wysyłanie przypomnień'
+        : type === 'remindcx' ? '💎 Wysyłanie powiadomień CX'
+        : '💀 Nakładanie kar';
     return `### ${title}\n${lines.join('\n')}`;
 }
 

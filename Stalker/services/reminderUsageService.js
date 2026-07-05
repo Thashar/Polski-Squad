@@ -111,6 +111,125 @@ class ReminderUsageService {
     }
 
     /**
+     * Sprawdza aktualne okno RemindCX (od wtorku 18:00 do środy 17:45 czasu polskiego).
+     * @returns {Object} - { active: boolean, windowKey: string|null }
+     *                     windowKey = data wtorku otwierającego okno (YYYY-MM-DD)
+     */
+    getCxWindow() {
+        const now = new Date();
+        const polandTime = new Date(now.toLocaleString('en-US', { timeZone: this.config.timezone }));
+
+        const cx = this.config.cxBoss;
+        const day = polandTime.getDay();
+        const minutesOfDay = polandTime.getHours() * 60 + polandTime.getMinutes();
+        const startMinutes = cx.windowStartHour * 60 + cx.windowStartMinute;
+        const endMinutes = cx.deadline.hour * 60 + cx.deadline.minute;
+
+        let windowStartDate = null;
+
+        if (day === cx.windowStartDay && minutesOfDay >= startMinutes) {
+            // Wtorek po 18:00 - okno otwarte, zaczęło się dzisiaj
+            windowStartDate = new Date(polandTime);
+        } else if (day === (cx.windowStartDay + 1) % 7 && minutesOfDay <= endMinutes) {
+            // Środa do 17:45 - okno otwarte, zaczęło się wczoraj
+            windowStartDate = new Date(polandTime);
+            windowStartDate.setDate(windowStartDate.getDate() - 1);
+        }
+
+        if (!windowStartDate) {
+            return { active: false, windowKey: null };
+        }
+
+        const year = windowStartDate.getFullYear();
+        const month = String(windowStartDate.getMonth() + 1).padStart(2, '0');
+        const dayOfMonth = String(windowStartDate.getDate()).padStart(2, '0');
+
+        return { active: true, windowKey: `${year}-${month}-${dayOfMonth}` };
+    }
+
+    /**
+     * Sprawdza czy klan może wysłać powiadomienie RemindCX
+     * (tylko w oknie wtorek 18:00 → środa 17:45, jeden raz na okno per klan)
+     * @param {string} roleId - ID roli (klanu)
+     * @returns {Promise<Object>} - { canSend: boolean, reason: string, windowKey: string|null }
+     */
+    async canSendCxReminder(roleId) {
+        if (!this.usageData) {
+            await this.loadUsageData();
+        }
+
+        // TYMCZASOWE: tryb bez limitów - pomija okno czasowe i jednorazowość
+        if (this.config.cxBoss.unlimited) {
+            return { canSend: true, reason: '✅ Tryb bez limitów (tymczasowy)', windowKey: null };
+        }
+
+        const window = this.getCxWindow();
+
+        if (!window.active) {
+            return {
+                canSend: false,
+                reason: '❌ Powiadomienie o bossie CX można wysłać tylko **od wtorku 18:00 do środy 17:45** (czas polski).',
+                windowKey: null
+            };
+        }
+
+        if (!this.usageData.cxSenders) {
+            this.usageData.cxSenders = {};
+        }
+
+        const usage = this.usageData.cxSenders[roleId]?.[window.windowKey];
+        if (usage) {
+            const sentTime = new Date(usage.timestamp).toLocaleString('pl-PL', { timeZone: this.config.timezone });
+            const senderMention = usage.sentBy ? ` przez <@${usage.sentBy}>` : '';
+            return {
+                canSend: false,
+                reason: `❌ Powiadomienie o bossie CX zostało już wysłane **${sentTime}**${senderMention}.\n\nPowiadomienie CX można wysłać tylko **jeden raz** w każdym oknie (wtorek 18:00 → środa 17:45).`,
+                windowKey: window.windowKey
+            };
+        }
+
+        return { canSend: true, reason: '✅ Można wysłać powiadomienie CX', windowKey: window.windowKey };
+    }
+
+    /**
+     * Rejestruje użycie RemindCX przez klan (jeden raz na okno)
+     * @param {string} roleId - ID roli (klanu)
+     * @param {string} senderId - ID użytkownika który wysłał powiadomienie
+     */
+    async recordCxUsage(roleId, senderId) {
+        if (!this.usageData) {
+            await this.loadUsageData();
+        }
+
+        // TYMCZASOWE: tryb bez limitów - nie rejestruj użycia (nie blokuj kolejnych wysyłek)
+        if (this.config.cxBoss.unlimited) {
+            logger.info('[REMINDCX] ℹ️ Tryb bez limitów - pomijam rejestrację użycia');
+            return;
+        }
+
+        const window = this.getCxWindow();
+        if (!window.active) {
+            logger.warn('[REMINDCX] ⚠️ Próba rejestracji użycia poza oknem CX - pomijam');
+            return;
+        }
+
+        if (!this.usageData.cxSenders) {
+            this.usageData.cxSenders = {};
+        }
+        if (!this.usageData.cxSenders[roleId]) {
+            this.usageData.cxSenders[roleId] = {};
+        }
+
+        this.usageData.cxSenders[roleId][window.windowKey] = {
+            timestamp: Date.now(),
+            sentBy: senderId
+        };
+
+        await this.saveUsageData();
+        logger.info(`[REMINDCX] 📤 Zarejestrowano użycie RemindCX dla klanu ${roleId} przez ${senderId} (okno: ${window.windowKey})`);
+    }
+
+    /**
      * Sprawdza czy klan może wysłać /remind (limity czasowe PER KLAN)
      * @param {string} roleId - ID roli (klanu)
      * @returns {Object} - { canSend: boolean, reason: string, minutesToDeadline: number }
@@ -498,6 +617,20 @@ class ReminderUsageService {
                 if (pingDate < thirtyDaysAgo) {
                     delete dailyPings[date];
                     cleanedCount++;
+                }
+            }
+        }
+
+        // Czyść stare wpisy RemindCX (okna starsze niż 30 dni)
+        if (this.usageData.cxSenders) {
+            for (const roleId in this.usageData.cxSenders) {
+                const windows = this.usageData.cxSenders[roleId];
+                for (const windowKey in windows) {
+                    const windowDate = new Date(windowKey);
+                    if (windowDate < thirtyDaysAgo) {
+                        delete windows[windowKey];
+                        cleanedCount++;
+                    }
                 }
             }
         }
