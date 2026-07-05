@@ -6,7 +6,7 @@ module.exports = {
     // Wiadomość przypomnienia o bossie CX (RemindCX)
     cxReminderMessage: (timeMessage, userMentions) =>
         `# <a:X_Uwaga:1297531538186965003> PRZYPOMNIENIE O BOSSIE CX <a:X_Uwaga:1297531538186965003>\n${timeMessage}\n\n` +
-        `💎 **Jeśli boss CX nie zostanie zbity, przepadną WSZYSTKIE nagrody!**\n\n${userMentions}`,
+        `**Jeśli nie zbijecie Bossa na czas nagrody przepadną!**\n\n${userMentions}`,
 
     // Formatowanie czasu do deadline bossa CX (środa 17:45)
     formatCxTimeMessage: (timeUntilDeadline) => {
