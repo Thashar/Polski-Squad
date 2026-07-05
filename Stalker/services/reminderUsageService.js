@@ -158,6 +158,11 @@ class ReminderUsageService {
             await this.loadUsageData();
         }
 
+        // TYMCZASOWE: tryb bez limitów - pomija okno czasowe i jednorazowość
+        if (this.config.cxBoss.unlimited) {
+            return { canSend: true, reason: '✅ Tryb bez limitów (tymczasowy)', windowKey: null };
+        }
+
         const window = this.getCxWindow();
 
         if (!window.active) {
@@ -194,6 +199,12 @@ class ReminderUsageService {
     async recordCxUsage(roleId, senderId) {
         if (!this.usageData) {
             await this.loadUsageData();
+        }
+
+        // TYMCZASOWE: tryb bez limitów - nie rejestruj użycia (nie blokuj kolejnych wysyłek)
+        if (this.config.cxBoss.unlimited) {
+            logger.info('[REMINDCX] ℹ️ Tryb bez limitów - pomijam rejestrację użycia');
+            return;
         }
 
         const window = this.getCxWindow();

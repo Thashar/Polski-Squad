@@ -567,7 +567,7 @@ async function handleRemindCxCompleteSend(interaction, session, sharedState) {
             )
             .setColor('#00ff00')
             .addFields(...buildDmResultFields(reminderResult))
-            .setFooter({ text: `Wykonano przez ${interaction.user.tag} | RemindCX można użyć tylko raz na okno` });
+            .setFooter({ text: `Wykonano przez ${interaction.user.tag}${sharedState.config.cxBoss.unlimited ? '' : ' | RemindCX można użyć tylko raz na okno'}` });
 
         try {
             await interaction.editReply({
