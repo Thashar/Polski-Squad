@@ -13,6 +13,7 @@ const SAFETY_SETTINGS_OFF = [
 const PROMPT_VERSIONS = {
     'extract-results':       'v1',
     'extract-results-batch': 'v1',
+    'extract-nicks-batch':   'v1',
     'extract-equipment':     'v1',
 };
 
@@ -214,6 +215,136 @@ Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników gracz
             logger.error('[AI OCR - Batch] Błąd analizy zbiorczej:', error);
             throw error;
         }
+    }
+
+    /**
+     * Analiza batch dla RemindCX: wyciąga ze zdjęć SAME NICKI graczy (bez wyników).
+     * Screeny bossa CX nie zawierają wyników w formacie zwykłych rankingów, dlatego
+     * osobny prompt (tylko nicki) i osobny parser bez walidacji wyników.
+     * @param {string[]} imagePaths - Ścieżki do obrazów
+     * @param {string[]} clanNicks - Lista nicków członków roli klanowej z Discorda
+     * @returns {Promise<{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}>}
+     */
+    async analyzeNicksImagesBatch(imagePaths, clanNicks = []) {
+        if (!this.enabled) {
+            throw new Error('AI OCR nie jest włączony');
+        }
+
+        try {
+            logger.info(`[AI OCR - Nicks] Rozpoczynam analizę ${imagePaths.length} zdjęć naraz (nicki klanu: ${clanNicks.length})`);
+
+            const parts = [];
+            for (const imagePath of imagePaths) {
+                const pngBuffer = await sharp(imagePath).png().toBuffer();
+                parts.push({ inlineData: { data: pngBuffer.toString('base64'), mimeType: 'image/png' } });
+            }
+
+            const nickListText = clanNicks.length > 0
+                ? clanNicks.map((n, i) => `${i + 1}. ${n}`).join('\n')
+                : '(brak listy)';
+
+            const prompt = `Przeanalizuj ${imagePaths.length} zdjęć z gry Survivor.io zawierających listę graczy (np. lista uczestników walki z bossem).
+Zdjęcia mogą się nakładać - ten sam gracz może pojawić się na kilku zdjęciach. Połącz wszystkie zdjęcia w jedną wspólną listę i usuń duplikaty (każdy gracz tylko raz).
+
+Poniżej lista nicków graczy z roli klanowej na Discordzie:
+${nickListText}
+
+Dla każdego gracza odczytanego ze zdjęć dopasuj jego nick do NAJBARDZIEJ PODOBNEGO nicku z powyższej listy Discord. Nicki w grze mogą się nieznacznie różnić od nicków Discord (literówki, dodatkowe ozdobniki, inne znaki specjalne, emoji) - wybierz najbardziej prawdopodobne dopasowanie. W wyniku użyj DOKŁADNIE nicku z listy Discord.
+Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze zdjęcia.
+
+Zwróć TYLKO nicki, jeden nick na linię, bez numeracji, bez wyników i bez żadnego dodatkowego tekstu.
+
+Jeśli zdjęcia nie zawierają listy graczy, odpowiedz: "Nie wykryto graczy".`;
+
+            parts.push({ text: prompt });
+
+            logger.info('[AI OCR - Nicks] Wysyłam zapytanie zbiorcze do Gemini Vision...');
+
+            const res = await this._generateContent(parts, 4000, {
+                step:          'extract-nicks-batch',
+                promptName:    'extract-nicks-batch',
+                promptVersion: PROMPT_VERSIONS['extract-nicks-batch'],
+            });
+
+            logger.info('[AI OCR - Nicks] Odpowiedź Gemini:');
+            logger.info(res.text);
+
+            const result = this.parseAINickResponse(res.text);
+            logger.info(`[AI OCR - Nicks] Wynik parsowania: ${result.players.length} graczy`);
+
+            return result;
+
+        } catch (error) {
+            logger.error('[AI OCR - Nicks] Błąd analizy zbiorczej nicków:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Parsuje odpowiedź AI zawierającą SAME NICKI (jeden na linię, bez wyników).
+     * Toleruje numerację, markdown i doklejone wyniki (obcina " - 123456" z końca linii).
+     * @param {string} responseText
+     * @returns {{players: Array<{playerName: string, score: number}>, confidence: number, isValid: boolean, error?: string}}
+     */
+    parseAINickResponse(responseText) {
+        const lowerResponse = responseText.toLowerCase();
+
+        const invalidKeywords = [
+            'niepoprawny screen',
+            'przesłano niepoprawny',
+            'trzeba przesłać screen',
+            'nie wykryłem',
+            'nie wykryto',
+            'nie znalazłem',
+            'nie można odczytać',
+            'nie mogę odczytać',
+            'brak graczy',
+            'cannot read',
+            'unable to read',
+            'no players'
+        ];
+
+        for (const keyword of invalidKeywords) {
+            if (lowerResponse.includes(keyword)) {
+                logger.info(`[AI OCR - Nicks] AI wykrył niepoprawny screen (keyword: "${keyword}")`);
+                return {
+                    players: [],
+                    confidence: 0,
+                    isValid: false,
+                    error: 'INVALID_SCREENSHOT'
+                };
+            }
+        }
+
+        const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const players = [];
+        const seen = new Set();
+
+        for (const line of lines) {
+            let playerName = line;
+
+            // Usuń markdown (pogrubienia) PRZED punktorami, żeby "**Nick**" nie zostawiało gwiazdki
+            playerName = playerName.replace(/\*\*/g, '');
+            // Usuń numerację, prefiksy i punktory
+            playerName = playerName.replace(/^nick\s+nr\s+\d+[:\s]*/i, '');
+            playerName = playerName.replace(/^\d+[\.\)]\s*/, '');
+            playerName = playerName.replace(/^[\*\-•]\s*/, '');
+            // Usuń doklejony wynik z końca linii (gdyby AI mimo wszystko go dodał)
+            playerName = playerName.replace(/\s*[-–—]\s*[\d\s,._]+$/, '').trim();
+
+            if (playerName.length > 0 && !seen.has(playerName)) {
+                seen.add(playerName);
+                players.push({ playerName, score: 0 });
+                logger.info(`[AI OCR - Nicks] Sparsowano nick: "${playerName}"`);
+            }
+        }
+
+        return {
+            players,
+            confidence: players.length > 0 ? Math.min(50 + (players.length * 10), 100) : 0,
+            isValid: players.length > 0,
+            error: players.length === 0 ? 'NO_PLAYERS_FOUND' : undefined
+        };
     }
 
     /**
