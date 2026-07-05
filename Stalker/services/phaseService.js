@@ -63,6 +63,9 @@ class PhaseService {
      * Tworzy nową sesję Fazy 1
      */
     createSession(userId, guildId, channelId, phase = 1, ocrExpiresAt = null) {
+        // Usuń ewentualną porzuconą sesję tego użytkownika (np. po przeciążeniu API)
+        this.discardStaleUserSession(userId);
+
         const sessionId = `${userId}_${Date.now()}`;
 
         const session = {
@@ -126,6 +129,34 @@ class PhaseService {
             }
         }
         return null;
+    }
+
+    /**
+     * Usuwa z pamięci porzuconą sesję użytkownika (bez kończenia sesji OCR w ocrService -
+     * wywoływane przy tworzeniu NOWEJ sesji, gdy nowa sesja OCR użytkownika już wystartowała
+     * i endOCRSession zabiłby ją zamiast starej).
+     */
+    discardStaleUserSession(userId) {
+        const stale = this.getSessionByUserId(userId);
+        if (!stale) return;
+
+        logger.warn(`[PHASE${stale.phase || 1}] ⚠️ Znaleziono porzuconą sesję ${stale.sessionId} - usuwam przed utworzeniem nowej`);
+
+        if (stale.timeout) {
+            clearTimeout(stale.timeout);
+            stale.timeout = null;
+        }
+        if (stale.blinkTimer) {
+            clearInterval(stale.blinkTimer);
+            stale.blinkTimer = null;
+        }
+        if (stale.pingTimer) {
+            clearInterval(stale.pingTimer);
+            stale.pingTimer = null;
+        }
+        stale.cancelled = true;
+        this.activeSessions.delete(stale.sessionId);
+        this.cleanupSessionFiles(stale.sessionId).catch(() => {});
     }
 
     /**
@@ -668,6 +699,10 @@ class PhaseService {
         }
 
         if (session.apiOverloaded) {
+            // KRYTYCZNE: usuń sesję z pamięci - martwa sesja przechwytywałaby zdjęcia
+            // kolejnej sesji użytkownika (getSessionByUserId zwraca pierwszą znalezioną),
+            // a jej timeout zabiłby nową sesję OCR
+            await this.cleanupSession(session.sessionId);
             return null;
         }
 

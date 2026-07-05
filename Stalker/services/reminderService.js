@@ -419,6 +419,9 @@ class ReminderService {
      * a powiadomienia trafiają do tych, których BRAKUJE (getCxMissingUsers).
      */
     createSession(userId, guildId, channelId, userClanRoleId, ocrExpiresAt = null, cxMode = false) {
+        // Usuń ewentualną porzuconą sesję tego użytkownika (np. po przeciążeniu API)
+        this.discardStaleUserSession(userId);
+
         const sessionId = `remind_${userId}_${Date.now()}`;
 
         const session = {
@@ -487,6 +490,30 @@ class ReminderService {
             }
         }
         return null;
+    }
+
+    /**
+     * Usuwa z pamięci porzuconą sesję użytkownika (bez kończenia sesji OCR w ocrService -
+     * wywoływane przy tworzeniu NOWEJ sesji, gdy nowa sesja OCR użytkownika już wystartowała
+     * i endOCRSession zabiłby ją zamiast starej).
+     */
+    discardStaleUserSession(userId) {
+        const stale = this.getSessionByUserId(userId);
+        if (!stale) return;
+
+        logger.warn(`[REMIND] ⚠️ Znaleziono porzuconą sesję ${stale.sessionId} - usuwam przed utworzeniem nowej`);
+
+        if (stale.timeout) {
+            clearTimeout(stale.timeout);
+            stale.timeout = null;
+        }
+        if (stale.blinkTimer) {
+            clearInterval(stale.blinkTimer);
+            stale.blinkTimer = null;
+        }
+        stale.cancelled = true;
+        this.activeSessions.delete(stale.sessionId);
+        this.cleanupSessionFiles(stale.sessionId).catch(() => {});
     }
 
     /**
@@ -1238,6 +1265,10 @@ class ReminderService {
         }
 
         if (session.apiOverloaded) {
+            // KRYTYCZNE: usuń sesję z pamięci - martwa sesja przechwytywałaby zdjęcia
+            // kolejnej sesji użytkownika (getSessionByUserId zwraca pierwszą znalezioną),
+            // a jej timeout zabiłby nową sesję OCR
+            await this.cleanupSession(sessionId);
             return null;
         }
 
