@@ -309,34 +309,59 @@ class BazarService {
     }
 
     /**
-     * Pobiera aktualną godzinę w strefie czasowej Europe/Warsaw
+     * Rozbija datę na składowe kalendarzowe w strefie Europe/Warsaw
      * @param {Date} date - Data do konwersji
-     * @returns {Object} - { hour, minute, date }
+     * @returns {Object} - { year, month, day, hour, minute, second }
      */
-    getPolandTime(date) {
-        // Konwertuj UTC na czas polski (Europe/Warsaw)
-        const polandTimeString = date.toLocaleString('pl-PL', {
+    getZonedParts(date) {
+        const fmt = new Intl.DateTimeFormat('en-US', {
             timeZone: 'Europe/Warsaw',
-            hour: '2-digit',
-            minute: '2-digit',
+            hour12: false,
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
-            hour12: false
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
         });
 
-        // Format: "DD.MM.YYYY, HH:MM"
-        const [datePart, timePart] = polandTimeString.split(', ');
-        const [day, month, year] = datePart.split('.');
-        const [hour, minute] = timePart.split(':');
+        const parts = {};
+        for (const part of fmt.formatToParts(date)) {
+            parts[part.type] = part.value;
+        }
 
         return {
-            hour: parseInt(hour, 10),
-            minute: parseInt(minute, 10),
-            day: parseInt(day, 10),
-            month: parseInt(month, 10),
-            year: parseInt(year, 10)
+            year: parseInt(parts.year, 10),
+            month: parseInt(parts.month, 10),
+            day: parseInt(parts.day, 10),
+            // Intl potrafi zwrócić "24" dla północy zamiast "00" - normalizujemy do 0
+            hour: parts.hour === '24' ? 0 : parseInt(parts.hour, 10),
+            minute: parseInt(parts.minute, 10),
+            second: parseInt(parts.second, 10)
         };
+    }
+
+    /**
+     * Konwertuje datę kalendarzową (czas ścienny) w strefie Europe/Warsaw na instant UTC.
+     * Niezależne od strefy czasowej systemu, na którym działa proces (w przeciwieństwie
+     * do konstruowania `new Date(rok, miesiąc, dzień, godzina)`, które zawsze interpretuje
+     * podane liczby jako czas lokalny SYSTEMU, a nie Polski).
+     * @returns {Date} - Instant UTC odpowiadający podanemu czasowi ściennemu w Polsce
+     */
+    zonedPartsToUtc(year, month, day, hour, minute, second) {
+        const target = Date.UTC(year, month - 1, day, hour, minute, second);
+        let guess = target;
+
+        // Iteracyjne dopasowanie offsetu (zbiega w 1-2 krokach poza momentem zmiany czasu)
+        for (let i = 0; i < 2; i++) {
+            const zoned = this.getZonedParts(new Date(guess));
+            const zonedAsUtc = Date.UTC(zoned.year, zoned.month - 1, zoned.day, zoned.hour, zoned.minute, zoned.second);
+            const error = zonedAsUtc - target;
+            if (error === 0) break;
+            guess -= error;
+        }
+
+        return new Date(guess);
     }
 
     /**
@@ -345,10 +370,9 @@ class BazarService {
      * @returns {Date} - Czas następnego resetu (UTC)
      */
     getNextResetTime(now) {
-        // Pobierz aktualną godzinę w czasie polskim
-        const polandTime = this.getPolandTime(now);
+        // Pobierz aktualną datę/godzinę w czasie polskim
+        const polandTime = this.getZonedParts(now);
         const currentHour = polandTime.hour;
-        const currentMinute = polandTime.minute;
 
         // Stały cykl co 2 godziny przez całą dobę (czas polski)
         // Parametr startHour określa przesunięcie w cyklu
@@ -356,6 +380,7 @@ class BazarService {
         // Dla startHour=17: resety o 1,3,5,7,9,11,13,15,17,19,21,23 (Polski)
 
         let targetHour = currentHour;
+        let dayOffset = 0;
 
         // Zawsze szukaj NASTĘPNEJ godziny resetu (nigdy nie zwracaj obecnej godziny)
         // To zapewnia że po wykonaniu resetu, komunikat pokaże czas do następnego resetu (nie "za 0h")
@@ -363,35 +388,12 @@ class BazarService {
             targetHour++;
             if (targetHour >= 24) {
                 targetHour = 0;
+                dayOffset++;
             }
         } while ((targetHour % 2) !== (this.startHour % 2));
 
-        // Utwórz datę następnego resetu w czasie polskim
-        const nextResetPoland = new Date(polandTime.year, polandTime.month - 1, polandTime.day, targetHour, 0, 0, 0);
-
-        // Jeśli targetHour < currentHour, oznacza to że reset jest następnego dnia (przeszliśmy przez północ)
-        if (targetHour < currentHour) {
-            nextResetPoland.setDate(nextResetPoland.getDate() + 1);
-        }
-
-        // Konwertuj czas polski na UTC
-        const polandOffset = this.getTimezoneOffset(nextResetPoland);
-        const nextResetUTC = new Date(nextResetPoland.getTime() - polandOffset);
-
-        return nextResetUTC;
-    }
-
-    /**
-     * Pobiera offset strefy czasowej Europe/Warsaw dla danej daty (uwzględnia DST)
-     * @param {Date} date - Data
-     * @returns {number} - Offset w milisekundach
-     */
-    getTimezoneOffset(date) {
-        // Utwórz datę w strefie Europe/Warsaw
-        const polandDate = new Date(date.toLocaleString('en-US', { timeZone: 'Europe/Warsaw' }));
-        const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
-
-        return polandDate.getTime() - utcDate.getTime();
+        // Skonwertuj docelowy czas ścienny (Polska) na instant UTC
+        return this.zonedPartsToUtc(polandTime.year, polandTime.month, polandTime.day + dayOffset, targetHour, 0, 0);
     }
 
     /**
