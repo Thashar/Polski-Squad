@@ -235,8 +235,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
 
         if (unit) {
             if (integerPart.length > 5) {
-                log.warn(`[AI OCR] normalizeScore: obcięto ${integerPart.length} cyfr → 5 (${unit})`);
-                integerPart = integerPart.substring(0, 5);
+                log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo cyfr przed jednostką (${integerPart.length} > 5) — odrzucam jako podróbkę`);
+                return null;
             }
             if (decimalPart) {
                 const maxDec = integerPart.length === 1 ? 2 : 1;

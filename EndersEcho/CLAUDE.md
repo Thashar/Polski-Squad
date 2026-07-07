@@ -54,6 +54,7 @@
        - **KROK 2:** Sprawdza autentyczność zdjęcia (10 tokenów)
        - **KROK 3:** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
+     - **Walidacja długości cyfr** (`normalizeScore` w `aiOcrService.js`): jeśli wynik z jednostką (K/M/B/T/Q/Qi/Sx/Sp) ma więcej niż 5 cyfr przed jednostką LUB za dużo miejsc po przecinku → wynik **odrzucany jako podróbka** (`error: 'FAKE_PHOTO'`, `score: null`), NIE obcinany. Wcześniej funkcja obcinała nadmiarowe cyfry (`substring(0, 5)`), co potrafiło zaniżyć poprawnie odczytany wynik (np. AI poprawnie odczytało `213769Q`, obcięcie zamieniało go w błędny `21376Q` i wynik fałszywie nie bił rekordu)
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
    - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + ekstrakcja:
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów) — **10 retry** przy błędzie API (429/500/503), delay cappowany na 10s
