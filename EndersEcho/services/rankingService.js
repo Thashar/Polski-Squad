@@ -4,7 +4,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { formatMessage } = require('../utils/helpers');
+const { formatMessage, compareByScoreThenTimestamp } = require('../utils/helpers');
 
 class RankingService {
     constructor(config, scoreHistoryService = null) {
@@ -117,7 +117,7 @@ class RankingService {
         }
 
         const sorted = Array.from(bestPerPlayer.values())
-            .sort((a, b) => b.scoreValue - a.scoreValue);
+            .sort(compareByScoreThenTimestamp);
 
         if (!activeGuildIds) this._globalCache = sorted;
         return sorted;
@@ -237,14 +237,14 @@ class RankingService {
 
             // Ranking globalny (posortowany malejąco)
             const globalSorted = Array.from(bestPerPlayer.values())
-                .sort((a, b) => b.scoreValue - a.scoreValue);
+                .sort(compareByScoreThenTimestamp);
 
             // Rankingi per-serwer: posortowane userId dla każdej gildii
             const perGuildSortedIds = new Map();
             for (const [guildId, ranking] of perGuildData) {
                 const sorted = Object.entries(ranking)
                     .filter(([, d]) => d.scoreValue > 0)
-                    .sort(([, a], [, b]) => b.scoreValue - a.scoreValue)
+                    .sort(([, a], [, b]) => compareByScoreThenTimestamp(a, b))
                     .map(([userId]) => userId);
                 perGuildSortedIds.set(guildId, sorted);
             }
@@ -1023,7 +1023,7 @@ class RankingService {
                         const userPlayer = tempPlayers.find(p => p.userId === userId);
                         if (userPlayer) {
                             userPlayer.scoreValue = this.parseScoreValue(previousScore);
-                            tempPlayers.sort((a, b) => b.scoreValue - a.scoreValue);
+                            tempPlayers.sort(compareByScoreThenTimestamp);
                             const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
                             positionChange = (previousIndex + 1) - currentPosition;
                         }
@@ -1383,7 +1383,7 @@ class RankingService {
         const ranking = await this.loadRanking(guildId);
         const sorted = Object.entries(ranking)
             .map(([userId, data]) => ({ ...data, userId }))
-            .sort((a, b) => b.scoreValue - a.scoreValue);
+            .sort(compareByScoreThenTimestamp);
         this._sortedCache.set(guildId, sorted);
         return sorted;
     }
@@ -1398,12 +1398,12 @@ class RankingService {
         const idx = sorted.findIndex(p => p.userId === userId);
         if (idx !== -1) {
             if (newScoreValue > (sorted[idx].scoreValue || 0)) {
-                sorted[idx] = { ...sorted[idx], score: bestScore, scoreValue: newScoreValue };
+                sorted[idx] = { ...sorted[idx], score: bestScore, scoreValue: newScoreValue, timestamp: new Date().toISOString() };
             }
         } else {
-            sorted.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue });
+            sorted.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, timestamp: new Date().toISOString() });
         }
-        sorted.sort((a, b) => b.scoreValue - a.scoreValue);
+        sorted.sort(compareByScoreThenTimestamp);
         return sorted;
     }
 
@@ -1416,12 +1416,12 @@ class RankingService {
         const idx = ranking.findIndex(p => p.userId === userId);
         if (idx !== -1) {
             if (newScoreValue > (ranking[idx].scoreValue || 0)) {
-                ranking[idx] = { ...ranking[idx], score: bestScore, scoreValue: newScoreValue, sourceGuildId };
+                ranking[idx] = { ...ranking[idx], score: bestScore, scoreValue: newScoreValue, sourceGuildId, timestamp: new Date().toISOString() };
             }
         } else {
-            ranking.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, sourceGuildId });
+            ranking.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, sourceGuildId, timestamp: new Date().toISOString() });
         }
-        ranking.sort((a, b) => b.scoreValue - a.scoreValue);
+        ranking.sort(compareByScoreThenTimestamp);
         return ranking;
     }
 

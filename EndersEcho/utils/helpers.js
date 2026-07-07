@@ -99,8 +99,24 @@ async function downloadBuffer(url) {
     });
 }
 
+/**
+ * Sortuje graczy malejąco po wyniku. Przy remisie (identyczny scoreValue)
+ * gracz, który zdobył wynik WCZEŚNIEJ (starszy timestamp), jest wyżej —
+ * ten kto powtórzył wynik jako drugi ląduje niżej.
+ * @param {{scoreValue: number, timestamp?: string}} a
+ * @param {{scoreValue: number, timestamp?: string}} b
+ * @returns {number}
+ */
+function compareByScoreThenTimestamp(a, b) {
+    if (b.scoreValue !== a.scoreValue) return b.scoreValue - a.scoreValue;
+    const aTime = a.timestamp ? new Date(a.timestamp).getTime() : Infinity;
+    const bTime = b.timestamp ? new Date(b.timestamp).getTime() : Infinity;
+    return aTime - bTime;
+}
+
 module.exports = {
     formatMessage,
     downloadFile,
-    downloadBuffer
+    downloadBuffer,
+    compareByScoreThenTimestamp
 };
