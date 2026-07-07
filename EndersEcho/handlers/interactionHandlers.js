@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
-const { downloadFile, downloadBuffer, formatMessage } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
@@ -4434,7 +4434,7 @@ class InteractionHandler {
                                 if (csPrevBossRecord) {
                                     const prevValCs = csPrevBossRecord.scoreValue;
                                     const tempCs = bossRankingCs.map(p => p.userId === userId ? { ...p, scoreValue: prevValCs } : p);
-                                    tempCs.sort((a, b) => b.scoreValue - a.scoreValue);
+                                    tempCs.sort(compareByScoreThenTimestamp);
                                     const prevIdxCs = tempCs.findIndex(p => p.userId === userId);
                                     prevBossPosCs = prevIdxCs !== -1 ? prevIdxCs + 1 : null;
                                 }
@@ -4799,7 +4799,7 @@ class InteractionHandler {
                             const tempRanking = bossRanking.map(p =>
                                 p.userId === userId ? { ...p, scoreValue: prevBossScoreValue } : p
                             );
-                            tempRanking.sort((a, b) => b.scoreValue - a.scoreValue);
+                            tempRanking.sort(compareByScoreThenTimestamp);
                             const prevBossIdx = tempRanking.findIndex(p => p.userId === userId);
                             bossPositionChange = (prevBossIdx + 1) - newBossPosition;
                             prevBossPosition = prevBossIdx !== -1 ? prevBossIdx + 1 : null;
@@ -6876,7 +6876,7 @@ class InteractionHandler {
             if (previousBossRecord) {
                 const prevVal = this.rankingService.parseScoreValue(previousBossRecord.score);
                 const temp = bossRanking.map(p => p.userId === userId ? { ...p, scoreValue: prevVal } : p);
-                temp.sort((a, b) => b.scoreValue - a.scoreValue);
+                temp.sort(compareByScoreThenTimestamp);
                 const prevIdx = temp.findIndex(p => p.userId === userId);
                 prevBossPosition = prevIdx !== -1 ? prevIdx + 1 : null;
             }

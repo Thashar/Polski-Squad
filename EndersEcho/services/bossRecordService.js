@@ -2,6 +2,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { compareByScoreThenTimestamp } = require('../utils/helpers');
 
 class BossRecordService {
     constructor(dataDir) {
@@ -121,7 +122,7 @@ class BossRecordService {
         }
         return Array.from(bestPerPlayer.entries())
             .map(([userId, entry]) => ({ userId, ...entry }))
-            .sort((a, b) => b.scoreValue - a.scoreValue);
+            .sort(compareByScoreThenTimestamp);
     }
 
     /**
@@ -133,12 +134,12 @@ class BossRecordService {
         const idx = ranking.findIndex(p => p.userId === userId);
         if (idx !== -1) {
             if (scoreValue > (ranking[idx].scoreValue || 0)) {
-                ranking[idx] = { ...ranking[idx], score, scoreValue, sourceGuildId };
+                ranking[idx] = { ...ranking[idx], score, scoreValue, sourceGuildId, timestamp: new Date().toISOString() };
             }
         } else {
-            ranking.push({ userId, username, score, scoreValue, sourceGuildId });
+            ranking.push({ userId, username, score, scoreValue, sourceGuildId, timestamp: new Date().toISOString() });
         }
-        ranking.sort((a, b) => b.scoreValue - a.scoreValue);
+        ranking.sort(compareByScoreThenTimestamp);
         return ranking;
     }
 
