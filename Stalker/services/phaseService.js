@@ -1254,20 +1254,29 @@ class PhaseService {
             title = `📸 Faza 2 - Runda ${round}/3 - Prześlij zdjęcia wyników`;
         }
 
+        const aiOcrService = this.ocrService && this.ocrService.aiOcrService;
+        const aiEnabled = !!(aiOcrService && aiOcrService.enabled);
+
+        const instructions = aiEnabled
+            ? '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
+              '**1.** Rób screeny starannie, nicki nie mogą być ucięte w połowie\n' +
+              '**2.** AI analizuje wszystkie zdjęcia naraz i dopasowuje nicki do listy klanu - nie trzeba powtarzać nicków między screenami\n' +
+              '**3.** Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze\n' +
+              '**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!** W razie wątpliwości użyj przycisku **➕ Dodaj więcej**, żeby dorzucić kolejne screeny do weryfikacji.\n\n' +
+              '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**'
+            : '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
+              '**1.** Rób screeny starannie, nicki nie mogą być ucięte w połowie\n' +
+              '**2.** Im więcej screenów, tym lepsza jakość odczytu\n' +
+              '   • TYLKO pierwszy i ostatni nick nie może się powtórzyć!\n' +
+              '   • Wszystkie inne nicki muszą być powtórzone!\n' +
+              '   • Rób screeny zgodnie z zasadą 1-9, +4, +5, +4, +5... 31-39, 32-40.\n' +
+              '**3.** Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.\n' +
+              '**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**\n\n' +
+              '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**';
+
         const embed = new EmbedBuilder()
             .setTitle(title)
-            .setDescription(
-                `📅 **Tydzień:** ${weekNumber}/${year}\n\n` +
-                '**⚠️ WAŻNE - Zasady robienia screenów:**\n' +
-                '**1.** Rób screeny starannie, nicki nie mogą być ucięte w połowie\n' +
-                '**2.** Im więcej screenów, tym lepsza jakość odczytu\n' +
-                '   • TYLKO pierwszy i ostatni nick nie może się powtórzyć!\n' +
-                '   • Wszystkie inne nicki muszą być powtórzone!\n' +
-                '   • Rób screeny zgodnie z zasadą 1-9, +4, +5, +4, +5... 31-39, 32-40.\n' +
-                '**3.** Sprawdź dokładnie czy ostateczny wynik odczytu zgadza się z rzeczywistą ilością zdobytych punktów w grze.\n' +
-                '**Zaakceptuj wynik tylko wtedy, gdy wszystko się zgadza!**\n\n' +
-                '**Możesz przesłać od 1 do 10 zdjęć w jednej wiadomości.**'
-            )
+            .setDescription(`📅 **Tydzień:** ${weekNumber}/${year}\n\n${instructions}`)
             .setColor('#0099FF')
             .setTimestamp()
             .setFooter({ text: 'Prześlij zdjęcia zwykłą wiadomością na tym kanale' });
