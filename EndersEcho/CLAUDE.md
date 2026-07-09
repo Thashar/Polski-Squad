@@ -200,7 +200,7 @@
    - **Tanie sprawdzenie w typowym przypadku:** `scoreHistoryService.getUniqueUserCount()` — tylko listing katalogów (bez parsowania JSON); pełne dane (kto był tym graczem, na jakim serwerze) pobierane wyłącznie gdy próg faktycznie przekroczono (`getAllUsersFirstEntries` + `getUserEarliestGuildEntry`)
    - **Kolejkowanie sekwencyjne** (`_queue` — Promise chain) zapobiega podwójnemu ogłoszeniu tego samego progu przy dwóch niemal równoczesnych nowych rekordach
    - **3 poziomy uroczystości** wg reszty z dzielenia: pełne tysiące (`grand`, fioletowy, korona 👑) > pełne pięćsetki (`major`, pomarańczowy, 🎊) > zwykłe setki (`standard`, złoty, 🎉)
-   - **Wykres przyrostu graczy** (`chartService.generateGlobalPlayerGrowthChart`) dołączany do embeda WYŁĄCZNIE dla progów 500/1000 (nie generowany co każde 100, żeby nie mnożyć kosztu renderowania)
+   - **Wykres przyrostu graczy** (`chartService.generateGlobalPlayerGrowthChart`) dołączany do embeda przy KAŻDYM ogłoszeniu (co każde 100 graczy), niezależnie od poziomu progu
    - Embed zawiera: tytuł zależny od poziomu, opis z imieniem i serwerem gracza który jako pierwszy przekroczył próg (jeśli możliwy do ustalenia — `client.users.fetch`), pola „Łącznie graczy" / „Następny próg", avatar gracza jako thumbnail, stopkę
    - Wysyłany na **wszystkie skonfigurowane serwery** (`guildConfigService.getAllConfiguredGuilds()`) na ich `allowedChannelId`, w pełni dwujęzyczny (`messages.js` — klucze `milestone*`)
    - **Persystencja:** `data/milestones.json` (`{ lastAnnounced }`) — przeżywa restart, zapobiega ponownemu ogłoszeniu już zaanonsowanego progu

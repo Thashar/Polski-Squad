@@ -93,9 +93,7 @@ class MilestoneService {
         return 'standard';
     }
 
-    async _resolveMilestonePlayer(milestone, allGuildIds) {
-        // Kosztowne (parsuje JSON wszystkich graczy) — wołane tylko raz na 100 graczy.
-        const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
+    async _resolveMilestonePlayer(firstEntries, milestone, allGuildIds) {
         const target = firstEntries[milestone - 1];
         if (!target) return null;
 
@@ -104,8 +102,11 @@ class MilestoneService {
     }
 
     async _announce(milestone, allGuildIds) {
-        const tier   = this._tier(milestone);
-        const player = await this._resolveMilestonePlayer(milestone, allGuildIds);
+        const tier = this._tier(milestone);
+        // Kosztowne (parsuje JSON wszystkich graczy) — wołane tylko raz na 100 graczy;
+        // ta sama lista służy do ustalenia gracza-jubilata i do wykresu przyrostu.
+        const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
+        const player = await this._resolveMilestonePlayer(firstEntries, milestone, allGuildIds);
 
         const guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag || null]));
 
@@ -125,17 +126,14 @@ class MilestoneService {
             .filter(g => this.client.guilds.cache.has(g.id));
         if (guilds.length === 0) return;
 
-        // Wykres przyrostu graczy — tylko dla progów 500/1000, żeby nie generować go co 100 graczy.
+        // Wykres przyrostu graczy — zawsze dołączany do ogłoszenia, niezależnie od poziomu progu.
         let chartBuffer = null;
-        if (tier !== 'standard') {
-            try {
-                const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
-                chartBuffer = await this.chartService.generateGlobalPlayerGrowthChart(
-                    firstEntries, '📊 Milestone', [], 0, '', milestone
-                );
-            } catch (err) {
-                logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
-            }
+        try {
+            chartBuffer = await this.chartService.generateGlobalPlayerGrowthChart(
+                firstEntries, '📊 Milestone', [], 0, '', milestone
+            );
+        } catch (err) {
+            logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
         }
 
         const sent = [], failed = [];
