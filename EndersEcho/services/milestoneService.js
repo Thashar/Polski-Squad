@@ -104,8 +104,12 @@ class MilestoneService {
     async _announce(milestone, allGuildIds) {
         const tier = this._tier(milestone);
         // Kosztowne (parsuje JSON wszystkich graczy) — wołane tylko raz na 100 graczy;
-        // ta sama lista służy do ustalenia gracza-jubilata i do wykresu przyrostu.
-        const firstEntries = await this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds);
+        // ta sama lista service'ów zasila zarówno ustalenie gracza-jubilata, jak i wykres.
+        const [firstEntries, guildFirstTsMap, totalSubmissions] = await Promise.all([
+            this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds),
+            this.scoreHistoryService.getGuildFirstTimestamps(allGuildIds),
+            this.scoreHistoryService.getTotalSubmissionCount(allGuildIds),
+        ]);
         const player = await this._resolveMilestonePlayer(firstEntries, milestone, allGuildIds);
 
         const guildTagMap = new Map(this.config.getAllGuilds().map(g => [g.id, g.tag || null]));
@@ -126,15 +130,36 @@ class MilestoneService {
             .filter(g => this.client.guilds.cache.has(g.id));
         if (guilds.length === 0) return;
 
-        // Wykres przyrostu graczy — zawsze dołączany do ogłoszenia, niezależnie od poziomu progu.
-        let chartBuffer = null;
-        try {
-            chartBuffer = await this.chartService.generateGlobalPlayerGrowthChart(
-                firstEntries, '📊 Milestone', [], 0, '', milestone
-            );
-        } catch (err) {
-            logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
-        }
+        // Znaczniki serwerów (kiedy każdy z nich dołączył) — dokładnie jak w panelu
+        // Centrum Dowodzenia → "Wykres przyrostu" (BEZ podziału krzywej na klany, tylko badge'e).
+        const guildMarkers = allGuildIds
+            .filter(gid => guildFirstTsMap[gid] != null)
+            .map(gid => {
+                const g = this.client.guilds.cache.get(gid);
+                return { firstTimestamp: guildFirstTsMap[gid], tag: guildTagMap.get(gid) || g?.name || gid, name: g?.name || gid };
+            });
+
+        // Wykres generowany raz na język (tytuł/podtytuł są wypalone w bitmapę) i buforowany,
+        // żeby nie renderować go osobno dla każdego skonfigurowanego serwera.
+        const chartCache = new Map();
+        const getChart = async (lang) => {
+            if (chartCache.has(lang)) return chartCache.get(lang);
+            const isPol = lang !== 'eng';
+            const chartTitle = isPol ? '📊 Przyrost Unikalnych Graczy' : '📊 Unique Player Growth';
+            const chartSubtitle = isPol
+                ? `${milestone} graczy · ${totalSubmissions} pobitych wyników`
+                : `${milestone} players · ${totalSubmissions} beaten records`;
+            let buffer = null;
+            try {
+                buffer = await this.chartService.generateGlobalPlayerGrowthChart(
+                    firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, milestone
+                );
+            } catch (err) {
+                logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
+            }
+            chartCache.set(lang, buffer);
+            return buffer;
+        };
 
         const sent = [], failed = [];
         for (const guildCfg of guilds) {
@@ -143,9 +168,10 @@ class MilestoneService {
                 if (!channel) continue;
 
                 const msgs  = this.config.getMessages(guildCfg.id);
-                const embed = this._buildEmbed(milestone, tier, playerName, sourceTag, msgs);
+                const embed = this._buildEmbed(milestone, tier, playerName, sourceTag, msgs, totalSubmissions);
 
                 const files = [];
+                const chartBuffer = await getChart(guildCfg.lang);
                 if (chartBuffer) {
                     embed.setImage('attachment://milestone_growth.png');
                     files.push(new AttachmentBuilder(chartBuffer, { name: 'milestone_growth.png' }));
@@ -163,7 +189,7 @@ class MilestoneService {
         if (failed.length) logger.warn(`[Milestone] Błędy wysyłki: ${failed.join(', ')}`);
     }
 
-    _buildEmbed(milestone, tier, playerName, sourceTag, msgs) {
+    _buildEmbed(milestone, tier, playerName, sourceTag, msgs, totalSubmissions) {
         const tierStyle = {
             standard: { color: 0xFFD700, titleKey: 'milestoneTitleStandard' },
             major:    { color: 0xE67E22, titleKey: 'milestoneTitleMajor' },
@@ -174,19 +200,16 @@ class MilestoneService {
         const description = playerName
             ? formatMessage(msgs.milestoneDescriptionWithPlayer, {
                 count: milestone,
+                records: totalSubmissions,
                 player: playerName,
                 server: sourceTag ? ` (${sourceTag.replace(/^<a?:([^:]+):\d+>$/, '$1')})` : '',
             })
-            : formatMessage(msgs.milestoneDescriptionNoPlayer, { count: milestone });
+            : formatMessage(msgs.milestoneDescriptionNoPlayer, { count: milestone, records: totalSubmissions });
 
         return new EmbedBuilder()
             .setColor(tierStyle.color)
             .setTitle(title)
             .setDescription(description)
-            .addFields(
-                { name: msgs.milestoneFieldTotal, value: `**${milestone}**`, inline: true },
-                { name: msgs.milestoneFieldNext, value: `**${milestone + MILESTONE_STEP}**`, inline: true },
-            )
             .setTimestamp()
             .setFooter({ text: msgs.milestoneFooter });
     }

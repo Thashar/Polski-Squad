@@ -143,10 +143,8 @@ const pol = {
     milestoneTitleStandard: '🎉 Nowy Kamień Milowy: {count} Graczy!',
     milestoneTitleMajor: '🎊 Wielki Kamień Milowy: {count} Graczy!',
     milestoneTitleGrand: '👑 HISTORYCZNY KAMIEŃ MILOWY: {count} Graczy!',
-    milestoneDescriptionWithPlayer: 'Społeczność **EndersEcho** przekroczyła właśnie granicę **{count} unikatowych graczy** zapisanych w rankingach! 🍾\n\nHonorowym **{count}. graczem** w historii został **{player}**{server}!\n\nDziękujemy każdemu, kto zmierzył się z bossami i zapisał swój wynik — do zobaczenia na kolejnym progu! 🏆',
-    milestoneDescriptionNoPlayer: 'Społeczność **EndersEcho** przekroczyła właśnie granicę **{count} unikatowych graczy** zapisanych w rankingach! 🍾\n\nDziękujemy każdemu, kto zmierzył się z bossami i zapisał swój wynik — do zobaczenia na kolejnym progu! 🏆',
-    milestoneFieldTotal: '👥 Łącznie graczy',
-    milestoneFieldNext: '🎯 Następny próg',
+    milestoneDescriptionWithPlayer: 'Społeczność **EndersEcho** przekroczyła właśnie granicę **{count} unikatowych graczy** zapisanych w rankingach! Pobito już łącznie **{records} rekordów**! 🍾\n\nHonorowym **{count}. graczem** w historii został **{player}**{server}!\n\nDzięki, że jest już nas tak wiele! Zapraszajcie zaprzyjaźnione serwery do zabawy, niech będzie nas jeszcze więcej! 🏆',
+    milestoneDescriptionNoPlayer: 'Społeczność **EndersEcho** przekroczyła właśnie granicę **{count} unikatowych graczy** zapisanych w rankingach! Pobito już łącznie **{records} rekordów**! 🍾\n\nDzięki, że jest już nas tak wiele! Zapraszajcie zaprzyjaźnione serwery do zabawy, niech będzie nas jeszcze więcej! 🏆',
     milestoneFooter: 'EndersEcho • Kamienie milowe społeczności',
 
     // /subscribe
@@ -529,10 +527,8 @@ const eng = {
     milestoneTitleStandard: '🎉 New Milestone: {count} Players!',
     milestoneTitleMajor: '🎊 Major Milestone: {count} Players!',
     milestoneTitleGrand: '👑 HISTORIC MILESTONE: {count} Players!',
-    milestoneDescriptionWithPlayer: 'The **EndersEcho** community just crossed **{count} unique players** recorded in the rankings! 🍾\n\nThe honorary **{count}th player** in history is **{player}**{server}!\n\nThanks to everyone who took on a boss and logged their score — see you at the next milestone! 🏆',
-    milestoneDescriptionNoPlayer: 'The **EndersEcho** community just crossed **{count} unique players** recorded in the rankings! 🍾\n\nThanks to everyone who took on a boss and logged their score — see you at the next milestone! 🏆',
-    milestoneFieldTotal: '👥 Total players',
-    milestoneFieldNext: '🎯 Next threshold',
+    milestoneDescriptionWithPlayer: 'The **EndersEcho** community just crossed **{count} unique players** recorded in the rankings! **{records} records** beaten so far! 🍾\n\nThe honorary **{count}th player** in history is **{player}**{server}!\n\nThanks for being such a huge crew! Invite your allied servers to join the fun — let\'s grow even bigger! 🏆',
+    milestoneDescriptionNoPlayer: 'The **EndersEcho** community just crossed **{count} unique players** recorded in the rankings! **{records} records** beaten so far! 🍾\n\nThanks for being such a huge crew! Invite your allied servers to join the fun — let\'s grow even bigger! 🏆',
     milestoneFooter: 'EndersEcho • Community milestones',
 
     // /subscribe
