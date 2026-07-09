@@ -40,7 +40,30 @@ class MilestoneService {
             const raw = await fs.promises.readFile(this._stateFile, 'utf8');
             this._lastAnnounced = JSON.parse(raw).lastAnnounced || 0;
         } catch {
-            this._lastAnnounced = 0;
+            // Brak pliku stanu = pierwsze uruchomienie tej funkcji (lub jego reset). Zakładanie
+            // 0 sprawiłoby, że przy pierwszym sprawdzeniu bot ogłosiłby najwyższy pełny próg
+            // ≤ aktualnej liczby graczy jako "właśnie przekroczony" — nawet jeśli społeczność
+            // dawno go minęła (np. ogłoszenie "200 graczy" przy realnych 280). Zamiast tego
+            // bazę ustawiamy cicho na aktualnym stanie; pierwsze realne ogłoszenie padnie
+            // dopiero przy faktycznym przekroczeniu kolejnego progu.
+            this._lastAnnounced = await this._seedBaseline();
+            await this._save();
+        }
+    }
+
+    async _seedBaseline() {
+        try {
+            const allGuildIds = this.guildConfigService.getAllConfiguredGuildIds()
+                .filter(id => this.client?.guilds.cache.has(id));
+            if (allGuildIds.length === 0) return 0;
+
+            const total = await this.scoreHistoryService.getUniqueUserCount(allGuildIds);
+            const baseline = Math.floor(total / MILESTONE_STEP) * MILESTONE_STEP;
+            logger.info(`[Milestone] Pierwsze uruchomienie — baza ustawiona na ${baseline} (aktualnie ${total} graczy); kolejne ogłoszenie od ${baseline + MILESTONE_STEP}`);
+            return baseline;
+        } catch (err) {
+            logger.warn(`[Milestone] Nie udało się ustalić bazowego progu, startuję od 0: ${err.message}`);
+            return 0;
         }
     }
 
