@@ -122,7 +122,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -149,6 +149,7 @@ class InteractionHandler {
         this.bossRecordService = bossRecordService;
         this.adminPanelService = adminPanelService;
         this.commandUsageService = commandUsageService;
+        this.milestoneService = milestoneService;
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -4584,6 +4585,7 @@ class InteractionHandler {
                     guildId, userId, userName, bestScore, bossName
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
+                if (isNewRecord && this.milestoneService) this.milestoneService.checkAndAnnounce();
                 // Migracja wpisu: przy dokładnym wyrównaniu wyniku _removeWeakerScoresFromOtherGuilds (porównanie "<")
                 // nie usuwa wpisu na poprzednim serwerze — trzeba to zrobić jawnie.
                 if (isCrossServerTieMigration && isNewRecord) {
@@ -9258,6 +9260,7 @@ class InteractionHandler {
                 targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
+            if (isNewRecord && this.milestoneService) this.milestoneService.checkAndAnnounce();
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
             if (this.ocrStatsService) this.ocrStatsService.recordAnalyze().catch(() => {});
             if (this.adminPanelService) {

@@ -240,6 +240,38 @@ class ScoreHistoryService {
         };
     }
 
+    // Zwraca liczbę unikatowych graczy (dedup po userId z nazw plików) we wszystkich serwerach.
+    // Lekka wersja getAllUsersFirstEntries — tylko listing katalogów, bez parsowania JSON.
+    // Używana do częstego sprawdzania kamieni milowych (bez kosztu odczytu treści plików).
+    async getUniqueUserCount(allGuildIds) {
+        const ids = new Set();
+        for (const guildId of allGuildIds) {
+            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
+            let files = [];
+            try { files = await fs.readdir(dir); } catch { continue; }
+            for (const file of files) {
+                if (file.endsWith('.json')) ids.add(file.slice(0, -5));
+            }
+        }
+        return ids.size;
+    }
+
+    // Zwraca { guildId, entry } dla najwcześniejszego wpisu danego gracza (szukane po wszystkich serwerach).
+    // Używane do ustalenia, na którym serwerze i z jakim wynikiem gracz pojawił się po raz pierwszy.
+    async getUserEarliestGuildEntry(allGuildIds, userId) {
+        let best = null;
+        for (const guildId of allGuildIds) {
+            const entries = await this._load(guildId, userId);
+            if (!Array.isArray(entries) || entries.length === 0) continue;
+            for (const entry of entries) {
+                const ts = new Date(entry.timestamp).getTime();
+                if (isNaN(ts)) continue;
+                if (!best || ts < best.ts) best = { guildId, entry, ts };
+            }
+        }
+        return best ? { guildId: best.guildId, entry: best.entry } : null;
+    }
+
     // Zwraca { guildId: [{userId, firstTimestamp}] } — dla każdego serwera lista pierwszych wpisów per gracz.
     async getPerGuildFirstEntries(allGuildIds) {
         const result = {};

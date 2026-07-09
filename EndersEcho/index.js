@@ -32,6 +32,7 @@ const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
+const MilestoneService = require('./services/milestoneService');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const BossRecordService = require('./services/bossRecordService');
@@ -112,6 +113,7 @@ const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
+const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHistoryService, guildConfigService, config, chartService);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
@@ -129,7 +131,7 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     testerService,
     usageLimitService,
 });
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -163,6 +165,10 @@ async function initializeBot() {
         // Uruchom scheduler cyklicznych raportów TOP10 globalnego
         globalTop10Service.setClient(client);
         globalTop10Service.start();
+
+        // Wczytaj stan ostatnio ogłoszonego kamienia milowego (przyrost unikalnych graczy)
+        milestoneService.setClient(client);
+        await milestoneService.load();
 
         // Wczytaj i uruchom Panel Centrum Dowodzenia Head Admina
         adminPanelService.setClient(client);
