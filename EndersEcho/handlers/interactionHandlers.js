@@ -487,6 +487,10 @@ class InteractionHandler {
                 await this._handleConfigureCvThresholdModal(interaction);
                 return;
             }
+            if (interaction.customId === 'cfg_autoreact_modal') {
+                await this._handleCfgAutoReactModal(interaction);
+                return;
+            }
             if (interaction.customId === 'boss_cfg_add_name_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -588,6 +592,7 @@ class InteractionHandler {
             7: state.roleRankingsDone === true,
             8: state.communityVerifDone === true,
             9: state.moderatorsDone === true,
+            10: state.autoReactionDone === true,
         };
         const allDone = Object.values(done).every(Boolean);
 
@@ -612,6 +617,7 @@ class InteractionHandler {
             new ActionRowBuilder().addComponents(
                 btn(8, '8. Weryfikacja społeczności', '8. Community Verification'),
                 btn(9, '9. Moderatorzy gry', '9. Game Moderators'),
+                btn(10, '10. Auto-reakcja', '10. Auto Reaction'),
             ),
         ];
 
@@ -654,6 +660,7 @@ class InteractionHandler {
             done[7] ? (rankCount > 0 ? `✅ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Skonfigurowane', 'Configured')} (${rankCount})` : `❌ 🏅 ${t('Ranking roli:', 'Role Rankings:')} ${t('Pominięte', 'Skipped')}`) : null,
             done[8] ? (state.communityVerifEnabled ? `✅ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Włączona (próg: ', 'Enabled (threshold: ')}${state.communityVerifThreshold || 5}${t(', kanał: ', ', channel: ')}${state.communityVerifChannelId ? `<#${state.communityVerifChannelId}>` : t('brak', 'none')})` : `❌ 🗳️ ${t('Weryfikacja społeczności:', 'Community Verification:')} ${t('Wyłączona', 'Disabled')}`) : null,
             done[9] ? ((state.moderators || []).length > 0 ? `✅ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${(state.moderators || []).map(m => `<@${m.userId}>`).join(', ')}` : `❌ 👮 ${t('Moderatorzy gry:', 'Game Moderators:')} ${t('Brak', 'None')}`) : null,
+            done[10] ? (state.autoReactionEmoji ? `✅ 💫 ${t('Auto-reakcja:', 'Auto Reaction:')} ${state.autoReactionEmoji}` : `❌ 💫 ${t('Auto-reakcja:', 'Auto Reaction:')} ${t('Wyłączona', 'Disabled')}`) : null,
         ].filter(Boolean);
 
         const embed = new EmbedBuilder()
@@ -708,7 +715,8 @@ class InteractionHandler {
                         '6️⃣  **Raporty Global TOP10** — publikowane po zmianie bossa\n' +
                         '7️⃣  **Ranking roli** *(opcjonalne)* — osobne rankingi dla posiadaczy wybranych ról\n' +
                         '8️⃣  **Weryfikacja społeczności** *(opcjonalne)* — przycisk "Zgłoś" pod rekordami, moderacja przez graczy\n' +
-                        '9️⃣  **Moderatorzy gry** *(opcjonalne)* — użytkownicy z dostępem do `/manage`\n\n' +
+                        '9️⃣  **Moderatorzy gry** *(opcjonalne)* — użytkownicy z dostępem do `/manage`\n' +
+                        '🔟  **Auto-reakcja** *(opcjonalne)* — emoji dodawane przez bota pod każdym ogłoszeniem rekordu\n\n' +
                         '💡 Po zakończeniu konfiguracji możesz otwierać Panel Admina bezpośrednio przez `/manage`.\n' +
                         ocrLine + diagHint,
                         '📋 **Steps overview:**\n' +
@@ -720,7 +728,8 @@ class InteractionHandler {
                         '6️⃣  **Global TOP10 Reports** — published after boss change\n' +
                         '7️⃣  **Role Rankings** *(optional)* — separate rankings for holders of specific roles\n' +
                         '8️⃣  **Community Verification** *(optional)* — "Report" button on records, player-driven moderation\n' +
-                        '9️⃣  **Game Moderators** *(optional)* — users with access to `/manage`\n\n' +
+                        '9️⃣  **Game Moderators** *(optional)* — users with access to `/manage`\n' +
+                        '🔟  **Auto Reaction** *(optional)* — an emoji the bot adds under every record announcement\n\n' +
                         '💡 Once configuration is complete, open the Admin Panel directly with `/manage`.\n' +
                         ocrLine + diagHint
                     );
@@ -761,6 +770,8 @@ class InteractionHandler {
                     communityVerifThreshold: existingCv.threshold || 5,
                     moderators: existing.moderators || [],
                     moderatorsDone: true,
+                    autoReactionEmoji: existing.autoReactionEmoji || null,
+                    autoReactionDone: true,
                 });
             } else {
                 this._configWizard.set(key, {
@@ -779,6 +790,8 @@ class InteractionHandler {
                     communityVerifThreshold: 5,
                     moderators: [],
                     moderatorsDone: false,
+                    autoReactionEmoji: null,
+                    autoReactionDone: false,
                 });
             }
         }
@@ -1018,6 +1031,40 @@ class InteractionHandler {
 
         } else if (step === 9) {
             await this._showModeratorStep(interaction, state, guildId);
+
+        } else if (step === 10) {
+            const embed = new EmbedBuilder().setColor(0x5865F2)
+                .setTitle(t('💫 Krok 10 — Auto-reakcja (opcjonalne)', '💫 Step 10 — Auto Reaction (optional)'))
+                .setDescription(
+                    t(
+                        'Bot może automatycznie dodawać wybraną reakcję pod każdym ogłoszeniem pobitego rekordu po użyciu `/update`.\n\n' +
+                        '**Jak działa:**\n' +
+                        '• Po opublikowaniu ogłoszenia rekordu bot dodaje pod nim wybraną emotkę jako reakcję\n' +
+                        '• Akceptowane są wyłącznie **systemowe emoji Discord** (standardowe Unicode, np. 🔥 👑 🎉)\n' +
+                        '• Emotki customowe serwera nie są obsługiwane\n\n' +
+                        'Możesz pominąć ten krok i skonfigurować auto-reakcję później przez `/configure`.',
+                        'The bot can automatically add a chosen reaction under every beaten record announcement after `/update`.\n\n' +
+                        '**How it works:**\n' +
+                        '• After a record announcement is published, the bot adds the chosen emoji as a reaction under it\n' +
+                        '• Only **default Discord emoji** are accepted (standard Unicode, e.g. 🔥 👑 🎉)\n' +
+                        '• Custom server emotes are not supported\n\n' +
+                        'You can skip this step and configure the auto reaction later by running `/configure`.'
+                    ) + '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + (state.autoReactionEmoji
+                        ? t('✅ Włączona — ', '✅ Enabled — ') + state.autoReactionEmoji
+                        : t('❌ Wyłączona', '❌ Disabled'))
+                );
+            const step10Btns = [];
+            if (!state.autoReactionEmoji) {
+                step10Btns.push(new ButtonBuilder().setCustomId('cfg_autoreact_enable').setLabel(t('Włącz', 'Enable')).setEmoji('✅').setStyle(ButtonStyle.Success));
+            } else {
+                step10Btns.push(new ButtonBuilder().setCustomId('cfg_autoreact_enable').setLabel(t('Zmień emotkę', 'Change Emoji')).setEmoji('✏️').setStyle(ButtonStyle.Primary));
+                step10Btns.push(new ButtonBuilder().setCustomId('cfg_autoreact_disable').setLabel(t('Wyłącz', 'Disable')).setEmoji('❌').setStyle(ButtonStyle.Secondary));
+            }
+            if (!state.autoReactionDone) {
+                step10Btns.push(new ButtonBuilder().setCustomId('cfg_autoreact_disable').setLabel(t('Pomiń', 'Skip')).setStyle(ButtonStyle.Secondary));
+            }
+            step10Btns.push(backBtn);
+            await interaction.update({ embeds: [embed], components: [new ActionRowBuilder().addComponents(...step10Btns)] });
         }
     }
 
@@ -1503,6 +1550,67 @@ class InteractionHandler {
         state.communityVerifThreshold = val;
         this._configWizard.set(key, state);
         await this._showConfigureStep(interaction, 8);
+    }
+
+    /**
+     * Sprawdza czy string to DOKŁADNIE jedno systemowe emoji Discord (standardowy Unicode).
+     * Obsługuje: piktogramy (z wariantem VS16 i odcieniem skóry), flagi (pary regional indicators),
+     * keycapy (0️⃣–9️⃣, #️⃣, *️⃣), flagi tag-sequence (🏴󠁧󠁢󠁥󠁮󠁧󠁿) oraz sekwencje ZWJ (👨‍👩‍👧).
+     * Odrzuca emotki customowe (<:nazwa:id>), tekst i cyfry bez keycapu.
+     * @param {string} str
+     * @returns {boolean}
+     */
+    _isSingleStandardEmoji(str) {
+        if (!str || /^[0-9#*]$/.test(str)) return false;
+        const single = '(?:\\p{Extended_Pictographic}\\uFE0F?[\\u{1F3FB}-\\u{1F3FF}]?|[\\u{1F1E6}-\\u{1F1FF}]{2}|[#*0-9]\\uFE0F?\\u20E3|\\u{1F3F4}[\\u{E0061}-\\u{E007A}]+\\u{E007F})';
+        return new RegExp(`^${single}(?:\\u200D${single})*$`, 'u').test(str);
+    }
+
+    async _handleCfgAutoReactModal(interaction) {
+        const key = this._wizardKey(interaction.user.id, interaction.guildId);
+        const state = this._configWizard.get(key);
+        if (!state) { await interaction.reply({ content: '⚠️ Session expired. Run `/configure` again.', flags: ['Ephemeral'] }); return; }
+
+        const isPol = state.lang === 'pol';
+        const raw = interaction.fields.getTextInputValue('cfg_autoreact_emoji_input').trim();
+
+        if (/^<a?:\w+:\d+>$/.test(raw)) {
+            await interaction.reply({
+                content: isPol
+                    ? '❌ Emotki customowe serwera nie są obsługiwane. Podaj systemowe emoji Discord (np. 🔥 👑 🎉).'
+                    : '❌ Custom server emotes are not supported. Provide a default Discord emoji (e.g. 🔥 👑 🎉).',
+                flags: ['Ephemeral']
+            });
+            return;
+        }
+        if (!this._isSingleStandardEmoji(raw)) {
+            await interaction.reply({
+                content: isPol
+                    ? '❌ Podaj dokładnie jedno systemowe emoji Discord (standardowe Unicode, np. 🔥 👑 🎉).'
+                    : '❌ Provide exactly one default Discord emoji (standard Unicode, e.g. 🔥 👑 🎉).',
+                flags: ['Ephemeral']
+            });
+            return;
+        }
+
+        state.autoReactionEmoji = raw;
+        state.autoReactionDone = true;
+        this._configWizard.set(key, state);
+        await this._showConfigureStep(interaction, 10);
+    }
+
+    /**
+     * Dodaje skonfigurowaną auto-reakcję pod ogłoszeniem pobitego rekordu (fire-and-forget).
+     * Emoji pochodzi z guild_configs.json (autoReactionEmoji, /configure krok 10).
+     * @param {Message|null} publicMsg - wiadomość publicznego ogłoszenia rekordu
+     * @param {string} guildId
+     */
+    _addRecordAutoReaction(publicMsg, guildId) {
+        const emoji = this.guildConfigService?.getConfig(guildId)?.autoReactionEmoji;
+        if (!emoji || !publicMsg) return;
+        publicMsg.react(emoji).catch(err => {
+            this.logService._gl(guildId).warn(`⚠️ Nie udało się dodać auto-reakcji "${emoji}" pod ogłoszeniem rekordu: ${err.message}`);
+        });
     }
 
     async _showModeratorStep(interaction, state, guildId) {
@@ -1991,6 +2099,35 @@ class InteractionHandler {
             return;
         }
 
+        // Krok 10 — auto-reakcja: włącz / zmień emotkę (modal)
+        if (customId === 'cfg_autoreact_enable') {
+            const modal = new ModalBuilder()
+                .setCustomId('cfg_autoreact_modal')
+                .setTitle(t('💫 Auto-reakcja', '💫 Auto Reaction'))
+                .addComponents(new ActionRowBuilder().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('cfg_autoreact_emoji_input')
+                        .setLabel(t('Emoji systemowe Discord (np. 🔥)', 'Default Discord emoji (e.g. 🔥)'))
+                        .setStyle(TextInputStyle.Short)
+                        .setRequired(true)
+                        .setPlaceholder('🔥')
+                        .setMaxLength(16)
+                        .setValue(state.autoReactionEmoji || '')
+                ));
+            await interaction.showModal(modal);
+            return;
+        }
+
+        // Krok 10 — auto-reakcja: wyłącz / pomiń
+        if (customId === 'cfg_autoreact_disable') {
+            state.autoReactionEmoji = null;
+            state.autoReactionDone = true;
+            this._configWizard.set(key, state);
+            const { embed, rows } = this._buildWizardDashboard(state, interaction.guildId);
+            await interaction.update({ embeds: [embed], components: rows });
+            return;
+        }
+
         // Anuluj konfigurację
         if (customId === 'cfg_cancel') {
             this._configWizard.delete(key);
@@ -2052,6 +2189,7 @@ class InteractionHandler {
                     rejectedChannelId: state.communityVerifChannelId || null,
                     threshold: state.communityVerifThreshold || 5,
                 } : { enabled: false, rejectedChannelId: null, threshold: 5 },
+                autoReactionEmoji: state.autoReactionEmoji || null,
                 configuredBy: {
                     userId: interaction.user.id,
                     username: interaction.user.username,
@@ -4515,6 +4653,7 @@ class InteractionHandler {
 
                     await interaction.editReply({ content: msgs.bossRecordOnlyConfirmed || '✅ Nowy rekord na bossie ogłoszony!' });
                     const csPublicMsg = await interaction.followUp({ embeds: csEmbeds, files: csFiles });
+                    this._addRecordAutoReaction(csPublicMsg, guildId);
 
                     // Sesja cofnięcia rekordu bossa — globalny ranking niezmieniony (skipGlobalRevert), cel = poprzedni serwer
                     const csRevertKey = `${userId}_${sourceGuildId}`;
@@ -4900,6 +5039,7 @@ class InteractionHandler {
                 const cvEnabledBoss = cvCfgBoss?.enabled === true && this.communityVerificationService;
 
                 const bossPublicMsg = await interaction.followUp({ embeds: bossPublicEmbeds, files: bossPublicFiles });
+                this._addRecordAutoReaction(bossPublicMsg, guildId);
 
                 // Aktualizuj sesję nieznanego bossa z ID ogłoszenia
                 if (unknownBossSessionKey && bossPublicMsg) {
@@ -5183,6 +5323,7 @@ class InteractionHandler {
                         files: publicFiles,
                     });
                     _newRecordPublicMsg = publicMsg;
+                    this._addRecordAutoReaction(publicMsg, guildId);
 
                     // Aktualizuj sesję nieznanego bossa z ID ogłoszenia
                     if (unknownBossSessionKey && publicMsg) {
@@ -5528,6 +5669,8 @@ class InteractionHandler {
         if (customId === 'cfg_mod_skip') return 'Pomiń moderatorów gry';
         if (customId === 'cfg_mod_add') return 'Dodaj moderatora gry (modal)';
         if (customId === 'cfg_mod_remove') return 'Usuń moderatora gry';
+        if (customId === 'cfg_autoreact_enable') return 'Auto-reakcja: włącz / zmień emotkę (modal)';
+        if (customId === 'cfg_autoreact_disable') return 'Auto-reakcja: wyłącz/pomiń';
         if (customId === 'cfg_accept') return 'Zaakceptuj konfigurację';
         if (customId === 'cfg_cancel') return 'Anuluj konfigurację';
         if (customId.startsWith('cfg_step_')) return `Krok konfiguracji: ${customId.replace('cfg_step_', '')}`;
@@ -6255,6 +6398,7 @@ class InteractionHandler {
                 customId === 'cfg_role_ranking_add' || customId === 'cfg_role_ranking_remove' || customId === 'cfg_role_ranking_skip' ||
                 customId === 'cfg_cv_enable' || customId === 'cfg_cv_disable' || customId === 'cfg_cv_threshold' ||
                 customId === 'cfg_mod_skip' || customId === 'cfg_mod_add' || customId === 'cfg_mod_remove' ||
+                customId === 'cfg_autoreact_enable' || customId === 'cfg_autoreact_disable' ||
                 customId === 'cfg_accept' || customId === 'cfg_cancel') {
                 const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
                 this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} /configure → ${this._describeCfgButton(customId)}`);
