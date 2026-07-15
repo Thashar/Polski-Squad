@@ -467,7 +467,7 @@
 - **Serwis:** `services/profileService.js` — `collectData`, `buildMainEmbed(data, isPol, subscriberCount?)`, `buildBossesEmbed`, `buildProfileComponents`
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
-- 8-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
+- 10-krokowy dashboard ephemeral z przyciskami szarymi→zielonymi po ukończeniu kroku
 - **Krok 1:** Język (pol/eng) — wszystkie komunikaty i opisy komend
 - **Krok 2:** Kanał bota (ChannelSelectMenu) — dla /update, /ranking, /subscribe
 - **Krok 3:** Kanał raportów odrzuconych screenów (opcjonalny, ChannelSelectMenu)
@@ -485,6 +485,16 @@
 - **Krok 7:** Ranking roli (opcjonalne) — przyciski "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"; stan `roleRankingsDone` w RAM; dla istniejącej konfiguracji pre-fill `true`
 - **Krok 8:** Weryfikacja społeczności (opcjonalne) — Włącz/Wyłącz/Pomiń + kanał zgłoszeń (ChannelSelectMenu) + próg zgłoszeń (modal, 1–25, domyślnie 5); stan `communityVerifDone` w RAM; konfiguracja zapisywana w `guild_configs.json` jako `communityVerification: { enabled, rejectedChannelId, threshold }`
 - **Krok 9:** Moderatorzy gry (opcjonalne) — lista moderatorów z pingami + przyciski "Dodaj" (modal z ID) / "Usuń" (StringSelectMenu) / "Pomiń" (tylko gdy krok jeszcze nieukończony); stan `moderatorsDone` w RAM; lista persystowana w `guild_configs.json` jako `moderators: [{ userId }]`; moderatorzy mają dostęp do `/manage` (bez head admin funkcji)
+- **Krok 10:** Auto-reakcja (opcjonalne) — bot automatycznie dodaje wybrane emoji jako reakcję pod każdym publicznym ogłoszeniem pobitego rekordu po `/update` (stos 4 embedów, turkusowe ogłoszenie rekordu bossa bez globalnego, ogłoszenie cross-server rekordu bossa; NIE dotyczy `/test` dryRun ani panelu Analizuj):
+  - Przy pierwszej konfiguracji krok można pominąć ("Pomiń") — pominięcie zalicza krok (auto-reakcja wyłączona)
+  - Gdy wyłączona: przycisk "Włącz" (✅) → modal z polem emoji; gdy włączona: przyciski "Zmień emotkę" (✏️, ten sam modal z prefill) i "Wyłącz" (❌)
+  - Modal (`cfg_autoreact_modal`, pole `cfg_autoreact_emoji_input`, max 64 znaki) akceptuje dokładnie jedno emoji — dwa typy:
+    - **Systemowe emoji Discord** (standardowy Unicode) — walidacja `_isSingleStandardEmoji()`: piktogramy (VS16 + odcienie skóry), flagi (pary regional indicators), keycapy (0️⃣ #️⃣), flagi tag-sequence (🏴󠁧󠁢󠁥󠁮󠁧󠁿), sekwencje ZWJ (👨‍👩‍👧)
+    - **Emotki customowe** — pełny format `<:nazwa:id>`/`<a:nazwa:id>` (walidacja dostępu: `client.emojis.cache.has(id)` — emotka musi pochodzić z serwera, na którym jest bot) LUB sama nazwa `:nazwa:`/`nazwa` (lookup po nazwie: najpierw emotki bieżącego serwera, potem wszystkich serwerów bota; po znalezieniu zapisywana jako pełny format `found.toString()`)
+    - Tekst, gołe cyfry, wiele emoji naraz i emotki niedostępne dla bota odrzucane z komunikatem ephemeral (PL/EN)
+  - Stan wizarda: `autoReactionEmoji` (string|null) + `autoReactionDone` (bool) w RAM; persystencja w `guild_configs.json` jako `autoReactionEmoji` (null = wyłączona)
+  - Dodawanie reakcji: `_addRecordAutoReaction(publicMsg, guildId)` — fire-and-forget po każdym `followUp` ogłoszenia rekordu w `_runUpdateFlow`; błąd reakcji tylko logowany (warn per-guild), nie przerywa flow
+  - customIDs: `cfg_step_10`, `cfg_autoreact_enable`, `cfg_autoreact_disable` (wyłącz/pomiń), `cfg_autoreact_modal`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone; obok niego pojawia się wtedy też przycisk **🔍 Diagnostyka** (`panel_diagnostics`) — dostępny dla każdego administratora, sprawdza uprawnienia bota (serwer + kanały + hierarchia ról TOP)
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina
 - Po zapisaniu: OCR domyślnie zablokowane (`['update', 'test']`), komendy re-rejestrowane dla nowego języka

@@ -600,8 +600,8 @@
       "commands": [
         {
           "name": "/configure",
-          "description": "Konfiguruje EndersEcho na serwerze (wizard 7 kroków: język, kanał, tag, role TOP, powiadomienia, rankingi ról). Zawiera przycisk ⚙️ Panel Admina.",
-          "usage": "/configure → przyciski kroków 1-7 + ⚙️ Panel Admina",
+          "description": "Konfiguruje EndersEcho na serwerze (wizard 10 kroków: język, kanały, tag, role TOP, powiadomienia, rankingi ról, weryfikacja społeczności, moderatorzy, auto-reakcja pod ogłoszeniami rekordów). Zawiera przycisk ⚙️ Panel Admina.",
+          "usage": "/configure → przyciski kroków 1-10 + ⚙️ Panel Admina",
           "requiredPermission": "administrator"
         },
         {
