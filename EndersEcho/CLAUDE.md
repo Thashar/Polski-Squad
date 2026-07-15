@@ -488,7 +488,10 @@
 - **Krok 10:** Auto-reakcja (opcjonalne) — bot automatycznie dodaje wybrane emoji jako reakcję pod każdym publicznym ogłoszeniem pobitego rekordu po `/update` (stos 4 embedów, turkusowe ogłoszenie rekordu bossa bez globalnego, ogłoszenie cross-server rekordu bossa; NIE dotyczy `/test` dryRun ani panelu Analizuj):
   - Przy pierwszej konfiguracji krok można pominąć ("Pomiń") — pominięcie zalicza krok (auto-reakcja wyłączona)
   - Gdy wyłączona: przycisk "Włącz" (✅) → modal z polem emoji; gdy włączona: przyciski "Zmień emotkę" (✏️, ten sam modal z prefill) i "Wyłącz" (❌)
-  - Modal (`cfg_autoreact_modal`, pole `cfg_autoreact_emoji_input`) akceptuje WYŁĄCZNIE jedno systemowe emoji Discord (standardowy Unicode) — walidacja `_isSingleStandardEmoji()`: piktogramy (VS16 + odcienie skóry), flagi (pary regional indicators), keycapy (0️⃣ #️⃣), flagi tag-sequence (🏴󠁧󠁢󠁥󠁮󠁧󠁿), sekwencje ZWJ (👨‍👩‍👧); emotki customowe (`<:nazwa:id>`), tekst i gołe cyfry odrzucane z komunikatem ephemeral
+  - Modal (`cfg_autoreact_modal`, pole `cfg_autoreact_emoji_input`, max 64 znaki) akceptuje dokładnie jedno emoji — dwa typy:
+    - **Systemowe emoji Discord** (standardowy Unicode) — walidacja `_isSingleStandardEmoji()`: piktogramy (VS16 + odcienie skóry), flagi (pary regional indicators), keycapy (0️⃣ #️⃣), flagi tag-sequence (🏴󠁧󠁢󠁥󠁮󠁧󠁿), sekwencje ZWJ (👨‍👩‍👧)
+    - **Emotki customowe** — pełny format `<:nazwa:id>`/`<a:nazwa:id>` (walidacja dostępu: `client.emojis.cache.has(id)` — emotka musi pochodzić z serwera, na którym jest bot) LUB sama nazwa `:nazwa:`/`nazwa` (lookup po nazwie: najpierw emotki bieżącego serwera, potem wszystkich serwerów bota; po znalezieniu zapisywana jako pełny format `found.toString()`)
+    - Tekst, gołe cyfry, wiele emoji naraz i emotki niedostępne dla bota odrzucane z komunikatem ephemeral (PL/EN)
   - Stan wizarda: `autoReactionEmoji` (string|null) + `autoReactionDone` (bool) w RAM; persystencja w `guild_configs.json` jako `autoReactionEmoji` (null = wyłączona)
   - Dodawanie reakcji: `_addRecordAutoReaction(publicMsg, guildId)` — fire-and-forget po każdym `followUp` ogłoszenia rekordu w `_runUpdateFlow`; błąd reakcji tylko logowany (warn per-guild), nie przerywa flow
   - customIDs: `cfg_step_10`, `cfg_autoreact_enable`, `cfg_autoreact_disable` (wyłącz/pomiń), `cfg_autoreact_modal`

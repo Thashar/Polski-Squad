@@ -1040,14 +1040,14 @@ class InteractionHandler {
                         'Bot może automatycznie dodawać wybraną reakcję pod każdym ogłoszeniem pobitego rekordu po użyciu `/update`.\n\n' +
                         '**Jak działa:**\n' +
                         '• Po opublikowaniu ogłoszenia rekordu bot dodaje pod nim wybraną emotkę jako reakcję\n' +
-                        '• Akceptowane są wyłącznie **systemowe emoji Discord** (standardowe Unicode, np. 🔥 👑 🎉)\n' +
-                        '• Emotki customowe serwera nie są obsługiwane\n\n' +
+                        '• Akceptowane są **systemowe emoji Discord** (standardowe Unicode, np. 🔥 👑 🎉)\n' +
+                        '• Akceptowane są też **emotki customowe** (`:nazwa:` lub `<:nazwa:id>`) — z serwerów, na których jest bot\n\n' +
                         'Możesz pominąć ten krok i skonfigurować auto-reakcję później przez `/configure`.',
                         'The bot can automatically add a chosen reaction under every beaten record announcement after `/update`.\n\n' +
                         '**How it works:**\n' +
                         '• After a record announcement is published, the bot adds the chosen emoji as a reaction under it\n' +
-                        '• Only **default Discord emoji** are accepted (standard Unicode, e.g. 🔥 👑 🎉)\n' +
-                        '• Custom server emotes are not supported\n\n' +
+                        '• **Default Discord emoji** are accepted (standard Unicode, e.g. 🔥 👑 🎉)\n' +
+                        '• **Custom emotes** are accepted too (`:name:` or `<:name:id>`) — from servers the bot is a member of\n\n' +
                         'You can skip this step and configure the auto reaction later by running `/configure`.'
                     ) + '\n\n**' + t('Aktualne ustawienie:', 'Current setting:') + '** ' + (state.autoReactionEmoji
                         ? t('✅ Włączona — ', '✅ Enabled — ') + state.autoReactionEmoji
@@ -1572,22 +1572,41 @@ class InteractionHandler {
         if (!state) { await interaction.reply({ content: '⚠️ Session expired. Run `/configure` again.', flags: ['Ephemeral'] }); return; }
 
         const isPol = state.lang === 'pol';
-        const raw = interaction.fields.getTextInputValue('cfg_autoreact_emoji_input').trim();
+        let raw = interaction.fields.getTextInputValue('cfg_autoreact_emoji_input').trim();
 
-        if (/^<a?:\w+:\d+>$/.test(raw)) {
+        // Emotka customowa — pełny format <:nazwa:id> / <a:nazwa:id> lub sama :nazwa: (lookup w emotkach serwera)
+        const customMatch = raw.match(/^<(a?):([\w]+):(\d+)>$/);
+        const nameMatch = !customMatch && raw.match(/^:?([\w]{2,32}):?$/);
+        if (customMatch) {
+            // Bot może reagować tylko emotkami z serwerów, na których jest — sprawdź dostęp
+            if (!interaction.client.emojis.cache.has(customMatch[3])) {
+                await interaction.reply({
+                    content: isPol
+                        ? '❌ Bot nie ma dostępu do tej emotki. Emotka customowa musi pochodzić z serwera, na którym jest EndersEcho.'
+                        : '❌ The bot has no access to this emote. A custom emote must come from a server EndersEcho is a member of.',
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
+        } else if (nameMatch && !this._isSingleStandardEmoji(raw)) {
+            // Nazwa emotki — szukaj najpierw na tym serwerze, potem na wszystkich serwerach bota
+            const found = interaction.guild.emojis.cache.find(e => e.name === nameMatch[1])
+                || interaction.client.emojis.cache.find(e => e.name === nameMatch[1]);
+            if (!found) {
+                await interaction.reply({
+                    content: isPol
+                        ? `❌ Nie znaleziono emotki o nazwie \`${nameMatch[1]}\` na serwerach, na których jest bot. Podaj systemowe emoji Discord (np. 🔥 👑 🎉) lub emotkę customową (\`:nazwa:\` lub \`<:nazwa:id>\`).`
+                        : `❌ No emote named \`${nameMatch[1]}\` was found on any server the bot is a member of. Provide a default Discord emoji (e.g. 🔥 👑 🎉) or a custom emote (\`:name:\` or \`<:name:id>\`).`,
+                    flags: ['Ephemeral']
+                });
+                return;
+            }
+            raw = found.toString(); // <:nazwa:id> lub <a:nazwa:id>
+        } else if (!this._isSingleStandardEmoji(raw)) {
             await interaction.reply({
                 content: isPol
-                    ? '❌ Emotki customowe serwera nie są obsługiwane. Podaj systemowe emoji Discord (np. 🔥 👑 🎉).'
-                    : '❌ Custom server emotes are not supported. Provide a default Discord emoji (e.g. 🔥 👑 🎉).',
-                flags: ['Ephemeral']
-            });
-            return;
-        }
-        if (!this._isSingleStandardEmoji(raw)) {
-            await interaction.reply({
-                content: isPol
-                    ? '❌ Podaj dokładnie jedno systemowe emoji Discord (standardowe Unicode, np. 🔥 👑 🎉).'
-                    : '❌ Provide exactly one default Discord emoji (standard Unicode, e.g. 🔥 👑 🎉).',
+                    ? '❌ Podaj dokładnie jedno emoji: systemowe Discord (np. 🔥 👑 🎉) lub emotkę customową (`:nazwa:` lub `<:nazwa:id>`) z serwera, na którym jest bot.'
+                    : '❌ Provide exactly one emoji: a default Discord emoji (e.g. 🔥 👑 🎉) or a custom emote (`:name:` or `<:name:id>`) from a server the bot is a member of.',
                 flags: ['Ephemeral']
             });
             return;
@@ -2107,11 +2126,11 @@ class InteractionHandler {
                 .addComponents(new ActionRowBuilder().addComponents(
                     new TextInputBuilder()
                         .setCustomId('cfg_autoreact_emoji_input')
-                        .setLabel(t('Emoji systemowe Discord (np. 🔥)', 'Default Discord emoji (e.g. 🔥)'))
+                        .setLabel(t('Emoji (np. 🔥) lub emotka customowa', 'Emoji (e.g. 🔥) or custom emote'))
                         .setStyle(TextInputStyle.Short)
                         .setRequired(true)
-                        .setPlaceholder('🔥')
-                        .setMaxLength(16)
+                        .setPlaceholder(t('🔥 lub :nazwa: lub <:nazwa:id>', '🔥 or :name: or <:name:id>'))
+                        .setMaxLength(64)
                         .setValue(state.autoReactionEmoji || '')
                 ));
             await interaction.showModal(modal);
