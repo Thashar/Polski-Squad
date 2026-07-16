@@ -1304,7 +1304,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 });
                 await tablicaMenedzer.ensureControlPanel();
 
-                const embed = new EmbedBuilder().setDescription(embedDescription);
+                const embed = new EmbedBuilder().setDescription(safeEmbedDescription(embedDescription));
                 if (embedTitle) embed.setTitle(embedTitle);
                 if (embedIcon) embed.setThumbnail(embedIcon);
                 if (embedImage) embed.setImage(embedImage);
@@ -1499,6 +1499,12 @@ async function handleModalSubmit(interaction, sharedState) {
 
 // ==================== HELPER FUNCTIONS ====================
 
+// Zwraca bezpieczny opis embed - EmbedBuilder.setDescription wymaga 1-4096 znaków,
+// więc pusty/opcjonalny opis zamieniamy na zero-width space, aby uniknąć błędu walidacji
+function safeEmbedDescription(description) {
+    return (description && description.trim() !== '') ? description : '​';
+}
+
 async function showTemplatePreview(interaction, data, sessionId) {
     let previewContent = '**Template Preview:**\n\n';
     previewContent += `📝 **Name:** ${data.name}\n`;
@@ -1510,7 +1516,7 @@ async function showTemplatePreview(interaction, data, sessionId) {
         previewContent += `\n\n${data.text}`;
     } else {
         const embed = new EmbedBuilder()
-            .setDescription(data.embedDescription);
+            .setDescription(safeEmbedDescription(data.embedDescription));
 
         if (data.embedTitle) embed.setTitle(data.embedTitle);
         if (data.embedIcon) embed.setThumbnail(data.embedIcon);
@@ -1555,7 +1561,7 @@ async function showTemplateEditPreview(interaction, template) {
         content += `\n\n${template.text}`;
     } else {
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription);
+            .setDescription(safeEmbedDescription(template.embedDescription));
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
         if (template.embedIcon) embed.setThumbnail(template.embedIcon);
@@ -1613,7 +1619,7 @@ async function showScheduledEditPreview(interaction, scheduled, sharedState) {
         content += `\n${template.text}`;
     } else {
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription)
+            .setDescription(safeEmbedDescription(template.embedDescription))
             .setTimestamp();
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
@@ -1676,7 +1682,7 @@ async function showManualEditPreview(interaction, scheduled, sharedState) {
         content += `\n${template.text}`;
     } else {
         const embed = new EmbedBuilder()
-            .setDescription(template.embedDescription)
+            .setDescription(safeEmbedDescription(template.embedDescription))
             .setTimestamp();
 
         if (template.embedTitle) embed.setTitle(template.embedTitle);
@@ -2497,7 +2503,7 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
             content += template.text;
         } else if (template.type === 'embed') {
             const embed = new EmbedBuilder()
-                .setDescription(template.embedDescription)
+                .setDescription(safeEmbedDescription(template.embedDescription))
                 .setTimestamp();
 
             if (template.embedTitle) embed.setTitle(template.embedTitle);
@@ -2550,7 +2556,7 @@ async function handleBoardScheduledSend(interaction, sharedState) {
             const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
 
             const embed = new EmbedBuilder()
-                .setDescription(template.embedDescription)
+                .setDescription(safeEmbedDescription(template.embedDescription))
                 .setFooter({ text: `Wysłał ${interaction.user.displayName} • ${timeStr}` });
 
             if (template.embedTitle) embed.setTitle(template.embedTitle);
