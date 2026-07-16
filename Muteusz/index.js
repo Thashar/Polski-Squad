@@ -166,7 +166,15 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     // System zmiany nazwy kanału - emoji statusu (🛑/🟢) lub wartość liczbowa (np. "23k", "34,8k")
-    const CHANNEL_RENAME_ROLE_ID = '1196586785413795850';
+    // Role traktowane jak administrator (dowolny kanał)
+    const CHANNEL_RENAME_ADMIN_ROLE_IDS = new Set([
+        '1170332302715396106',
+    ]);
+    // Role mogące zmieniać prefix tylko na wybranych kanałach
+    const CHANNEL_RENAME_ROLE_IDS = new Set([
+        '1196586785413795850',
+        '1196911721588199464',
+    ]);
     const CHANNEL_RENAME_ALLOWED_CHANNELS = new Set([
         '1194298890069999756',
         '1200051393843695699',
@@ -177,8 +185,11 @@ client.on(Events.MessageCreate, async (message) => {
         const isStatusEmoji = trimmedContent === '🛑' || trimmedContent === '🟢' || trimmedContent === '🔥';
         const isValuePattern = /^\d+([.,]\d+)?k$/i.test(trimmedContent);
         if (isStatusEmoji || isValuePattern) {
-            const isAdmin = await isAdminMember(message.guild, message.author.id);
-            const hasRenameRole = message.member?.roles.cache.has(CHANNEL_RENAME_ROLE_ID) &&
+            const memberRoles = message.member?.roles.cache;
+            const hasAdminRole = memberRoles ? [...CHANNEL_RENAME_ADMIN_ROLE_IDS].some(id => memberRoles.has(id)) : false;
+            const isAdmin = hasAdminRole || await isAdminMember(message.guild, message.author.id);
+            const hasRenameRole = memberRoles &&
+                [...CHANNEL_RENAME_ROLE_IDS].some(id => memberRoles.has(id)) &&
                 CHANNEL_RENAME_ALLOWED_CHANNELS.has(message.channelId);
             if (isAdmin || hasRenameRole) {
                 try {
