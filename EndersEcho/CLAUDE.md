@@ -494,6 +494,7 @@
     - Tekst, gołe cyfry, wiele emoji naraz i emotki niedostępne dla bota odrzucane z komunikatem ephemeral (PL/EN)
   - Stan wizarda: `autoReactionEmoji` (string|null) + `autoReactionDone` (bool) w RAM; persystencja w `guild_configs.json` jako `autoReactionEmoji` (null = wyłączona)
   - Dodawanie reakcji: `_addRecordAutoReaction(publicMsg, guildId)` — fire-and-forget po każdym `followUp` ogłoszenia rekordu w `_runUpdateFlow`; błąd reakcji tylko logowany (warn per-guild), nie przerywa flow
+  - **Wymagane uprawnienia bota:** `AddReactions` (dodanie reakcji pod ogłoszeniem) + `UseExternalEmojis` (gdy emotka customowa pochodzi z innego serwera niż ten, na którym publikowane jest ogłoszenie); oba sprawdzane w Diagnostyce uprawnień (`panel_diagnostics`) — na poziomie serwera i kanału bota
   - customIDs: `cfg_step_10`, `cfg_autoreact_enable`, `cfg_autoreact_disable` (wyłącz/pomiń), `cfg_autoreact_modal`
 - Zielony przycisk **✅ Zaakceptuj konfigurację!** pojawia się gdy wszystkie kroki ukończone; obok niego pojawia się wtedy też przycisk **🔍 Diagnostyka** (`panel_diagnostics`) — dostępny dla każdego administratora, sprawdza uprawnienia bota (serwer + kanały + hierarchia ról TOP)
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina

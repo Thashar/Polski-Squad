@@ -11139,6 +11139,8 @@ class InteractionHandler {
             [PermissionFlagsBits.ReadMessageHistory,  'ReadMessageHistory', t('wymagane do odczytu historii kanału', 'required to read channel history')],
             [PermissionFlagsBits.ViewChannel,         'ViewChannel',        t('wymagane do widzenia kanałów', 'required to see channels')],
             [PermissionFlagsBits.AttachFiles,         'AttachFiles',        t('wymagane do wysyłania plików', 'required to send files')],
+            [PermissionFlagsBits.AddReactions,        'AddReactions',       t('wymagane do auto-reakcji pod ogłoszeniami rekordów (/configure krok 10)', 'required for auto reactions under record announcements (/configure step 10)')],
+            [PermissionFlagsBits.UseExternalEmojis,   'UseExternalEmojis',  t('wymagane gdy auto-reakcja używa emotki customowej z innego serwera', 'required when the auto reaction uses a custom emote from another server')],
         ];
 
         const serverPermsHeader = t('🔐 **Uprawnienia serwera**', '🔐 **Server Permissions**');
@@ -11168,6 +11170,8 @@ class InteractionHandler {
                 [PermissionFlagsBits.EmbedLinks,         'EmbedLinks'],
                 [PermissionFlagsBits.ReadMessageHistory, 'ReadMessageHistory'],
                 [PermissionFlagsBits.AttachFiles,        'AttachFiles'],
+                [PermissionFlagsBits.AddReactions,       'AddReactions'],
+                [PermissionFlagsBits.UseExternalEmojis,  'UseExternalEmojis'],
             ];
             for (const [flag, name] of CHANNEL_PERMS) {
                 const hasGlobal = botMember.permissions.has(flag);
