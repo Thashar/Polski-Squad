@@ -15,6 +15,7 @@
 
 **Funkcjonalność Przypomnień:**
 - **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, ikoną i obrazem
+  - **Opis embed jest opcjonalny** - pusty opis jest zamieniany na zero-width space (`safeEmbedDescription` w `przypominienHandlers.js`, analogiczny guard w `harmonogram.js`), bo `EmbedBuilder.setDescription` wymaga 1-4096 znaków i pusty string rzucał błąd walidacji przy podglądzie/wysyłce
 - **Zaplanowane:** Ustawianie przypomień na podstawie szablonów z:
   - Pierwszym wyzwoleniem (data + czas)
   - Interwałem powtarzania (1s, 1m, 1h, 1d do max 90d, lub "ee" dla specjalnego wzorca)

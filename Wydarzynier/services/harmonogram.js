@@ -122,8 +122,12 @@ class Harmonogram {
                 const now = new Date();
                 const timeStr = now.toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Warsaw' });
 
+                // setDescription wymaga 1-4096 znaków - pusty opcjonalny opis zamieniamy na zero-width space
+                const safeDescription = (template.embedDescription && template.embedDescription.trim() !== '')
+                    ? template.embedDescription
+                    : '​';
                 const embed = new EmbedBuilder()
-                    .setDescription(template.embedDescription)
+                    .setDescription(safeDescription)
                     .setFooter({ text: `System powiadomień • ${timeStr}` });
 
                 if (template.embedTitle) {
