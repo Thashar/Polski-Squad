@@ -58,6 +58,7 @@
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
    - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + ekstrakcja:
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów) — **10 retry** przy błędzie API (429/500/503), delay cappowany na 10s
+       - **Podwójna weryfikacja negatywnego wyniku:** gdy AI odpowie NOK (screen niepodobny do wzorca), porównanie jest wykonywane **jeszcze raz** (drugi, niezależny request); screen odrzucany (`NOT_SIMILAR`) dopiero po DWÓCH negatywnych wynikach — chroni przed pojedynczą pomyłką modelu. Druga próba pozytywna → analiza kontynuowana normalnie. Powód odrzucenia = z drugiej próby (fallback: z pierwszej). Koszt tokenów obu prób sumowany w `tokenUsage`. Dotyczy `/update` i `/test` (wspólna implementacja `analyzeTestImage`)
      - **KROK 2:** Ekstrakcja danych (boss + score) — bez sprawdzania Victory i autentyczności (500 tokenów) — **10 retry** przy błędzie API, delay cappowany na 10s
      - Gdy screen niepodobny do wzorca → embed `testNotSimilarTitle/Description` (brak zapisu)
      - Po udanej weryfikacji: pełny flow — zapis do rankingu, aktualizacja ról TOP, snippet globalnego rankingu (gdy pozycja globalna się zmieniła), powiadomienia DM

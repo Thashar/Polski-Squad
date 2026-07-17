@@ -308,13 +308,23 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             const mediaType = 'image/png';
 
             const onRetryTemplate = onRetry ? (attempt, total) => onRetry(attempt, total, 'template') : null;
-            const { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang, onRetryTemplate);
+            let { isSimilar, rejectionReason, usage: u1 } = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang, onRetryTemplate);
             tokenUsage.promptTokens  += u1.promptTokens;
             tokenUsage.outputTokens  += u1.outputTokens;
             tokenUsage.thoughtTokens += u1.thoughtTokens;
 
+            // Negatywne dopasowanie wzorca — powtórz porównanie; dopiero DRUGI negatywny wynik odrzuca screen
             if (!isSimilar) {
-                return { bossName: null, score: null, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason, tokenUsage };
+                log.info('[AI Test] Negatywny wynik wzorca — powtarzam porównanie (próba 2/2)...');
+                const second = await this._compareWithTemplate(wzorBase64, uploadedBase64, mediaType, log, telemetryMeta, lang, onRetryTemplate);
+                tokenUsage.promptTokens  += second.usage.promptTokens;
+                tokenUsage.outputTokens  += second.usage.outputTokens;
+                tokenUsage.thoughtTokens += second.usage.thoughtTokens;
+                if (!second.isSimilar) {
+                    return { bossName: null, score: null, isValidVictory: false, error: 'NOT_SIMILAR', rejectionReason: second.rejectionReason || rejectionReason, tokenUsage };
+                }
+                log.info('[AI Test] Druga próba wzorca pozytywna — kontynuuję analizę');
+                isSimilar = true;
             }
 
             if (onProgress) await onProgress('extracting');
