@@ -555,6 +555,7 @@
 - Zablokowany użytkownik przy próbie `/update` widzi komunikat o blokadzie i konieczności kontaktu z adminem
 - `/unblock` (admin) — lista zablokowanych posortowana od najkrótszej kary do permanentnych, select menu do odblokowania; jeśli `blockedByHeadAdmin: true` — zwykły Admin nie może odblokować
 - Panel Admina → **🔒 Zablokuj gracza** (Head Admin) — cross-server wyszukiwanie + blokada z `blockedByHeadAdmin: true`
+- **Ogłoszenie czasowej blokady** (`_announceUserBlock(client, targetUserId, blockedUntil, adminName)`): gdy admin nakłada blokadę CZASOWĄ (podany czas trwania), bot wysyła systemową wiadomość (czerwony embed, klucze `userBlockAnnouncementTitle`/`userBlockAnnouncement`) na kanał bota (`allowedChannelId`) serwera, na którym gracz ma swój najlepszy globalny wynik (`getGlobalRanking()` → `sourceGuildId`), w języku tego serwera: „Użytkownik @wzmianka został zablokowany na okres **X** przez administratora **nick**". Wywoływane fire-and-forget z obu ścieżek blokady adminem: panel admina (`_handlePanelBlockModal`) i raport odrzuconego screena (modal czasu blokady). NIE ogłaszane: blokady permanentne (puste pole czasu), automatyczna blokada 24h z weryfikacji społeczności oraz permanentna blokada z akcji CV `cv_admin_block`. Gdy gracz nie ma wyniku w żadnym rankingu — brak ogłoszenia.
 - Persistencja przeżywa restart bota
 
 **GuildConfigService** — `services/guildConfigService.js`:
