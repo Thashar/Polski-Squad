@@ -3853,6 +3853,7 @@ class InteractionHandler {
                 ? this.userBlockService.formatTimeRemaining(blockedUntil, { permanent: t('∞ Permanentnie', '∞ Permanent'), expired: t('Wygasła', 'Expired') })
                 : t('∞ Permanentnie', '∞ Permanent');
             logger.info(`🔒 Head Admin zablokował ${username} (${targetUserId}) na serwerze ${guildName} — ${timeLabel}`);
+            this._announceUserBlock(interaction.client, targetUserId, blockedUntil, interaction.member?.displayName || interaction.user.username);
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0x57F287)
                     .setTitle(t('✅ Gracz zablokowany', '✅ Player Blocked'))
@@ -3867,6 +3868,42 @@ class InteractionHandler {
         } catch (err) {
             logger.error(`Błąd _handlePanelBlockModal (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd blokowania gracza.', '❌ Error blocking player.'), embeds: [], components: [] });
+        }
+    }
+
+    /**
+     * Ogłasza CZASOWĄ blokadę gracza nałożoną przez admina — systemowa wiadomość na kanale bota
+     * serwera, na którym gracz ma swój najlepszy (globalny) wynik. Fire-and-forget.
+     * Blokady permanentne (blockedUntil === null) i automatyczne (CV) nie są ogłaszane.
+     * @param {Client} client
+     * @param {string} targetUserId - ID zablokowanego gracza
+     * @param {number|null} blockedUntil - timestamp końca blokady (null = permanentna)
+     * @param {string} adminName - nick administratora nakładającego blokadę
+     */
+    async _announceUserBlock(client, targetUserId, blockedUntil, adminName) {
+        try {
+            if (!blockedUntil) return; // permanentna — bez ogłoszenia
+            const globalRanking = await this.rankingService.getGlobalRanking();
+            const entry = globalRanking.find(p => p.userId === targetUserId);
+            if (!entry?.sourceGuildId) return; // gracz nie ma wyniku w żadnym rankingu
+            const channelId = this.guildConfigService?.getConfig(entry.sourceGuildId)?.allowedChannelId;
+            if (!channelId) return;
+            const channel = await client.channels.fetch(channelId).catch(() => null);
+            if (!channel) return;
+            const msgs = this.msgs(entry.sourceGuildId);
+            const duration = this.userBlockService.formatTimeRemaining(blockedUntil);
+            const embed = new EmbedBuilder()
+                .setColor(0xFF4444)
+                .setTitle(msgs.userBlockAnnouncementTitle)
+                .setDescription(msgs.userBlockAnnouncement
+                    .replace('{userMention}', `<@${targetUserId}>`)
+                    .replace('{duration}', duration)
+                    .replace('{adminName}', adminName))
+                .setTimestamp();
+            await channel.send({ embeds: [embed] });
+            this.logService._gl(entry.sourceGuildId).info(`🔒 Ogłoszono blokadę gracza ${this.logService.nickLink(entry.username || targetUserId, targetUserId)} (${duration}, przez ${adminName})`);
+        } catch (err) {
+            logger.warn(`⚠️ Nie udało się ogłosić blokady gracza ${targetUserId}: ${err.message}`);
         }
     }
 
@@ -8993,6 +9030,7 @@ class InteractionHandler {
         });
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
+        this._announceUserBlock(interaction.client, targetUserId, blockedUntil, adminName);
         this.adminPanelService?.refresh();
 
         if (crossUpdateGlobalMsgId) {

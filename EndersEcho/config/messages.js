@@ -312,6 +312,10 @@ const pol = {
     configureTagTooLong: '❌ Tag może mieć maksymalnie 4 znaki.',
     configureTagEmpty: '❌ Tag nie może być pusty.',
 
+    // Ogłoszenie czasowej blokady gracza (kanał bota serwera z jego najlepszym wynikiem)
+    userBlockAnnouncementTitle: '🔒 Blokada gracza',
+    userBlockAnnouncement: 'Użytkownik {userMention} został zablokowany na okres **{duration}** przez administratora **{adminName}**.',
+
     // Weryfikacja społeczności
     cvVoteButton: '⚠️ Zgłoś',
     cvReported: '⚠️ Zgłoszono',
@@ -695,6 +699,10 @@ const eng = {
     configureCancelled: '❌ Configuration cancelled. Previous settings remain unchanged.',
     configureTagTooLong: '❌ The tag can have a maximum of 4 characters.',
     configureTagEmpty: '❌ The tag cannot be empty.',
+
+    // Temporary player block announcement (bot channel of the server with their best score)
+    userBlockAnnouncementTitle: '🔒 Player Blocked',
+    userBlockAnnouncement: 'User {userMention} has been blocked for **{duration}** by administrator **{adminName}**.',
 
     // Community verification
     cvVoteButton: '⚠️ Report',
