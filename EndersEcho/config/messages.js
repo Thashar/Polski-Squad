@@ -365,14 +365,24 @@ const pol = {
     bossRankingBackList: 'Lista bossów',
     bossRankingPlayers: 'graczy',
 
+    // /help
+    helpTitle: '📖 Ender\'s Echo — pomoc',
+    helpDescription: 'Opis komend, konfiguracji i odpowiedzi na częste pytania znajdziesz na stronie:\n{url}',
+    helpDocsTitle: 'Dokumenty',
+    helpPrivacy: 'Polityka prywatności',
+    helpTerms: 'Regulamin',
+    helpSupportTitle: 'Wsparcie',
+    helpSupport: 'Serwer pomocy',
+
     // Panel bossów — zdjęcie
     bossCfgSetImg: 'Przypisz zdjęcie',
     bossCfgImgSelectBoss: 'Wybierz bossa do przypisania zdjęcia:',
     bossCfgImgSelectPlaceholder: 'Wybierz bossa...',
-    bossCfgImgWaiting: '🖼️ Wyślij zdjęcie bossa jako wiadomość na tym kanale.\nObsługiwane formaty: jpg, png, gif, webp.\n\n⏳ Czekam **60 sekund**...',
+    bossCfgImgModalTitle: 'Zdjęcie bossa',
+    bossCfgImgModalLabel: 'Link do zdjęcia (z Discorda)',
     bossCfgImgSuccess: '✅ Zdjęcie przypisane do bossa **{bossName}**.',
-    bossCfgImgTimeout: '⏱️ Upłynął czas oczekiwania na zdjęcie. Użyj przycisku ponownie.',
-    bossCfgImgNoAttachment: '❌ Wiadomość nie zawiera zdjęcia.',
+    bossCfgImgNoSession: '❌ Sesja wygasła. Wybierz bossa ponownie.',
+    bossCfgImgInvalidUrl: '❌ Nieprawidłowy link. Wrzuć zdjęcie na Discorda, skopiuj jego odnośnik i wklej tutaj.',
     bossCfgImgInvalidType: '❌ Nieobsługiwany format pliku. Użyj: jpg, png, gif, webp.',
 
     // /profile
@@ -753,14 +763,24 @@ const eng = {
     bossRankingBackList: 'Boss list',
     bossRankingPlayers: 'players',
 
+    // /help
+    helpTitle: '📖 Ender\'s Echo — Help',
+    helpDescription: 'Command reference, setup guide and FAQ are available on the website:\n{url}',
+    helpDocsTitle: 'Documents',
+    helpPrivacy: 'Privacy Policy',
+    helpTerms: 'Terms of Service',
+    helpSupportTitle: 'Support',
+    helpSupport: 'Support server',
+
     // Boss config panel — image
     bossCfgSetImg: 'Set Image',
     bossCfgImgSelectBoss: 'Select a boss to assign an image:',
     bossCfgImgSelectPlaceholder: 'Select a boss...',
-    bossCfgImgWaiting: '🖼️ Send the boss image as a message in this channel.\nSupported formats: jpg, png, gif, webp.\n\n⏳ Waiting **60 seconds**...',
+    bossCfgImgModalTitle: 'Boss Image',
+    bossCfgImgModalLabel: 'Image link (from Discord)',
     bossCfgImgSuccess: '✅ Image assigned to boss **{bossName}**.',
-    bossCfgImgTimeout: '⏱️ Timed out waiting for an image. Use the button again.',
-    bossCfgImgNoAttachment: '❌ Message contains no image attachment.',
+    bossCfgImgNoSession: '❌ Session expired. Select the boss again.',
+    bossCfgImgInvalidUrl: '❌ Invalid link. Upload the image to Discord, copy its link and paste it here.',
     bossCfgImgInvalidType: '❌ Unsupported file type. Use: jpg, png, gif, webp.',
 
     // /profile

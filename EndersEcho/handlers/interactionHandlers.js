@@ -259,6 +259,11 @@ class InteractionHandler {
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
+
+            new SlashCommandBuilder()
+                .setName('help')
+                .setDescription('Show help and useful links for Ender\'s Echo')
+                .setDescriptionLocalizations(pl('Pokaż pomoc i przydatne linki do Ender\'s Echo')),
         ];
     }
 
@@ -353,6 +358,12 @@ class InteractionHandler {
                 return;
             }
 
+            // /help — działa też na serwerach bez konfiguracji
+            if (interaction.commandName === 'help') {
+                await this.handleHelpCommand(interaction);
+                return;
+            }
+
             // Komendy admin — dowolny kanał, ale wymagają konfiguracji serwera
             if (interaction.commandName === 'test') {
                 if (!this._checkConfigured(interaction)) return;
@@ -399,6 +410,14 @@ class InteractionHandler {
             }
             if (interaction.customId === 'limit_modal') {
                 await this._handleLimitModal(interaction);
+                return;
+            }
+            if (interaction.customId === 'boss_cfg_img_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleBossCfgImgModal(interaction);
                 return;
             }
             if (interaction.customId === 'panel_remove_search_modal') {
@@ -812,6 +831,40 @@ class InteractionHandler {
         }
         const { embed, components } = this._buildAdminPanel(interaction);
         await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+    }
+
+    async handleHelpCommand(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const url = 'https://endersecho.thashar.dev/';
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.helpTitle || t('📖 Ender\'s Echo — pomoc', '📖 Ender\'s Echo — Help'))
+            .setDescription(
+                (msgs.helpDescription || t(
+                    'Opis komend, konfiguracji i odpowiedzi na częste pytania znajdziesz na stronie:\n{url}',
+                    'Command reference, setup guide and FAQ are available on the website:\n{url}'
+                )).replace('{url}', url)
+            )
+            .addFields(
+                {
+                    // Wymóg Sekcji 5(a) Warunków Discorda — łatwy dostęp do polityki prywatności z poziomu aplikacji
+                    name: msgs.helpDocsTitle || t('Dokumenty', 'Documents'),
+                    value: [
+                        `[${msgs.helpPrivacy || t('Polityka prywatności', 'Privacy Policy')}](${url}privacy)`,
+                        `[${msgs.helpTerms || t('Regulamin', 'Terms of Service')}](${url}terms)`,
+                    ].join('\n'),
+                    inline: true,
+                },
+                {
+                    name: msgs.helpSupportTitle || t('Wsparcie', 'Support'),
+                    value: `[${msgs.helpSupport || t('Serwer pomocy', 'Support server')}](https://discord.gg/aTPH4r9Zbg)`,
+                    inline: true,
+                },
+            );
+
+        await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
     }
 
     async handleGenerateCommand(interaction) {
@@ -11302,7 +11355,6 @@ class InteractionHandler {
         const { GatewayIntentBits } = require('discord.js');
         const intentChecks = [
             [GatewayIntentBits.GuildMembers,    t('GuildMembers (fetch memberów, rankingi ról)', 'GuildMembers (member fetch, role rankings)')],
-            [GatewayIntentBits.MessageContent,  t('MessageContent (odczyt treści wiadomości)', 'MessageContent (reading message content)')],
         ];
         for (const [bit, label] of intentChecks) {
             if (intents.has(bit)) {
@@ -13111,68 +13163,80 @@ class InteractionHandler {
         });
     }
 
-    /** Po wyborze bossa — czeka na wiadomość ze zdjęciem przez message collector */
+    /** Po wyborze bossa — pokazuje modal z polem na link do zdjęcia */
     async _handleBossCfgImgBossSel(interaction) {
         const t = this._panelT(interaction.guildId);
         const msgs = this.msgs(interaction.guildId);
         const bossName = interaction.values[0];
 
-        await interaction.update({
-            embeds: [new EmbedBuilder().setColor(0x5865F2)
-                .setTitle(t('🖼️ Oczekiwanie na zdjęcie', '🖼️ Waiting for Image'))
-                .setDescription(msgs.bossCfgImgWaiting || t('Wyślij zdjęcie bossa jako wiadomość na tym kanale...', 'Send the boss image as a message in this channel...'))
-                .setFooter({ text: bossName })],
-            components: [],
-        });
+        // Nazwa bossa idzie do sesji, nie do customId — customId ma limit 100 znaków
+        this._bossCfgSessions.set(interaction.user.id, { pendingBoss: bossName });
 
-        const channel = interaction.channel;
-        if (!channel) return;
+        const modal = new ModalBuilder()
+            .setCustomId('boss_cfg_img_modal')
+            .setTitle((msgs.bossCfgImgModalTitle || t('Zdjęcie bossa', 'Boss Image')).substring(0, 45));
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('boss_img_url')
+                .setLabel((msgs.bossCfgImgModalLabel || t('Link do zdjęcia', 'Image link')).substring(0, 45))
+                .setPlaceholder('https://cdn.discordapp.com/attachments/...')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMinLength(10)
+                .setMaxLength(1000)
+        ));
+        await interaction.showModal(modal);
+    }
 
-        const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-        const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    /** Zapis zdjęcia bossa z linku wklejonego w modalu */
+    async _handleBossCfgImgModal(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
 
-        let collected;
-        try {
-            collected = await channel.awaitMessages({
-                filter: m => m.author.id === interaction.user.id && m.attachments.size > 0,
-                max: 1,
-                time: 60_000,
-                errors: ['time'],
+        const session = this._bossCfgSessions.get(interaction.user.id);
+        const bossName = session?.pendingBoss;
+        if (!bossName) {
+            await interaction.reply({
+                content: msgs.bossCfgImgNoSession || t('❌ Sesja wygasła. Wybierz bossa ponownie.', '❌ Session expired. Select the boss again.'),
+                flags: ['Ephemeral'],
             });
+            return;
+        }
+        this._bossCfgSessions.delete(interaction.user.id);
+
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        const rawUrl = (interaction.fields.getTextInputValue('boss_img_url') || '').trim();
+
+        // Rozszerzenie bierzemy ze ścieżki URL — przy linku nie ma nazwy załącznika ani content-type
+        const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+        let ext;
+        try {
+            ext = path.extname(new URL(rawUrl).pathname).toLowerCase();
         } catch {
-            await interaction.followUp({ content: msgs.bossCfgImgTimeout || t('⏱️ Upłynął czas oczekiwania.', '⏱️ Timed out.'), flags: ['Ephemeral'] });
+            await interaction.editReply({ content: msgs.bossCfgImgInvalidUrl || t('❌ Nieprawidłowy link.', '❌ Invalid link.') });
+            return;
+        }
+        if (!ALLOWED_EXTS.includes(ext)) {
+            await interaction.editReply({ content: msgs.bossCfgImgInvalidType || t('❌ Nieobsługiwany format.', '❌ Unsupported format.') });
             return;
         }
 
-        const msg = collected.first();
-        const attachment = msg.attachments.first();
-        if (!attachment) {
-            await interaction.followUp({ content: msgs.bossCfgImgNoAttachment || t('❌ Brak załącznika.', '❌ No attachment.'), flags: ['Ephemeral'] });
-            return;
-        }
-
-        const ext = path.extname(attachment.name || '').toLowerCase();
-        const contentType = (attachment.contentType || '').split(';')[0].trim();
-        if (!ALLOWED_TYPES.includes(contentType) && !ALLOWED_EXTS.includes(ext)) {
-            await interaction.followUp({ content: msgs.bossCfgImgInvalidType || t('❌ Nieobsługiwany format.', '❌ Unsupported format.'), flags: ['Ephemeral'] });
-            return;
-        }
-
-        // Pobierz i zapisz zdjęcie
+        // Pobierz i zapisz zdjęcie — downloadBuffer pilnuje HTTPS, hosta (Discord CDN) i limitu 25 MB
         try {
             const imgDir = path.join(__dirname, '../data/boss_images');
             await fs.mkdir(imgDir, { recursive: true });
             const safeName = bossName.replace(/[^a-zA-Z0-9_\-]/g, '_');
-            const filename = `${safeName}${ext || '.png'}`;
-            const buffer = await downloadBuffer(attachment.url);
+            const filename = `${safeName}${ext}`;
+            const buffer = await downloadBuffer(rawUrl);
             await fs.writeFile(path.join(imgDir, filename), buffer);
             await this.bossAliasService.setBossImage(bossName, filename);
             const successMsg = (msgs.bossCfgImgSuccess || '✅ Zdjęcie przypisane do bossa **{bossName}**.').replace('{bossName}', bossName);
-            await interaction.followUp({ content: successMsg, flags: ['Ephemeral'] });
+            await interaction.editReply({ content: successMsg });
             logger.info(`Zdjęcie bossa "${bossName}" zapisane jako ${filename}`);
         } catch (e) {
             logger.error(`Błąd zapisu zdjęcia bossa: ${e.message}`);
-            await interaction.followUp({ content: t('❌ Błąd zapisu zdjęcia.', '❌ Failed to save image.'), flags: ['Ephemeral'] });
+            await interaction.editReply({ content: t('❌ Błąd zapisu zdjęcia.', '❌ Failed to save image.') });
         }
     }
 

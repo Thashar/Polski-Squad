@@ -221,7 +221,9 @@
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
    - **Centrum Dowodzenia (head admin):** panel 6 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
-**Komendy slash:** `/configure`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
+**Komendy slash:** `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
+
+**`/help`** — publiczna komenda (ephemeral), działa też na serwerach bez konfiguracji. Embed z linkiem do strony `https://endersecho.thashar.dev/`, sekcją "Dokumenty" (polityka prywatności `/privacy`, regulamin `/terms` — wymóg Sekcji 5(a) Warunków Discorda) i linkiem do serwera pomocy.
 
 **Panel Admina** — dostępny przez `/manage`:
 - Dostęp: Administrator Discord
@@ -399,7 +401,8 @@
 | `boss_map_boss_sel` | StringSelectMenu — wybór angielskiej nazwy bossa |
 | `boss_map_lang_sel` | StringSelectMenu języka → zapis aliasu z flow mapowania |
 | `boss_cfg_set_img` | Przycisk "🖼️ Przypisz zdjęcie" — otwiera select bossów |
-| `boss_cfg_img_boss_sel` | StringSelectMenu — wybrany boss → czeka na wiadomość ze zdjęciem |
+| `boss_cfg_img_boss_sel` | StringSelectMenu — wybrany boss → otwiera modal z polem na link do zdjęcia |
+| `boss_cfg_img_modal` | Modal z linkiem do zdjęcia (Discord CDN) → pobranie i zapis pliku |
 | `ranking_boss_list` | Przycisk "🎯 Ranking Bossów" w widoku global ranking |
 | `ranking_boss_sel` | StringSelectMenu — wybrany boss → pokazuje per-boss ranking globalny |
 
@@ -416,8 +419,8 @@
   - **➕ Nowy boss (EN):** modal → dodaje custom boss poza KNOWN_BOSS_NAMES → `englishNames[]` w JSON
   - **🔤 Dodaj alias:** boss select → modal (alias) → language select → zapis do `aliases` + **automatyczna migracja boss_records** (surowa nazwa → angielska, zachowując lepszy wynik)
   - **🗑️ Usuń alias:** boss select → alias select → usunięcie
-  - **🖼️ Przypisz zdjęcie:** boss select → czeka 60s na wiadomość ze zdjęciem → pobiera attachment → zapisuje do `data/boss_images/{bossName}.{ext}` → ścieżka w `boss_aliases.json` jako `images["BossEN"]`
-  - Sesje robocze: `_bossCfgSessions` Map (RAM, per userId)
+  - **🖼️ Przypisz zdjęcie:** boss select → modal z linkiem do zdjęcia (wrzuconego wcześniej na Discorda) → walidacja rozszerzenia z URL (jpg/jpeg/png/gif/webp) → `downloadBuffer` (HTTPS, host Discord CDN, limit 25 MB) → zapis do `data/boss_images/{bossName}.{ext}` → ścieżka w `boss_aliases.json` jako `images["BossEN"]`
+  - Sesje robocze: `_bossCfgSessions` Map (RAM, per userId) — przechowuje `pendingBoss` między selectem a modalem (nazwa bossa nie mieści się w customId, limit 100 znaków)
 - **Wykrywanie nieznanej nazwy:** `correctBossNameFull(raw, bossAliasService)` zwraca `{ corrected, wasUnknown }`. Gdy `wasUnknown=true` i wynik OCR jest prawidłowy: `_runUpdateFlow` wywołuje `_sendUnknownBossEmbed` (await, zwraca `sessionKey`).
 - **Embed nieznanego bossa (czerwony):** wysyłany na `ENDERSECHO_SERVER_LOG_CHANNEL_ID`. Zawiera: nazwę bossa (OCR), gracza (link Discord), komendę, serwer, screenshot. Przycisk: 🔗 Dopasuj do nazwy angielskiej (`boss_mapm_{sessionKey}`). Po dodaniu aliasu przycisk staje się **nieaktywny** (disabled), a w ogłoszeniu rekordu pojawia się notka z imieniem admina.
 - **Flow mapowania (po kliknięciu przycisku):**
