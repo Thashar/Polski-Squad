@@ -28,6 +28,7 @@ const InteractionHandler = require('./handlers/interactionHandlers');
 const AchievementService = require('./services/achievementService');
 const CommunityVerificationService = require('./services/communityVerificationService');
 const GuildBanService = require('./services/guildBanService');
+const GuildDataRetentionService = require('./services/guildDataRetentionService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
@@ -111,6 +112,7 @@ const updateCooldownService = new UpdateCooldownService(config);
 const achievementService = new AchievementService(config);
 const communityVerificationService = new CommunityVerificationService(config.ranking.dataDir);
 const guildBanService = new GuildBanService(config.ranking.dataDir);
+const guildDataRetentionService = new GuildDataRetentionService(config.ranking.dataDir, guildConfigService);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHistoryService, guildConfigService, config, chartService);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
@@ -160,6 +162,28 @@ async function initializeBot() {
         await updateCooldownService.load();
         await guildBanService.load();
         await ocrStatsService.load();
+
+        // Retencja danych: 30 dni po usunięciu bota z serwera dane serwera są
+        // kasowane (zgodnie z polityką prywatności); statystyki tokenów AI zostają.
+        // Po usunięciu — powiadomienie na kanał logów serwerowych (z pingiem).
+        await guildDataRetentionService.load();
+        guildDataRetentionService.start(client, async (guildId, info) => {
+            const tRet = info.lang === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
+            await sendAdminNotification(client, new EmbedBuilder()
+                .setColor(0xED4245)
+                .setTitle(tRet('🗑️ Dane serwera usunięte (retencja 30 dni)', '🗑️ Server data deleted (30-day retention)'))
+                .setDescription(tRet(
+                    'Minęło 30 dni od usunięcia bota z serwera — dane serwera zostały skasowane zgodnie z polityką prywatności.',
+                    '30 days have passed since the bot was removed from the server — server data has been deleted in accordance with the privacy policy.'
+                ))
+                .addFields(
+                    { name: tRet('Serwer', 'Server'), value: `${info.guildName} (\`${guildId}\`)` },
+                    { name: tRet('Usunięto', 'Deleted'), value: tRet('ranking, historia wyników, osiągnięcia, rekordy bossów, konfiguracja', 'rankings, score history, achievements, boss records, configuration') },
+                    { name: tRet('Zachowano', 'Retained'), value: tRet('statystyki zużycia tokenów AI (cele rozliczeniowe i statystyczne)', 'AI token usage statistics (billing and statistical purposes)') }
+                )
+                .setTimestamp()
+            );
+        });
 
         // Uruchom scheduler cyklicznych raportów TOP10 globalnego
         globalTop10Service.setClient(client);
@@ -282,6 +306,8 @@ client.on('guildCreate', async (guild) => {
             return;
         }
         logger.info(`🆕 Bot dodany do serwera: ${guild.name} (${guild.id})`);
+        // bot wrócił przed upływem 30 dni → dane serwera zostają
+        await guildDataRetentionService.cancel(guild.id);
         const existing = guildConfigService.getConfig(guild.id);
         await guildConfigService.saveConfig(guild.id, {
             ...(!existing ? { configured: false, ocrBlocked: ['update', 'test'] } : {}),
@@ -326,12 +352,17 @@ client.on('guildDelete', async (guild) => {
     if (guild.available === false) return;
     const guildLangDel = guildConfigService.getConfig(guild.id)?.lang || 'pol';
     const tGD = guildLangDel === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
+    // start 30-dniowego zegara retencji (schedule czyta config, więc PRZED powiadomieniem)
+    await guildDataRetentionService.schedule(guild.id, guild.name).catch(err =>
+        logger.error(`Błąd planowania retencji dla "${guild.name}": ${err.message}`)
+    );
     await sendAdminNotification(client, new EmbedBuilder()
         .setColor(0xED4245)
         .setTitle(tGD('🚪 Bot usunięty z serwera', '🚪 Bot removed from server'))
         .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
         .addFields(
-            { name: tGD('Serwer', 'Server'), value: `${guild.name} (\`${guild.id}\`)` }
+            { name: tGD('Serwer', 'Server'), value: `${guild.name} (\`${guild.id}\`)` },
+            { name: tGD('🗓️ Retencja danych', '🗓️ Data retention'), value: tGD('Dane serwera zostaną usunięte po **30 dniach**, o ile bot nie wróci na serwer.', 'Server data will be deleted after **30 days** unless the bot rejoins the server.') }
         )
         .setTimestamp()
     );
