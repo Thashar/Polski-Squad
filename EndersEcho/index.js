@@ -171,15 +171,15 @@ async function initializeBot() {
             const tRet = info.lang === 'eng' ? ((_p, e) => e) : ((p, _e) => p);
             await sendAdminNotification(client, new EmbedBuilder()
                 .setColor(0xED4245)
-                .setTitle(tRet('🗑️ Dane serwera usunięte (retencja 30 dni)', '🗑️ Server data deleted (30-day retention)'))
+                .setTitle(tRet('🗑️ Konfiguracja serwera usunięta (retencja 30 dni)', '🗑️ Server configuration deleted (30-day retention)'))
                 .setDescription(tRet(
-                    'Minęło 30 dni od usunięcia bota z serwera — dane serwera zostały skasowane zgodnie z polityką prywatności.',
-                    '30 days have passed since the bot was removed from the server — server data has been deleted in accordance with the privacy policy.'
+                    'Minęło 30 dni od usunięcia bota z serwera — konfiguracja serwera została skasowana zgodnie z polityką prywatności.',
+                    '30 days have passed since the bot was removed from the server — server configuration has been deleted in accordance with the privacy policy.'
                 ))
                 .addFields(
                     { name: tRet('Serwer', 'Server'), value: `${info.guildName} (\`${guildId}\`)` },
-                    { name: tRet('Usunięto', 'Deleted'), value: tRet('ranking, historia wyników, osiągnięcia, rekordy bossów, konfiguracja', 'rankings, score history, achievements, boss records, configuration') },
-                    { name: tRet('Zachowano', 'Retained'), value: tRet('statystyki zużycia tokenów AI (cele rozliczeniowe i statystyczne)', 'AI token usage statistics (billing and statistical purposes)') }
+                    { name: tRet('Usunięto', 'Deleted'), value: tRet('konfiguracja serwera (ustawienia, rankingi ról)', 'server configuration (settings, role rankings)') },
+                    { name: tRet('Zachowano', 'Retained'), value: tRet('dane graczy (ranking, historia wyników, osiągnięcia — pozostają pod kontrolą użytkowników) oraz statystyki zużycia tokenów AI (rozliczenia)', 'player data (rankings, score history, achievements — remain under user control) and AI token usage statistics (billing)') }
                 )
                 .setTimestamp()
             );
@@ -362,7 +362,7 @@ client.on('guildDelete', async (guild) => {
         .setThumbnail(guild.iconURL({ dynamic: true, size: 128 }))
         .addFields(
             { name: tGD('Serwer', 'Server'), value: `${guild.name} (\`${guild.id}\`)` },
-            { name: tGD('🗓️ Retencja danych', '🗓️ Data retention'), value: tGD('Dane serwera zostaną usunięte po **30 dniach**, o ile bot nie wróci na serwer.', 'Server data will be deleted after **30 days** unless the bot rejoins the server.') }
+            { name: tGD('🗓️ Retencja danych', '🗓️ Data retention'), value: tGD('Konfiguracja serwera zostanie usunięta po **30 dniach**, o ile bot nie wróci na serwer. Dane graczy zostają.', 'Server configuration will be deleted after **30 days** unless the bot rejoins the server. Player data is kept.') }
         )
         .setTimestamp()
     );

@@ -4,9 +4,11 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 
-/* 30 dni od usunięcia bota z serwera — po tym czasie dane serwera są kasowane
-   (wymóg Discord Developer Policy + deklaracja w polityce prywatności:
-   https://endersecho.thashar.dev/privacy, sekcja "Data retention"). */
+/* 30 dni od usunięcia bota z serwera — po tym czasie kasowana jest KONFIGURACJA
+   serwera (deklaracja w polityce prywatności: https://endersecho.thashar.dev/privacy,
+   sekcja "Data retention"). Dane graczy (ranking, historia wyników, osiągnięcia,
+   rekordy bossów) NIE są usuwane — należą do użytkowników i tylko oni decydują
+   o ich usunięciu (autonomia użytkownika; dane zasilają też profil cross-server). */
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 12 * 60 * 60 * 1000; // kontrola 2x na dobę
 
@@ -86,20 +88,21 @@ class GuildDataRetentionService {
         }
     }
 
-    /* Ten sam zakres co panelowy przycisk "Usuń dane serwera":
-       katalog data/guilds/{guildId} (ranking, historia, osiągnięcia, rekordy
-       bossów) + wpis w guild_configs.json. Globalne data/token_usage.json
-       celowo NIETYKANE — statystyki zużycia tokenów AI zostają do celów
-       rozliczeniowych i statystycznych (sekcja 7 polityki prywatności). */
+    /* Usuwana jest WYŁĄCZNIE konfiguracja serwera: wpis w guild_configs.json
+       + role_rankings.json (konfiguracja rankingów ról ustawiana przez adminów).
+       Dane graczy w data/guilds/{guildId}/ (ranking.json, wyniki/, achievements.json,
+       rekordy bossów) zostają — należą do użytkowników. Globalne data/token_usage.json
+       również nietykane — statystyki tokenów AI do celów rozliczeniowych
+       i statystycznych (sekcja 7 polityki prywatności). */
     async _deleteGuildData(guildId, info) {
-        const guildDataDir = path.join(this.dataDir, 'guilds', guildId);
-        await fs.rm(guildDataDir, { recursive: true, force: true }).catch(err => {
+        const roleRankingsFile = path.join(this.dataDir, 'guilds', guildId, 'role_rankings.json');
+        await fs.rm(roleRankingsFile, { force: true }).catch(err => {
             if (err.code !== 'ENOENT') throw err;
         });
         await this.guildConfigService.deleteConfig(guildId);
         delete this._pending[guildId];
         await this._save();
-        logger.warn(`🗑️ Retencja: usunięto dane serwera "${info.guildName}" (${guildId}) — 30 dni od usunięcia bota`);
+        logger.warn(`🗑️ Retencja: usunięto konfigurację serwera "${info.guildName}" (${guildId}) — 30 dni od usunięcia bota (dane graczy zostają)`);
         if (this._onDeleted) await this._onDeleted(guildId, info);
     }
 }
