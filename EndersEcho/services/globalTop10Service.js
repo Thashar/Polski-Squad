@@ -272,7 +272,10 @@ class GlobalTop10Service {
 
         const embed = new EmbedBuilder()
             .setColor(0xe74c3c)
-            .setTitle(msgs.globalTop10ReportTitle || '🌐 TOP 10 Globalny')
+            .setAuthor({
+                name:    (msgs.globalTop10ReportTitle || '🌐 TOP 10 Globalny').replace(/^🌐\s*/, ''),
+                iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128',
+            })
             .setDescription(lines || msgs.rankingEmpty)
             .addFields({
                 name:   msgs.globalTop10BossField || '⚔️ Boss okresu',
