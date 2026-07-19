@@ -1011,9 +1011,9 @@ class AdminPanelService {
                 + (unknownNames.length > 5 ? `\n... i ${unknownNames.length - 5} więcej` : '')
             : '✅ Brak — wszystkie nazwy zmapowane';
 
+        // Pełna lista (bez ucinania do 5) — twardy limit 1024 znaków pola zabezpiecza capField()
         const noImageValue = noImage.length > 0
-            ? noImage.slice(0, 5).map(n => `• \`${n}\``).join('\n')
-                + (noImage.length > 5 ? `\n... i ${noImage.length - 5} więcej` : '')
+            ? noImage.map(n => `• \`${n}\``).join('\n')
             : '✅ Wszystkie mają zdjęcie';
 
         return new EmbedBuilder()
