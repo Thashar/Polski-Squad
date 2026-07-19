@@ -1118,7 +1118,7 @@ class RankingService {
             // Nagłówek z ikoną emoji bossa (author); zdjęcie bossa jako thumbnail
             const embed3 = new EmbedBuilder().setColor(embedColor);
             const bossTitle = formatMessage(msgs.bossRankingEmbedTitle || 'Ranking bossa: {bossName}', { bossName: bossDisplayName || '' });
-            embed3.setAuthor({ name: bossTitle, iconURL: 'https://cdn.discordapp.com/emojis/1521275407322845325.webp?size=128' });
+            embed3.setAuthor({ name: bossTitle, iconURL: 'https://cdn.discordapp.com/emojis/1278011356876111873.webp' });
             if (bossImageName) {
                 embed3.setThumbnail(`attachment://${bossImageName}`);
             }
