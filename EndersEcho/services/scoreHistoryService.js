@@ -198,6 +198,8 @@ class ScoreHistoryService {
         const newMonth = new Set();
         // Buckety miesięczne dla ostatnich 3 miesięcy (format YYYY-MM)
         const monthBuckets = {};
+        // Liczba pobitych rekordów per gracz (każdy wpis historii = jedno pobicie), sumowana cross-server
+        const recordCounts = new Map();
 
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
@@ -213,13 +215,16 @@ class ScoreHistoryService {
                     if (!Array.isArray(entries) || entries.length === 0) continue;
 
                     let firstTs = Infinity;
+                    let entryCount = 0;
                     for (const entry of entries) {
                         const ts = new Date(entry.timestamp).getTime();
                         if (isNaN(ts)) continue;
+                        entryCount++;
                         if (ts < firstTs) firstTs = ts;
                         if (ts >= weekAgo) activeWeek.add(userId);
                         if (ts >= monthAgo) activeMonth.add(userId);
                     }
+                    if (entryCount > 0) recordCounts.set(userId, (recordCounts.get(userId) || 0) + entryCount);
 
                     if (firstTs !== Infinity) {
                         if (firstTs >= weekAgo) newWeek.add(userId);
@@ -231,12 +236,19 @@ class ScoreHistoryService {
             }
         }
 
+        // TOP10 graczy najczęściej pobijających rekordy (liczba wpisów historii, cross-server)
+        const topRecordSetters = [...recordCounts.entries()]
+            .map(([userId, count]) => ({ userId, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10);
+
         return {
             activeLastWeek: activeWeek.size,
             activeLastMonth: activeMonth.size,
             newLastWeek: newWeek.size,
             newLastMonth: newMonth.size,
             monthBuckets, // { 'YYYY-MM': count }
+            topRecordSetters, // [{ userId, count }]
         };
     }
 

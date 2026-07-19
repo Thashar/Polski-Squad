@@ -336,7 +336,7 @@ class AdminPanelService {
                 components: [this._buildSystemRow()],
             },
             {
-                embed: this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount),
+                embed: this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount, playerActivityStats),
                 components: [this._buildUsersRow(), this._buildUsersRow2()],
             },
             {
@@ -344,7 +344,7 @@ class AdminPanelService {
                 components: this._buildServersComponents(serverData),
             },
             {
-                embed: this._buildBossesEmbed(bossData),
+                embed: this._buildBossesEmbed(bossData, globalRanking),
                 components: [this._buildBossesRow()],
             },
             {
@@ -567,31 +567,13 @@ class AdminPanelService {
     }
 
     // ─── EMBED 2: Użytkownicy ─────────────────────────────────────────────────
-    _buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount) {
+    _buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount, activityStats = null) {
         const totalPlayers = globalRanking.length;
         const blockedCount = Array.isArray(blockedUsersArr) ? blockedUsersArr.length : 0;
 
         // Statystyki graczy wyliczane z globalnego rankingu
         const top1 = globalRanking[0] || null;
         const leaderValue = top1 ? `**${top1.username || top1.userId}** — ${top1.score || '—'}` : '—';
-
-        const bossCounts = new Map();
-        let recordsToday = 0, records7d = 0;
-        const now = Date.now();
-        const dayMs = 24 * 60 * 60 * 1000;
-        const todayStr = todayKey();
-        for (const p of globalRanking) {
-            if (p.bossName) bossCounts.set(p.bossName, (bossCounts.get(p.bossName) || 0) + 1);
-            if (p.timestamp) {
-                const ts = new Date(p.timestamp).getTime();
-                if (!isNaN(ts)) {
-                    if (new Date(p.timestamp).toISOString().slice(0, 10) === todayStr) recordsToday++;
-                    if (now - ts <= 7 * dayMs) records7d++;
-                }
-            }
-        }
-        const topBoss = [...bossCounts.entries()].sort((a, b) => b[1] - a[1])[0] || null;
-        const topBossValue = topBoss ? `${topBoss[0]} (**${topBoss[1]}** rekordów)` : '—';
 
         // Najświeższy rekord w rankingu (kiedy ustanowiono)
         let newestTs = null;
@@ -601,6 +583,17 @@ class AdminPanelService {
             if (!isNaN(ts) && (newestTs === null || ts > newestTs)) newestTs = ts;
         }
         const newestValue = newestTs !== null ? `<t:${Math.floor(newestTs / 1000)}:R>` : '—';
+
+        // TOP10 graczy najczęściej pobijających rekordy (liczba wpisów historii wyników, cross-server)
+        const usernameMap = new Map(globalRanking.map(p => [p.userId, p.username]));
+        const topSetters = activityStats?.topRecordSetters ?? [];
+        const topSettersValue = topSetters.length > 0
+            ? topSetters.map((s, i) => {
+                const name = usernameMap.get(s.userId);
+                const label = name ? `**${name}**` : `<@${s.userId}>`;
+                return `${i + 1}. ${label} — **${s.count}**`;
+            }).join('\n')
+            : '—';
 
         let blockedValue = `${blockedCount}`;
         if (blockedCount > 0) {
@@ -629,9 +622,8 @@ class AdminPanelService {
                 { name: '⏳ Aktywne cooldowny', value: `${activeCooldownCount}`, inline: true },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
                 { name: '👑 Lider globalny', value: capField(leaderValue, 256), inline: true },
-                { name: '🎯 Najczęstszy boss rekordów', value: capField(topBossValue, 256), inline: true },
                 { name: '🕐 Ostatni rekord', value: newestValue, inline: true },
-                { name: '📈 Nowe rekordy', value: `Dziś: **${recordsToday}** | 7 dni: **${records7d}**`, inline: true },
+                { name: '🏆 TOP10 pobijających rekordy', value: capField(topSettersValue), inline: false },
                 { name: '🔒 Zablokowanych', value: capField(blockedValue), inline: false },
             );
     }
@@ -996,7 +988,7 @@ class AdminPanelService {
     }
 
     // ─── EMBED 4: Bossowie ────────────────────────────────────────────────────
-    _buildBossesEmbed(bossData) {
+    _buildBossesEmbed(bossData, globalRanking = []) {
         if (!bossData) {
             return new EmbedBuilder()
                 .setColor(0x1ABC9C)
@@ -1005,6 +997,14 @@ class AdminPanelService {
         }
 
         const { knownCount, withRecords, unknownNames, noImage, periodBoss } = bossData;
+
+        // Najczęstszy boss wśród aktualnych rekordów globalnego rankingu
+        const bossCounts = new Map();
+        for (const p of globalRanking) {
+            if (p.bossName) bossCounts.set(p.bossName, (bossCounts.get(p.bossName) || 0) + 1);
+        }
+        const topBoss = [...bossCounts.entries()].sort((a, b) => b[1] - a[1])[0] || null;
+        const topBossValue = topBoss ? `${topBoss[0]} (**${topBoss[1]}** rekordów)` : '—';
 
         const unknownValue = unknownNames.length > 0
             ? unknownNames.slice(0, 5).map(n => `• \`${n}\``).join('\n')
@@ -1023,6 +1023,7 @@ class AdminPanelService {
                 { name: '👾 W bazie', value: `${knownCount}`, inline: true },
                 { name: '🏆 Z rekordami', value: `${withRecords.length}`, inline: true },
                 { name: '⚔️ Boss okresu', value: capField(periodBoss || '—', 256), inline: true },
+                { name: '🎯 Najczęstszy boss rekordów', value: capField(topBossValue, 256), inline: false },
                 { name: `⚠️ Nieznane nazwy do zmapowania (${unknownNames.length})`, value: capField(unknownValue), inline: false },
                 { name: `🖼️ Bez zdjęcia (${noImage.length})`, value: capField(noImageValue), inline: false },
             );
