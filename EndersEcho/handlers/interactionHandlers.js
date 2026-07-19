@@ -468,6 +468,22 @@ class InteractionHandler {
                 await this._handlePanelBanGuildSearch(interaction);
                 return;
             }
+            if (interaction.customId === 'cc_player_lookup_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcPlayerLookupModal(interaction);
+                return;
+            }
+            if (interaction.customId === 'cc_cost_alert_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcCostAlertModal(interaction);
+                return;
+            }
             if (interaction.customId === 'ach_check_modal') {
                 await this._handleAchCheckModal(interaction);
                 return;
@@ -2993,6 +3009,398 @@ class InteractionHandler {
         await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
     }
 
+    /** Dopisuje wpis do dziennika akcji admina w Centrum Dowodzenia */
+    _ccAudit(interaction, action) {
+        try {
+            const adminName = interaction.member?.displayName || interaction.user?.username || 'admin';
+            this.adminPanelService?.logAdminAction?.(adminName, action);
+        } catch { /* dziennik nie może blokować akcji */ }
+    }
+
+    // ── CC: Podgląd gracza ───────────────────────────────────────────────────
+    async _handleCcPlayerLookup(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const modal = new ModalBuilder()
+            .setCustomId('cc_player_lookup_modal')
+            .setTitle('Podgląd gracza');
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('cc_player_query')
+                .setLabel('Fragment nicku gracza')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMinLength(1)
+                .setMaxLength(50)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handleCcPlayerLookupModal(interaction) {
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const query = interaction.fields.getTextInputValue('cc_player_query').trim().toLowerCase();
+        const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+        const matches = globalRanking.filter(p => (p.username || '').toLowerCase().includes(query));
+
+        if (matches.length === 0) {
+            await interaction.editReply({ content: `❌ Nie znaleziono gracza pasującego do "${query}".` });
+            return;
+        }
+        if (matches.length === 1) {
+            const embed = await this._buildCcPlayerDetailEmbed(matches[0], globalRanking, interaction.client);
+            await interaction.editReply({ embeds: [embed] });
+            return;
+        }
+        const options = matches.slice(0, 25).map(p => ({
+            label: (p.username || p.userId).slice(0, 100),
+            description: `${p.score || ''} ${p.bossName ? `· ${p.bossName}` : ''}`.trim().slice(0, 100) || undefined,
+            value: p.userId,
+        }));
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('cc_player_lookup_sel')
+            .setPlaceholder(`Wyniki (${matches.length}) — wybierz gracza`)
+            .addOptions(options);
+        await interaction.editReply({
+            content: `🔍 Znaleziono **${matches.length}** graczy:`,
+            components: [new ActionRowBuilder().addComponents(select)],
+        });
+    }
+
+    async _handleCcPlayerLookupSelect(interaction) {
+        await interaction.deferUpdate();
+        const userId = interaction.values[0];
+        const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
+        const player = globalRanking.find(p => p.userId === userId);
+        if (!player) {
+            await interaction.editReply({ content: '❌ Gracz nie znaleziony w rankingu.', components: [] });
+            return;
+        }
+        const embed = await this._buildCcPlayerDetailEmbed(player, globalRanking, interaction.client);
+        await interaction.editReply({ content: null, embeds: [embed], components: [] });
+    }
+
+    /** Buduje szczegółowy embed gracza dla Centrum Dowodzenia (rekord, blokady, cooldown, odrzucenia, osiągnięcia) */
+    async _buildCcPlayerDetailEmbed(player, globalRanking, client) {
+        const cfgSvc = this.guildConfigService;
+        const position = globalRanking.findIndex(p => p.userId === player.userId) + 1;
+        const serverName = cfgSvc?.getConfig(player.sourceGuildId)?.guildName || player.sourceGuildId || '—';
+
+        // Blokada
+        let blockValue = '✅ Nie';
+        try {
+            const blocked = await this.userBlockService?.getBlockedUsers() ?? [];
+            const entry = blocked.find(b => b.userId === player.userId);
+            if (entry) {
+                blockValue = entry.blockedUntil
+                    ? `🔒 Tak — do ${new Date(entry.blockedUntil).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' })}`
+                    : '🔒 Tak — permanentnie';
+                if (entry.blockedByHeadAdmin) blockValue += ' (head admin)';
+            }
+        } catch { /* opcjonalne */ }
+
+        // Cooldown
+        const remainingMs = this.updateCooldownService?.getRemainingMs(player.userId);
+        const cooldownValue = remainingMs ? `⏳ ${formatCooldownTime(remainingMs)}` : '✅ Brak';
+
+        // Odrzucenia w tym miesiącu (wszystkie serwery)
+        const month = new Date().toISOString().slice(0, 7);
+        let rejections = 0;
+        try {
+            const rejData = this.ocrStatsService?.getStats()?.userRejections || {};
+            for (const guildRej of Object.values(rejData)) {
+                rejections += guildRej?.[player.userId]?.[month] || 0;
+            }
+        } catch { /* opcjonalne */ }
+
+        // Osiągnięcia (serwer źródłowy rekordu)
+        let achCount = null;
+        try {
+            const unlocked = await this.achievementService?.getUnlockedAchievements(player.sourceGuildId, player.userId);
+            if (Array.isArray(unlocked)) achCount = unlocked.length;
+        } catch { /* opcjonalne */ }
+
+        return new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(`🔍 ${player.username || player.userId}`)
+            .addFields(
+                { name: '🌐 Pozycja globalna', value: position > 0 ? `#${position} / ${globalRanking.length}` : '—', inline: true },
+                { name: '🏆 Rekord', value: `${player.score || '—'}${player.bossName ? ` (${player.bossName})` : ''}`, inline: true },
+                { name: '🖥️ Serwer', value: serverName, inline: true },
+                { name: '🔒 Zablokowany', value: blockValue, inline: true },
+                { name: '⏳ Cooldown', value: cooldownValue, inline: true },
+                { name: `🚫 Odrzucenia (${month})`, value: `${rejections}`, inline: true },
+                { name: '🏅 Osiągnięcia', value: achCount !== null ? `${achCount}` : '—', inline: true },
+                { name: '👤 Profil', value: `<@${player.userId}>`, inline: true },
+            )
+            .setTimestamp();
+    }
+
+    // ── CC: Wyczyść cooldown gracza ──────────────────────────────────────────
+    async _handleCcClearCooldown(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const now = Date.now();
+        const active = [];
+        for (const [userId, entry] of (this.updateCooldownService?._cooldowns || new Map())) {
+            if (entry.expiresAt > now) active.push({ userId, remainingMs: entry.expiresAt - now });
+        }
+        if (active.length === 0) {
+            await interaction.reply({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setDescription('✅ Brak aktywnych cooldownów.')],
+                flags: ['Ephemeral'],
+            });
+            return;
+        }
+        const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys())).catch(() => []);
+        const nameMap = new Map(globalRanking.map(p => [p.userId, p.username]));
+        const options = active.slice(0, 25).map(a => ({
+            label: (nameMap.get(a.userId) || a.userId).slice(0, 100),
+            description: `Pozostało: ${formatCooldownTime(a.remainingMs)}`.slice(0, 100),
+            value: a.userId,
+        }));
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('cc_clear_cd_sel')
+            .setPlaceholder(`Aktywne cooldowny (${active.length}) — wybierz gracza`)
+            .addOptions(options);
+        await interaction.reply({
+            content: '🧊 Wybierz gracza, któremu wyczyścić cooldown:',
+            components: [new ActionRowBuilder().addComponents(select)],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    async _handleCcClearCooldownSelect(interaction) {
+        const userId = interaction.values[0];
+        await this.updateCooldownService.clearCooldown(userId);
+        const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys())).catch(() => []);
+        const username = globalRanking.find(p => p.userId === userId)?.username || userId;
+        this._ccAudit(interaction, `🧊 Wyczyszczono cooldown: ${username}`);
+        this.adminPanelService?.refresh();
+        await interaction.update({
+            content: `✅ Cooldown gracza **${username}** został wyczyszczony.`,
+            components: [],
+        });
+    }
+
+    // ── CC: Oczekujące zgłoszenia CV ─────────────────────────────────────────
+    async _handleCcPendingCv(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const sessions = Object.entries(this.communityVerificationService?._sessions || {})
+            .filter(([, s]) => s.status === 'pending')
+            .sort((a, b) => new Date(b[1].createdAt || 0) - new Date(a[1].createdAt || 0));
+
+        if (sessions.length === 0) {
+            await interaction.reply({
+                embeds: [new EmbedBuilder().setColor(0x57F287).setDescription('✅ Brak oczekujących zgłoszeń weryfikacji społeczności.')],
+                flags: ['Ephemeral'],
+            });
+            return;
+        }
+        const cfgSvc = this.guildConfigService;
+        const lines = sessions.slice(0, 15).map(([msgId, s]) => {
+            const serverName = cfgSvc?.getConfig(s.guildId)?.guildName || s.guildId;
+            const link = s.messageUrl ? ` — [wiadomość](${s.messageUrl})` : '';
+            return `• <@${s.userId}> — zgłoszeń: **${s.count || 0}** — ${serverName}${link}`;
+        });
+        if (sessions.length > 15) lines.push(`... i ${sessions.length - 15} więcej`);
+        let cvDesc = lines.join('\n');
+        if (cvDesc.length > 4000) cvDesc = cvDesc.slice(0, 3998) + '…';
+        await interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle(`🗳️ Oczekujące zgłoszenia CV (${sessions.length})`)
+                .setDescription(cvDesc)],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    // ── CC: Nieskonfigurowane serwery (wersja ephemeral, nie rusza wiadomości panelu) ──
+    async _handleCcUnconfigured(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const t = this._panelT(interaction.guildId);
+        const unconfigured = [];
+        for (const [guildId, guild] of interaction.client.guilds.cache) {
+            if (this.config.adminGuildId && guildId === this.config.adminGuildId) continue;
+            if (!this.guildConfigService.isConfigured(guildId)) {
+                unconfigured.push({ id: guildId, name: guild.name, memberCount: guild.memberCount });
+            }
+        }
+        const description = unconfigured.length === 0
+            ? t('✅ Wszystkie serwery z botem są skonfigurowane.', '✅ All servers with the bot are configured.')
+            : unconfigured.map(g => `• **${g.name}** (\`${g.id}\`) — ${g.memberCount} członków`).join('\n');
+        await interaction.reply({
+            embeds: [new EmbedBuilder()
+                .setColor(unconfigured.length > 0 ? 0xFEE75C : 0x57F287)
+                .setTitle(t('⚠️ Nieskonfigurowane serwery', '⚠️ Unconfigured Servers'))
+                .setDescription(description)],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    // ── CC: Diagnostyka wybranego serwera ────────────────────────────────────
+    async _handleCcDiagServer(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const cfgSvc = this.guildConfigService;
+        const guilds = [];
+        for (const guildId of cfgSvc.getAllConfiguredGuildIds()) {
+            const g = interaction.client.guilds.cache.get(guildId);
+            if (g) guilds.push({ id: guildId, name: cfgSvc.getConfig(guildId)?.guildName || g.name });
+        }
+        if (guilds.length === 0) {
+            await interaction.reply({ content: '❌ Brak skonfigurowanych serwerów z botem.', flags: ['Ephemeral'] });
+            return;
+        }
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('cc_diag_sel')
+            .setPlaceholder('Wybierz serwer do diagnostyki')
+            .addOptions(guilds.slice(0, 25).map(g => ({ label: g.name.slice(0, 100), value: g.id })));
+        await interaction.reply({
+            content: '🔍 Diagnostyka uprawnień — wybierz serwer:',
+            components: [new ActionRowBuilder().addComponents(select)],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    async _handleCcDiagSelect(interaction) {
+        const guildId = interaction.values[0];
+        const guild = interaction.client.guilds.cache.get(guildId);
+        if (!guild) {
+            await interaction.update({ content: '❌ Serwer niedostępny w cache.', components: [] });
+            return;
+        }
+        const t = this._panelT(interaction.guildId);
+        const embed = this._buildDiagnosticsEmbed(guild, t, interaction.client);
+        await interaction.update({ content: null, embeds: [embed], components: [] });
+    }
+
+    // ── CC: Podgląd raportu TOP10 na żądanie ─────────────────────────────────
+    async _handleCcTop10Preview(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            const embed = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
+            await interaction.editReply({ content: '📢 Podgląd raportu TOP10 (wskaźniki zmian są symulowane):', embeds: [embed] });
+        } catch (err) {
+            await interaction.editReply({ content: `❌ Błąd generowania podglądu: ${err.message}` });
+        }
+    }
+
+    // ── CC: Konfiguracja bossów (wersja ephemeral) ───────────────────────────
+    async _handleCcActionBossCfg(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        if (!this.bossAliasService) {
+            await interaction.reply({ content: '⚠️ BossAliasService niedostępny.', flags: ['Ephemeral'] });
+            return;
+        }
+        const { embed, components } = this._buildBossConfigPanel(interaction);
+        await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+    }
+
+    // ── CC: Alert kosztowy ───────────────────────────────────────────────────
+    async _handleCcCostAlert(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const current = this.adminPanelService?.getCostAlertThreshold?.();
+        const modal = new ModalBuilder()
+            .setCustomId('cc_cost_alert_modal')
+            .setTitle('Alert kosztowy AI');
+        const input = new TextInputBuilder()
+            .setCustomId('cc_cost_alert_value')
+            .setLabel('Próg dzienny w USD (puste = wyłącz)')
+            .setPlaceholder('np. 0.50')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setMaxLength(10);
+        if (current) input.setValue(String(current));
+        modal.addComponents(new ActionRowBuilder().addComponents(input));
+        await interaction.showModal(modal);
+    }
+
+    async _handleCcCostAlertModal(interaction) {
+        const raw = interaction.fields.getTextInputValue('cc_cost_alert_value').trim().replace(',', '.');
+        let threshold = null;
+        if (raw !== '') {
+            threshold = parseFloat(raw);
+            if (isNaN(threshold) || threshold <= 0) {
+                await interaction.reply({ content: '❌ Nieprawidłowa wartość progu (podaj liczbę > 0, np. 0.50).', flags: ['Ephemeral'] });
+                return;
+            }
+        }
+        await this.adminPanelService?.setCostAlertThreshold?.(threshold);
+        this._ccAudit(interaction, threshold ? `🔔 Ustawiono alert kosztowy: $${threshold}/dzień` : '🔕 Wyłączono alert kosztowy');
+        this.adminPanelService?.refresh();
+        await interaction.reply({
+            content: threshold
+                ? `✅ Alert kosztowy ustawiony: ping przy dziennym koszcie ≥ **$${threshold}**.`
+                : '✅ Alert kosztowy wyłączony.',
+            flags: ['Ephemeral'],
+        });
+    }
+
+    // ── CC: Globalny kill-switch OCR ─────────────────────────────────────────
+    async _handleCcGlobalOcr(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const blocked = this.adminPanelService?.isGlobalOcrBlocked?.() === true;
+        const target = blocked ? 'unblock' : 'block';
+        const desc = blocked
+            ? '▶️ Włączyć OCR globalnie? Wrócą ustawienia per-serwer.'
+            : '🛑 Wyłączyć OCR **globalnie** (tryb serwisowy)?\n`/update` i `/test` przestaną działać na WSZYSTKICH serwerach (head admin ma nadal dostęp).';
+        await interaction.reply({
+            embeds: [new EmbedBuilder().setColor(blocked ? 0x57F287 : 0xED4245).setDescription(desc)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`cc_global_ocr_ok_${target}`)
+                    .setEmoji(blocked ? '▶️' : '🛑')
+                    .setLabel(blocked ? 'Włącz globalnie' : 'Wyłącz globalnie')
+                    .setStyle(blocked ? ButtonStyle.Success : ButtonStyle.Danger),
+            )],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    async _handleCcGlobalOcrConfirm(interaction, target) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const block = target === 'block';
+        await this.adminPanelService?.setGlobalOcrBlocked?.(block);
+        this._ccAudit(interaction, block ? '🛑 Wyłączono OCR globalnie (tryb serwisowy)' : '▶️ Włączono OCR globalnie');
+        this.adminPanelService?.refresh();
+        await interaction.update({
+            embeds: [new EmbedBuilder()
+                .setColor(block ? 0xED4245 : 0x57F287)
+                .setDescription(block
+                    ? '🛑 OCR został **wyłączony globalnie** — `/update` i `/test` zablokowane na wszystkich serwerach.'
+                    : '▶️ OCR został **włączony globalnie** — obowiązują ustawienia per-serwer.')],
+            components: [],
+        });
+    }
+
     async _handleCcActionTokens(interaction) {
         if (!this._isHeadAdmin(interaction.user.id)) {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -3192,6 +3600,7 @@ class InteractionHandler {
             } catch (roleError) {
                 logger.warn(`Błąd aktualizacji ról TOP po usunięciu (panel): ${roleError.message}`);
             }
+            this._ccAudit(interaction, `🗑️ Usunięto gracza z rankingu: ${playerName}`);
             this.adminPanelService?.refresh();
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
@@ -3510,6 +3919,7 @@ class InteractionHandler {
                 }
             }
 
+            this._ccAudit(interaction, `🧹 Usunięto wynik ${removed?.score || ''} gracza ${oldUsername}`);
             this.adminPanelService?.refresh();
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
@@ -4425,6 +4835,12 @@ class InteractionHandler {
 
         const isOcrAuthorized = this.config.blockOcrUserIds.includes(interaction.user.id);
         if (this.ocrBlockService.isBlocked(interaction.guildId, ocrBlockKey) && !isOcrAuthorized) {
+            await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Globalny kill-switch OCR (tryb serwisowy z Centrum Dowodzenia) — blokuje wszystkie serwery naraz
+        if (this.adminPanelService?.isGlobalOcrBlocked?.() && !isOcrAuthorized) {
             await interaction.reply({ content: msgs.ocrBlocked, flags: ['Ephemeral'] });
             return;
         }
@@ -5615,20 +6031,27 @@ class InteractionHandler {
             }
 
         } catch (error) {
-            const is503 = error?.message?.includes('503') || error?.message?.includes('Service Unavailable');
+            const errStatus = error?.status ?? error?.statusCode ?? error?.code;
+            const is503 = error?.message?.includes('503') || error?.message?.includes('Service Unavailable') || errStatus === 503;
+            // Każdy błąd API (przeciążenie, rate limit, błąd serwera, sieć) → to nie wina użytkownika
+            const isApiError = is503
+                || [429, 500].includes(errStatus)
+                || ['ECONNRESET', 'ETIMEDOUT'].includes(errStatus)
+                || /\b(429|500)\b|Too Many Requests|Internal Server Error|overloaded|fetch failed/i.test(error?.message || '');
 
-            if (is503 && !dryRun && this.updateCooldownService && !this._isHeadAdmin(interaction.user.id)) {
+            // Odrzucenie przez API → użytkownik nie dostaje cooldownu (wyczyść ustawiony z góry)
+            if (isApiError && !dryRun && this.updateCooldownService && !this._isHeadAdmin(interaction.user.id)) {
                 await this.updateCooldownService.clearCooldown(interaction.user.id);
             }
 
-            if (!is503) {
+            if (!isApiError) {
                 await this.logService.logOCRError(error, `handle${commandName.charAt(0).toUpperCase() + commandName.slice(1)}Command`, interaction.guildId);
             } else {
-                gl.warn(`⚠️ [/${commandName}] AI 503 Service Unavailable — cooldown wyczyszczony dla ${interaction.user.username}`);
+                gl.warn(`⚠️ [/${commandName}] Błąd API AI (${errStatus || 'brak statusu'}) — cooldown wyczyszczony dla ${interaction.user.username}`);
             }
 
             try {
-                await interaction.editReply(is503 ? msgs.updateAiOverloaded : msgs.updateError);
+                await interaction.editReply(isApiError ? msgs.updateAiOverloaded : msgs.updateError);
             } catch (replyError) {
                 gl.error(`Błąd podczas wysyłania komunikatu o błędzie: ${replyError.message}`);
             }
@@ -5761,6 +6184,16 @@ class InteractionHandler {
         if (customId === 'cc_action_tokens') return 'CC: Zużycie tokenów';
         if (customId === 'cc_action_cmd_usage') return 'CC: Użycia komend';
         if (customId === 'cc_action_ocr_stats') return 'CC: Success Rate';
+        if (customId === 'cc_player_lookup') return 'CC: Podgląd gracza';
+        if (customId === 'cc_clear_cooldown') return 'CC: Wyczyść cooldown';
+        if (customId === 'cc_pending_cv') return 'CC: Oczekujące CV';
+        if (customId === 'cc_unconfigured') return 'CC: Nieskonfigurowane serwery';
+        if (customId === 'cc_diag_server') return 'CC: Diagnostyka serwera';
+        if (customId === 'cc_top10_preview') return 'CC: Podgląd TOP10';
+        if (customId === 'cc_action_boss_cfg') return 'CC: Konfiguracja bossów';
+        if (customId === 'cc_cost_alert') return 'CC: Alert kosztowy';
+        if (customId === 'cc_global_ocr') return 'CC: Globalny OCR (przełącznik)';
+        if (customId.startsWith('cc_global_ocr_ok_')) return 'CC: Globalny OCR (potwierdzenie)';
         return `panel: ${customId}`;
     }
 
@@ -5924,6 +6357,8 @@ class InteractionHandler {
                     }
                 } catch {}
                 const adminName = interaction.member?.displayName || interaction.user.username;
+                this._ccAudit(interaction, `↩️ Cofnięto wynik: <@${targetUserId}>`);
+                this.adminPanelService?.refresh();
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .addFields({ name: '↩️ Cofnięto', value: `przez **${adminName}**`, inline: false });
                 // Dezaktywuj przycisk cofnięcia (zamiast usuwać)
@@ -6163,6 +6598,46 @@ class InteractionHandler {
                 await this._handleCcActionOcrStats(interaction);
                 return;
             }
+            if (customId === 'cc_player_lookup') {
+                await this._handleCcPlayerLookup(interaction);
+                return;
+            }
+            if (customId === 'cc_clear_cooldown') {
+                await this._handleCcClearCooldown(interaction);
+                return;
+            }
+            if (customId === 'cc_pending_cv') {
+                await this._handleCcPendingCv(interaction);
+                return;
+            }
+            if (customId === 'cc_unconfigured') {
+                await this._handleCcUnconfigured(interaction);
+                return;
+            }
+            if (customId === 'cc_diag_server') {
+                await this._handleCcDiagServer(interaction);
+                return;
+            }
+            if (customId === 'cc_top10_preview') {
+                await this._handleCcTop10Preview(interaction);
+                return;
+            }
+            if (customId === 'cc_action_boss_cfg') {
+                await this._handleCcActionBossCfg(interaction);
+                return;
+            }
+            if (customId === 'cc_cost_alert') {
+                await this._handleCcCostAlert(interaction);
+                return;
+            }
+            if (customId.startsWith('cc_global_ocr_ok_')) {
+                await this._handleCcGlobalOcrConfirm(interaction, customId.replace('cc_global_ocr_ok_', ''));
+                return;
+            }
+            if (customId === 'cc_global_ocr') {
+                await this._handleCcGlobalOcr(interaction);
+                return;
+            }
             if (customId === 'panel_remove') {
                 await this._handlePanelRemove(interaction);
                 return;
@@ -6299,6 +6774,15 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelOcrAction(interaction, customId);
+                {
+                    const en = customId.startsWith('panel_ocr_en_');
+                    const rest = customId.replace(en ? 'panel_ocr_en_' : 'panel_ocr_dis_', '');
+                    const target = rest.split('_')[0]; // update | test | both
+                    const gid = rest.split('_').slice(1).join('_');
+                    const gName = this.guildConfigService?.getConfig(gid)?.guildName || gid;
+                    this._ccAudit(interaction, `🔄 AI OCR ${en ? 'włączono' : 'wyłączono'} (${target}) — ${gName}`);
+                }
+                this.adminPanelService?.refresh();
                 return;
             }
             if (customId === 'panel_limit') {
@@ -6960,6 +7444,8 @@ class InteractionHandler {
             await this._updateAllCvReportMsgs(interaction.client, session,
                 msgs.cvAdminBlocked.replace('{adminName}', adminName), []);
         }
+        const cvActionLabel = action === 'approve' ? '✅ CV: zatwierdzono wynik' : action === 'remove' ? '🗑️ CV: usunięto rekord' : '🔒 CV: zablokowano gracza';
+        this._ccAudit(interaction, `${cvActionLabel}: <@${session.userId}>`);
         this.adminPanelService?.refresh();
     }
 
@@ -8161,6 +8647,32 @@ class InteractionHandler {
                 return;
             }
 
+            // Centrum Dowodzenia — selecty nowych akcji (tylko head admin)
+            if (customId === 'cc_player_lookup_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcPlayerLookupSelect(interaction);
+                return;
+            }
+            if (customId === 'cc_clear_cd_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcClearCooldownSelect(interaction);
+                return;
+            }
+            if (customId === 'cc_diag_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcDiagSelect(interaction);
+                return;
+            }
+
             if (customId === 'panel_unblock_select') {
                 const msgs = this.msgs(interaction.guildId);
                 const t = this._panelT(interaction.guildId);
@@ -8199,7 +8711,10 @@ class InteractionHandler {
                 }
                 const success = await this.userBlockService.unblockUser(targetUserId, isHeadAdmin);
                 const username = entry?.username || targetUserId;
-                if (success === true) this.adminPanelService?.refresh();
+                if (success === true) {
+                    this._ccAudit(interaction, `🔓 Odblokowano gracza: ${username}`);
+                    this.adminPanelService?.refresh();
+                }
                 await interaction.update({
                     embeds: [new EmbedBuilder().setColor(success === true ? 0x57F287 : 0xFF4444)
                         .setTitle(success === true ? t('✅ Odblokowano', '✅ Unblocked') : t('⚠️ Nie znaleziono', '⚠️ Not Found'))
@@ -9095,6 +9610,7 @@ class InteractionHandler {
 
         logger.info(`🔒 Zablokowano ${targetUsername} (${targetUserId}) ${blockedUntil ? `do ${new Date(blockedUntil).toISOString()}` : 'permanentnie'} przez ${adminName}`);
         this._announceUserBlock(interaction.client, targetUserId, blockedUntil, adminName);
+        this._ccAudit(interaction, `🔒 Zablokowano gracza: ${targetUsername}${blockedUntil ? '' : ' (permanentnie)'}`);
         this.adminPanelService?.refresh();
 
         if (crossUpdateGlobalMsgId) {
@@ -9222,6 +9738,8 @@ class InteractionHandler {
             results.push(formatMessage(msgs.limitCooldownSet, { cooldown: rawCooldown }));
         }
 
+        this._ccAudit(interaction, `⚙️ Zmieniono limity: dzienny=${rawUsage || 'brak'}, cooldown=${rawCooldown || 'brak'}`);
+        this.adminPanelService?.refresh();
         await interaction.reply({ content: results.join('\n'), flags: ['Ephemeral'] });
     }
 
@@ -9529,6 +10047,7 @@ class InteractionHandler {
             gl.info(`🎯 [Analizuj] Wynik zapisany — isNewRecord: ${isNewRecord}`);
             if (this.ocrStatsService) this.ocrStatsService.recordAnalyze().catch(() => {});
             if (this.adminPanelService) {
+                this._ccAudit(interaction, `🔬 Analiza manualna: ${userName} — ${aiResult.score}`);
                 this.adminPanelService.setLastRecord(userName, aiResult.score, aiResult.bossName, targetGuildId);
                 this.adminPanelService.refresh();
             }
@@ -9981,6 +10500,8 @@ class InteractionHandler {
             const revertInfo = previousRecord?.score
                 ? `↩️ Wynik cofnięty przez **${reverterName}** → przywrócono: **${previousRecord.score}** | ${now}`
                 : `↩️ Wynik cofnięty przez **${reverterName}** → gracz usunięty z rankingu | ${now}`;
+            this._ccAudit(interaction, `↩️ Cofnięto wynik (Analizuj): ${userName}`);
+            this.adminPanelService?.refresh();
 
             const updatedEmbeds = interaction.message.embeds.map(e => {
                 const builder = EmbedBuilder.from(e);
@@ -11222,10 +11743,18 @@ class InteractionHandler {
     // =====================================================================
 
     async _handlePanelDiagnostics(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const embed = this._buildDiagnosticsEmbed(interaction.guild, t, interaction.client);
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_back_configure').setEmoji('◀️').setLabel(t('Wróć do konfiguracji', 'Back to Configuration')).setStyle(ButtonStyle.Secondary),
+        );
+        await interaction.update({ embeds: [embed], components: [backRow] });
+    }
+
+    /** Buduje embed diagnostyki uprawnień dla dowolnego serwera (używany przez /configure i Centrum Dowodzenia) */
+    _buildDiagnosticsEmbed(guild, t, client) {
         const { normalizeTiers } = require('../services/roleService');
         const { PermissionFlagsBits } = require('discord.js');
-        const t = this._panelT(interaction.guildId);
-        const guild = interaction.guild;
         const botMember = guild.members.me;
         const guildId = guild.id;
         const guildConfig = this.config.getGuildConfig(guildId);
@@ -11297,7 +11826,7 @@ class InteractionHandler {
         ];
         const checkReportChannel = (chId, label, useClientCache) => {
             const ch = useClientCache
-                ? interaction.client.channels.cache.get(chId)
+                ? client.channels.cache.get(chId)
                 : guild.channels.cache.get(chId);
             if (!ch) {
                 addIssue(`❌ ${label} — ` + t(`kanał \`${chId}\` nieznaleziony w cache`, `channel \`${chId}\` not found in cache`));
@@ -11362,7 +11891,7 @@ class InteractionHandler {
         // --- Intenty ---
         lines.push('');
         lines.push(t('🔧 **Intenty klienta**', '🔧 **Client Intents**'));
-        const intents = interaction.client.options.intents;
+        const intents = client.options.intents;
         const { GatewayIntentBits } = require('discord.js');
         const intentChecks = [
             [GatewayIntentBits.GuildMembers,    t('GuildMembers (fetch memberów, rankingi ról)', 'GuildMembers (member fetch, role rankings)')],
@@ -11382,17 +11911,12 @@ class InteractionHandler {
             ? t('Wykryto problemy — sprawdź szczegóły poniżej.', 'Issues detected — check details below.')
             : t('✅ Wszystko wygląda poprawnie.', '✅ Everything looks correct.');
 
-        const embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .setColor(color)
             .setTitle(t(`🔍 Diagnostyka — ${guild.name}`, `🔍 Diagnostics — ${guild.name}`))
             .setDescription(`${summary}\n\n${lines.join('\n')}`)
             .setFooter({ text: t(`Rola bota: "${botRoleName}" · poz. ${botHighestPos}`, `Bot role: "${botRoleName}" · pos. ${botHighestPos}`) })
             .setTimestamp();
-
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('panel_back_configure').setEmoji('◀️').setLabel(t('Wróć do konfiguracji', 'Back to Configuration')).setStyle(ButtonStyle.Secondary),
-        );
-        await interaction.update({ embeds: [embed], components: [backRow] });
     }
 
     async _handlePanelBanServer(interaction) {
@@ -11533,6 +12057,8 @@ class InteractionHandler {
 
         const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
         this.logService._gl(interaction.guildId).warn(`${this.logService.nickLink(nick, interaction.user.id)} Zbanowano serwer "${guildName}" (${guildIdToBan})`);
+        this._ccAudit(interaction, `🚫 Zbanowano serwer: ${guildName}`);
+        this.adminPanelService?.refresh();
 
         await interaction.update({
             embeds: [new EmbedBuilder()
@@ -11652,6 +12178,8 @@ class InteractionHandler {
 
             const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
             this.logService._gl(interaction.guildId).warn(`${this.logService.nickLink(nick, interaction.user.id)} Usunięto dane serwera "${guildName}" (${guildIdToDelete})`);
+            this._ccAudit(interaction, `🗑️ Usunięto dane serwera: ${guildName}`);
+            this.adminPanelService?.refresh();
 
             await interaction.update({
                 embeds: [new EmbedBuilder()
@@ -11731,6 +12259,7 @@ class InteractionHandler {
 
         const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
         this.logService._gl(interaction.guildId).info(`${this.logService.nickLink(nick, interaction.user.id)} Odbanowano serwer "${guildName}" (${guildId})`);
+        this._ccAudit(interaction, `✅ Odbanowano serwer: ${guildName}`);
 
         await interaction.update({
             embeds: [new EmbedBuilder()

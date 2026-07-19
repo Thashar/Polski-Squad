@@ -15,6 +15,10 @@ class OcrStatsService {
             allTime:    { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0 },
             resettable: { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0, resetAt: null },
             userRejections: {},
+            // Globalne liczniki zapytań do API AI (nie podlegają resetowi):
+            // requests = każda próba zapytania, rejected = próba odrzucona przez API (przeciążenie/sieć),
+            // fullFailures = wszystkie retry wyczerpane → screen użytkownika niezaakceptowany przez błąd API
+            apiStats: { requests: 0, rejected: 0, fullFailures: 0 },
         };
     }
 
@@ -45,6 +49,7 @@ class OcrStatsService {
             // Uzupełnij brakujące pola dla starych plików (backward compat)
             this._data.allTime.doubleCheckRecovered = this._data.allTime.doubleCheckRecovered || 0;
             this._data.resettable.doubleCheckRecovered = this._data.resettable.doubleCheckRecovered || 0;
+            if (!this._data.apiStats) this._data.apiStats = { requests: 0, rejected: 0, fullFailures: 0 };
         } catch {
             this._data = this._defaultData();
         }
@@ -65,6 +70,30 @@ class OcrStatsService {
         if (!this._data) await this.load();
         this._data.resettable = { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0, resetAt: new Date().toISOString() };
         await this._save();
+    }
+
+    // ── Globalne liczniki API AI (nie resetowane przyciskiem resetu) ──────────
+    async recordApiRequest() {
+        if (!this._data) await this.load();
+        if (!this._data.apiStats) this._data.apiStats = { requests: 0, rejected: 0, fullFailures: 0 };
+        this._data.apiStats.requests++;
+        this._save().catch(() => {});
+    }
+
+    // Pojedyncza próba odrzucona przez API (429/500/503/błąd sieci)
+    async recordApiRejection() {
+        if (!this._data) await this.load();
+        if (!this._data.apiStats) this._data.apiStats = { requests: 0, rejected: 0, fullFailures: 0 };
+        this._data.apiStats.rejected++;
+        this._save().catch(() => {});
+    }
+
+    // Wszystkie retry wyczerpane — API odrzuciło zapytania tyle razy pod rząd, że screen nie został zaakceptowany
+    async recordApiFullFailure() {
+        if (!this._data) await this.load();
+        if (!this._data.apiStats) this._data.apiStats = { requests: 0, rejected: 0, fullFailures: 0 };
+        this._data.apiStats.fullFailures++;
+        this._save().catch(() => {});
     }
 
     // Podwójna analiza wzorca: pierwsza próba negatywna, druga próba pozytywna (screen przeszedł za drugim razem)

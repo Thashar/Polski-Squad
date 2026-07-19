@@ -131,7 +131,11 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     scoreHistoryService,
     testerService,
     usageLimitService,
+    bossAliasService,
+    bossRecordService,
 });
+// Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
+aiOcrService.setStatsService(ocrStatsService);
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService);
 
 /**

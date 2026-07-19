@@ -35,6 +35,7 @@ class AIOCRService {
         this.config = config;
         this.adapter = llmAdapter;
         this.bossAliasService = bossAliasService;
+        this._statsService = null; // OcrStatsService — globalne liczniki zapytań API (wstrzykiwany setterem)
 
         const apiKey = process.env.ENDERSECHO_GOOGLE_AI_API_KEY;
         this.enabled = !!apiKey && config.ocr.useAI === true && !!llmAdapter;
@@ -60,9 +61,15 @@ class AIOCRService {
      * Zachowuje poprzedni kształt odpowiedzi (text, promptTokens, outputTokens,
      * thoughtTokens) + dodaje pola telemetryczne (durationMs, traceId, provider).
      */
+    /** Wstrzykuje OcrStatsService do rejestrowania globalnych liczników zapytań API */
+    setStatsService(statsService) {
+        this._statsService = statsService;
+    }
+
     async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3, onRetry = null) {
         let lastError;
         for (let attempt = 0; attempt < retries; attempt++) {
+            this._statsService?.recordApiRequest?.().catch(() => {});
             try {
                 const result = await this.adapter.generate({
                     provider: 'gemini',
@@ -87,7 +94,14 @@ class AIOCRService {
                 lastError = err;
                 const status = err.status ?? err.statusCode ?? err.code;
                 const isRetryable = status === 429 || status === 503 || status === 500 || status === 'ECONNRESET' || status === 'ETIMEDOUT';
-                if (!isRetryable || attempt === retries - 1) throw err;
+                if (isRetryable) this._statsService?.recordApiRejection?.().catch(() => {});
+                if (!isRetryable || attempt === retries - 1) {
+                    // Wyczerpane retry na błędzie API → screen użytkownika przepada przez API, nie jego winę
+                    if (isRetryable && attempt === retries - 1) {
+                        this._statsService?.recordApiFullFailure?.().catch(() => {});
+                    }
+                    throw err;
+                }
                 logger.warn(`[AI OCR] Gemini error ${status}, retry ${attempt + 1}/${retries - 1} za 3000ms`);
                 if (onRetry) await onRetry(attempt + 1, retries).catch(() => {});
                 await new Promise(r => setTimeout(r, 3000));

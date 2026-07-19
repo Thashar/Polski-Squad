@@ -42,28 +42,40 @@ function todayKey() {
     return new Date().toISOString().slice(0, 10);
 }
 
+// Limit Discord: 1024 znaki na wartość pola embeda, 4096 na opis.
+// Przycina z wielokropkiem — zabezpieczenie przed crashem przy długich nickach/nazwach.
+function capField(value, max = 1024) {
+    const str = String(value ?? '—');
+    if (str.length <= max) return str || '—';
+    return str.slice(0, max - 2) + '…';
+}
+
 const MONTH_NAMES_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
 // Klucze sekcji — kolejność = kolejność wiadomości na kanale
-const SECTION_KEYS = ['system', 'users', 'ocr', 'activity', 'costs', 'servers'];
+const SECTION_KEYS = ['system', 'users', 'servers', 'bosses', 'stats', 'costs', 'tools'];
 
 /**
  * Centrum Dowodzenia Head Admina.
- * Panel składa się z 6 osobnych wiadomości na kanale ENDERSECHO_ADMIN_PANEL_CHANNEL_ID.
+ * Panel składa się z 7 osobnych wiadomości na kanale ENDERSECHO_ADMIN_PANEL_CHANNEL_ID.
  * Każda wiadomość zawiera jeden embed + dedykowane przyciski akcji bezpośrednio pod nim.
- * Wszystkie 6 wiadomości są edytowane automatycznie po każdym zdarzeniu.
+ * Wszystkie wiadomości są edytowane automatycznie po każdym zdarzeniu.
  */
 class AdminPanelService {
     constructor(dataDir, config, services) {
         this._dataFile = path.join(dataDir, 'admin_panel.json');
         this._config = config;
         this._services = services;
-        // Słownik messageId per sekcja: { system, users, ocr, activity, costs, servers }
+        // Słownik messageId per sekcja: { system, users, servers, bosses, stats, costs, tools }
         this._messageIds = {};
         this._channelId = config.adminPanelChannelId || null;
         this._client = null;
         this._startTime = Date.now();
-        this._lastRecord = null;
+        this._lastRecords = [];          // ostatnie rekordy (max 5, persystowane)
+        this._auditLog = [];             // dziennik akcji admina (max 10, persystowany)
+        this._costAlert = { threshold: null, lastAlertDate: null }; // alert kosztowy
+        this._globalOcrBlocked = false;  // globalny kill-switch OCR (tryb serwisowy)
+        this._lastTodayCost = 0;
         this._refreshing = false;
         this._pendingRefresh = false;
         this._lastServerData = null;
@@ -87,6 +99,12 @@ class AdminPanelService {
             if (!this._channelId && data.channelId) {
                 this._channelId = data.channelId;
             }
+            if (Array.isArray(data.lastRecords)) this._lastRecords = data.lastRecords.slice(0, 5);
+            if (Array.isArray(data.auditLog)) this._auditLog = data.auditLog.slice(0, 10);
+            if (data.costAlert && typeof data.costAlert === 'object') {
+                this._costAlert = { threshold: data.costAlert.threshold ?? null, lastAlertDate: data.costAlert.lastAlertDate ?? null };
+            }
+            this._globalOcrBlocked = data.globalOcrBlocked === true;
         } catch {
             // Brak pliku — pierwszy start
         }
@@ -97,11 +115,45 @@ class AdminPanelService {
         await fs.writeFile(this._dataFile, JSON.stringify({
             messageIds: this._messageIds,
             channelId: this._channelId,
+            lastRecords: this._lastRecords,
+            auditLog: this._auditLog,
+            costAlert: this._costAlert,
+            globalOcrBlocked: this._globalOcrBlocked,
         }, null, 2), 'utf8');
     }
 
+    // Dodaje rekord do feedu ostatnich rekordów (max 5, najnowszy pierwszy)
     setLastRecord(userName, score, bossName, guildId) {
-        this._lastRecord = { userName, score, bossName, guildId, timestamp: new Date().toISOString() };
+        this._lastRecords.unshift({ userName, score, bossName, guildId, timestamp: new Date().toISOString() });
+        this._lastRecords = this._lastRecords.slice(0, 5);
+        this._persist().catch(() => {});
+    }
+
+    // Dziennik akcji admina — max 10 wpisów, najnowszy pierwszy
+    logAdminAction(adminName, action) {
+        this._auditLog.unshift({ adminName, action, timestamp: new Date().toISOString() });
+        this._auditLog = this._auditLog.slice(0, 10);
+        this._persist().catch(() => {});
+    }
+
+    // ── Globalny kill-switch OCR (tryb serwisowy) ────────────────────────────
+    isGlobalOcrBlocked() {
+        return this._globalOcrBlocked;
+    }
+
+    async setGlobalOcrBlocked(blocked) {
+        this._globalOcrBlocked = blocked === true;
+        await this._persist().catch(() => {});
+    }
+
+    // ── Alert kosztowy ───────────────────────────────────────────────────────
+    getCostAlertThreshold() {
+        return this._costAlert?.threshold ?? null;
+    }
+
+    async setCostAlertThreshold(threshold) {
+        this._costAlert = { threshold: (threshold && threshold > 0) ? threshold : null, lastAlertDate: this._costAlert?.lastAlertDate ?? null };
+        await this._persist().catch(() => {});
     }
 
     isConfigured() {
@@ -153,7 +205,7 @@ class AdminPanelService {
             return;
         }
 
-        // Sprawdź czy wszystkie 6 wiadomości istnieje
+        // Sprawdź czy wszystkie wiadomości sekcji istnieją
         const allKeysPresent = SECTION_KEYS.every(k => this._messageIds[k]);
         let allExist = false;
 
@@ -165,7 +217,7 @@ class AdminPanelService {
         }
 
         if (allExist) {
-            // Edytuj wszystkie 6 równolegle
+            // Edytuj wszystkie sekcje równolegle
             await Promise.allSettled(
                 SECTION_KEYS.map((key, i) =>
                     channel.messages.fetch(this._messageIds[key])
@@ -175,20 +227,21 @@ class AdminPanelService {
                         }))
                 )
             );
+            await this._maybeCostAlert(channel);
             return;
         }
 
-        // Usuń stare wiadomości panelu jeśli istnieją
-        for (const key of SECTION_KEYS) {
-            if (this._messageIds[key]) {
-                await channel.messages.fetch(this._messageIds[key])
+        // Usuń WSZYSTKIE stare wiadomości panelu (także sekcje ze starych układów, np. 'ocr'/'activity')
+        for (const msgId of Object.values(this._messageIds)) {
+            if (msgId) {
+                await channel.messages.fetch(msgId)
                     .then(msg => msg.delete())
                     .catch(() => {});
             }
         }
         this._messageIds = {};
 
-        // Wyślij 6 nowych wiadomości sekwencyjnie (zachowuje kolejność na kanale)
+        // Wyślij nowe wiadomości sekwencyjnie (zachowuje kolejność na kanale)
         for (let i = 0; i < SECTION_KEYS.length; i++) {
             const newMsg = await channel.send({
                 embeds: [sections[i].embed],
@@ -198,7 +251,27 @@ class AdminPanelService {
         }
 
         await this._persist();
-        logger.info(`Panel Centrum Dowodzenia: utworzono 6 wiadomości panelu na kanale ${this._channelId}`);
+        logger.info(`Panel Centrum Dowodzenia: utworzono ${SECTION_KEYS.length} wiadomości panelu na kanale ${this._channelId}`);
+        await this._maybeCostAlert(channel);
+    }
+
+    // Wysyła ping alertu kosztowego, gdy dzisiejszy koszt przekroczył próg (raz dziennie)
+    async _maybeCostAlert(channel) {
+        try {
+            const th = this._costAlert?.threshold;
+            if (!th || th <= 0) return;
+            const cost = this._lastTodayCost ?? 0;
+            const today = todayKey();
+            if (cost >= th && this._costAlert.lastAlertDate !== today) {
+                this._costAlert.lastAlertDate = today;
+                await this._persist().catch(() => {});
+                const pings = (this._config.blockOcrUserIds || []).map(id => `<@${id}>`).join(' ');
+                await channel.send({
+                    content: `🔔 ${pings} **Alert kosztowy:** dzisiejszy koszt AI **${fmtCost(cost)}** przekroczył próg **$${th}**.`,
+                }).catch(() => {});
+                logger.warn(`Alert kosztowy: dzisiejszy koszt ${fmtCost(cost)} >= próg $${th}`);
+            }
+        } catch { /* alert nie może blokować refresha */ }
     }
 
     _getActiveGuildIds() {
@@ -208,7 +281,7 @@ class AdminPanelService {
         return new Set((this._config.guilds || []).map(g => g.id));
     }
 
-    // Buduje tablicę 6 obiektów { embed, components } — po jednym na sekcję
+    // Buduje tablicę obiektów { embed, components } — po jednym na sekcję (kolejność = SECTION_KEYS)
     async _buildSections() {
         const guildIds = this._getActiveGuildIds();
         const now = new Date();
@@ -238,6 +311,13 @@ class AdminPanelService {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
         });
 
+        // Dane sekcji Bossowie (opcjonalne serwisy — embed pokazuje '—' gdy brak)
+        const bossData = await this._getBossData([...guildIds]);
+
+        // Zapamiętaj dzisiejszy koszt do alertu kosztowego
+        this._lastTodayCost = todayTokens.cost;
+
+        // Kolejność MUSI odpowiadać SECTION_KEYS: system, users, servers, bosses, stats, costs, tools
         return [
             {
                 embed: this._buildSystemEmbed(serverData.configured, lastUpdated, [...guildIds]),
@@ -245,25 +325,55 @@ class AdminPanelService {
             },
             {
                 embed: this._buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount),
-                components: [this._buildUsersRow()],
+                components: [this._buildUsersRow(), this._buildUsersRow2()],
             },
             {
-                embed: this._buildOcrEmbed(ocrStats, [...guildIds], globalRanking),
+                embed: this._buildServersEmbed(serverData),
+                components: [this._buildServersRow(), this._buildServersRow2()],
+            },
+            {
+                embed: this._buildBossesEmbed(bossData),
+                components: [this._buildBossesRow()],
+            },
+            {
+                embed: this._buildOcrEmbed(ocrStats, [...guildIds], globalRanking, playerActivityStats),
                 components: [this._buildOcrRow()],
-            },
-            {
-                embed: this._buildActivityEmbed(playerActivityStats),
-                components: [this._buildActivityRow()],
             },
             {
                 embed: this._buildCostEmbed(todayTokens, [...guildIds], globalRanking),
                 components: [this._buildCostRow()],
             },
             {
-                embed: this._buildServersEmbed(serverData),
-                components: [this._buildServersRow()],
+                embed: this._buildToolsEmbed([...guildIds]),
+                components: [this._buildToolsRow()],
             },
         ];
+    }
+
+    // Zbiera dane sekcji Bossowie: znane bossy, z rekordami, nieznane nazwy, bez zdjęcia, boss okresu
+    async _getBossData(guildIds) {
+        try {
+            const bossAlias = this._services.bossAliasService;
+            const bossRecords = this._services.bossRecordService;
+            if (!bossAlias || !bossRecords) return null;
+
+            const known = bossAlias.getExtraEnglishNames() || [];
+            const [withRecords, unknownNames] = await Promise.all([
+                bossRecords.getBossesWithRecords(guildIds, known).catch(() => []),
+                bossRecords.getUnknownBossNames(guildIds, known).catch(() => []),
+            ]);
+            const images = bossAlias.getData()?.images || {};
+            const noImage = known.filter(n => !images[n]);
+
+            let periodBoss = null;
+            try {
+                periodBoss = await this._services.globalTop10Service?._getMostFrequentBoss?.(10) ?? null;
+            } catch { /* opcjonalne */ }
+
+            return { knownCount: known.length, withRecords, unknownNames, noImage, periodBoss };
+        } catch {
+            return null;
+        }
     }
 
     _getActiveCooldownCount() {
@@ -380,6 +490,21 @@ class AdminPanelService {
             }
         } catch { /* pomiń */ }
 
+        // Feed ostatnich rekordów (max 5)
+        const cfgSvc2 = this._services.guildConfigService;
+        const lastRecordsValue = this._lastRecords.length > 0
+            ? this._lastRecords.map(r => {
+                const tag = cfgSvc2?.getConfig(r.guildId)?.tag || cfgSvc2?.getConfig(r.guildId)?.guildName || null;
+                const tagStr = tag ? ` \`${tag}\`` : '';
+                return `• **${r.userName}** — ${r.score}${r.bossName ? ` (${r.bossName})` : ''}${tagStr} · ${fmtTs(r.timestamp)}`;
+            }).join('\n')
+            : '—';
+
+        // Dziennik ostatnich akcji admina (max 5 w embedzie)
+        const auditValue = this._auditLog.length > 0
+            ? this._auditLog.slice(0, 5).map(a => `• ${a.action} — **${a.adminName}** · ${fmtTs(a.timestamp)}`).join('\n')
+            : '—';
+
         return new EmbedBuilder()
             .setColor(0xFF6B35)
             .setTitle('📡 Przegląd Systemu')
@@ -390,6 +515,8 @@ class AdminPanelService {
                 { name: '🖥️ Serwery', value: `${configuredCount}`, inline: true },
                 { name: '🌐 AI OCR', value: `${aiOcrActive} aktywnych / ${aiOcrBlocked} zablokowanych`, inline: true },
                 { name: '📅 Następny Global TOP10', value: nextTop10, inline: true },
+                { name: '🏆 Ostatnie rekordy', value: capField(lastRecordsValue), inline: false },
+                { name: '📜 Ostatnie akcje admina', value: capField(auditValue), inline: false },
             )
             .setFooter({ text: `Ostatnia aktualizacja: ${lastUpdated}` });
     }
@@ -434,7 +561,7 @@ class AdminPanelService {
                 { name: '👥 Łącznie graczy', value: `${totalPlayers}`, inline: true },
                 { name: '⏳ Aktywne cooldowny', value: `${activeCooldownCount}`, inline: true },
                 { name: '🧪 Testerzy', value: `${testerCount}`, inline: true },
-                { name: '🔒 Zablokowanych', value: blockedValue, inline: false },
+                { name: '🔒 Zablokowanych', value: capField(blockedValue), inline: false },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
             );
     }
@@ -449,8 +576,16 @@ class AdminPanelService {
         );
     }
 
-    // ─── EMBED 3: OCR & Analizy ──────────────────────────────────────────────
-    _buildOcrEmbed(ocrStats, guildIds = [], globalRanking = []) {
+    _buildUsersRow2() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_player_lookup').setEmoji('🔍').setLabel('Podgląd gracza').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('cc_clear_cooldown').setEmoji('🧊').setLabel('Wyczyść cooldown').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_pending_cv').setEmoji('🗳️').setLabel('Oczekujące CV').setStyle(ButtonStyle.Secondary),
+        );
+    }
+
+    // ─── EMBED 5: Statystyki (OCR & Analizy + Aktywność Graczy + Zdrowie API) ─
+    _buildOcrEmbed(ocrStats, guildIds = [], globalRanking = [], activityStats = null) {
         const at = ocrStats?.allTime ?? { total: 0, success: 0, adminFixed: 0 };
         const rs = ocrStats?.resettable ?? { total: 0, success: 0, adminFixed: 0 };
 
@@ -496,9 +631,32 @@ class AdminPanelService {
             }).join('\n')
             : '—';
 
+        // Zdrowie API — globalne liczniki zapytań (nie podlegają resetowi)
+        const api = ocrStats?.apiStats ?? { requests: 0, rejected: 0, fullFailures: 0 };
+        const apiRejPct = api.requests > 0 ? `${((api.rejected / api.requests) * 100).toFixed(1)}%` : '—';
+        const apiHealthValue =
+            `Odrzucone przez API: **${api.rejected}** / **${api.requests}** zapytań (${apiRejPct})\n`
+            + `Pełne odrzuty (screen niezaakceptowany po wszystkich retry): **${api.fullFailures}**`;
+
+        // Aktywność graczy (dawny osobny embed — scalony)
+        let activeValue = '—', newValue = '—', monthLine = '—';
+        if (activityStats) {
+            const { activeLastWeek, activeLastMonth, newLastWeek, newLastMonth, monthBuckets } = activityStats;
+            activeValue = `Tydzień: **${activeLastWeek}** | Miesiąc: **${activeLastMonth}**`;
+            newValue = `Tydzień: **${newLastWeek}** | Miesiąc: **${newLastMonth}**`;
+            const now = new Date();
+            const months = [];
+            for (let i = 2; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const key = d.toISOString().slice(0, 7);
+                months.push(`${MONTH_NAMES_PL[d.getMonth()]}: +${monthBuckets?.[key] || 0}`);
+            }
+            monthLine = months.join(' | ');
+        }
+
         return new EmbedBuilder()
             .setColor(0x5865F2)
-            .setTitle('📊 OCR & Analizy')
+            .setTitle('📊 Statystyki')
             .addFields(
                 { name: '📊 Analizy', value: `Łącznie: **${at.total}** / Od resetu: **${rs.total}**`, inline: false },
                 { name: '✅ Success Rate', value: successRateValue, inline: false },
@@ -509,7 +667,11 @@ class AdminPanelService {
                     inline: true,
                 },
                 { name: '🔧 Interwencje admina', value: `Łącznie: **${atFixed}** / Od resetu: **${rsFixed}**`, inline: true },
-                { name: `🚫 Top odrzucani (${currentMonth})`, value: rejectedUsersValue, inline: false },
+                { name: '🌩️ Zdrowie API (globalnie)', value: apiHealthValue, inline: false },
+                { name: `🚫 Top odrzucani (${currentMonth})`, value: capField(rejectedUsersValue), inline: false },
+                { name: '📈 Aktywni gracze', value: activeValue, inline: true },
+                { name: '🆕 Nowi gracze', value: newValue, inline: true },
+                { name: '📅 Przyrost miesięczny', value: monthLine, inline: false },
             );
     }
 
@@ -517,42 +679,6 @@ class AdminPanelService {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_action_ocr_stats').setEmoji('🎯').setLabel('Success Rate').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('cc_action_cmd_usage').setEmoji('🔢').setLabel('Użycia komend').setStyle(ButtonStyle.Secondary),
-        );
-    }
-
-    // ─── EMBED 4: Aktywność Graczy ────────────────────────────────────────────
-    _buildActivityEmbed(stats) {
-        if (!stats) {
-            return new EmbedBuilder()
-                .setColor(0x9B59B6)
-                .setTitle('🏆 Aktywność Graczy')
-                .setDescription('Brak danych o aktywności.');
-        }
-
-        const { activeLastWeek, activeLastMonth, newLastWeek, newLastMonth, monthBuckets } = stats;
-
-        const now = new Date();
-        const months = [];
-        for (let i = 2; i >= 0; i--) {
-            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const key = d.toISOString().slice(0, 7);
-            const count = monthBuckets?.[key] || 0;
-            months.push({ label: MONTH_NAMES_PL[d.getMonth()], count });
-        }
-        const monthLine = months.map(m => `${m.label}: +${m.count}`).join(' | ');
-
-        return new EmbedBuilder()
-            .setColor(0x9B59B6)
-            .setTitle('🏆 Aktywność Graczy')
-            .addFields(
-                { name: '📈 Aktywni gracze', value: `Tydzień: **${activeLastWeek}** | Miesiąc: **${activeLastMonth}**`, inline: false },
-                { name: '🆕 Nowi gracze', value: `Tydzień: **${newLastWeek}** | Miesiąc: **${newLastMonth}**`, inline: false },
-                { name: '📅 Przyrost miesięczny', value: monthLine || '—', inline: false },
-            );
-    }
-
-    _buildActivityRow() {
-        return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_player_growth').setEmoji('📈').setLabel('Wykres przyrostu').setStyle(ButtonStyle.Secondary),
         );
     }
@@ -618,9 +744,22 @@ class AdminPanelService {
             }).join('\n')
             : '—';
 
+        // Aktualne limity + próg alertu kosztowego
+        const dailyLimit = this._services.usageLimitService?.getLimit?.();
+        const cooldownMs = this._services.updateCooldownService?.getCooldownDuration?.() ?? null;
+        let cdStr = '—';
+        if (cooldownMs && cooldownMs > 0) {
+            const h = Math.floor(cooldownMs / 3600000);
+            const m = Math.floor((cooldownMs % 3600000) / 60000);
+            cdStr = h > 0 ? (m > 0 ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+        }
+        const limitStr = (dailyLimit !== null && dailyLimit !== undefined) ? `${dailyLimit}/dzień` : 'brak';
+        const alertTh = this.getCostAlertThreshold();
+        const alertStr = alertTh ? `$${alertTh}/dzień` : 'wyłączony';
+
         return new EmbedBuilder()
             .setColor(0xFEE75C)
-            .setTitle('💰 Koszty AI')
+            .setTitle('💰 Koszty & Limity')
             .addFields(
                 {
                     name: '📤 Dziś',
@@ -632,8 +771,13 @@ class AdminPanelService {
                     value: `${fmtCost(monthCost)} wydane | Projekcja: ~${fmtCost(projection)}`,
                     inline: false,
                 },
-                { name: '🏆 Top 3 serwery (miesiąc)', value: topGuildsValue, inline: false },
-                { name: '👤 Top 5 użytkowników (miesiąc, req.)', value: topUsersValue, inline: false },
+                {
+                    name: '⚙️ Limity i alert',
+                    value: `Limit dzienny: **${limitStr}** | Cooldown: **${cdStr}** | 🔔 Próg alertu: **${alertStr}**`,
+                    inline: false,
+                },
+                { name: '🏆 Top 3 serwery (miesiąc)', value: capField(topGuildsValue), inline: false },
+                { name: '👤 Top 5 użytkowników (miesiąc, req.)', value: capField(topUsersValue), inline: false },
             );
     }
 
@@ -673,6 +817,7 @@ class AdminPanelService {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_action_tokens').setEmoji('📊').setLabel('Tokeny AI').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_limit').setEmoji('⚙️').setLabel('Ustaw limity').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_cost_alert').setEmoji('🔔').setLabel('Alert kosztowy').setStyle(ButtonStyle.Secondary),
         );
     }
 
@@ -732,7 +877,7 @@ class AdminPanelService {
         return new EmbedBuilder()
             .setColor(0xEB459E)
             .setTitle('🖥️ Serwery')
-            .setDescription(lines.join('\n'));
+            .setDescription(capField(lines.join('\n'), 4096));
     }
 
     _buildServersRow() {
@@ -742,6 +887,88 @@ class AdminPanelService {
             new ButtonBuilder().setCustomId('cc_action_tester').setEmoji('🧪').setLabel('Testerzy').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🚫').setLabel('Zbanuj serwer').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('🗑️').setLabel('Usuń dane').setStyle(ButtonStyle.Danger),
+        );
+    }
+
+    _buildServersRow2() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_unconfigured').setEmoji('⚠️').setLabel('Nieskonfigurowane').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_diag_server').setEmoji('🔍').setLabel('Diagnostyka serwera').setStyle(ButtonStyle.Secondary),
+        );
+    }
+
+    // ─── EMBED 4: Bossowie ────────────────────────────────────────────────────
+    _buildBossesEmbed(bossData) {
+        if (!bossData) {
+            return new EmbedBuilder()
+                .setColor(0x1ABC9C)
+                .setTitle('👾 Bossowie')
+                .setDescription('Brak danych o bossach.');
+        }
+
+        const { knownCount, withRecords, unknownNames, noImage, periodBoss } = bossData;
+
+        const unknownValue = unknownNames.length > 0
+            ? unknownNames.slice(0, 5).map(n => `• \`${n}\``).join('\n')
+                + (unknownNames.length > 5 ? `\n... i ${unknownNames.length - 5} więcej` : '')
+            : '✅ Brak — wszystkie nazwy zmapowane';
+
+        const noImageValue = noImage.length > 0
+            ? `**${noImage.length}**: ${noImage.slice(0, 5).join(', ')}${noImage.length > 5 ? `, ... (+${noImage.length - 5})` : ''}`
+            : '✅ Wszystkie mają zdjęcie';
+
+        return new EmbedBuilder()
+            .setColor(0x1ABC9C)
+            .setTitle('👾 Bossowie')
+            .addFields(
+                { name: '👾 W bazie', value: `${knownCount}`, inline: true },
+                { name: '🏆 Z rekordami', value: `${withRecords.length}`, inline: true },
+                { name: '⚔️ Boss okresu', value: capField(periodBoss || '—', 256), inline: true },
+                { name: `⚠️ Nieznane nazwy do zmapowania (${unknownNames.length})`, value: capField(unknownValue), inline: false },
+                { name: '🖼️ Bez zdjęcia', value: capField(noImageValue), inline: false },
+            );
+    }
+
+    _buildBossesRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_action_boss_cfg').setEmoji('👾').setLabel('Konfiguracja bossów').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('cc_top10_preview').setEmoji('📢').setLabel('Podgląd TOP10').setStyle(ButtonStyle.Secondary),
+        );
+    }
+
+    // ─── EMBED 7: Narzędzia ───────────────────────────────────────────────────
+    _buildToolsEmbed(guildIds) {
+        const testerCount = this._services.testerService?.getTesters()?.length ?? 0;
+
+        const cfgSvc = this._services.guildConfigService;
+        let perGuildBlocked = 0;
+        for (const guildId of guildIds) {
+            const cfg = cfgSvc?.getConfig(guildId);
+            if (cfg?.configured && (cfg.ocrBlocked || []).includes('update')) perGuildBlocked++;
+        }
+
+        const globalState = this._globalOcrBlocked
+            ? '🛑 **ZABLOKOWANY GLOBALNIE** (tryb serwisowy — /update i /test wyłączone na wszystkich serwerach)'
+            : '✅ Włączony (obowiązują ustawienia per-serwer)';
+
+        return new EmbedBuilder()
+            .setColor(0x95A5A6)
+            .setTitle('⚙️ Narzędzia')
+            .addFields(
+                { name: '🧪 Testerzy OCR', value: `${testerCount}`, inline: true },
+                { name: '🔄 OCR zablokowany per-serwer', value: `${perGuildBlocked}`, inline: true },
+                { name: '🌐 Globalny OCR', value: globalState, inline: false },
+            );
+    }
+
+    _buildToolsRow() {
+        const ocrBtn = this._globalOcrBlocked
+            ? new ButtonBuilder().setCustomId('cc_global_ocr').setEmoji('▶️').setLabel('Włącz OCR globalnie').setStyle(ButtonStyle.Success)
+            : new ButtonBuilder().setCustomId('cc_global_ocr').setEmoji('🛑').setLabel('Wyłącz OCR globalnie').setStyle(ButtonStyle.Danger);
+
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_action_tester').setEmoji('🧪').setLabel('Testerzy').setStyle(ButtonStyle.Secondary),
+            ocrBtn,
         );
     }
 }

@@ -169,6 +169,27 @@ class BossRecordService {
     }
 
     /**
+     * Zwraca surowe nazwy bossów z rekordów, które NIE są znane (brak w englishNames/aliasach)
+     * — czekają na zmapowanie przez head admina.
+     * @param {string[]|Set} allGuildIds
+     * @param {string[]} knownEnglishNames
+     * @returns {Promise<string[]>} posortowana lista nieznanych nazw
+     */
+    async getUnknownBossNames(allGuildIds, knownEnglishNames) {
+        const knownSet = new Set(knownEnglishNames);
+        const unknown = new Set();
+        for (const guildId of allGuildIds) {
+            const data = await this._load(guildId).catch(() => ({}));
+            for (const bosses of Object.values(data)) {
+                for (const bossName of Object.keys(bosses)) {
+                    if (!knownSet.has(bossName)) unknown.add(bossName);
+                }
+            }
+        }
+        return [...unknown].sort((a, b) => a.localeCompare(b));
+    }
+
+    /**
      * Liczy globalną pozycję gracza per boss jednym przebiegiem przez wszystkie serwery.
      * Zwraca tylko bossów gdzie gracz MA rekord.
      * @param {string[]|Set} allGuildIds

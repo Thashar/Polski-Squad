@@ -65,6 +65,8 @@
      - Wymaga `USE_ENDERSECHO_AI_OCR=true`; gdy AI wyłączone → ephemeral `testAiOcrRequired`
      - Respektuje blokadę użytkownika (`userBlockService`) i globalny blok OCR (`ocrBlockService.isBlocked('update')`)
      - **Cooldown 5 min** po udanym zapisie wyniku — sprawdzany przez `updateCooldownService`; informuje gracza ile czasu pozostało (w języku serwera); persystowany w `data/update_cooldowns.json` (przeżywa restart)
+     - **Brak cooldownu przy błędzie API:** cooldown jest ustawiany z góry (anty-spam), ale gdy analiza padnie na błędzie API (503/429/500/ECONNRESET/ETIMEDOUT — wykrywane po `error.status` i treści komunikatu w catch `_runUpdateFlow`) → `clearCooldown()` i komunikat `updateAiOverloaded`. Użytkownik nie płaci cooldownem za przeciążenie API (wcześniej czyszczone tylko przy 503)
+     - **Globalne liczniki API (`ocr_stats.json → apiStats`, NIE resetowane przyciskiem resetu):** `requests` (każda próba zapytania do Gemini), `rejected` (próba odrzucona przez API — 429/500/503/sieć), `fullFailures` (wszystkie retry wyczerpane → screen niezaakceptowany z winy API, np. 10× 503 pod rząd). Rejestrowane w `aiOcrService._generateContent` przez `setStatsService(ocrStatsService)` (wiring w index.js). Wyświetlane w Centrum Dowodzenia → embed Statystyki → pole `🌩️ Zdrowie API`
    - **Komenda /test (tylko admin + użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`, wymaga AI OCR):** Tryb testowy `/update` — współdzieli pełną implementację przez `_runUpdateFlow(interaction, { dryRun: true, commandName: 'test', ocrBlockKey: 'test' })`:
      - Widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`); wykonać może wyłącznie użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS`
      - **Podgląd IDENTYCZNY z `/update`** (od czerwca 2026): `/test` renderuje dokładnie ten sam stos embedów co `/update` dla danego serwera — z global snippetem, snippetem bossa, **wykresem progresu**, nowymi osiągnięciami, licznikiem subskrypcji i pozycjami (klan/global/boss). Realizowane przez **symulację read-only** stanu „po zapisie" (bez modyfikacji danych):
@@ -832,45 +834,34 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) bot **automatycz
 ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 ```
 
-**Działanie:** Panel to jedna stała wiadomość z 6 embedami + 4 rzędy przycisków na kanale head admina. Edytowana automatycznie po każdym zdarzeniu. Brak select menu — wyłącznie przyciski.
+**Działanie:** Panel to **7 osobnych wiadomości** (każda: 1 embed + własne rzędy przycisków) na kanale head admina. Edytowane automatycznie po każdym zdarzeniu. Kolejność sekcji = `SECTION_KEYS` w `adminPanelService.js`: `system, users, servers, bosses, stats, costs, tools`. Przy zmianie układu sekcji stare wiadomości są usuwane (iteracja po `Object.values(_messageIds)` — także osierocone klucze starych układów) i wysyłane od nowa. Wszystkie dynamiczne pola przycinane helperem `capField()` (limit 1024/pole, 4096/opis) — zabezpieczenie przed crashem.
 
-**6 embedów panelu:**
+**7 embedów panelu (każdy z własnymi przyciskami POD embedem):**
 
-| # | Embed | Kolor | Zawartość |
-|---|---|---|---|
-| 1 | 📡 Przegląd Systemu | `0xFF6B35` | Uptime, ping, RAM, liczba serwerów, AI OCR (aktywnych/zablokowanych), następny Global TOP10 |
-| 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, testerzy, lista zablokowanych (max 3 + "i N więcej"), oczekujące CV |
-| 3 | 📊 OCR & Analizy | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem** (ile razy podwójna weryfikacja wzorca przeszła dopiero za drugą próbą, licznik + % względem wszystkich analiz, globalnie i od resetu), odrzucone, interwencje admina, oczekujące CV |
-| 4 | 🏆 Aktywność Graczy | `0x9B59B6` | Aktywni gracze tydzień/miesiąc, nowi gracze tydzień/miesiąc, przyrost miesięczny (ostatnie 3 miesiące) |
-| 5 | 💰 Koszty AI | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), ten miesiąc + projekcja, top 3 serwery po koszcie |
-| 6 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku |
+| # | Embed | Kolor | Zawartość | Przyciski |
+|---|---|---|---|---|
+| 1 | 📡 Przegląd Systemu | `0xFF6B35` | Uptime, ping, RAM, liczba serwerów, AI OCR (aktywnych/zablokowanych), następny Global TOP10, **🏆 Ostatnie rekordy** (feed 5, persystowany), **📜 Ostatnie akcje admina** (dziennik 5 z 10 persystowanych) | `🔄 cc_refresh`, `📅 panel_top10_interval`, `📢 panel_info` |
+| 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, testerzy, lista zablokowanych (max 3 + "i N więcej"), oczekujące CV | Rząd 1: `🔒 panel_block`, `🔓 cc_action_unblock`, `🗑️ panel_remove`, `🧹 panel_remove_score`, `🏆 panel_ach_del` · Rząd 2: `🔍 cc_player_lookup`, `🧊 cc_clear_cooldown`, `🗳️ cc_pending_cv` |
+| 3 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku; sekcje nieskonfigurowane/brak bota | Rząd 1: `🔄 panel_ocr`, `🔁 cc_action_roles`, `🧪 cc_action_tester`, `🚫 panel_ban_guild`, `🗑️ panel_delete_server_data` · Rząd 2: `⚠️ cc_unconfigured`, `🔍 cc_diag_server` |
+| 4 | 👾 Bossowie | `0x1ABC9C` | Bossy w bazie, z rekordami, boss okresu, **nieznane nazwy do zmapowania** (`bossRecordService.getUnknownBossNames()`, max 5 + licznik), bossy bez zdjęcia | `👾 cc_action_boss_cfg` (pełny panel konfiguracji bossów jako ephemeral), `📢 cc_top10_preview` (podgląd raportu TOP10, ephemeral) |
+| 5 | 📊 Statystyki | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem**, odrzucone, interwencje admina, **🌩️ Zdrowie API** (globalne, nieresetowalne: odrzucone/wszystkie zapytania + %, pełne odrzuty po 10 retry), top odrzucani, aktywni/nowi gracze, przyrost miesięczny (scalone z dawnym embedem Aktywność) | `🎯 cc_action_ocr_stats`, `🔢 cc_action_cmd_usage`, `📈 panel_player_growth` |
+| 6 | 💰 Koszty & Limity | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), miesiąc + projekcja, **⚙️ Limity i alert** (limit dzienny, cooldown, próg alertu), top 3 serwery, top 5 użytkowników | `📊 cc_action_tokens`, `⚙️ panel_limit`, `🔔 cc_cost_alert` (modal progu USD/dzień) |
+| 7 | ⚙️ Narzędzia | `0x95A5A6` | Testerzy, liczba serwerów z zablokowanym OCR per-guild, **stan globalnego OCR** | `🧪 cc_action_tester`, `🛑/▶️ cc_global_ocr` (kill-switch z potwierdzeniem `cc_global_ocr_ok_{block\|unblock}`) |
 
-**Komponenty na wiadomości panelu (4 rzędy przycisków):**
+**Nowe akcje CC (wszystkie tylko head admin, ephemeral):**
+- `🔍 cc_player_lookup` → modal (`cc_player_lookup_modal`) → wyszukiwanie w globalnym rankingu → przy wielu trafieniach select `cc_player_lookup_sel` → embed szczegółów gracza: pozycja globalna, rekord+boss, serwer, blokada, aktywny cooldown, odrzucenia w bieżącym miesiącu, liczba osiągnięć
+- `🧊 cc_clear_cooldown` → select aktywnych cooldownów (`cc_clear_cd_sel`) → czyszczenie cooldownu gracza (np. po spalonej próbie z winy API)
+- `🗳️ cc_pending_cv` → lista oczekujących sesji CV z licznikami zgłoszeń i linkami do wiadomości raportów
+- `⚠️ cc_unconfigured` → lista serwerów z botem bez konfiguracji (wersja ephemeral — nie rusza wiadomości panelu, w przeciwieństwie do `panel_unconfigured` które używa `update()`)
+- `🔍 cc_diag_server` → select skonfigurowanych serwerów (`cc_diag_sel`) → embed diagnostyki uprawnień dla wybranego serwera. Refaktor: logika diagnostyki wydzielona do `_buildDiagnosticsEmbed(guild, t, client)` — używana też przez `panel_diagnostics` (/configure)
+- `👾 cc_action_boss_cfg` → panel konfiguracji bossów jako **ephemeral reply** (wrapper — `panel_boss_cfg` używa `update()` i zniszczyłby wiadomość panelu)
+- `📢 cc_top10_preview` → `globalTop10Service.buildOnDemandEmbed()` jako ephemeral (bez zapisu snapshotu/harmonogramu)
+- `🔔 cc_cost_alert` → modal (`cc_cost_alert_modal`) progu dziennego kosztu AI w USD (puste = wyłącz). Po przekroczeniu progu `_maybeCostAlert()` wysyła na kanał panelu ping do head adminów (raz dziennie, `lastAlertDate` w persist)
+- `🛑 cc_global_ocr` → globalny kill-switch OCR (tryb serwisowy): `adminPanelService.setGlobalOcrBlocked()` persystowany w `admin_panel.json`; `_runUpdateFlow` sprawdza `isGlobalOcrBlocked()` po per-guild blocku (head admin pomija). Stan i przycisk (Wyłącz/Włącz) widoczne w embedzie Narzędzia
 
-**Rząd 1 — System:**
-- `🔄 cc_refresh` — wymuś refresh (odpowiada ephemeral)
-- `📅 panel_top10_interval` — interwał Global TOP10 (otwiera modal)
-- `📢 panel_info` — wyślij info na wszystkie serwery (otwiera modal)
-- `📈 panel_player_growth` — statystyki przyrostu graczy (ephemeral)
-- `🔢 cc_action_cmd_usage` — użycia komend globalnie (ephemeral)
+**Dziennik akcji admina (`logAdminAction`):** wpisy dodawane helperem `_ccAudit(interaction, action)` przy: blokadzie/odblokowaniu gracza, usunięciu gracza/wyniku, akcjach CV (approve/remove/block), analizie manualnej, cofnięciach wyniku (ocr_revert + analyze revert), zmianie limitów, toggle AI OCR per-guild, banie/odbanowaniu serwera, usunięciu danych serwera, czyszczeniu cooldownu, alercie kosztowym, global OCR. Max 10 wpisów, 5 widocznych w embedzie System, persystowane w `admin_panel.json`.
 
-**Rząd 2 — Użytkownicy:**
-- `🔒 panel_block` — zablokuj gracza (otwiera modal wyszukiwania)
-- `🔓 cc_action_unblock` — odblokuj gracza (modal lub info "brak zablokowanych")
-- `🗑️ panel_remove` — usuń gracza (otwiera modal wyszukiwania)
-- `🏆 panel_ach_del` — usuń osiągnięcia (otwiera modal wyszukiwania)
-
-**Rząd 3 — Serwer/OCR:**
-- `🔄 panel_ocr` — AI OCR on/off per serwer (otwiera modal)
-- `⚙️ panel_limit` — ustaw limity (otwiera modal)
-- `🔁 cc_action_roles` — przetwórz role TOP (ephemeral z potwierdzeniem)
-- `🧪 cc_action_tester` — zarządzaj testerami (ephemeral)
-- `🚫 panel_ban_guild` — zbanuj serwer (otwiera modal)
-
-**Rząd 4 — Statystyki:**
-- `📊 cc_action_tokens` — zużycie tokenów globalnie (ephemeral)
-- `🎯 cc_action_ocr_stats` — Success Rate z licznikami (ephemeral)
-- `🗑️ panel_delete_server_data` — usuń dane serwera (otwiera panel)
+**Persistencja panelu (`data/admin_panel.json`):** `{ messageIds, channelId, lastRecords[], auditLog[], costAlert: {threshold, lastAlertDate}, globalOcrBlocked }`.
 
 **Widok `/manage → 📡 Centrum Dowodzenia`:**
 Prosta informacja o kanale panelu + przycisk `🔄 Odśwież Panel`.
