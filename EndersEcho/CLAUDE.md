@@ -342,7 +342,7 @@
 | `cc_action_tester` | Zarządzaj testerami — lista + przyciski Dodaj/Usuń (ephemeral) |
 | `cc_action_tokens` | Zużycie tokenów globalnie (ephemeral, head admin) |
 | `cc_action_cmd_usage` | Użycia komend globalnie (ephemeral, head admin) |
-| `cc_action_ocr_stats` | Success Rate z licznikami + przycisk reset (ephemeral, head admin) |
+| `cc_action_ocr_stats` | Success Rate z licznikami (w tym „🔁 Wzorzec OK za 2. razem" — % podwójnych weryfikacji wzorca zaliczonych za drugim razem) + przycisk reset (ephemeral, head admin) |
 | `panel_info` | Otwórz modal /info (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
@@ -840,7 +840,7 @@ ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
 |---|---|---|---|
 | 1 | 📡 Przegląd Systemu | `0xFF6B35` | Uptime, ping, RAM, liczba serwerów, AI OCR (aktywnych/zablokowanych), następny Global TOP10 |
 | 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, testerzy, lista zablokowanych (max 3 + "i N więcej"), oczekujące CV |
-| 3 | 📊 OCR & Analizy | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, odrzucone, interwencje admina, oczekujące CV |
+| 3 | 📊 OCR & Analizy | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem** (ile razy podwójna weryfikacja wzorca przeszła dopiero za drugą próbą, licznik + % względem wszystkich analiz, globalnie i od resetu), odrzucone, interwencje admina, oczekujące CV |
 | 4 | 🏆 Aktywność Graczy | `0x9B59B6` | Aktywni gracze tydzień/miesiąc, nowi gracze tydzień/miesiąc, przyrost miesięczny (ostatnie 3 miesiące) |
 | 5 | 💰 Koszty AI | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), ten miesiąc + projekcja, top 3 serwery po koszcie |
 | 6 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku |

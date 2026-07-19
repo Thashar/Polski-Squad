@@ -472,6 +472,13 @@ class AdminPanelService {
         const successRateValue =
             `\`[${atBar}]\` ${atRateStr} (łącznie)\n\`[${rsBar}]\` ${rsRateStr} (od resetu)`;
 
+        const atDouble = at.doubleCheckRecovered || 0;
+        const rsDouble = rs.doubleCheckRecovered || 0;
+        const atDoublePct = at.total > 0 ? `${((atDouble / at.total) * 100).toFixed(1)}%` : '—';
+        const rsDoublePct = rs.total > 0 ? `${((rsDouble / rs.total) * 100).toFixed(1)}%` : '—';
+        const doubleCheckValue =
+            `Łącznie: **${atDouble}** (${atDoublePct}) / Od resetu: **${rsDouble}** (${rsDoublePct})`;
+
         const currentMonth = new Date().toISOString().slice(0, 7);
         const ocrSvc = this._services.ocrStatsService;
         const cfgSvc = this._services.guildConfigService;
@@ -495,6 +502,7 @@ class AdminPanelService {
             .addFields(
                 { name: '📊 Analizy', value: `Łącznie: **${at.total}** / Od resetu: **${rs.total}**`, inline: false },
                 { name: '✅ Success Rate', value: successRateValue, inline: false },
+                { name: '🔁 Wzorzec OK za 2. razem', value: doubleCheckValue, inline: false },
                 {
                     name: '❌ Odrzucone',
                     value: `Łącznie: **${at.total - (at.success || 0)}** / Od resetu: **${rs.total - (rs.success || 0)}**`,

@@ -2747,6 +2747,14 @@ class InteractionHandler {
                 resetInfo,
             });
 
+            // Podwójna analiza wzorca — druga próba pozytywna (% względem wszystkich analiz)
+            const atDouble = at.doubleCheckRecovered || 0;
+            const rsDouble = rs.doubleCheckRecovered || 0;
+            embed.addFields({ name: t('🔁 Wzorzec OK za 2. razem', '🔁 Template OK on 2nd try'), value:
+                `**${t('Od zawsze', 'All time')}**: **${atDouble}** / ${at.total} → **${this._formatRate(atDouble, at.total)}**\n` +
+                `**${t('Resetowalny', 'Resettable')}**: **${rsDouble}** / ${rs.total} → **${this._formatRate(rsDouble, rs.total)}**`,
+            });
+
             // Fail counter = adminFixed (ręczna analiza admina + cofnięcia)
             embed.addFields({ name: t('❌ Interwencje admina (Fail)', '❌ Admin interventions (Fail)'), value:
                 t(
@@ -4504,6 +4512,9 @@ class InteractionHandler {
                 this.ocrStatsService.record(interaction.guildId, _ocrIsValid).catch(() => {});
                 if (!_ocrIsValid) {
                     this.ocrStatsService.recordRejection(interaction.guildId, interaction.user.id).catch(() => {});
+                }
+                if (aiResult.doubleCheckRecovered) {
+                    this.ocrStatsService.recordDoubleCheckRecovered().catch(() => {});
                 }
             }
 

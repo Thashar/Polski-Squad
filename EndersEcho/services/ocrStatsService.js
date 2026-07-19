@@ -12,8 +12,8 @@ class OcrStatsService {
 
     _defaultData() {
         return {
-            allTime:    { total: 0, success: 0, adminFixed: 0 },
-            resettable: { total: 0, success: 0, adminFixed: 0, resetAt: null },
+            allTime:    { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0 },
+            resettable: { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0, resetAt: null },
             userRejections: {},
         };
     }
@@ -42,6 +42,9 @@ class OcrStatsService {
                 delete this._data.analyzeAllTime;
                 delete this._data.analyzeResettable;
             }
+            // Uzupełnij brakujące pola dla starych plików (backward compat)
+            this._data.allTime.doubleCheckRecovered = this._data.allTime.doubleCheckRecovered || 0;
+            this._data.resettable.doubleCheckRecovered = this._data.resettable.doubleCheckRecovered || 0;
         } catch {
             this._data = this._defaultData();
         }
@@ -60,8 +63,16 @@ class OcrStatsService {
 
     async resetResettable() {
         if (!this._data) await this.load();
-        this._data.resettable = { total: 0, success: 0, adminFixed: 0, resetAt: new Date().toISOString() };
+        this._data.resettable = { total: 0, success: 0, adminFixed: 0, doubleCheckRecovered: 0, resetAt: new Date().toISOString() };
         await this._save();
+    }
+
+    // Podwójna analiza wzorca: pierwsza próba negatywna, druga próba pozytywna (screen przeszedł za drugim razem)
+    async recordDoubleCheckRecovered() {
+        if (!this._data) await this.load();
+        this._data.allTime.doubleCheckRecovered = (this._data.allTime.doubleCheckRecovered || 0) + 1;
+        this._data.resettable.doubleCheckRecovered = (this._data.resettable.doubleCheckRecovered || 0) + 1;
+        this._save().catch(() => {});
     }
 
     // Admin ręcznie zanalizował odrzucony screen → liczy się jako fail w success rate
