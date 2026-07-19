@@ -6194,6 +6194,7 @@ class InteractionHandler {
         if (customId === 'cc_cost_alert') return 'CC: Alert kosztowy';
         if (customId === 'cc_global_ocr') return 'CC: Globalny OCR (przełącznik)';
         if (customId.startsWith('cc_global_ocr_ok_')) return 'CC: Globalny OCR (potwierdzenie)';
+        if (customId === 'cc_srv_pg_prev' || customId === 'cc_srv_pg_next') return 'CC: Paginacja serwerów';
         return `panel: ${customId}`;
     }
 
@@ -6596,6 +6597,16 @@ class InteractionHandler {
             }
             if (customId === 'cc_action_ocr_stats') {
                 await this._handleCcActionOcrStats(interaction);
+                return;
+            }
+            if (customId === 'cc_srv_pg_prev' || customId === 'cc_srv_pg_next') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await interaction.deferUpdate();
+                this.adminPanelService?.changeServersPage(customId === 'cc_srv_pg_next' ? 1 : -1);
+                this.adminPanelService?.refresh();
                 return;
             }
             if (customId === 'cc_player_lookup') {

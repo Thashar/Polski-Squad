@@ -133,6 +133,7 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     usageLimitService,
     bossAliasService,
     bossRecordService,
+    commandUsageService,
 });
 // Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
 aiOcrService.setStatsService(ocrStatsService);
