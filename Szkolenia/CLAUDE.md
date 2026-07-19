@@ -12,7 +12,7 @@
 **Uprawnienia:**
 - Admin/moderator/specjalne role -> mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
 - Użytkownik z rolą klanową -> może otworzyć wątek tylko sobie (reakcja pod własnym postem)
-**Ping ról klanowych:** Po pierwszej wiadomości właściciela wątku bot automatycznie pinguje wszystkie 4 role klanowe (działa również po ponownym otwarciu wątku)
+**Ping ról klanowych (prośba o pomoc):** Gdy właściciel wątku napisze wiadomość zawierającą dowolną odmianę słowa "pomóc" (pomocy, pomoże, pomożesz, pomogę, pomógł, pomagać itd. — detekcja z normalizacją polskich znaków i regexem `pomo[czg]|pomag`), bot pinguje wszystkie 4 role klanowe. Ping wysyłany jest **tylko raz na cykl otwarcia** wątku (flaga `helpPingSent` w `data/reminders.json`); przy ponownym otwarciu wątku flaga jest resetowana. Właściciel wątku ustalany jest z zapisanego `ownerId` (targetUser z reakcji), a nie z `channel.ownerId` (który dla wątków tworzonych przez bota wskazuje bota) — z fallbackiem po nazwie wątku dla wątków sprzed zmiany.
 **Komendy:** `/decode` (integracja sio-tools, tylko informacja w wiadomości - komenda w Stalker)
 
 ---

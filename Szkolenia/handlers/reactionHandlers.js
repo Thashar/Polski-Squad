@@ -102,7 +102,10 @@ async function handleReactionAdd(reaction, user, state, config) {
                 config.messages.threadCreated(user.id, config.roles.ping, targetUser.id)
             );
 
-            // Zresetuj status przypomnienia dla ponownie otwartego wątku
+            // Zapisz właściciela wątku i zresetuj status przypomnienia oraz flagę pingu o pomoc
+            const reopenNow = Date.now();
+            await reminderStorage.setReminder(state.lastReminderMap, existingThread.id, reopenNow, null, targetUser.id);
+            await reminderStorage.resetHelpPing(state.lastReminderMap, existingThread.id);
             await reminderStorage.resetReminderStatus(state.lastReminderMap, existingThread.id);
         } else {
             // Utwórz nowy wątek
@@ -115,9 +118,9 @@ async function handleReactionAdd(reaction, user, state, config) {
                 config.messages.threadCreated(user.id, config.roles.ping, targetUser.id)
             );
 
-            // Inicjalizuj czas utworzenia wątku w mapie
+            // Inicjalizuj czas utworzenia wątku w mapie (z właścicielem i wyzerowaną flagą pingu o pomoc)
             const now = Date.now();
-            await reminderStorage.setReminder(state.lastReminderMap, thread.id, now, now);
+            await reminderStorage.setReminder(state.lastReminderMap, thread.id, now, now, targetUser.id);
         }
 
     } catch (error) {

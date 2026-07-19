@@ -27,7 +27,9 @@ class ReminderStorageService {
                     reminderMap.set(threadId, {
                         lastReminder: threadData,
                         threadCreated: null, // Nie znamy daty utworzenia
-                        reminderSent: false // Nowe pole dla śledzenia przypomnienia
+                        reminderSent: false, // Nowe pole dla śledzenia przypomnienia
+                        ownerId: null, // Właściciel wątku (nieznany w starym formacie)
+                        helpPingSent: false // Czy wysłano już ping z prośbą o pomoc w tym cyklu
                     });
                 } else {
                     // Nowy format - obiekt z pełnymi danymi
@@ -87,19 +89,52 @@ class ReminderStorageService {
      * @param {string} threadId - ID wątku
      * @param {number} timestamp - Timestamp przypomnienia
      * @param {number|null} threadCreated - Timestamp utworzenia wątku (opcjonalny)
+     * @param {string|null} ownerId - ID właściciela wątku (opcjonalny)
      */
-    async setReminder(reminderMap, threadId, timestamp, threadCreated = null) {
+    async setReminder(reminderMap, threadId, timestamp, threadCreated = null, ownerId = null) {
         const existingData = reminderMap.get(threadId);
-        
+
         const threadData = {
             lastReminder: timestamp,
             threadCreated: threadCreated || (existingData ? existingData.threadCreated : null),
-            reminderSent: existingData ? existingData.reminderSent : false
+            reminderSent: existingData ? existingData.reminderSent : false,
+            ownerId: ownerId || (existingData ? existingData.ownerId : null),
+            helpPingSent: existingData ? (existingData.helpPingSent || false) : false
         };
-        
+
         reminderMap.set(threadId, threadData);
         await this.saveReminders(reminderMap);
         logger.info(`📅 Zaktualizowano przypomnienie dla wątku: ${threadId}`);
+    }
+
+    /**
+     * Oznacza że wysłano ping z prośbą o pomoc dla wątku (raz na cykl otwarcia)
+     * @param {Map} reminderMap - Mapa z danymi przypomień
+     * @param {string} threadId - ID wątku
+     */
+    async markHelpPingSent(reminderMap, threadId) {
+        const existingData = reminderMap.get(threadId);
+        if (existingData) {
+            existingData.helpPingSent = true;
+            reminderMap.set(threadId, existingData);
+            await this.saveReminders(reminderMap);
+            logger.info(`📢 Oznaczono ping o pomoc jako wysłany dla wątku: ${threadId}`);
+        }
+    }
+
+    /**
+     * Resetuje flagę pingu o pomoc (przy otwarciu/ponownym otwarciu wątku)
+     * @param {Map} reminderMap - Mapa z danymi przypomień
+     * @param {string} threadId - ID wątku
+     */
+    async resetHelpPing(reminderMap, threadId) {
+        const existingData = reminderMap.get(threadId);
+        if (existingData) {
+            existingData.helpPingSent = false;
+            reminderMap.set(threadId, existingData);
+            await this.saveReminders(reminderMap);
+            logger.info(`🔄 Zresetowano flagę pingu o pomoc dla wątku: ${threadId}`);
+        }
     }
 
     /**

@@ -10,6 +10,38 @@ const AIChatService = require('./services/aiChatService');
 
 const logger = createBotLogger('Szkolenia');
 
+/**
+ * Usuwa polskie znaki diakrytyczne i zamienia tekst na małe litery.
+ * @param {string} text
+ * @returns {string}
+ */
+function normalizePolish(text) {
+    return text
+        .toLowerCase()
+        .replace(/ó/g, 'o')
+        .replace(/[żź]/g, 'z')
+        .replace(/ę/g, 'e')
+        .replace(/ą/g, 'a')
+        .replace(/ł/g, 'l')
+        .replace(/ś/g, 's')
+        .replace(/ć/g, 'c')
+        .replace(/ń/g, 'n');
+}
+
+/**
+ * Wykrywa czy w wiadomości pada dowolna odmiana słowa "pomóc"/"pomoc"
+ * (pomocy, pomoże, pomożesz, pomogę, pomógł, pomagać itd.).
+ * @param {string} text
+ * @returns {boolean}
+ */
+function containsHelpRequest(text) {
+    if (!text) return false;
+    const normalized = normalizePolish(text);
+    // Rdzenie po normalizacji: pomoc/pomocy (pomo+c), pomoz/pomoze (pomo+z),
+    // pomoge/pomogl (pomo+g), pomaga/pomagac (pomag)
+    return /pomo[czg]|pomag/.test(normalized);
+}
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -180,38 +212,48 @@ client.on(Events.MessageCreate, async (message) => {
         if (message.channel.parentId !== config.channels.training) return;
         if (message.author.bot) return;
 
-        let threadOwnerId = message.channel.ownerId;
+        // Ustal właściciela wątku: najpierw z zapisanych danych, potem po nazwie wątku,
+        // a na końcu z ownerId kanału (z pominięciem bota, który tworzy wątki)
+        let threadData = sharedState.lastReminderMap.get(message.channel.id);
+        let threadOwnerId = threadData ? threadData.ownerId : null;
 
         if (!threadOwnerId) {
-            logger.warn(`⚠️ Wątek nie ma ownerId, szukam po nazwie: ${message.channel.name}`);
             const threadOwner = message.guild.members.cache.find(member =>
                 member.displayName === message.channel.name || member.user.username === message.channel.name
             );
-            if (!threadOwner) {
-                logger.warn(`⚠️ Nie znaleziono właściciela wątku w cache: ${message.channel.name}`);
-                return;
+            if (threadOwner) {
+                threadOwnerId = threadOwner.id;
+            } else if (message.channel.ownerId && message.channel.ownerId !== client.user.id) {
+                threadOwnerId = message.channel.ownerId;
             }
-            threadOwnerId = threadOwner.id;
-            logger.info(`✅ Znaleziono właściciela w cache: ${threadOwner.displayName} (${threadOwnerId})`);
         }
 
+        if (!threadOwnerId) {
+            logger.warn(`⚠️ Nie ustalono właściciela wątku: ${message.channel.name}`);
+            return;
+        }
+
+        // Reaguj tylko na wiadomości właściciela wątku
         if (message.author.id !== threadOwnerId) return;
 
-        logger.info(`👤 Wiadomość od właściciela wątku: ${message.author.username}`);
+        // Ping o pomoc wysyłamy tylko raz na cykl otwarcia wątku
+        if (threadData && threadData.helpPingSent) return;
 
-        const messages = await message.channel.messages.fetch({ limit: 100 });
-        const ownerMessagesCount = messages.filter(msg =>
-            msg.author.id === threadOwnerId && !msg.author.bot
-        ).size;
+        // Ping tylko gdy właściciel prosi o pomoc (dowolna odmiana słowa "pomóc")
+        if (!containsHelpRequest(message.content)) return;
 
-        logger.info(`📊 Liczba wiadomości właściciela: ${ownerMessagesCount}`);
-
-        if (ownerMessagesCount === 1) {
-            await message.channel.send(
-                config.messages.ownerNeedsHelp(threadOwnerId, config.roles.clan)
-            );
-            logger.info(`📢 Wysłano ping do ról klanowych w wątku: ${message.channel.name}`);
+        // Upewnij się, że istnieje wpis w mapie (np. dla wątków sprzed zmiany),
+        // aby trwale zapamiętać że ping został już wysłany
+        if (!threadData) {
+            const now = Date.now();
+            await reminderStorage.setReminder(sharedState.lastReminderMap, message.channel.id, now, now, threadOwnerId);
         }
+
+        await message.channel.send(
+            config.messages.ownerNeedsHelp(threadOwnerId, config.roles.clan)
+        );
+        await reminderStorage.markHelpPingSent(sharedState.lastReminderMap, message.channel.id);
+        logger.info(`📢 Wysłano ping do ról klanowych (prośba o pomoc) w wątku: ${message.channel.name}`);
 
     } catch (error) {
         logger.error('❌ Błąd podczas obsługi wiadomości:', error);
