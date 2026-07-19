@@ -163,6 +163,18 @@ const ACHIEVEMENTS = [
         descPol: 'Wyślij wyniki z 13 różnych bossów', descEng: 'Submit scores from 13 different bosses',
         check: (p, _ctx) => (p.bossesEncountered || []).length >= 13,
     },
+    {
+        id: 'boss_immortal', category: 'bosses', rarity: 'mythic', hidden: false, icon: '☄️',
+        namePol: 'Nieśmiertelny Łowca',   nameEng: 'Immortal Hunter',
+        descPol: 'Wyślij wyniki z 16 różnych bossów', descEng: 'Submit scores from 16 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 16,
+    },
+    {
+        id: 'boss_god', category: 'bosses', rarity: 'mythic', hidden: false, icon: '👑',
+        namePol: 'Bóg Łowów',   nameEng: 'God of the Hunt',
+        descPol: 'Wyślij wyniki z 20 różnych bossów', descEng: 'Submit scores from 20 different bosses',
+        check: (p, _ctx) => (p.bossesEncountered || []).length >= 20,
+    },
 
     // ===== EKSPLORATOR (EXPLORER) — ukryte =====
     {

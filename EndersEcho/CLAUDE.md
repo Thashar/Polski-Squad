@@ -166,8 +166,8 @@
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
 7. **System Osiągnięć** — `achievementService.js` + `config/achievements.js`:
-   - **78 stałych osiągnięć** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
-   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (6) · 🕵️ Eksplorator/ukryte (43) · 💎 Prestiż (13)
+   - **80 stałych osiągnięć** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
+   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (8: 1/3/5/7/10/13/16/20 różnych bossów, dwa najwyższe: ☄️ Nieśmiertelny Łowca i 👑 Bóg Łowów, oba mythic) · 🕵️ Eksplorator/ukryte (43) · 💎 Prestiż (13)
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
    - **Kasowanie częściowe:** `clearUserAchievements(guildId, userId)` — usuwa WSZYSTKIE osiągnięcia kategorii `score` i `records` oraz resetuje `recordCount`/`lastRecordAt`/`lastRecordBeatAt`; pozostałe kategorie (bosses, explorer, prestige) zostają; wywoływane przy usunięciu gracza z rankingu (panel admina + komenda `/remove` — usunięcie całego gracza)

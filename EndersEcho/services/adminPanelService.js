@@ -720,7 +720,7 @@ class AdminPanelService {
         const totalCmd = cmdUsage.reduce((sum, s) => sum + (s.count || 0), 0);
         const fmtCmd = n => n.toLocaleString('pl-PL');
         const cmdUsageValue = cmdUsage.length > 0
-            ? cmdUsage.slice(0, 10).map(s => `\`/${s.name}\` — **${fmtCmd(s.count)}**`).join(' · ')
+            ? cmdUsage.slice(0, 10).map(s => `\`/${s.name}\` — **${fmtCmd(s.count)}**`).join('\n')
                 + `\nŁącznie: **${fmtCmd(totalCmd)}**`
             : '—';
 
