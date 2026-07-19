@@ -952,6 +952,7 @@ async function handleButton(interaction, sharedState) {
         const ocrSession = sharedState.ocrService.getActiveOCRUser(interaction.guildId, interaction.user.id);
 
         if (!ocrSession) {
+            logger.warn(`[OCR-GUARD] 🚫 Odrzucono klik ${interaction.customId} od ${interaction.user.tag} - brak aktywnej sesji OCR (wiadomość: ${interaction.message?.id})`);
             await interaction.reply({
                 content: '❌ Nie masz aktywnej sesji OCR. To panel innej osoby.',
                 flags: MessageFlags.Ephemeral
@@ -960,6 +961,7 @@ async function handleButton(interaction, sharedState) {
         }
 
         if (ocrSession.messageId && interaction.message?.id !== ocrSession.messageId) {
+            logger.warn(`[OCR-GUARD] 🚫 Odrzucono klik ${interaction.customId} od ${interaction.user.tag} - kliknięta wiadomość ${interaction.message?.id} ≠ wiadomość sesji ${ocrSession.messageId}`);
             await interaction.reply({
                 content: '❌ To nie jest Twoja sesja OCR.',
                 flags: MessageFlags.Ephemeral
@@ -4847,6 +4849,7 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
     if (!session || session.userId !== interaction.user.id) {
+        logger.warn(`[PHASE2] 🚫 Odrzucono klik ${interaction.customId} od ${interaction.user.tag} - brak sesji phaseService`);
         await interaction.reply({
             content: '❌ Sesja wygasła lub nie masz uprawnień.',
             flags: MessageFlags.Ephemeral
@@ -5454,6 +5457,7 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
     const session = phaseService.getSessionByUserId(interaction.user.id);
 
     if (!session || session.userId !== interaction.user.id) {
+        logger.warn(`[PHASE2] 🚫 Odrzucono klik ${interaction.customId} od ${interaction.user.tag} - brak sesji phaseService`);
         await interaction.reply({
             content: '❌ Sesja wygasła lub nie masz uprawnień.',
             flags: MessageFlags.Ephemeral

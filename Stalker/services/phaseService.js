@@ -552,6 +552,13 @@ class PhaseService {
         session.currentStepKey = 'downloading';
 
         // Timer migania - animuje aktywny etap co 1s
+        // Zabezpieczenie przed wyciekiem: jeśli poprzedni timer tej sesji jeszcze działa
+        // (np. równoległy przebieg batch), zatrzymaj go zanim referencja zostanie nadpisana
+        if (session.blinkTimer) {
+            clearInterval(session.blinkTimer);
+            session.blinkTimer = null;
+            logger.warn('[PHASE] ⚠️ Wykryto aktywny timer migania przy starcie batch - zatrzymano stary timer');
+        }
         session.blinkTimer = setInterval(async () => {
             if (session.isUpdatingProgress) return;
             session.blinkState = !session.blinkState;
@@ -579,6 +586,12 @@ class PhaseService {
                 await new Promise(resolve => setTimeout(resolve, 100));
                 waitCount++;
             }
+            // Poczekaj aż WSZYSTKIE zakolejkowane edycje embedu postępu faktycznie się
+            // zakończą - bez tego spóźniona edycja migania mogłaby nadpisać embed
+            // potwierdzenia z przyciskami wysyłany zaraz po batchu przez index.js
+            try {
+                await session.progressEditChain;
+            } catch (_) { /* błędy logowane w _doUpdateBatchProgress */ }
         };
 
         logger.info(`[PHASE${session.phase}] 🔄 Analiza batch ${totalImages} zdjęć dla sesji ${sessionId}`);
@@ -717,8 +730,19 @@ class PhaseService {
     /**
      * Aktualizuje pasek postępu w trybie batch - "stepper" pokazujący aktualny etap
      * (pobieranie / wysyłanie do AI / przetwarzanie / analiza wyników).
+     *
+     * Wszystkie edycje embedu postępu są SERIALIZOWANE przez łańcuch promise per sesja -
+     * kolejna edycja startuje dopiero po zakończeniu poprzedniej. To gwarantuje, że
+     * edycje trafiają do Discorda w kolejności wywołań i żadna spóźniona aktualizacja
+     * (np. tick migania opóźniony przez rate limit) nie nadpisze późniejszego stanu.
      */
-    async updateBatchProgress(session) {
+    updateBatchProgress(session) {
+        session.progressEditChain = (session.progressEditChain || Promise.resolve())
+            .then(() => this._doUpdateBatchProgress(session));
+        return session.progressEditChain;
+    }
+
+    async _doUpdateBatchProgress(session) {
         if (!session.publicInteraction) return;
         try {
             const steps = session.batchSteps || [];

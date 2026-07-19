@@ -611,11 +611,18 @@ client.on(Events.MessageCreate, async (message) => {
     try {
         const session = phaseService.getSessionByUserId(message.author.id);
 
-        if (session && session.stage === 'awaiting_images' && session.channelId === message.channelId) {
+        // isProcessing: stage zmienia się na 'confirming_complete' dopiero PO zakończeniu
+        // przetwarzania, więc bez tej flagi druga wiadomość ze zdjęciami wysłana w trakcie
+        // batcha uruchomiłaby RÓWNOLEGŁE przetwarzanie na tej samej sesji (wyciek timera
+        // migania, przemieszane wyniki, nadpisane embedy)
+        if (session && session.stage === 'awaiting_images' && !session.isProcessing && session.channelId === message.channelId) {
             // Sprawdź czy wiadomość ma załączniki (zdjęcia)
             const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
 
             if (imageAttachments.size > 0) {
+                // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async);
+                // processImagesFromDisk zresetuje flagę w swoim finally
+                session.isProcessing = true;
                 logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
                 const attachmentsArray = Array.from(imageAttachments.values());
@@ -694,6 +701,7 @@ client.on(Events.MessageCreate, async (message) => {
                             });
                         }
                         editSuccess = true;
+                        logger.info(`[PHASE${session.phase}] 📬 Pokazano embed potwierdzenia z przyciskami (cel: ${session.publicInteraction.id || 'interaction-reply'})`);
                     } catch (editError) {
                         logger.warn(`[PHASE1] ⚠️ Nie można zaktualizować wiadomości postępu (${editError.message}) - wysyłam nową`);
                     }
@@ -707,6 +715,7 @@ client.on(Events.MessageCreate, async (message) => {
                         });
                         // Nowa wiadomość = nowe ID do weryfikacji właściciela sesji przy kolejnych kliknięciach
                         ocrService.setSessionMessageId(message.guild.id, message.author.id, newMsg.id);
+                        logger.info(`[PHASE${session.phase}] 📬 Wysłano NOWĄ wiadomość potwierdzenia z przyciskami (messageId: ${newMsg.id})`);
                     }
 
                     // Wyślij ghost ping zamiast zwykłego pingu w edytowanej wiadomości
@@ -722,11 +731,14 @@ client.on(Events.MessageCreate, async (message) => {
     try {
         const session = reminderService.getSessionByUserId(message.author.id);
 
-        if (session && session.stage === 'awaiting_images' && session.channelId === message.channelId) {
+        // !isProcessing - blokada równoległego przetwarzania drugiej wiadomości ze zdjęciami
+        if (session && session.stage === 'awaiting_images' && !session.isProcessing && session.channelId === message.channelId) {
             // Sprawdź czy wiadomość ma załączniki (zdjęcia)
             const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
 
             if (imageAttachments.size > 0) {
+                // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async)
+                session.isProcessing = true;
                 logger.info(`[REMIND] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
                 const attachmentsArray = Array.from(imageAttachments.values());
@@ -837,11 +849,14 @@ client.on(Events.MessageCreate, async (message) => {
     try {
         const session = punishmentService.getSessionByUserId(message.author.id);
 
-        if (session && session.stage === 'awaiting_images' && session.channelId === message.channelId) {
+        // !isProcessing - blokada równoległego przetwarzania drugiej wiadomości ze zdjęciami
+        if (session && session.stage === 'awaiting_images' && !session.isProcessing && session.channelId === message.channelId) {
             // Sprawdź czy wiadomość ma załączniki (zdjęcia)
             const imageAttachments = message.attachments.filter(att => att.contentType?.startsWith('image/'));
 
             if (imageAttachments.size > 0) {
+                // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async)
+                session.isProcessing = true;
                 logger.info(`[PUNISH] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
                 const attachmentsArray = Array.from(imageAttachments.values());

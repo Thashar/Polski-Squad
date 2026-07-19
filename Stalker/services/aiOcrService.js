@@ -12,8 +12,8 @@ const SAFETY_SETTINGS_OFF = [
 
 const PROMPT_VERSIONS = {
     'extract-results':       'v1',
-    'extract-results-batch': 'v1',
-    'extract-nicks-batch':   'v1',
+    'extract-results-batch': 'v2',
+    'extract-nicks-batch':   'v2',
     'extract-equipment':     'v1',
 };
 
@@ -188,6 +188,11 @@ ${nickListText}
 Dla każdego gracza odczytanego ze zdjęć dopasuj jego nick do NAJBARDZIEJ PODOBNEGO nicku z powyższej listy Discord. Nicki w grze mogą się nieznacznie różnić od nicków Discord (literówki, dodatkowe ozdobniki, inne znaki specjalne, emoji) - wybierz najbardziej prawdopodobne dopasowanie. W wyniku użyj DOKŁADNIE nicku z listy Discord.
 Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze zdjęcia.
 
+REGUŁY KRYTYCZNE:
+- Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. NIE wypisuj członków listy Discord, których nie ma na zdjęciach.
+- Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
+- NIE wymyślaj wyników. Jeśli gracz jest widoczny, ale jego wynik jest nieczytelny, pomiń tego gracza.
+
 Zwróć wynik w następującym formacie (jeden gracz na linię):
 <nick na discordzie> - <wynik>
 
@@ -251,6 +256,10 @@ ${nickListText}
 
 Dla każdego gracza odczytanego ze zdjęć dopasuj jego nick do NAJBARDZIEJ PODOBNEGO nicku z powyższej listy Discord. Nicki w grze mogą się nieznacznie różnić od nicków Discord (literówki, dodatkowe ozdobniki, inne znaki specjalne, emoji) - wybierz najbardziej prawdopodobne dopasowanie. W wyniku użyj DOKŁADNIE nicku z listy Discord.
 Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze zdjęcia.
+
+REGUŁY KRYTYCZNE:
+- Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. NIE wypisuj członków listy Discord, których nie ma na zdjęciach.
+- Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
 
 Zwróć TYLKO nicki, jeden nick na linię, bez numeracji, bez wyników i bez żadnego dodatkowego tekstu.
 
@@ -389,7 +398,9 @@ Jeśli zdjęcia nie zawierają listy graczy, odpowiedz: "Nie wykryto graczy".`;
         const players = [];
 
         for (const line of lines) {
-            const match = line.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+            // Wynik musi być SAMĄ liczbą na końcu linii - dzięki temu nicki zawierające
+            // myślnik (np. "7-Words") nie są ucinane na pierwszym myślniku
+            const match = line.match(/^(.+?)\s*[-–—]\s*([\d\s,._]+)$/);
 
             if (match) {
                 let playerName = match[1].trim();
