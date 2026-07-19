@@ -212,10 +212,23 @@ client.on(Events.MessageCreate, async (message) => {
         if (message.channel.parentId !== config.channels.training) return;
         if (message.author.bot) return;
 
-        // Ustal właściciela wątku: najpierw z zapisanych danych, potem po nazwie wątku,
-        // a na końcu z ownerId kanału (z pominięciem bota, który tworzy wątki)
+        // Ustal właściciela wątku:
+        // 1) zapisany ownerId, 2) autor wiadomości startowej wątku (wątek zakładany z reakcji
+        //    pod postem właściciela — najpewniejsze źródło, niezależne od zmiany nicku i cache),
+        // 3) dopasowanie po nazwie wątku, 4) ownerId kanału (z pominięciem bota tworzącego wątki)
         let threadData = sharedState.lastReminderMap.get(message.channel.id);
         let threadOwnerId = threadData ? threadData.ownerId : null;
+
+        if (!threadOwnerId) {
+            try {
+                const starterMessage = await message.channel.fetchStarterMessage();
+                if (starterMessage && starterMessage.author && !starterMessage.author.bot) {
+                    threadOwnerId = starterMessage.author.id;
+                }
+            } catch (err) {
+                // Wiadomość startowa mogła zostać usunięta — próbujemy dalej
+            }
+        }
 
         if (!threadOwnerId) {
             const threadOwner = message.guild.members.cache.find(member =>
@@ -233,6 +246,20 @@ client.on(Events.MessageCreate, async (message) => {
             return;
         }
 
+        // Zapamiętaj ustalonego właściciela (wątki sprzed zmiany nie mają zapisanego ownerId) —
+        // dzięki temu kolejne wiadomości nie wymagają ponownego ustalania i ping o pomoc działa
+        if (!threadData || !threadData.ownerId) {
+            const now = Date.now();
+            await reminderStorage.setReminder(
+                sharedState.lastReminderMap,
+                message.channel.id,
+                threadData?.lastReminder || now,
+                threadData?.threadCreated || now,
+                threadOwnerId
+            );
+            threadData = sharedState.lastReminderMap.get(message.channel.id);
+        }
+
         // Reaguj tylko na wiadomości właściciela wątku
         if (message.author.id !== threadOwnerId) return;
 
@@ -241,13 +268,6 @@ client.on(Events.MessageCreate, async (message) => {
 
         // Ping tylko gdy właściciel prosi o pomoc (dowolna odmiana słowa "pomóc")
         if (!containsHelpRequest(message.content)) return;
-
-        // Upewnij się, że istnieje wpis w mapie (np. dla wątków sprzed zmiany),
-        // aby trwale zapamiętać że ping został już wysłany
-        if (!threadData) {
-            const now = Date.now();
-            await reminderStorage.setReminder(sharedState.lastReminderMap, message.channel.id, now, now, threadOwnerId);
-        }
 
         await message.channel.send(
             config.messages.ownerNeedsHelp(threadOwnerId, config.roles.clan)
