@@ -537,9 +537,9 @@ class AdminPanelService {
             }).join('\n')
             : '—';
 
-        // Dziennik ostatnich akcji admina (max 5 w embedzie)
+        // Dziennik ostatnich akcji admina (max 10 w embedzie — tyle samo co w pliku)
         const auditValue = this._auditLog.length > 0
-            ? this._auditLog.slice(0, 5).map(a => `• ${a.action} — **${a.adminName}** · ${fmtTs(a.timestamp)}`).join('\n')
+            ? this._auditLog.slice(0, 10).map(a => `• ${a.action} — **${a.adminName}** · ${fmtTs(a.timestamp)}`).join('\n')
             : '—';
 
         return new EmbedBuilder()
