@@ -255,8 +255,20 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             if (decimalPart) {
                 const maxDec = integerPart.length === 1 ? 2 : 1;
                 if (decimalPart.length > maxDec) {
-                    log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo miejsc po przecinku (${decimalPart.length} > ${maxDec}) — odrzucam jako podróbkę`);
-                    return null;
+                    // Wyjątek: wzorzec "<int>.<cyfra>5Sx" — klasyczna halucynacja AI, gdzie "S"
+                    // zostało odczytane jako "5", a jednostka "Sx" i tak została doklejona
+                    // (np. "169.8Sx" → "169.85Sx"). Nie odrzucamy w tym przypadku — usuwamy
+                    // zdublowaną cyfrę "5" i traktujemy wynik jako poprawny "<int>.<cyfra>Sx".
+                    // Bezpieczne dla Best i Total: legalny wynik z 2 cyframi po przecinku jest
+                    // możliwy tylko przy 1 cyfrze całkowitej (maxDec=2), więc tu nigdy nie wchodzi.
+                    if (/^Sx$/i.test(unit) && decimalPart.length === 2 && decimalPart[1] === '5') {
+                        const fixedDecimal = decimalPart[0];
+                        log.info(`[AI OCR] normalizeScore: "${originalScore}" — halucynacja S→5 przed Sx, koryguję na "${integerPart}.${fixedDecimal}${unit}"`);
+                        decimalPart = fixedDecimal;
+                    } else {
+                        log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo miejsc po przecinku (${decimalPart.length} > ${maxDec}) — odrzucam jako podróbkę`);
+                        return null;
+                    }
                 }
             }
         }
