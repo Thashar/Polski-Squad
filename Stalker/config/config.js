@@ -187,5 +187,11 @@ module.exports = {
     queueChannelId: '1437122516974829679',
 
     // Kanał skanowania ekwipunku (Core Stock)
-    equipmentChannelId: '1491801320602992690'
+    equipmentChannelId: '1491801320602992690',
+
+    // News Relay - monitorowanie kanału z postami z innego serwera (AI streszczenie → kanały WARNING klanów)
+    newsRelay: {
+        // Kanał, na który przychodzą posty z innego serwera (webhook/follow/bot). Brak = funkcja wyłączona
+        sourceChannelId: process.env.STALKER_LME_NEWS_CHANNEL_ID || null
+    }
 };

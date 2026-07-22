@@ -746,6 +746,8 @@ STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 # AI OCR (opcjonalne)
 USE_STALKER_AI_OCR=false
 STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
+# News Relay (opcjonalne) - kanał z postami z innego serwera → polskie streszczenie na kanały klanów
+STALKER_LME_NEWS_CHANNEL_ID=channel_id
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here

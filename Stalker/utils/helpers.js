@@ -87,6 +87,65 @@ async function downloadDiscordImage(url, filepath) {
 }
 
 /**
+ * Pobiera obraz z Discord CDN do bufora w pamięci (bez zapisu na dysk).
+ * Wymusza HTTPS, whitelist hostów Discord, limit 25 MB i timeout 30s.
+ * @param {string} url - URL obrazu z Discord CDN (najlepiej proxyURL dla obrazów z embedów)
+ * @returns {Promise<Buffer>} - Bufor z zawartością obrazu
+ */
+async function downloadDiscordImageBuffer(url) {
+    validateDiscordUrl(url);
+
+    return new Promise((resolve, reject) => {
+        const chunks = [];
+        let totalSize = 0;
+        let finished = false;
+
+        const req = https.get(url, (response) => {
+            if (response.statusCode && response.statusCode >= 400) {
+                finished = true;
+                response.destroy();
+                reject(new Error(`HTTP ${response.statusCode} przy pobieraniu obrazu`));
+                return;
+            }
+
+            response.on('data', (chunk) => {
+                totalSize += chunk.length;
+                if (totalSize > MAX_DOWNLOAD_SIZE) {
+                    finished = true;
+                    response.destroy();
+                    reject(new Error(`Plik przekracza limit ${MAX_DOWNLOAD_SIZE / 1024 / 1024} MB`));
+                    return;
+                }
+                chunks.push(chunk);
+            });
+
+            response.on('end', () => {
+                if (!finished) {
+                    finished = true;
+                    resolve(Buffer.concat(chunks));
+                }
+            });
+
+            response.on('error', (err) => {
+                if (!finished) { finished = true; reject(err); }
+            });
+        });
+
+        req.setTimeout(DOWNLOAD_TIMEOUT_MS, () => {
+            if (!finished) {
+                finished = true;
+                req.destroy();
+                reject(new Error(`Timeout pobierania obrazu (${DOWNLOAD_TIMEOUT_MS / 1000}s)`));
+            }
+        });
+
+        req.on('error', (err) => {
+            if (!finished) { finished = true; reject(err); }
+        });
+    });
+}
+
+/**
  * Opóźnienie wykonania (delay)
  */
 function delay(ms) {
@@ -435,4 +494,5 @@ module.exports = {
     getWeekNumber,
     cleanupOldFiles,
     downloadDiscordImage,
+    downloadDiscordImageBuffer,
 };

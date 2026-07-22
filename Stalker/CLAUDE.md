@@ -71,6 +71,15 @@
     - 🚫 Wpisy Gary bez ról klanowych w gildii
     - 👥 Klanowcy bez przypisanych danych → odwrotne wyszukiwanie: najbliższy wpis Gary z procentem
 
+**News Relay** - `newsRelayService.js`: Monitorowanie jednego kanału (env `STALKER_LME_NEWS_CHANNEL_ID`), na który przychodzą posty z innego serwera (webhook/follow/bot) po angielsku, ze screenami. Bot odczytuje treść + obrazy przez **Google Gemini Vision** (`llmAdapter`, model `config.ocr.googleAiModel`), tworzy **szczegółowe polskie streszczenie** i rozsyła je (embed + oryginalne screeny) na **kanały WARNING wszystkich klanów** (`config.warningChannels`).
+- **Wpięcie:** handler w `index.js` (`client.on(MessageCreate)`) PRZED filtrem botów/webhooków — posty z innego serwera przychodzą jako webhook/bot, więc muszą być przechwycone zanim `if (message.author.bot && !isWebhook) return`. Po obsłużeniu handler robi `return` (nie przetwarza dalej).
+- **Zbieranie danych (`extractText`/`extractImageRefs`):** tekst z `message.content` ORAZ ze wszystkich embedów (author/title/description/fields/footer). Obrazy z załączników (image/*) oraz z embedów (`image.proxyURL`/`thumbnail.proxyURL` — host Discord CDN objęty whitelistą downloadera). Max 10 obrazów.
+- **Pobieranie obrazów:** `downloadDiscordImageBuffer()` (nowy helper w `utils/helpers.js`) — do pamięci, whitelist hostów Discord CDN, limit 25 MB, timeout 30s. Każdy obraz: `original` (do ponownego załączenia) + `png` przez sharp (dane dla Gemini). Nieudane pobrania są pomijane.
+- **AI:** prompt `news-relay-summary` v1 — zwraca JSON `{"title","summary"}` po polsku (parser toleruje bloki kodu i tekst dookoła, fallback: cała odpowiedź jako summary). Retry na 503/429/500/sieciowe (5× exponential backoff, max 5s).
+- **Wysyłka (`broadcast`):** embed (#5865F2, tytuł z 📢, opis clamp 4096, pierwszy obraz w embedzie przez `attachment://`, pozostałe jako galeria, pole z linkiem do oryginalnego posta, footer „Przekazano z: <nazwa źródła>"). Świeże `AttachmentBuilder` per kanał (buforów nie można reużywać), 1s odstęp między kanałami.
+- **Włączanie:** aktywny gdy ustawiony `STALKER_LME_NEWS_CHANNEL_ID` ORAZ `STALKER_GOOGLE_AI_API_KEY` (`config.ocr.googleAiApiKey`). Brak kanału = funkcja wyłączona (log info przy starcie). **Nie używa `USE_STALKER_AI_OCR`** (to osobny przełącznik dla OCR wyników).
+- **Persistencja:** brak — relay działa na żywo (event-driven). Posty z okresu, gdy bot był offline, nie są przetwarzane (świadoma decyzja, jak przy monitorowaniu DM przypomnień).
+
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 
 **RemindCX (Boss CX)** - Przycisk 💎 RemindCX na panelu OCR (row1, obok Remind), tylko przycisk (brak komendy slash):
@@ -323,6 +332,10 @@ STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
 USE_STALKER_AI_OCR=false
 STALKER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
+
+# News Relay (opcjonalne) - kanał z postami z innego serwera do streszczania po polsku
+# Wymaga STALKER_GOOGLE_AI_API_KEY (Gemini Vision). Brak = funkcja wyłączona
+STALKER_LME_NEWS_CHANNEL_ID=channel_id
 
 ```
 

@@ -108,6 +108,8 @@ const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
+const NewsRelayService = require('./services/newsRelayService');
+const newsRelayService = new NewsRelayService(config, llmAdapter, logger);
 
 const GIFTCODE_CHANNEL_ID = '1191791557607690442';
 const GIFTCODE_REPORT_CHANNEL_ID = '1263240344871370804';
@@ -428,6 +430,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 client.on(Events.MessageCreate, async (message) => {
     const isWebhook = !!message.webhookId;
+
+    // ============ NEWS RELAY: monitorowany kanał z postami z innego serwera ============
+    // Musi być PRZED filtrem botów/webhooków - posty z innego serwera przychodzą jako webhook/bot
+    if (newsRelayService.enabled && message.channel.id === config.newsRelay.sourceChannelId) {
+        newsRelayService.handleMessage(message).catch(err => logger.error(`[NEWS-RELAY] ${err.message}`));
+        return;
+    }
 
     // Ignoruj wiadomości od botów (ale webhookowe wiadomości przepuszczamy dla kanału giftcode)
     if (message.author.bot && !isWebhook) return;
