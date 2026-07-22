@@ -178,24 +178,55 @@ class NewsRelayService {
             parts.push({ inlineData: { data: img.png.toString('base64'), mimeType: 'image/png' } });
         }
 
-        const prompt = `Jesteś tłumaczem i redaktorem newsów gildii z gry Survivor.io / Lunar Mine.
-Otrzymujesz post z zewnętrznego serwera Discord (najczęściej po angielsku)${images.length > 0 ? ' wraz z załączonymi obrazami/screenami' : ''}.
+        const prompt = `Jesteś tłumaczem, redaktorem i analitykiem newsów gildii z gry Survivor.io / Lunar Mine.
 
-Twoje zadanie: przygotuj SZCZEGÓŁOWE streszczenie PO POLSKU tego, co przekazuje post${images.length > 0 ? ' ORAZ co widać na obrazach' : ''}.
-Zasady:
-- Pisz naturalną, poprawną polszczyzną.
-- Zachowaj WSZYSTKIE konkretne informacje: liczby, daty, godziny, nazwy, zmiany, instrukcje, nagrody, wymagania, statystyki widoczne na screenach.
-- Nie dodawaj informacji, których nie ma w poście ani na obrazach. Nie zgaduj.
-- Jeśli post to ogłoszenie/aktualizacja - wypunktuj najważniejsze zmiany.
-- Streszczenie ma być kompletne, ale zwięzłe (bez lania wody).
+Otrzymujesz post pochodzący z zewnętrznego serwera Discord (najczęściej w języku angielskim)${images.length > 0 ? ' wraz z załączonymi obrazami, screenami lub grafikami' : ''}.
 
-Treść posta (tekst):
-"""
-${textContent || '(brak tekstu — informacje wyłącznie na obrazach)'}
-"""
+Twoim zadaniem jest przygotowanie KOMPLETNEGO, SZCZEGÓŁOWEGO, ale ZWIĘZŁEGO streszczenia w języku polskim, obejmującego:
 
-Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w formacie:
-{"title": "<krótki tytuł po polsku, max 100 znaków>", "summary": "<szczegółowe streszczenie po polsku>"}`;
+wszystkie istotne informacje zawarte w treści posta,
+wszystkie istotne informacje widoczne na załączonych obrazach/screenach${images.length > 0 ? ' (jeśli występują)' : ''}.
+
+ZASADY:
+
+Pisz naturalną, poprawną i zrozumiałą polszczyzną.
+Tłumacz sens wypowiedzi, a nie każde zdanie dosłownie.
+Zachowaj WSZYSTKIE konkretne i istotne informacje: liczby, daty, godziny, procenty, statystyki, nazwy, wymagania, warunki, nagrody, koszty, zmiany, instrukcje i terminy.
+Dokładnie przeanalizuj tekst na obrazach/screenach i uwzględnij informacje, które nie pojawiają się w treści posta.
+Jeśli tekst na obrazie jest nieczytelny lub nie da się go jednoznacznie odczytać, NIE ZGADUJ. Pomiń tę informację.
+Nie dodawaj żadnych informacji od siebie.
+Nie zgaduj znaczenia niejasnych informacji.
+Nie wymyślaj brakujących szczegółów.
+Jeśli post zawiera błędne, niejasne lub sprzeczne informacje, przedstaw je zgodnie z oryginałem, bez samodzielnego poprawiania.
+Nazwy własne, nazwy postaci, przedmiotów, umiejętności, eventów, trybów gry, serwerów, gildii i innych elementów gry pozostaw w oryginalnej formie, chyba że ich polskie tłumaczenie jest jednoznacznie ustaloną nazwą.
+Nie tłumacz nazw własnych na siłę.
+Zachowaj oryginalny sens instrukcji i warunków.
+Jeśli post jest ogłoszeniem lub aktualizacją, przedstaw najważniejsze zmiany w czytelnej formie.
+Jeśli post zawiera kilka różnych tematów, uwzględnij każdy z nich.
+Jeśli informacja pojawia się zarówno w tekście, jak i na obrazie, nie powtarzaj jej bez potrzeby.
+Streszczenie powinno być kompletne, ale bez lania wody i zbędnych komentarzy.
+Nie pisz wstępu typu “Oto streszczenie” ani żadnych dodatkowych komentarzy.
+
+TREŚĆ POSTA:
+“””
+${textContent || '(brak tekstu — informacje znajdują się wyłącznie na obrazach)'}
+“””
+
+${images.length > 0 ? 'ZAŁĄCZONE OBRAZY/SCREENY: Przeanalizuj wszystkie załączone obrazy i uwzględnij w streszczeniu wszystkie istotne, jednoznacznie odczytelne informacje, których nie ma w tekście posta.' : ''}
+
+Zwróć wynik WYŁĄCZNIE jako poprawny obiekt JSON, bez bloków kodu, bez komentarzy i bez żadnego tekstu poza JSON.
+
+Format odpowiedzi:
+{“title”:”<krótki, konkretny tytuł po polsku, maksymalnie 100 znaków>”,“summary”:”<kompletne i szczegółowe streszczenie po polsku>”}
+
+WAŻNE:
+
+Odpowiedź musi być prawidłowym JSON-em.
+Nie używaj Markdown.
+Nie dodawaj znaków \`\`\` ani innych bloków kodu.
+Nie dodawaj żadnych pól poza “title” i “summary”.
+Wartość “title” ma mieć maksymalnie 100 znaków.
+Jeśli w streszczeniu musisz użyć cudzysłowu, zastosuj poprawne escapowanie JSON.`;
 
         parts.push({ text: prompt });
 
