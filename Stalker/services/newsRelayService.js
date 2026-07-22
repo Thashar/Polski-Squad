@@ -187,6 +187,7 @@ Zasady:
 - Zachowaj WSZYSTKIE konkretne informacje: liczby, daty, godziny, nazwy, zmiany, instrukcje, nagrody, wymagania, statystyki widoczne na screenach.
 - Nie dodawaj informacji, których nie ma w poście ani na obrazach. Nie zgaduj.
 - Jeśli post to ogłoszenie/aktualizacja - wypunktuj najważniejsze zmiany.
+- Nagłówki poszczególnych sekcji newsa ZAWSZE pogrubiaj (Discord markdown: **Nagłówek sekcji**).
 - Streszczenie ma być kompletne, ale zwięzłe (bez lania wody).
 
 Treść posta (tekst):
