@@ -270,7 +270,7 @@ Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w 
                 const summary = (parsed.summary || '').toString().trim();
                 if (summary) {
                     return {
-                        title: title || '📢 Nowość z serwera',
+                        title: title || '📢 Nowości z gry',
                         summary,
                     };
                 }
@@ -280,7 +280,7 @@ Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w 
         }
 
         // Fallback - użyj całości jako streszczenia
-        return { title: '📢 Nowość z serwera', summary: cleaned };
+        return { title: '📢 Nowości z gry', summary: cleaned };
     }
 
     /**
