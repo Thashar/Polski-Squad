@@ -12,7 +12,7 @@ const SAFETY_SETTINGS_OFF = [
 
 const PROMPT_VERSIONS = {
     'extract-results':       'v1',
-    'extract-results-batch': 'v3',
+    'extract-results-batch': 'v4',
     'extract-nicks-batch':   'v2',
     'extract-equipment':     'v1',
 };
@@ -189,11 +189,10 @@ Dla każdego gracza odczytanego ze zdjęć dopasuj jego nick do NAJBARDZIEJ PODO
 Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze zdjęcia.
 
 REGUŁY KRYTYCZNE:
-- Wypisz KAŻDY nick z powyższej listy Discord DOKŁADNIE JEDEN RAZ - nie pomijaj NIKOGO z listy.
-- Jeśli gracz z listy jest widoczny na zdjęciach - podaj jego odczytany wynik.
-- Jeśli gracza z listy NIE MA na zdjęciach albo jego wynik jest nieczytelny - podaj 0.
+- Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. Zdjęcie zawiera tylko kilka nicków i wyników - lista w odpowiedzi ma być TAK SAMO krótka.
+- NIE wypisuj graczy z listy Discord, których NIE MA na zdjęciach. Osoby bez dopasowania na zdjęciu POMIŃ całkowicie - NIE podawaj dla nich wyniku 0 ani żadnego innego.
 - Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
-- NIE wymyślaj wyników - wynik musi być odczytany ze zdjęcia albo wynosić 0.
+- NIE wymyślaj wyników. Jeśli gracz jest widoczny, ale jego wynik jest nieczytelny, pomiń tego gracza.
 
 Zwróć wynik w następującym formacie (jeden gracz na linię):
 <nick na discordzie> - <wynik>
