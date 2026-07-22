@@ -310,21 +310,29 @@ Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w 
                 // Świeże załączniki dla każdego kanału (buforów nie można reużywać między wysyłkami)
                 const files = images.map((img, i) => new AttachmentBuilder(img.original, { name: `screen_${i}_${img.name}` }));
 
-                const embed = new EmbedBuilder()
+                // Główny embed: tytuł + streszczenie + pierwszy screen
+                const mainEmbed = new EmbedBuilder()
                     .setColor('#5865F2')
                     .setTitle(title.startsWith('📢') ? title : `📢 ${title}`)
                     .setDescription(description)
                     .setFooter({ text: `Przekazano z: ${sourceName}` })
                     .setTimestamp();
 
-                if (files.length > 0) {
-                    embed.setImage(`attachment://${files[0].name}`);
-                }
-                if (jumpUrl) {
-                    embed.addFields({ name: '​', value: `[🔗 Oryginalny post](${jumpUrl})` });
+                if (jumpUrl) mainEmbed.setURL(jumpUrl);
+                if (files.length > 0) mainEmbed.setImage(`attachment://${files[0].name}`);
+                if (jumpUrl) mainEmbed.addFields({ name: '​', value: `[🔗 Oryginalny post](${jumpUrl})` });
+
+                const embeds = [mainEmbed];
+
+                // Kolejne screeny jako dodatkowe embedy — Discord łączy embedy o wspólnym `url`
+                // w jedną galerię obrazów pod głównym embedem (max 10 embedów / wiadomość)
+                for (let i = 1; i < files.length; i++) {
+                    const extra = new EmbedBuilder().setImage(`attachment://${files[i].name}`);
+                    if (jumpUrl) extra.setURL(jumpUrl);
+                    embeds.push(extra);
                 }
 
-                await channel.send({ embeds: [embed], files });
+                await channel.send({ embeds, files });
                 sent++;
 
                 if (sent < channelIds.length) await delay(CHANNEL_SEND_DELAY_MS);
