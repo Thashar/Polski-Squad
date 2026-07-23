@@ -477,6 +477,12 @@
           "description": "Aktywuj kod podarunkowy Habby dla wszystkich klanowiczów ze zapisanym ID (Gemini rozwiązuje captchę)",
           "usage": "/giftcode kod:[kod podarunkowy]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/glory-test",
+          "description": "Ręcznie wypycha dane progresu Fazy 1 do shared_data dla loterii Glory (Kontroler) - do testów",
+          "usage": "/glory-test",
+          "requiredPermission": "administrator"
         }
       ]
     },

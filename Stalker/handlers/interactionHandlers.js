@@ -166,6 +166,17 @@ async function handleSlashCommand(interaction, sharedState) {
         case 'ocr-debug':
             await handleOcrDebugCommand(interaction, config);
             break;
+        case 'glory-test':
+            // Wymagane uprawnienia administratora
+            if (!interaction.member.permissions.has('Administrator')) {
+                await interaction.reply({
+                    content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+                    flags: MessageFlags.Ephemeral
+                });
+                return;
+            }
+            await handleGloryTestExportCommand(interaction, sharedState);
+            break;
         case 'faza1':
             await handlePhase1Command(interaction, sharedState);
             break;
@@ -3104,7 +3115,12 @@ async function registerSlashCommands(client) {
                 option.setName('kod')
                     .setDescription('Kod podarunkowy do aktywacji (pomiń, aby sprawdzić kody z ostatniego miesiąca)')
                     .setRequired(false)
-            )
+            ),
+
+        new SlashCommandBuilder()
+            .setName('glory-test')
+            .setDescription('Wypycha dane progresu Fazy 1 do shared_data dla loterii Glory (Kontroler) — do testów')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ];
 
     try {
@@ -3557,6 +3573,50 @@ async function handleOcrDebugCommand(interaction, config) {
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
         flags: MessageFlags.Ephemeral
     });
+}
+
+/**
+ * Obsługuje komendę /glory-test — ręcznie wypycha dane progresu Fazy 1 do shared_data
+ * (shared_data/glory_progress.json), by Kontroler mógł przeprowadzić testy loterii Glory.
+ * Uprawnienia sprawdzane w switchu (Administrator).
+ */
+async function handleGloryTestExportCommand(interaction, sharedState) {
+    const { config, databaseService } = sharedState;
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+        const result = await exportGloryProgress(interaction.guild, databaseService, config);
+
+        if (!result || !result.ok) {
+            const reasons = {
+                no_weeks: '⚠️ Brak zapisanych tygodni Fazy 1 — nie ma czego eksportować. Użyj najpierw `/faza1`.',
+                error: `❌ Błąd eksportu: ${result?.error || 'nieznany'}`
+            };
+            await interaction.editReply({ content: reasons[result?.reason] || '❌ Nie udało się wyeksportować danych progresu Glory.' });
+            return;
+        }
+
+        const clanNames = { '0': 'PolskiSquad⁰', '1': 'PolskiSquad¹', '2': 'PolskiSquad²', 'main': 'Polski Squad (main)' };
+        let content = '✅ **Dane progresu Glory wypchnięte do `shared_data/glory_progress.json`**\n\n';
+
+        for (const [clanKey, clanData] of Object.entries(result.clans)) {
+            const name = clanNames[clanKey] || clanKey;
+            const participants = clanData.participants || [];
+            const lastWeek = clanData.lastWeek ? `${clanData.lastWeek.weekNumber}/${clanData.lastWeek.year}` : '—';
+            const avg = clanData.averageProgress !== null && clanData.averageProgress !== undefined ? clanData.averageProgress : '—';
+            const ticketsSum = participants.reduce((s, p) => s + (p.tickets || 1), 0);
+            content += `**${name}** — uczestników: **${participants.length}**, pula losów: **${ticketsSum}** (tydzień ${lastWeek}, średnia baseline: ${avg})\n`;
+        }
+
+        content += '\nMożesz teraz uruchomić w Kontrolerze **`/glory-test`**, aby zobaczyć podgląd i symulację losowania.';
+
+        if (content.length > 1900) content = content.slice(0, 1900) + '\n-# …(skrócono)';
+        await interaction.editReply({ content });
+    } catch (error) {
+        logger.error('[GLORY] ❌ Błąd komendy /glory-test:', error);
+        await interaction.editReply({ content: '❌ Wystąpił błąd podczas eksportu danych progresu Glory.' });
+    }
 }
 
 // =====================================================================

@@ -259,7 +259,9 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`, `/glory-test`
+
+**`/glory-test`** (admin, ukryta dla nie-adminów): ręcznie wypycha dane progresu Fazy 1 do `shared_data/glory_progress.json` (wywołuje `exportGloryProgress()`) — do testów loterii Glory w Kontrolerze, bez czekania na kolejne `/faza1`. Odpowiedź ephemeral pokazuje uczestników i pulę losów per klan. Uwaga: eksport i tak dzieje się automatycznie po każdym `/faza1` i przy starcie bota.
 
 **Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
 - Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)

@@ -33,7 +33,7 @@ async function exportGloryProgress(guild, databaseService, config) {
         const allWeeks = await databaseService.getAvailableWeeks(guild.id);
         if (allWeeks.length === 0) {
             logger.info('[GLORY] Brak tygodni z danymi — pomijam eksport progresu Glory');
-            return;
+            return { ok: false, reason: 'no_weeks' };
         }
 
         // Zbierz pełną historię wyników per userId (wszystkie tygodnie/klany) do liczenia rekordu.
@@ -155,8 +155,11 @@ async function exportGloryProgress(guild, databaseService, config) {
             .join(', ');
         logger.info(`[GLORY] ✅ Eksport progresu Glory zaktualizowany (uczestnicy per klan: ${summary})`);
 
+        return { ok: true, clans: exportClans, path: SHARED_DATA_PATH };
+
     } catch (err) {
         logger.error('[GLORY] ❌ Błąd eksportu progresu Glory:', err.message);
+        return { ok: false, reason: 'error', error: err.message };
     }
 }
 
