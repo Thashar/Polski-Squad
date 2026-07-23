@@ -324,8 +324,8 @@
         },
         {
           "name": "/glory-test",
-          "description": "Testuje loterię Glory - podgląd uczestników, losów i symulacja losowania (bez ogłaszania)",
-          "usage": "/glory-test [klan:all/main/0/1/2]",
+          "description": "Testowe losowanie Glory dla wszystkich klanów - publikuje na kanałach klanów jak realne losowanie (oznaczone jako test), z pełną listą uczestników",
+          "usage": "/glory-test",
           "requiredPermission": "administrator"
         }
       ]

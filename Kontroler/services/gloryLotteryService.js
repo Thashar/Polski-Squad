@@ -247,29 +247,111 @@ class GloryLotteryService {
         }
     }
 
-    // ===== Podgląd testowy (bez ogłaszania i bez zapisu) =====
+    // ===== Test: realne losowanie publikowane na docelowym kanale (bez zapisu do statystyk) =====
 
     /**
-     * Zwraca symulację losowania dla wybranego klanu (lub wszystkich) na podstawie
-     * aktualnych danych z shared_data/glory_progress.json. NIE ogłasza i NIE zapisuje niczego.
+     * Wykonuje testowe losowanie dla wybranego klanu (lub wszystkich) i PUBLIKUJE wynik
+     * na docelowym kanale klanu (embed zwycięzców + PEŁNA lista uczestników). Oznaczone jako test.
+     * NIE zapisuje zwycięstw do glory_winners.json, NIE zapisuje historii, NIE pinguje roli.
      * @param {string|null} onlyClanKey - klucz klanu ('0'/'1'/'2'/'main') lub null = wszystkie
      */
-    async getTestPreview(onlyClanKey = null) {
+    async runTestDraw(onlyClanKey = null) {
         const data = await this.readProgress();
-        const results = [];
+        if (!data || !data.clans) return { hasData: false, results: [] };
+
+        const guild = await this.client.guilds.fetch(this.config.guildId).catch(() => null);
         const clanEntries = Object.entries(this.cfg.clans)
             .filter(([key]) => !onlyClanKey || key === onlyClanKey);
 
+        const results = [];
         for (const [clanKey, clanCfg] of clanEntries) {
-            const clanData = (data && data.clans && data.clans[clanKey]) || {};
+            const clanData = data.clans[clanKey] || {};
             const participants = clanData.participants || [];
-            const winners = participants.length > 0
-                ? this.drawWeighted(participants, this.cfg.winnersCount)
-                : [];
-            results.push({ clanKey, clanCfg, clanData, participants, winners });
+            const channel = guild
+                ? await guild.channels.fetch(clanCfg.channelId).catch(() => null)
+                : null;
+
+            if (!channel) {
+                results.push({ clanKey, clanCfg, participants, winners: [], sent: false, reason: 'no_channel' });
+                continue;
+            }
+
+            if (participants.length === 0) {
+                const embed = this._prependTestBanner(this.buildNoParticipantsEmbed(clanCfg));
+                await channel.send({ embeds: [embed] });
+                results.push({ clanKey, clanCfg, participants, winners: [], sent: true });
+                continue;
+            }
+
+            const winners = this.drawWeighted(participants, this.cfg.winnersCount);
+            await this.publishTestAnnouncement(channel, clanCfg, winners, participants, clanData);
+            results.push({ clanKey, clanCfg, participants, winners, sent: true });
         }
 
-        return { hasData: !!data, updatedAt: data ? data.updatedAt : null, results };
+        return { hasData: true, results };
+    }
+
+    /**
+     * Dopisuje na górze opisu embeda baner informujący, że to losowanie testowe.
+     */
+    _prependTestBanner(embed) {
+        const banner = '> 🧪 **LOSOWANIE TESTOWE** — to nie jest oficjalne cykliczne losowanie\n\n';
+        return embed.setDescription(banner + (embed.data.description || ''));
+    }
+
+    /**
+     * Publikuje na kanale wynik wyglądający jak prawdziwe cykliczne losowanie:
+     * ping roli klanowej + embed zwycięzców (z banerem testowym na górze) + PEŁNA lista uczestników.
+     */
+    async publishTestAnnouncement(channel, clanCfg, winners, participants, clanData) {
+        const winnerIds = new Set(winners.map(w => w.userId));
+        const winnersEmbed = this._prependTestBanner(
+            this.buildWinnersEmbed(clanCfg, winners, participants, clanData)
+        );
+
+        // Pierwsza wiadomość: jak realne losowanie — ping roli klanowej + embed zwycięzców
+        await channel.send({
+            content: `<@&${clanCfg.roleId}>`,
+            embeds: [winnersEmbed],
+            allowedMentions: { roles: [clanCfg.roleId], users: winners.map(w => w.userId) }
+        });
+
+        // Kolejne wiadomości: PEŁNA lista uczestników (bez pingowania osób na liście)
+        const listEmbeds = this.buildParticipantsEmbeds(clanCfg, participants, winnerIds);
+        for (const embed of listEmbeds) {
+            await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+        }
+    }
+
+    /**
+     * Buduje embedy z PEŁNĄ listą uczestników (posortowaną wg losów, potem progresu),
+     * dzieląc na wiele embedów gdy opis przekracza limit Discorda (4096 znaków).
+     */
+    buildParticipantsEmbeds(clanCfg, participants, winnerIds) {
+        const sorted = [...participants].sort((a, b) => (b.tickets - a.tickets) || (b.progress - a.progress));
+        const lines = sorted.map((p, i) => {
+            const marker = winnerIds.has(p.userId) ? '🏆' : `**${i + 1}.**`;
+            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${p.tickets === 1 ? 'los' : 'losy'}`;
+        });
+        const totalTickets = participants.reduce((s, p) => s + (p.tickets || 1), 0);
+        const header = `# 🎟️ Uczestnicy loterii Glory — ${clanCfg.displayName}\nŁącznie: **${participants.length}** osób · pula losów: **${totalTickets}**\n\n`;
+
+        // Dzielenie na fragmenty ≤ ~3900 znaków (bezpiecznie poniżej limitu 4096 opisu embeda)
+        const chunks = [];
+        let buf = '';
+        for (const line of lines) {
+            if ((buf + '\n' + line).length > 3900) {
+                chunks.push(buf);
+                buf = line;
+            } else {
+                buf += (buf ? '\n' : '') + line;
+            }
+        }
+        if (buf) chunks.push(buf);
+
+        return chunks.map((chunk, idx) => new EmbedBuilder()
+            .setDescription((idx === 0 ? header : `-# 🎟️ Uczestnicy (cd. ${idx + 1}/${chunks.length})\n\n`) + chunk)
+            .setColor(0x5865F2));
     }
 
     // ===== Ogłoszenia =====
