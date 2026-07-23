@@ -127,10 +127,14 @@ class GloryLotteryService {
         const roles = this.cfg.excludedRoles || [];
         if (!guild || roles.length === 0 || !participants || participants.length === 0) return excluded;
 
+        // Wyjątek od wyjątku: osoby z tej listy nie są wykluczane mimo roli wykluczającej
+        const exceptions = new Set(this.cfg.excludedRolesExceptions || []);
+
         try {
             const ids = participants.map(p => p.userId);
             const members = await guild.members.fetch({ user: ids });
             for (const [id, member] of members) {
+                if (exceptions.has(id)) continue; // dopuszczony mimo roli wykluczającej
                 if (roles.some(roleId => member.roles.cache.has(roleId))) excluded.add(id);
             }
         } catch (e) {
@@ -367,11 +371,15 @@ class GloryLotteryService {
     buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds = new Set()) {
         const sorted = [...participants].sort((a, b) => (b.tickets - a.tickets) || (b.progress - a.progress));
         const lines = sorted.map((p, i) => {
-            const marker = winnerIds.has(p.userId) ? '🏆' : (excludeIds.has(p.userId) ? '🚫' : `**${i + 1}.**`);
-            const suffix = excludeIds.has(p.userId) ? ' · *wykluczony z losowania*' : '';
-            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${losWord(p.tickets)}${suffix}`;
+            // Osoby wykluczone: krótki wpis bez progresu/losów (ich losy nie liczą się do puli)
+            if (excludeIds.has(p.userId)) {
+                return `🚫 <@${p.userId}> — wykluczony z losowania`;
+            }
+            const marker = winnerIds.has(p.userId) ? '🏆' : `**${i + 1}.**`;
+            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${losWord(p.tickets)}`;
         });
-        const totalTickets = participants.reduce((s, p) => s + (p.tickets || 1), 0);
+        // Pula losów liczona tylko z osób NIE wykluczonych
+        const totalTickets = participants.reduce((s, p) => s + (excludeIds.has(p.userId) ? 0 : (p.tickets || 1)), 0);
         const excludedNote = excludeIds.size > 0 ? ` · 🚫 wykluczonych: **${excludeIds.size}**` : '';
         const header = `# 🎟️ Uczestnicy loterii Glory — ${clanCfg.displayName}\nŁącznie: **${participants.length}** osób · pula losów: **${totalTickets}**${excludedNote}\n\n`;
 

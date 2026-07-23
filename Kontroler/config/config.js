@@ -173,6 +173,13 @@ module.exports = {
             .map(s => s.trim())
             .filter(Boolean),
 
+        // Wyjątek od wyjątku: ID osób, które MIMO posiadania roli wykluczającej NADAL biorą udział
+        // w losowaniu (nie są wykluczane). Lista ID w env, rozdzielona przecinkami.
+        excludedRolesExceptions: (process.env.KONTROLER_GLORY_EXCLUDED_ROLES_EXCEPTIONS || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
+
         // Klany: klucz eksportu Stalkera (0/1/2/main) → rola (ping), kanał ogłoszenia (env), nazwa
         // UWAGA: mapowanie kanałów na klany należy zweryfikować przez env KONTROLER_GLORY_CHANNEL_*
         clans: {

@@ -52,6 +52,7 @@
    - **Losy (skala w nieskończoność):** progres ≥ 5 → 1 los; następnie **N losów gdy progres ≥ (N-1) × średnia** progresu progresujących z wcześniejszego tygodnia (≥ 1× średnia → 2 losy, ≥ 2× → 3, ≥ 3× → 4, ≥ 4× → 5, …). Wzór: `tickets = floor(progres / średnia) + 1`. Brak danych wcześniejszego tygodnia → wszyscy kwalifikujący dostają 1 los. Kontroler nie nakłada górnego limitu losów w puli
    - **Losowanie:** cron **piątek 22:00** czasu polskiego (`utils/timezone.js`, setTimeout jak MVP), osobne dla każdego klanu; pula ważona (1–3 wpisy), **3 zwycięzców/klan** (`config.glory.winnersCount`), bez powtórzeń. Ogłoszenie embedem na kanale klanu (env `KONTROLER_GLORY_CHANNEL_*`) z **pingiem roli klanowej**
    - **Role wykluczone z wygrywania (`config.glory.excludedRoles`, env `KONTROLER_GLORY_EXCLUDED_ROLES`):** osoby z którąkolwiek z tych ról są usuwane z puli losowania (`getExcludedUserIds()` sprawdza role członków przez `guild.members.fetch`), ale **nadal liczą się do średniej progresu („oczekiwany standard")** — średnia jest liczona po stronie Stalkera po wszystkich progresujących, więc wykluczenie ról jej nie zmienia. Dotyczy losowania cyklicznego, `/glory-reroll` i `/glory-test` (w teście oznaczeni 🚫 na liście)
+     - **Wyjątek od wyjątku (`config.glory.excludedRolesExceptions`, env `KONTROLER_GLORY_EXCLUDED_ROLES_EXCEPTIONS`):** lista ID osób, które MIMO posiadania roli wykluczającej NADAL biorą udział w losowaniu (nie są wykluczane)
    - **Licznik zwycięstw:** każde wygrane Glory zapisywane do `shared_data/glory_winners.json` (`{userId: {count, displayName, history}}`) — Stalker pokazuje to jako gwiazdki ⭐ w `/player-status` i `/player-compare` (zastąpiło dawne „Wykonuje CX")
    - **Persistencja:** `data/glory_history.json` (ostatnie losowanie per klan: uczestnicy + zwycięzcy) — do rerolla, restart-safe
    - **`/glory-reroll <klan>`** (admin, ukryta dla nie-adminów przez `setDefaultMemberPermissions`): dobiera dodatkowego zwycięzcę spośród uczestników ostatniego losowania, którzy nie wygrali (system awaryjny)
@@ -94,6 +95,8 @@ KONTROLER_GLORY_CHANNEL_1=channel_id      # Kanał ogłoszeń Glory dla PolskiSq
 KONTROLER_GLORY_CHANNEL_2=channel_id      # Kanał ogłoszeń Glory dla PolskiSquad²
 # Role wykluczone z WYGRYWANIA Glory (lista ID rozdzielona przecinkami; wykluczeni nadal liczą się do średniej)
 KONTROLER_GLORY_EXCLUDED_ROLES=role_id1,role_id2
+# Wyjątek od wyjątku: ID osób, które mimo roli wykluczającej NADAL biorą udział w losowaniu
+KONTROLER_GLORY_EXCLUDED_ROLES_EXCEPTIONS=user_id1,user_id2
 # Role klanowe (współdzielone ze Stalkerem): STALKER_LME_TARGET_ROLE_MAIN/0/1/2
 ```
 
