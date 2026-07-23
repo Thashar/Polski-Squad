@@ -16,10 +16,10 @@ const MIN_PROGRESS_FOR_TICKET = 5;
  * Liczy się tylko, gdy istnieje wcześniejszy rekord > 0 (nowi gracze nie "progresują").
  *
  * Dla każdego klanu (0/1/2/main) zapisuje listę uczestników ostatniego tygodnia
- * z przypisaną liczbą losów (1/2/3) wg progów:
+ * z przypisaną liczbą losów wg progów (skala w nieskończoność):
  *   - progres ≥ MIN_PROGRESS_FOR_TICKET (5)            → 1 los
- *   - progres ≥ średnia progresu progresujących (poprz. tydzień) → 2 losy
- *   - progres ≥ 2 × ta średnia                          → 3 losy
+ *   - progres ≥ (N-1) × średnia progresu progresujących (poprz. tydzień) → N losów
+ *     (czyli: ≥ 1× średnia → 2, ≥ 2× → 3, ≥ 3× → 4, ≥ 4× → 5, ...)
  * Gdy brak danych wcześniejszego tygodnia / brak progresujących → każdy kwalifikujący dostaje 1 los.
  *
  * Zapisywane do shared_data/glory_progress.json, czytane przez Kontroler (gloryLotteryService).
@@ -118,10 +118,11 @@ async function exportGloryProgress(guild, databaseService, config) {
                 const prog = progressInWeek(p.userId, p.score, lastWeek.weekNumber, lastWeek.year);
                 if (prog === null || prog < MIN_PROGRESS_FOR_TICKET) continue;
 
+                // Skala losów w nieskończoność: N losów gdy progres ≥ (N-1) × średnia.
+                //   1 los = progres ≥ 5 (poniżej średniej), 2 = ≥ 1× średnia, 3 = ≥ 2×, 4 = ≥ 3×, 5 = ≥ 4×, ...
                 let tickets = 1;
                 if (averageProgress && averageProgress > 0) {
-                    if (prog >= 2 * averageProgress) tickets = 3;
-                    else if (prog >= averageProgress) tickets = 2;
+                    tickets = Math.floor(prog / averageProgress) + 1;
                 }
                 participants.push({
                     userId: p.userId,

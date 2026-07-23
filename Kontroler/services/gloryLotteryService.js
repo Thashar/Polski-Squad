@@ -9,11 +9,19 @@ const logger = createBotLogger('Kontroler');
 const SHARED_GLORY_PROGRESS = path.join(__dirname, '../../shared_data/glory_progress.json');
 const SHARED_GLORY_WINNERS = path.join(__dirname, '../../shared_data/glory_winners.json');
 
+// Polska odmiana słowa "los": 1 los, 2-4 losy, 5+ losów (z wyjątkami 12-14 → losów)
+function losWord(n) {
+    if (n === 1) return 'los';
+    const d = n % 10, dd = n % 100;
+    if (d >= 2 && d <= 4 && !(dd >= 12 && dd <= 14)) return 'losy';
+    return 'losów';
+}
+
 /**
  * Loteria Glory — cotygodniowe losowanie (piątek 22:00 czasu polskiego) osobno dla każdego klanu.
  *
  * Źródło danych: shared_data/glory_progress.json (eksportowane przez Stalkera na podstawie
- * progresu Fazy 1). Każdy uczestnik ma przypisaną liczbę losów (1/2/3). Losowanie jest ważone
+ * progresu Fazy 1). Każdy uczestnik ma przypisaną liczbę losów (1, 2, 3, … bez limitu). Losowanie jest ważone
  * (uczestnik z N losami = N wpisów w puli), bez powtórzeń zwycięzców.
  *
  * Wyniki ogłaszane na kanale klanu (env KONTROLER_GLORY_CHANNEL_*) z pingiem roli klanowej.
@@ -135,7 +143,7 @@ class GloryLotteryService {
         const pool = [];
         for (const p of participants) {
             if (excludeIds.has(p.userId)) continue;
-            const tickets = Math.max(1, Math.min(3, p.tickets || 1));
+            const tickets = Math.max(1, Math.floor(p.tickets || 1)); // bez górnego limitu
             for (let i = 0; i < tickets; i++) pool.push(p);
         }
         // Tasowanie Fisher-Yates
@@ -361,7 +369,7 @@ class GloryLotteryService {
         const lines = sorted.map((p, i) => {
             const marker = winnerIds.has(p.userId) ? '🏆' : (excludeIds.has(p.userId) ? '🚫' : `**${i + 1}.**`);
             const suffix = excludeIds.has(p.userId) ? ' · *wykluczony z losowania*' : '';
-            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${p.tickets === 1 ? 'los' : 'losy'}${suffix}`;
+            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${losWord(p.tickets)}${suffix}`;
         });
         const totalTickets = participants.reduce((s, p) => s + (p.tickets || 1), 0);
         const excludedNote = excludeIds.size > 0 ? ` · 🚫 wykluczonych: **${excludeIds.size}**` : '';
@@ -394,7 +402,7 @@ class GloryLotteryService {
 
         const winnersList = winners.length > 0
             ? winners
-                .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${w.tickets === 1 ? 'los' : 'losy'})`)
+                .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${losWord(w.tickets)})`)
                 .join('\n')
             : '*Brak zwycięzców — wszyscy uczestnicy są wykluczeni z losowania.*';
 
@@ -405,7 +413,7 @@ Zwycięzcy losowania **rangi Glory Member** za progres w Fazie 1 (tydzień ${wee
 
 ${winnersList}
 
--# 🎟️ Uczestników: ${participants.length} · Losowanie ważone progresem (1–3 losy)`)
+-# 🎟️ Uczestników: ${participants.length} · Losowanie ważone progresem (więcej progresu = więcej losów)`)
             .setColor(0xF1C40F)
             .setTimestamp();
     }
@@ -437,7 +445,7 @@ W tym tygodniu nikt nie zaliczył wystarczającego progresu w Fazie 1 — brak z
         const embed = new EmbedBuilder()
             .setDescription(`# 🎲 Dodatkowy zwycięzca Glory — ${clanCfg.displayName}
 
-Dodatkowo wylosowano: <@${winner.userId}> — progres **${winner.progress}** (${winner.tickets} ${winner.tickets === 1 ? 'los' : 'losy'})`)
+Dodatkowo wylosowano: <@${winner.userId}> — progres **${winner.progress}** (${winner.tickets} ${losWord(winner.tickets)})`)
             .setColor(0xF1C40F)
             .setTimestamp();
 
