@@ -414,12 +414,24 @@ class GloryLotteryService {
                 .join('\n')
             : '*Brak zwycięzców — wszyscy uczestnicy są wykluczeni z losowania.*';
 
+        // Standard tygodnia (średni progres) + konkretne progi losów dla tego klanu
+        const avg = clanData.averageProgress;
+        let standardLine;
+        if (avg && avg > 0) {
+            standardLine = `📊 **Standard tygodnia** (średni progres progresujących): **${avg}**
+🎟️ Progi losów: ≥5 → **1**, ≥${avg} → **2**, ≥${Math.round(2 * avg)} → **3**, ≥${Math.round(3 * avg)} → **4**, … (bez limitu)`;
+        } else {
+            standardLine = '📊 **Standard tygodnia:** brak danych z poprzedniego tygodnia — każdy uczestnik dostaje 1 los';
+        }
+
         return new EmbedBuilder()
             .setDescription(`# 🏆 Loteria Glory — ${clanCfg.displayName}
 
 Zwycięzcy losowania **rangi Glory Member** za progres w Fazie 1 (tydzień ${weekLabel}):
 
 ${winnersList}
+
+${standardLine}
 
 -# 🎟️ Uczestników: ${participants.length} · Losowanie ważone progresem (więcej progresu = więcej losów)`)
             .setColor(0xF1C40F)
