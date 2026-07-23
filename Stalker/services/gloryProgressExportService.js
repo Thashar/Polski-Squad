@@ -7,6 +7,9 @@ const SHARED_DATA_PATH = path.join(__dirname, '../../shared_data/glory_progress.
 
 // Minimalny progres (względem rekordu) uprawniający do 1 losu w loterii Glory
 const MIN_PROGRESS_FOR_TICKET = 5;
+// Ulga dla słabszych graczy: przy rekordzie < LOW_RECORD_THRESHOLD próg na 1 los to tylko 1 pkt progresu
+const LOW_RECORD_THRESHOLD = 620;
+const MIN_PROGRESS_LOW_RECORD = 1;
 
 /**
  * Eksportuje dane progresu Fazy 1 potrzebne do loterii Glory (Kontroler).
@@ -17,7 +20,7 @@ const MIN_PROGRESS_FOR_TICKET = 5;
  *
  * Dla każdego klanu (0/1/2/main) zapisuje listę uczestników ostatniego tygodnia
  * z przypisaną liczbą losów wg progów (skala w nieskończoność):
- *   - progres ≥ MIN_PROGRESS_FOR_TICKET (5)            → 1 los
+ *   - progres ≥ 5 (lub ≥ 1 gdy rekord gracza < 620)    → 1 los
  *   - progres ≥ (N-1) × średnia progresu progresujących (poprz. tydzień) → N losów
  *     (czyli: ≥ 1× średnia → 2, ≥ 2× → 3, ≥ 3× → 4, ≥ 4× → 5, ...)
  * Gdy brak danych wcześniejszego tygodnia / brak progresujących → każdy kwalifikujący dostaje 1 los.
@@ -115,11 +118,16 @@ async function exportGloryProgress(guild, databaseService, config) {
             const lastPlayers = weekClanPlayers.get(`${lastWeek.weekNumber}-${lastWeek.year}-${clan}`) || [];
             const participants = [];
             for (const p of lastPlayers) {
-                const prog = progressInWeek(p.userId, p.score, lastWeek.weekNumber, lastWeek.year);
-                if (prog === null || prog < MIN_PROGRESS_FOR_TICKET) continue;
+                const rec = recordBefore(p.userId, lastWeek.weekNumber, lastWeek.year);
+                if (rec <= 0) continue; // nowy gracz — brak wcześniejszego rekordu, nie "progresuje"
+                const prog = p.score - rec;
+
+                // Próg na 1 los: normalnie 5 pkt, ale przy słabym rekordzie (< 620) tylko 1 pkt progresu
+                const minProgress = rec < LOW_RECORD_THRESHOLD ? MIN_PROGRESS_LOW_RECORD : MIN_PROGRESS_FOR_TICKET;
+                if (prog < minProgress) continue;
 
                 // Skala losów w nieskończoność: N losów gdy progres ≥ (N-1) × średnia.
-                //   1 los = progres ≥ 5 (poniżej średniej), 2 = ≥ 1× średnia, 3 = ≥ 2×, 4 = ≥ 3×, 5 = ≥ 4×, ...
+                //   1 los = progres poniżej średniej, 2 = ≥ 1× średnia, 3 = ≥ 2×, 4 = ≥ 3×, 5 = ≥ 4×, ...
                 let tickets = 1;
                 if (averageProgress && averageProgress > 0) {
                     tickets = Math.floor(prog / averageProgress) + 1;
