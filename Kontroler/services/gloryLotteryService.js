@@ -247,13 +247,34 @@ class GloryLotteryService {
         }
     }
 
+    // ===== Podgląd testowy (bez ogłaszania i bez zapisu) =====
+
+    /**
+     * Zwraca symulację losowania dla wybranego klanu (lub wszystkich) na podstawie
+     * aktualnych danych z shared_data/glory_progress.json. NIE ogłasza i NIE zapisuje niczego.
+     * @param {string|null} onlyClanKey - klucz klanu ('0'/'1'/'2'/'main') lub null = wszystkie
+     */
+    async getTestPreview(onlyClanKey = null) {
+        const data = await this.readProgress();
+        const results = [];
+        const clanEntries = Object.entries(this.cfg.clans)
+            .filter(([key]) => !onlyClanKey || key === onlyClanKey);
+
+        for (const [clanKey, clanCfg] of clanEntries) {
+            const clanData = (data && data.clans && data.clans[clanKey]) || {};
+            const participants = clanData.participants || [];
+            const winners = participants.length > 0
+                ? this.drawWeighted(participants, this.cfg.winnersCount)
+                : [];
+            results.push({ clanKey, clanCfg, clanData, participants, winners });
+        }
+
+        return { hasData: !!data, updatedAt: data ? data.updatedAt : null, results };
+    }
+
     // ===== Ogłoszenia =====
 
-    async announceWinners(channel, clanCfg, winners, participants, clanData) {
-        if (!channel) {
-            logger.warn(`⚠️ Glory: brak kanału ogłoszeń dla ${clanCfg.displayName} (${clanCfg.channelId})`);
-            return;
-        }
+    buildWinnersEmbed(clanCfg, winners, participants, clanData) {
         const weekLabel = clanData.lastWeek
             ? `${clanData.lastWeek.weekNumber}/${clanData.lastWeek.year}`
             : '—';
@@ -262,7 +283,7 @@ class GloryLotteryService {
             .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${w.tickets === 1 ? 'los' : 'losy'})`)
             .join('\n');
 
-        const embed = new EmbedBuilder()
+        return new EmbedBuilder()
             .setDescription(`# 🏆 Loteria Glory — ${clanCfg.displayName}
 
 Zwycięzcy losowania **rangi Glory Member** za progres w Fazie 1 (tydzień ${weekLabel}):
@@ -272,7 +293,23 @@ ${winnersList}
 -# 🎟️ Uczestników: ${participants.length} · Losowanie ważone progresem (1–3 losy)`)
             .setColor(0xF1C40F)
             .setTimestamp();
+    }
 
+    buildNoParticipantsEmbed(clanCfg) {
+        return new EmbedBuilder()
+            .setDescription(`# 🏆 Loteria Glory — ${clanCfg.displayName}
+
+W tym tygodniu nikt nie zaliczył wystarczającego progresu w Fazie 1 — brak zwycięzców.`)
+            .setColor(0x95A5A6)
+            .setTimestamp();
+    }
+
+    async announceWinners(channel, clanCfg, winners, participants, clanData) {
+        if (!channel) {
+            logger.warn(`⚠️ Glory: brak kanału ogłoszeń dla ${clanCfg.displayName} (${clanCfg.channelId})`);
+            return;
+        }
+        const embed = this.buildWinnersEmbed(clanCfg, winners, participants, clanData);
         await channel.send({
             content: `<@&${clanCfg.roleId}>`,
             embeds: [embed],
@@ -298,13 +335,7 @@ Dodatkowo wylosowano: <@${winner.userId}> — progres **${winner.progress}** (${
 
     async announceNoParticipants(channel, clanCfg) {
         if (!channel) return;
-        const embed = new EmbedBuilder()
-            .setDescription(`# 🏆 Loteria Glory — ${clanCfg.displayName}
-
-W tym tygodniu nikt nie zaliczył wystarczającego progresu w Fazie 1 — brak zwycięzców.`)
-            .setColor(0x95A5A6)
-            .setTimestamp();
-        await channel.send({ embeds: [embed] });
+        await channel.send({ embeds: [this.buildNoParticipantsEmbed(clanCfg)] });
     }
 }
 

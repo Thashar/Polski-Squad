@@ -53,10 +53,11 @@
    - **Losowanie:** cron **piątek 22:00** czasu polskiego (`utils/timezone.js`, setTimeout jak MVP), osobne dla każdego klanu; pula ważona (1–3 wpisy), **3 zwycięzców/klan** (`config.glory.winnersCount`), bez powtórzeń. Ogłoszenie embedem na kanale klanu (env `KONTROLER_GLORY_CHANNEL_*`) z **pingiem roli klanowej**
    - **Licznik zwycięstw:** każde wygrane Glory zapisywane do `shared_data/glory_winners.json` (`{userId: {count, displayName, history}}`) — Stalker pokazuje to jako gwiazdki ⭐ w `/player-status` i `/player-compare` (zastąpiło dawne „Wykonuje CX")
    - **Persistencja:** `data/glory_history.json` (ostatnie losowanie per klan: uczestnicy + zwycięzcy) — do rerolla, restart-safe
-   - **`/glory-reroll <klan>`** (admin): dobiera dodatkowego zwycięzcę spośród uczestników ostatniego losowania, którzy nie wygrali (system awaryjny)
+   - **`/glory-reroll <klan>`** (admin, ukryta dla nie-adminów przez `setDefaultMemberPermissions`): dobiera dodatkowego zwycięzcę spośród uczestników ostatniego losowania, którzy nie wygrali (system awaryjny)
+   - **`/glory-test [klan]`** (admin, ukryta dla nie-adminów): podgląd i symulacja losowania (ephemeral) — per klan pokazuje ostatni/wcześniejszy tydzień, średnią progresu (baseline), listę uczestników z progresem i liczbą losów oraz przykładowe losowanie. **Nie ogłasza i nie zapisuje** (bez pingów, bez `glory_winners.json`). Domyślnie wszystkie klany (`klan:all`)
    - **Konfiguracja:** `config.glory` (dataFile, scheduleWeekday=5/Hour=22/Minute=0, winnersCount=3, clans: klucz→{roleId, channelId, displayName})
 
-**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/glory-reroll`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
+**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/glory-reroll`, `/glory-test`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot1):**

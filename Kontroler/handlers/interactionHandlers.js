@@ -1,5 +1,5 @@
 const {
-    SlashCommandBuilder, REST, Routes,
+    SlashCommandBuilder, REST, Routes, PermissionFlagsBits,
     EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
@@ -60,6 +60,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     break;
                 case 'glory-reroll':
                     await handleGloryRerollCommand(interaction, config);
+                    break;
+                case 'glory-test':
+                    await handleGloryTestCommand(interaction, config);
                     break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
@@ -1341,11 +1344,28 @@ async function registerSlashCommands(client, config) {
         new SlashCommandBuilder()
             .setName('glory-reroll')
             .setDescription('Dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (system awaryjny)')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
             .addStringOption(option =>
                 option.setName('klan')
                     .setDescription('Klan, dla którego dobrać dodatkowego zwycięzcę')
                     .setRequired(true)
                     .addChoices(
+                        { name: 'Polski Squad (main)', value: 'main' },
+                        { name: 'PolskiSquad⁰', value: '0' },
+                        { name: 'PolskiSquad¹', value: '1' },
+                        { name: 'PolskiSquad²', value: '2' }
+                    )),
+
+        new SlashCommandBuilder()
+            .setName('glory-test')
+            .setDescription('Testuje loterię Glory - podgląd uczestników, losów i symulacja losowania (bez ogłaszania)')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            .addStringOption(option =>
+                option.setName('klan')
+                    .setDescription('Klan do przetestowania (domyślnie wszystkie)')
+                    .setRequired(false)
+                    .addChoices(
+                        { name: 'Wszystkie klany', value: 'all' },
                         { name: 'Polski Squad (main)', value: 'main' },
                         { name: 'PolskiSquad⁰', value: '0' },
                         { name: 'PolskiSquad¹', value: '1' },
@@ -1460,6 +1480,80 @@ async function handleGloryRerollCommand(interaction, config) {
     } catch (error) {
         logger.error('❌ Błąd obsługi komendy /glory-reroll:', error);
         await interaction.editReply({ content: '❌ Wystąpił błąd podczas dobierania zwycięzcy Glory.' });
+    }
+}
+
+/**
+ * Obsługuje komendę /glory-test — podgląd i symulacja losowania Glory (admin, bez ogłaszania i zapisu)
+ */
+async function handleGloryTestCommand(interaction, config) {
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const gloryService = interaction.client.gloryService;
+    if (!gloryService) {
+        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', ephemeral: true });
+        return;
+    }
+
+    const selected = interaction.options.getString('klan') || 'all';
+    const onlyClanKey = selected === 'all' ? null : selected;
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const preview = await gloryService.getTestPreview(onlyClanKey);
+
+        if (!preview.hasData) {
+            await interaction.editReply({
+                content: '⚠️ Brak danych progresu Glory (`shared_data/glory_progress.json`). Stalker eksportuje je po zatwierdzeniu `/faza1` lub przy starcie.'
+            });
+            return;
+        }
+
+        const ticketWord = (n) => (n === 1 ? 'los' : 'losy');
+        let content = `🧪 **Test loterii Glory** — podgląd bez ogłaszania i bez zapisu\n`;
+        content += `-# Dane zaktualizowane: ${preview.updatedAt ? new Date(preview.updatedAt).toLocaleString('pl-PL', { timeZone: 'Europe/Warsaw' }) : '—'} · Zwycięzców/klan: ${config.glory.winnersCount}\n\n`;
+
+        for (const r of preview.results) {
+            const { clanCfg, clanData, participants, winners } = r;
+            const lastWeek = clanData.lastWeek ? `${clanData.lastWeek.weekNumber}/${clanData.lastWeek.year}` : '—';
+            const prevWeek = clanData.previousWeek ? `${clanData.previousWeek.weekNumber}/${clanData.previousWeek.year}` : '—';
+            const avg = clanData.averageProgress !== null && clanData.averageProgress !== undefined ? clanData.averageProgress : '—';
+
+            content += `### ${clanCfg.displayName}\n`;
+            content += `-# Ostatni tydzień: ${lastWeek} · Wcześniejszy: ${prevWeek} · Średnia progresu (baseline): ${avg}\n`;
+
+            if (participants.length === 0) {
+                content += `📭 Brak uczestników (nikt nie zaliczył progresu ≥ 5).\n\n`;
+                continue;
+            }
+
+            // Ranking uczestników wg losów, potem progresu
+            const sorted = [...participants].sort((a, b) => (b.tickets - a.tickets) || (b.progress - a.progress));
+            const winnerIds = new Set(winners.map(w => w.userId));
+            const shown = sorted.slice(0, 20);
+            content += shown
+                .map(p => `${winnerIds.has(p.userId) ? '🏆' : '▫️'} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${ticketWord(p.tickets)}`)
+                .join('\n');
+            if (sorted.length > shown.length) content += `\n-# …i ${sorted.length - shown.length} więcej`;
+
+            const totalTickets = participants.reduce((s, p) => s + (p.tickets || 1), 0);
+            content += `\n🎟️ Uczestników: **${participants.length}** · Pula losów: **${totalTickets}**\n`;
+            content += `🎲 Przykładowe losowanie (${winners.length}): ${winners.map(w => `<@${w.userId}>`).join(', ') || '—'}\n\n`;
+        }
+
+        if (content.length > 1900) content = content.slice(0, 1900) + '\n-# …(skrócono)';
+
+        await interaction.editReply({ content, allowedMentions: { parse: [] } });
+    } catch (error) {
+        logger.error('❌ Błąd obsługi komendy /glory-test:', error);
+        await interaction.editReply({ content: '❌ Wystąpił błąd podczas testu loterii Glory.' });
     }
 }
 

@@ -321,6 +321,12 @@
           "description": "Dobiera dodatkowego zwycięzcę loterii Glory dla wybranego klanu (system awaryjny)",
           "usage": "/glory-reroll klan:[main/0/1/2]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/glory-test",
+          "description": "Testuje loterię Glory - podgląd uczestników, losów i symulacja losowania (bez ogłaszania)",
+          "usage": "/glory-test [klan:all/main/0/1/2]",
+          "requiredPermission": "administrator"
         }
       ]
     },
