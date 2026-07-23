@@ -3,6 +3,7 @@ const messages = require('../config/messages');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { exportClanThresholds } = require('../services/clanThresholdsExportService');
+const { exportGloryProgress } = require('../services/gloryProgressExportService');
 const fs = require('fs').promises;
 
 const logger = createBotLogger('Stalker');
@@ -4519,6 +4520,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         // Zaktualizuj progi rekrutacyjne dla Rekrutera (fire-and-forget)
         exportClanThresholds(interaction.guild, sharedState.databaseService, sharedState.config)
             .catch(err => logger.error('[THRESHOLDS] Błąd aktualizacji progów:', err.message));
+        exportGloryProgress(interaction.guild, sharedState.databaseService, sharedState.config)
+            .catch(err => logger.error('[GLORY] Błąd aktualizacji progresu Glory:', err.message));
 
         // Wyślij powiadomienie na kanał ostrzeżeń
         try {
@@ -9339,28 +9342,14 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const coeff1 = computeCoefficients(userInfo1.userId, data1, lifePts1);
         const coeff2 = computeCoefficients(userInfo2.userId, data2, lifePts2);
 
-        // Sprawdź dane CX (hasCx = kiedykolwiek, hasCxRecent = ostatni miesiąc, hasCxElite = 2700+ w ostatnim miesiącu)
-        let hasCx1 = false, hasCxRecent1 = false, hasCxElite1 = false;
-        let hasCx2 = false, hasCxRecent2 = false, hasCxElite2 = false;
+        // Wczytaj licznik zdobytych Glory dla obu graczy (zapisywane przez Kontroler bot)
+        let gloryCount1 = 0, gloryCount2 = 0;
         try {
-            const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
-            const cxRaw = await fs.readFile(cxHistoryPath, 'utf8');
-            const cxHistory = JSON.parse(cxRaw);
-            const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
-            const u1 = cxHistory[userInfo1.userId];
-            if (u1?.scores?.length > 0) {
-                hasCx1 = true;
-                const r1 = u1.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
-                hasCxRecent1 = r1.length > 0;
-                hasCxElite1 = r1.some(s => s.score >= 2700);
-            }
-            const u2 = cxHistory[userInfo2.userId];
-            if (u2?.scores?.length > 0) {
-                hasCx2 = true;
-                const r2 = u2.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
-                hasCxRecent2 = r2.length > 0;
-                hasCxElite2 = r2.some(s => s.score >= 2700);
-            }
+            const gloryWinnersPath = require('path').join(__dirname, '../../shared_data/glory_winners.json');
+            const gloryRaw = await fs.readFile(gloryWinnersPath, 'utf8');
+            const gloryWinners = JSON.parse(gloryRaw);
+            if (typeof gloryWinners[userInfo1.userId]?.count === 'number') gloryCount1 = gloryWinners[userInfo1.userId].count;
+            if (typeof gloryWinners[userInfo2.userId]?.count === 'number') gloryCount2 = gloryWinners[userInfo2.userId].count;
         } catch (e) { /* brak pliku - ok */ }
 
         // Wczytaj dane EndersEcho dla obu graczy
@@ -9408,8 +9397,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const m2 = calcMetrics(data2);
 
         // Boost CX do zaangażowania - tylko za aktywność w ostatnim miesiącu
-        if (hasCxRecent1 && m1.engagementFactor !== null) m1.engagementFactor = Math.min(100, m1.engagementFactor + 5);
-        if (hasCxRecent2 && m2.engagementFactor !== null) m2.engagementFactor = Math.min(100, m2.engagementFactor + 5);
 
         const name1 = userInfo1.latestNick;
         const name2 = userInfo2.latestNick;
@@ -9492,8 +9479,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         // Formatuj pole statystyk gracza (pełne inline field)
-        function fmtPlayerField(m, coeff, mvp, hasCx, hasCxRecent, hasCxElite, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal, coreStock, coreRankings) {
-            const cxStar = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
+        function fmtPlayerField(m, coeff, mvp, gloryCount, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal, coreStock, coreRankings) {
+            const gloryStars = gloryCount > 0
+                ? '⭐'.repeat(Math.min(gloryCount, 15)) + (gloryCount > 15 ? ` (${gloryCount}×)` : '')
+                : 'brak';
             let f = '';
             f += `🏰 **${clanDisplay}**\n`;
             f += position > 0
@@ -9512,12 +9501,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `📈 **Trend:** ${m.trendDescription ? `${m.trendIcon || ''} ${m.trendDescription}` : 'Brak'}\n`;
             f += `\n`;
             f += `🎯 **Rzetelność:** ${fmtCoeff(coeff.wyjebanieFactor)}\n`;
-            f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}${cxStar}\n`;
+            f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}\n`;
             f += `⏱️ **Punktualność:** ${fmtCoeff(coeff.timingFactor)}\n`;
             f += `📨 **Responsywność:** ${fmtCoeff(coeff.responsivenessFactor)}\n`;
             f += `\n`;
             f += `⭐ **MVP:** ${fmtMvp(mvp)}\n`;
-            f += `🏆 **CX:** ${hasCx ? 'Tak ✅' : 'Nie'}\n`;
+            f += `🏆 **Glory:** ${gloryStars}\n`;
             f += `🏹 **EE:** ${eeRank !== null ? `#${eeRank}/${eeTotal} — ${eeScore}` : 'Brak'}\n`;
             if (coreStock) {
                 const totalCores = Object.values(coreStock).reduce((s, v) => s + v, 0);
@@ -9570,10 +9559,10 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         const mvpScore1 = mvp1.gold * 3 + mvp1.silver * 2 + mvp1.bronze;
         const mvpScore2 = mvp2.gold * 3 + mvp2.silver * 2 + mvp2.bronze;
         addResult(mvpScore1, mvpScore2);
-        // CX
-        if (hasCxRecent1 && !hasCxRecent2) wins1++;
-        else if (hasCxRecent2 && !hasCxRecent1) wins2++;
-        else if (hasCxRecent1 && hasCxRecent2) { wins1 += 0.5; wins2 += 0.5; }
+        // Glory (liczba zdobytych tytułów Glory)
+        if (gloryCount1 > gloryCount2) wins1++;
+        else if (gloryCount2 > gloryCount1) wins2++;
+        else if (gloryCount1 > 0 && gloryCount2 > 0) { wins1 += 0.5; wins2 += 0.5; }
         // Core Stock — każdy typ cora osobny punkt (oddzielne porównanie, poza głównym wynikiem)
         const CORE_TYPES = ['Transmute Core', 'Xeno Pet Core', 'Mount Core', 'Relic Core', 'Resonance Chip', 'Survivor Awakening Core'];
         let coreWins1 = 0, coreWins2 = 0;
@@ -9634,8 +9623,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, hasCx1, hasCxRecent1, hasCxElite1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1, coreRankings1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, hasCx2, hasCxRecent2, hasCxElite2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2, coreRankings2), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, gloryCount1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1, coreRankings1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, gloryCount2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2, coreRankings2), inline: true },
                 { name: '\u200b', value: '\u200b', inline: false },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych', inline: true },
                 { name: '🎒PORÓWNANIE CORE STOCK', value: coreWinnerField, inline: true }
@@ -9852,24 +9841,16 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // playerProgressData = ostatnie 12 tygodni (embed + wykres progresu)
         const playerProgressData = allPlayerData.slice(0, 12);
 
-        // Wczytaj dane CX gracza ze shared_data (zapisywane przez Kontroler bot)
-        // hasCxData = kiedykolwiek grał CX (do "Wykonuje CX: Tak/Nie")
-        // hasCxRecent = grał CX w ostatnim miesiącu (do gwiazdki i boost zaangażowania)
-        // hasCxElite = osiągnął 2700+ w ostatnim miesiącu (do gwiazdki 🌟 zamiast ⭐)
-        let hasCxData = false;
-        let hasCxRecent = false;
-        let hasCxElite = false;
+        // Wczytaj licznik zdobytych Glory ze shared_data (zapisywane przez Kontroler bot)
+        // Każde zdobyte Glory = jedna gwiazdka ⭐
+        let gloryCount = 0;
         try {
-            const cxHistoryPath = require('path').join(__dirname, '../../shared_data/cx_history.json');
-            const cxHistoryRaw = await fs.readFile(cxHistoryPath, 'utf8');
-            const cxHistory = JSON.parse(cxHistoryRaw);
-            const userData = cxHistory[userId];
-            if (userData && userData.scores && userData.scores.length > 0) {
-                hasCxData = true;
-                const thirtyFiveDaysAgo = new Date(Date.now() - 35 * 24 * 60 * 60 * 1000);
-                const recentScores = userData.scores.filter(s => new Date(s.date) >= thirtyFiveDaysAgo);
-                hasCxRecent = recentScores.length > 0;
-                hasCxElite = recentScores.some(s => s.score >= 2700);
+            const gloryWinnersPath = require('path').join(__dirname, '../../shared_data/glory_winners.json');
+            const gloryWinnersRaw = await fs.readFile(gloryWinnersPath, 'utf8');
+            const gloryWinners = JSON.parse(gloryWinnersRaw);
+            const userData = gloryWinners[userId];
+            if (userData && typeof userData.count === 'number') {
+                gloryCount = userData.count;
             }
         } catch (e) {
             // Plik nie istnieje jeszcze lub brak danych - ok
@@ -10212,11 +10193,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (totalComparisons > 0) {
                 engagementFactor = (progressWeeksCount / totalComparisons) * 100;
             }
-        }
-
-        // Bonus CX do zaangażowania - tylko za aktywność w ostatnim miesiącu (nie karze za brak CX)
-        if (hasCxRecent && engagementFactor !== null) {
-            engagementFactor = Math.min(100, engagementFactor + 5);
         }
 
         // Oblicz Trend — identyczna formuła co wykres (ostatni punkt allPlayerData, pełna historia)
@@ -10656,8 +10632,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 engagementCircle = '🟠'; // Pomarańczowe (70-79.99%)
             }
         }
-        const cxStarDisplay = hasCxElite ? ' 🌟' : (hasCxRecent ? ' ⭐' : '');
-        description += `💪 **Zaangażowanie:** ${engagementCircle}${cxStarDisplay}\n`;
+        description += `💪 **Zaangażowanie:** ${engagementCircle}\n`;
 
         // Responsywność - zawsze pokazuj, jeśli null to zielona kropka
         let responsivenessCircle = '🟢'; // Domyślnie zielone (brak danych)
@@ -10685,7 +10660,10 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         description += `💀 **Punkty kary (lifetime):** ${lifetimePoints > 0 ? lifetimePoints : 'brak'}\n`;
         description += `🎭 **Rola karania:** ${hasPunishmentRole ? 'Tak' : 'Nie'}\n`;
         description += `🚨 **Blokada loterii:** ${hasLotteryBanRole ? 'Tak' : 'Nie'}\n`;
-        description += `🏆 **Wykonuje CX:** ${hasCxData ? 'Tak ✅' : 'Nie'}\n`;
+        const gloryStars = gloryCount > 0
+            ? '⭐'.repeat(Math.min(gloryCount, 15)) + (gloryCount > 15 ? ` (${gloryCount}×)` : '')
+            : 'brak';
+        description += `🏆 **Glory:** ${gloryStars}\n`;
 
         // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
         if (trendIcon !== null && trendDescription !== null) {

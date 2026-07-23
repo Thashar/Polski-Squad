@@ -775,6 +775,12 @@ KONTROLER_GUILD_ID=guild_id
 # AI OCR Google Gemini (WYMAGANE - jedyny silnik OCR, bez fallbacku na Tesseract)
 KONTROLER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 KONTROLER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
+# Loteria Glory - kanały ogłoszeń per klan (progres Fazy 1 ze Stalkera; WERYFIKUJ mapowanie klanów)
+KONTROLER_GLORY_CHANNEL_MAIN=channel_id
+KONTROLER_GLORY_CHANNEL_0=channel_id
+KONTROLER_GLORY_CHANNEL_1=channel_id
+KONTROLER_GLORY_CHANNEL_2=channel_id
+# Role klanowe współdzielone ze Stalkerem: STALKER_LME_TARGET_ROLE_MAIN/0/1/2
 # Przekazywanie wiadomości (robot1) - lista user ID rozdzielona przecinkami
 ROBOT=user_id_1,user_id_2
 

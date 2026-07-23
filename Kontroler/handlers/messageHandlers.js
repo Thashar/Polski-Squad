@@ -113,7 +113,7 @@ class MessageHandler {
 
         // SPRAWDZENIE AKTYWNEJ LOTERII: Sprawdź czy dla klanu użytkownika jest aktywna loteria
         logger.info(`🔍 Sprawdzam warunki loterii: lotteryService=${!!this.lotteryService}, channelName=${channelConfig.name}`);
-        if (this.lotteryService && (channelConfig.name === 'Daily' || channelConfig.name === 'CX')) {
+        if (this.lotteryService && channelConfig.name === 'Daily') {
             logger.info(`🔍 Sprawdzam aktywną loterię dla kanału ${channelConfig.name} (${member.user.username})`);
             const targetRoleId = channelConfig.requiredRoleId;
             const lotteryCheck = this.lotteryService.checkUserLotteryEligibility(member, targetRoleId);
@@ -124,7 +124,7 @@ class MessageHandler {
             });
             
             if (!lotteryCheck.isLotteryActive) {
-                const channelTypeName = channelConfig.name === 'Daily' ? 'Daily' : 'CX';
+                const channelTypeName = 'Daily';
                 let noLotteryMessage = `🚫 **Brak aktywnej loterii**\n\n`;
                 noLotteryMessage += `Dla Twojego klanu **${lotteryCheck.clanName}** nie ma obecnie aktywnej loterii **${channelTypeName}**.\n\n`;
                 noLotteryMessage += `Twoje zdjęcie nie zostanie przeanalizowane.`;
@@ -263,7 +263,7 @@ class MessageHandler {
             logger.error(`BŁĄD PODCZAS ANALIZY: ${error.message}`);
             await safeEditMessage(analysisMessage, this.messageService.formatAnalysisErrorMessage(error.message));
         } finally {
-            // Wyślij informację o loterii Daily lub CX z opóźnieniem zawsze na końcu
+            // Wyślij informację o loterii Daily z opóźnieniem zawsze na końcu
             this.scheduleLotteryInfo(analysisMessage, channelConfig);
             
             cleanupFiles(originalImagePath);
@@ -299,62 +299,8 @@ class MessageHandler {
 
         const roleResult = await this.roleService.assignRole(member, channelConfig.requiredRoleId, guild);
 
-        // Sprawdź czy to kanał CX i czy wynik kwalifikuje do roli specjalnej
-        let specialRoleResult = null;
-        if (channelConfig.name === 'CX' && channelConfig.specialRole &&
-            result.score >= channelConfig.specialRole.threshold) {
-
-            logger.info(`👑 Użytkownik ${member.displayName} osiągnął ${result.score} pkt - nadanie roli specjalnej CX`);
-            specialRoleResult = await this.roleService.assignRole(member, channelConfig.specialRole.roleId, guild);
-
-            if (specialRoleResult.success) {
-                logger.info(`👑 Pomyślnie nadano rolę specjalną CX użytkownikowi ${member.displayName}`);
-            } else {
-                logger.error(`❌ Błąd nadania roli specjalnej CX: ${specialRoleResult.error}`);
-            }
-        }
-
-        // Zapisz wynik CX do shared_data dla innych botów (np. Stalker /player-status)
-        if (channelConfig.name === 'CX') {
-            try {
-                const cxHistoryPath = path.join(__dirname, '../../shared_data/cx_history.json');
-                let cxHistory = {};
-                try {
-                    const raw = await fs.readFile(cxHistoryPath, 'utf8');
-                    cxHistory = JSON.parse(raw);
-                } catch (e) {
-                    // Plik nie istnieje jeszcze, tworzymy nowy
-                }
-
-                const userId = member.user.id;
-                const completedAt = new Date().toISOString();
-                if (!cxHistory[userId]) {
-                    cxHistory[userId] = { scores: [] };
-                }
-
-                cxHistory[userId].displayName = member.displayName;
-                cxHistory[userId].lastCxDate = completedAt;
-                cxHistory[userId].scores.push({
-                    score: result.score,
-                    date: completedAt,
-                    guildId: guild.id
-                });
-
-                // Ogranicz historię do ostatnich 20 wyników
-                if (cxHistory[userId].scores.length > 20) {
-                    cxHistory[userId].scores = cxHistory[userId].scores.slice(-20);
-                }
-
-                await fs.writeFile(cxHistoryPath, JSON.stringify(cxHistory, null, 2), 'utf8');
-                logger.info(`💾 Zapisano wynik CX gracza ${member.displayName}: ${result.score} pkt`);
-
-            } catch (e) {
-                logger.error(`❌ Błąd zapisu CX history: ${e.message}`);
-            }
-        }
-
         if (roleResult.success) {
-            const message = this.messageService.formatResultMessage(result, roleResult, channelConfig, specialRoleResult);
+            const message = this.messageService.formatResultMessage(result, roleResult, channelConfig);
             await safeEditMessage(analysisMessage, message);
         } else {
             const message = this.messageService.formatRoleErrorMessage(result, roleResult.error);
@@ -420,8 +366,8 @@ class MessageHandler {
      * @param {Object} channelConfig - Konfiguracja kanału
      */
     scheduleLotteryInfo(message, channelConfig) {
-        // Wysyłaj tylko na kanałach Daily i CX
-        if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
+        // Wysyłaj tylko na kanale Daily
+        if (channelConfig.name !== 'Daily') {
             return;
         }
 
@@ -453,22 +399,20 @@ class MessageHandler {
     }
 
     /**
-     * Wysyła informację o loterii Daily lub CX w formie embed message
+     * Wysyła informację o loterii Daily w formie embed message
      * @param {Message} message - Wiadomość analizy lub oryginalna wiadomość użytkownika
      * @param {Object} channelConfig - Konfiguracja kanału
      */
     async sendLotteryInfo(message, channelConfig) {
-        // Wysyłaj tylko na kanałach Daily i CX
-        if (channelConfig.name !== 'Daily' && channelConfig.name !== 'CX') {
+        // Wysyłaj tylko na kanale Daily
+        if (channelConfig.name !== 'Daily') {
             return;
         }
 
         try {
             const channel = message.channel;
             const client = message.client;
-            const isDaily = channelConfig.name === 'Daily';
-            const lotteryTitle = isDaily ? '# 🎰 Loteria Glory Member za Daily' : '# 🎰 Loteria Glory Member za CX';
-            
+
             logger.info(`📤 Sprawdzam możliwość wysłania embeda loterii na kanał: ${channel.name} (${channel.id})`);
 
             // Sprawdź czy już mamy zapisane ID embeda o loterii dla tego kanału
@@ -502,11 +446,8 @@ class MessageHandler {
 
 
             // Wyślij nową wiadomość embed o loterii
-            let lotteryEmbed;
-            
-            if (isDaily) {
-                lotteryEmbed = new EmbedBuilder()
-                    .setDescription(`# 🎰 Loteria Glory Member za Daily
+            const lotteryEmbed = new EmbedBuilder()
+                .setDescription(`# 🎰 Loteria Glory Member za Daily
 
 Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
 
@@ -517,24 +458,8 @@ class MessageHandler {
 ⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
 
 ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
-                    .setColor(0x00FF00) // Zielony kolor
-                    .setTimestamp();
-            } else {
-                lotteryEmbed = new EmbedBuilder()
-                    .setDescription(`# 🎰 Loteria Glory Member za CX
-
-Żeby wziąć udział w loterii i wygrać rangę Glory Member na tydzień, należy:
-
-🎯 osiągnąć w ciągu całego sezonu CX **1500 PKT**
-📸 przesłać screen z tego osiągnięcia na tym kanale
-⏰ czas na przesłanie screena jest do **18:30** w dniu, w którym rozpoczął się nowy sezon
-✅ screen musi być zatwierdzony przez bota Kontroler
-⚠️ **oszukiwanie bota podrobionymi screenami będzie skutkowało banem na Glory Member, a w szczególnych przypadkach może grozić usunięciem z klanu!**
-
-${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
-                    .setColor(0xFF6600) // Pomarańczowy kolor dla CX
-                    .setTimestamp();
-            }
+                .setColor(0x00FF00) // Zielony kolor
+                .setTimestamp();
 
             const lotteryMessage = await channel.send({ embeds: [lotteryEmbed] });
             this.lotteryMessageIds.set(channel.id, lotteryMessage.id);

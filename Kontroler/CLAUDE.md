@@ -1,14 +1,13 @@
 ### 🎯 Kontroler Bot
 
-**5 Systemów:**
-1. **AI OCR Dwukanałowy** - `aiOcrService.js` (Google Gemini Vision) + `analysisService.js`: jedyny silnik OCR, **bez fallbacku na Tesseract** (stary `ocrService.js` usunięty)
+**6 Systemów:**
+1. **AI OCR (kanał Daily)** - `aiOcrService.js` (Google Gemini Vision) + `analysisService.js`: jedyny silnik OCR, **bez fallbacku na Tesseract** (stary `ocrService.js` usunięty). **Kanał CX został usunięty** — bot nie analizuje już screenów CX ani nie nadaje ról CX (zastąpione loterią Glory, system 6)
    - **Silnik:** `aiOcrService.analyzeResultsImage(imagePath)` wysyła zbinaryzowany obraz do Gemini Vision przez wspólny `utils/llmAdapter.js` (DI z `index.js`, `createLlmAdapter({ botSlug: 'kontroler' })`). Prompt prosi o listę `<nick> - <wynik>` całego rankingu. Parsowanie jak w Stalkerze (`parseAIResponse`), wykrywanie niepoprawnego screena po słowach kluczowych ("nie wykryto", "brak wyników" itd.)
    - **Binaryzacja przed AI (`_binarizeWhiteOnBlack`):** przed wysłaniem do AI obraz jest przerabiany — białe piksele zostają białe, cała reszta na czarno (biały tekst na czarnym tle). Piksel uznawany za biały gdy WSZYSTKIE kanały R/G/B ≥ `config.ocr.whiteThreshold` (domyślnie 200). Raw-pixel przez `sharp`
    - **Retry 503 (przeciążone API):** 10× exponential backoff → po wyczerpaniu rzuca `isAPIOverloaded=true`. Inne retryable (429/500/sieciowe): 3×
    - **Dopasowanie gracza (`analysisService.findMatchingPlayer`):** wśród odczytanych graczy szuka nicku serwera — FAZA 1 dokładne dopasowanie (normalizacja: lowercase, tylko litery/cyfry + polskie znaki, dwukierunkowe `includes`), FAZA 2 podobieństwo Levenshtein (`isSimilarNick`, próg `similarity.threshold` 0.4 → `lowThreshold` 0.3). Brak konceptu "drugie wystąpienie nicku" (AI zwraca jeden wpis per gracz)
-   - **Walidacja wyniku (`validateScore`):** liczba z AI sprawdzana wobec konfiguracji kanału — CX (1500min, zakres 0-2800, krok 100, rola specjalna 2800+), Daily (910min, zakres 0-1050, krok 10). Poza krokiem → zaokrąglenie do najbliższej wielokrotności. Poza zakresem → odrzucenie
+   - **Walidacja wyniku (`validateScore`):** liczba z AI sprawdzana wobec konfiguracji kanału Daily (910min, zakres 0-1050, krok 10). Poza krokiem → zaokrąglenie do najbliższej wielokrotności. Poza zakresem → odrzucenie
    - **Env:** `KONTROLER_GOOGLE_AI_API_KEY` (fallback `ENDERSECHO_GOOGLE_AI_API_KEY`/`GOOGLE_AI_API_KEY`), `KONTROLER_GOOGLE_AI_MODEL` (domyślnie `gemini-2.5-flash-lite`). Bez klucza OCR nie zadziała (brak fallbacku)
-   - **Zapis CX do shared_data:** Po udanym OCR na kanale CX, wynik jest zapisywany do `shared_data/cx_history.json` (klucz: userId, historia max 20 wyników). Używane przez Stalker Bot w `/player-status` i `/player-compare`
 2. **Loteria** - `lotteryService.js`: Daty (dd.mm.yyyy HH:MM) w **czasie polskim** (Europe/Warsaw, niezależnie od strefy serwera), DST auto, multi-klan (server/main/0/1/2), cykle (0-365dni, max 24d), ostrzeżenia (90/30min), historia+przelosowanie, ban filter
    - **Czas polski (`utils/timezone.js`):** Bot operuje w strefie Europe/Warsaw niezależnie od strefy czasowej serwera (np. UTC). `polandWallClockToUTC(y,m,d,h,min)` przelicza polski zegar ścienny na poprawny moment UTC (DST przez `Intl`), `getPolandParts()` zwraca komponenty czasu polskiego "teraz" (walidacja dat, klucze ostrzeżeń), `formatPolandDateTime/Date/Time()` formatują do wyświetlenia. Tworzenie loterii, obliczanie kolejnych losowań, walidacja daty i wszystkie wyświetlane daty używają czasu polskiego.
 3. **Dywersja w klanie** - `votingService.js`:
@@ -48,8 +47,16 @@
      - **Brak stackowania korony:** jeśli autor ma już aktywną koronę MVP (`getActiveEffectType === 'mvp_crown'`), ponowne nadanie jest pomijane (standalone `crown` → fallback `textreply`), więc prefix 👑 się nie nakłada
      - **Handler:** `handleApprovalReaction` w `mvpService.js`, podpięty obok `handleReactionAdd` na `MessageReactionAdd` w `index.js`. Korona restart-safe przez `NicknameManager.restoreExpiredEffects` przy starcie
    - **Konfiguracja:** `config.mvp` (pollChannelId, roleId, kekwEmojiId, voteEmojis, scanDays, targetAuthors, maxCandidates, votingDurationMs, scheduleWeekday/Hour/Minute, excludedChannels, **approval**: enabled, crownDurationMs, crownPrefix, jackpotChance, wildcardOnJackpot, textReplyChance, crownChance, stampEmojis, maxApprovedMemory)
+6. **Loteria Glory** - `gloryLotteryService.js`: cotygodniowe losowanie rangi Glory Member na podstawie progresu Fazy 1 (dane od Stalkera), **niezależne od `lotteryService`**
+   - **Źródło danych:** `shared_data/glory_progress.json` — eksportowane przez Stalkera (`gloryProgressExportService.js`, po każdym `/faza1` + przy starcie). Per klan (0/1/2/main) lista uczestników z liczbą losów. Progres liczony jak w `/progres` (wynik ostatniego tygodnia − rekord z wcześniejszych tygodni; liczy się tylko przy istniejącym wcześniejszym rekordzie > 0)
+   - **Losy:** progres ≥ 5 → 1 los; progres ≥ średnia progresu progresujących z **wcześniejszego** tygodnia → 2 losy; ≥ 2× ta średnia → 3 losy. Brak danych wcześniejszego tygodnia → wszyscy kwalifikujący dostają 1 los
+   - **Losowanie:** cron **piątek 22:00** czasu polskiego (`utils/timezone.js`, setTimeout jak MVP), osobne dla każdego klanu; pula ważona (1–3 wpisy), **3 zwycięzców/klan** (`config.glory.winnersCount`), bez powtórzeń. Ogłoszenie embedem na kanale klanu (env `KONTROLER_GLORY_CHANNEL_*`) z **pingiem roli klanowej**
+   - **Licznik zwycięstw:** każde wygrane Glory zapisywane do `shared_data/glory_winners.json` (`{userId: {count, displayName, history}}`) — Stalker pokazuje to jako gwiazdki ⭐ w `/player-status` i `/player-compare` (zastąpiło dawne „Wykonuje CX")
+   - **Persistencja:** `data/glory_history.json` (ostatnie losowanie per klan: uczestnicy + zwycięzcy) — do rerolla, restart-safe
+   - **`/glory-reroll <klan>`** (admin): dobiera dodatkowego zwycięzcę spośród uczestników ostatniego losowania, którzy nie wygrali (system awaryjny)
+   - **Konfiguracja:** `config.glory` (dataFile, scheduleWeekday=5/Hour=22/Minute=0, winnersCount=3, clans: klucz→{roleId, channelId, displayName})
 
-**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
+**Komendy:** `/lottery`, `/lottery-list`, `/lottery-remove`, `/lottery-history`, `/lottery-reroll`, `/lottery-debug`, `/glory-reroll`, `/ocr-debug`, `/oligopoly`, `/oligopoly-review`, `/oligopoly-list`, `/oligopoly-clear`, `/mvp`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot1):**
@@ -77,11 +84,19 @@ ROBOT1_FORWARD_CHANNEL=channel_id         # Kanał forward dla Robot1
 ROBOT1_MENTION_ROLE=role_id               # Rola do pingu (@) dla Robot1
 ROBOT1_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot1
 KONTROLER_BLOCKED_ROLE=role_id            # Rola blokująca udział w loteriach
+
+# Loteria Glory - kanały ogłoszeń per klan (WERYFIKUJ mapowanie klanów!)
+KONTROLER_GLORY_CHANNEL_MAIN=channel_id   # Kanał ogłoszeń Glory dla klanu main
+KONTROLER_GLORY_CHANNEL_0=channel_id      # Kanał ogłoszeń Glory dla PolskiSquad⁰
+KONTROLER_GLORY_CHANNEL_1=channel_id      # Kanał ogłoszeń Glory dla PolskiSquad¹
+KONTROLER_GLORY_CHANNEL_2=channel_id      # Kanał ogłoszeń Glory dla PolskiSquad²
+# Role klanowe (współdzielone ze Stalkerem): STALKER_LME_TARGET_ROLE_MAIN/0/1/2
 ```
 
 ## Najlepsze Praktyki
 
 - **Logger:** createBotLogger('Kontroler')
-- **OCR:** AI (Google Gemini Vision), dwukanałowy (CX + Daily), bez fallbacku na Tesseract
+- **OCR:** AI (Google Gemini Vision), tylko kanał Daily, bez fallbacku na Tesseract
 - **Loteria:** DST auto, multi-klan, cykle 0-365 dni
-- **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json
+- **Loteria Glory:** piątek 22:00 (czas polski), progres Fazy 1 ze Stalkera, 3 zwycięzców/klan, licznik gwiazdek w `glory_winners.json`
+- **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json, glory_history.json

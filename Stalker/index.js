@@ -19,6 +19,7 @@ const RaportCleanupService = require('./services/raportCleanupService');
 const BroadcastMessageService = require('./services/broadcastMessageService');
 const AIChatService = require('./services/aiChatService');
 const { exportClanThresholds } = require('./services/clanThresholdsExportService');
+const { exportGloryProgress } = require('./services/gloryProgressExportService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -290,6 +291,8 @@ client.once(Events.ClientReady, async () => {
     for (const guild of client.guilds.cache.values()) {
         exportClanThresholds(guild, databaseService, config)
             .catch(err => logger.error(`[THRESHOLDS] Błąd eksportu progów przy starcie (${guild.name}):`, err.message));
+        exportGloryProgress(guild, databaseService, config)
+            .catch(err => logger.error(`[GLORY] Błąd eksportu progresu Glory przy starcie (${guild.name}):`, err.message));
     }
 
     await ocrService.initializeOCR();

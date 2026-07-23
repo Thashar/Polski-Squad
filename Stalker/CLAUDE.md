@@ -38,7 +38,7 @@
    - Format: `{ userId: { items: {...}, updatedAt: ISO_string } }`
    - Dane widoczne w `/player-status` w sekcji "### 🎒 EKWIPUNEK (Core Stock)"
    - Dane tymczasowe (pending) przechowywane w `client._equipmentPending` Map (wygasają po 5 min)
-6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2). Po każdym zatwierdzeniu `/faza1` (i przy starcie bota) wywołuje `clanThresholdsExportService.exportClanThresholds()` → zapisuje `shared_data/clan_thresholds.json` z minimalnym maxScore per klan, używanym przez Rekrutera do dynamicznej kwalifikacji.
+6. **Fazy Lunar** - `phaseService.js`: `/faza1` (lista), `/faza2` (3 rundy damage), `/wyniki` (TOP30 z paginacją tygodni), `/progres`, `/clan-status`, `/clan-progres` (progres TOP30 klanu z wykresem), `/img` (dodaj zdjęcie tabeli do Fazy 2). Po każdym zatwierdzeniu `/faza1` (i przy starcie bota) wywołuje `clanThresholdsExportService.exportClanThresholds()` → zapisuje `shared_data/clan_thresholds.json` z minimalnym maxScore per klan, używanym przez Rekrutera do dynamicznej kwalifikacji. Wywołuje też `gloryProgressExportService.exportGloryProgress()` → zapisuje `shared_data/glory_progress.json` (per klan: uczestnicy loterii Glory z liczbą losów 1/2/3 wg progresu Fazy 1 względem rekordu — logika jak w `/progres`), używane przez Kontroler (loteria Glory).
    - **Przetwarzanie zdjęć (batch AI):** Gdy AI OCR włączony, `/faza1` i `/faza2` analizują WSZYSTKIE zdjęcia danej partii naraz w jednym zapytaniu do AI (`processImagesBatch()`), dołączając do promptu listę nicków roli klanowej (snapshot sesji `role_nicks_snapshot_<sessionId>.json`, fallback na żywo). AI deduplikuje nakładające się zdjęcia i dopasowuje nicki do Discord, zwracając jeden wynik na gracza. **Każdy przebieg batch tworzy JEDEN wpis w `session.processedImages`** — dzięki temu mechanizm konfliktów działa bez zmian: przycisk **➕ Dodaj więcej** uruchamia kolejny batch (nowy wpis), a jeśli ten sam nick ma w kolejnym przebiegu inny wynik → konflikt do ręcznego rozstrzygnięcia przez moderatora. Fallback bez AI: `processImagesPerImage()` (Tesseract, zdjęcie-po-zdjęciu).
    - **Dopasowanie nicków AI do klanu (`utils/nickMatcher.js` → `assignNicksToClan()`):** Założenie domenowe — KAŻDY gracz na screenie ma rolę klanową, więc każdy odczytany nick odpowiada dokładnie jednemu członkowi klanu. Realizowane jako **problem przydziału 1:1**: każdy klanowicz użyty maks. raz w partii, minimalizacja łącznej odległości edycyjnej, algorytm **zachłanny po globalnym minimum** (najpierw pary o najmniejszej odległości — dokładne trafienia kotwiczą resztę). Dzięki temu literówki/błędy OCR (np. `krępo` → `Krzempo`) trafiają do najbliższego WOLNEGO klanowicza — **bez progu odcięcia**. Odległość: Levenshtein na **grafemach** (emoji = 1 znak, `splitGraphemes()` + `Intl.Segmenter`), po normalizacji `normForMatch()` (NFKD + usunięcie diakrytyków + lowercase). Gwarantuje, że te same osoby dostają identyczny kanoniczny nick we wszystkich rundach → spójny union i poprawne `sumPhase2Results` (sumuje po stringu nicku). Pre-dedup identycznych nicków AI (wyższy wynik). Util współdzielony — używany przez `phaseService` (`normalizePlayersToClanNicks` deleguje do niego), `reminderService` i `punishmentService`.
    - **Pasek postępu (stepper):** W trybie batch pasek pokazuje ETAPY procesu zamiast kratek per-zdjęcie: `📥 Pobieranie zdjęć → 🤖 Wysyłanie do AI → ⚙️ Przetwarzanie przez AI → 📊 Analiza wyników`. Aktywny etap miga (🟧/⬜ co 1s przez `blinkTimer`), ukończone mają ✅. Implementacja: `updateBatchProgress()`. Tryb fallback (per-zdjęcie) używa starego paska `createProgressBar()` z kratkami postępu.
@@ -180,15 +180,15 @@
 - **Logika:** Ikona wyciągana z pierwszego znaku `clanName` (np. "🎮PolskiSquad⁰🎮" → "🎮")
 - **Implementacja:** `clanEmojiMap` - mapa weekKey → emoji klanu dla szybkiego dostępu
 
-**Integracja CX w `/player-status`** - Dane z Kontroler Bot (shared_data/cx_history.json):
-- **Wczytywanie:** Po posortowaniu `playerProgressData`, bot odczytuje `shared_data/cx_history.json` szukając `userId` gracza
-- **Zaangażowanie bonus:** Jeśli gracz ma dane CX → +5% do `engagementFactor` (max 100%) - CX nie karze za brak
-- **Złota gwiazdka ⭐:** Przy kółku Zaangażowania jeśli gracz wykonuje CX (`💪 **Zaangażowanie:** 🟢 ⭐`)
-- **Kary i status:** `🏆 **Wykonuje CX:** Tak ✅` lub `Nie` na końcu sekcji
-- **Źródło danych:** Kontroler Bot zapisuje wyniki przy udanym OCR na kanale CX do `shared_data/cx_history.json` (userId jako klucz, historia do 20 wyników)
+**Integracja Glory w `/player-status` i `/player-compare`** - Dane z Kontroler Bot (shared_data/glory_winners.json):
+- **Wczytywanie:** Bot odczytuje `shared_data/glory_winners.json` szukając `userId` gracza → `count` (liczba zdobytych Glory)
+- **Wyświetlanie:** Linia `🏆 **Glory:** ⭐⭐⭐` w sekcji „Kary i status" (`/player-status`) oraz w polu gracza (`/player-compare`). Każde zdobyte Glory = jedna gwiazdka ⭐ (powyżej 15 gwiazdek dodawany jest sufiks `(N×)`); brak zwycięstw → `brak`
+- **Porównanie graczy:** w `/player-compare` większy `count` daje punkt w „WYNIKU PORÓWNANIA" (remis przy równej liczbie > 0)
+- **Zastąpiło CX:** dawna integracja `shared_data/cx_history.json` („Wykonuje CX", bonus +5% do zaangażowania, gwiazdka ⭐/🌟) została usunięta wraz z kanałem CX w Kontrolerze
+- **Źródło danych:** Kontroler Bot (`gloryLotteryService.js`) dopisuje zwycięstwo przy każdym cotygodniowym losowaniu Glory oraz przy `/glory-reroll`
 
 **Integracja Enders Echo w `/player-status` i `/player-compare`** - Dane z EndersEcho Bot (shared_data/endersecho_ranking.json):
-- **Wczytywanie:** Po wczytaniu CX, bot odczytuje `shared_data/endersecho_ranking.json` szukając `userId` gracza
+- **Wczytywanie:** Bot odczytuje `shared_data/endersecho_ranking.json` szukając `userId` gracza
 - **Wyświetlanie w `/player-status`:** Linia `🏹 **Enders Echo:** #X / Y — rekord: **score**` w sekcji STATYSTYKI, tuż pod linią `⚔️ Atak`
 - **Wyświetlanie w `/player-compare`:** Linia `🏹 **EE:** #X/Y — score` w polu gracza (`fmtPlayerField`)
 - **Brak danych:** Sekcja/linia jest pomijana gdy gracz nie ma wpisu w rankingu EE
@@ -215,11 +215,10 @@
 - **Sekcje embeda (kolor #9B59B6):**
   - Nagłówek: `⚔️ PORÓWNANIE GRACZY` + ostatni wynik każdego
   - `📊 STATYSTYKI`: Miesięczny progres i najlepszy wynik side-by-side
-  - `🌡️ WSPÓŁCZYNNIKI`: Zaangażowanie (z ⭐ jeśli CX) + Wykonuje CX po obu stronach
+  - `🌡️ WSPÓŁCZYNNIKI`: Zaangażowanie + Glory (gwiazdki ⭐) po obu stronach
   - `💨 TREND`: Opis trendu + sparkline dla każdego gracza
 - **Autocomplete:** Wspólny handler z `/progres` i `/player-status`
 - **Logika:** `loadPlayerData()`, `calcMetrics()`, `genSparkline()` - lokalne funkcje pomocnicze wewnątrz komendy
-- **CX boost:** Identyczny jak w `/player-status` - +5% do zaangażowania
 
 **Sekcja MVP w `/player-status`** - Tygodnie gdzie gracz był w TOP3 progresu:
 - **Nazwa sekcji:** `### ⭐ MVP TYGODNIA`

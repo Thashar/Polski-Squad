@@ -41,21 +41,6 @@ module.exports = {
     
     // Kanały do monitorowania
     channels: {
-        cx: {
-            targetChannelId: '1305607184037449738',
-            requiredRoleId: '1298594615619751966',
-            minimumScore: 1500,
-            scoreRange: [0, 2800],
-            scoreStep: 100,
-            requireSecondOccurrence: false,
-            name: 'CX',
-            skipLines: 1,
-            // Nowa konfiguracja dla roli specjalnej
-            specialRole: {
-                roleId: '1421502672112058589',
-                threshold: 2700
-            }
-        },
         daily: {
             targetChannelId: '1297828299006808124',
             requiredRoleId: '1297834373499977769',
@@ -165,6 +150,44 @@ module.exports = {
             'piątek': 5,
             'sobota': 6,
             'niedziela': 0
+        }
+    },
+
+    // Konfiguracja loterii Glory (progres Fazy 1 ze Stalkera → shared_data/glory_progress.json)
+    glory: {
+        dataFile: path.join(__dirname, '../data/glory_history.json'),
+
+        // Harmonogram losowania (czas polski Europe/Warsaw): piątek (5) o 22:00
+        scheduleWeekday: 5,
+        scheduleHour: 22,
+        scheduleMinute: 0,
+
+        // Liczba zwycięzców na klan w jednym cotygodniowym losowaniu
+        winnersCount: 3,
+
+        // Klany: klucz eksportu Stalkera (0/1/2/main) → rola (ping), kanał ogłoszenia (env), nazwa
+        // UWAGA: mapowanie kanałów na klany należy zweryfikować przez env KONTROLER_GLORY_CHANNEL_*
+        clans: {
+            'main': {
+                roleId: process.env.STALKER_LME_TARGET_ROLE_MAIN || '1170351983092383814',
+                channelId: process.env.KONTROLER_GLORY_CHANNEL_MAIN || '1257784287864815677',
+                displayName: '🔥Polski Squad🔥'
+            },
+            '0': {
+                roleId: process.env.STALKER_LME_TARGET_ROLE_0 || '1170351932735193179',
+                channelId: process.env.KONTROLER_GLORY_CHANNEL_0 || '1297845241256218664',
+                displayName: '🎮PolskiSquad⁰🎮'
+            },
+            '1': {
+                roleId: process.env.STALKER_LME_TARGET_ROLE_1 || '1170351955560927262',
+                channelId: process.env.KONTROLER_GLORY_CHANNEL_1 || '1261921367935287398',
+                displayName: '⚡PolskiSquad¹⚡'
+            },
+            '2': {
+                roleId: process.env.STALKER_LME_TARGET_ROLE_2 || '1170351976075210752',
+                channelId: process.env.KONTROLER_GLORY_CHANNEL_2 || '1262153143630958762',
+                displayName: '💥PolskiSquad²💥'
+            }
         }
     },
 

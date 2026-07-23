@@ -86,7 +86,7 @@ class RoleService {
     }
 
     /**
-     * Sprawdza czy kanał jest kanałem Daily lub CX (do blokowania)
+     * Sprawdza czy kanał jest kanałem Daily (do blokowania)
      * @param {string} channelId - ID kanału
      * @returns {boolean} - Czy kanał podlega blokowaniu
      */

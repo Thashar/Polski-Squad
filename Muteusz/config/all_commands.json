@@ -242,7 +242,7 @@
     },
     {
       "name": "Kontroler",
-      "description": "Bot do weryfikacji OCR screenshotów CX/Daily oraz systemu zaawansowanych loterii",
+      "description": "Bot do weryfikacji OCR screenshotów Daily, loterii oraz cotygodniowej loterii Glory (progres Fazy 1)",
       "commands": [
         {
           "name": "/ocr-debug",
@@ -315,6 +315,12 @@
           "description": "Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst za reakcje KEKW)",
           "usage": "/mvp",
           "requiredPermission": "public"
+        },
+        {
+          "name": "/glory-reroll",
+          "description": "Dobiera dodatkowego zwycięzcę loterii Glory dla wybranego klanu (system awaryjny)",
+          "usage": "/glory-reroll klan:[main/0/1/2]",
+          "requiredPermission": "administrator"
         }
       ]
     },

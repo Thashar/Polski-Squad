@@ -410,15 +410,10 @@ class LotteryService {
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
                 targetWarningChannelId = this.config.channels.daily.targetChannelId; // Wyślij na kanał Daily OCR
-            } 
-            // Sprawdź czy to loteria dla roli CX
-            else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
-                channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId; // Wyślij na kanał CX OCR
-            } 
+            }
             // Inne role = brak ostrzeżeń
             else {
-                logger.info(`📋 Pomijam ostrzeżenie zamknięcia - loteria ${lotteryId} nie dotyczy roli Daily ani CX`);
+                logger.info(`📋 Pomijam ostrzeżenie zamknięcia - loteria ${lotteryId} nie dotyczy roli Daily`);
                 return;
             }
 
@@ -481,15 +476,10 @@ class LotteryService {
             if (lottery.targetRoleId === this.config.channels.daily.requiredRoleId) {
                 channelType = 'Daily';
                 targetWarningChannelId = this.config.channels.daily.targetChannelId; // Wyślij na kanał Daily OCR
-            } 
-            // Sprawdź czy to loteria dla roli CX
-            else if (lottery.targetRoleId === this.config.channels.cx.requiredRoleId) {
-                channelType = 'CX';
-                targetWarningChannelId = this.config.channels.cx.targetChannelId; // Wyślij na kanał CX OCR
-            } 
+            }
             // Inne role = brak ostrzeżeń
             else {
-                logger.info(`📋 Pomijam finalne ostrzeżenie - loteria ${lotteryId} nie dotyczy roli Daily ani CX`);
+                logger.info(`📋 Pomijam finalne ostrzeżenie - loteria ${lotteryId} nie dotyczy roli Daily`);
                 return;
             }
 
@@ -918,39 +908,8 @@ class LotteryService {
 
         const actualWinnersCount = Math.min(winnersCount, membersArray.length);
 
-        // Sprawdź czy to loteria CX i czy mamy dostęp do guild
-        let specialRoleId = null;
-        if (guild && lottery && lottery.targetRoleId) {
-            // Sprawdź czy to może być CX na podstawie roli docelowej
-            const cxConfig = this.config.channels.cx;
-            if (cxConfig && lottery.targetRoleId === cxConfig.requiredRoleId && cxConfig.specialRole) {
-                specialRoleId = cxConfig.specialRole.roleId;
-                logger.info(`🎲 Loteria CX wykryta - uwzględniam rolę specjalną ${specialRoleId}`);
-            }
-        }
-
-        // Utwórz pulę z podwójnymi wpisami dla użytkowników z rolą specjalną
-        let lotteryPool = [];
-        let specialRoleCount = 0;
-
-        for (const member of membersArray) {
-            lotteryPool.push(member);
-
-            // Sprawdź czy użytkownik ma rolę specjalną CX
-            if (specialRoleId && member.roles.cache.has(specialRoleId)) {
-                lotteryPool.push(member); // Dodaj drugi wpis (podwójna szansa)
-                specialRoleCount++;
-                logger.info(`🎲 Użytkownik ${member.displayName} ma dodatkową szansę (specjalna rola CX)`);
-            }
-        }
-
-        if (specialRoleCount > 0) {
-            logger.info(`👑 ${specialRoleCount} użytkowników ma podwójną szansę w loterii CX`);
-            logger.info(`🎲 Pula losowania: ${membersArray.length} członków → ${lotteryPool.length} wpisów`);
-        }
-
-        // Losowanie bez powtórzeń (ale jeden użytkownik może mieć więcej wpisów)
-        const shuffled = lotteryPool.sort(() => 0.5 - Math.random());
+        // Losowanie bez powtórzeń
+        const shuffled = membersArray.sort(() => 0.5 - Math.random());
         const selectedMembers = new Set();
 
         for (let i = 0; i < shuffled.length && winners.length < actualWinnersCount; i++) {
@@ -1500,9 +1459,6 @@ class LotteryService {
         if (targetRoleId === this.config.channels.daily.requiredRoleId) {
             channelType = 'Daily';
             maxHoursBeforeDraw = 25; // 25 godzin przed losowaniem
-        } else if (targetRoleId === this.config.channels.cx.requiredRoleId) {
-            channelType = 'CX';
-            maxHoursBeforeDraw = 313; // 313 godzin (13 dni) przed losowaniem
         } else {
             return {
                 isAllowed: false,

@@ -10,6 +10,7 @@ const { createLlmAdapter } = require('../utils/llmAdapter');
 const RoleService = require('./services/roleService');
 const MessageService = require('./services/messageService');
 const LotteryService = require('./services/lotteryService');
+const GloryLotteryService = require('./services/gloryLotteryService');
 const OligopolyService = require('./services/oligopolyService');
 const VotingService = require('./services/votingService');
 const MvpService = require('./services/mvpService');
@@ -32,7 +33,7 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 
-let aiOcrService, analysisService, roleService, messageService, messageHandler, lotteryService, oligopolyService, votingService, mvpService;
+let aiOcrService, analysisService, roleService, messageService, messageHandler, lotteryService, gloryService, oligopolyService, votingService, mvpService;
 
 /**
  * Inicjalizuje wszystkie serwisy
@@ -43,6 +44,7 @@ async function initializeServices() {
     analysisService = new AnalysisService(config, aiOcrService);
     roleService = new RoleService(config);
     lotteryService = new LotteryService(config);
+    gloryService = new GloryLotteryService(config);
     oligopolyService = new OligopolyService(config, logger);
     votingService = new VotingService(config);
     mvpService = new MvpService(config);
@@ -102,6 +104,11 @@ function onShutdown(signal) {
     // Zatrzymaj serwis loterii
     if (lotteryService) {
         lotteryService.stop();
+    }
+
+    // Zatrzymaj serwis loterii Glory
+    if (gloryService) {
+        gloryService.stop();
     }
 
     // Zatrzymaj serwis MVP tygodnia
@@ -202,6 +209,8 @@ function setupEventHandlers() {
             await onReady();
             // Inicjalizuj serwis loterii z klientem Discord
             await lotteryService.initialize(client);
+            // Inicjalizuj serwis loterii Glory z klientem Discord
+            await gloryService.initialize(client);
             // Inicjalizuj serwis głosowania z klientem Discord
             await votingService.initialize(client);
             // Inicjalizuj serwis MVP tygodnia z klientem Discord
@@ -303,6 +312,7 @@ function setupEventHandlers() {
         interaction.client.oligopolyService = oligopolyService;
         interaction.client.votingService = votingService;
         interaction.client.mvpService = mvpService;
+        interaction.client.gloryService = gloryService;
         handleInteraction(interaction, config, lotteryService);
     });
 
@@ -341,6 +351,7 @@ async function start() {
 
 async function stop() {
     if (lotteryService) lotteryService.stop();
+    if (gloryService) gloryService.stop();
     if (mvpService) mvpService.stop();
     return client.destroy();
 }

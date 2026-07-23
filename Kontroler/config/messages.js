@@ -24,11 +24,10 @@ module.exports = {
     
     // Informacje o loteriach
     dailyLottery: '\n\nBierzesz udział w loterii Daily.\n**Nie musisz nic robić!** Wyniki pojawią się na jednym z poniższych kanałów w stosownym czasie!\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762\n{lotteryInfo}',
-    cxLottery: '\n\nBierzesz udział w loterii CX.\n**Nie musisz nic robić!** Wyniki pojawią się na jednym z poniższych kanałów w stosownym czasie!\nhttps://discord.com/channels/1170323970692743240/1257784287864815677 https://discord.com/channels/1170323970692743240/1297845241256218664 https://discord.com/channels/1170323970692743240/1261921367935287398 https://discord.com/channels/1170323970692743240/1262153143630958762\n{lotteryInfo}',
-    
+
     // Dodatkowe informacje
     similarityMatch: '\n🔍 **Dopasowanie:** Nick znaleziony przez podobieństwo',
     
     // Blokowanie użytkowników z karą
-    penaltyBlocked: '❌ **Udział w loteriach został zablokowany**\n⚠️ **Powód:** Uzbierałeś za dużo punktów kary\n🚫 **Nie możesz przesyłać zdjęć na kanały Daily oraz CX**'
+    penaltyBlocked: '❌ **Udział w loteriach został zablokowany**\n⚠️ **Powód:** Uzbierałeś za dużo punktów kary\n🚫 **Nie możesz przesyłać zdjęć na kanał Daily**'
 };

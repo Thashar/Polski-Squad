@@ -58,6 +58,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'mvp':
                     await handleMvpCommand(interaction, config);
                     break;
+                case 'glory-reroll':
+                    await handleGloryRerollCommand(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
             }
@@ -1335,6 +1338,20 @@ async function registerSlashCommands(client, config) {
             .setName('mvp')
             .setDescription('Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst na serwerze)'),
 
+        new SlashCommandBuilder()
+            .setName('glory-reroll')
+            .setDescription('Dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (system awaryjny)')
+            .addStringOption(option =>
+                option.setName('klan')
+                    .setDescription('Klan, dla którego dobrać dodatkowego zwycięzcę')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: 'Polski Squad (main)', value: 'main' },
+                        { name: 'PolskiSquad⁰', value: '0' },
+                        { name: 'PolskiSquad¹', value: '1' },
+                        { name: 'PolskiSquad²', value: '2' }
+                    )),
+
     ];
 
     const rest = new REST().setToken(config.token);
@@ -1397,6 +1414,52 @@ async function handleMvpCommand(interaction, config) {
         } else {
             await interaction.reply({ content: msg, ephemeral: true });
         }
+    }
+}
+
+/**
+ * Obsługuje komendę /glory-reroll — dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (admin)
+ */
+async function handleGloryRerollCommand(interaction, config) {
+    if (!interaction.member.permissions.has('Administrator')) {
+        await interaction.reply({
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            ephemeral: true
+        });
+        return;
+    }
+
+    const gloryService = interaction.client.gloryService;
+    if (!gloryService) {
+        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', ephemeral: true });
+        return;
+    }
+
+    const clanKey = interaction.options.getString('klan');
+    const clanCfg = config.glory.clans[clanKey];
+    const clanName = clanCfg ? clanCfg.displayName : clanKey;
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+        const result = await gloryService.reroll(clanKey);
+
+        if (result.success) {
+            await interaction.editReply({
+                content: `✅ Dobrano dodatkowego zwycięzcę Glory dla **${clanName}**: <@${result.winner.userId}> (progres ${result.winner.progress}). Ogłoszenie wysłano na kanał klanu.`
+            });
+            return;
+        }
+
+        const reasons = {
+            no_draw: `❌ Dla klanu **${clanName}** nie ma jeszcze żadnego cotygodniowego losowania Glory do dobrania.`,
+            no_participants: `❌ Ostatnie losowanie Glory dla **${clanName}** nie miało żadnych uczestników.`,
+            no_more: `❌ Brak kolejnych uczestników do dobrania dla **${clanName}** — wszyscy uczestnicy już wygrali.`
+        };
+        await interaction.editReply({ content: reasons[result.reason] || '❌ Nie udało się dobrać zwycięzcy.' });
+    } catch (error) {
+        logger.error('❌ Błąd obsługi komendy /glory-reroll:', error);
+        await interaction.editReply({ content: '❌ Wystąpił błąd podczas dobierania zwycięzcy Glory.' });
     }
 }
 
