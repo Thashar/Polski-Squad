@@ -1513,7 +1513,8 @@ async function handleGloryTestCommand(interaction, config) {
                 content += `📭 **${r.clanCfg.displayName}** — brak uczestników (opublikowano komunikat o braku zwycięzców) → <#${r.clanCfg.channelId}>\n`;
                 continue;
             }
-            content += `✅ **${r.clanCfg.displayName}** — uczestników: **${r.participants.length}**, wylosowano: **${r.winners.length}** → <#${r.clanCfg.channelId}>\n`;
+            const exclNote = r.excludedCount > 0 ? `, wykluczonych: **${r.excludedCount}**` : '';
+            content += `✅ **${r.clanCfg.displayName}** — uczestników: **${r.participants.length}**${exclNote}, wylosowano: **${r.winners.length}** → <#${r.clanCfg.channelId}>\n`;
         }
 
         if (content.length > 1900) content = content.slice(0, 1900) + '\n-# …(skrócono)';

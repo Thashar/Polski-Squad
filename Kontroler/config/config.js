@@ -165,6 +165,14 @@ module.exports = {
         // Liczba zwycięzców na klan w jednym cotygodniowym losowaniu
         winnersCount: 3,
 
+        // Role wykluczone z WYGRYWANIA (lista ID w env, rozdzielona przecinkami).
+        // UWAGA: osoby z tymi rolami NADAL liczą się do średniej progresu ("oczekiwany standard"),
+        // bo średnia jest liczona w Stalkerze po wszystkich progresujących — tu tylko usuwamy je z puli losowania.
+        excludedRoles: (process.env.KONTROLER_GLORY_EXCLUDED_ROLES || '')
+            .split(',')
+            .map(s => s.trim())
+            .filter(Boolean),
+
         // Klany: klucz eksportu Stalkera (0/1/2/main) → rola (ping), kanał ogłoszenia (env), nazwa
         // UWAGA: mapowanie kanałów na klany należy zweryfikować przez env KONTROLER_GLORY_CHANNEL_*
         clans: {

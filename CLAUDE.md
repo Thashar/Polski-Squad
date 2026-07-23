@@ -780,6 +780,8 @@ KONTROLER_GLORY_CHANNEL_MAIN=channel_id
 KONTROLER_GLORY_CHANNEL_0=channel_id
 KONTROLER_GLORY_CHANNEL_1=channel_id
 KONTROLER_GLORY_CHANNEL_2=channel_id
+# Role wykluczone z wygrywania Glory (lista ID po przecinku; wykluczeni nadal liczą się do średniej progresu)
+KONTROLER_GLORY_EXCLUDED_ROLES=role_id1,role_id2
 # Role klanowe współdzielone ze Stalkerem: STALKER_LME_TARGET_ROLE_MAIN/0/1/2
 # Przekazywanie wiadomości (robot1) - lista user ID rozdzielona przecinkami
 ROBOT=user_id_1,user_id_2

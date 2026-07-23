@@ -109,6 +109,28 @@ class GloryLotteryService {
 
     // ===== Losowanie ważone =====
 
+    /**
+     * Zwraca zbiór userId uczestników, którzy mają którąś z ról wykluczonych z wygrywania
+     * (`config.glory.excludedRoles`). Osoby te są usuwane z puli losowania, ale nadal liczą się
+     * do średniej progresu ("oczekiwany standard"), która jest liczona po stronie Stalkera.
+     */
+    async getExcludedUserIds(guild, participants) {
+        const excluded = new Set();
+        const roles = this.cfg.excludedRoles || [];
+        if (!guild || roles.length === 0 || !participants || participants.length === 0) return excluded;
+
+        try {
+            const ids = participants.map(p => p.userId);
+            const members = await guild.members.fetch({ user: ids });
+            for (const [id, member] of members) {
+                if (roles.some(roleId => member.roles.cache.has(roleId))) excluded.add(id);
+            }
+        } catch (e) {
+            logger.warn(`⚠️ Glory: nie udało się pobrać członków do wykluczeń ról: ${e.message}`);
+        }
+        return excluded;
+    }
+
     drawWeighted(participants, count, excludeIds = new Set()) {
         const pool = [];
         for (const p of participants) {
@@ -163,7 +185,9 @@ class GloryLotteryService {
                     continue;
                 }
 
-                const winners = this.drawWeighted(participants, this.cfg.winnersCount);
+                // Wyklucz z losowania osoby z ról wykluczonych (nadal liczą się do średniej w Stalkerze)
+                const excludeIds = await this.getExcludedUserIds(guild, participants);
+                const winners = this.drawWeighted(participants, this.cfg.winnersCount, excludeIds);
                 await this.announceWinners(channel, clanCfg, winners, participants, clanData);
                 await this.recordGloryWins(winners, clanKey, clanData.lastWeek);
 
@@ -196,7 +220,12 @@ class GloryLotteryService {
         if (!rec) return { success: false, reason: 'no_draw' };
         if (!rec.participants || rec.participants.length === 0) return { success: false, reason: 'no_participants' };
 
-        const excludeIds = new Set((rec.winners || []).map(w => w.userId));
+        const clanCfg = this.cfg.clans[clanKey];
+        const guild = await this.client.guilds.fetch(this.config.guildId).catch(() => null);
+
+        // Wyklucz dotychczasowych zwycięzców ORAZ osoby z ról wykluczonych
+        const roleExcluded = await this.getExcludedUserIds(guild, rec.participants);
+        const excludeIds = new Set([...(rec.winners || []).map(w => w.userId), ...roleExcluded]);
         const remaining = rec.participants.filter(p => !excludeIds.has(p.userId));
         if (remaining.length === 0) return { success: false, reason: 'no_more' };
 
@@ -208,8 +237,6 @@ class GloryLotteryService {
         rec.winners.push({ userId: winner.userId, displayName: winner.displayName });
         await this.saveHistory();
 
-        const clanCfg = this.cfg.clans[clanKey];
-        const guild = await this.client.guilds.fetch(this.config.guildId).catch(() => null);
         const channel = guild ? await guild.channels.fetch(clanCfg.channelId).catch(() => null) : null;
         await this.announceReroll(channel, clanCfg, winner);
         await this.recordGloryWins([winner], clanKey, rec.lastWeek);
@@ -283,9 +310,10 @@ class GloryLotteryService {
                 continue;
             }
 
-            const winners = this.drawWeighted(participants, this.cfg.winnersCount);
-            await this.publishTestAnnouncement(channel, clanCfg, winners, participants, clanData);
-            results.push({ clanKey, clanCfg, participants, winners, sent: true });
+            const excludeIds = await this.getExcludedUserIds(guild, participants);
+            const winners = this.drawWeighted(participants, this.cfg.winnersCount, excludeIds);
+            await this.publishTestAnnouncement(channel, clanCfg, winners, participants, clanData, excludeIds);
+            results.push({ clanKey, clanCfg, participants, winners, excludedCount: excludeIds.size, sent: true });
         }
 
         return { hasData: true, results };
@@ -303,7 +331,7 @@ class GloryLotteryService {
      * Publikuje na kanale wynik wyglądający jak prawdziwe cykliczne losowanie:
      * ping roli klanowej + embed zwycięzców (z banerem testowym na górze) + PEŁNA lista uczestników.
      */
-    async publishTestAnnouncement(channel, clanCfg, winners, participants, clanData) {
+    async publishTestAnnouncement(channel, clanCfg, winners, participants, clanData, excludeIds = new Set()) {
         const winnerIds = new Set(winners.map(w => w.userId));
         const winnersEmbed = this._prependTestBanner(
             this.buildWinnersEmbed(clanCfg, winners, participants, clanData)
@@ -317,7 +345,7 @@ class GloryLotteryService {
         });
 
         // Kolejne wiadomości: PEŁNA lista uczestników (bez pingowania osób na liście)
-        const listEmbeds = this.buildParticipantsEmbeds(clanCfg, participants, winnerIds);
+        const listEmbeds = this.buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds);
         for (const embed of listEmbeds) {
             await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
         }
@@ -326,15 +354,18 @@ class GloryLotteryService {
     /**
      * Buduje embedy z PEŁNĄ listą uczestników (posortowaną wg losów, potem progresu),
      * dzieląc na wiele embedów gdy opis przekracza limit Discorda (4096 znaków).
+     * Osoby wykluczone z losowania (excludeIds) są oznaczone 🚫 (liczą się do średniej, ale nie wygrywają).
      */
-    buildParticipantsEmbeds(clanCfg, participants, winnerIds) {
+    buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds = new Set()) {
         const sorted = [...participants].sort((a, b) => (b.tickets - a.tickets) || (b.progress - a.progress));
         const lines = sorted.map((p, i) => {
-            const marker = winnerIds.has(p.userId) ? '🏆' : `**${i + 1}.**`;
-            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${p.tickets === 1 ? 'los' : 'losy'}`;
+            const marker = winnerIds.has(p.userId) ? '🏆' : (excludeIds.has(p.userId) ? '🚫' : `**${i + 1}.**`);
+            const suffix = excludeIds.has(p.userId) ? ' · *wykluczony z losowania*' : '';
+            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${p.tickets === 1 ? 'los' : 'losy'}${suffix}`;
         });
         const totalTickets = participants.reduce((s, p) => s + (p.tickets || 1), 0);
-        const header = `# 🎟️ Uczestnicy loterii Glory — ${clanCfg.displayName}\nŁącznie: **${participants.length}** osób · pula losów: **${totalTickets}**\n\n`;
+        const excludedNote = excludeIds.size > 0 ? ` · 🚫 wykluczonych: **${excludeIds.size}**` : '';
+        const header = `# 🎟️ Uczestnicy loterii Glory — ${clanCfg.displayName}\nŁącznie: **${participants.length}** osób · pula losów: **${totalTickets}**${excludedNote}\n\n`;
 
         // Dzielenie na fragmenty ≤ ~3900 znaków (bezpiecznie poniżej limitu 4096 opisu embeda)
         const chunks = [];
@@ -361,9 +392,11 @@ class GloryLotteryService {
             ? `${clanData.lastWeek.weekNumber}/${clanData.lastWeek.year}`
             : '—';
 
-        const winnersList = winners
-            .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${w.tickets === 1 ? 'los' : 'losy'})`)
-            .join('\n');
+        const winnersList = winners.length > 0
+            ? winners
+                .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${w.tickets === 1 ? 'los' : 'losy'})`)
+                .join('\n')
+            : '*Brak zwycięzców — wszyscy uczestnicy są wykluczeni z losowania.*';
 
         return new EmbedBuilder()
             .setDescription(`# 🏆 Loteria Glory — ${clanCfg.displayName}
