@@ -345,19 +345,21 @@ class GloryLotteryService {
      */
     async publishTestAnnouncement(channel, clanCfg, winners, participants, clanData, excludeIds = new Set()) {
         const winnerIds = new Set(winners.map(w => w.userId));
+        // Nicki serwerowe dla wszystkich uczestników (obejmuje też zwycięzców)
+        const nameMap = await this.resolveDisplayNames(channel.guild, participants.map(p => p.userId));
         const winnersEmbed = this._prependTestBanner(
-            this.buildWinnersEmbed(clanCfg, winners, participants, clanData)
+            this.buildWinnersEmbed(clanCfg, winners, participants, clanData, nameMap)
         );
 
         // Pierwsza wiadomość: jak realne losowanie — ping roli klanowej + embed zwycięzców
         await channel.send({
             content: `<@&${clanCfg.roleId}>`,
             embeds: [winnersEmbed],
-            allowedMentions: { roles: [clanCfg.roleId], users: winners.map(w => w.userId) }
+            allowedMentions: { roles: [clanCfg.roleId] }
         });
 
         // Kolejne wiadomości: PEŁNA lista uczestników (bez pingowania osób na liście)
-        const listEmbeds = this.buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds);
+        const listEmbeds = this.buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds, nameMap);
         for (const embed of listEmbeds) {
             await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
         }
@@ -368,15 +370,38 @@ class GloryLotteryService {
      * dzieląc na wiele embedów gdy opis przekracza limit Discorda (4096 znaków).
      * Osoby wykluczone z losowania (excludeIds) są oznaczone 🚫 (liczą się do średniej, ale nie wygrywają).
      */
-    buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds = new Set()) {
+    /**
+     * Buduje mapę userId → nick serwerowy dla podanych ID.
+     * Wzmianki `<@id>` w opisie embeda Discord renderuje jako nick tylko gdy użytkownik jest w cache
+     * klienta — inaczej pokazuje surowe ID. Dlatego w embedach wyświetlamy nick jako zwykły tekst.
+     */
+    async resolveDisplayNames(guild, ids) {
+        const map = new Map();
+        if (!guild || !ids || ids.length === 0) return map;
+        try {
+            const members = await guild.members.fetch({ user: ids });
+            for (const [id, member] of members) map.set(id, member.displayName);
+        } catch (e) {
+            logger.warn(`⚠️ Glory: nie udało się pobrać nicków serwerowych: ${e.message}`);
+        }
+        return map;
+    }
+
+    /** Nick do wyświetlenia: aktualny nick serwerowy → zapisany displayName → ID jako ostateczność. */
+    _name(userId, storedName, nameMap) {
+        return (nameMap && nameMap.get(userId)) || storedName || `Gracz ${userId}`;
+    }
+
+    buildParticipantsEmbeds(clanCfg, participants, winnerIds, excludeIds = new Set(), nameMap = null) {
         const sorted = [...participants].sort((a, b) => (b.tickets - a.tickets) || (b.progress - a.progress));
         const lines = sorted.map((p, i) => {
             // Osoby wykluczone: krótki wpis bez progresu/losów (ich losy nie liczą się do puli)
+            const name = this._name(p.userId, p.displayName, nameMap);
             if (excludeIds.has(p.userId)) {
-                return `🚫 <@${p.userId}> — wykluczony z losowania`;
+                return `🚫 ${name} — wykluczony z losowania`;
             }
             const marker = winnerIds.has(p.userId) ? '🏆' : `**${i + 1}.**`;
-            return `${marker} <@${p.userId}> — progres **${p.progress}** → **${p.tickets}** ${losWord(p.tickets)}`;
+            return `${marker} ${name} — progres **${p.progress}** → **${p.tickets}** ${losWord(p.tickets)}`;
         });
         // Pula losów liczona tylko z osób NIE wykluczonych
         const totalTickets = participants.reduce((s, p) => s + (excludeIds.has(p.userId) ? 0 : (p.tickets || 1)), 0);
@@ -403,14 +428,14 @@ class GloryLotteryService {
 
     // ===== Ogłoszenia =====
 
-    buildWinnersEmbed(clanCfg, winners, participants, clanData) {
+    buildWinnersEmbed(clanCfg, winners, participants, clanData, nameMap = null) {
         const weekLabel = clanData.lastWeek
             ? `${clanData.lastWeek.weekNumber}/${clanData.lastWeek.year}`
             : '—';
 
         const winnersList = winners.length > 0
             ? winners
-                .map((w, i) => `**${i + 1}.** <@${w.userId}> — progres **${w.progress}** (${w.tickets} ${losWord(w.tickets)})`)
+                .map((w, i) => `**${i + 1}.** ${this._name(w.userId, w.displayName, nameMap)} — progres **${w.progress}** (${w.tickets} ${losWord(w.tickets)})`)
                 .join('\n')
             : '*Brak zwycięzców — wszyscy uczestnicy są wykluczeni z losowania.*';
 
@@ -452,27 +477,29 @@ W tym tygodniu nikt nie zaliczył wystarczającego progresu w Fazie 1 — brak z
             logger.warn(`⚠️ Glory: brak kanału ogłoszeń dla ${clanCfg.displayName} (${clanCfg.channelId})`);
             return;
         }
-        const embed = this.buildWinnersEmbed(clanCfg, winners, participants, clanData);
+        const nameMap = await this.resolveDisplayNames(channel.guild, winners.map(w => w.userId));
+        const embed = this.buildWinnersEmbed(clanCfg, winners, participants, clanData, nameMap);
         await channel.send({
             content: `<@&${clanCfg.roleId}>`,
             embeds: [embed],
-            allowedMentions: { roles: [clanCfg.roleId], users: winners.map(w => w.userId) }
+            allowedMentions: { roles: [clanCfg.roleId] }
         });
     }
 
     async announceReroll(channel, clanCfg, winner) {
         if (!channel) return;
+        const nameMap = await this.resolveDisplayNames(channel.guild, [winner.userId]);
         const embed = new EmbedBuilder()
             .setDescription(`# 🎲 Dodatkowy zwycięzca Glory — ${clanCfg.displayName}
 
-Dodatkowo wylosowano: <@${winner.userId}> — progres **${winner.progress}** (${winner.tickets} ${losWord(winner.tickets)})`)
+Dodatkowo wylosowano: ${this._name(winner.userId, winner.displayName, nameMap)} — progres **${winner.progress}** (${winner.tickets} ${losWord(winner.tickets)})`)
             .setColor(0xF1C40F)
             .setTimestamp();
 
         await channel.send({
             content: `<@&${clanCfg.roleId}>`,
             embeds: [embed],
-            allowedMentions: { roles: [clanCfg.roleId], users: [winner.userId] }
+            allowedMentions: { roles: [clanCfg.roleId] }
         });
     }
 
