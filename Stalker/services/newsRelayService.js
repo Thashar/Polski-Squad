@@ -185,6 +185,8 @@ Twoje zadanie: przygotuj SZCZEGÓŁOWE streszczenie PO POLSKU tego, co przekazuj
 Zasady:
 - Pisz naturalną, poprawną polszczyzną.
 - Zachowaj WSZYSTKIE konkretne informacje: liczby, daty, godziny, nazwy, zmiany, instrukcje, nagrody, wymagania, statystyki widoczne na screenach.
+- Daty, godziny i czas trwania wydarzeń KOPIUJ DOKŁADNIE w takiej samej formie, w jakiej występują w oryginale (ten sam format, te same wartości). NIE przepisuj ich na schemat "od <data> do <data>" ani nie zmieniaj układu.
+- NIGDY nie używaj placeholderów ani nawiasów w stylu "[data i godzina]", "[data]", "[godzina]". Jeśli konkretnej daty/godziny nie ma w poście ani na obrazach — po prostu pomiń tę informację, nie wstawiaj zastępczego tekstu.
 - Nie dodawaj informacji, których nie ma w poście ani na obrazach. Nie zgaduj.
 - Jeśli post to ogłoszenie/aktualizacja - wypunktuj najważniejsze zmiany.
 - Nagłówki poszczególnych sekcji newsa ZAWSZE pogrubiaj (Discord markdown: **Nagłówek sekcji**).
