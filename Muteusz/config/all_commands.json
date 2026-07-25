@@ -636,8 +636,14 @@
         },
         {
           "name": "/profile",
-          "description": "Wyświetla pełny profil gracza: rekord serwera, pozycja globalna, wycinek rankingu globalnego, rola TOP, rankingi ról, rekordy per boss, osiągnięcia. Można przeglądać profile innych graczy przez wyszukiwanie nicku.",
+          "description": "Wyświetl profil gracza: rekordy, bossowie i osiągnięcia (z przełączaniem między własnymi profilami)",
           "usage": "/profile [gracz:fragment nicku]",
+          "requiredPermission": "public"
+        },
+        {
+          "name": "/profiles",
+          "description": "Zarządzanie profilami gracza (kilka kont w grze) — dodawanie, przełączanie domyślnego, zmiana nazwy, usuwanie",
+          "usage": "/profiles",
           "requiredPermission": "public"
         },
         {
@@ -660,7 +666,7 @@
         },
         {
           "name": "/update",
-          "description": "Aktualizuje swój wynik w rankingu (OCR screenshot)",
+          "description": "Dodaj nowy wynik Ender's Echo do analizy (przy kilku profilach bot zapyta, do którego przypisać wynik)",
           "usage": "/update załącznik:[screenshot z wynikiem]",
           "requiredPermission": "public"
         }

@@ -114,9 +114,110 @@ function compareByScoreThenTimestamp(a, b) {
     return aTime - bTime;
 }
 
+// ===== PROFILE GRACZA (multi-profile) =====
+//
+// Jeden użytkownik Discorda może mieć kilka profili (grać na kilku kontach w grze).
+// Tożsamość wpisu w danych = playerKey:
+//   profil główny (1):    "123456789012345678"        ← identyczny jak dawny userId (zgodność wstecz)
+//   profil dodatkowy (2): "123456789012345678#2"
+//
+// Separator "#" jest wybrany świadomie: customId komponentów Discorda parsowane są przez
+// split('_') i split(':'), więc żaden z tych znaków nie może wystąpić w playerKey.
+// "#" jest też bezpieczny w nazwach plików (historia wyników = plik per profil).
+const PROFILE_SEPARATOR = '#';
+
+// Znaczniki profili w nazwach wyświetlanych: profil 1 = brak znacznika (bez zmian dla graczy
+// z jednym profilem), profile 2+ = cyfra w kółku doklejona do nicku Discord.
+const PROFILE_MARKERS = ['', '', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
+
+/**
+ * Buduje playerKey z ID właściciela i numeru profilu.
+ * @param {string} userId - ID użytkownika Discord
+ * @param {number} [profileIndex=1] - numer profilu (1 = główny)
+ * @returns {string}
+ */
+function makePlayerKey(userId, profileIndex = 1) {
+    const idx = Number(profileIndex) || 1;
+    return idx <= 1 ? String(userId) : `${userId}${PROFILE_SEPARATOR}${idx}`;
+}
+
+/**
+ * Zwraca ID użytkownika Discord (właściciela) z playerKey.
+ * Bezpieczne dla zwykłego userId — zwraca go bez zmian.
+ * @param {string} playerKey
+ * @returns {string}
+ */
+function getOwnerId(playerKey) {
+    if (playerKey === null || playerKey === undefined) return playerKey;
+    const str = String(playerKey);
+    const sepIdx = str.indexOf(PROFILE_SEPARATOR);
+    return sepIdx === -1 ? str : str.slice(0, sepIdx);
+}
+
+/**
+ * Zwraca numer profilu z playerKey (1 dla profilu głównego / zwykłego userId).
+ * @param {string} playerKey
+ * @returns {number}
+ */
+function getProfileIndex(playerKey) {
+    if (!playerKey) return 1;
+    const str = String(playerKey);
+    const sepIdx = str.indexOf(PROFILE_SEPARATOR);
+    if (sepIdx === -1) return 1;
+    const parsed = parseInt(str.slice(sepIdx + 1), 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
+/**
+ * Czy playerKey wskazuje profil dodatkowy (nie główny).
+ * @param {string} playerKey
+ * @returns {boolean}
+ */
+function isAltProfile(playerKey) {
+    return getProfileIndex(playerKey) > 1;
+}
+
+/**
+ * Formatuje nazwę wyświetlaną profilu: nick Discord + znacznik numeru profilu.
+ * Profil główny zwraca nick bez zmian — dzięki temu gracze z jednym profilem
+ * widzą dokładnie to samo co przed wdrożeniem profili.
+ * @param {string} baseName - nick Discord (displayName / username)
+ * @param {number|string} profileIndexOrKey - numer profilu albo playerKey
+ * @returns {string}
+ */
+function formatProfileDisplayName(baseName, profileIndexOrKey) {
+    const idx = typeof profileIndexOrKey === 'number'
+        ? profileIndexOrKey
+        : getProfileIndex(profileIndexOrKey);
+    if (idx <= 1) return baseName;
+    const marker = PROFILE_MARKERS[idx] || `(${idx})`;
+    return `${baseName} ${marker}`;
+}
+
+/**
+ * Zwraca sam znacznik profilu (do embedów, gdzie nick jest w innym polu).
+ * Profil główny → null.
+ * @param {number|string} profileIndexOrKey
+ * @returns {string|null}
+ */
+function getProfileMarker(profileIndexOrKey) {
+    const idx = typeof profileIndexOrKey === 'number'
+        ? profileIndexOrKey
+        : getProfileIndex(profileIndexOrKey);
+    if (idx <= 1) return null;
+    return PROFILE_MARKERS[idx] || `(${idx})`;
+}
+
 module.exports = {
     formatMessage,
     downloadFile,
     downloadBuffer,
-    compareByScoreThenTimestamp
+    compareByScoreThenTimestamp,
+    PROFILE_SEPARATOR,
+    makePlayerKey,
+    getOwnerId,
+    getProfileIndex,
+    isAltProfile,
+    formatProfileDisplayName,
+    getProfileMarker
 };

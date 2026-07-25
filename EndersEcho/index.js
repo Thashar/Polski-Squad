@@ -34,6 +34,7 @@ const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
 const MilestoneService = require('./services/milestoneService');
+const ProfileRegistryService = require('./services/profileRegistryService');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const BossRecordService = require('./services/bossRecordService');
@@ -115,6 +116,8 @@ const guildBanService = new GuildBanService(config.ranking.dataDir);
 const guildDataRetentionService = new GuildDataRetentionService(config.ranking.dataDir, guildConfigService);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
 const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHistoryService, guildConfigService, config, chartService, rankingService);
+// Rejestr profili graczy (kilka kont w grze) — max 3 profile na użytkownika
+const profileRegistryService = new ProfileRegistryService(config.ranking.dataDir, config.profiles?.maxPerUser ?? 3);
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
@@ -137,7 +140,7 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
 });
 // Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
 aiOcrService.setStatsService(ocrStatsService);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService, profileRegistryService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -162,6 +165,7 @@ async function initializeBot() {
         await ocrService.initialize();
 
         // Wczytaj limit dzienny, historię tokenów, cooldowny /update i listę zbanowanych serwerów
+        await profileRegistryService.load();
         await usageLimitService.load();
         await tokenUsageService.load();
         await updateCooldownService.load();

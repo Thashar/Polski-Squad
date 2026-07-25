@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { formatProfileDisplayName } = require('../utils/helpers');
 
 // Konfiguracja typów embedów OCR — kolor, emoji, etykieta
 const OCR_EMBED_TYPES = {
@@ -149,6 +150,8 @@ class LogService {
                 adminName,
                 roleError,
                 globalPlayerCount = null,
+                profileIndex = null,
+                profileLabel = null,
             } = options;
 
             const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
@@ -171,10 +174,19 @@ class LogService {
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
 
             if (userName) {
+                // Profil dodatkowy → znacznik przy nicku, żeby log wskazywał konkretne konto gracza
+                const displayName = formatProfileDisplayName(userName, profileIndex || 1);
                 const playerVal = userId
-                    ? `[${userName}](https://discord.com/users/${userId})`
-                    : userName;
+                    ? `[${displayName}](https://discord.com/users/${userId})`
+                    : displayName;
                 embed.addFields({ name: '👤 Gracz', value: playerVal, inline: true });
+            }
+            if (profileIndex && profileIndex > 1) {
+                embed.addFields({
+                    name: '👥 Profil',
+                    value: profileLabel ? `#${profileIndex} — ${profileLabel}` : `#${profileIndex}`,
+                    inline: true,
+                });
             }
             if (commandName) {
                 embed.addFields({ name: '⌨️ Komenda', value: `/${commandName}`, inline: true });

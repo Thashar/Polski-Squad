@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
-const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
@@ -122,7 +122,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null, profileRegistryService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -150,6 +150,7 @@ class InteractionHandler {
         this.adminPanelService = adminPanelService;
         this.commandUsageService = commandUsageService;
         this.milestoneService = milestoneService;
+        this.profileRegistryService = profileRegistryService;
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -157,6 +158,7 @@ class InteractionHandler {
             roleService,
             roleRankingConfigService,
             guildConfigService,
+            profileRegistryService,
             dataDir: config.ranking?.dataDir || null,
         });
         // Tymczasowe sesje dla /info (userId -> { title, description, icon, image })
@@ -175,12 +177,14 @@ class InteractionHandler {
         this._bossMapSessions = new Map();
         // Sesje robocze panelu konfiguracji bossów (userId -> { pendingBoss? })
         this._bossCfgSessions = new Map();
-        // Sesje cofnięcia wyniku OCR (userId_guildId -> { guildId, userId, previousRecord, newRecord })
+        // Sesje cofnięcia wyniku OCR (playerKey_guildId -> { guildId, userId, playerKey, previousRecord, newRecord })
         this._ocrRevertSessions = new Map();
         // Stan paginacji rankingów per-boss (messageId -> { bossName, players, currentPage, totalPages, userId })
         this._bossRankings = new Map();
-        // Stan sesji /profile (messageId -> { viewerId, targetUserId, targetGuildId, view, category, bossPage, bossMaxPage, cachedData })
+        // Stan sesji /profile (messageId -> { viewerId, targetPlayerKey, targetGuildId, view, category, bossPage, bossMaxPage, cachedData })
         this._profileStates = new Map();
+        // Oczekujące wybory profilu przy /update i /test (interactionId -> { interaction, dryRun, commandName, ocrBlockKey, userId })
+        this._updateProfileSessions = new Map();
     }
 
     /**
@@ -259,6 +263,12 @@ class InteractionHandler {
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
+
+            new SlashCommandBuilder()
+                .setName('profiles')
+                .setNameLocalizations(pl('profile'))
+                .setDescription('Manage your player profiles (multiple in-game accounts)')
+                .setDescriptionLocalizations(pl('Zarządzaj swoimi profilami gracza (kilka kont w grze)')),
 
             new SlashCommandBuilder()
                 .setName('help')
@@ -390,6 +400,7 @@ class InteractionHandler {
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
                 case 'achievements': await this.handleAchievementsCommand(interaction);   break;
                 case 'profile':      await this.handleProfileCommand(interaction);        break;
+                case 'profiles':     await this.handleProfilesCommand(interaction);       break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -402,6 +413,10 @@ class InteractionHandler {
         } else if (interaction.isModalSubmit()) {
             if (interaction.customId === 'info_modal') {
                 await this._handleInfoModalSubmit(interaction);
+                return;
+            }
+            if (interaction.customId.startsWith('prof_modal_')) {
+                await this._handleProfileNameModal(interaction);
                 return;
             }
             if (interaction.customId.startsWith('ee_block_modal_')) {
@@ -3054,9 +3069,9 @@ class InteractionHandler {
             return;
         }
         const options = matches.slice(0, 25).map(p => ({
-            label: (p.username || p.userId).slice(0, 100),
+            label: formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 100),
             description: `${p.score || ''} ${p.bossName ? `· ${p.bossName}` : ''}`.trim().slice(0, 100) || undefined,
-            value: p.userId,
+            value: p.playerKey || p.userId,
         }));
         const select = new StringSelectMenuBuilder()
             .setCustomId('cc_player_lookup_sel')
@@ -3070,9 +3085,9 @@ class InteractionHandler {
 
     async _handleCcPlayerLookupSelect(interaction) {
         await interaction.deferUpdate();
-        const userId = interaction.values[0];
+        const selectedPlayerKey = interaction.values[0];
         const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-        const player = globalRanking.find(p => p.userId === userId);
+        const player = globalRanking.find(p => (p.playerKey || p.userId) === selectedPlayerKey);
         if (!player) {
             await interaction.editReply({ content: '❌ Gracz nie znaleziony w rankingu.', components: [] });
             return;
@@ -3084,7 +3099,8 @@ class InteractionHandler {
     /** Buduje szczegółowy embed gracza dla Centrum Dowodzenia (rekord, blokady, cooldown, odrzucenia, osiągnięcia) */
     async _buildCcPlayerDetailEmbed(player, globalRanking, client) {
         const cfgSvc = this.guildConfigService;
-        const position = globalRanking.findIndex(p => p.userId === player.userId) + 1;
+        // Pozycja dotyczy PROFILU; blokady/cooldown/odrzucenia niżej — właściciela (osoby)
+        const position = globalRanking.findIndex(p => (p.playerKey || p.userId) === (player.playerKey || player.userId)) + 1;
         const serverName = cfgSvc?.getConfig(player.sourceGuildId)?.guildName || player.sourceGuildId || '—';
 
         // Blokada
@@ -3117,7 +3133,7 @@ class InteractionHandler {
         // Osiągnięcia (serwer źródłowy rekordu)
         let achCount = null;
         try {
-            const unlocked = await this.achievementService?.getUnlockedAchievements(player.sourceGuildId, player.userId);
+            const unlocked = await this.achievementService?.getUnlockedAchievements(player.sourceGuildId, player.playerKey || player.userId);
             if (Array.isArray(unlocked)) achCount = unlocked.length;
         } catch { /* opcjonalne */ }
 
@@ -3501,11 +3517,11 @@ class InteractionHandler {
                 return;
             }
             const options = allMatches.slice(0, 25).map(p => ({
-                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                label: `#${p.rank} ${formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 60)}`.slice(0, 100),
                 description: isHeadAdmin
                     ? `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100)
                     : `${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
-                value: `${p.userId}:${p.sgid}`,
+                value: `${p.playerKey || p.userId}:${p.sgid}`,
             }));
             const subtitle = allMatches.length > 25
                 ? t(`Znaleziono ${allMatches.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${allMatches.length} — showing 25. Narrow your search.`)
@@ -3534,11 +3550,11 @@ class InteractionHandler {
 
     async _handlePanelRemoveSelect(interaction) {
         const value = interaction.values[0]; // format: userId:guildId
-        const [targetUserId, targetGuildId] = value.split(':');
+        const [targetPlayerKey, targetGuildId] = value.split(':');
         const t = this._panelT(interaction.guildId);
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
-        const player = players.find(p => p.userId === targetUserId);
-        const displayName = player?.username || targetUserId;
+        const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+        const displayName = formatProfileDisplayName(player?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
         const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
         const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
         await interaction.update({
@@ -3549,24 +3565,24 @@ class InteractionHandler {
                     `Are you sure you want to remove **${displayName}**${serverNote} from the ranking?\n\nThis action cannot be undone.`
                 ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetUserId}:${targetGuildId}`).setEmoji('✅').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetUserId}:${targetGuildId}`).setEmoji('🏆').setLabel(t('Usuń z osiągnięciami', 'Remove with Achievements')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_confirm_${targetPlayerKey}:${targetGuildId}`).setEmoji('✅').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId(`panel_remove_all_confirm_${targetPlayerKey}:${targetGuildId}`).setEmoji('🏆').setLabel(t('Usuń z osiągnięciami', 'Remove with Achievements')).setStyle(ButtonStyle.Danger),
                 new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
     }
 
     async _handlePanelRemoveConfirm(interaction, rawValue, { resetAllAchievements = false } = {}) {
-        // rawValue: "userId:targetGuildId" (zawiera docelowy serwer, niekoniecznie bieżący)
-        const [targetUserId, targetGuildId] = rawValue.split(':');
+        // rawValue: "playerKey:targetGuildId" (playerKey = profil gracza; serwer niekoniecznie bieżący)
+        const [targetPlayerKey, targetGuildId] = rawValue.split(':');
         const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
             const playersBefore = await this.rankingService.getSortedPlayers(targetGuildId).catch(() => []);
-            const playerRecord = playersBefore.find(p => p.userId === targetUserId);
-            const playerName = playerRecord?.username || targetUserId;
+            const playerRecord = playersBefore.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+            const playerName = formatProfileDisplayName(playerRecord?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
             const playerTimestamp = playerRecord?.timestamp || null;
-            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetUserId, targetGuildId);
+            const wasRemoved = await this.rankingService.removePlayerFromRanking(targetPlayerKey, targetGuildId);
             if (!wasRemoved) {
                 const { embed, components } = this._buildAdminPanel(interaction);
                 embed.setDescription(t('⚠️ Gracz nie znajduje się w rankingu.\n\n', '⚠️ Player not found in ranking.\n\n') + (embed.data.description || ''));
@@ -3582,17 +3598,17 @@ class InteractionHandler {
                 }
                 if (this.achievementService) {
                     if (resetAllAchievements) {
-                        await this.achievementService.resetAllAchievements(targetGuildId, targetUserId);
+                        await this.achievementService.resetAllAchievements(targetGuildId, targetPlayerKey);
                     } else {
-                        await this.achievementService.clearUserAchievements(targetGuildId, targetUserId);
+                        await this.achievementService.clearUserAchievements(targetGuildId, targetPlayerKey);
                     }
                 }
                 if (this.scoreHistoryService && playerTimestamp) {
-                    this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, playerTimestamp)
+                    this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetPlayerKey, playerTimestamp)
                         .catch(e => logger.warn(`Błąd czyszczenia historii po usunięciu z rankingu: ${e.message}`));
                 }
                 if (this.bossRecordService) {
-                    await this.bossRecordService.removeAllUserBossRecords(targetGuildId, targetUserId)
+                    await this.bossRecordService.removeAllUserBossRecords(targetGuildId, targetPlayerKey)
                         .catch(e => logger.warn(`Błąd usuwania rekordów bossów po usunięciu z rankingu: ${e.message}`));
                 }
                 const guildNameLog = targetGuild?.name || targetGuildId;
@@ -3608,15 +3624,15 @@ class InteractionHandler {
                 embeds: [new EmbedBuilder().setColor(0x57F287)
                     .setTitle(t('✅ Gracz usunięty', '✅ Player Removed'))
                     .setDescription(t(
-                        `Gracz <@${targetUserId}> został usunięty z rankingu${serverNote}${resetAllAchievements ? ' wraz ze wszystkimi osiągnięciami' : ''}.`,
-                        `Player <@${targetUserId}> has been removed from the ranking${serverNote}${resetAllAchievements ? ' along with all achievements' : ''}.`
+                        `Gracz <@${getOwnerId(targetPlayerKey)}> został usunięty z rankingu${serverNote}${resetAllAchievements ? ' wraz ze wszystkimi osiągnięciami' : ''}.`,
+                        `Player <@${getOwnerId(targetPlayerKey)}> has been removed from the ranking${serverNote}${resetAllAchievements ? ' along with all achievements' : ''}.`
                     ))],
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                 )]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelRemoveConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", gracz ID ${targetUserId}):`, err);
+            logger.error(`Błąd _handlePanelRemoveConfirm (serwer "${interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId}", profil ${targetPlayerKey}):`, err);
             await interaction.editReply({ content: t('❌ Błąd usuwania gracza.', '❌ Error removing player.'), embeds: [], components: [] });
         }
     }
@@ -3672,11 +3688,11 @@ class InteractionHandler {
                 return;
             }
             const options = allMatches.slice(0, 25).map(p => ({
-                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                label: `#${p.rank} ${formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 60)}`.slice(0, 100),
                 description: isHeadAdmin
                     ? `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100)
                     : `${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
-                value: `${p.userId}:${p.sgid}`,
+                value: `${p.playerKey || p.userId}:${p.sgid}`,
             }));
             const subtitle = allMatches.length > 25
                 ? t(`Znaleziono ${allMatches.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${allMatches.length} — showing 25. Narrow your search.`)
@@ -3704,27 +3720,28 @@ class InteractionHandler {
     }
 
     async _handlePanelRemoveScorePlayer(interaction) {
-        const [targetUserId, targetGuildId] = interaction.values[0].split(':');
+        const [targetPlayerKey, targetGuildId] = interaction.values[0].split(':');
         await interaction.deferUpdate();
-        await this._renderRemoveScorePage(interaction, targetUserId, targetGuildId, 0);
+        await this._renderRemoveScorePage(interaction, targetPlayerKey, targetGuildId, 0);
     }
 
     async _handlePanelRemoveScorePage(interaction, rawValue) {
         // rawValue: userId:guildId:page
-        const [targetUserId, targetGuildId, pageStr] = rawValue.split(':');
+        const [targetPlayerKey, targetGuildId, pageStr] = rawValue.split(':');
         await interaction.deferUpdate();
-        await this._renderRemoveScorePage(interaction, targetUserId, targetGuildId, Number(pageStr) || 0);
+        await this._renderRemoveScorePage(interaction, targetPlayerKey, targetGuildId, Number(pageStr) || 0);
     }
 
     // Renderuje stronę listy wyników gracza (25/stronę) z paginacją; edytuje bieżącą (ephemeral) wiadomość.
-    async _renderRemoveScorePage(interaction, targetUserId, targetGuildId, page) {
+    async _renderRemoveScorePage(interaction, targetPlayerKey, targetGuildId, page) {
         const t = this._panelT(interaction.guildId);
         try {
             const entries = this.scoreHistoryService
-                ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId)
+                ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetPlayerKey)
                 : [];
             const players = await this.rankingService.getSortedPlayers(targetGuildId);
-            const displayName = players.find(p => p.userId === targetUserId)?.username || targetUserId;
+            const _dnPlayer = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+            const displayName = formatProfileDisplayName(_dnPlayer?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
             if (entries.length === 0) {
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0xFF4444)
@@ -3749,7 +3766,7 @@ class InteractionHandler {
                 return {
                     label: `${e.score}`.slice(0, 100),
                     description: `${dateStr}${e.bossName ? ' • ' + e.bossName : ''}`.slice(0, 100),
-                    value: `${targetUserId}:${targetGuildId}:${tsMs}`,
+                    value: `${targetPlayerKey}:${targetGuildId}:${tsMs}`,
                 };
             });
             const components = [
@@ -3761,9 +3778,9 @@ class InteractionHandler {
             ];
             if (totalPages > 1) {
                 components.push(new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_remove_score_page_${targetUserId}:${targetGuildId}:${safePage - 1}`).setEmoji('◀️').setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+                    new ButtonBuilder().setCustomId(`panel_remove_score_page_${targetPlayerKey}:${targetGuildId}:${safePage - 1}`).setEmoji('◀️').setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
                     new ButtonBuilder().setCustomId('panel_remove_score_page_noop').setLabel(`${safePage + 1}/${totalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
-                    new ButtonBuilder().setCustomId(`panel_remove_score_page_${targetUserId}:${targetGuildId}:${safePage + 1}`).setEmoji('▶️').setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
+                    new ButtonBuilder().setCustomId(`panel_remove_score_page_${targetPlayerKey}:${targetGuildId}:${safePage + 1}`).setEmoji('▶️').setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Secondary).setDisabled(safePage >= totalPages - 1),
                 ));
             }
             components.push(new ActionRowBuilder().addComponents(
@@ -3787,13 +3804,14 @@ class InteractionHandler {
 
     async _handlePanelRemoveScoreEntry(interaction) {
         const t = this._panelT(interaction.guildId);
-        const [targetUserId, targetGuildId, tsMs] = interaction.values[0].split(':');
+        const [targetPlayerKey, targetGuildId, tsMs] = interaction.values[0].split(':');
         await interaction.deferUpdate();
         try {
-            const entries = this.scoreHistoryService ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId) : [];
+            const entries = this.scoreHistoryService ? await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetPlayerKey) : [];
             const entry = entries.find(e => String(new Date(e.timestamp).getTime()) === tsMs);
             const players = await this.rankingService.getSortedPlayers(targetGuildId);
-            const displayName = players.find(p => p.userId === targetUserId)?.username || targetUserId;
+            const _dnPlayer = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+            const displayName = formatProfileDisplayName(_dnPlayer?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
             if (!entry) {
@@ -3815,7 +3833,7 @@ class InteractionHandler {
                         `Player: **${displayName}**${serverNote}\nScore: **${entry.score}**\nDate: ${dateStr}${entry.bossName ? `\nBoss: ${entry.bossName}` : ''}\n\nRemove this entry from history? If it's the player's current record, the ranking will be recalculated to the next best score.`
                     ))],
                 components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId(`panel_remove_score_confirm_${targetUserId}:${targetGuildId}:${tsMs}`).setEmoji('✅').setLabel(t('Usuń wynik', 'Remove Score')).setStyle(ButtonStyle.Danger),
+                    new ButtonBuilder().setCustomId(`panel_remove_score_confirm_${targetPlayerKey}:${targetGuildId}:${tsMs}`).setEmoji('✅').setLabel(t('Usuń wynik', 'Remove Score')).setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
                 )]
             });
@@ -3827,17 +3845,17 @@ class InteractionHandler {
 
     async _handlePanelRemoveScoreConfirm(interaction, rawValue) {
         // rawValue: userId:guildId:tsMs
-        const [targetUserId, targetGuildId, tsMsStr] = rawValue.split(':');
+        const [targetPlayerKey, targetGuildId, tsMsStr] = rawValue.split(':');
         const tsMs = Number(tsMsStr);
         const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
             const rankingBefore = await this.rankingService.loadRanking(targetGuildId);
-            const oldRecord = rankingBefore[targetUserId] || null;
-            const oldUsername = oldRecord?.username || targetUserId;
+            const oldRecord = rankingBefore[targetPlayerKey] || null;
+            const oldUsername = formatProfileDisplayName(oldRecord?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
 
             const removed = this.scoreHistoryService
-                ? await this.scoreHistoryService.removeEntryByTimestamp(targetGuildId, targetUserId, tsMs)
+                ? await this.scoreHistoryService.removeEntryByTimestamp(targetGuildId, targetPlayerKey, tsMs)
                 : null;
 
             if (!removed) {
@@ -3852,7 +3870,7 @@ class InteractionHandler {
             let newRecordInfo = null;
             const removedVal = typeof removed.scoreValue === 'number' ? removed.scoreValue : this.rankingService.parseScoreValue(removed.score);
             if (oldRecord && removedVal >= this.rankingService.parseScoreValue(oldRecord.score)) {
-                const remaining = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId);
+                const remaining = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetPlayerKey);
                 let best = null;
                 for (const e of remaining) {
                     const v = typeof e.scoreValue === 'number' ? e.scoreValue : this.rankingService.parseScoreValue(e.score);
@@ -3861,15 +3879,16 @@ class InteractionHandler {
                     }
                 }
                 if (!best) {
-                    await this.rankingService.revertUserRecord(targetGuildId, targetUserId, null);
+                    await this.rankingService.revertUserRecord(targetGuildId, targetPlayerKey, null);
                 } else {
-                    await this.rankingService.revertUserRecord(targetGuildId, targetUserId, {
+                    await this.rankingService.revertUserRecord(targetGuildId, targetPlayerKey, {
                         score: best.score,
                         scoreValue: best._v,
                         timestamp: best.timestamp,
                         username: oldUsername,
                         bossName: best.bossName || null,
-                        userId: targetUserId,
+                        userId: getOwnerId(targetPlayerKey),
+                        playerKey: targetPlayerKey,
                     });
                     newRecordInfo = best.score;
                 }
@@ -3891,11 +3910,11 @@ class InteractionHandler {
             let newBossRecordInfo = null;
             if (this.bossRecordService && removed.bossName) {
                 try {
-                    const userBoss = await this.bossRecordService.getUserBossRecords(targetGuildId, targetUserId);
+                    const userBoss = await this.bossRecordService.getUserBossRecords(targetGuildId, targetPlayerKey);
                     const currentBossRec = userBoss?.[removed.bossName] || null;
                     const currentBossVal = currentBossRec && typeof currentBossRec.scoreValue === 'number' ? currentBossRec.scoreValue : null;
                     if (currentBossRec && currentBossVal === removedVal) {
-                        const remainingBoss = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetUserId);
+                        const remainingBoss = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetPlayerKey);
                         let bestBoss = null;
                         for (const e of remainingBoss) {
                             if (e.bossName !== removed.bossName) continue;
@@ -3905,9 +3924,9 @@ class InteractionHandler {
                             }
                         }
                         if (!bestBoss) {
-                            await this.bossRecordService.revertBossRecord(targetGuildId, targetUserId, removed.bossName, null);
+                            await this.bossRecordService.revertBossRecord(targetGuildId, targetPlayerKey, removed.bossName, null);
                         } else {
-                            await this.bossRecordService.revertBossRecord(targetGuildId, targetUserId, removed.bossName, {
+                            await this.bossRecordService.revertBossRecord(targetGuildId, targetPlayerKey, removed.bossName, {
                                 score: bestBoss.score, scoreValue: bestBoss._v, timestamp: bestBoss.timestamp, username: oldUsername,
                             });
                             newBossRecordInfo = bestBoss.score;
@@ -4232,9 +4251,9 @@ class InteractionHandler {
                 return;
             }
             const options = notBlocked.slice(0, 25).map(p => ({
-                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                label: `#${p.rank} ${formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 60)}`.slice(0, 100),
                 description: `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
-                value: `${p.userId}:${p.sgid}`,
+                value: `${p.playerKey || p.userId}:${p.sgid}`,
             }));
             let subtitle = notBlocked.length > 25
                 ? t(`Znaleziono ${notBlocked.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${notBlocked.length} — showing 25. Narrow your search.`)
@@ -4265,12 +4284,14 @@ class InteractionHandler {
     }
 
     async _handlePanelBlockSelect(interaction) {
-        const value = interaction.values[0]; // userId:guildId
-        const [targetUserId, targetGuildId] = value.split(':');
+        const value = interaction.values[0]; // playerKey:guildId
+        const [selectedPlayerKey, targetGuildId] = value.split(':');
+        // Blokada dotyczy OSOBY (wszystkich jej profili), więc z klucza bierzemy właściciela
+        const targetUserId = getOwnerId(selectedPlayerKey);
         const t = this._panelT(interaction.guildId);
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
-        const player = players.find(p => p.userId === targetUserId);
-        const displayName = player?.username || targetUserId;
+        const player = players.find(p => (p.playerKey || p.userId) === selectedPlayerKey);
+        const displayName = formatProfileDisplayName(player?.username || targetUserId, getProfileIndex(selectedPlayerKey));
         const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0xFF4444)
@@ -4315,6 +4336,7 @@ class InteractionHandler {
             const players = await this.rankingService.getSortedPlayers(targetGuildId);
             const player = players.find(p => p.userId === targetUserId);
             const username = player?.username || targetUserId;
+            // (blokada obejmuje wszystkie profile gracza — identyfikujemy po userId)
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
             const blockedUntil = await this.userBlockService.blockUser(
                 targetUserId, username, targetGuildId, guildName, durationStr,
@@ -4674,7 +4696,7 @@ class InteractionHandler {
             if (this.scoreHistoryService && this.chartService) {
                 try {
                     const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
-                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, interaction.user.id, 365);
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, this.profileRegistryService?.getActivePlayerKey(interaction.user.id) || interaction.user.id, 365);
                     if (callerHistory.length >= 2) {
                         const chartTitle = msgs.chartTitle;
                         const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
@@ -4734,22 +4756,434 @@ class InteractionHandler {
      * @param {Collection} memberRoles - interaction.member.roles.cache
      * @returns {Promise<Array<{roleName: string, position: number}>>}
      */
-    async _computeRolePositions(guildId, userId, guild, memberRoles) {
+    async _computeRolePositions(guildId, playerKey, guild, memberRoles) {
         if (!this.roleRankingConfigService || !memberRoles || !guild) return [];
+        const ownerId = getOwnerId(playerKey);
         try {
             const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
             const result = [];
             for (const rr of roleRankings) {
                 if (!memberRoles.has(rr.roleId)) continue;
                 const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, guild, this.roleRankingConfigService);
-                const idx = rolePlayers.findIndex(p => p.userId === userId);
+                // Pozycja dotyczy PROFILU (ranking ról zawiera wszystkie profile członków roli)
+                const idx = rolePlayers.findIndex(p => (p.playerKey || p.userId) === playerKey);
                 if (idx !== -1) result.push({ roleName: rr.roleName, position: idx + 1 });
             }
             return result;
         } catch (err) {
-            logger.warn(`Błąd pobierania pozycji ról dla użytkownika "${guild?.members?.cache?.get(userId)?.displayName || userId}": ${err.message}`);
+            logger.warn(`Błąd pobierania pozycji ról dla użytkownika "${guild?.members?.cache?.get(ownerId)?.displayName || playerKey}": ${err.message}`);
             return [];
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    //  PROFILE GRACZA (kilka kont w grze)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Nazwa profilu do wyświetlenia: "Main (profil główny)" / "② Profil 2 — Smurf".
+     * @param {{ index: number, label: string|null }} prof
+     * @param {Object} msgs
+     * @returns {string}
+     */
+    _profileDisplayName(prof, msgs) {
+        if (prof.index === 1) {
+            return prof.label ? `🏠 ${msgs.profileCmdMainName} — ${prof.label}` : `🏠 ${msgs.profileCmdMainName}`;
+        }
+        const marker = getProfileMarker(prof.index);
+        const base = `${marker} ${formatMessage(msgs.profileCmdSlotName, { index: prof.index })}`;
+        return prof.label ? `${base} — ${prof.label}` : base;
+    }
+
+    /** Krótka etykieta na przycisk (limit 80 znaków). */
+    _profileButtonLabel(prof, msgs) {
+        const base = prof.index === 1 ? 'Main' : formatMessage(msgs.profileCmdSlotName, { index: prof.index });
+        const label = prof.label ? `${base} — ${prof.label}` : base;
+        return label.slice(0, 80);
+    }
+
+    /**
+     * Przyciski wyboru profilu przy /update i /test.
+     * Kolejność: Main, potem profile 2, 3… (zgodnie z numeracją slotów).
+     * @param {string} sessionId - ID interakcji komendy (klucz sesji)
+     * @param {Array} profiles
+     * @param {number} activeIdx - domyślny profil (wyróżniony)
+     * @returns {ActionRowBuilder[]}
+     */
+    _buildProfilePickerRows(sessionId, profiles, activeIdx, guildId, commandName) {
+        const msgs = this.msgs(guildId);
+        const rows = [];
+        let row = new ActionRowBuilder();
+        for (const prof of profiles) {
+            if (row.components.length === 5) {
+                rows.push(row);
+                row = new ActionRowBuilder();
+            }
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`upd_prof_${prof.index}_${sessionId}`)
+                    .setLabel(this._profileButtonLabel(prof, msgs))
+                    .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
+                    .setStyle(prof.index === activeIdx ? ButtonStyle.Primary : ButtonStyle.Secondary)
+            );
+        }
+        if (row.components.length > 0) rows.push(row);
+        return rows;
+    }
+
+    /**
+     * Kliknięcie przycisku wyboru profilu przy /update lub /test.
+     * Komponent jest tylko potwierdzany (deferUpdate) — dalszy flow korzysta z ORYGINALNEJ
+     * interakcji komendy, dzięki czemu publiczne ogłoszenie (followUp) działa jak dotąd.
+     */
+    async _handleUpdateProfilePick(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        // upd_prof_{index}_{sessionId}
+        const parts = customId.split('_');
+        const profileIndex = parseInt(parts[2], 10);
+        const sessionId = parts.slice(3).join('_');
+
+        const session = this._updateProfileSessions.get(sessionId);
+        if (!session) {
+            await interaction.update({ content: msgs.updateProfileSessionExpired, components: [] }).catch(() => {});
+            return;
+        }
+        if (session.userId !== interaction.user.id) {
+            await interaction.reply({ content: msgs.updateProfileNotYours, flags: ['Ephemeral'] });
+            return;
+        }
+        if (!this.profileRegistryService?.hasProfile(interaction.user.id, profileIndex)) {
+            await interaction.update({ content: msgs.profileCmdNotFound, components: [] }).catch(() => {});
+            return;
+        }
+
+        this._updateProfileSessions.delete(sessionId);
+        await interaction.deferUpdate().catch(() => {});
+
+        const playerKey = makePlayerKey(interaction.user.id, profileIndex);
+        const gl = this.logService._gl(interaction.guildId);
+        const prof = this.profileRegistryService.getProfiles(interaction.user.id).find(pr => pr.index === profileIndex);
+        gl.info(`👥 [/${session.commandName}] Wybrano profil ${profileIndex}${prof?.label ? ` ("${prof.label}")` : ''} — ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)}`);
+
+        await this._runUpdateAnalysis(session.interaction, {
+            dryRun: session.dryRun,
+            commandName: session.commandName,
+            ocrBlockKey: session.ocrBlockKey,
+            playerKey,
+            alreadyReplied: true,
+        });
+    }
+
+    /**
+     * Obsługuje komendę /profiles (/profile w PL: „profile") — panel zarządzania profilami gracza.
+     * @param {CommandInteraction} interaction
+     */
+    async handleProfilesCommand(interaction) {
+        await this.logService.logCommandUsage('profiles', interaction);
+        if (!this.profileRegistryService) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).updateError, flags: ['Ephemeral'] });
+            return;
+        }
+        const { embed, components } = await this._buildProfilesPanel(interaction.user.id, interaction.guildId, interaction.client);
+        await interaction.reply({ embeds: [embed], components, flags: ['Ephemeral'] });
+    }
+
+    /**
+     * Buduje embed + przyciski panelu profili gracza.
+     */
+    async _buildProfilesPanel(userId, guildId, client) {
+        const msgs = this.msgs(guildId);
+        const profiles = this.profileRegistryService.getProfiles(userId);
+        const activeIdx = this.profileRegistryService.getActiveIndex(userId);
+        const maxProfiles = this.profileRegistryService.getMaxProfiles();
+
+        // Wyniki profili z rankingu globalnego (żeby gracz widział, co jest gdzie zapisane)
+        const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+        const activeGuildIds = new Set(configuredIds.filter(gid => client.guilds.cache.has(gid)));
+        const globalRanking = await this.rankingService.getGlobalRanking(activeGuildIds).catch(() => []);
+
+        const lines = profiles.map(prof => {
+            const idx = globalRanking.findIndex(pl => (pl.playerKey || pl.userId) === prof.playerKey);
+            const scorePart = idx !== -1
+                ? `**${globalRanking[idx].score}** *(#${idx + 1})*`
+                : `*${msgs.profileCmdNoScore}*`;
+            const isActive = prof.index === activeIdx;
+            const name = this._profileDisplayName(prof, msgs);
+            const activeHint = isActive ? ` · *${msgs.profileCmdActiveHint}*` : '';
+            return `${isActive ? '**▸** ' : '　'}${name} — ${scorePart}${activeHint}`;
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.profileCmdTitle)
+            .setDescription(
+                `${formatMessage(msgs.profileCmdDescription, { count: profiles.length, max: maxProfiles })}\n\n${lines.join('\n')}`
+            );
+
+        const canAdd = profiles.length < maxProfiles;
+        const hasAlts = profiles.some(pr => !pr.isMain);
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('prof_add')
+                .setLabel(msgs.profileCmdBtnAdd)
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(!canAdd),
+            new ButtonBuilder()
+                .setCustomId('prof_switch')
+                .setLabel(msgs.profileCmdBtnSwitch)
+                .setStyle(ButtonStyle.Primary)
+                .setDisabled(profiles.length < 2),
+            new ButtonBuilder()
+                .setCustomId('prof_rename')
+                .setLabel(msgs.profileCmdBtnRename)
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+                .setCustomId('prof_delete')
+                .setLabel(msgs.profileCmdBtnDelete)
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(!hasAlts),
+        );
+
+        return { embed, components: [row] };
+    }
+
+    /** Odświeża panel profili w miejscu. */
+    async _refreshProfilesPanel(interaction, extraContent = null) {
+        const { embed, components } = await this._buildProfilesPanel(interaction.user.id, interaction.guildId, interaction.client);
+        const payload = { embeds: [embed], components };
+        if (extraContent !== null) payload.content = extraContent;
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+        } else {
+            await interaction.update(payload);
+        }
+    }
+
+    /**
+     * Przyciski panelu profili: dodaj / przełącz / zmień nazwę / usuń.
+     */
+    async handleProfileRegistryButton(interaction, customId) {
+        const msgs = this.msgs(interaction.guildId);
+        const userId = interaction.user.id;
+        const registry = this.profileRegistryService;
+        if (!registry) {
+            await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Dodanie profilu — modal na nazwę (nick w grze), nazwa opcjonalna
+        if (customId === 'prof_add') {
+            if (registry.getProfiles(userId).length >= registry.getMaxProfiles()) {
+                await interaction.reply({
+                    content: formatMessage(msgs.profileCmdAddLimit, { limit: registry.getMaxProfiles() }),
+                    flags: ['Ephemeral'],
+                });
+                return;
+            }
+            await this._showProfileNameModal(interaction, 'add', null, msgs);
+            return;
+        }
+
+        // Wybór profilu do przełączenia / zmiany nazwy / usunięcia — lista przycisków
+        if (customId === 'prof_switch' || customId === 'prof_rename' || customId === 'prof_delete') {
+            const action = customId.split('_')[1]; // switch | rename | delete
+            const profiles = registry.getProfiles(userId)
+                .filter(pr => action !== 'delete' || !pr.isMain); // profilu głównego nie można usunąć
+            if (profiles.length === 0) {
+                await interaction.reply({ content: msgs.profileCmdNotFound, flags: ['Ephemeral'] });
+                return;
+            }
+            const rows = [];
+            let row = new ActionRowBuilder();
+            for (const prof of profiles) {
+                if (row.components.length === 5) { rows.push(row); row = new ActionRowBuilder(); }
+                row.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`prof_${action}_do_${prof.index}`)
+                        .setLabel(this._profileButtonLabel(prof, msgs))
+                        .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
+                        .setStyle(action === 'delete' ? ButtonStyle.Danger : ButtonStyle.Secondary)
+                );
+            }
+            if (row.components.length > 0) rows.push(row);
+            await interaction.reply({ content: msgs.profileCmdSelectPrompt, components: rows, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Ustawienie domyślnego profilu
+        if (customId.startsWith('prof_switch_do_')) {
+            const idx = parseInt(customId.slice('prof_switch_do_'.length), 10);
+            const ok = await registry.setActive(userId, idx);
+            if (!ok) {
+                await interaction.update({ content: msgs.profileCmdNotFound, components: [] });
+                return;
+            }
+            const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
+            await interaction.update({
+                content: formatMessage(msgs.profileCmdSwitched, { profile: this._profileDisplayName(prof, msgs) }),
+                components: [],
+            });
+            return;
+        }
+
+        // Zmiana nazwy profilu — modal
+        if (customId.startsWith('prof_rename_do_')) {
+            const idx = parseInt(customId.slice('prof_rename_do_'.length), 10);
+            await this._showProfileNameModal(interaction, 'rename', idx, msgs);
+            return;
+        }
+
+        // Usunięcie profilu — potwierdzenie
+        if (customId.startsWith('prof_delete_do_')) {
+            const idx = parseInt(customId.slice('prof_delete_do_'.length), 10);
+            if (idx === 1) {
+                await interaction.update({ content: msgs.profileCmdDeleteMain, components: [] });
+                return;
+            }
+            const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
+            if (!prof) {
+                await interaction.update({ content: msgs.profileCmdNotFound, components: [] });
+                return;
+            }
+            await interaction.update({
+                content: formatMessage(msgs.profileCmdDeleteConfirm, { profile: this._profileDisplayName(prof, msgs) }),
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`prof_delete_confirm_${idx}`)
+                        .setLabel(msgs.profileCmdBtnDelete)
+                        .setStyle(ButtonStyle.Danger),
+                )],
+            });
+            return;
+        }
+
+        // Usunięcie profilu — wykonanie (ranking + bossowie + historia + osiągnięcia + subskrypcje)
+        if (customId.startsWith('prof_delete_confirm_')) {
+            const idx = parseInt(customId.slice('prof_delete_confirm_'.length), 10);
+            await interaction.deferUpdate();
+            const result = await this._deleteProfileData(userId, idx, interaction);
+            if (!result.ok) {
+                await interaction.editReply({ content: msgs.profileCmdNotFound, components: [] });
+                return;
+            }
+            await interaction.editReply({
+                content: formatMessage(msgs.profileCmdDeleted, { profile: result.profileName, records: result.removedRecords }),
+                components: [],
+            });
+            return;
+        }
+    }
+
+    /** Modal nazwy profilu (dodanie albo zmiana nazwy). */
+    async _showProfileNameModal(interaction, mode, profileIndex, msgs) {
+        const modal = new ModalBuilder()
+            .setCustomId(`prof_modal_${mode}_${profileIndex ?? 0}`)
+            .setTitle(msgs.profileCmdModalTitle)
+            .addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('prof_label')
+                    .setLabel(msgs.profileCmdModalLabel)
+                    .setPlaceholder(msgs.profileCmdModalPlaceholder)
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(24)
+                    .setRequired(false)
+            ));
+        await interaction.showModal(modal);
+    }
+
+    /** Zapis nazwy profilu z modala. */
+    async _handleProfileNameModal(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        const registry = this.profileRegistryService;
+        // prof_modal_{add|rename}_{index}
+        const parts = interaction.customId.split('_');
+        const mode = parts[2];
+        const idx = parseInt(parts[3], 10);
+        const label = interaction.fields.getTextInputValue('prof_label')?.trim() || null;
+
+        if (mode === 'add') {
+            const res = await registry.addProfile(interaction.user.id, label);
+            if (!res.ok) {
+                const content = res.reason === 'LIMIT'
+                    ? formatMessage(msgs.profileCmdAddLimit, { limit: res.limit })
+                    : msgs.profileCmdDuplicateLabel;
+                await interaction.reply({ content, flags: ['Ephemeral'] });
+                return;
+            }
+            const prof = registry.getProfiles(interaction.user.id).find(pr => pr.index === res.index);
+            await interaction.reply({
+                content: formatMessage(msgs.profileCmdAdded, { profile: this._profileDisplayName(prof, msgs) }),
+                flags: ['Ephemeral'],
+            });
+            this.logService._gl(interaction.guildId).info(
+                `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)} dodał profil #${res.index}${label ? ` ("${label}")` : ''}`
+            );
+            return;
+        }
+
+        const res = await registry.setLabel(interaction.user.id, idx, label);
+        if (!res.ok) {
+            const content = res.reason === 'DUPLICATE_LABEL' ? msgs.profileCmdDuplicateLabel : msgs.profileCmdNotFound;
+            await interaction.reply({ content, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.reply({
+            content: res.label
+                ? formatMessage(msgs.profileCmdRenamed, { label: res.label })
+                : msgs.profileCmdRenameCleared,
+            flags: ['Ephemeral'],
+        });
+    }
+
+    /**
+     * Usuwa profil wraz ze WSZYSTKIMI jego danymi na wszystkich serwerach.
+     * Numer slotu nie jest odzyskiwany przez przenumerowanie — pozostaje wolny.
+     * @returns {Promise<{ ok: boolean, profileName?: string, removedRecords?: number }>}
+     */
+    async _deleteProfileData(userId, profileIndex, interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        const registry = this.profileRegistryService;
+        const prof = registry.getProfiles(userId).find(pr => pr.index === profileIndex);
+        if (!prof || prof.isMain) return { ok: false };
+
+        const playerKey = prof.playerKey;
+        const profileName = this._profileDisplayName(prof, msgs);
+        const guildIds = this.guildConfigService?.getAllConfiguredGuildIds()
+            || Array.from(interaction.client.guilds.cache.keys());
+
+        let removedRecords = 0;
+        for (const gid of guildIds) {
+            try {
+                const wasRemoved = await this.rankingService.removePlayerFromRanking(playerKey, gid);
+                if (wasRemoved) removedRecords++;
+                if (this.bossRecordService) {
+                    await this.bossRecordService.removeAllUserBossRecords(gid, playerKey).catch(() => 0);
+                }
+                if (this.achievementService) {
+                    await this.achievementService.resetAllAchievements(gid, playerKey).catch(() => {});
+                }
+                if (this.scoreHistoryService) {
+                    await this.scoreHistoryService.removeEntriesAfter(gid, playerKey, 0).catch(() => 0);
+                }
+                // Role TOP na serwerze mogą się zmienić po usunięciu wpisu z rankingu
+                const guildObj = interaction.client.guilds.cache.get(gid);
+                const guildCfg = this.config.getGuildConfig(gid);
+                if (wasRemoved && guildObj && guildCfg?.topRoles) {
+                    this.roleService.updateTopRoles(guildObj, null, guildCfg.topRoles).catch(() => {});
+                }
+            } catch (err) {
+                this.logService._gl(interaction.guildId).warn(`⚠️ Błąd usuwania danych profilu ${playerKey} na serwerze ${gid}: ${err.message}`);
+            }
+        }
+
+        // Subskrypcje wskazujące na ten profil tracą sens
+        await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
+        await registry.removeProfile(userId, profileIndex);
+
+        this.logService._gl(interaction.guildId).info(
+            `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, userId)} usunął profil #${profileIndex} (wpisy w rankingu: ${removedRecords})`
+        );
+        return { ok: true, profileName, removedRecords };
     }
 
     /**
@@ -4793,11 +5227,17 @@ class InteractionHandler {
      * @param {CommandInteraction} interaction
      * @param {{ dryRun: boolean, commandName: 'update'|'test', ocrBlockKey: 'update'|'test' }} opts
      */
-    async _runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey }) {
+    /**
+     * Walidacje wejściowe /update i /test + ewentualny wybór profilu.
+     * Sam OCR i zapis wyniku wykonuje `_runUpdateAnalysis` (osobno, bo wybór profilu
+     * przerywa flow na kliknięcie przycisku).
+     * @param {{ dryRun: boolean, commandName: string, ocrBlockKey: string, playerKey?: string|null }} opts
+     *   playerKey — ustawiany tylko przy wznowieniu po wyborze profilu
+     */
+    async _runUpdateFlow(interaction, { dryRun, commandName, ocrBlockKey, playerKey = null }) {
         const gl = this.logService._gl(interaction.guildId);
 
         const msgs = this.msgs(interaction.guildId);
-        let _ocrEmbedParams = null; // zbieramy przez cały flow, wysyłamy w finally
 
         if (await this.userBlockService.isBlocked(interaction.user.id)) {
             await interaction.reply({
@@ -4857,17 +5297,74 @@ class InteractionHandler {
             }
         }
 
-        const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
-        if (!limitCheck.allowed) {
+        // ── Wybór profilu (gracz z kilkoma kontami w grze) ───────────────────────────
+        // Gdy gracz ma więcej niż jeden profil, przed analizą pytamy przyciskami, do którego
+        // profilu przypisać wynik. Limit dzienny i cooldown NIE są jeszcze naliczane —
+        // porzucony wybór nie może kosztować gracza próby.
+        const profileList = this.profileRegistryService?.getProfiles(interaction.user.id) || [];
+        if (!playerKey && profileList.length > 1) {
+            const activeIdx = this.profileRegistryService.getActiveIndex(interaction.user.id);
+            const rows = this._buildProfilePickerRows(interaction.id, profileList, activeIdx, interaction.guildId, commandName);
             await interaction.reply({
-                content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }),
-                flags: ['Ephemeral']
+                content: this.msgs(interaction.guildId).updateChooseProfile,
+                components: rows,
+                flags: ['Ephemeral'],
             });
+            this._updateProfileSessions.set(interaction.id, {
+                interaction,
+                dryRun,
+                commandName,
+                ocrBlockKey,
+                userId: interaction.user.id,
+                createdAt: Date.now(),
+            });
+            setTimeout(() => this._updateProfileSessions.delete(interaction.id), 5 * 60 * 1000);
+            gl.info(`👥 [/${commandName}] Oczekuję na wybór profilu (${profileList.length} profile) — ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)}`);
             return;
         }
 
-        await interaction.deferReply({ flags: ['Ephemeral'] });
-        await interaction.editReply({ content: msgs.updateDownloading });
+        await this._runUpdateAnalysis(interaction, {
+            dryRun,
+            commandName,
+            ocrBlockKey,
+            playerKey: playerKey || interaction.user.id,
+            alreadyReplied: false,
+        });
+    }
+
+    /**
+     * Analiza screena i zapis wyniku dla KONKRETNEGO profilu.
+     * Wywoływana bezpośrednio (gracz z jednym profilem) albo po wyborze profilu przyciskiem.
+     *
+     * @param {CommandInteraction} interaction - zawsze ORYGINALNA interakcja komendy
+     *   (po wyborze profilu komponent jest tylko potwierdzany przez deferUpdate, a dalszy
+     *   flow korzysta z tokenu komendy — dzięki temu publiczne ogłoszenie followUp działa
+     *   dokładnie tak jak przed wprowadzeniem profili).
+     * @param {{ dryRun: boolean, commandName: string, ocrBlockKey: string, playerKey: string, alreadyReplied: boolean }} opts
+     */
+    async _runUpdateAnalysis(interaction, { dryRun, commandName, ocrBlockKey, playerKey, alreadyReplied = false }) {
+        const gl = this.logService._gl(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        let _ocrEmbedParams = null; // zbieramy przez cały flow, wysyłamy w finally
+
+        const attachment = interaction.options.getAttachment('image');
+        const profileIndex = getProfileIndex(playerKey);
+        const profileLabel = this.profileRegistryService?.getLabel(interaction.user.id, profileIndex) || null;
+
+        const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
+        if (!limitCheck.allowed) {
+            const limitMsg = { content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }), components: [] };
+            if (alreadyReplied) {
+                await interaction.editReply(limitMsg);
+            } else {
+                await interaction.reply({ ...limitMsg, flags: ['Ephemeral'] });
+            }
+            return;
+        }
+
+        if (!alreadyReplied) await interaction.deferReply({ flags: ['Ephemeral'] });
+        // components: [] usuwa przyciski wyboru profilu z wiadomości
+        await interaction.editReply({ content: msgs.updateDownloading, components: [] });
         let lastMsgAt = Date.now();
 
         const editReplyStep = async (content) => {
@@ -4936,8 +5433,8 @@ class InteractionHandler {
 
             if (aiResult.error === 'NOT_SIMILAR') {
                 gl.warn(`❌ [/${commandName}] Odrzucono: NOT_SIMILAR`);
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason, revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
-                const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: 'NOT_SIMILAR', rejectionReason: aiResult.rejectionReason, revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
+                const _notSimilarImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, 'NOT_SIMILAR', gl, aiResult.rejectionReason, playerKey);
                 if (_notSimilarImgUrl) _ocrEmbedParams.imageUrl = _notSimilarImgUrl;
                 const _rejExt1 = path.extname(tempImagePath).slice(1) || 'png';
                 const _rejName1 = `rejected_${Date.now()}.${_rejExt1}`;
@@ -4963,8 +5460,8 @@ class InteractionHandler {
 
             if (!aiResult.isValidVictory) {
                 gl.warn(`❌ [/${commandName}] Odrzucono: ${aiResult.error || 'VALIDATION_FAILED'}`);
-                _ocrEmbedParams = { type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED', revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
-                const _validationImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: 'rejected', userName: displayNameForLog, userId: interaction.user.id, commandName, reason: aiResult.error || 'VALIDATION_FAILED', revertComponents: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`panel_block_time_${interaction.user.id}_${interaction.guildId}`).setLabel('🔒 Zablokuj użytkownika').setStyle(ButtonStyle.Danger)).toJSON()] };
+                const _validationImgUrl = await this._sendInvalidScreenReport(interaction, tempImagePath, aiResult.error, gl, null, playerKey);
                 if (_validationImgUrl) _ocrEmbedParams.imageUrl = _validationImgUrl;
                 const _rejExt2 = path.extname(tempImagePath).slice(1) || 'png';
                 const _rejName2 = `rejected_${Date.now()}.${_rejExt2}`;
@@ -5012,11 +5509,11 @@ class InteractionHandler {
 
             // Stan globalny przed zapisem — liczony też w /test (dryRun), żeby podgląd był identyczny jak /update (read-only)
             const prevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-            const prevGlobalPosition = (() => { const i = prevGlobalRanking?.findIndex(p => p.userId === userId); return i !== -1 ? i + 1 : null; })();
+            const prevGlobalPosition = (() => { const i = prevGlobalRanking?.findIndex(p => (p.playerKey || p.userId) === playerKey); return i !== -1 ? i + 1 : null; })();
 
             // Dane cross-server — obliczane raz, używane przy sprawdzeniu duplikatu i przy embeddzie rekordu
             const _newScoreValue = this.rankingService.parseScoreValue(bestScore);
-            const _prevGlobalUser = prevGlobalRanking?.find(p => p.userId === userId) || null;
+            const _prevGlobalUser = prevGlobalRanking?.find(p => (p.playerKey || p.userId) === playerKey) || null;
 
             // Duplikat cross-server: gracz ma już lepszy wynik na innym serwerze — nie zapisuj do rankingu globalnego.
             // Dokładne wyrównanie (===) NIE wchodzi w ten blok — trafia do normalnego flow niżej i jest traktowane
@@ -5032,7 +5529,7 @@ class InteractionHandler {
                     try {
                         const allGuildIdsCs = this.guildConfigService?.getAllConfiguredGuildIds()
                             || Array.from(interaction.client.guilds.cache.keys());
-                        const userBossAll = await this.bossRecordService.getUserBossRecordsAllGuilds(allGuildIdsCs, userId);
+                        const userBossAll = await this.bossRecordService.getUserBossRecordsAllGuilds(allGuildIdsCs, playerKey);
                         const prevBoss = userBossAll?.[bossName] || null;
                         const prevBossVal = prevBoss && typeof prevBoss.scoreValue === 'number' ? prevBoss.scoreValue : -Infinity;
                         if (_newScoreValue > prevBossVal) {
@@ -5059,7 +5556,7 @@ class InteractionHandler {
                     if (!dryRun) {
                         try {
                             const res = await this.bossRecordService.updateBossRecord(
-                                sourceGuildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
+                                sourceGuildId, playerKey, bossName, userName, bestScore, bossScoreValue, bossTs
                             );
                             csServerAPrevBoss = res.previousBossRecord;
                         } catch (saveErr) {
@@ -5074,9 +5571,9 @@ class InteractionHandler {
                             const _csAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                             const _csAchActiveGuildIds = new Set(_csAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
                             const _csAchGlobalRanking = await this.rankingService.getGlobalRanking(_csAchActiveGuildIds);
-                            const _csAchGlobalIdx = _csAchGlobalRanking.findIndex(p => p.userId === userId);
+                            const _csAchGlobalIdx = _csAchGlobalRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                             const csGlobalPosForAch = _csAchGlobalIdx !== -1 ? _csAchGlobalIdx + 1 : 0;
-                            csAchievements = await this.achievementService.processSubmission(sourceGuildId, userId, {
+                            csAchievements = await this.achievementService.processSubmission(sourceGuildId, playerKey, {
                                 scoreValue: bossScoreValue,
                                 bossName,
                                 isNewRecord: false,
@@ -5101,20 +5598,20 @@ class InteractionHandler {
                                 || Array.from(interaction.client.guilds.cache.keys());
                             // /test (dryRun): symulowany ranking bossa (nowy wynik nałożony bez zapisu); inaczej realny stan po zapisie
                             const bossRankingCs = dryRun
-                                ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsCs2, bossName, userId, bossScoreValue, bestScore, userName, sourceGuildId)
+                                ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsCs2, bossName, playerKey, bossScoreValue, bestScore, userName, sourceGuildId)
                                 : await this.bossRecordService.getGlobalBossRanking(allGuildIdsCs2, bossName);
-                            const newBossIdxCs = bossRankingCs.findIndex(p => p.userId === userId);
+                            const newBossIdxCs = bossRankingCs.findIndex(p => (p.playerKey || p.userId) === playerKey);
                             if (newBossIdxCs !== -1 && this.globalTop10Service) {
                                 let prevBossPosCs = null;
                                 if (csPrevBossRecord) {
                                     const prevValCs = csPrevBossRecord.scoreValue;
-                                    const tempCs = bossRankingCs.map(p => p.userId === userId ? { ...p, scoreValue: prevValCs } : p);
+                                    const tempCs = bossRankingCs.map(p => (p.playerKey || p.userId) === playerKey ? { ...p, scoreValue: prevValCs } : p);
                                     tempCs.sort(compareByScoreThenTimestamp);
-                                    const prevIdxCs = tempCs.findIndex(p => p.userId === userId);
+                                    const prevIdxCs = tempCs.findIndex(p => (p.playerKey || p.userId) === playerKey);
                                     prevBossPosCs = prevIdxCs !== -1 ? prevIdxCs + 1 : null;
                                 }
                                 csBossSnippet = await this.globalTop10Service.buildBossSnippetFieldData(
-                                    userId, bossRankingCs, prevBossPosCs, bossName, msgs, interaction.client
+                                    playerKey, bossRankingCs, prevBossPosCs, bossName, msgs, interaction.client
                                 );
                             }
                         } catch { /* snippet opcjonalny */ }
@@ -5155,6 +5652,9 @@ class InteractionHandler {
                         screenshotName: imageAttachmentCs.name,
                         previousScore: null,
                         userId: null,            // brak pozycji w klanie (dane na poprzednim serwerze)
+                        playerKey: null,
+                        profileIndex,
+                        profileLabel,
                         guildId: null,
                         messages: msgs,
                         guild: interaction.guild,
@@ -5174,14 +5674,14 @@ class InteractionHandler {
                     // Przycisk cofnięcia (admin) — keyed na POPRZEDNI serwer, gdzie zapisano rekord bossa
                     const csRevertRow = [new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
-                            .setCustomId(`ocr_revert_${userId}_${sourceGuildId}`)
+                            .setCustomId(`ocr_revert_${playerKey}_${sourceGuildId}`)
                             .setLabel('↩️ Cofnij wynik')
                             .setStyle(ButtonStyle.Secondary)
                     ).toJSON()];
 
                     // /test (dryRun): podgląd ephemeral, bez publicznego ogłoszenia i bez sesji cofnięcia
                     if (dryRun) {
-                        _ocrEmbedParams = { type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score };
+                        _ocrEmbedParams = { profileIndex, profileLabel, type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score };
                         await interaction.editReply({ embeds: csEmbeds, files: csFiles });
                         gl.info(`🧪 [/test] Podgląd: duplikat globalny cross-server + rekord bossa "${bossName}" (bez zapisu)`);
                         return;
@@ -5192,10 +5692,11 @@ class InteractionHandler {
                     this._addRecordAutoReaction(csPublicMsg, guildId);
 
                     // Sesja cofnięcia rekordu bossa — globalny ranking niezmieniony (skipGlobalRevert), cel = poprzedni serwer
-                    const csRevertKey = `${userId}_${sourceGuildId}`;
+                    const csRevertKey = `${playerKey}_${sourceGuildId}`;
                     this._ocrRevertSessions.set(csRevertKey, {
                         guildId: sourceGuildId,
                         userId,
+                    playerKey,
                         previousRecord: null,
                         skipGlobalRevert: true,
                         newRecord: { timestamp: bossTs, bossName },
@@ -5206,7 +5707,7 @@ class InteractionHandler {
                     });
                     setTimeout(() => this._ocrRevertSessions.delete(csRevertKey), 24 * 60 * 60 * 1000);
 
-                    _ocrEmbedParams = { type: 'boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score, revertComponents: csRevertRow };
+                    _ocrEmbedParams = { profileIndex, profileLabel, type: 'boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score, revertComponents: csRevertRow };
                     gl.info(`🎯 [/${commandName}] Duplikat globalny cross-server, ale pobito rekord bossa "${bossName}" — zapis na serwerze "${sourceGuildName}"`);
                     return;
                 }
@@ -5228,13 +5729,13 @@ class InteractionHandler {
                     messages: msgs,
                 });
                 await interaction.editReply({ embeds: crossServerEmbeds, files: [imageAttachment] });
-                _ocrEmbedParams = { type: 'cross_server', userName, userId, score: bestScore, bossName, commandName, previousScore: _prevGlobalUser.score };
+                _ocrEmbedParams = { profileIndex, profileLabel, type: 'cross_server', userName, userId, score: bestScore, bossName, commandName, previousScore: _prevGlobalUser.score };
                 gl.info(`✅ ${this.logService.nickLink(userName, userId)} Duplikat cross-server (nie zapisano) — serwer: "${sourceGuildName}"`);
                 return;
             }
 
             // Zapamiętaj poprzedni rekord przed nadpisaniem (potrzebne do community verification)
-            const previousRecordSnapshot = dryRun ? null : await this.rankingService.getUserRecord(guildId, userId);
+            const previousRecordSnapshot = dryRun ? null : await this.rankingService.getUserRecord(guildId, playerKey);
 
             // Dokładne wyrównanie globalnego wyniku z innego serwera — wpis migruje z poprzedniego serwera na ten
             const isCrossServerTieMigration = !!(_prevGlobalUser && _prevGlobalUser.scoreValue === _newScoreValue && _prevGlobalUser.sourceGuildId !== guildId);
@@ -5246,7 +5747,7 @@ class InteractionHandler {
             if (dryRun) {
                 // Tryb testowy: porównanie bez zapisu do rankingu.
                 const ranking = await this.rankingService.loadRanking(guildId);
-                currentScore = ranking[userId] || null;
+                currentScore = ranking[playerKey] || null;
                 const newScoreValue = this.rankingService.parseScoreValue(bestScore);
                 if (!currentScore) {
                     isNewRecord = true;
@@ -5257,7 +5758,7 @@ class InteractionHandler {
             } else {
                 await editReplyStep(msgs.updateSaving);
                 ({ isNewRecord, currentScore, newTimestamp: newRecordTimestamp, affectedGuildIds } = await this.rankingService.updateUserRanking(
-                    guildId, userId, userName, bestScore, bossName
+                    guildId, playerKey, userName, bestScore, bossName, profileLabel
                 ));
                 await this.logService.logScoreUpdate(userName, bestScore, isNewRecord, guildId);
                 if (isNewRecord && this.milestoneService) this.milestoneService.checkAndAnnounce();
@@ -5265,7 +5766,7 @@ class InteractionHandler {
                 // nie usuwa wpisu na poprzednim serwerze — trzeba to zrobić jawnie.
                 if (isCrossServerTieMigration && isNewRecord) {
                     try {
-                        await this.rankingService.removePlayerFromRanking(userId, _prevGlobalUser.sourceGuildId);
+                        await this.rankingService.removePlayerFromRanking(playerKey, _prevGlobalUser.sourceGuildId);
                         if (!affectedGuildIds.includes(_prevGlobalUser.sourceGuildId)) affectedGuildIds.push(_prevGlobalUser.sourceGuildId);
                         gl.info(`🔁 Migracja wyniku gracza "${userName}" — usunięto wpis z poprzedniego serwera po wyrównaniu wyniku`);
                     } catch (migrateErr) {
@@ -5287,7 +5788,7 @@ class InteractionHandler {
                 const bossScoreValue = this.rankingService.parseScoreValue(bestScore);
                 try {
                     const bossResult = await this.bossRecordService.updateBossRecord(
-                        guildId, userId, bossName, userName, bestScore, bossScoreValue, bossTs
+                        guildId, playerKey, bossName, userName, bestScore, bossScoreValue, bossTs
                     );
                     isNewBossRecord = bossResult.isNewBossRecord;
                     previousBossRecord = bossResult.previousBossRecord;
@@ -5298,8 +5799,8 @@ class InteractionHandler {
                 // dryRun (/test): read-only — czy boss rekord byłby pobity + poprzedni rekord (bez zapisu)
                 try {
                     const bossScoreValue = this.rankingService.parseScoreValue(bestScore);
-                    isNewBossRecord = await this.bossRecordService.wouldBeatBossRecord(guildId, userId, bossName, bossScoreValue);
-                    const userBoss = await this.bossRecordService.getUserBossRecords(guildId, userId);
+                    isNewBossRecord = await this.bossRecordService.wouldBeatBossRecord(guildId, playerKey, bossName, bossScoreValue);
+                    const userBoss = await this.bossRecordService.getUserBossRecords(guildId, playerKey);
                     previousBossRecord = userBoss?.[bossName] ? { ...userBoss[bossName] } : null;
                 } catch { /* ignoruj */ }
             }
@@ -5310,19 +5811,19 @@ class InteractionHandler {
             if (isNewRecord && this.achievementService) {
                 try {
                     const sortedAfter = dryRun
-                        ? await this.rankingService.simulateSortedPlayers(guildId, userId, userName, bestScore)
+                        ? await this.rankingService.simulateSortedPlayers(guildId, playerKey, userName, bestScore)
                         : await this.rankingService.getSortedPlayers(guildId);
-                    currentPositionForAch = sortedAfter.findIndex(p => p.userId === userId) + 1;
+                    currentPositionForAch = sortedAfter.findIndex(p => (p.playerKey || p.userId) === playerKey) + 1;
                     const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
                     const newScoreValue = this.rankingService.parseScoreValue(bestScore);
                     const _achConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                     const _achActiveGuildIds = new Set(_achConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
                     const _achGlobalRanking = dryRun
-                        ? await this.rankingService.simulateGlobalRanking(_achActiveGuildIds, userId, userName, bestScore, guildId)
+                        ? await this.rankingService.simulateGlobalRanking(_achActiveGuildIds, playerKey, userName, bestScore, guildId)
                         : await this.rankingService.getGlobalRanking(_achActiveGuildIds);
-                    const _achGlobalIdx = _achGlobalRanking.findIndex(p => p.userId === userId);
+                    const _achGlobalIdx = _achGlobalRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                     const globalPositionForAch = _achGlobalIdx !== -1 ? _achGlobalIdx + 1 : 0;
-                    newAchievements = await this.achievementService.processSubmission(guildId, userId, {
+                    newAchievements = await this.achievementService.processSubmission(guildId, playerKey, {
                         scoreValue: newScoreValue,
                         bossName,
                         isNewRecord: true,
@@ -5341,7 +5842,7 @@ class InteractionHandler {
 
             // Odrzuć tylko gdy: boss rozpoznany + brak rekordu globalnego + brak rekordu per-boss
             if (!isNewRecord && !wasUnknownBoss && !isNewBossRecord) {
-                _ocrEmbedParams = { type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                _ocrEmbedParams = { profileIndex, profileLabel, type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -5419,7 +5920,7 @@ class InteractionHandler {
                         messages: msgs,
                         color1: 0xFEE75C,
                     });
-                    _ocrEmbedParams = { type: 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                    _ocrEmbedParams = { profileIndex, profileLabel, type: 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                     gl.info(`⚠️ [/${commandName}] Wynik zaakceptowany z nierozpoznanym bossem (bez poprawy rekordu): "${bossName || '???'}"`);
                     await interaction.editReply({ embeds: warnEmbeds, files: [imageAttachmentAlt] });
                     return;
@@ -5433,9 +5934,9 @@ class InteractionHandler {
                         const _bossAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                         const _bossAchActiveGuildIds = new Set(_bossAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
                         const _bossAchGlobalRanking = await this.rankingService.getGlobalRanking(_bossAchActiveGuildIds);
-                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => p.userId === userId);
+                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                         const bossGlobalPositionForAch = _bossAchGlobalIdx !== -1 ? _bossAchGlobalIdx + 1 : 0;
-                        newAchievements = await this.achievementService.processSubmission(guildId, userId, {
+                        newAchievements = await this.achievementService.processSubmission(guildId, playerKey, {
                             scoreValue: bossScoreVal,
                             bossName,
                             isNewRecord: false,
@@ -5461,9 +5962,9 @@ class InteractionHandler {
                         || Array.from(interaction.client.guilds.cache.keys());
                     // /test (dryRun): symulowany ranking bossa (nowy wynik bez zapisu); inaczej realny stan po zapisie
                     const bossRanking = dryRun
-                        ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, userId, this.rankingService.parseScoreValue(bestScore), bestScore, userName, guildId)
+                        ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, playerKey, this.rankingService.parseScoreValue(bestScore), bestScore, userName, guildId)
                         : await this.bossRecordService.getGlobalBossRanking(allGuildIdsForBoss, bossName);
-                    const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
+                    const newBossIdx = bossRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                     if (newBossIdx !== -1) {
                         const newBossPosition = newBossIdx + 1;
                         let bossPositionChange = 0;
@@ -5474,10 +5975,10 @@ class InteractionHandler {
                         } else {
                             const prevBossScoreValue = this.rankingService.parseScoreValue(previousBossRecord.score);
                             const tempRanking = bossRanking.map(p =>
-                                p.userId === userId ? { ...p, scoreValue: prevBossScoreValue } : p
+                                (p.playerKey || p.userId) === playerKey ? { ...p, scoreValue: prevBossScoreValue } : p
                             );
                             tempRanking.sort(compareByScoreThenTimestamp);
-                            const prevBossIdx = tempRanking.findIndex(p => p.userId === userId);
+                            const prevBossIdx = tempRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                             bossPositionChange = (prevBossIdx + 1) - newBossPosition;
                             prevBossPosition = prevBossIdx !== -1 ? prevBossIdx + 1 : null;
                         }
@@ -5489,7 +5990,7 @@ class InteractionHandler {
                         };
                         if (this.globalTop10Service) {
                             bossSnippetDataLocal = await this.globalTop10Service.buildBossSnippetFieldData(
-                                userId, bossRanking, prevBossPosition, bossName, msgs, interaction.client
+                                playerKey, bossRanking, prevBossPosition, bossName, msgs, interaction.client
                             );
                         }
                     }
@@ -5528,6 +6029,9 @@ class InteractionHandler {
                     screenshotName: imageAttachmentAlt.name,
                     previousScore: null,
                     userId: null,            // brak pozycji w klanie (rekord globalny niezmieniony)
+                    playerKey: null,
+                    profileIndex,
+                    profileLabel,
                     guildId: null,
                     messages: msgs,
                     guild: interaction.guild,
@@ -5548,7 +6052,7 @@ class InteractionHandler {
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
 
                 if (dryRun) {
-                    _ocrEmbedParams = { type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: previousBossRecord?.score };
+                    _ocrEmbedParams = { profileIndex, profileLabel, type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: previousBossRecord?.score };
                     await interaction.editReply({ embeds: bossPublicEmbeds, files: bossPublicFiles });
                     return;
                 }
@@ -5556,7 +6060,7 @@ class InteractionHandler {
                 // non-dryRun: publiczne ogłoszenie
                 const bossRevertRow = [new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${userId}_${guildId}`)
+                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
                         .setLabel('↩️ Cofnij wynik')
                         .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
@@ -5587,7 +6091,7 @@ class InteractionHandler {
                 if (cvEnabledBoss && bossPublicMsg) {
                     try {
                         const bossTs = new Date().toISOString();
-                        const expired = await this.communityVerificationService.expireUserSessions(userId, guildId);
+                        const expired = await this.communityVerificationService.expireUserSessions(playerKey, guildId);
                         for (const oldMsgId of expired) {
                             try {
                                 const oldSession = this.communityVerificationService.getSession(oldMsgId);
@@ -5611,6 +6115,7 @@ class InteractionHandler {
                         await this.communityVerificationService.createSession({
                             guildId,
                             userId,
+                            playerKey,
                             messageId: bossPublicMsg.id,
                             channelId: bossPublicMsg.channelId,
                             messageUrl: bossMsgUrl,
@@ -5627,10 +6132,11 @@ class InteractionHandler {
                 }
 
                 // Sesja cofnięcia dla admina (boss record only — globalny ranking niezmieniony)
-                const bossRevertKey = `${userId}_${guildId}`;
+                const bossRevertKey = `${playerKey}_${guildId}`;
                 this._ocrRevertSessions.set(bossRevertKey, {
                     guildId,
                     userId,
+                    playerKey,
                     previousRecord: null,
                     skipGlobalRevert: true,
                     newRecord: { timestamp: new Date().toISOString() },
@@ -5651,7 +6157,7 @@ class InteractionHandler {
             });
 
             const guildConfig = this.config.getGuildConfig(interaction.guildId);
-            const rolePositions = await this._computeRolePositions(guildId, userId, interaction.guild, interaction.member?.roles?.cache);
+            const rolePositions = await this._computeRolePositions(guildId, playerKey, interaction.guild, interaction.member?.roles?.cache);
             const lang = guildConfig?.lang || 'pol';
             const achievementsFieldValue = this.achievementService
                 ? this.achievementService.buildNewAchievementsFieldValue(newAchievements, lang)
@@ -5663,7 +6169,7 @@ class InteractionHandler {
                 const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                 const activeGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
                 const newGlobalRanking = dryRun
-                    ? await this.rankingService.simulateGlobalRanking(new Set(activeGuildIds), userId, userName, bestScore, guildId)
+                    ? await this.rankingService.simulateGlobalRanking(new Set(activeGuildIds), playerKey, userName, bestScore, guildId)
                     : await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
                 // Licznik w stopce zawsze z REALNEGO rankingu — przy /test symulacja dokłada gracza,
                 // który nie jest jeszcze w rankingu, i stopka pokazywała N+1.
@@ -5671,10 +6177,10 @@ class InteractionHandler {
                     ? (await this.rankingService.getCountedPlayers(new Set(activeGuildIds))).total
                     : newGlobalRanking.length;
                 globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
-                    userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
+                    playerKey, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                 );
                 if (globalSnippetData) {
-                    const newGlobalIdx = newGlobalRanking.findIndex(p => p.userId === userId);
+                    const newGlobalIdx = newGlobalRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
                     gl.info(`🌐 Snippet globalny${dryRun ? ' (test)' : ''}: ${prevGlobalPosition ?? '—'} → #${newGlobalIdx + 1}`);
                 }
             } catch (snippetErr) {
@@ -5688,10 +6194,10 @@ class InteractionHandler {
                 const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                     || Array.from(interaction.client.guilds.cache.keys());
                 const bossRankingOverrideSim = dryRun
-                    ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, userId, _newScoreValue, bestScore, userName, guildId)
+                    ? await this.bossRecordService.simulateGlobalBossRanking(allGuildIdsForBoss, bossName, playerKey, _newScoreValue, bestScore, userName, guildId)
                     : null;
                 const bossResult = await this._buildBossSnippetData(
-                    userId, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client, bossRankingOverrideSim
+                    playerKey, bossName, previousBossRecord, allGuildIdsForBoss, msgs, interaction.client, bossRankingOverrideSim
                 );
                 bossSnippetData = bossResult.snippetData;
                 bossGlobalRankingOverride = bossResult.override;
@@ -5735,7 +6241,7 @@ class InteractionHandler {
             // === Licznik subskrybentów (Embed 1) === (read-only; w /test pokazujemy taki sam licznik, DM nie wychodzi)
             let recordSubscribers = [];
             try {
-                recordSubscribers = await this.notificationService.getSubscribersForTarget(userId, guildId);
+                recordSubscribers = await this.notificationService.getSubscribersForTarget(playerKey, guildId);
             } catch (subErr) {
                 gl.warn(`⚠️ Nie udało się pobrać subskrybentów: ${subErr.message}`);
             }
@@ -5746,7 +6252,7 @@ class InteractionHandler {
             if (globalSnippetData && this.scoreHistoryService && this.chartService) {
                 try {
                     const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
-                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, userId, 365);
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, playerKey, 365);
                     // /test (dryRun): nowy wpis nie jest jeszcze w historii — dokładamy symulowany punkt, by wykres był identyczny jak po /update
                     // WAŻNE: pole 'guildId' (nie 'sourceGuildId') — wykres grupuje serie po 'guildId' (z getUserHistoryAllGuilds)
                     if (dryRun) {
@@ -5808,6 +6314,9 @@ class InteractionHandler {
                 screenshotName: imageAttachment.name,
                 previousScore: currentScore ? currentScore.score : null,
                 userId,
+                playerKey,
+                profileIndex,
+                profileLabel,
                 guildId: interaction.guildId,
                 messages: msgs,
                 guild: interaction.guild,
@@ -5830,7 +6339,7 @@ class InteractionHandler {
                 crossServerMigratedNote,
                 // /test (dryRun): symulowana pozycja w klanie (nowy wynik bez zapisu), by była identyczna jak po /update
                 sortedPlayersOverride: dryRun
-                    ? await this.rankingService.simulateSortedPlayers(guildId, userId, userName, bestScore)
+                    ? await this.rankingService.simulateSortedPlayers(guildId, playerKey, userName, bestScore)
                     : null,
             });
 
@@ -5875,7 +6384,7 @@ class InteractionHandler {
                     if (cvEnabled && publicMsg) {
                         try {
                             // Wygaś stare pending sesje tego gracza i usuń przyciski ze starych wiadomości
-                            const expired = await this.communityVerificationService.expireUserSessions(userId, guildId);
+                            const expired = await this.communityVerificationService.expireUserSessions(playerKey, guildId);
                             for (const oldMsgId of expired) {
                                 try {
                                     const oldSession = this.communityVerificationService.getSession(oldMsgId);
@@ -5900,6 +6409,7 @@ class InteractionHandler {
                             await this.communityVerificationService.createSession({
                                 guildId,
                                 userId,
+                                playerKey,
                                 messageId: publicMsg.id,
                                 channelId: publicMsg.channelId,
                                 messageUrl: msgUrl,
@@ -5933,7 +6443,7 @@ class InteractionHandler {
             if (dryRun) {
                 // W trybie testowym pomijamy aktualizację ról TOP,
                 // powiadomienia Global Top 3 oraz DM subskrybentów.
-                _ocrEmbedParams = { type: 'test_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                _ocrEmbedParams = { profileIndex, profileLabel, type: 'test_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                 return;
             }
 
@@ -5943,10 +6453,11 @@ class InteractionHandler {
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
-                const revertKey = `${userId}_${guildId}`;
+                const revertKey = `${playerKey}_${guildId}`;
                 this._ocrRevertSessions.set(revertKey, {
                     guildId,
                     userId,
+                    playerKey,
                     previousRecord: previousRecordSnapshot ?? null,
                     newRecord: { timestamp: newRecordTimestamp },
                     bossName: bossName || null,
@@ -5957,18 +6468,19 @@ class InteractionHandler {
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${userId}_${guildId}`)
+                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
                         .setLabel('↩️ Cofnij wynik')
                         .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
-                _ocrEmbedParams = { type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
+                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
-                const revertKey = `${userId}_${guildId}`;
+                const revertKey = `${playerKey}_${guildId}`;
                 this._ocrRevertSessions.set(revertKey, {
                     guildId,
                     userId,
+                    playerKey,
                     previousRecord: previousRecordSnapshot ?? null,
                     newRecord: { timestamp: newRecordTimestamp },
                     bossName: bossName || null,
@@ -5979,11 +6491,11 @@ class InteractionHandler {
                 setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
                 const revertRow = [new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${userId}_${guildId}`)
+                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
                         .setLabel('↩️ Cofnij wynik')
                         .setStyle(ButtonStyle.Secondary)
                 ).toJSON()];
-                _ocrEmbedParams = { type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
+                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
             }
 
             // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza
@@ -6254,6 +6766,16 @@ class InteractionHandler {
 
         try {
 
+            // === Profile gracza (kilka kont w grze) ===
+            if (customId.startsWith('upd_prof_')) {
+                await this._handleUpdateProfilePick(interaction, customId);
+                return;
+            }
+            if (customId.startsWith('prof_')) {
+                await this.handleProfileRegistryButton(interaction, customId);
+                return;
+            }
+
             // === Przyciski raportów odrzuconych screenów ===
             if (customId.startsWith('ee_approve_')) {
                 const msgs = this.msgs(interaction.guildId);
@@ -6339,9 +6861,11 @@ class InteractionHandler {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
+                // ocr_revert_{playerKey}_{guildId} — playerKey może zawierać "#N" (profil dodatkowy)
                 const parts = customId.replace('ocr_revert_', '').split('_');
-                const [targetUserId, targetGuildId] = parts;
-                const revertKey = `${targetUserId}_${targetGuildId}`;
+                const [targetPlayerKey, targetGuildId] = parts;
+                const targetUserId = getOwnerId(targetPlayerKey);
+                const revertKey = `${targetPlayerKey}_${targetGuildId}`;
                 const session = this._ocrRevertSessions.get(revertKey);
                 if (!session) {
                     await interaction.reply({ content: '❌ Sesja wygasła lub wynik został już cofnięty.', flags: ['Ephemeral'] });
@@ -6515,7 +7039,7 @@ class InteractionHandler {
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
                 customId === 'profile_back' || customId === 'profile_search' ||
                 customId === 'profile_manage_subs' || customId === 'profile_subscribe' ||
-                customId === 'profile_unsubscribe') {
+                customId === 'profile_unsubscribe' || customId.startsWith('profile_view_')) {
                 await this._handleProfileButton(interaction);
                 return;
             }
@@ -7494,12 +8018,14 @@ class InteractionHandler {
     }
 
     async _cvRemoveRecord(session) {
+        // Wszystkie cofnięcia dotyczą PROFILU z sesji (session.playerKey);
+        // sesje utworzone przed wdrożeniem profili mają tylko userId = profil główny.
         // Cofaj ranking do stanu sprzed zgłoszenia (ignoruje rekordy B, C pobite po A)
         // skipGlobalRevert = true gdy pobito tylko rekord bossa (globalny ranking niezmieniony)
         if (!session.skipGlobalRevert) {
             try {
                 await this.rankingService.revertUserRecord(
-                    session.guildId, session.userId, session.previousRecord
+                    session.guildId, (session.playerKey || session.userId), session.previousRecord
                 );
             } catch (e) {
                 logger.error(`CV _cvRemoveRecord revert ranking error: ${e.message}`);
@@ -7509,14 +8035,14 @@ class InteractionHandler {
         let removedRecordCount = 0;
         if (this.scoreHistoryService && session.newRecord?.timestamp) {
             removedRecordCount = await this.scoreHistoryService.removeEntriesAfter(
-                session.guildId, session.userId, session.newRecord.timestamp
+                session.guildId, (session.playerKey || session.userId), session.newRecord.timestamp
             ).catch(e => { logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`); return 0; });
         }
         // Cofnij tylko osiągnięcia score/records zdobyte od momentu zgłoszonego rekordu — wcześniejsze zostają
         try {
             if (this.achievementService && session.newRecord?.timestamp) {
                 await this.achievementService.clearAchievementsAfter(
-                    session.guildId, session.userId, session.newRecord.timestamp,
+                    session.guildId, (session.playerKey || session.userId), session.newRecord.timestamp,
                     { removedRecordCount, previousRecord: session.previousRecord }
                 );
             }
@@ -7528,7 +8054,7 @@ class InteractionHandler {
             const bossNameToRevert = session.newRecord?.bossName ?? session.bossName ?? null;
             if (bossNameToRevert) {
                 await this.bossRecordService.revertBossRecord(
-                    session.guildId, session.userId, bossNameToRevert,
+                    session.guildId, (session.playerKey || session.userId), bossNameToRevert,
                     session.previousBossRecord ?? null
                 ).catch(e => logger.error(`CV _cvRemoveRecord revert boss record error: ${e.message}`));
             }
@@ -7570,7 +8096,7 @@ class InteractionHandler {
         try {
             const histories = await Promise.all(
                 pagePlayers.map(async (p) => {
-                    const entries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.userId);
+                    const entries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.playerKey || p.userId);
                     return {
                         userId: p.userId,
                         name: p.username || p.userId,
@@ -7599,7 +8125,7 @@ class InteractionHandler {
         try {
             const histories = await Promise.all(
                 pagePlayers.map(async (p) => {
-                    const allEntries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.userId);
+                    const allEntries = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, p.playerKey || p.userId);
                     const bossEntries = allEntries.filter(e =>
                         typeof e.scoreValue === 'number' && e.scoreValue > 0 && e.bossName === bossName
                     );
@@ -7630,26 +8156,27 @@ class InteractionHandler {
 
     // Buduje dane snippetu zmiany w rankingu bossa (format identyczny jak globalSnippetData).
     // Zwraca { title, description } lub null.
-    async _buildBossSnippetData(userId, bossName, previousBossRecord, allGuildIds, msgs, client, bossRankingOverride = null) {
+    async _buildBossSnippetData(playerKey, bossName, previousBossRecord, allGuildIds, msgs, client, bossRankingOverride = null) {
         if (!this.bossRecordService || !this.globalTop10Service) return { snippetData: null, override: null };
         try {
             // /test (dryRun): symulowany ranking bossa (z nowym wynikiem, bez zapisu); inaczej realny stan po zapisie
             const bossRanking = bossRankingOverride || await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
-            const newBossIdx = bossRanking.findIndex(p => p.userId === userId);
+            const matchKey = (p) => (p.playerKey || p.userId) === playerKey;
+            const newBossIdx = bossRanking.findIndex(matchKey);
             if (newBossIdx === -1) return { snippetData: null, override: null };
             const newBossPosition = newBossIdx + 1;
 
             let prevBossPosition = null;
             if (previousBossRecord) {
                 const prevVal = this.rankingService.parseScoreValue(previousBossRecord.score);
-                const temp = bossRanking.map(p => p.userId === userId ? { ...p, scoreValue: prevVal } : p);
+                const temp = bossRanking.map(p => matchKey(p) ? { ...p, scoreValue: prevVal } : p);
                 temp.sort(compareByScoreThenTimestamp);
-                const prevIdx = temp.findIndex(p => p.userId === userId);
+                const prevIdx = temp.findIndex(matchKey);
                 prevBossPosition = prevIdx !== -1 ? prevIdx + 1 : null;
             }
 
             const snippetData = await this.globalTop10Service.buildBossSnippetFieldData(
-                userId, bossRanking, prevBossPosition, bossName, msgs, client
+                playerKey, bossRanking, prevBossPosition, bossName, msgs, client
             );
 
             const bossPositionChange = prevBossPosition !== null ? prevBossPosition - newBossPosition : 0;
@@ -8127,7 +8654,7 @@ class InteractionHandler {
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                allAchGuildIds, userId, lang, 'overview', null
+                allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(userId) || userId, lang, 'overview', null
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -8148,7 +8675,7 @@ class InteractionHandler {
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                allAchGuildIds, userId, lang, view, category
+                allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(userId) || userId, lang, view, category
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -8183,24 +8710,31 @@ class InteractionHandler {
         try {
             const viewerId    = interaction.user.id;
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
+            // Domyślnie pokazujemy aktywny profil gracza (przełączanie przyciskami niżej)
+            const viewerPlayerKey = this.profileRegistryService?.getActivePlayerKey(viewerId) || viewerId;
+            const viewerProfiles = this.profileRegistryService?.getProfiles(viewerId) || [];
 
-            // Zawsze używaj serwera skąd pochodzi najlepszy wynik gracza
+            // Zawsze używaj serwera skąd pochodzi najlepszy wynik profilu
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-            const entry = globalRanking.find(p => p.userId === viewerId);
+            const entry = globalRanking.find(p => (p.playerKey || p.userId) === viewerPlayerKey);
             let targetGuildId = entry?.sourceGuildId || guildId;
 
             const lang  = this._getProfileLang(guildId, targetGuildId);
             const isPol = lang === 'pol';
 
-            const data = await this.profileService.collectData(targetGuildId, viewerId, allGuildIds, interaction.client);
+            const data = await this.profileService.collectData(targetGuildId, viewerPlayerKey, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol);
             const state = {
-                viewerId, targetUserId: viewerId, targetGuildId,
+                viewerId, targetPlayerKey: viewerPlayerKey, targetGuildId,
                 lang,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
             };
             const components = this.profileService.buildProfileComponents(
-                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: true },
+                {
+                    view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: true,
+                    ownProfiles: viewerProfiles,
+                    currentProfileIndex: getProfileIndex(viewerPlayerKey),
+                },
                 isPol
             );
             const replyMsg = await interaction.editReply({ embeds: [embed], components });
@@ -8257,8 +8791,22 @@ class InteractionHandler {
             const isPol   = (state.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
-            if (customId === 'profile_back') {
-                state.targetUserId   = state.viewerId;
+            if (customId.startsWith('profile_view_')) {
+                // Przełączenie widoku na inny profil TEGO SAMEGO gracza
+                const wantedIdx = parseInt(customId.slice('profile_view_'.length), 10);
+                if (this.profileRegistryService?.hasProfile(state.viewerId, wantedIdx)) {
+                    state.targetPlayerKey = makePlayerKey(state.viewerId, wantedIdx);
+                    state.view = 'main';
+                    state.category = null;
+                    state.bossPage = 0;
+                    state.cachedData = null;
+                    const switchRanking = await this.rankingService.getGlobalRanking(allGuildIds);
+                    const switchEntry = switchRanking.find(p => (p.playerKey || p.userId) === state.targetPlayerKey);
+                    state.targetGuildId = switchEntry?.sourceGuildId || state.targetGuildId || guildId;
+                    state.lang = this._getProfileLang(guildId, state.targetGuildId);
+                }
+            } else if (customId === 'profile_back') {
+                state.targetPlayerKey   = this.profileRegistryService?.getActivePlayerKey(state.viewerId) || state.viewerId;
                 state.view           = 'main';
                 state.category       = null;
                 state.bossPage       = 0;
@@ -8267,14 +8815,14 @@ class InteractionHandler {
                 state.subscriberCount = null;
                 // Zawsze używaj serwera skąd pochodzi najlepszy wynik gracza
                 const backRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-                const backEntry = backRanking.find(p => p.userId === state.viewerId);
+                const backEntry = backRanking.find(p => (p.playerKey || p.userId) === state.targetPlayerKey);
                 state.targetGuildId = backEntry?.sourceGuildId || guildId;
                 state.lang = this._getProfileLang(guildId, state.targetGuildId);
             } else if (customId === 'profile_subscribe') {
-                const targetUsername  = state.cachedData?.username || state.targetUserId;
+                const targetUsername  = state.cachedData?.username || state.targetPlayerKey;
                 const targetGuildName = interaction.client.guilds.cache.get(state.targetGuildId)?.name || state.targetGuildId;
                 const added = await this.notificationService.addSubscription(
-                    state.viewerId, state.targetUserId, state.targetGuildId, targetUsername, targetGuildName
+                    state.viewerId, state.targetPlayerKey, state.targetGuildId, targetUsername, targetGuildName
                 );
                 if (added && this.achievementService) {
                     this.achievementService.trackSubscription(guildId, state.viewerId).catch(() => {});
@@ -8283,7 +8831,7 @@ class InteractionHandler {
                 if (state.subscriberCount !== null) state.subscriberCount = (state.subscriberCount || 0) + (added ? 1 : 0);
             } else if (customId === 'profile_unsubscribe') {
                 const removed = await this.notificationService.removeSubscription(
-                    state.viewerId, state.targetUserId, state.targetGuildId
+                    state.viewerId, state.targetPlayerKey, state.targetGuildId
                 );
                 state.isSubscribed = false;
                 if (state.subscriberCount !== null && removed) state.subscriberCount = Math.max(0, (state.subscriberCount || 1) - 1);
@@ -8307,14 +8855,14 @@ class InteractionHandler {
             // Jeśli zmieniamy gracza (back) lub nie ma cache → odśwież dane
             if (!state.cachedData) {
                 state.cachedData = await this.profileService.collectData(
-                    state.targetGuildId, state.targetUserId, allGuildIds, interaction.client
+                    state.targetGuildId, state.targetPlayerKey, allGuildIds, interaction.client
                 );
             }
             const data = state.cachedData;
 
             let embed;
             let files = [];
-            const isOwnProfileNow = state.viewerId === state.targetUserId;
+            const isOwnProfileNow = getOwnerId(state.targetPlayerKey) === state.viewerId;
             if (state.view === 'main') {
                 const subCount = !isOwnProfileNow ? (state.subscriberCount ?? null) : null;
                 embed = this.profileService.buildMainEmbed(data, isPol, subCount);
@@ -8326,16 +8874,16 @@ class InteractionHandler {
                 state.bossPage    = result.currentPage;
             } else {
                 const achView   = state.view === 'ach_overview' ? 'overview' : 'cat';
-                const isOwnProf = state.viewerId === state.targetUserId;
+                const isOwnProf = getOwnerId(state.targetPlayerKey) === state.viewerId;
                 const lang      = isPol ? 'pol' : 'eng';
                 let achResult;
                 if (isOwnProf) {
                     achResult = await this.achievementService.buildAchievementsViewGlobal(
-                        allGuildIds, state.targetUserId, lang, achView, state.category
+                        allGuildIds, state.targetPlayerKey, lang, achView, state.category
                     );
                 } else {
                     achResult = await this.achievementService.buildAchievementsViewForUserGlobal(
-                        allGuildIds, state.targetUserId, data.username, lang, achView, state.category, state.targetGuildId
+                        allGuildIds, state.targetPlayerKey, data.username, lang, achView, state.category, state.targetGuildId
                     );
                 }
                 embed = achResult.embed;
@@ -8347,8 +8895,10 @@ class InteractionHandler {
                 category: state.category,
                 bossPage: state.bossPage,
                 bossMaxPage: state.bossMaxPage,
-                isOwnProfile: state.viewerId === state.targetUserId,
+                isOwnProfile: isOwnProfileNow,
                 isSubscribed: state.isSubscribed || false,
+                ownProfiles: isOwnProfileNow ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
+                currentProfileIndex: getProfileIndex(state.targetPlayerKey),
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -8393,7 +8943,7 @@ class InteractionHandler {
                 if (state?.cachedData && state.view !== 'select') {
                     const prevEmbed = this.profileService.buildMainEmbed(state.cachedData, isPol);
                     const prevComponents = this.profileService.buildProfileComponents(
-                        { view: state.view || 'main', category: state.category, bossPage: state.bossPage, bossMaxPage: state.bossMaxPage, isOwnProfile: state.viewerId === state.targetUserId },
+                        { view: state.view || 'main', category: state.category, bossPage: state.bossPage, bossMaxPage: state.bossMaxPage, isOwnProfile: getOwnerId(state.targetPlayerKey) === state.viewerId },
                         isPol
                     );
                     await interaction.editReply({
@@ -8408,27 +8958,27 @@ class InteractionHandler {
             }
 
             if (matches.length === 1) {
-                const targetUserId  = matches[0].userId;
+                const targetPlayerKey  = matches[0].playerKey || matches[0].userId;
                 const targetGuildId = matches[0].sourceGuildId || guildId;
                 const newLang = this._getProfileLang(guildId, targetGuildId);
                 const newIsPol = newLang === 'pol';
-                const isOwnProfile = viewerId === targetUserId;
+                const isOwnProfile = getOwnerId(targetPlayerKey) === viewerId;
 
                 let isSubscribed = false;
                 let subscriberCount = null;
                 if (!isOwnProfile && this.notificationService) {
                     const [viewerSubs, targetSubscribers] = await Promise.all([
                         this.notificationService.getSubscriptions(viewerId),
-                        this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId),
+                        this.notificationService.getSubscribersForTarget(targetPlayerKey, targetGuildId),
                     ]);
-                    isSubscribed = viewerSubs.some(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
+                    isSubscribed = viewerSubs.some(s => s.targetPlayerKey === targetPlayerKey && s.targetGuildId === targetGuildId);
                     subscriberCount = targetSubscribers.length;
                 }
 
-                const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+                const data = await this.profileService.collectData(targetGuildId, targetPlayerKey, allGuildIds, interaction.client);
                 const embed = this.profileService.buildMainEmbed(data, newIsPol, subscriberCount);
                 const newState = {
-                    viewerId, targetUserId, targetGuildId, lang: newLang,
+                    viewerId, targetPlayerKey, targetGuildId, lang: newLang,
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
                     isSubscribed, subscriberCount,
                 };
@@ -8442,9 +8992,9 @@ class InteractionHandler {
             }
 
             const options = matches.slice(0, 25).map(p => ({
-                label: (p.username || p.userId).slice(0, 100),
+                label: formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 100),
                 description: `${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId} · ${p.score}`.slice(0, 100),
-                value: `${p.userId}:${p.sourceGuildId || guildId}`,
+                value: `${p.playerKey || p.userId}:${p.sourceGuildId || guildId}`,
             }));
             const select = new StringSelectMenuBuilder()
                 .setCustomId('profile_search_sel')
@@ -8469,29 +9019,29 @@ class InteractionHandler {
     async _handleProfileSearchSelect(interaction) {
         await interaction.deferUpdate();
         try {
-            const [targetUserId, targetGuildId] = interaction.values[0].split(':');
+            const [targetPlayerKey, targetGuildId] = interaction.values[0].split(':');
             const guildId    = interaction.guildId;
             const viewerId   = interaction.user.id;
             const lang       = this._getProfileLang(guildId, targetGuildId);
             const isPol      = lang === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
-            const isOwnProfile = viewerId === targetUserId;
+            const isOwnProfile = getOwnerId(targetPlayerKey) === viewerId;
 
             let isSubscribed = false;
             let subscriberCount = null;
             if (!isOwnProfile && this.notificationService) {
                 const [viewerSubs, targetSubscribers] = await Promise.all([
                     this.notificationService.getSubscriptions(viewerId),
-                    this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId),
+                    this.notificationService.getSubscribersForTarget(targetPlayerKey, targetGuildId),
                 ]);
-                isSubscribed = viewerSubs.some(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
+                isSubscribed = viewerSubs.some(s => s.targetPlayerKey === targetPlayerKey && s.targetGuildId === targetGuildId);
                 subscriberCount = targetSubscribers.length;
             }
 
-            const data = await this.profileService.collectData(targetGuildId, targetUserId, allGuildIds, interaction.client);
+            const data = await this.profileService.collectData(targetGuildId, targetPlayerKey, allGuildIds, interaction.client);
             const embed = this.profileService.buildMainEmbed(data, isPol, subscriberCount);
             const newState = {
-                viewerId, targetUserId, targetGuildId, lang,
+                viewerId, targetPlayerKey, targetGuildId, lang,
                 view: 'main', category: null, bossPage: 0, bossMaxPage: 1, cachedData: data,
                 isSubscribed, subscriberCount,
             };
@@ -8909,7 +9459,7 @@ class InteractionHandler {
         const PAGE_SIZE = 25;
         const options = sorted.slice(0, PAGE_SIZE).map(p =>
             new StringSelectMenuOptionBuilder()
-                .setValue(p.userId)
+                .setValue(p.playerKey || p.userId)
                 .setLabel(p.displayName.substring(0, 100))
         );
         const selectMenu = new StringSelectMenuBuilder()
@@ -8935,23 +9485,26 @@ class InteractionHandler {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
         const selectedGuildId = customId.replace('notif_player_select_', '');
-        const selectedUserId = interaction.values[0];
+        // Wartość to klucz profilu ("userId" lub "userId#N") — subskrybuje się konkretny profil
+        const selectedPlayerKey = interaction.values[0];
+        const selectedOwnerId = getOwnerId(selectedPlayerKey);
         const targetGuildName = interaction.client.guilds.cache.get(selectedGuildId)?.name || selectedGuildId;
-        let targetUsername = selectedUserId;
+        let targetUsername = selectedOwnerId;
         const players = await this.rankingService.getSortedPlayers(selectedGuildId);
-        const player = players.find(p => p.userId === selectedUserId);
-        if (player) targetUsername = player.username || selectedUserId;
+        const player = players.find(p => (p.playerKey || p.userId) === selectedPlayerKey);
+        if (player) targetUsername = player.username || selectedOwnerId;
         const targetGuild = interaction.client.guilds.cache.get(selectedGuildId);
         if (targetGuild) {
             try {
-                const member = await targetGuild.members.fetch(selectedUserId);
+                const member = await targetGuild.members.fetch(selectedOwnerId);
                 targetUsername = member.displayName;
             } catch {}
         }
+        targetUsername = formatProfileDisplayName(targetUsername, getProfileIndex(selectedPlayerKey));
         const confirmText = formatMessage(msgs.notifConfirmText, { username: targetUsername, guild: targetGuildName });
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-                .setCustomId(`notif_confirm_${selectedUserId}_${selectedGuildId}`)
+                .setCustomId(`notif_confirm_${selectedPlayerKey}_${selectedGuildId}`)
                 .setEmoji('✅')
                 .setLabel(msgs.notifConfirmYes)
                 .setStyle(ButtonStyle.Success),
@@ -8967,25 +9520,27 @@ class InteractionHandler {
     async _handleNotifConfirm(interaction, customId) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
-        // customId: notif_confirm_{userId}_{guildId}  (snowflakes contain only digits)
+        // customId: notif_confirm_{playerKey}_{guildId}  (playerKey = userId lub userId#N)
         const parts = customId.split('_');
-        // parts: ['notif','confirm', userId, guildId]
-        const targetUserId = parts[2];
+        // parts: ['notif','confirm', playerKey, guildId]
+        const targetPlayerKey = parts[2];
         const targetGuildId = parts[3];
         const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
-        let targetUsername = targetUserId;
+        const targetOwnerId = getOwnerId(targetPlayerKey);
+        let targetUsername = targetOwnerId;
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
-        const player = players.find(p => p.userId === targetUserId);
-        if (player) targetUsername = player.username || targetUserId;
+        const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+        if (player) targetUsername = player.username || targetOwnerId;
         const targetGuild = interaction.client.guilds.cache.get(targetGuildId);
         if (targetGuild) {
             try {
-                const member = await targetGuild.members.fetch(targetUserId);
+                const member = await targetGuild.members.fetch(targetOwnerId);
                 targetUsername = member.displayName;
             } catch {}
         }
+        targetUsername = formatProfileDisplayName(targetUsername, getProfileIndex(targetPlayerKey));
         const added = await this.notificationService.addSubscription(
-            interaction.user.id, targetUserId, targetGuildId, targetUsername, targetGuildName
+            interaction.user.id, targetPlayerKey, targetGuildId, targetUsername, targetGuildName
         );
         if (!added) {
             await interaction.editReply({
@@ -9020,7 +9575,7 @@ class InteractionHandler {
         }
         const options = subs.slice(0, 25).map(sub =>
             new StringSelectMenuOptionBuilder()
-                .setValue(`${sub.targetUserId}_${sub.targetGuildId}`)
+                .setValue(`${sub.targetPlayerKey || sub.targetUserId}_${sub.targetGuildId}`)
                 .setLabel(`${sub.targetUsername} — ${sub.targetGuildName}`.substring(0, 100))
         );
         const selectMenu = new StringSelectMenuBuilder()
@@ -9048,7 +9603,8 @@ class InteractionHandler {
                     displayName = member.displayName;
                 } catch {}
             }
-            result.push({ ...player, displayName });
+            // Profil dodatkowy → nick ze znacznikiem, żeby lista rozróżniała konta jednej osoby
+            result.push({ ...player, displayName: formatProfileDisplayName(displayName, player.profileIndex || 1) });
         }
         const isLetter = name => /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(name);
         result.sort((a, b) => {
@@ -9111,7 +9667,7 @@ class InteractionHandler {
         const page = sorted.slice(offset, offset + 25);
         const options = page.map(p =>
             new StringSelectMenuOptionBuilder()
-                .setValue(p.userId)
+                .setValue(p.playerKey || p.userId)
                 .setLabel(p.displayName.substring(0, 100))
         );
         const selectMenu = new StringSelectMenuBuilder()
@@ -9129,10 +9685,10 @@ class InteractionHandler {
     async _handleNotifRemoveSelect(interaction) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
-        const [targetUserId, targetGuildId] = interaction.values[0].split('_');
+        const [targetPlayerKey, targetGuildId] = interaction.values[0].split('_');
         const subs = await this.notificationService.getSubscriptions(interaction.user.id);
-        const sub = subs.find(s => s.targetUserId === targetUserId && s.targetGuildId === targetGuildId);
-        const removed = await this.notificationService.removeSubscription(interaction.user.id, targetUserId, targetGuildId);
+        const sub = subs.find(s => (s.targetPlayerKey || s.targetUserId) === targetPlayerKey && s.targetGuildId === targetGuildId);
+        const removed = await this.notificationService.removeSubscription(interaction.user.id, targetPlayerKey, targetGuildId);
         if (removed && sub) {
             await interaction.editReply({
                 content: formatMessage(msgs.notifRemoveSuccess, { username: sub.targetUsername, guild: sub.targetGuildName }),
@@ -9827,6 +10383,7 @@ class InteractionHandler {
         for (const part of (footerText || '').split('|')) {
             if (part.startsWith('ref:')) result.globalMsgId = part.slice(4);
             else if (part.startsWith('uid:')) result.userId = part.slice(4);
+            else if (part.startsWith('pk:')) result.playerKey = part.slice(3);
             else if (part.startsWith('gid:')) result.guildId = part.slice(4);
             else if (part.startsWith('pgc:')) result.perGuildChannelId = part.slice(4);
             else if (part.startsWith('pgm:')) result.perGuildMsgId = part.slice(4);
@@ -9945,6 +10502,10 @@ class InteractionHandler {
         }
 
         const footerInfo = this._parseReportFooter(origMsg.embeds[0]?.footer?.text);
+        // Profil, dla którego wysłano screen (stopka `pk:`); stare raporty → profil główny
+        const targetPlayerKey = footerInfo.playerKey || targetUserId;
+        const targetProfileIndex = getProfileIndex(targetPlayerKey);
+        const targetProfileLabel = this.profileRegistryService?.getLabel(targetUserId, targetProfileIndex) || null;
 
         // Obraz jest w polu embed.image oryginalnej wiadomości raportu
         const imageUrl = origMsg.embeds[0]?.image?.url;
@@ -10034,6 +10595,9 @@ class InteractionHandler {
                         type: 'rejected',
                         userName,
                         userId: targetUserId,
+                        playerKey: targetPlayerKey,
+                        profileIndex: targetProfileIndex,
+                        profileLabel: targetProfileLabel,
                         userAvatar: interaction.user.displayAvatarURL(),
                         commandName: 'analyze',
                         reason: aiResult.error || 'VALIDATION_FAILED',
@@ -10050,12 +10614,12 @@ class InteractionHandler {
             // Stan globalny przed zapisem — potrzebny do snippetu globalnego (Embed 2)
             const _analyzePrevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
             const _analyzePrevGlobalPosition = (() => {
-                const i = _analyzePrevGlobalRanking?.findIndex(p => p.userId === targetUserId);
+                const i = _analyzePrevGlobalRanking?.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
                 return i !== -1 ? i + 1 : null;
             })();
 
             const { isNewRecord, currentScore, ranking: updatedRanking, affectedGuildIds: analyzeAffectedGuilds = [] } = await this.rankingService.updateUserRanking(
-                targetGuildId, targetUserId, userName, aiResult.score, aiResult.bossName
+                targetGuildId, targetPlayerKey, userName, aiResult.score, aiResult.bossName, targetProfileLabel
             );
             await this.logService.logScoreUpdate(userName, aiResult.score, isNewRecord, targetGuildId, { adminName });
             if (isNewRecord && this.milestoneService) this.milestoneService.checkAndAnnounce();
@@ -10072,12 +10636,12 @@ class InteractionHandler {
             let previousBossRecord = null;
             if (aiResult.bossName && this.bossRecordService) {
                 const analyzeBossTs = isNewRecord
-                    ? (updatedRanking[targetUserId]?.timestamp ?? new Date().toISOString())
+                    ? (updatedRanking[targetPlayerKey]?.timestamp ?? new Date().toISOString())
                     : new Date().toISOString();
                 const analyzeBossScoreValue = this.rankingService.parseScoreValue(aiResult.score);
                 try {
                     const bossResult = await this.bossRecordService.updateBossRecord(
-                        targetGuildId, targetUserId, aiResult.bossName, userName,
+                        targetGuildId, targetPlayerKey, aiResult.bossName, userName,
                         aiResult.score, analyzeBossScoreValue, analyzeBossTs
                     );
                     isNewBossRecord = bossResult.isNewBossRecord;
@@ -10093,15 +10657,15 @@ class InteractionHandler {
                 if (isNewRecord) {
                     try {
                         const sortedAfter = await this.rankingService.getSortedPlayers(targetGuildId);
-                        const currentPositionForAch = sortedAfter.findIndex(p => p.userId === targetUserId) + 1;
+                        const currentPositionForAch = sortedAfter.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey) + 1;
                         const prevScoreValue = currentScore ? this.rankingService.parseScoreValue(currentScore.score) : 0;
                         const newScoreValue = this.rankingService.parseScoreValue(aiResult.score);
                         const _analyzeConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                         const _analyzeActiveGuildIds = new Set(_analyzeConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
                         const _analyzeGlobalRanking = await this.rankingService.getGlobalRanking(_analyzeActiveGuildIds);
-                        const _analyzeGlobalIdx = _analyzeGlobalRanking.findIndex(p => p.userId === targetUserId);
+                        const _analyzeGlobalIdx = _analyzeGlobalRanking.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
                         const analyzeGlobalPositionForAch = _analyzeGlobalIdx !== -1 ? _analyzeGlobalIdx + 1 : 0;
-                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetUserId, {
+                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetPlayerKey, {
                             scoreValue: newScoreValue,
                             bossName: aiResult.bossName,
                             isNewRecord: true,
@@ -10116,9 +10680,9 @@ class InteractionHandler {
                         const _bossAchConfiguredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
                         const _bossAchActiveGuildIds = new Set(_bossAchConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
                         const _bossAchGlobalRanking = await this.rankingService.getGlobalRanking(_bossAchActiveGuildIds);
-                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => p.userId === targetUserId);
+                        const _bossAchGlobalIdx = _bossAchGlobalRanking.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
                         const bossGlobalPositionForAch = _bossAchGlobalIdx !== -1 ? _bossAchGlobalIdx + 1 : 0;
-                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetUserId, {
+                        newAchievements = await this.achievementService.processSubmission(targetGuildId, targetPlayerKey, {
                             scoreValue: bossScoreVal,
                             bossName: aiResult.bossName,
                             isNewRecord: false,
@@ -10167,6 +10731,9 @@ class InteractionHandler {
                     type: _analyzeRoleErr ? 'analyze_panel_role_error' : 'analyze_panel',
                     userName,
                     userId: targetUserId,
+                    playerKey: targetPlayerKey,
+                    profileIndex: targetProfileIndex,
+                    profileLabel: targetProfileLabel,
                     userAvatar: interaction.user.displayAvatarURL(),
                     score: aiResult.score,
                     bossName: aiResult.bossName,
@@ -10205,7 +10772,7 @@ class InteractionHandler {
                         let analyzeRolePositions = [];
                         try {
                             const targetMember = targetGuildObj ? await targetGuildObj.members.fetch(targetUserId).catch(() => null) : null;
-                            analyzeRolePositions = await this._computeRolePositions(targetGuildId, targetUserId, targetGuildObj, targetMember?.roles?.cache);
+                            analyzeRolePositions = await this._computeRolePositions(targetGuildId, targetPlayerKey, targetGuildObj, targetMember?.roles?.cache);
                         } catch {}
 
                         // Snippet globalny (Embed 2) — tylko gdy zmieniła się pozycja w rankingu globalnym
@@ -10216,7 +10783,7 @@ class InteractionHandler {
                                 const analyzeActiveGuildIds = analyzeConfiguredIds.filter(gid => interaction.client.guilds.cache.has(gid));
                                 const analyzeNewGlobalRanking = await this.rankingService.getGlobalRanking(new Set(analyzeActiveGuildIds));
                                 analyzeGlobalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
-                                    targetUserId, analyzeNewGlobalRanking, _analyzePrevGlobalPosition, targetMsgs, interaction.client
+                                    targetPlayerKey, analyzeNewGlobalRanking, _analyzePrevGlobalPosition, targetMsgs, interaction.client
                                 );
                             } catch (snippetErr) {
                                 gl.warn(`⚠️ [Analizuj] Błąd snippeta globalnego: ${snippetErr.message}`);
@@ -10230,7 +10797,7 @@ class InteractionHandler {
                                 const allGuildIdsForBoss = this.guildConfigService?.getAllConfiguredGuildIds()
                                     || Array.from(interaction.client.guilds.cache.keys());
                                 const bossResult = await this._buildBossSnippetData(
-                                    targetUserId, aiResult.bossName, previousBossRecord, allGuildIdsForBoss, targetMsgs, interaction.client
+                                    targetPlayerKey, aiResult.bossName, previousBossRecord, allGuildIdsForBoss, targetMsgs, interaction.client
                                 );
                                 analyzeBossSnippetData = bossResult.snippetData;
                             } catch (bossSnippetErr) {
@@ -10251,7 +10818,7 @@ class InteractionHandler {
                         // Licznik subskrybentów (Embed 1)
                         let analyzeSubscribers = [];
                         try {
-                            analyzeSubscribers = await this.notificationService.getSubscribersForTarget(targetUserId, targetGuildId);
+                            analyzeSubscribers = await this.notificationService.getSubscribersForTarget(targetPlayerKey, targetGuildId);
                         } catch (subErr) {
                             gl.warn(`⚠️ [Analizuj] Nie udało się pobrać subskrybentów: ${subErr.message}`);
                         }
@@ -10262,7 +10829,7 @@ class InteractionHandler {
                         if (analyzeGlobalSnippetData && this.scoreHistoryService && this.chartService) {
                             try {
                                 const allGuildIdsChart = this.guildConfigService?.getAllConfiguredGuildIds() || [targetGuildId];
-                                const analyzeHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, targetUserId, 365);
+                                const analyzeHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIdsChart, targetPlayerKey, 365);
                                 if (analyzeHistory.length >= 2) {
                                     const guildTagMap = {};
                                     const guildNameMap = {};
@@ -10325,6 +10892,9 @@ class InteractionHandler {
                             screenshotName: announceName,
                             previousScore: currentScore ? currentScore.score : null,
                             userId: targetUserId,
+                            playerKey: targetPlayerKey,
+                            profileIndex: targetProfileIndex,
+                            profileLabel: targetProfileLabel,
                             guildId: targetGuildId,
                             messages: targetMsgs,
                             guild: targetGuildObj,
@@ -10405,9 +10975,10 @@ class InteractionHandler {
             if (this.config.rejectedChannelId && globalMsgId) {
                 this._analyzeRevertSessions.set(globalMsgId, {
                     targetUserId,
+                    targetPlayerKey,
                     targetGuildId,
                     previousRecord: currentScore ?? null,
-                    newRecordTimestamp: isNewRecord ? (updatedRanking[targetUserId]?.timestamp ?? null) : null,
+                    newRecordTimestamp: isNewRecord ? (updatedRanking[targetPlayerKey]?.timestamp ?? null) : null,
                     userName,
                     adminName,
                     publicMsgId: analyzePublicMsg?.id || null,
@@ -10463,6 +11034,8 @@ class InteractionHandler {
         await interaction.deferUpdate();
 
         const { targetUserId, targetGuildId, previousRecord, newRecordTimestamp, userName, adminName } = session;
+        // Sesje utworzone przed wdrożeniem profili nie mają targetPlayerKey → profil główny
+        const targetPlayerKey = session.targetPlayerKey || targetUserId;
         const gl = this.logService._gl(targetGuildId);
         const serverName = interaction.client.guilds.cache.get(targetGuildId)?.name || targetGuildId;
         const reverterName = interaction.member?.displayName || interaction.user.username;
@@ -10471,7 +11044,7 @@ class InteractionHandler {
             gl.info(`↩️ [Cofnij] ${reverterName} cofa wynik dla ${userName} (serwer: ${serverName}), poprzedni wynik: ${previousRecord?.score || 'brak'}`);
 
             // 1. Cofnij ranking (identycznie jak CV revert)
-            await this.rankingService.revertUserRecord(targetGuildId, targetUserId, previousRecord ?? null);
+            await this.rankingService.revertUserRecord(targetGuildId, targetPlayerKey, previousRecord ?? null);
             // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
             if (this.ocrStatsService && targetUserId !== interaction.user.id) {
                 this.ocrStatsService.recordReverted().catch(() => {});
@@ -10481,13 +11054,13 @@ class InteractionHandler {
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
             let removedRecordCount = 0;
             if (this.scoreHistoryService && newRecordTimestamp) {
-                removedRecordCount = await this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetUserId, newRecordTimestamp)
+                removedRecordCount = await this.scoreHistoryService.removeEntriesAfter(targetGuildId, targetPlayerKey, newRecordTimestamp)
                     .catch(e => { gl.error(`↩️ [Cofnij] Błąd usuwania historii: ${e.message}`); return 0; });
             }
 
             // 3. Cofnij tylko osiągnięcia score/records zdobyte od momentu analizowanego rekordu — wcześniejsze zostają
             if (this.achievementService && newRecordTimestamp) {
-                await this.achievementService.clearAchievementsAfter(targetGuildId, targetUserId, newRecordTimestamp,
+                await this.achievementService.clearAchievementsAfter(targetGuildId, targetPlayerKey, newRecordTimestamp,
                     { removedRecordCount, previousRecord: previousRecord ?? null }).catch(() => {});
                 gl.info('↩️ [Cofnij] Osiągnięcia score/records zdobyte od cofniętego rekordu wyczyszczone');
             }
@@ -10613,7 +11186,12 @@ class InteractionHandler {
         };
     }
 
-    async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null) {
+    /**
+     * @param {string|null} playerKey - profil, dla którego wysłano screen; trafia do stopki (pk:),
+     *   żeby późniejsza ręczna analiza admina zapisała wynik na właściwym profilu.
+     */
+    async _sendInvalidScreenReport(interaction, imagePath, reason, gl, rejectionReason = null, playerKey = null) {
+        const _reportProfileRef = playerKey && getProfileIndex(playerKey) > 1 ? `|pk:${playerKey}` : '';
         const hasGlobal = !!this.config.rejectedChannelId;
         const guildCfg = this.config.getGuildConfig(interaction.guildId);
         const perGuildChannelId = guildCfg?.invalidReportChannelId || null;
@@ -10723,7 +11301,7 @@ class InteractionHandler {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.rejectedChannelId);
                     if (globalChannel) {
-                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}`, true);
+                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}${_reportProfileRef}`, true);
                         sentGlobalMsg = _gMsg;
                         reportImgUrl = _gImgUrl;
                         globalMsgId = sentGlobalMsg.id;
@@ -10740,8 +11318,8 @@ class InteractionHandler {
                     const guildChannel = await interaction.client.channels.fetch(perGuildChannelId);
                     if (guildChannel) {
                         const footerText = globalMsgId
-                            ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}`
-                            : `uid:${interaction.user.id}|gid:${interaction.guildId}`;
+                            ? `ref:${globalMsgId}|uid:${interaction.user.id}|gid:${interaction.guildId}${_reportProfileRef}`
+                            : `uid:${interaction.user.id}|gid:${interaction.guildId}${_reportProfileRef}`;
                         const { msg: sentPerGuild, imgUrl: _pgImgUrl } = await sendReport(guildChannel, footerText);
                         if (!reportImgUrl) reportImgUrl = _pgImgUrl;
                         // Zapisz referencję do per-guild wiadomości w footerze globalnego embeda
@@ -11382,9 +11960,9 @@ class InteractionHandler {
                 return;
             }
             const options = allMatches.slice(0, 25).map(p => ({
-                label: `#${p.rank} ${(p.username || p.userId).slice(0, 60)}`.slice(0, 100),
+                label: `#${p.rank} ${formatProfileDisplayName(p.username || p.userId, p.profileIndex || 1).slice(0, 60)}`.slice(0, 100),
                 description: `${p.guildName} | ${t('Wynik', 'Score')}: ${p.score}`.slice(0, 100),
-                value: `${p.userId}:${p.sgid}`,
+                value: `${p.playerKey || p.userId}:${p.sgid}`,
             }));
             const subtitle = allMatches.length > 25
                 ? t(`Znaleziono ${allMatches.length} — pokazuję 25. Zawęź wyszukiwanie.`, `Found ${allMatches.length} — showing 25. Narrow your search.`)
@@ -11413,18 +11991,18 @@ class InteractionHandler {
 
     async _handlePanelAchDelPlayerSelect(interaction) {
         const value = interaction.values[0]; // format: userId:guildId
-        const [targetUserId, targetGuildId] = value.split(':');
+        const [targetPlayerKey, targetGuildId] = value.split(':');
         const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
         try {
             const players = await this.rankingService.getSortedPlayers(targetGuildId);
-            const player = players.find(p => p.userId === targetUserId);
-            const displayName = player?.username || targetUserId;
+            const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+            const displayName = formatProfileDisplayName(player?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
             const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
 
             const unlockedAchs = this.achievementService
-                ? await this.achievementService.getUnlockedAchievements(targetGuildId, targetUserId)
+                ? await this.achievementService.getUnlockedAchievements(targetGuildId, targetPlayerKey)
                 : [];
 
             if (unlockedAchs.length === 0) {
@@ -11447,12 +12025,12 @@ class InteractionHandler {
                 {
                     label: t('🗑️ Usuń WSZYSTKIE osiągnięcia', '🗑️ Remove ALL achievements'),
                     description: t(`Usuwa wszystkie ${unlockedAchs.length} osiągnięcia i cały progress`, `Removes all ${unlockedAchs.length} achievements and all progress`).slice(0, 100),
-                    value: `all:${targetUserId}:${targetGuildId}`,
+                    value: `all:${targetPlayerKey}:${targetGuildId}`,
                 },
                 ...unlockedAchs.slice(0, 24).map(a => ({
                     label: `${a.icon} ${(a.namePol || a.nameEng || a.id).slice(0, 90)}`.slice(0, 100),
                     description: (a.descPol || a.descEng || '').slice(0, 100),
-                    value: `${a.id}:${targetUserId}:${targetGuildId}`,
+                    value: `${a.id}:${targetPlayerKey}:${targetGuildId}`,
                 })),
             ];
 
@@ -11476,7 +12054,7 @@ class InteractionHandler {
                 ]
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchDelPlayerSelect (gracz ${targetUserId}, serwer ${targetGuildId}):`, err);
+            logger.error(`Błąd _handlePanelAchDelPlayerSelect (gracz ${targetPlayerKey}, serwer ${targetGuildId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd wczytywania osiągnięć.', '❌ Error loading achievements.'), embeds: [], components: [] });
         }
     }
@@ -11486,20 +12064,20 @@ class InteractionHandler {
         const parts = value.split(':');
         // achId może zawierać '_' ale nie ':', więc pierwsze dwie ostatnie wartości to userId i guildId
         const targetGuildId = parts[parts.length - 1];
-        const targetUserId = parts[parts.length - 2];
+        const targetPlayerKey = parts[parts.length - 2];
         const achId = parts.slice(0, parts.length - 2).join(':');
         const isAll = achId === 'all';
         const t = this._panelT(interaction.guildId);
 
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
-        const player = players.find(p => p.userId === targetUserId);
-        const displayName = player?.username || targetUserId;
+        const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
+        const displayName = formatProfileDisplayName(player?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
         const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
         const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
 
         const confirmId = isAll
-            ? `panel_ach_ok_all:${targetUserId}:${targetGuildId}`
-            : `panel_ach_ok_1:${achId}:${targetUserId}:${targetGuildId}`;
+            ? `panel_ach_ok_all:${targetPlayerKey}:${targetGuildId}`
+            : `panel_ach_ok_1:${achId}:${targetPlayerKey}:${targetGuildId}`;
 
         const descPol = isAll
             ? `Czy na pewno chcesz usunąć **WSZYSTKIE** osiągnięcia i cały progress gracza **${displayName}**${serverNote}?\n\nTej operacji nie można cofnąć.`
@@ -11531,15 +12109,15 @@ class InteractionHandler {
 
             const parts = rawValue.split(':');
             const isAll = parts[0] === 'all';
-            let targetUserId, targetGuildId, achId;
+            let targetPlayerKey, targetGuildId, achId;
 
             if (isAll) {
                 // all:{userId}:{guildId}
-                [, targetUserId, targetGuildId] = parts;
+                [, targetPlayerKey, targetGuildId] = parts;
             } else {
                 // 1:{achId}:{userId}:{guildId}  (achId nie zawiera ':')
                 targetGuildId = parts[parts.length - 1];
-                targetUserId = parts[parts.length - 2];
+                targetPlayerKey = parts[parts.length - 2];
                 achId = parts.slice(1, parts.length - 2).join(':');
             }
 
@@ -11547,28 +12125,28 @@ class InteractionHandler {
             const serverNote = guildName ? ` (${guildName})` : '';
 
             if (isAll) {
-                await this.achievementService.resetAllAchievements(targetGuildId, targetUserId);
-                await this.logService.logMessage('success', `Wszystkie osiągnięcia gracza ${targetUserId} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
+                await this.achievementService.resetAllAchievements(targetGuildId, targetPlayerKey);
+                await this.logService.logMessage('success', `Wszystkie osiągnięcia gracza ${targetPlayerKey} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0x57F287)
                         .setTitle(t('✅ Osiągnięcia usunięte', '✅ Achievements Removed'))
                         .setDescription(t(
-                            `Wszystkie osiągnięcia gracza <@${targetUserId}>${serverNote} zostały usunięte.`,
-                            `All achievements of player <@${targetUserId}>${serverNote} have been removed.`
+                            `Wszystkie osiągnięcia gracza <@${getOwnerId(targetPlayerKey)}>${serverNote} zostały usunięte.`,
+                            `All achievements of player <@${getOwnerId(targetPlayerKey)}>${serverNote} have been removed.`
                         ))],
                     components: [new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
                     )]
                 });
             } else {
-                await this.achievementService.removeOneAchievement(targetGuildId, targetUserId, achId);
-                await this.logService.logMessage('success', `Osiągnięcie "${achId}" gracza ${targetUserId} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
+                await this.achievementService.removeOneAchievement(targetGuildId, targetPlayerKey, achId);
+                await this.logService.logMessage('success', `Osiągnięcie "${achId}" gracza ${targetPlayerKey} usunięte (serwer ${targetGuildId}) przez panel admina`, interaction);
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0x57F287)
                         .setTitle(t('✅ Osiągnięcie usunięte', '✅ Achievement Removed'))
                         .setDescription(t(
-                            `Osiągnięcie **${achId}** gracza <@${targetUserId}>${serverNote} zostało usunięte.`,
-                            `Achievement **${achId}** of player <@${targetUserId}>${serverNote} has been removed.`
+                            `Osiągnięcie **${achId}** gracza <@${getOwnerId(targetPlayerKey)}>${serverNote} zostało usunięte.`,
+                            `Achievement **${achId}** of player <@${getOwnerId(targetPlayerKey)}>${serverNote} has been removed.`
                         ))],
                     components: [new ActionRowBuilder().addComponents(
                         new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
@@ -12552,12 +13130,12 @@ class InteractionHandler {
             }
 
             const options = matches.map(p => ({
-                label: p.username.substring(0, 100),
+                label: formatProfileDisplayName(p.username, p.profileIndex || 1).substring(0, 100),
                 description: t(
                     `Serwer: ${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId}`,
                     `Server: ${interaction.client.guilds.cache.get(p.sourceGuildId)?.name || p.sourceGuildId}`
                 ).substring(0, 100),
-                value: `${p.userId}:${p.sourceGuildId}`
+                value: `${p.playerKey || p.userId}:${p.sourceGuildId}`
             }));
 
             await interaction.editReply({
@@ -12590,12 +13168,12 @@ class InteractionHandler {
     async _handleAchCheckSelect(interaction) {
         await interaction.deferUpdate();
         try {
-            const [userId, guildId] = interaction.values[0].split(':');
+            const [selectedPlayerKey, guildId] = interaction.values[0].split(':');
             const allGuildIds = new Set(interaction.client.guilds.cache.keys());
             const globalRanking = await this.rankingService.getGlobalRanking(allGuildIds);
-            const player = globalRanking.find(p => p.userId === userId);
-            const username = player?.username || userId;
-            await this._showPlayerAchievements(interaction, userId, username, guildId);
+            const player = globalRanking.find(p => (p.playerKey || p.userId) === selectedPlayerKey);
+            const username = formatProfileDisplayName(player?.username || getOwnerId(selectedPlayerKey), getProfileIndex(selectedPlayerKey));
+            await this._showPlayerAchievements(interaction, selectedPlayerKey, username, guildId);
         } catch (err) {
             logger.error(`Błąd _handleAchCheckSelect: ${err.message}`);
         }
@@ -12623,7 +13201,7 @@ class InteractionHandler {
                 // Powrót do własnych osiągnięć
                 const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
                 const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                    allAchGuildIds, interaction.user.id, lang, 'cat', 'score'
+                    allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(interaction.user.id) || interaction.user.id, lang, 'cat', 'score'
                 );
                 await interaction.editReply({ embeds: [embed], components });
                 return;
@@ -12651,8 +13229,8 @@ class InteractionHandler {
 
             const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
             const globalRanking = await this.rankingService.getGlobalRanking(allAchGuildIds);
-            const player = globalRanking.find(p => p.userId === targetUserId);
-            const targetUsername = player?.username || targetUserId;
+            const player = globalRanking.find(p => (p.playerKey || p.userId) === targetUserId);
+            const targetUsername = formatProfileDisplayName(player?.username || getOwnerId(targetUserId), getProfileIndex(targetUserId));
 
             const { embed, components } = await this.achievementService.buildAchievementsViewForUserGlobal(
                 allAchGuildIds, targetUserId, targetUsername, lang,

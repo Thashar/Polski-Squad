@@ -4,7 +4,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { formatMessage, compareByScoreThenTimestamp } = require('../utils/helpers');
+const { formatMessage, compareByScoreThenTimestamp, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
 
 class RankingService {
     constructor(config, scoreHistoryService = null) {
@@ -57,11 +57,16 @@ class RankingService {
         try {
             const data = await fs.readFile(file, 'utf8');
             const parsed = JSON.parse(data);
-            // Normalizuj stare wpisy bez scoreValue
-            for (const [uid, entry] of Object.entries(parsed)) {
+            // Normalizuj wpisy: brakujący scoreValue + pola tożsamości profilu.
+            // Klucz mapy to playerKey ("userId" dla profilu głównego, "userId#N" dla dodatkowego) —
+            // rozkładamy go tu raz, żeby KAŻDA ścieżka odczytu miała playerKey/userId/profileIndex.
+            for (const [playerKey, entry] of Object.entries(parsed)) {
                 if (typeof entry.scoreValue !== 'number' || isNaN(entry.scoreValue)) {
-                    parsed[uid].scoreValue = entry.score ? this.parseScoreValue(entry.score) : 0;
+                    entry.scoreValue = entry.score ? this.parseScoreValue(entry.score) : 0;
                 }
+                entry.playerKey = playerKey;
+                entry.userId = getOwnerId(playerKey);
+                entry.profileIndex = getProfileIndex(playerKey);
             }
             this._rankingCache.set(guildId, parsed);
             return parsed;
@@ -106,12 +111,20 @@ class RankingService {
             guilds.map(g => this.loadRanking(g.id).then(r => ({ guildId: g.id, ranking: r })))
         );
 
+        // Dedup po playerKey (NIE po userId) — każdy profil gracza jest osobnym wpisem
+        // w rankingu globalnym, ale ten sam profil z dwóch serwerów liczy się raz (najlepszy wynik).
         const bestPerPlayer = new Map();
         for (const { guildId, ranking } of rankings) {
-            for (const [userId, data] of Object.entries(ranking)) {
-                const existing = bestPerPlayer.get(userId);
+            for (const [playerKey, data] of Object.entries(ranking)) {
+                const existing = bestPerPlayer.get(playerKey);
                 if (!existing || data.scoreValue > existing.scoreValue) {
-                    bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guildId });
+                    bestPerPlayer.set(playerKey, {
+                        ...data,
+                        playerKey,
+                        userId: getOwnerId(playerKey),
+                        profileIndex: getProfileIndex(playerKey),
+                        sourceGuildId: guildId,
+                    });
                 }
             }
         }
@@ -124,17 +137,39 @@ class RankingService {
     }
 
     /**
+     * Ranking globalny zredukowany do JEDNEGO wpisu na użytkownika Discorda (najlepszy profil).
+     * Używany tam, gdzie liczy się OSOBA, a nie wynik: progi ról TOP, licznik unikalnych graczy,
+     * eksport do shared_data (Stalker czyta po userId).
+     * @param {Set<string>|null} activeGuildIds
+     * @returns {Promise<Array>}
+     */
+    async getGlobalRankingByUser(activeGuildIds = null) {
+        const all = await this.getGlobalRanking(activeGuildIds);
+        const bestPerUser = new Map();
+        for (const entry of all) {
+            const existing = bestPerUser.get(entry.userId);
+            if (!existing || compareByScoreThenTimestamp(entry, existing) < 0) {
+                bestPerUser.set(entry.userId, entry);
+            }
+        }
+        return Array.from(bestPerUser.values()).sort(compareByScoreThenTimestamp);
+    }
+
+    /**
      * KANONICZNY licznik całkowity graczy — dokładnie ten sam zbiór, który trafia do stopki embeda
      * admina po /update („N unikalnych graczy globalnie"): ranking globalny, dedup po userId.
      * Używany też przez kamienie milowe, Centrum Dowodzenia i wykres przyrostu, żeby wszystkie
      * miejsca pokazywały tę samą liczbę. NIE liczymy plików historii — zostają one po graczach
      * usuniętych z rankingu, więc dawały wynik wyższy od rankingu.
+     * Licznik dotyczy OSÓB, nie wpisów — gracz z kilkoma profilami liczy się raz (dedup po userId),
+     * inaczej kamienie milowe („N graczy") i statystyki CC byłyby zawyżone o profile dodatkowe.
      * @param {Set<string>|null} activeGuildIds - serwery brane pod uwagę (skonfigurowane ∩ bot obecny)
-     * @returns {Promise<{ total: number, playerIds: Set<string> }>}
+     * @returns {Promise<{ total: number, playerIds: Set<string>, profileCount: number }>}
      */
     async getCountedPlayers(activeGuildIds = null) {
         const ranking = await this.getGlobalRanking(activeGuildIds);
-        return { total: ranking.length, playerIds: new Set(ranking.map(p => p.userId)) };
+        const playerIds = new Set(ranking.map(p => p.userId));
+        return { total: playerIds.size, playerIds, profileCount: ranking.length };
     }
 
     /**
@@ -237,38 +272,46 @@ class RankingService {
                 allGuilds.map(g => this.loadRanking(g.id).then(r => ({ guildId: g.id, ranking: r })))
             );
 
-            const perGuildData = new Map(); // guildId -> { userId: data }
-            const bestPerPlayer = new Map(); // userId -> best data
+            const perGuildData = new Map();   // guildId -> { playerKey: data }
+            const bestPerProfile = new Map(); // playerKey -> best data (wszystkie profile)
             for (const { guildId, ranking } of loadedRankings) {
                 perGuildData.set(guildId, ranking);
-                for (const [userId, data] of Object.entries(ranking)) {
-                    const existing = bestPerPlayer.get(userId);
+                for (const [playerKey, data] of Object.entries(ranking)) {
+                    const existing = bestPerProfile.get(playerKey);
                     if (!existing || data.scoreValue > existing.scoreValue) {
-                        bestPerPlayer.set(userId, { ...data, userId, sourceGuildId: guildId });
+                        bestPerProfile.set(playerKey, {
+                            ...data,
+                            playerKey,
+                            userId: getOwnerId(playerKey),
+                            profileIndex: getProfileIndex(playerKey),
+                            sourceGuildId: guildId,
+                        });
                     }
                 }
             }
 
-            // Ranking globalny (posortowany malejąco)
-            const globalSorted = Array.from(bestPerPlayer.values())
+            // Wszystkie profile (posortowane malejąco) — pełne dane dla konsumentów świadomych profili
+            const allProfilesSorted = Array.from(bestPerProfile.values())
                 .sort(compareByScoreThenTimestamp);
 
-            // Rankingi per-serwer: posortowane userId dla każdej gildii
+            // Rankingi per-serwer: posortowane playerKey dla każdej gildii
             const perGuildSortedIds = new Map();
             for (const [guildId, ranking] of perGuildData) {
                 const sorted = Object.entries(ranking)
                     .filter(([, d]) => d.scoreValue > 0)
                     .sort(([, a], [, b]) => compareByScoreThenTimestamp(a, b))
-                    .map(([userId]) => userId);
+                    .map(([playerKey]) => playerKey);
                 perGuildSortedIds.set(guildId, sorted);
             }
 
-            const players = globalSorted.map((player, index) => {
+            const buildEntry = (player, index, rankList) => {
                 const guildIds = perGuildSortedIds.get(player.sourceGuildId) || [];
-                const serverRankIdx = guildIds.indexOf(player.userId);
+                const serverRankIdx = guildIds.indexOf(player.playerKey);
                 return {
                     rank: index + 1,
                     userId: player.userId,
+                    playerKey: player.playerKey,
+                    profileIndex: player.profileIndex || 1,
                     username: player.username,
                     score: player.score,
                     scoreValue: player.scoreValue,
@@ -276,11 +319,23 @@ class RankingService {
                     timestamp: player.timestamp,
                     sourceGuildId: player.sourceGuildId,
                     serverRank: serverRankIdx >= 0 ? serverRankIdx + 1 : null,
-                    serverTotalPlayers: guildIds.length || null,
+                    serverTotalPlayers: rankList ? rankList.length : (guildIds.length || null),
                 };
-            });
+            };
 
-            const sharedData = { updatedAt: new Date().toISOString(), players };
+            // players[] — JEDEN wpis na użytkownika Discorda (najlepszy profil).
+            // Konsumenci cross-bot (Stalker: find(p => p.userId === ...), players.length) czytają
+            // to pole i muszą widzieć osoby, nie profile — inaczej liczba graczy byłaby zawyżona.
+            const bestPerUser = new Map();
+            for (const player of allProfilesSorted) {
+                if (!bestPerUser.has(player.userId)) bestPerUser.set(player.userId, player);
+            }
+            const players = Array.from(bestPerUser.values()).map((p, i) => buildEntry(p, i, null));
+
+            // profiles[] — wszystkie profile wszystkich graczy (ranking taki jak w /ranking global)
+            const profiles = allProfilesSorted.map((p, i) => buildEntry(p, i, null));
+
+            const sharedData = { updatedAt: new Date().toISOString(), players, profiles };
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
             await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
 
@@ -411,6 +466,8 @@ class RankingService {
                 } catch {
                     // fallback na zapisane username
                 }
+                // Profil dodatkowy: nick Discord + znacznik numeru (② / ③) — widać, że to ta sama osoba
+                displayName = formatProfileDisplayName(displayName, player.profileIndex || getProfileIndex(player.playerKey));
 
                 const bossName = player.bossName || msgs.unknownBoss;
                 const isCurrentUser = player.userId === userId;
@@ -716,7 +773,10 @@ class RankingService {
                 ? `\`${String(rank).padStart(2, '0')}\` ${MEDALS[rank - 1]}`
                 : `\`${String(rank).padStart(2, '0')}\``;
 
-            const displayName = p.username || `ID:${p.userId}`;
+            const displayName = formatProfileDisplayName(
+                p.username || `ID:${p.userId}`,
+                p.profileIndex || getProfileIndex(p.playerKey)
+            );
             const isMe = p.userId === callerUserId;
             const nickDisplay = isMe ? `**__${displayName}__**` : `**${displayName}**`;
 
@@ -800,7 +860,8 @@ class RankingService {
      */
     async getSortedPlayersByRole(guildId, roleId, guild, roleRankingConfigService) {
         const allPlayers = await this.getSortedPlayers(guildId);
-        const playerIds = allPlayers.map(p => p.userId);
+        // Dedup userId — gracz z kilkoma profilami ma kilka wpisów, ale fetchujemy membera raz
+        const playerIds = [...new Set(allPlayers.map(p => p.userId))];
         const membersWithRole = await roleRankingConfigService.getMembersWithRole(guild, roleId, playerIds);
         return allPlayers.filter(p => membersWithRole.has(p.userId));
     }
@@ -985,6 +1046,9 @@ class RankingService {
             screenshotName,
             previousScore = null,
             userId = null,
+            playerKey = null,       // tożsamość profilu; gdy null → userId (profil główny)
+            profileIndex = null,    // numer profilu do znacznika w opisie (null/1 = brak znacznika)
+            profileLabel = null,    // etykieta profilu (nick w grze) — pokazywana obok znacznika
             guildId = null,
             messages = null,
             guild = null,
@@ -1026,19 +1090,25 @@ class RankingService {
         let currentPosition = null;
         let positionChange = 0;
         let isNewEntry = false;
-        if (userId && guildId) {
+        // Pozycję liczymy po playerKey (profilu), nie po userId — gracz z kilkoma profilami
+        // ma kilka wpisów w rankingu i musimy trafić w ten, którego dotyczy rekord.
+        const targetKey = playerKey || userId;
+        let sortedPlayersForPos = null;
+        if (targetKey && guildId) {
             try {
                 const sortedPlayers = sortedPlayersOverride || await this.getSortedPlayers(guildId);
-                const userIndex = sortedPlayers.findIndex(player => player.userId === userId);
+                sortedPlayersForPos = sortedPlayers;
+                const matchKey = (p) => (p.playerKey || p.userId) === targetKey;
+                const userIndex = sortedPlayers.findIndex(matchKey);
                 if (userIndex !== -1) {
                     currentPosition = userIndex + 1;
                     if (previousScore) {
-                        const tempPlayers = [...sortedPlayers];
-                        const userPlayer = tempPlayers.find(p => p.userId === userId);
+                        const tempPlayers = sortedPlayers.map(p => ({ ...p }));
+                        const userPlayer = tempPlayers.find(matchKey);
                         if (userPlayer) {
                             userPlayer.scoreValue = this.parseScoreValue(previousScore);
                             tempPlayers.sort(compareByScoreThenTimestamp);
-                            const previousIndex = tempPlayers.findIndex(player => player.userId === userId);
+                            const previousIndex = tempPlayers.findIndex(matchKey);
                             positionChange = (previousIndex + 1) - currentPosition;
                         }
                     } else {
@@ -1050,7 +1120,24 @@ class RankingService {
             }
         }
 
-        const positionRole = currentPosition ? this.getPositionRole(currentPosition, guildTopRoles, guild) : null;
+        // Rola TOP w nagłówku embeda musi odpowiadać temu, co faktycznie przyzna roleService,
+        // a ten liczy progi na liście zdeduplikowanej (jeden profil na osobę). Dla profilu
+        // dodatkowego pozycja profilu ≠ pozycja osoby, więc rolę bierzemy z pozycji osoby.
+        let topRolePosition = currentPosition;
+        if (currentPosition && getProfileIndex(targetKey) > 1 && sortedPlayersForPos) {
+            const ownerId = getOwnerId(targetKey);
+            const seen = new Set();
+            const byUser = [];
+            for (const p of sortedPlayersForPos) {
+                const uid = p.userId || getOwnerId(p.playerKey);
+                if (seen.has(uid)) continue;
+                seen.add(uid);
+                byUser.push(uid);
+            }
+            const ownerIdx = byUser.indexOf(ownerId);
+            topRolePosition = ownerIdx !== -1 ? ownerIdx + 1 : null;
+        }
+        const positionRole = topRolePosition ? this.getPositionRole(topRolePosition, guildTopRoles, guild) : null;
         const embedColor = this.getPositionColor(currentPosition);
         const medal = this.getPositionMedal(currentPosition);
 
@@ -1078,6 +1165,13 @@ class RankingService {
             for (const rp of rolePositions) {
                 descLines.push(`🎖️ **${rp.roleName}:** #${rp.position}`);
             }
+        }
+        // Znacznik profilu — tylko dla profili dodatkowych (gracze z jednym profilem nie widzą zmiany)
+        const recordProfileIdx = profileIndex || getProfileIndex(targetKey);
+        if (recordProfileIdx > 1) {
+            const marker = getProfileMarker(recordProfileIdx);
+            const labelSuffix = profileLabel ? ` — *${profileLabel}*` : '';
+            descLines.push(`**${msgs.recordProfileLabel}:** ${marker} #${recordProfileIdx}${labelSuffix}`);
         }
         const timeSince = this.formatTimeSince(previousTimestamp);
         if (timeSince) {
@@ -1300,23 +1394,24 @@ class RankingService {
     }
 
     /**
-     * Aktualizuje ranking użytkownika na danym serwerze
+     * Aktualizuje ranking gracza (profilu) na danym serwerze
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey - tożsamość profilu ("userId" lub "userId#N")
      * @param {string} userName
      * @param {string} bestScore
      * @param {string|null} bossName
+     * @param {string|null} profileLabel - etykieta profilu (nick w grze), tylko dla profili dodatkowych
      */
-    async updateUserRanking(guildId, userId, userName, bestScore, bossName = null) {
+    async updateUserRanking(guildId, playerKey, userName, bestScore, bossName = null, profileLabel = null) {
         // Całe read-modify-write w kolejce per-guild — eliminuje race condition przy równoczesnych /update
         return this._enqueue(guildId, async () => {
             if (this.config.ocr.detailedLogging.enabled) {
-                logger.info(`🔍 DEBUG: updateUserRanking - serwer: "${this.config.getAllGuilds().find(g => g.id === guildId)?.tag || guildId}", gracz: "${userName}", bestScore: "${bestScore}"`);
+                logger.info(`🔍 DEBUG: updateUserRanking - serwer: "${this.config.getAllGuilds().find(g => g.id === guildId)?.tag || guildId}", gracz: "${userName}", profil: ${getProfileIndex(playerKey)}, bestScore: "${bestScore}"`);
             }
 
             const ranking = await this.loadRanking(guildId);
             const newScoreValue = this.parseScoreValue(bestScore);
-            const currentScore = ranking[userId];
+            const currentScore = ranking[playerKey];
 
             let isNewRecord = false;
 
@@ -1331,24 +1426,27 @@ class RankingService {
 
             if (isNewRecord) {
                 const nowIso = new Date().toISOString();
-                ranking[userId] = {
+                ranking[playerKey] = {
                     score: bestScore,
                     username: userName,
                     timestamp: nowIso,
                     scoreValue: newScoreValue,
-                    userId,
+                    userId: getOwnerId(playerKey),
+                    playerKey,
+                    profileIndex: getProfileIndex(playerKey),
+                    profileLabel: profileLabel || null,
                     bossName: bossName || this.config.messages.unknownBossLabel
                 };
                 await this.saveRanking(guildId, ranking);
                 if (this.scoreHistoryService) {
-                    this.scoreHistoryService.addEntry(guildId, userId, {
+                    this.scoreHistoryService.addEntry(guildId, playerKey, {
                         score: bestScore,
                         scoreValue: newScoreValue,
                         timestamp: nowIso,
                         bossName: bossName || this.config.messages.unknownBossLabel
                     }).catch(err => logger.error('Błąd zapisu historii wyników:', err));
                 }
-                const affectedGuildIds = await this._removeWeakerScoresFromOtherGuilds(userId, newScoreValue, guildId);
+                const affectedGuildIds = await this._removeWeakerScoresFromOtherGuilds(playerKey, newScoreValue, guildId);
                 return { isNewRecord, ranking, currentScore, newTimestamp: nowIso, affectedGuildIds };
             }
 
@@ -1357,14 +1455,14 @@ class RankingService {
     }
 
     /**
-     * Zwraca aktualny rekord gracza lub null.
+     * Zwraca aktualny rekord profilu lub null.
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @returns {Promise<Object|null>}
      */
-    async getUserRecord(guildId, userId) {
+    async getUserRecord(guildId, playerKey) {
         const ranking = await this.loadRanking(guildId);
-        return ranking[userId] || null;
+        return ranking[playerKey] || null;
     }
 
     /**
@@ -1374,20 +1472,21 @@ class RankingService {
      * @param {string} userId
      * @param {Object|null} previousRecord
      */
-    async revertUserRecord(guildId, userId, previousRecord) {
+    async revertUserRecord(guildId, playerKey, previousRecord) {
         return this._enqueue(guildId, async () => {
             const ranking = await this.loadRanking(guildId);
             if (previousRecord) {
-                ranking[userId] = { ...previousRecord };
+                ranking[playerKey] = { ...previousRecord };
             } else {
-                delete ranking[userId];
+                delete ranking[playerKey];
             }
             await this.saveRanking(guildId, ranking);
         });
     }
 
     /**
-     * Pobiera posortowanych graczy dla danego serwera
+     * Pobiera posortowane profile graczy dla danego serwera.
+     * Każdy wpis ma playerKey (tożsamość profilu) oraz userId (właściciel Discord).
      * @param {string} guildId
      * @returns {Promise<Array>}
      */
@@ -1396,26 +1495,55 @@ class RankingService {
         if (cached) return cached;
         const ranking = await this.loadRanking(guildId);
         const sorted = Object.entries(ranking)
-            .map(([userId, data]) => ({ ...data, userId }))
+            .map(([playerKey, data]) => ({
+                ...data,
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+            }))
             .sort(compareByScoreThenTimestamp);
         this._sortedCache.set(guildId, sorted);
         return sorted;
     }
 
     /**
-     * SYMULACJA (read-only, /test): posortowani gracze serwera jak GDYBY zapisano nowy wynik.
-     * Nie modyfikuje danych — klonuje aktualny ranking i nakłada nowy wynik gracza.
+     * Lista graczy serwera zredukowana do jednego (najlepszego) profilu na użytkownika Discorda.
+     * Używana do wyliczania progów ról TOP — jeden member Discorda może mieć tylko jedną rolę,
+     * a profile dodatkowe nie mogą zabierać progów innym graczom.
+     * @param {string} guildId
+     * @returns {Promise<Array>}
      */
-    async simulateSortedPlayers(guildId, userId, userName, bestScore) {
+    async getSortedPlayersByUser(guildId) {
+        const all = await this.getSortedPlayers(guildId);
+        const bestPerUser = new Map();
+        for (const entry of all) {
+            if (!bestPerUser.has(entry.userId)) bestPerUser.set(entry.userId, entry);
+        }
+        return Array.from(bestPerUser.values());
+    }
+
+    /**
+     * SYMULACJA (read-only, /test): posortowani gracze serwera jak GDYBY zapisano nowy wynik.
+     * Nie modyfikuje danych — klonuje aktualny ranking i nakłada nowy wynik profilu.
+     */
+    async simulateSortedPlayers(guildId, playerKey, userName, bestScore) {
         const sorted = (await this.getSortedPlayers(guildId)).map(p => ({ ...p }));
         const newScoreValue = this.parseScoreValue(bestScore);
-        const idx = sorted.findIndex(p => p.userId === userId);
+        const idx = sorted.findIndex(p => p.playerKey === playerKey);
         if (idx !== -1) {
             if (newScoreValue > (sorted[idx].scoreValue || 0)) {
                 sorted[idx] = { ...sorted[idx], score: bestScore, scoreValue: newScoreValue, timestamp: new Date().toISOString() };
             }
         } else {
-            sorted.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, timestamp: new Date().toISOString() });
+            sorted.push({
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+                username: userName,
+                score: bestScore,
+                scoreValue: newScoreValue,
+                timestamp: new Date().toISOString(),
+            });
         }
         sorted.sort(compareByScoreThenTimestamp);
         return sorted;
@@ -1424,16 +1552,25 @@ class RankingService {
     /**
      * SYMULACJA (read-only, /test): globalny ranking jak GDYBY zapisano nowy wynik na danym serwerze.
      */
-    async simulateGlobalRanking(activeGuildIds, userId, userName, bestScore, sourceGuildId) {
+    async simulateGlobalRanking(activeGuildIds, playerKey, userName, bestScore, sourceGuildId) {
         const ranking = (await this.getGlobalRanking(activeGuildIds)).map(p => ({ ...p }));
         const newScoreValue = this.parseScoreValue(bestScore);
-        const idx = ranking.findIndex(p => p.userId === userId);
+        const idx = ranking.findIndex(p => p.playerKey === playerKey);
         if (idx !== -1) {
             if (newScoreValue > (ranking[idx].scoreValue || 0)) {
                 ranking[idx] = { ...ranking[idx], score: bestScore, scoreValue: newScoreValue, sourceGuildId, timestamp: new Date().toISOString() };
             }
         } else {
-            ranking.push({ userId, username: userName, score: bestScore, scoreValue: newScoreValue, sourceGuildId, timestamp: new Date().toISOString() });
+            ranking.push({
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+                username: userName,
+                score: bestScore,
+                scoreValue: newScoreValue,
+                sourceGuildId,
+                timestamp: new Date().toISOString(),
+            });
         }
         ranking.sort(compareByScoreThenTimestamp);
         return ranking;
@@ -1460,20 +1597,22 @@ class RankingService {
     }
 
     /**
-     * Po nowym rekordzie na `currentGuildId` usuwa gorsze wyniki tego gracza z pozostałych serwerów.
+     * Po nowym rekordzie na `currentGuildId` usuwa gorsze wyniki TEGO SAMEGO PROFILU z pozostałych serwerów.
+     * Kluczem jest playerKey, nie userId — inaczej rekord jednego profilu wykasowałby wpisy
+     * pozostałych profili tego samego gracza.
      * Zwraca listę guildId serwerów, z których usunięto wynik (do aktualizacji ról TOP).
      */
-    async _removeWeakerScoresFromOtherGuilds(userId, newScoreValue, currentGuildId) {
+    async _removeWeakerScoresFromOtherGuilds(playerKey, newScoreValue, currentGuildId) {
         const otherGuilds = this.config.getAllGuilds().filter(g => g.id !== currentGuildId);
         const affectedGuildIds = [];
         for (const guild of otherGuilds) {
             await this._enqueue(guild.id, async () => {
                 const ranking = await this.loadRanking(guild.id);
-                if (ranking[userId] && ranking[userId].scoreValue < newScoreValue) {
-                    const playerName = ranking[userId].username || userId;
+                if (ranking[playerKey] && ranking[playerKey].scoreValue < newScoreValue) {
+                    const playerName = ranking[playerKey].username || playerKey;
                     const currentGuildTag = this.config.getAllGuilds().find(g => g.id === currentGuildId)?.tag;
-                    logger.info(`🗑️ Usunięto gorszy wynik gracza "${playerName}" z serwera "${guild.tag || guild.id}" (pobity przez rekord na "${currentGuildTag || currentGuildId}")`);
-                    delete ranking[userId];
+                    logger.info(`🗑️ Usunięto gorszy wynik gracza "${playerName}" (profil ${getProfileIndex(playerKey)}) z serwera "${guild.tag || guild.id}" (pobity przez rekord na "${currentGuildTag || currentGuildId}")`);
+                    delete ranking[playerKey];
                     await this.saveRanking(guild.id, ranking);
                     affectedGuildIds.push(guild.id);
                 }
@@ -1483,18 +1622,18 @@ class RankingService {
     }
 
     /**
-     * Usuwa gracza z rankingu danego serwera
-     * @param {string} userId
+     * Usuwa profil gracza z rankingu danego serwera
+     * @param {string} playerKey
      * @param {string} guildId
      * @returns {Promise<boolean>}
      */
-    async removePlayerFromRanking(userId, guildId) {
+    async removePlayerFromRanking(playerKey, guildId) {
         try {
             const ranking = await this.loadRanking(guildId);
 
-            if (ranking[userId]) {
-                const playerName = ranking[userId].username || userId;
-                delete ranking[userId];
+            if (ranking[playerKey]) {
+                const playerName = ranking[playerKey].username || playerKey;
+                delete ranking[playerKey];
                 await this.saveRanking(guildId, ranking);
                 const guildTag = this.config.getAllGuilds().find(g => g.id === guildId)?.tag;
                 logger.info(`🗑️ Usunięto gracza "${playerName}" z rankingu serwera "${guildTag || guildId}"`);

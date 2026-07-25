@@ -5,6 +5,7 @@ const path = require('path');
 const { ACHIEVEMENTS, RARITY, CATEGORY_INFO } = require('../config/achievements');
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { getOwnerId, getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -52,9 +53,9 @@ class AchievementService {
         await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
     }
 
-    _ensureUser(data, userId) {
-        if (!data[userId]) {
-            data[userId] = {
+    _ensureUser(data, playerKey) {
+        if (!data[playerKey]) {
+            data[playerKey] = {
                 unlocked: {},
                 progress: {
                     recordCount: 0,
@@ -66,7 +67,7 @@ class AchievementService {
                 },
             };
         }
-        return data[userId];
+        return data[playerKey];
     }
 
     /**
@@ -75,18 +76,18 @@ class AchievementService {
      * (those unlocked since the previous record beat).
      *
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {{ scoreValue, bossName, isNewRecord, prevScoreValue, currentPosition }} ctx
      * @returns {Promise<string[]>}
      */
-    async processSubmission(guildId, userId, ctx, options = {}) {
+    async processSubmission(guildId, playerKey, ctx, options = {}) {
         if (!ctx.isNewRecord) return [];
         const preview = options.preview === true; // tryb /test — liczy odblokowane bez zapisu
 
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                const userData = this._ensureUser(data, userId);
+                const userData = this._ensureUser(data, playerKey);
                 const p = userData.progress;
 
                 // Aktualizuj progress przed sprawdzeniem warunków
@@ -148,16 +149,16 @@ class AchievementService {
      * Usuwa podane achievementIds z unlocked, dekrementuje recordCount o 1,
      * przywraca lastRecordAt i lastRecordBeatAt do wartości z poprzedniego rekordu.
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {string[]} achievementIds - ID osiągnięć zdobytych tym rekordem
      * @param {Object|null} previousRecord - poprzedni rekord ({ timestamp } lub null)
      */
-    async revertSubmissionAchievements(guildId, userId, achievementIds, previousRecord) {
+    async revertSubmissionAchievements(guildId, playerKey, achievementIds, previousRecord) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                if (!data[userId]) return;
-                const userData = data[userId];
+                if (!data[playerKey]) return;
+                const userData = data[playerKey];
                 for (const id of achievementIds) {
                     delete userData.unlocked[id];
                 }
@@ -167,7 +168,7 @@ class AchievementService {
                 userData.progress.lastRecordBeatAt = prevTs;
                 await this.saveData(guildId, data);
             } catch (err) {
-                logger.error(`revertSubmissionAchievements error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
+                logger.error(`revertSubmissionAchievements error (gracz ID ${playerKey}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
             }
         });
     }
@@ -176,12 +177,12 @@ class AchievementService {
      * Usuwa osiągnięcia powiązane z wynikiem i pobijaniem rekordów (kategorie 'score' i 'records')
      * oraz resetuje powiązane pola progress. Wywoływane przy usunięciu gracza z rankingu przez admina.
      */
-    async clearUserAchievements(guildId, userId) {
+    async clearUserAchievements(guildId, playerKey) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                if (!data[userId]) return;
-                const userData = data[userId];
+                if (!data[playerKey]) return;
+                const userData = data[playerKey];
                 const scoreAndRecordIds = new Set(
                     ACHIEVEMENTS.filter(a => a.category === 'score' || a.category === 'records').map(a => a.id)
                 );
@@ -201,16 +202,16 @@ class AchievementService {
      * (unlockedAt >= fromTimestamp). Osiągnięcia zdobyte WCZEŚNIEJ pozostają.
      * Wywoływane przy cofaniu wyniku gracza (community verification / panel Analizuj → Cofnij).
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {string} fromTimestamp - timestamp cofniętego rekordu (ISO)
      * @param {{ removedRecordCount?: number, previousRecord?: Object|null }} [opts]
      */
-    async clearAchievementsAfter(guildId, userId, fromTimestamp, { removedRecordCount = 0, previousRecord = null } = {}) {
+    async clearAchievementsAfter(guildId, playerKey, fromTimestamp, { removedRecordCount = 0, previousRecord = null } = {}) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                if (!data[userId]) return;
-                const userData = data[userId];
+                if (!data[playerKey]) return;
+                const userData = data[playerKey];
                 const cutoff = new Date(fromTimestamp).getTime();
                 for (const [id, info] of Object.entries(userData.unlocked || {})) {
                     const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
@@ -224,7 +225,7 @@ class AchievementService {
                 }
                 await this.saveData(guildId, data);
             } catch (err) {
-                logger.error(`clearAchievementsAfter error (gracz ID ${userId}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
+                logger.error(`clearAchievementsAfter error (gracz ID ${playerKey}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
             }
         });
     }
@@ -233,32 +234,32 @@ class AchievementService {
      * Usuwa WSZYSTKIE osiągnięcia i cały progress gracza na danym serwerze.
      * Wywoływane przez head admina z poziomu /manage → Reset osiągnięć.
      */
-    async resetAllAchievements(guildId, userId) {
+    async resetAllAchievements(guildId, playerKey) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                if (!data[userId]) return;
-                delete data[userId];
+                if (!data[playerKey]) return;
+                delete data[playerKey];
                 await this.saveData(guildId, data);
             } catch {}
         });
     }
 
-    async removeOneAchievement(guildId, userId, achId) {
+    async removeOneAchievement(guildId, playerKey, achId) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                if (!data[userId]?.unlocked?.[achId]) return;
-                delete data[userId].unlocked[achId];
+                if (!data[playerKey]?.unlocked?.[achId]) return;
+                delete data[playerKey].unlocked[achId];
                 await this.saveData(guildId, data);
             } catch {}
         });
     }
 
-    async getUnlockedAchievements(guildId, userId) {
+    async getUnlockedAchievements(guildId, playerKey) {
         try {
             const data = await this.loadData(guildId);
-            const unlocked = data[userId]?.unlocked || {};
+            const unlocked = data[playerKey]?.unlocked || {};
             return ACHIEVEMENTS.filter(a => unlocked[a.id]).map(a => ({ ...a, unlockedAt: unlocked[a.id].unlockedAt }));
         } catch { return []; }
     }
@@ -269,14 +270,14 @@ class AchievementService {
      * read-modify-write jest serializowana per serwer (zapobiega utracie zapisów
      * i cofaniu lastRecordBeatAt w wyścigu z processSubmission).
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {(progress: Object) => void} incrementFn - inkrementuje odpowiedni licznik postępu
      */
-    async _trackExplorer(guildId, userId, incrementFn) {
+    async _trackExplorer(guildId, playerKey, incrementFn) {
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);
-                const userData = this._ensureUser(data, userId);
+                const userData = this._ensureUser(data, playerKey);
                 const p = userData.progress;
                 incrementFn(p);
 
@@ -293,48 +294,48 @@ class AchievementService {
         });
     }
 
-    async trackRankingView(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.rankingViews = (p.rankingViews || 0) + 1; });
+    async trackRankingView(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.rankingViews = (p.rankingViews || 0) + 1; });
     }
 
     /**
      * Śledzi aktywację subskrypcji — może odblokować ukryte osiągnięcia eksploratora.
      */
-    async trackSubscription(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.subscriptions = (p.subscriptions || 0) + 1; });
+    async trackSubscription(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.subscriptions = (p.subscriptions || 0) + 1; });
     }
 
-    async trackNonRecord(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.nonRecordCount = (p.nonRecordCount || 0) + 1; });
+    async trackNonRecord(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.nonRecordCount = (p.nonRecordCount || 0) + 1; });
     }
 
-    async trackCvApproved(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.cvApprovedCount = (p.cvApprovedCount || 0) + 1; });
+    async trackCvApproved(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.cvApprovedCount = (p.cvApprovedCount || 0) + 1; });
     }
 
-    async trackAiAnalyzed(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.aiRescuedCount = (p.aiRescuedCount || 0) + 1; });
+    async trackAiAnalyzed(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.aiRescuedCount = (p.aiRescuedCount || 0) + 1; });
     }
 
-    async trackProfileSearch(guildId, userId) {
-        return this._trackExplorer(guildId, userId, p => { p.profileSearches = (p.profileSearches || 0) + 1; });
+    async trackProfileSearch(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.profileSearches = (p.profileSearches || 0) + 1; });
     }
 
     /**
      * Tworzy embed i komponenty dla komendy /achievements.
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {string} lang - 'pol' | 'eng'
      * @param {string} view - 'cat' | 'overview'
      * @param {string|null} category - klucz kategorii (gdy view='cat')
      * @returns {Promise<{ embed: EmbedBuilder, components: ActionRowBuilder[] }>}
      */
-    async buildAchievementsView(guildId, userId, lang, view, category, crossServerGuildName = null) {
+    async buildAchievementsView(guildId, playerKey, lang, view, category, crossServerGuildName = null) {
         const isPol = lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
 
         const data = await this.loadData(guildId);
-        const userData = this._ensureUser(data, userId);
+        const userData = this._ensureUser(data, playerKey);
         const { unlocked, progress } = userData;
 
         let embed;
@@ -484,13 +485,13 @@ class AchievementService {
     }
 
     // Merge osiągnięć i postępu ze wszystkich serwerów dla jednego gracza
-    async _mergeAchievements(allGuildIds, userId) {
+    async _mergeAchievements(allGuildIds, playerKey) {
         const ids = allGuildIds instanceof Set ? [...allGuildIds] : (Array.isArray(allGuildIds) ? allGuildIds : [allGuildIds]);
         const merged = { unlocked: {}, progress: null };
 
         for (const guildId of ids) {
             const data = await this.loadData(guildId);
-            const ud = data[userId];
+            const ud = data[playerKey];
             if (!ud) continue;
 
             for (const [achId, info] of Object.entries(ud.unlocked || {})) {
@@ -540,10 +541,10 @@ class AchievementService {
     }
 
     // Widok własnych osiągnięć zsumowany ze wszystkich serwerów
-    async buildAchievementsViewGlobal(allGuildIds, userId, lang, view, category) {
+    async buildAchievementsViewGlobal(allGuildIds, playerKey, lang, view, category) {
         const isPol = lang === 'pol';
         const t = (pol, eng) => isPol ? pol : eng;
-        const { unlocked, progress } = await this._mergeAchievements(allGuildIds, userId);
+        const { unlocked, progress } = await this._mergeAchievements(allGuildIds, playerKey);
 
         let embed;
         if (view === 'overview') {
@@ -677,11 +678,20 @@ class AchievementService {
         const total = ACHIEVEMENTS.length;
         const playerMap = new Map();
 
-        for (const [userId, data] of Object.entries(ranking)) {
-            const count = achieveData[userId]?.unlocked
-                ? Object.keys(achieveData[userId].unlocked).length
+        // Ranking osiągnięć jest per PROFIL (osiągnięcia liczone są od wyników profilu),
+        // dlatego iterujemy po playerKey; userId zostaje jako właściciel do wzmianek.
+        for (const [playerKey, data] of Object.entries(ranking)) {
+            const count = achieveData[playerKey]?.unlocked
+                ? Object.keys(achieveData[playerKey].unlocked).length
                 : 0;
-            playerMap.set(userId, { userId, username: data.username || userId, count, total });
+            playerMap.set(playerKey, {
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+                username: data.username || getOwnerId(playerKey),
+                count,
+                total,
+            });
         }
 
         return Array.from(playerMap.values())
@@ -698,15 +708,17 @@ class AchievementService {
                 rankingService.loadRanking(guildId)
             ]);
 
-            for (const [userId, data] of Object.entries(ranking)) {
-                const count = achieveData[userId]?.unlocked
-                    ? Object.keys(achieveData[userId].unlocked).length
+            for (const [playerKey, data] of Object.entries(ranking)) {
+                const count = achieveData[playerKey]?.unlocked
+                    ? Object.keys(achieveData[playerKey].unlocked).length
                     : 0;
-                const existing = bestPerPlayer.get(userId);
+                const existing = bestPerPlayer.get(playerKey);
                 if (!existing || count > existing.count) {
-                    bestPerPlayer.set(userId, {
-                        userId,
-                        username: data.username || userId,
+                    bestPerPlayer.set(playerKey, {
+                        playerKey,
+                        userId: getOwnerId(playerKey),
+                        profileIndex: getProfileIndex(playerKey),
+                        username: data.username || getOwnerId(playerKey),
                         count,
                         total,
                         sourceGuildId: guildId
@@ -721,7 +733,7 @@ class AchievementService {
 
     async getAchievementRankingByRole(guildId, roleId, guild, rankingService, roleRankingConfigService) {
         const allPlayers = await this.getAchievementRanking(guildId, rankingService);
-        const playerIds = allPlayers.map(p => p.userId);
+        const playerIds = [...new Set(allPlayers.map(p => p.userId))];
         const membersWithRole = await roleRankingConfigService.getMembersWithRole(guild, roleId, playerIds);
         return allPlayers.filter(p => membersWithRole.has(p.userId));
     }
@@ -751,7 +763,8 @@ class AchievementService {
             const medal = pos === 1 ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : `**#${pos}**`;
             const tag = guildTagMap ? (guildTagMap.get(p.sourceGuildId) || '') : '';
             const tagSuffix = tag ? ` • ${tag}` : '';
-            const name = p.userId === callerId ? `**${p.username}**` : p.username;
+            const displayName = formatProfileDisplayName(p.username, p.profileIndex || 1);
+            const name = p.userId === callerId ? `**${displayName}**` : displayName;
             return `${medal} ${name} — **${p.count}**${tagSuffix}`;
         });
 

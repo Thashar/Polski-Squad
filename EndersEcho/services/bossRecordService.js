@@ -2,7 +2,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
-const { compareByScoreThenTimestamp } = require('../utils/helpers');
+const { compareByScoreThenTimestamp, getOwnerId, getProfileIndex } = require('../utils/helpers');
 
 class BossRecordService {
     constructor(dataDir) {
@@ -41,17 +41,17 @@ class BossRecordService {
      * Wywoływane zawsze po pozytywnym OCR — niezależnie od wyniku rekordu ogólnego.
      * @returns {{ isNewBossRecord: boolean, previousBossRecord: object|null }}
      */
-    async updateBossRecord(guildId, userId, bossName, username, score, scoreValue, timestamp) {
+    async updateBossRecord(guildId, playerKey, bossName, username, score, scoreValue, timestamp) {
         return this._enqueue(guildId, async () => {
             const data = await this._load(guildId);
-            if (!data[userId]) data[userId] = {};
-            const existing = data[userId][bossName];
+            if (!data[playerKey]) data[playerKey] = {};
+            const existing = data[playerKey][bossName];
             const existingValue = existing && typeof existing.scoreValue === 'number' ? existing.scoreValue : -Infinity;
             if (scoreValue <= existingValue) {
                 return { isNewBossRecord: false, previousBossRecord: existing ? { ...existing } : null };
             }
             const previousBossRecord = existing ? { ...existing } : null;
-            data[userId][bossName] = { score, scoreValue, timestamp, username };
+            data[playerKey][bossName] = { score, scoreValue, timestamp, username };
             await this._save(guildId, data);
             return { isNewBossRecord: true, previousBossRecord };
         });
@@ -61,15 +61,15 @@ class BossRecordService {
      * Cofnięcie rekordu per-boss (CV remove / ocr revert).
      * previousBossRecord = null → usuwa rekord bossa dla gracza.
      */
-    async revertBossRecord(guildId, userId, bossName, previousBossRecord) {
+    async revertBossRecord(guildId, playerKey, bossName, previousBossRecord) {
         return this._enqueue(guildId, async () => {
             const data = await this._load(guildId);
-            if (!data[userId]) return;
+            if (!data[playerKey]) return;
             if (previousBossRecord) {
-                data[userId][bossName] = { ...previousBossRecord };
+                data[playerKey][bossName] = { ...previousBossRecord };
             } else {
-                delete data[userId][bossName];
-                if (Object.keys(data[userId]).length === 0) delete data[userId];
+                delete data[playerKey][bossName];
+                if (Object.keys(data[playerKey]).length === 0) delete data[playerKey];
             }
             await this._save(guildId, data);
         });
@@ -79,12 +79,12 @@ class BossRecordService {
      * Usuwa WSZYSTKIE rekordy bossów gracza na danym serwerze (np. przy usunięciu gracza z rankingu).
      * @returns {number} liczba usuniętych rekordów bossów
      */
-    async removeAllUserBossRecords(guildId, userId) {
+    async removeAllUserBossRecords(guildId, playerKey) {
         return this._enqueue(guildId, async () => {
             const data = await this._load(guildId);
-            if (!data[userId]) return 0;
-            const removed = Object.keys(data[userId]).length;
-            delete data[userId];
+            if (!data[playerKey]) return 0;
+            const removed = Object.keys(data[playerKey]).length;
+            delete data[playerKey];
             await this._save(guildId, data);
             return removed;
         });
@@ -94,50 +94,65 @@ class BossRecordService {
      * Read-only: czy podany wynik pobiłby istniejący rekord bossa gracza?
      * Używane w trybie dryRun (/test) — nie zapisuje niczego.
      */
-    async wouldBeatBossRecord(guildId, userId, bossName, scoreValue) {
+    async wouldBeatBossRecord(guildId, playerKey, bossName, scoreValue) {
         const data = await this._load(guildId);
-        const existing = data?.[userId]?.[bossName];
+        const existing = data?.[playerKey]?.[bossName];
         const existingValue = (existing && typeof existing.scoreValue === 'number') ? existing.scoreValue : -Infinity;
         return scoreValue > existingValue;
     }
 
     /**
-     * Globalny ranking graczy wg najlepszego wyniku na danym bossie (cross-guild).
+     * Globalny ranking profili wg najlepszego wyniku na danym bossie (cross-guild).
+     * Każdy profil gracza to osobny wpis; `userId` to właściciel (do wzmianek Discord).
      * @param {string[]} allGuildIds
      * @param {string} bossName - angielska nazwa bossa
-     * @returns {Array<{ userId, username, score, scoreValue, timestamp, sourceGuildId }>}
+     * @returns {Array<{ playerKey, userId, profileIndex, username, score, scoreValue, timestamp, sourceGuildId }>}
      */
     async getGlobalBossRanking(allGuildIds, bossName) {
         const bestPerPlayer = new Map();
         for (const guildId of allGuildIds) {
             const data = await this._load(guildId);
-            for (const [userId, bosses] of Object.entries(data)) {
+            for (const [playerKey, bosses] of Object.entries(data)) {
                 const entry = bosses[bossName];
                 if (!entry) continue;
-                const prev = bestPerPlayer.get(userId);
+                const prev = bestPerPlayer.get(playerKey);
                 if (!prev || entry.scoreValue > prev.scoreValue) {
-                    bestPerPlayer.set(userId, { ...entry, sourceGuildId: guildId });
+                    bestPerPlayer.set(playerKey, { ...entry, sourceGuildId: guildId });
                 }
             }
         }
         return Array.from(bestPerPlayer.entries())
-            .map(([userId, entry]) => ({ userId, ...entry }))
+            .map(([playerKey, entry]) => ({
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+                ...entry,
+            }))
             .sort(compareByScoreThenTimestamp);
     }
 
     /**
-     * SYMULACJA (read-only, /test): globalny ranking bossa jak GDYBY zapisano nowy wynik gracza.
+     * SYMULACJA (read-only, /test): globalny ranking bossa jak GDYBY zapisano nowy wynik profilu.
      * Nie modyfikuje danych — klonuje aktualny ranking i nakłada nowy wynik.
      */
-    async simulateGlobalBossRanking(allGuildIds, bossName, userId, scoreValue, score, username, sourceGuildId) {
+    async simulateGlobalBossRanking(allGuildIds, bossName, playerKey, scoreValue, score, username, sourceGuildId) {
         const ranking = (await this.getGlobalBossRanking(allGuildIds, bossName)).map(p => ({ ...p }));
-        const idx = ranking.findIndex(p => p.userId === userId);
+        const idx = ranking.findIndex(p => p.playerKey === playerKey);
         if (idx !== -1) {
             if (scoreValue > (ranking[idx].scoreValue || 0)) {
                 ranking[idx] = { ...ranking[idx], score, scoreValue, sourceGuildId, timestamp: new Date().toISOString() };
             }
         } else {
-            ranking.push({ userId, username, score, scoreValue, sourceGuildId, timestamp: new Date().toISOString() });
+            ranking.push({
+                playerKey,
+                userId: getOwnerId(playerKey),
+                profileIndex: getProfileIndex(playerKey),
+                username,
+                score,
+                scoreValue,
+                sourceGuildId,
+                timestamp: new Date().toISOString(),
+            });
         }
         ranking.sort(compareByScoreThenTimestamp);
         return ranking;
@@ -155,11 +170,11 @@ class BossRecordService {
         const bossPlayers = new Map();
         for (const guildId of allGuildIds) {
             const data = await this._load(guildId);
-            for (const [userId, bosses] of Object.entries(data)) {
+            for (const [playerKey, bosses] of Object.entries(data)) {
                 for (const bossName of Object.keys(bosses)) {
                     if (!knownSet.has(bossName)) continue;
                     if (!bossPlayers.has(bossName)) bossPlayers.set(bossName, new Set());
-                    bossPlayers.get(bossName).add(userId);
+                    bossPlayers.get(bossName).add(playerKey);
                 }
             }
         }
@@ -193,27 +208,27 @@ class BossRecordService {
      * Liczy globalną pozycję gracza per boss jednym przebiegiem przez wszystkie serwery.
      * Zwraca tylko bossów gdzie gracz MA rekord.
      * @param {string[]|Set} allGuildIds
-     * @param {string} userId
+     * @param {string} playerKey
      * @returns {Promise<Object>} { bossName: position (1-indexed) }
      */
-    async getPlayerBossPositions(allGuildIds, userId) {
+    async getPlayerBossPositions(allGuildIds, playerKey) {
         const allGuildsData = await Promise.all(
             [...allGuildIds].map(gid => this._load(gid).catch(() => ({})))
         );
         // Zbierz najlepszy wynik per gracz per boss ze wszystkich serwerów
-        const bossPlayerBest = {}; // bossName -> Map<userId, scoreValue>
+        const bossPlayerBest = {}; // bossName -> Map<playerKey, scoreValue>
         for (const guildData of allGuildsData) {
-            for (const [uid, bosses] of Object.entries(guildData)) {
+            for (const [playerKey, bosses] of Object.entries(guildData)) {
                 for (const [bossName, rec] of Object.entries(bosses)) {
                     if (!bossPlayerBest[bossName]) bossPlayerBest[bossName] = new Map();
-                    const cur = bossPlayerBest[bossName].get(uid) ?? -Infinity;
-                    if (rec.scoreValue > cur) bossPlayerBest[bossName].set(uid, rec.scoreValue);
+                    const cur = bossPlayerBest[bossName].get(playerKey) ?? -Infinity;
+                    if (rec.scoreValue > cur) bossPlayerBest[bossName].set(playerKey, rec.scoreValue);
                 }
             }
         }
         const positions = {};
         for (const [bossName, playerMap] of Object.entries(bossPlayerBest)) {
-            const targetScore = playerMap.get(userId);
+            const targetScore = playerMap.get(playerKey);
             if (targetScore === undefined) continue;
             const sorted = [...playerMap.values()].sort((a, b) => b - a);
             positions[bossName] = sorted.findIndex(s => s === targetScore) + 1;
@@ -224,25 +239,25 @@ class BossRecordService {
     /**
      * Zwraca rekordy bossów jednego gracza na danym serwerze.
      * @param {string} guildId
-     * @param {string} userId
+     * @param {string} playerKey
      * @returns {Object} { bossName: { score, scoreValue, timestamp, username } }
      */
-    async getUserBossRecords(guildId, userId) {
+    async getUserBossRecords(guildId, playerKey) {
         const all = await this._load(guildId);
-        return all[userId] || {};
+        return all[playerKey] || {};
     }
 
     /**
      * Zwraca najlepsze rekordy bossów gracza ze wszystkich serwerów (merge po scoreValue).
      * @param {string[]|Set} allGuildIds
-     * @param {string} userId
+     * @param {string} playerKey
      * @returns {Object} { bossName: { score, scoreValue, timestamp, username, sourceGuildId } }
      */
-    async getUserBossRecordsAllGuilds(allGuildIds, userId) {
+    async getUserBossRecordsAllGuilds(allGuildIds, playerKey) {
         const perGuild = await Promise.all(
             [...allGuildIds].map(async gid => {
                 const recs = await this._load(gid).catch(() => ({}));
-                return [gid, recs[userId] || {}];
+                return [gid, recs[playerKey] || {}];
             })
         );
         const merged = {};
@@ -272,15 +287,15 @@ class BossRecordService {
             await this._enqueue(guildId, async () => {
                 const data = await this._load(guildId);
                 let changed = false;
-                for (const [userId, bosses] of Object.entries(data)) {
+                for (const [playerKey, bosses] of Object.entries(data)) {
                     const rawEntry = bosses[rawName];
                     if (!rawEntry) continue;
                     const engEntry = bosses[englishName];
                     if (!engEntry || rawEntry.scoreValue > engEntry.scoreValue) {
-                        data[userId][englishName] = { ...rawEntry };
+                        data[playerKey][englishName] = { ...rawEntry };
                     }
-                    delete data[userId][rawName];
-                    if (Object.keys(data[userId]).length === 0) delete data[userId];
+                    delete data[playerKey][rawName];
+                    if (Object.keys(data[playerKey]).length === 0) delete data[playerKey];
                     changed = true;
                     migratedCount++;
                 }

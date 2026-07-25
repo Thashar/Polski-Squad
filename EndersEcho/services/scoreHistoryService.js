@@ -1,79 +1,88 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { getOwnerId } = require('../utils/helpers');
 
+/**
+ * Historia wyników. Plik na PROFIL: wyniki/{playerKey}.json
+ * (profil główny = samo userId, profile dodatkowe = "userId#N").
+ *
+ * Statystyki zbiorcze (przyrost graczy, aktywność, nowi gracze) agregują po WŁAŚCICIELU
+ * (userId), nie po pliku — gracz z kilkoma profilami to nadal jedna osoba, a wszystkie
+ * liczniki graczy w bocie muszą pokazywać tę samą liczbę co rankingService.getCountedPlayers().
+ */
 class ScoreHistoryService {
     constructor(dataDir) {
         this.dataDir = dataDir;
     }
 
-    _file(guildId, userId) {
-        return path.join(this.dataDir, 'guilds', guildId, 'wyniki', `${userId}.json`);
+    _file(guildId, playerKey) {
+        return path.join(this.dataDir, 'guilds', guildId, 'wyniki', `${playerKey}.json`);
     }
 
-    async _load(guildId, userId) {
+    async _load(guildId, playerKey) {
         try {
-            const raw = await fs.readFile(this._file(guildId, userId), 'utf8');
+            const raw = await fs.readFile(this._file(guildId, playerKey), 'utf8');
             return JSON.parse(raw);
         } catch {
             return [];
         }
     }
 
-    async _save(guildId, userId, entries) {
-        const file = this._file(guildId, userId);
+    async _save(guildId, playerKey, entries) {
+        const file = this._file(guildId, playerKey);
         await fs.mkdir(path.dirname(file), { recursive: true });
         await fs.writeFile(file, JSON.stringify(entries, null, 2), 'utf8');
     }
 
-    async addEntry(guildId, userId, entry) {
-        const entries = await this._load(guildId, userId);
+    async addEntry(guildId, playerKey, entry) {
+        const entries = await this._load(guildId, playerKey);
         entries.push(entry);
-        await this._save(guildId, userId, entries);
+        await this._save(guildId, playerKey, entries);
     }
 
     // Usuwa ostatni wpis z danym scoreValue (przy cofaniu rekordu przez admina)
-    async removeEntry(guildId, userId, scoreValue) {
-        const entries = await this._load(guildId, userId);
+    async removeEntry(guildId, playerKey, scoreValue) {
+        const entries = await this._load(guildId, playerKey);
         if (entries.length === 0) return;
         const lastIdx = entries.map(e => e.scoreValue).lastIndexOf(scoreValue);
         if (lastIdx === -1) return;
         entries.splice(lastIdx, 1);
-        await this._save(guildId, userId, entries);
+        await this._save(guildId, playerKey, entries);
     }
 
     // Usuwa wszystkie wpisy z timestamp >= fromTimestamp (przy cofaniu rekordu przez CV).
     // Zwraca liczbę usuniętych wpisów.
-    async removeEntriesAfter(guildId, userId, fromTimestamp) {
-        const entries = await this._load(guildId, userId);
+    async removeEntriesAfter(guildId, playerKey, fromTimestamp) {
+        const entries = await this._load(guildId, playerKey);
         if (entries.length === 0) return 0;
         const cutoff = new Date(fromTimestamp).getTime();
         const filtered = entries.filter(e => new Date(e.timestamp).getTime() < cutoff);
         const removed = entries.length - filtered.length;
         if (removed > 0) {
-            await this._save(guildId, userId, filtered);
+            await this._save(guildId, playerKey, filtered);
         }
         return removed;
     }
 
     // Zwraca WSZYSTKIE wpisy gracza (bez filtra dni), posortowane chronologicznie. Używane przez panel "Usuń wynik".
-    async getAllUserEntries(guildId, userId) {
-        const entries = await this._load(guildId, userId);
+    async getAllUserEntries(guildId, playerKey) {
+        const entries = await this._load(guildId, playerKey);
         return entries.slice().sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     }
 
     // Usuwa wpis o danym timestampie (ms). Zwraca usunięty wpis lub null. Używane przez panel "Usuń wynik".
-    async removeEntryByTimestamp(guildId, userId, timestampMs) {
-        const entries = await this._load(guildId, userId);
+    async removeEntryByTimestamp(guildId, playerKey, timestampMs) {
+        const entries = await this._load(guildId, playerKey);
         const idx = entries.findIndex(e => new Date(e.timestamp).getTime() === timestampMs);
         if (idx === -1) return null;
         const [removed] = entries.splice(idx, 1);
-        await this._save(guildId, userId, entries);
+        await this._save(guildId, playerKey, entries);
         return removed;
     }
 
     // Zwraca wpisy z ostatnich maxDaysBack dni, posortowane chronologicznie
-    async getUserHistory(guildId, userId, maxDaysBack = 90) {
-        const entries = await this._load(guildId, userId);
+    async getUserHistory(guildId, playerKey, maxDaysBack = 90) {
+        const entries = await this._load(guildId, playerKey);
         const cutoff = Date.now() - maxDaysBack * 24 * 60 * 60 * 1000;
         return entries
             .filter(e => new Date(e.timestamp).getTime() >= cutoff)
@@ -82,11 +91,11 @@ class ScoreHistoryService {
 
     // Zwraca wpisy ze wszystkich serwerów, scalone i posortowane chronologicznie.
     // Każdy wpis ma dodane pole guildId (z ścieżki pliku) do identyfikacji klanu.
-    async getUserHistoryAllGuilds(allGuildIds, userId, maxDaysBack = 90) {
+    async getUserHistoryAllGuilds(allGuildIds, playerKey, maxDaysBack = 90) {
         const cutoff = Date.now() - maxDaysBack * 24 * 60 * 60 * 1000;
         const allEntries = await Promise.all(
             allGuildIds.map(gid =>
-                this._load(gid, userId).then(entries => entries.map(e => ({ ...e, guildId: gid })))
+                this._load(gid, playerKey).then(entries => entries.map(e => ({ ...e, guildId: gid })))
             )
         );
         return allEntries
@@ -118,14 +127,17 @@ class ScoreHistoryService {
         return result;
     }
 
-    // Zwraca { guildId: liczba_graczy } — ile unikalnych plików wyników istnieje na danym serwerze.
+    // Zwraca { guildId: liczba_graczy } — ile unikalnych GRACZY (nie profili) ma wyniki na danym serwerze.
     async getGuildPlayerCounts(allGuildIds) {
         const counts = {};
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
             let files = [];
             try { files = await fs.readdir(dir); } catch { /* brak wyników */ }
-            counts[guildId] = files.filter(f => f.endsWith('.json')).length;
+            const owners = new Set(
+                files.filter(f => f.endsWith('.json')).map(f => getOwnerId(f.slice(0, -5)))
+            );
+            counts[guildId] = owners.size;
         }
         return counts;
     }
@@ -165,7 +177,9 @@ class ScoreHistoryService {
             }
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
-                const userId = file.slice(0, -5);
+                // Nazwa pliku = playerKey; gracza identyfikuje właściciel, więc wszystkie
+                // profile jednej osoby scalają się w jeden wpis "pierwszy raz widziany"
+                const userId = getOwnerId(file.slice(0, -5));
                 if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
@@ -212,7 +226,8 @@ class ScoreHistoryService {
 
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
-                const userId = file.slice(0, -5);
+                // Wszystkie profile gracza scalane w jeden wpis osoby (nazwa pliku = playerKey)
+                const userId = getOwnerId(file.slice(0, -5));
                 if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
@@ -269,10 +284,10 @@ class ScoreHistoryService {
 
     // Zwraca { guildId, entry } dla najwcześniejszego wpisu danego gracza (szukane po wszystkich serwerach).
     // Używane do ustalenia, na którym serwerze i z jakim wynikiem gracz pojawił się po raz pierwszy.
-    async getUserEarliestGuildEntry(allGuildIds, userId) {
+    async getUserEarliestGuildEntry(allGuildIds, playerKey) {
         let best = null;
         for (const guildId of allGuildIds) {
-            const entries = await this._load(guildId, userId);
+            const entries = await this._load(guildId, playerKey);
             if (!Array.isArray(entries) || entries.length === 0) continue;
             for (const entry of entries) {
                 const ts = new Date(entry.timestamp).getTime();
@@ -289,22 +304,27 @@ class ScoreHistoryService {
         const result = {};
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
-            const entries = [];
+            // ownerId -> najwcześniejszy timestamp (profile jednej osoby scalane w jeden wpis)
+            const firstByOwner = new Map();
             let files;
             try { files = await fs.readdir(dir); } catch { result[guildId] = []; continue; }
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
-                if (allowedUserIds && !allowedUserIds.has(file.slice(0, -5))) continue;
+                const ownerId = getOwnerId(file.slice(0, -5));
+                if (allowedUserIds && !allowedUserIds.has(ownerId)) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
                     const userEntries = JSON.parse(raw);
                     if (!Array.isArray(userEntries) || userEntries.length === 0) continue;
                     const earliest = Math.min(...userEntries.map(e => new Date(e.timestamp).getTime()));
                     if (isNaN(earliest)) continue;
-                    entries.push({ userId: file.slice(0, -5), firstTimestamp: earliest });
+                    const prev = firstByOwner.get(ownerId);
+                    if (prev === undefined || earliest < prev) firstByOwner.set(ownerId, earliest);
                 } catch {}
             }
-            result[guildId] = entries.sort((a, b) => a.firstTimestamp - b.firstTimestamp);
+            result[guildId] = Array.from(firstByOwner.entries())
+                .map(([userId, firstTimestamp]) => ({ userId, firstTimestamp }))
+                .sort((a, b) => a.firstTimestamp - b.firstTimestamp);
         }
         return result;
     }

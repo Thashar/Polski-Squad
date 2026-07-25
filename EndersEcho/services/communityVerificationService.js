@@ -38,7 +38,8 @@ class CommunityVerificationService {
      * Tworzy nową sesję głosowania po opublikowaniu rekordu.
      * @param {Object} opts
      * @param {string} opts.guildId
-     * @param {string} opts.userId
+     * @param {string} opts.userId - właściciel Discord (blokada, sprawdzenie głosu na siebie)
+     * @param {string} opts.playerKey - profil, którego dotyczy rekord (cofnięcie wyniku)
      * @param {string} opts.messageId - ID publicznej wiadomości z rekordem
      * @param {string} opts.channelId
      * @param {string} opts.messageUrl
@@ -46,11 +47,12 @@ class CommunityVerificationService {
      * @param {Object} opts.newRecord - { score, bossName, timestamp }
      * @param {string[]} opts.newAchievements - ID osiągnięć zdobytych tym rekordem
      */
-    async createSession({ guildId, userId, messageId, channelId, messageUrl, previousRecord, newRecord, newAchievements, previousBossRecord, skipGlobalRevert }) {
+    async createSession({ guildId, userId, playerKey, messageId, channelId, messageUrl, previousRecord, newRecord, newAchievements, previousBossRecord, skipGlobalRevert }) {
         await this._loadPromise;
         this._sessions[messageId] = {
             guildId,
             userId,
+            playerKey: playerKey || userId,
             channelId,
             messageUrl,
             previousRecord: previousRecord || null,
@@ -68,11 +70,11 @@ class CommunityVerificationService {
     }
 
     /**
-     * Zwraca wszystkie aktywne (pending) sesje dla danego userId+guildId.
+     * Zwraca wszystkie aktywne (pending) sesje dla danego profilu (playerKey) + guildId.
      */
-    getPendingSessionsForUser(userId, guildId) {
+    getPendingSessionsForUser(playerKey, guildId) {
         return Object.entries(this._sessions)
-            .filter(([, s]) => s.userId === userId && s.guildId === guildId && s.status === 'pending')
+            .filter(([, s]) => (s.playerKey || s.userId) === playerKey && s.guildId === guildId && s.status === 'pending')
             .map(([msgId, s]) => ({ messageId: msgId, ...s }));
     }
 
@@ -134,11 +136,11 @@ class CommunityVerificationService {
      * Zamyka wszystkie pending sesje gracza na danym serwerze (gdy pobił nowy rekord).
      * Zwraca listę zamkniętych sessionId (messageId).
      */
-    async expireUserSessions(userId, guildId) {
+    async expireUserSessions(playerKey, guildId) {
         await this._loadPromise;
         const expired = [];
         for (const [msgId, session] of Object.entries(this._sessions)) {
-            if (session.userId === userId && session.guildId === guildId && session.status === 'pending') {
+            if ((session.playerKey || session.userId) === playerKey && session.guildId === guildId && session.status === 'pending') {
                 session.status = 'expired';
                 session.closedAt = new Date().toISOString();
                 expired.push(msgId);

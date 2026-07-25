@@ -4,6 +4,7 @@ const fs   = require('fs');
 const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
 const { formatMessage } = require('../utils/helpers');
 
 const logger = createBotLogger('EndersEcho');
@@ -51,7 +52,7 @@ class GlobalTop10Service {
                 firstTrigger: null,
                 nextTrigger:  null,
                 triggerCount: 0,
-                lastSnapshot: {},   // { [userId]: position }
+                lastSnapshot: {},   // { [playerKey]: position }
             };
         }
     }
@@ -184,7 +185,7 @@ class GlobalTop10Service {
 
         // Zaktualizuj snapshot przed wysłaniem
         const newSnapshot = {};
-        top10.forEach((p, i) => { newSnapshot[p.userId] = i + 1; });
+        top10.forEach((p, i) => { newSnapshot[p.playerKey || p.userId] = i + 1; });
         this._cfg.lastSnapshot = newSnapshot;
         this._save();
 
@@ -220,7 +221,7 @@ class GlobalTop10Service {
         for (let i = 0; i < top10.length; i++) {
             const player   = top10[i];
             const position = i + 1;
-            const prevPos  = lastSnapshot[player.userId] || null;
+            const prevPos  = lastSnapshot[player.playerKey || player.userId] || null;
 
             // Zmiana pozycji
             let changeStr, changeSign;
@@ -249,6 +250,8 @@ class GlobalTop10Service {
                     if (member) displayName = member.displayName;
                 }
             } catch { /* fallback na username */ }
+            // Profil dodatkowy → nick + znacznik (② / ③)
+            displayName = formatProfileDisplayName(displayName, player.profileIndex || getProfileIndex(player.playerKey));
 
             const tag       = guildTagMap.get(player.sourceGuildId);
             const date      = new Date(player.timestamp);
@@ -316,7 +319,7 @@ class GlobalTop10Service {
         }
         top10.forEach((player, idx) => {
             // ~20% graczy jako 🆕 (brak w snapshocie), reszta z losową poprzednią pozycją
-            if (Math.random() > 0.2) fakeSnapshot[player.userId] = positions[idx];
+            if (Math.random() > 0.2) fakeSnapshot[player.playerKey || player.userId] = positions[idx];
         });
 
         return this._buildTop10Embed(top10, fakeSnapshot, bossName, msgs, null, client);
@@ -373,8 +376,8 @@ class GlobalTop10Service {
      * Buduje dane snippetu (awans w globalnym rankingu).
      * Zwraca { title, description } lub null jeśli brak zmiany pozycji.
      */
-    async buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
-        const newGlobalIndex = newGlobalRanking.findIndex(p => p.userId === userId);
+    async buildSnippetFieldData(playerKey, newGlobalRanking, prevGlobalPosition, msgs, client) {
+        const newGlobalIndex = newGlobalRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
         if (newGlobalIndex === -1) return null;
         const newGlobalPosition = newGlobalIndex + 1;
 
@@ -393,6 +396,7 @@ class GlobalTop10Service {
                     if (member) displayName = member.displayName;
                 }
             } catch { /* fallback */ }
+            displayName = formatProfileDisplayName(displayName, player.profileIndex || getProfileIndex(player.playerKey));
             const tag = guildTagMap.get(player.sourceGuildId);
             const date = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -431,7 +435,7 @@ class GlobalTop10Service {
 
     /**
      * Snippet dla rankingu konkretnego bossa (identyczny format jak globalny).
-     * @param {string} userId
+     * @param {string} playerKey
      * @param {Array} bossRanking  - wynik getGlobalBossRanking (już po aktualizacji)
      * @param {number|null} prevBossPosition - pozycja przed aktualizacją (null = nowy wpis)
      * @param {string} bossName
@@ -439,8 +443,8 @@ class GlobalTop10Service {
      * @param {object} client
      * @returns {{ title, description }|null}
      */
-    async buildBossSnippetFieldData(userId, bossRanking, prevBossPosition, bossName, msgs, client) {
-        const newBossIndex = bossRanking.findIndex(p => p.userId === userId);
+    async buildBossSnippetFieldData(playerKey, bossRanking, prevBossPosition, bossName, msgs, client) {
+        const newBossIndex = bossRanking.findIndex(p => (p.playerKey || p.userId) === playerKey);
         if (newBossIndex === -1) return null;
         const newBossPosition = newBossIndex + 1;
 
@@ -459,6 +463,7 @@ class GlobalTop10Service {
                     if (member) displayName = member.displayName;
                 }
             } catch { /* fallback */ }
+            displayName = formatProfileDisplayName(displayName, player.profileIndex || getProfileIndex(player.playerKey));
             const tag = guildTagMap.get(player.sourceGuildId);
             const date = new Date(player.timestamp);
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
@@ -492,8 +497,8 @@ class GlobalTop10Service {
      * Buduje snippet embed (awans w globalnym rankingu).
      * Zwraca EmbedBuilder lub null jeśli brak zmiany pozycji.
      */
-    async buildSnippetEmbed(userId, newGlobalRanking, prevGlobalPosition, msgs, client) {
-        const data = await this.buildSnippetFieldData(userId, newGlobalRanking, prevGlobalPosition, msgs, client);
+    async buildSnippetEmbed(playerKey, newGlobalRanking, prevGlobalPosition, msgs, client) {
+        const data = await this.buildSnippetFieldData(playerKey, newGlobalRanking, prevGlobalPosition, msgs, client);
         if (!data) return null;
 
         return new EmbedBuilder()
