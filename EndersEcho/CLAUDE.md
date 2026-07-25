@@ -200,11 +200,12 @@
    - CustomIDs: `ach_rank_start` | `ach_rank_srv_{guildId}` | `ach_rank_global` | `ach_rank_role_{guildId}_{roleId}` | `ach_rank_prev` | `ach_rank_next` | `ach_rank_mypos` | `ach_rank_back` | `ach_rank_no_srv`
 
 9. **Kamienie Milowe Unikalnych Graczy** — `milestoneService.js`:
-   - Po każdym nowym rekordzie (`/update`, panel „Analizuj") sprawdza, czy globalna liczba unikatowych graczy (dedup po `userId` z nazw plików `wyniki/{userId}.json` na wszystkich skonfigurowanych serwerach) przekroczyła kolejną pełną setkę (100, 200, 300…)
-   - **Tanie sprawdzenie w typowym przypadku:** `scoreHistoryService.getUniqueUserCount()` — tylko listing katalogów (bez parsowania JSON); pełne dane (kto był tym graczem, na jakim serwerze) pobierane wyłącznie gdy próg faktycznie przekroczono (`getAllUsersFirstEntries` + `getUserEarliestGuildEntry`)
+   - Po każdym nowym rekordzie (`/update`, panel „Analizuj") sprawdza, czy globalna liczba unikatowych graczy przekroczyła kolejną pełną setkę (100, 200, 300…)
+   - **Licznik graczy = `rankingService.getCountedPlayers()`** (patrz „Kanoniczny licznik graczy" niżej) — ten sam zbiór, który pokazuje stopka embeda admina po `/update`. Wcześniej milestone liczył **pliki** `wyniki/{userId}.json` (`getUniqueUserCount`, usunięte), przez co ogłaszał próg wcześniej niż inne miejsca: pliki historii zostają po graczach usuniętych z rankingu, a plik z pustą tablicą (po `removeEntriesAfter`) też był liczony
+   - **Tanie sprawdzenie w typowym przypadku:** odczyt `ranking.json` per serwer; pełna historia (kto był tym graczem, na jakim serwerze) parsowana wyłącznie gdy próg faktycznie przekroczono (`getAllUsersFirstEntries` + `getUserEarliestGuildEntry`)
    - **Kolejkowanie sekwencyjne** (`_queue` — Promise chain) zapobiega podwójnemu ogłoszeniu tego samego progu przy dwóch niemal równoczesnych nowych rekordach
    - **3 poziomy uroczystości** wg reszty z dzielenia: pełne tysiące (`grand`, fioletowy, korona 👑) > pełne pięćsetki (`major`, pomarańczowy, 🎊) > zwykłe setki (`standard`, złoty, 🎉)
-   - **Wykres przyrostu graczy** — identyczny co do treści z wykresem generowanym przez przycisk „Wykres przyrostu” w Centrum Dowodzenia (`_handlePanelPlayerGrowth`): jedna zbiorcza krzywa `generateGlobalPlayerGrowthChart` ze znacznikami serwerów (badge z tagiem/nazwą w miejscu, gdzie dany serwer dołączył), tytułem i podtytułem „X graczy · Y pobitych wyników". **NIE** używa wariantu z podziałem krzywej na klany (`generatePerServerGrowthChart`/`generateGuildComparisonChart`). Dołączany do embeda przy KAŻDYM ogłoszeniu (co każde 100 graczy), niezależnie od poziomu progu. Renderowany raz na język (pol/eng) i buforowany w pamięci na czas wysyłki — treść tytułu/podtytułu jest wypalona w bitmapę, więc nie da się jej zlokalizować per-serwer bez ponownego renderu
+   - **Wykres przyrostu graczy** — identyczny co do treści z wykresem generowanym przez przycisk „Wykres przyrostu” w Centrum Dowodzenia (`_handlePanelPlayerGrowth`): jedna zbiorcza krzywa `generateGlobalPlayerGrowthChart` ze znacznikami serwerów (badge z tagiem/nazwą w miejscu, gdzie dany serwer dołączył), tytułem i podtytułem „X graczy · Y pobitych wyników". **Podtytuł i etykieta ostatniego punktu pokazują AKTUALNY licznik graczy, nie zaokrąglony próg** — wcześniej `displayTotal` = próg (np. „300"), więc wykres kłamał przy realnych 312 graczach na krzywej. Historia zasilająca krzywą jest zawężona do graczy z rankingu globalnego (`getAllUsersFirstEntries(allGuildIds, playerIds)`), żeby krzywa kończyła się na tej samej liczbie co licznik. **NIE** używa wariantu z podziałem krzywej na klany (`generatePerServerGrowthChart`/`generateGuildComparisonChart`). Dołączany do embeda przy KAŻDYM ogłoszeniu (co każde 100 graczy), niezależnie od poziomu progu. Renderowany raz na język (pol/eng) i buforowany w pamięci na czas wysyłki — treść tytułu/podtytułu jest wypalona w bitmapę, więc nie da się jej zlokalizować per-serwer bez ponownego renderu
    - Embed zawiera: tytuł zależny od poziomu, opis z liczbą pobitych rekordów, imieniem i serwerem gracza który jako pierwszy przekroczył próg (jeśli możliwy do ustalenia — `client.users.fetch`) oraz zaproszeniem do zapraszania zaprzyjaźnionych serwerów, avatar gracza jako thumbnail, stopkę. **Bez pól** (usunięte „Łącznie graczy" / „Następny próg" — te dane są już widoczne na wykresie)
    - Wysyłany na **wszystkie skonfigurowane serwery** (`guildConfigService.getAllConfiguredGuilds()`) na ich `allowedChannelId`, w pełni dwujęzyczny (`messages.js` — klucze `milestone*`)
    - **Persystencja:** `data/milestones.json` (`{ lastAnnounced }`) — przeżywa restart, zapobiega ponownemu ogłoszeniu już zaanonsowanego progu
@@ -881,7 +882,26 @@ Prosta informacja o kanale panelu + przycisk `🔄 Odśwież Panel`.
 
 **Persistencja:** `data/admin_panel.json` — `{ messageId, channelId }`. Jeśli wiadomość usunięta, serwis tworzy nową.
 
-**Aktywność graczy:** `scoreHistoryService.getActivePlayersStats(allGuildIds)` — dane o aktywnych/nowych graczach z historii wyników. Opcjonalne — jeśli serwis niedostępny, embed pokazuje "Brak danych".
+**Aktywność graczy:** `scoreHistoryService.getActivePlayersStats(countedGuildIds, countedPlayerIds)` — dane o aktywnych/nowych graczach z historii wyników. Opcjonalne — jeśli serwis niedostępny, embed pokazuje "Brak danych". Wszystkie liczniki są **deduplikowane globalnie po `userId`** (historia najpierw scalana ze wszystkich serwerów, dopiero potem klasyfikowana) — wcześniej `firstTs` liczony był per plik, więc gracz obecny na kilku serwerach wchodził do `monthBuckets` wielokrotnie, a weteran, który po raz pierwszy wrzucił wynik na nowym serwerze, trafiał do „Nowi gracze / Tydzień".
+
+---
+
+## Kanoniczny licznik graczy (jedno źródło prawdy)
+
+**`rankingService.getCountedPlayers(activeGuildIds)` → `{ total, playerIds }`** — ranking globalny (dedup po `userId`), czyli dokładnie ten zbiór, który trafia do stopki embeda admina po `/update` („👥 N unikalnych graczy globalnie"). **Każde miejsce pokazujące całkowitą liczbę graczy MUSI używać tej metody** — nie licz plików `wyniki/*.json` (zostają po graczach usuniętych z rankingu i po wyczyszczeniu historii zostaje pusty plik).
+
+**Zakres serwerów: skonfigurowane ∩ bot faktycznie obecny** (`getAllConfiguredGuildIds().filter(cache.has)`). W Centrum Dowodzenia służy do tego `adminPanelService._getCountedGuildIds()` — sekcja „Serwery" nadal używa pełnej listy (`_getActiveGuildIds()`), bo pokazuje serwery bez bota jako osobną kategorię.
+
+**Miejsca korzystające z licznika:**
+| Miejsce | Kod |
+|---|---|
+| Stopka embeda admina po `/update` (wzorzec) | `interactionHandlers._runUpdateFlow` → `logService.sendOcrAnalysisEmbed({ globalPlayerCount })` |
+| Kamienie milowe (próg + podtytuł wykresu) | `milestoneService._check` / `_announce` |
+| CC → 👥 Użytkownicy → „Łącznie graczy" | `adminPanelService._buildSections` |
+| CC → 📊 Statystyki → „Nowi gracze" / „Przyrost miesięczny" | `getActivePlayersStats(countedGuildIds, countedPlayerIds)` |
+| CC → 📈 Przyrost graczy (embed + oba wykresy) | `interactionHandlers._handlePanelPlayerGrowth` |
+
+**`/test` (dryRun) nie zawyża licznika** — `simulateGlobalRanking` dokłada symulowanego gracza, więc stopka bierze `total` z realnego rankingu (`getCountedPlayers`), a symulacja służy tylko do snippetu pozycji.
 
 **Klucz API serwisu:**
 ```javascript

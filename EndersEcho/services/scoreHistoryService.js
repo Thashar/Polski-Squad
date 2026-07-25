@@ -151,7 +151,9 @@ class ScoreHistoryService {
 
     // Zwraca tablicę { userId, firstTimestamp } dla każdego unikalnego gracza we wszystkich serwerach,
     // posortowaną chronologicznie. Używana do wykresu przyrostu unikalnych graczy globalnie.
-    async getAllUsersFirstEntries(allGuildIds) {
+    // allowedUserIds (Set|null) — gdy podany, liczeni są wyłącznie ci gracze (patrz getCountedPlayerIds
+    // w rankingService: licznikiem całkowitym jest ranking globalny, nie pliki historii).
+    async getAllUsersFirstEntries(allGuildIds, allowedUserIds = null) {
         const userFirstSeen = new Map(); // userId -> earliest timestamp ms
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
@@ -164,6 +166,7 @@ class ScoreHistoryService {
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
                 const userId = file.slice(0, -5);
+                if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
                     const entries = JSON.parse(raw);
@@ -187,19 +190,20 @@ class ScoreHistoryService {
     // Zwraca statystyki aktywności graczy: aktywni (≥1 nowy rekord) w ostatnim tygodniu/miesiącu,
     // nowi gracze (pierwszy rekord kiedykolwiek) w ostatnim tygodniu/miesiącu,
     // oraz monthBuckets: { 'YYYY-MM': liczba_nowych_graczy }
-    async getActivePlayersStats(allGuildIds) {
+    //
+    // Wszystkie liczniki są deduplikowane GLOBALNIE po userId: historia gracza jest najpierw scalana
+    // ze wszystkich serwerów, dopiero potem klasyfikowana. Bez tego gracz obecny na kilku serwerach
+    // wchodził do monthBuckets wielokrotnie, a weteran, który po raz pierwszy wrzucił wynik na nowym
+    // serwerze, był liczony jako "nowy" (pierwszy wpis liczony per plik, nie per gracz).
+    //
+    // allowedUserIds (Set|null) — gdy podany, liczeni są wyłącznie ci gracze (ranking globalny).
+    async getActivePlayersStats(allGuildIds, allowedUserIds = null) {
         const now = Date.now();
         const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
         const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
 
-        const activeWeek = new Set();
-        const activeMonth = new Set();
-        const newWeek = new Set();
-        const newMonth = new Set();
-        // Buckety miesięczne dla ostatnich 3 miesięcy (format YYYY-MM)
-        const monthBuckets = {};
-        // Liczba pobitych rekordów per gracz (każdy wpis historii = jedno pobicie), sumowana cross-server
-        const recordCounts = new Map();
+        // userId -> { firstTs, lastTs, count } scalone ze WSZYSTKICH serwerów
+        const merged = new Map();
 
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
@@ -208,64 +212,59 @@ class ScoreHistoryService {
 
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
-                const userId = file.replace('.json', '');
+                const userId = file.slice(0, -5);
+                if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
                     const entries = JSON.parse(raw);
                     if (!Array.isArray(entries) || entries.length === 0) continue;
 
-                    let firstTs = Infinity;
-                    let entryCount = 0;
+                    let agg = merged.get(userId);
+                    if (!agg) {
+                        agg = { firstTs: Infinity, lastTs: -Infinity, count: 0 };
+                        merged.set(userId, agg);
+                    }
                     for (const entry of entries) {
                         const ts = new Date(entry.timestamp).getTime();
                         if (isNaN(ts)) continue;
-                        entryCount++;
-                        if (ts < firstTs) firstTs = ts;
-                        if (ts >= weekAgo) activeWeek.add(userId);
-                        if (ts >= monthAgo) activeMonth.add(userId);
-                    }
-                    if (entryCount > 0) recordCounts.set(userId, (recordCounts.get(userId) || 0) + entryCount);
-
-                    if (firstTs !== Infinity) {
-                        if (firstTs >= weekAgo) newWeek.add(userId);
-                        if (firstTs >= monthAgo) newMonth.add(userId);
-                        const bucket = new Date(firstTs).toISOString().slice(0, 7);
-                        monthBuckets[bucket] = (monthBuckets[bucket] || 0) + 1;
+                        agg.count++;
+                        if (ts < agg.firstTs) agg.firstTs = ts;
+                        if (ts > agg.lastTs) agg.lastTs = ts;
                     }
                 } catch { /* pomiń uszkodzone pliki */ }
             }
         }
 
+        let activeLastWeek = 0, activeLastMonth = 0, newLastWeek = 0, newLastMonth = 0;
+        // Buckety miesięczne dla ostatnich 3 miesięcy (format YYYY-MM)
+        const monthBuckets = {};
+        // Liczba pobitych rekordów per gracz (każdy wpis historii = jedno pobicie), sumowana cross-server
+        const recordCounts = [];
+
+        for (const [userId, agg] of merged) {
+            if (agg.count === 0) continue;
+            if (agg.lastTs >= weekAgo) activeLastWeek++;
+            if (agg.lastTs >= monthAgo) activeLastMonth++;
+            if (agg.firstTs >= weekAgo) newLastWeek++;
+            if (agg.firstTs >= monthAgo) newLastMonth++;
+            const bucket = new Date(agg.firstTs).toISOString().slice(0, 7);
+            monthBuckets[bucket] = (monthBuckets[bucket] || 0) + 1;
+            recordCounts.push({ userId, count: agg.count });
+        }
+
         // TOP10 graczy najczęściej pobijających rekordy (liczba wpisów historii, cross-server)
-        const topRecordSetters = [...recordCounts.entries()]
-            .map(([userId, count]) => ({ userId, count }))
+        const topRecordSetters = recordCounts
             .sort((a, b) => b.count - a.count)
             .slice(0, 10);
 
         return {
-            activeLastWeek: activeWeek.size,
-            activeLastMonth: activeMonth.size,
-            newLastWeek: newWeek.size,
-            newLastMonth: newMonth.size,
+            activeLastWeek,
+            activeLastMonth,
+            newLastWeek,
+            newLastMonth,
             monthBuckets, // { 'YYYY-MM': count }
             topRecordSetters, // [{ userId, count }]
         };
-    }
-
-    // Zwraca liczbę unikatowych graczy (dedup po userId z nazw plików) we wszystkich serwerach.
-    // Lekka wersja getAllUsersFirstEntries — tylko listing katalogów, bez parsowania JSON.
-    // Używana do częstego sprawdzania kamieni milowych (bez kosztu odczytu treści plików).
-    async getUniqueUserCount(allGuildIds) {
-        const ids = new Set();
-        for (const guildId of allGuildIds) {
-            const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
-            let files = [];
-            try { files = await fs.readdir(dir); } catch { continue; }
-            for (const file of files) {
-                if (file.endsWith('.json')) ids.add(file.slice(0, -5));
-            }
-        }
-        return ids.size;
     }
 
     // Zwraca { guildId, entry } dla najwcześniejszego wpisu danego gracza (szukane po wszystkich serwerach).
@@ -285,7 +284,8 @@ class ScoreHistoryService {
     }
 
     // Zwraca { guildId: [{userId, firstTimestamp}] } — dla każdego serwera lista pierwszych wpisów per gracz.
-    async getPerGuildFirstEntries(allGuildIds) {
+    // allowedUserIds (Set|null) — gdy podany, liczeni są wyłącznie ci gracze (ranking globalny).
+    async getPerGuildFirstEntries(allGuildIds, allowedUserIds = null) {
         const result = {};
         for (const guildId of allGuildIds) {
             const dir = path.join(this.dataDir, 'guilds', guildId, 'wyniki');
@@ -294,6 +294,7 @@ class ScoreHistoryService {
             try { files = await fs.readdir(dir); } catch { result[guildId] = []; continue; }
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
+                if (allowedUserIds && !allowedUserIds.has(file.slice(0, -5))) continue;
                 try {
                     const raw = await fs.readFile(path.join(dir, file), 'utf8');
                     const userEntries = JSON.parse(raw);
