@@ -287,13 +287,25 @@ class AdminPanelService {
         return new Set((this._config.guilds || []).map(g => g.id));
     }
 
+    // Serwery brane pod uwagę przy LICZNIKACH GRACZY: skonfigurowane ∩ bot faktycznie obecny.
+    // Ta sama lista, na której liczy się stopka embeda admina po /update i kamienie milowe — bez
+    // tego filtra panel doliczał graczy z serwerów, z których bot został usunięty (dane graczy są
+    // celowo zachowywane). Sekcja "Serwery" nadal korzysta z pełnej listy — pokazuje te serwery
+    // osobno jako "brak bota".
+    _getCountedGuildIds() {
+        const configured = this._getActiveGuildIds();
+        if (!this._client?.guilds?.cache) return configured;
+        return new Set([...configured].filter(id => this._client.guilds.cache.has(id)));
+    }
+
     // Buduje tablicę obiektów { embed, components } — po jednym na sekcję (kolejność = SECTION_KEYS)
     async _buildSections() {
         const guildIds = this._getActiveGuildIds();
+        const countedGuildIds = this._getCountedGuildIds();
         const now = new Date();
 
         const [globalRanking, blockedUsersArr, serverData] = await Promise.all([
-            this._services.rankingService?.getGlobalRanking(guildIds).catch(() => []) ?? Promise.resolve([]),
+            this._services.rankingService?.getGlobalRanking(countedGuildIds).catch(() => []) ?? Promise.resolve([]),
             this._services.userBlockService?.getBlockedUsers().catch(() => []) ?? Promise.resolve([]),
             this._getServerStats([...guildIds]),
         ]);
@@ -307,7 +319,10 @@ class AdminPanelService {
         try {
             const scoreHistorySvc = this._services.scoreHistoryService;
             if (scoreHistorySvc?.getActivePlayersStats) {
-                playerActivityStats = await scoreHistorySvc.getActivePlayersStats([...guildIds]);
+                // Historia zawężona do graczy z rankingu globalnego — ten sam zbiór, który daje
+                // "Łącznie graczy", więc "Nowi gracze" i "Przyrost miesięczny" liczą tych samych ludzi.
+                const countedPlayerIds = new Set(globalRanking.map(p => p.userId));
+                playerActivityStats = await scoreHistorySvc.getActivePlayersStats([...countedGuildIds], countedPlayerIds);
             }
         } catch { /* opcjonalne */ }
 

@@ -124,6 +124,20 @@ class RankingService {
     }
 
     /**
+     * KANONICZNY licznik całkowity graczy — dokładnie ten sam zbiór, który trafia do stopki embeda
+     * admina po /update („N unikalnych graczy globalnie"): ranking globalny, dedup po userId.
+     * Używany też przez kamienie milowe, Centrum Dowodzenia i wykres przyrostu, żeby wszystkie
+     * miejsca pokazywały tę samą liczbę. NIE liczymy plików historii — zostają one po graczach
+     * usuniętych z rankingu, więc dawały wynik wyższy od rankingu.
+     * @param {Set<string>|null} activeGuildIds - serwery brane pod uwagę (skonfigurowane ∩ bot obecny)
+     * @returns {Promise<{ total: number, playerIds: Set<string> }>}
+     */
+    async getCountedPlayers(activeGuildIds = null) {
+        const ranking = await this.getGlobalRanking(activeGuildIds);
+        return { total: ranking.length, playerIds: new Set(ranking.map(p => p.userId)) };
+    }
+
+    /**
      * Oblicza ranking serwerów — suma wyników top 30 graczy per serwer.
      * @param {import('discord.js').Client} client
      * @returns {Promise<Array<{guildId,guildName,totalScoreValue,totalScore,playerCount,topScore,topScoreValue}>>}

@@ -5665,7 +5665,11 @@ class InteractionHandler {
                 const newGlobalRanking = dryRun
                     ? await this.rankingService.simulateGlobalRanking(new Set(activeGuildIds), userId, userName, bestScore, guildId)
                     : await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
-                globalPlayerCount = newGlobalRanking.length;
+                // Licznik w stopce zawsze z REALNEGO rankingu — przy /test symulacja dokłada gracza,
+                // który nie jest jeszcze w rankingu, i stopka pokazywała N+1.
+                globalPlayerCount = dryRun
+                    ? (await this.rankingService.getCountedPlayers(new Set(activeGuildIds))).total
+                    : newGlobalRanking.length;
                 globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
                     userId, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                 );
@@ -12289,18 +12293,22 @@ class InteractionHandler {
         try {
             const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
             const allGuildIds = configuredIds.filter(gid => interaction.client.guilds.cache.has(gid));
-            const [firstEntries, guildFirstTs, totalSubmissions, globalRanking, guildRankingCounts, perGuildEntries] = await Promise.all([
-                this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds) || [],
+
+            // Licznik całkowity = ranking globalny (jak stopka embeda admina po /update). Historia
+            // filtrowana do tego samego zbioru graczy, żeby +7/+30 dni i krzywa wykresu zgadzały się
+            // z "Łącznie".
+            const { total: totalPlayers, playerIds } = await this.rankingService.getCountedPlayers(new Set(allGuildIds));
+
+            const [firstEntries, guildFirstTs, totalSubmissions, guildRankingCounts, perGuildEntries] = await Promise.all([
+                this.scoreHistoryService?.getAllUsersFirstEntries(allGuildIds, playerIds) || [],
                 this.scoreHistoryService?.getGuildFirstTimestamps(allGuildIds) || {},
                 this.scoreHistoryService?.getTotalSubmissionCount(allGuildIds) || 0,
-                this.rankingService.getGlobalRanking(new Set(allGuildIds)),
                 Promise.all(allGuildIds.map(gid =>
                     this.rankingService.loadRanking(gid).then(r => ({ gid, count: Object.keys(r).length }))
                 )),
-                this.scoreHistoryService?.getPerGuildFirstEntries(allGuildIds) || {},
+                this.scoreHistoryService?.getPerGuildFirstEntries(allGuildIds, playerIds) || {},
             ]);
 
-            const totalPlayers = globalRanking.length;
             const guildCounts = Object.fromEntries(guildRankingCounts.map(r => [r.gid, r.count]));
             const now = Date.now();
             const last7  = firstEntries.filter(e => e.firstTimestamp >= now - 7  * 86400000).length;

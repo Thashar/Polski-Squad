@@ -17,12 +17,14 @@ class MilestoneService {
      * @param {object} guildConfigService      GuildConfigService
      * @param {object} config                  config bota
      * @param {object} chartService            { generateGlobalPlayerGrowthChart }
+     * @param {object} rankingService          RankingService — źródło kanonicznego licznika graczy
      */
-    constructor(dataDir, scoreHistoryService, guildConfigService, config, chartService) {
+    constructor(dataDir, scoreHistoryService, guildConfigService, config, chartService, rankingService) {
         this.scoreHistoryService = scoreHistoryService;
         this.guildConfigService  = guildConfigService;
         this.config              = config;
         this.chartService        = chartService;
+        this.rankingService      = rankingService;
         this.client              = null;
         this._stateFile          = path.join(dataDir, 'milestones.json');
         this._lastAnnounced      = 0;
@@ -57,7 +59,7 @@ class MilestoneService {
                 .filter(id => this.client?.guilds.cache.has(id));
             if (allGuildIds.length === 0) return 0;
 
-            const total = await this.scoreHistoryService.getUniqueUserCount(allGuildIds);
+            const { total } = await this.rankingService.getCountedPlayers(new Set(allGuildIds));
             const baseline = Math.floor(total / MILESTONE_STEP) * MILESTONE_STEP;
             logger.info(`[Milestone] Pierwsze uruchomienie — baza ustawiona na ${baseline} (aktualnie ${total} graczy); kolejne ogłoszenie od ${baseline + MILESTONE_STEP}`);
             return baseline;
@@ -76,8 +78,8 @@ class MilestoneService {
     }
 
     /**
-     * Wołane po każdym nowo zapisanym rekordzie. Tanie w typowym przypadku (tylko listing
-     * katalogów) — pełne dane graczy pobierane wyłącznie gdy faktycznie przekroczono próg.
+     * Wołane po każdym nowo zapisanym rekordzie. Tanie w typowym przypadku (odczyt rankingów
+     * serwerów) — pełna historia graczy parsowana wyłącznie gdy faktycznie przekroczono próg.
      */
     checkAndAnnounce() {
         this._queue = this._queue
@@ -93,7 +95,7 @@ class MilestoneService {
             .filter(id => this.client.guilds.cache.has(id));
         if (allGuildIds.length === 0) return;
 
-        const total = await this.scoreHistoryService.getUniqueUserCount(allGuildIds);
+        const { total, playerIds } = await this.rankingService.getCountedPlayers(new Set(allGuildIds));
         const milestone = Math.floor(total / MILESTONE_STEP) * MILESTONE_STEP;
 
         if (milestone <= 0 || milestone <= this._lastAnnounced) return;
@@ -101,10 +103,10 @@ class MilestoneService {
         this._lastAnnounced = milestone;
         await this._save();
 
-        logger.success(`[Milestone] 🎉 Osiągnięto ${milestone} unikatowych graczy!`);
+        logger.success(`[Milestone] 🎉 Osiągnięto ${milestone} unikatowych graczy (aktualnie ${total})!`);
 
         try {
-            await this._announce(milestone, allGuildIds);
+            await this._announce(milestone, total, playerIds, allGuildIds);
         } catch (err) {
             logger.error(`[Milestone] Błąd wysyłania ogłoszenia: ${err.message}`);
         }
@@ -124,12 +126,14 @@ class MilestoneService {
         return { userId: target.userId, guildId: located?.guildId || null };
     }
 
-    async _announce(milestone, allGuildIds) {
+    async _announce(milestone, total, playerIds, allGuildIds) {
         const tier = this._tier(milestone);
         // Kosztowne (parsuje JSON wszystkich graczy) — wołane tylko raz na 100 graczy;
         // ta sama lista service'ów zasila zarówno ustalenie gracza-jubilata, jak i wykres.
+        // Historia filtrowana do graczy z rankingu globalnego (playerIds), żeby krzywa wykresu
+        // kończyła się na tej samej liczbie, którą pokazuje licznik całkowity.
         const [firstEntries, guildFirstTsMap, totalSubmissions] = await Promise.all([
-            this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds),
+            this.scoreHistoryService.getAllUsersFirstEntries(allGuildIds, playerIds),
             this.scoreHistoryService.getGuildFirstTimestamps(allGuildIds),
             this.scoreHistoryService.getTotalSubmissionCount(allGuildIds),
         ]);
@@ -169,13 +173,16 @@ class MilestoneService {
             if (chartCache.has(lang)) return chartCache.get(lang);
             const isPol = lang !== 'eng';
             const chartTitle = isPol ? '📊 Przyrost Unikalnych Graczy' : '📊 Unique Player Growth';
+            // Podtytuł i etykieta ostatniego punktu pokazują AKTUALNY licznik graczy (ten sam co
+            // stopka embeda admina po /update), a nie zaokrąglony próg — inaczej wykres pokazywał
+            // np. "300" przy realnych 312 graczach na krzywej.
             const chartSubtitle = isPol
-                ? `${milestone} graczy · ${totalSubmissions} pobitych wyników`
-                : `${milestone} players · ${totalSubmissions} beaten records`;
+                ? `${total} graczy · ${totalSubmissions} pobitych wyników`
+                : `${total} players · ${totalSubmissions} beaten records`;
             let buffer = null;
             try {
                 buffer = await this.chartService.generateGlobalPlayerGrowthChart(
-                    firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, milestone
+                    firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, total
                 );
             } catch (err) {
                 logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
