@@ -238,10 +238,7 @@ class MvpService {
             const channel = await this.client.channels.fetch(this.cfg.pollChannelId);
 
             if (candidates.length === 0) {
-                await channel.send({
-                    content: this.buildNoCandidatesMessage(),
-                    allowedMentions: { parse: ['everyone'] }
-                });
+                await channel.send(this.buildNoCandidatesPayload());
                 this.logger.info('📭 MVP: brak kandydatów w tym tygodniu - ogłoszono brak');
                 return;
             }
@@ -359,31 +356,18 @@ class MvpService {
                     if (r.emoji?.id === this.cfg.kekwEmojiId) continue;
                     otherReactionsCount += r.count || 0;
                 }
-                // Jeśli wiadomość jest odpowiedzią na inną - zapamiętaj treść i autora oryginału
-                let replyTo = null;
-                if (msg.reference && msg.reference.messageId) {
-                    try {
-                        const ref = await msg.fetchReference();
-                        if (ref) {
-                            replyTo = {
-                                authorId: ref.author?.id || null,
-                                authorDisplay: ref.member?.displayName || ref.author?.username || 'nieznany',
-                                content: ref.content || '',
-                                hasAttachment: (ref.attachments?.size || 0) > 0
-                            };
-                        }
-                    } catch (e) {
-                        // Oryginalna wiadomość mogła zostać usunięta lub jest niedostępna - pomijamy kontekst odpowiedzi
-                    }
-                }
+                // Jeśli wiadomość jest odpowiedzią na inną (riposta) - zapamiętaj kontekst oryginału
+                const replyTo = await this.buildReplyContext(msg);
                 candidates.push({
                     messageId: msg.id,
                     channelId: channel.id,
                     authorId: msg.author.id,
                     authorTag: msg.author.tag,
                     authorDisplay: msg.member?.displayName || msg.author.username,
+                    authorAvatar: this.extractAvatarUrl(msg.author),
                     content: msg.content || '',
                     hasAttachment: msg.attachments.size > 0,
+                    imageUrl: this.extractImageUrl(msg),
                     kekwCount: count,
                     otherReactionsCount,
                     createdTimestamp: msg.createdTimestamp,
@@ -401,10 +385,7 @@ class MvpService {
     // ===== Ankieta =====
 
     async startPoll(channel, candidates) {
-        const pollMessage = await channel.send({
-            content: this.buildPollMessage(candidates),
-            allowedMentions: { parse: ['everyone'] }
-        });
+        const pollMessage = await channel.send(this.buildPollPayload(candidates));
 
         for (let i = 0; i < candidates.length; i++) {
             try {
@@ -429,38 +410,222 @@ class MvpService {
         this.logger.info(`🏆 MVP: rozpoczęto ankietę (${candidates.length} kandydatów), koniec za 24h`);
     }
 
-    formatCandidateText(c) {
-        let t = (c.content || '').replace(/\r?\n+/g, ' ').trim();
-        if (t.length > 280) t = t.slice(0, 277) + '...';
-        if (!t) t = c.hasAttachment ? '[załącznik / obraz]' : '[brak treści tekstowej]';
+    // ===== Media i kontekst riposty =====
+
+    /** Awatar użytkownika (stały link CDN - nie wygasa, w przeciwieństwie do załączników). */
+    extractAvatarUrl(user) {
+        try {
+            return user?.displayAvatarURL?.({ extension: 'png', size: 128 }) || null;
+        } catch {
+            return null;
+        }
+    }
+
+    /** URL pierwszego obrazka wiadomości - załącznik graficzny lub obrazek z auto-embeda (np. tenor). */
+    extractImageUrl(message) {
+        try {
+            const attachment = message.attachments?.find(a =>
+                (a.contentType && a.contentType.startsWith('image/')) ||
+                /\.(png|jpe?g|gif|webp)(\?|$)/i.test(a.name || a.url || '')
+            );
+            if (attachment) return attachment.url;
+
+            const embedWithImage = message.embeds?.find(e => e.image?.url || e.thumbnail?.url);
+            if (embedWithImage) return embedWithImage.image?.url || embedWithImage.thumbnail?.url;
+        } catch {
+            // Wiadomość częściowa/niedostępna - brak obrazka
+        }
+        return null;
+    }
+
+    /**
+     * Kontekst riposty: na jaką wypowiedź odpowiada kandydat (autor, treść, obrazek, link).
+     * Zwraca null gdy wiadomość nie jest odpowiedzią lub oryginał został usunięty.
+     */
+    async buildReplyContext(message) {
+        if (!message.reference || !message.reference.messageId) return null;
+        try {
+            const ref = await message.fetchReference();
+            if (!ref) return null;
+            return {
+                authorId: ref.author?.id || null,
+                authorDisplay: ref.member?.displayName || ref.author?.username || 'nieznany',
+                authorAvatar: this.extractAvatarUrl(ref.author),
+                content: ref.content || '',
+                hasAttachment: (ref.attachments?.size || 0) > 0,
+                imageUrl: this.extractImageUrl(ref),
+                url: ref.url || null
+            };
+        } catch (e) {
+            // Oryginalna wiadomość mogła zostać usunięta lub jest niedostępna - pomijamy kontekst riposty
+            return null;
+        }
+    }
+
+    /**
+     * Uzupełnia dane kandydata tuż przed publikacją ogłoszenia:
+     * - dociąga awatar, jeśli stan pochodzi sprzed tej wersji,
+     * - odświeża podpisany link do załącznika (linki CDN Discorda wygasają po ~24h).
+     */
+    async hydrateCandidate(c) {
+        if (!c.authorAvatar && c.authorId) {
+            try {
+                const user = await this.client.users.fetch(c.authorId);
+                c.authorAvatar = this.extractAvatarUrl(user);
+            } catch {
+                // Użytkownik usunięty/niedostępny - embed pójdzie bez awatara
+            }
+        }
+
+        if (!c.imageUrl && !c.replyTo?.imageUrl) return;
+        try {
+            const channel = await this.client.channels.fetch(c.channelId);
+            const message = await channel.messages.fetch(c.messageId);
+            const fresh = this.extractImageUrl(message);
+            if (fresh) c.imageUrl = fresh;
+
+            if (c.replyTo?.imageUrl && message.reference) {
+                const ref = await message.fetchReference();
+                const freshRef = this.extractImageUrl(ref);
+                if (freshRef) c.replyTo.imageUrl = freshRef;
+            }
+        } catch {
+            // Wiadomość usunięta/niedostępna - zostaje zapisany (możliwe, że wygasły) link
+        }
+    }
+
+    // ===== Prezentacja (embedy) =====
+
+    kekwEmoji() {
+        return `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
+    }
+
+    /** Paleta kolejnych wypowiedzi - spójna, wyrazista gama; dzika karta zawsze fioletowa. */
+    candidateColor(index, isWildcard) {
+        if (isWildcard) return 0x9B59B6;
+        const palette = [0xF1C40F, 0xE67E22, 0x3498DB, 0x2ECC71, 0xE91E63, 0x1ABC9C, 0xE74C3C, 0xFF7043, 0x00BCD4, 0x8E44AD];
+        return palette[index % palette.length];
+    }
+
+    formatQuoteText(c, maxLength = 400) {
+        let t = (c.content || '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim();
+        if (t.length > maxLength) t = t.slice(0, maxLength - 1).trimEnd() + '…';
         return t;
     }
 
-    buildPollMessage(candidates) {
-        const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
-        const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
+    /** Cytat wypowiedzi jako blok cytatu - zachowuje łamanie linii, domyka cudzysłowy. */
+    buildQuoteBlock(c) {
+        const text = this.formatQuoteText(c);
+        if (!text) {
+            if (c.imageUrl) return '> *(bez słów — cała siła w obrazku)*';
+            return c.hasAttachment ? '> *(załącznik bez treści tekstowej)*' : '> *(brak treści tekstowej)*';
+        }
 
-        let body = `@everyone\n# 🏆 MVP TYGODNIA — najlepszy tekst na serwerze!\n`;
-        body += `W minionym tygodniu padło kilka perełek. Zagłosujcie na **najlepszy tekst** — głosujemy na tekst, nie na osobę!\n\n`;
-
-        candidates.forEach((c, i) => {
-            const dateUnix = Math.floor(c.createdTimestamp / 1000);
-            body += `${this.cfg.voteEmojis[i]}\n`;
-            body += `> ***„${this.formatCandidateText(c)}”***\n`;
-            const wild = c.isWildcard ? '🃏 *dzika karta od MVP* · ' : '';
-            body += `-# ${wild}✍️ <@${c.authorId}> · ${c.kekwCount}× ${kekw} · <#${c.channelId}> · <t:${dateUnix}:f> · [oryginał](${c.url})\n\n`;
-        });
-
-        body += `🗳️ **Jak głosować:** kliknij reakcję przy wybranym tekście. Możesz oddać tylko **jeden** głos (kliknięcie innej reakcji usuwa poprzednią).\n`;
-        body += `⏳ Głosowanie kończy się <t:${endUnix}:R>.`;
-        return body;
+        const lines = text.split('\n');
+        return lines.map((line, i) => {
+            const trimmed = line.trim();
+            if (!trimmed) return '> ';
+            const open = i === 0 ? '„' : '';
+            const close = i === lines.length - 1 ? '”' : '';
+            return `> ***${open}${trimmed}${close}***`;
+        }).join('\n');
     }
 
-    buildNoCandidatesMessage() {
-        const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
-        return `@everyone\n# 😴 MVP TYGODNIA\n` +
-            `W tym tygodniu nikt nie zebrał żadnej reakcji ${kekw} — brak kandydatów do tytułu MVP.\n` +
-            `Piszcie więcej zabawnych tekstów na czatach! 😄`;
+    /**
+     * Pole „riposta" - na jaką wypowiedź odpowiada kandydat.
+     * Nicki podajemy tekstem (nie wzmianką), bo embed pokazuje surowe ID gdy user nie jest w cache.
+     */
+    buildReplyField(c, imageFromReply) {
+        const r = c.replyTo;
+        if (!r) return null;
+
+        let snippet = (r.content || '').replace(/\s+/g, ' ').trim();
+        if (snippet.length > 160) snippet = snippet.slice(0, 159) + '…';
+        if (!snippet) snippet = r.imageUrl ? '[obrazek]' : (r.hasAttachment ? '[załącznik]' : '[brak treści]');
+
+        const jump = r.url ? ` · [↗ oryginał](${r.url})` : '';
+        const note = imageFromReply ? '\n*(obrazek poniżej pochodzi z tej wypowiedzi)*' : '';
+        return {
+            name: '↩️ Riposta na wypowiedź',
+            value: `**${r.authorDisplay || 'nieznany'}**${jump}\n> *„${snippet}”*${note}`,
+            inline: false
+        };
+    }
+
+    /** Jeden kandydat = jeden embed: cytat, riposta, statystyki, obrazek i awatar autora. */
+    buildCandidateEmbed(c, index) {
+        const emoji = this.cfg.voteEmojis[index] || '▫️';
+        const embed = new EmbedBuilder()
+            .setColor(this.candidateColor(index, c.isWildcard))
+            .setAuthor({
+                name: `${emoji}  ${c.authorDisplay || c.authorTag || 'nieznany'}`,
+                url: c.url || undefined
+            })
+            .setDescription(this.buildQuoteBlock(c))
+            .setFooter({ text: `Zagłosuj reakcją ${emoji}` })
+            .setTimestamp(c.createdTimestamp || Date.now());
+
+        if (c.isWildcard) embed.setTitle('🃏 Dzika karta od MVP');
+        if (c.authorAvatar) embed.setThumbnail(c.authorAvatar);
+
+        // Obrazek własny kandydata ma pierwszeństwo; gdy go nie ma, pokazujemy obrazek ripostowanej wypowiedzi
+        const imageFromReply = !c.imageUrl && !!c.replyTo?.imageUrl;
+        const image = c.imageUrl || c.replyTo?.imageUrl;
+        if (image) embed.setImage(image);
+
+        const fields = [];
+        const replyField = this.buildReplyField(c, imageFromReply);
+        if (replyField) fields.push(replyField);
+        fields.push(
+            { name: '😹 Zebrane KEKW', value: `**${c.kekwCount}** × ${this.kekwEmoji()}`, inline: true },
+            { name: '📍 Kanał', value: `<#${c.channelId}>`, inline: true }
+        );
+        if (c.url) fields.push({ name: '🔗 Źródło', value: `[przejdź do wypowiedzi](${c.url})`, inline: true });
+        embed.addFields(fields);
+
+        return embed;
+    }
+
+    buildPollPayload(candidates) {
+        const endUnix = Math.floor((Date.now() + this.cfg.votingDurationMs) / 1000);
+
+        let content = `@everyone\n# 🏆 MVP TYGODNIA — najlepsza wypowiedź minionego tygodnia\n`;
+        content += `W ostatnich ${this.cfg.scanDays} dniach padło kilka perełek ${this.kekwEmoji()} — wybierzcie tę **jedną**. `;
+        content += `Głosujemy na **wypowiedź**, nie na osobę!`;
+
+        const embeds = candidates.map((c, i) => this.buildCandidateEmbed(c, i));
+
+        // Stopka z zasadami - tylko gdy zmieści się w twardym limicie 10 embedów na wiadomość
+        if (embeds.length <= 9) {
+            const usedEmojis = candidates.map((_, i) => this.cfg.voteEmojis[i]).join(' ');
+            embeds.push(new EmbedBuilder()
+                .setColor(0x2B2D31)
+                .setDescription(
+                    `🗳️ **Jak głosować:** kliknij reakcję ${usedEmojis} pod tą wiadomością.\n` +
+                    `👤 Jedna osoba = **jeden** głos (kliknięcie innej reakcji kasuje poprzednią).\n` +
+                    `⏳ Głosowanie kończy się <t:${endUnix}:R> · <t:${endUnix}:f>`
+                ));
+        }
+
+        return { content, embeds, allowedMentions: { parse: ['everyone'] } };
+    }
+
+    buildNoCandidatesPayload() {
+        const embed = new EmbedBuilder()
+            .setColor(0x5D6D7E)
+            .setTitle('😴 MVP TYGODNIA — brak kandydatów')
+            .setDescription(
+                `W tym tygodniu żadna wypowiedź nie zebrała reakcji ${this.kekwEmoji()}, więc nie ma z czego wybierać.\n\n` +
+                `Piszcie więcej zabawnych tekstów na czatach — tytuł czeka! 😄`
+            )
+            .setFooter({ text: 'Rola MVP pozostaje przy dotychczasowym zwycięzcy' })
+            .setTimestamp();
+
+        return {
+            content: '@everyone',
+            embeds: [embed],
+            allowedMentions: { parse: ['everyone'] }
+        };
     }
 
     // ===== Obsługa reakcji (głosowanie) =====
@@ -758,21 +923,8 @@ class MvpService {
         try {
             const msg = ctx.fullMessage;
 
-            // Kontekst odpowiedzi (jak w collectFromChannel)
-            let replyTo = null;
-            if (msg.reference && msg.reference.messageId) {
-                try {
-                    const ref = await msg.fetchReference();
-                    if (ref) {
-                        replyTo = {
-                            authorId: ref.author?.id || null,
-                            authorDisplay: ref.member?.displayName || ref.author?.username || 'nieznany',
-                            content: ref.content || '',
-                            hasAttachment: (ref.attachments?.size || 0) > 0
-                        };
-                    }
-                } catch (e) { /* oryginał usunięty/niedostępny - pomijamy kontekst */ }
-            }
+            // Kontekst riposty (jak w collectFromChannel)
+            const replyTo = await this.buildReplyContext(msg);
 
             const kekwReaction = msg.reactions.cache.find(r => r.emoji?.id === this.cfg.kekwEmojiId);
             const kekwCount = kekwReaction?.count || 1;
@@ -783,8 +935,10 @@ class MvpService {
                 authorId: ctx.author.id,
                 authorTag: ctx.author.tag,
                 authorDisplay: msg.member?.displayName || ctx.author.username,
+                authorAvatar: this.extractAvatarUrl(ctx.author),
                 content: msg.content || '',
                 hasAttachment: msg.attachments.size > 0,
+                imageUrl: this.extractImageUrl(msg),
                 kekwCount,
                 otherReactionsCount: 0,
                 createdTimestamp: msg.createdTimestamp,
@@ -857,10 +1011,7 @@ class MvpService {
             await this.recordWinner(winner);
 
             const channel = await this.client.channels.fetch(channelId || this.cfg.pollChannelId);
-            await channel.send({
-                content: this.buildWinnerMessage(winner, tally, candidates, winnerIndex),
-                allowedMentions: { parse: ['everyone'] }
-            });
+            await channel.send(await this.buildWinnerPayload(winner, tally, candidates, winnerIndex));
             this.logger.info(`🏆 MVP: zwycięzca ${winner.authorTag} (kandydat ${winnerIndex + 1}, ${tally[winnerIndex]} głos(ów))`);
         } catch (error) {
             this.logger.error(`❌ MVP: błąd finalizacji głosowania: ${error.message}`);
@@ -928,20 +1079,73 @@ class MvpService {
         }
     }
 
-    buildWinnerMessage(winner, tally, candidates, winnerIndex) {
-        const kekw = `<:z_Kekw:${this.cfg.kekwEmojiId}>`;
-        let body = `@everyone\n# 👑 MVP TYGODNIA wyłoniony!\n`;
-        body += `Zwyciężył tekst, który napisał(a) <@${winner.authorId}>! 🎉\n\n`;
-        body += `> ***„${this.formatCandidateText(winner)}”***\n`;
-        body += `-# ✍️ <@${winner.authorId}> · ${winner.kekwCount}× ${kekw} · <#${winner.channelId}> · [oryginał](${winner.url})\n\n`;
-        body += `📊 **Wyniki głosowania:**\n`;
-        candidates.forEach((c, i) => {
-            const marker = i === winnerIndex ? '👑' : '▫️';
-            body += `${marker} ${this.cfg.voteEmojis[i]} — **${tally[i]}** głos(ów) (<@${c.authorId}>)\n`;
-        });
+    /** Pasek postępu wyniku głosowania. */
+    buildVoteBar(count, maxCount, size = 10) {
+        const filled = maxCount > 0 ? Math.round((count / maxCount) * size) : 0;
+        return '▰'.repeat(filled) + '▱'.repeat(Math.max(0, size - filled));
+    }
+
+    /**
+     * Ogłoszenie zwycięzcy: embed ze zwycięską wypowiedzią (cytat, riposta, obrazek, awatar)
+     * + embed z wynikami głosowania.
+     */
+    async buildWinnerPayload(winner, tally, candidates, winnerIndex) {
+        await this.hydrateCandidate(winner);
+
+        const totalVotes = tally.reduce((sum, v) => sum + v, 0);
+        const maxVotes = Math.max(...tally, 0);
         const winnerCount = (this.winners[winner.authorId]?.count) || 1;
-        body += `\n🏅 <@${winner.authorId}> otrzymuje rolę MVP na najbliższy tydzień! To już **${winnerCount}.** tytuł MVP tej osoby.`;
-        return body;
+
+        const content = `@everyone\n# 👑 MVP TYGODNIA wyłoniony!\n` +
+            `Zwyciężyła wypowiedź, którą napisał(a) <@${winner.authorId}> — gratulacje! 🎉`;
+
+        const winnerEmbed = new EmbedBuilder()
+            .setColor(0xFFD700)
+            .setAuthor({
+                name: `👑  ${winner.authorDisplay || winner.authorTag || 'nieznany'}`,
+                url: winner.url || undefined
+            })
+            .setTitle('🏆 Zwycięska wypowiedź tygodnia')
+            .setDescription(this.buildQuoteBlock(winner))
+            .setFooter({ text: `To już ${winnerCount}. tytuł MVP tej osoby · rola MVP na najbliższy tydzień` })
+            .setTimestamp(winner.createdTimestamp || Date.now());
+
+        if (winner.authorAvatar) winnerEmbed.setThumbnail(winner.authorAvatar);
+
+        const imageFromReply = !winner.imageUrl && !!winner.replyTo?.imageUrl;
+        const image = winner.imageUrl || winner.replyTo?.imageUrl;
+        if (image) winnerEmbed.setImage(image);
+
+        const fields = [];
+        const replyField = this.buildReplyField(winner, imageFromReply);
+        if (replyField) fields.push(replyField);
+        fields.push(
+            { name: '🗳️ Głosy', value: `**${tally[winnerIndex]}** z ${totalVotes}`, inline: true },
+            { name: '😹 Zebrane KEKW', value: `**${winner.kekwCount}** × ${this.kekwEmoji()}`, inline: true },
+            { name: '📍 Kanał', value: `<#${winner.channelId}>`, inline: true }
+        );
+        if (winner.url) fields.push({ name: '🔗 Źródło', value: `[przejdź do wypowiedzi](${winner.url})`, inline: true });
+        winnerEmbed.addFields(fields);
+
+        // Nicki tekstem, nie wzmianką - embed pokazuje surowe ID, gdy user nie jest w cache klienta
+        const rows = candidates.map((c, i) => {
+            const marker = i === winnerIndex ? '👑' : '▫️';
+            const percent = totalVotes > 0 ? Math.round((tally[i] / totalVotes) * 100) : 0;
+            const wild = c.isWildcard ? ' 🃏' : '';
+            return `${marker} ${this.cfg.voteEmojis[i]} \`${this.buildVoteBar(tally[i], maxVotes)}\` **${tally[i]}** (${percent}%) — ${c.authorDisplay || c.authorTag}${wild}`;
+        });
+
+        const resultsEmbed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('📊 Wyniki głosowania')
+            .setDescription(rows.join('\n'))
+            .setFooter({ text: `Oddano ${totalVotes} głos(ów) · ${candidates.length} wypowiedzi w zestawieniu` });
+
+        return {
+            content,
+            embeds: [winnerEmbed, resultsEmbed],
+            allowedMentions: { parse: ['everyone'] }
+        };
     }
 
     // ===== Rola =====
