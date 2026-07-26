@@ -4813,15 +4813,28 @@ class InteractionHandler {
     }
 
     /**
+     * Czy sesja cofnięcia jest już zamknięta (rekord cofnięty w którykolwiek sposób).
+     * @param {string} status
+     */
+    _isSessionReverted(status) {
+        return status === 'owner' || status === 'admin' || status === 'profile_deleted';
+    }
+
+    /**
      * Komponenty ogłoszenia po cofnięciu wyniku: jeden nieaktywny CZERWONY przycisk
-     * informujący KTO cofnął rekord.
-     * @param {'owner'|'admin'} by
+     * informujący DLACZEGO rekord zniknął.
+     * @param {'owner'|'admin'|'profile_deleted'} by
      */
     _buildRevertedRows(by, msgs) {
+        const label = by === 'owner'
+            ? msgs.recordUndoByOwner
+            : by === 'profile_deleted'
+                ? msgs.recordUndoProfileDeleted
+                : msgs.recordUndoByAdmin;
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`rec_undone_${by}`)
-                .setLabel(by === 'owner' ? msgs.recordUndoByOwner : msgs.recordUndoByAdmin)
+                .setLabel(label)
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(true)
         )];
@@ -4932,13 +4945,21 @@ class InteractionHandler {
                 const msg = chan ? await chan.messages.fetch(session.adminMsgId).catch(() => null) : null;
                 if (msg) {
                     const embeds = msg.embeds?.length
-                        ? [EmbedBuilder.from(msg.embeds[0]).addFields({
-                            name: '↩️ Cofnięto',
-                            value: by === 'owner'
-                                ? `przez **właściciela wyniku**${actorName ? ` (${actorName})` : ''}`
-                                : `przez **${actorName || 'administratora'}**`,
-                            inline: false,
-                        })]
+                        ? [EmbedBuilder.from(msg.embeds[0]).addFields(
+                            by === 'profile_deleted'
+                                ? {
+                                    name: '🗑️ Profil usunięty',
+                                    value: `właściciel usunął profil${actorName ? ` **${actorName}**` : ''} — wynik zniknął razem z nim`,
+                                    inline: false,
+                                }
+                                : {
+                                    name: '↩️ Cofnięto',
+                                    value: by === 'owner'
+                                        ? `przez **właściciela wyniku**${actorName ? ` (${actorName})` : ''}`
+                                        : `przez **${actorName || 'administratora'}**`,
+                                    inline: false,
+                                }
+                        )]
                         : msg.embeds;
                     await msg.edit({ embeds, components: revertedRows }).catch(() => {});
                 }
@@ -5011,7 +5032,7 @@ class InteractionHandler {
             await interaction.reply({ content: msgs.recordUndoNotOwner, flags: ['Ephemeral'] });
             return;
         }
-        if (session.status === 'owner' || session.status === 'admin') {
+        if (this._isSessionReverted(session.status)) {
             await interaction.reply({ content: msgs.recordUndoAlready, flags: ['Ephemeral'] });
             return;
         }
@@ -5053,7 +5074,7 @@ class InteractionHandler {
             await interaction.update({ content: msgs.recordUndoNotOwner, components: [] });
             return;
         }
-        if (session.status === 'owner' || session.status === 'admin') {
+        if (this._isSessionReverted(session.status)) {
             await interaction.update({ content: msgs.recordUndoAlready, components: [] });
             return;
         }
@@ -5629,9 +5650,11 @@ class InteractionHandler {
             }
         }
 
-        // Przyciski cofnięcia pod ogłoszeniami usuwanego profilu tracą ważność
+        // Przyciski cofnięcia pod ogłoszeniami usuwanego profilu tracą ważność.
+        // Powód „profile_deleted" → etykieta „🗑️ Profil usunięty" zamiast „Cofnął admin"
+        // (żaden admin tu nie interweniował — wynik zniknął razem z profilem)
         for (const gid of guildIds) {
-            await this._invalidateUndoForPlayer(interaction.client, playerKey, gid, profileName).catch(() => {});
+            await this._invalidateUndoForPlayer(interaction.client, playerKey, gid, profileName, { by: 'profile_deleted' }).catch(() => {});
         }
         // Subskrypcje wskazujące na ten profil tracą sens
         await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
@@ -7303,7 +7326,7 @@ class InteractionHandler {
                     await interaction.reply({ content: '❌ Sesja wygasła lub wynik został już cofnięty.', flags: ['Ephemeral'] });
                     return;
                 }
-                if (session.status === 'owner' || session.status === 'admin') {
+                if (this._isSessionReverted(session.status)) {
                     await interaction.reply({
                         content: session.status === 'owner'
                             ? '❌ Ten wynik został już cofnięty przez właściciela.'
@@ -8535,7 +8558,7 @@ class InteractionHandler {
         const recSession = key
             ? this.recordRevertService.get(key)
             : this.recordRevertService.getLatest(session.playerKey || session.userId, session.guildId);
-        if (!recSession || recSession.status === 'owner' || recSession.status === 'admin') return;
+        if (!recSession || this._isSessionReverted(recSession.status)) return;
         await this.recordRevertService.markReverted(recSession.publicMsgId, by, actorName);
         if (client) {
             await this._applyRevertVisuals(client, recSession, by, actorName).catch(() => {});
@@ -8546,12 +8569,16 @@ class InteractionHandler {
      * Unieważnia przycisk cofnięcia dla OSTATNIEGO rekordu profilu — używane tam, gdzie admin
      * usuwa dane inną drogą niż przycisk cofnięcia (usunięcie gracza/wyniku, kasowanie profilu).
      */
-    async _invalidateUndoForPlayer(client, playerKey, guildId, actorName = null) {
+    /**
+     * @param {'admin'|'profile_deleted'} by - powód unieważnienia; decyduje o etykiecie
+     *        przycisku pod ogłoszeniem („Cofnął admin" vs „Profil usunięty")
+     */
+    async _invalidateUndoForPlayer(client, playerKey, guildId, actorName = null, { by = 'admin' } = {}) {
         if (!this.recordRevertService) return;
         const recSession = this.recordRevertService.getLatest(playerKey, guildId);
-        if (!recSession || recSession.status === 'owner' || recSession.status === 'admin') return;
-        await this.recordRevertService.markReverted(recSession.publicMsgId, 'admin', actorName);
-        if (client) await this._applyRevertVisuals(client, recSession, 'admin', actorName).catch(() => {});
+        if (!recSession || this._isSessionReverted(recSession.status)) return;
+        await this.recordRevertService.markReverted(recSession.publicMsgId, by, actorName);
+        if (client) await this._applyRevertVisuals(client, recSession, by, actorName).catch(() => {});
     }
 
     async _updateAllCvReportMsgs(client, session, statusText, newComponents) {

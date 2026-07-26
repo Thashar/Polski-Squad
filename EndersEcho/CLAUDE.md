@@ -103,12 +103,13 @@
 - **Synchronizacja obu stron** (`_applyRevertVisuals`):
   - gracz cofnął → embed w kanale logów OCR dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął właściciel` + pole „↩️ Cofnięto"
   - admin cofnął → ogłoszenie publiczne dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął admin` + notkę w treści
+  - **profil usunięty przez właściciela** → przycisk `🗑️ Profil usunięty` (`recordUndoProfileDeleted`, status sesji `profile_deleted`) zamiast „Cofnął admin" — żaden admin nie interweniował, wynik zniknął razem z profilem; embed w logach OCR dostaje pole `🗑️ Profil usunięty` z nazwą skasowanego profilu. Powód przekazuje `_invalidateUndoForPlayer(..., { by: 'profile_deleted' })` z `_deleteProfileData`
   - referencja do embeda admina zapamiętywana przez `logService.sendOcrAnalysisEmbed({ onSent })` → `recordRevertService.attachAdminMessage()`
 - **Klucz sesji = ID publicznego ogłoszenia.** Przycisk admina używa `ocr_revert_{publicMsgId}` (stary format `ocr_revert_{playerKey}_{guildId}` nadal obsługiwany → cofa ostatni rekord profilu), dzięki czemu oba przyciski dotyczą DOKŁADNIE tego samego rekordu
-- **Ochrona przed podwójnym cofnięciem:** status (`active` → `owner`/`admin`/`superseded`) ustawiany PRZED modyfikacją danych. Każda inna ścieżka usuwająca rekord unieważnia przycisk gracza: `_cvRemoveRecord` (CV: usuń rekord / zablokuj, cofnięcie z „Analizuj"), panel `🗑️ Usuń gracza`, panel `🧹 Usuń wynik`, usunięcie profilu w `/profiles`
+- **Ochrona przed podwójnym cofnięciem:** status (`active` → `owner`/`admin`/`profile_deleted`/`superseded`, sprawdzany helperem `_isSessionReverted`) ustawiany PRZED modyfikacją danych. Każda inna ścieżka usuwająca rekord unieważnia przycisk gracza: `_cvRemoveRecord` (CV: usuń rekord / zablokuj, cofnięcie z „Analizuj"), panel `🗑️ Usuń gracza`, panel `🧹 Usuń wynik`, usunięcie profilu w `/profiles`
 - **Przycisk przeżywa przebudowę komponentów:** zgłoszenie CV (aktualizacja licznika `⚠️ Zgłoś (N)`) i zatwierdzenie zgłoszenia (`cvBtnStatusApproved` — rekord zostaje) dokładają go z powrotem przez `_undoButtonFor()`
 - **Persystencja:** `data/record_reverts.json` (`{ sessions: { [publicMsgId]: {...} }, latest: { "playerKey_guildId": publicMsgId } }`) wczytywany przy starcie — bez tego restart bota unieważniałby przyciski pod opublikowanymi ogłoszeniami. Sesje starsze niż 30 dni czyszczone przy starcie
-- **CustomIDs:** `rec_undo_{publicMsgId}` | `rec_undo_ok_{publicMsgId}` | `rec_undo_no` | `rec_undone_{owner|admin}` (nieaktywny znacznik)
+- **CustomIDs:** `rec_undo_{publicMsgId}` | `rec_undo_ok_{publicMsgId}` | `rec_undo_no` | `rec_undone_{owner|admin|profile_deleted}` (nieaktywny znacznik)
 
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:

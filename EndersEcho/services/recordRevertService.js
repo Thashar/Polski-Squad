@@ -170,7 +170,7 @@ class RecordRevertService {
     /**
      * Oznacza rekord jako cofnięty.
      * @param {string} publicMsgId
-     * @param {'owner'|'admin'} by
+     * @param {'owner'|'admin'|'profile_deleted'} by
      * @param {string|null} actorName
      * @returns {Promise<Object|null>} sesja albo null gdy nie istnieje
      */
