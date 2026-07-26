@@ -176,6 +176,10 @@ async function initializeBot() {
         await guildBanService.load();
         await ocrStatsService.load();
 
+        // Odroczone usuwanie profili: gracz zgłasza chęć usunięcia, dane znikają
+        // dopiero po 7 dniach (do tego czasu może odwołać). Sweep co godzinę + przy starcie.
+        interactionHandler.startProfileDeletionSweep(client);
+
         // Retencja danych: 30 dni po usunięciu bota z serwera dane serwera są
         // kasowane (zgodnie z polityką prywatności); statystyki tokenów AI zostają.
         // Po usunięciu — powiadomienie na kanał logów serwerowych (z pingiem).

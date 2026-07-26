@@ -10,6 +10,11 @@ const logger = createBotLogger('EndersEcho');
 const DEFAULT_MAX_PROFILES = 3;
 const MAX_LABEL_LENGTH = 24;
 
+// Usunięcie profilu jest odroczone — gracz ma tydzień na wycofanie decyzji
+const DELETION_DELAY_MS = 7 * 24 * 60 * 60 * 1000;
+// Jak często sprawdzamy, czy któryś profil doczekał terminu skasowania
+const SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+
 /**
  * Rejestr profili graczy — jeden użytkownik Discorda może mieć kilka profili
  * (gra na kilku kontach w grze), każdy z osobnym wpisem w rankingu.
@@ -19,17 +24,25 @@ const MAX_LABEL_LENGTH = 24;
  *   "123456789012345678": {
  *     "active": 2,
  *     "profiles": [
- *       { "index": 1, "label": null,      "createdAt": "2026-07-25T..." },
- *       { "index": 2, "label": "Smurf",   "createdAt": "2026-07-25T..." }
+ *       { "index": 1, "label": null,    "createdAt": "2026-07-25T...", "pendingDeleteAt": "2026-08-02T..." },
+ *       { "index": 2, "label": "Smurf", "createdAt": "2026-07-25T..." }
  *     ]
  *   }
  * }
  *
- * Profil 1 (główny) istnieje niejawnie dla każdego gracza — nie wymaga wpisu w pliku.
- * Dzięki temu gracze, którzy nigdy nie użyli /profil, działają dokładnie jak przed wdrożeniem.
+ * Profil slotu 1 istnieje niejawnie dla każdego gracza, DOPÓKI gracz nie ma wpisu
+ * w pliku — dzięki temu gracze, którzy nigdy nie tknęli profili, działają jak przed
+ * wdrożeniem. Gdy wpis istnieje, lista `profiles` jest jedynym źródłem prawdy (slot 1
+ * może zostać usunięty, jeśli mainem jest inny profil).
  *
- * Numery profili to STABILNE SLOTY — po usunięciu profilu numery nie są przenumerowywane
- * (inaczej rozjechałyby się subskrypcje, dane rankingowe i customId komponentów).
+ * Po usunięciu profilu pozostałe są PRZENUMEROWYWANE w dół (usunięcie 1 → 2 staje się 1,
+ * 3 staje się 2), żeby gracz nie oglądał dziur w numeracji. Numer slotu jest częścią
+ * `playerKey`, więc `removeProfile` zwraca listę przesunięć, a wywołujący (handler)
+ * przenosi wszystkie dane profilu na nowe klucze.
+ *
+ * MAIN (pole `active`) to profil wskazany pinezką 📌 — jego dane pokazują /ranking,
+ * /profile i /achievements, jego wynik jest podpowiadany przy /update. Maina NIE MOŻNA
+ * usunąć; najpierw trzeba wskazać mainem inny profil.
  */
 class ProfileRegistryService {
     constructor(dataDir, maxProfiles = DEFAULT_MAX_PROFILES) {
@@ -37,6 +50,8 @@ class ProfileRegistryService {
         this._data = {};
         this._maxProfiles = maxProfiles;
         this._queue = Promise.resolve();
+        this._timer = null;
+        this._onDue = null;
     }
 
     async load() {
@@ -46,6 +61,8 @@ class ProfileRegistryService {
             this._data = (parsed && typeof parsed === 'object') ? parsed : {};
             const withAlts = Object.values(this._data).filter(u => (u.profiles || []).length > 1).length;
             if (withAlts > 0) logger.info(`👥 ProfileRegistry: ${withAlts} graczy z profilami dodatkowymi`);
+            const pending = this.getPendingDeletions().length;
+            if (pending > 0) logger.info(`👥 ProfileRegistry: ${pending} profil(i) oczekuje na usunięcie`);
         } catch {
             this._data = {};
         }
@@ -69,55 +86,73 @@ class ProfileRegistryService {
         this._maxProfiles = Math.max(1, Number(max) || DEFAULT_MAX_PROFILES);
     }
 
+    getDeletionDelayMs() {
+        return DELETION_DELAY_MS;
+    }
+
     /**
-     * Lista profili gracza. Zawsze zawiera profil główny (nawet gdy brak wpisu w pliku).
-     * @param {string} userId
-     * @returns {Array<{ index: number, label: string|null, createdAt: string|null, playerKey: string, isMain: boolean }>}
+     * Surowa lista slotów gracza — bez wyliczania maina (używane wewnętrznie,
+     * żeby getMainIndex/getProfiles nie zapętliły się nawzajem).
      */
-    getProfiles(userId) {
-        const entry = this._data[userId];
-        const stored = Array.isArray(entry?.profiles) ? entry.profiles : [];
-        const hasMain = stored.some(p => Number(p.index) === 1);
-        const list = hasMain ? [...stored] : [{ index: 1, label: null, createdAt: null }, ...stored];
+    _rawProfiles(userId) {
+        const stored = Array.isArray(this._data[userId]?.profiles) ? this._data[userId].profiles : [];
+        const list = stored.length > 0
+            ? stored
+            : [{ index: 1, label: null, createdAt: null }];
         return list
             .map(p => ({
                 index: Number(p.index),
                 label: p.label || null,
                 createdAt: p.createdAt || null,
-                playerKey: makePlayerKey(userId, p.index),
-                isMain: Number(p.index) === 1,
+                pendingDeleteAt: p.pendingDeleteAt || null,
             }))
             .sort((a, b) => a.index - b.index);
+    }
+
+    /**
+     * Lista profili gracza. Dla gracza bez wpisu w pliku = jeden profil w slocie 1.
+     * @param {string} userId
+     * @returns {Array<{ index: number, label: string|null, createdAt: string|null, pendingDeleteAt: string|null, playerKey: string, isMain: boolean }>}
+     */
+    getProfiles(userId) {
+        const mainIndex = this.getMainIndex(userId);
+        return this._rawProfiles(userId).map(p => ({
+            ...p,
+            playerKey: makePlayerKey(userId, p.index),
+            isMain: p.index === mainIndex,
+        }));
     }
 
     /**
      * Czy gracz ma jakikolwiek profil dodatkowy (decyduje o pokazywaniu UI profili).
      */
     hasMultipleProfiles(userId) {
-        return this.getProfiles(userId).length > 1;
+        return this._rawProfiles(userId).length > 1;
     }
 
     /**
      * Czy dany profil istnieje dla gracza.
      */
     hasProfile(userId, profileIndex) {
-        return this.getProfiles(userId).some(p => p.index === Number(profileIndex));
+        return this._rawProfiles(userId).some(p => p.index === Number(profileIndex));
     }
 
     /**
-     * Numer aktywnego profilu gracza (na który trafiają wyniki z /update).
-     * Gdy aktywny profil został usunięty — fallback na główny.
+     * Numer profilu MAIN (pinezka 📌) — to na niego trafiają wyniki z /update i to jego
+     * statystyki pokazują widoki personalne. Gdy zapisany main nie istnieje (dane sprzed
+     * usunięcia slotu), fallback na pierwszy istniejący slot.
      */
-    getActiveIndex(userId) {
-        const active = Number(this._data[userId]?.active) || 1;
-        return this.hasProfile(userId, active) ? active : 1;
+    getMainIndex(userId) {
+        const list = this._rawProfiles(userId);
+        const stored = Number(this._data[userId]?.active) || 1;
+        return list.some(p => p.index === stored) ? stored : (list[0]?.index || 1);
     }
 
     /**
-     * playerKey aktywnego profilu — klucz, pod którym zapisywane są wyniki.
+     * playerKey profilu MAIN — klucz, pod którym zapisywane są wyniki.
      */
-    getActivePlayerKey(userId) {
-        return makePlayerKey(userId, this.getActiveIndex(userId));
+    getMainPlayerKey(userId) {
+        return makePlayerKey(userId, this.getMainIndex(userId));
     }
 
     /**
@@ -126,7 +161,7 @@ class ProfileRegistryService {
      */
     getLabel(userId, profileIndex) {
         const idx = Number(profileIndex) || 1;
-        return this.getProfiles(userId).find(p => p.index === idx)?.label || null;
+        return this._rawProfiles(userId).find(p => p.index === idx)?.label || null;
     }
 
     /**
@@ -137,17 +172,35 @@ class ProfileRegistryService {
     }
 
     /**
-     * Ustawia aktywny profil.
+     * Materializuje wpis gracza w pliku (dla graczy działających dotąd na domyślnym slocie 1).
+     */
+    _ensureEntry(userId) {
+        if (!this._data[userId]) {
+            this._data[userId] = {
+                active: 1,
+                profiles: this._rawProfiles(userId).map(p => ({
+                    index: p.index,
+                    label: p.label,
+                    createdAt: p.createdAt,
+                    ...(p.pendingDeleteAt ? { pendingDeleteAt: p.pendingDeleteAt } : {}),
+                })),
+            };
+        }
+        return this._data[userId];
+    }
+
+    /**
+     * Ustawia profil MAIN (pinezka). Profil zaplanowany do usunięcia automatycznie
+     * odzyskuje ważność — main nie może czekać na skasowanie.
      * @returns {Promise<boolean>} false gdy profil nie istnieje
      */
-    async setActive(userId, profileIndex) {
+    async setMain(userId, profileIndex) {
         const idx = Number(profileIndex) || 1;
         if (!this.hasProfile(userId, idx)) return false;
-        if (!this._data[userId]) {
-            this._data[userId] = { active: idx, profiles: this.getProfiles(userId).map(p => ({ index: p.index, label: p.label, createdAt: p.createdAt })) };
-        } else {
-            this._data[userId].active = idx;
-        }
+        const entry = this._ensureEntry(userId);
+        entry.active = idx;
+        const target = entry.profiles.find(p => Number(p.index) === idx);
+        if (target?.pendingDeleteAt) delete target.pendingDeleteAt;
         await this._save();
         return true;
     }
@@ -168,7 +221,7 @@ class ProfileRegistryService {
      * @returns {Promise<{ ok: boolean, reason?: string, index?: number, playerKey?: string }>}
      */
     async addProfile(userId, label = null, logName = null) {
-        const existing = this.getProfiles(userId);
+        const existing = this._rawProfiles(userId);
         if (existing.length >= this._maxProfiles) {
             return { ok: false, reason: 'LIMIT', limit: this._maxProfiles };
         }
@@ -178,18 +231,14 @@ class ProfileRegistryService {
             return { ok: false, reason: 'DUPLICATE_LABEL' };
         }
 
-        // Pierwszy wolny slot (nie maksimum+1 — sloty po usuniętych profilach są odzyskiwane)
+        // Pierwszy wolny slot — po przenumerowaniu jest to zwykle koniec listy,
+        // ale wyliczamy go uczciwie (dane sprzed wdrożenia mogą mieć dziury)
         const used = new Set(existing.map(p => p.index));
         let index = 1;
         while (used.has(index)) index++;
 
-        if (!this._data[userId]) {
-            this._data[userId] = {
-                active: 1,
-                profiles: existing.map(p => ({ index: p.index, label: p.label, createdAt: p.createdAt })),
-            };
-        }
-        this._data[userId].profiles.push({
+        const entry = this._ensureEntry(userId);
+        entry.profiles.push({
             index,
             label: cleanLabel,
             createdAt: new Date().toISOString(),
@@ -199,27 +248,149 @@ class ProfileRegistryService {
         return { ok: true, index, playerKey: makePlayerKey(userId, index) };
     }
 
+    // ─── Odroczone usuwanie (7 dni) ────────────────────────────────────────────
+
     /**
-     * Usuwa profil z rejestru (dane rankingowe czyści wywołujący).
-     * Profilu głównego nie można usunąć.
-     * @returns {Promise<{ ok: boolean, reason?: string }>}
+     * Planuje usunięcie profilu za 7 dni. Dane zostają nietknięte do terminu —
+     * gracz może wycofać decyzję (`cancelDeletion`).
+     * @returns {Promise<{ ok: boolean, reason?: string, deleteAt?: string }>}
+     */
+    async scheduleDeletion(userId, profileIndex, logName = null) {
+        const idx = Number(profileIndex) || 1;
+        if (!this.hasProfile(userId, idx)) return { ok: false, reason: 'NOT_FOUND' };
+        if (idx === this.getMainIndex(userId)) return { ok: false, reason: 'IS_MAIN' };
+
+        const entry = this._ensureEntry(userId);
+        const target = entry.profiles.find(p => Number(p.index) === idx);
+        if (!target) return { ok: false, reason: 'NOT_FOUND' };
+        if (target.pendingDeleteAt) return { ok: true, deleteAt: target.pendingDeleteAt, already: true };
+
+        target.pendingDeleteAt = new Date(Date.now() + DELETION_DELAY_MS).toISOString();
+        await this._save();
+        logger.info(`👥 Zaplanowano usunięcie profilu #${idx} (termin ${target.pendingDeleteAt}) — gracz ${this._logName(userId, logName)}`);
+        return { ok: true, deleteAt: target.pendingDeleteAt };
+    }
+
+    /** Wycofuje zaplanowane usunięcie profilu. */
+    async cancelDeletion(userId, profileIndex, logName = null) {
+        const idx = Number(profileIndex) || 1;
+        const entry = this._data[userId];
+        const target = entry?.profiles?.find(p => Number(p.index) === idx);
+        if (!target?.pendingDeleteAt) return { ok: false, reason: 'NOT_PENDING' };
+        delete target.pendingDeleteAt;
+        await this._save();
+        logger.info(`👥 Odwołano usunięcie profilu #${idx} — gracz ${this._logName(userId, logName)}`);
+        return { ok: true };
+    }
+
+    /** Czy profil czeka na skasowanie. */
+    getPendingDeleteAt(userId, profileIndex) {
+        const idx = Number(profileIndex) || 1;
+        return this._rawProfiles(userId).find(p => p.index === idx)?.pendingDeleteAt || null;
+    }
+
+    /**
+     * Wszystkie zaplanowane usunięcia (do sweepu i statystyk).
+     * @returns {Array<{ userId: string, index: number, playerKey: string, deleteAt: string }>}
+     */
+    getPendingDeletions() {
+        const out = [];
+        for (const userId of Object.keys(this._data)) {
+            for (const p of this._rawProfiles(userId)) {
+                if (p.pendingDeleteAt) {
+                    out.push({ userId, index: p.index, playerKey: makePlayerKey(userId, p.index), deleteAt: p.pendingDeleteAt });
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Uruchamia cykliczne sprawdzanie terminów usunięcia.
+     * @param {(pending: { userId: string, index: number, playerKey: string, deleteAt: string }) => Promise<void>} onDue
+     *        wywoływane dla każdego profilu po terminie — kasuje dane i wywołuje removeProfile
+     */
+    start(onDue) {
+        this._onDue = onDue;
+        const run = () => this.sweep().catch(err => logger.error(`Błąd kontroli usuwania profili: ${err.message}`));
+        run();
+        this._timer = setInterval(run, SWEEP_INTERVAL_MS);
+        if (this._timer.unref) this._timer.unref();
+    }
+
+    stop() {
+        if (this._timer) clearInterval(this._timer);
+        this._timer = null;
+    }
+
+    async sweep() {
+        if (!this._onDue) return;
+        const now = Date.now();
+        for (const pending of this.getPendingDeletions()) {
+            if (Date.parse(pending.deleteAt) > now) continue;
+            try {
+                await this._onDue(pending);
+            } catch (err) {
+                // wpis zostaje — kolejna próba przy następnym przebiegu
+                logger.error(`Błąd usuwania profilu #${pending.index} gracza <@${pending.userId}>: ${err.message}`);
+            }
+        }
+    }
+
+    /**
+     * Usuwa profil z rejestru i **przenumerowuje** pozostałe: po skasowaniu profilu 1
+     * profil 2 staje się 1, a 3 staje się 2 — gracz nie ma dziur w numeracji.
+     *
+     * Numer slotu jest częścią `playerKey`, więc przesunięcie wymaga przeniesienia
+     * WSZYSTKICH danych profilu (ranking, rekordy bossów, historia, osiągnięcia,
+     * subskrypcje, sesje). Zwracana lista `renumbered` mówi wywołującemu, co przenieść;
+     * jest posortowana rosnąco, więc kolejne przenosiny trafiają zawsze na wolny klucz.
+     *
+     * Dane rankingowe usuwanego profilu czyści wywołujący (przed wywołaniem tej metody).
+     * Profilu MAIN nie można usunąć — najpierw trzeba wskazać mainem inny profil.
+     * @returns {Promise<{ ok: boolean, reason?: string, renumbered?: Array<{ fromIndex: number, toIndex: number, fromKey: string, toKey: string }> }>}
      */
     async removeProfile(userId, profileIndex, logName = null) {
         const idx = Number(profileIndex) || 1;
-        if (idx === 1) return { ok: false, reason: 'MAIN_PROFILE' };
         if (!this.hasProfile(userId, idx)) return { ok: false, reason: 'NOT_FOUND' };
+        if (idx === this.getMainIndex(userId)) return { ok: false, reason: 'IS_MAIN' };
 
-        const entry = this._data[userId];
-        if (!entry) return { ok: false, reason: 'NOT_FOUND' };
-        entry.profiles = (entry.profiles || []).filter(p => Number(p.index) !== idx);
-        if (Number(entry.active) === idx) entry.active = 1;
-        // Gdy zostaje tylko profil główny bez etykiety — usuń wpis, wracamy do stanu domyślnego
-        if (entry.profiles.length === 0 || (entry.profiles.length === 1 && Number(entry.profiles[0].index) === 1 && !entry.profiles[0].label)) {
+        const entry = this._ensureEntry(userId);
+        const mainIdx = this.getMainIndex(userId);
+        const remaining = (entry.profiles || [])
+            .filter(p => Number(p.index) !== idx)
+            .sort((a, b) => Number(a.index) - Number(b.index));
+
+        // Przesunięcie w dół: numery >  usuniętego zjeżdżają o jeden
+        const renumbered = [];
+        remaining.forEach(p => {
+            const from = Number(p.index);
+            const to = from > idx ? from - 1 : from;
+            if (from !== to) {
+                renumbered.push({
+                    fromIndex: from,
+                    toIndex: to,
+                    fromKey: makePlayerKey(userId, from),
+                    toKey: makePlayerKey(userId, to),
+                });
+            }
+            p.index = to;
+        });
+
+        entry.profiles = remaining;
+        entry.active = mainIdx > idx ? mainIdx - 1 : mainIdx;
+
+        // Gdy zostaje tylko czysty slot 1 — usuń wpis, wracamy do stanu domyślnego
+        const rest = entry.profiles;
+        if (rest.length === 1 && Number(rest[0].index) === 1 && !rest[0].label && !rest[0].pendingDeleteAt && Number(entry.active) === 1) {
             delete this._data[userId];
         }
         await this._save();
-        logger.info(`👥 Usunięto profil #${idx} — gracz ${this._logName(userId, logName)}`);
-        return { ok: true };
+        const shiftInfo = renumbered.length > 0
+            ? ` (przesunięto: ${renumbered.map(r => `${r.fromIndex}→${r.toIndex}`).join(', ')})`
+            : '';
+        logger.info(`👥 Usunięto profil #${idx}${shiftInfo} — gracz ${this._logName(userId, logName)}`);
+        return { ok: true, renumbered };
     }
 
     /**
@@ -231,22 +402,17 @@ class ProfileRegistryService {
         if (!this.hasProfile(userId, idx)) return { ok: false, reason: 'NOT_FOUND' };
 
         const cleanLabel = this._sanitizeLabel(label);
-        const others = this.getProfiles(userId).filter(p => p.index !== idx);
+        const others = this._rawProfiles(userId).filter(p => p.index !== idx);
         if (cleanLabel && others.some(p => (p.label || '').toLowerCase() === cleanLabel.toLowerCase())) {
             return { ok: false, reason: 'DUPLICATE_LABEL' };
         }
 
-        if (!this._data[userId]) {
-            this._data[userId] = {
-                active: 1,
-                profiles: this.getProfiles(userId).map(p => ({ index: p.index, label: p.label, createdAt: p.createdAt })),
-            };
-        }
-        const target = this._data[userId].profiles.find(p => Number(p.index) === idx);
+        const entry = this._ensureEntry(userId);
+        const target = entry.profiles.find(p => Number(p.index) === idx);
         if (target) {
             target.label = cleanLabel;
         } else {
-            this._data[userId].profiles.push({ index: idx, label: cleanLabel, createdAt: new Date().toISOString() });
+            entry.profiles.push({ index: idx, label: cleanLabel, createdAt: new Date().toISOString() });
         }
         await this._save();
         return { ok: true, label: cleanLabel };
@@ -267,23 +433,23 @@ class ProfileRegistryService {
 
     /**
      * Statystyki do Centrum Dowodzenia.
-     * @returns {{ usersWithAlts: number, totalAltProfiles: number }}
+     * @returns {{ usersWithAlts: number, totalAltProfiles: number, pendingDeletions: number }}
      */
     getStats() {
         let usersWithAlts = 0;
         let totalAltProfiles = 0;
         for (const userId of Object.keys(this._data)) {
-            const alts = this.getProfiles(userId).filter(p => !p.isMain).length;
+            const alts = this._rawProfiles(userId).length - 1;
             if (alts > 0) {
                 usersWithAlts++;
                 totalAltProfiles += alts;
             }
         }
-        return { usersWithAlts, totalAltProfiles };
+        return { usersWithAlts, totalAltProfiles, pendingDeletions: this.getPendingDeletions().length };
     }
 
     /**
-     * Wszystkie playerKey wszystkich zarejestrowanych profili dodatkowych
+     * Wszystkie playerKey profili spoza maina
      * (np. do audytu spójności danych rankingowych).
      */
     getAllAltPlayerKeys() {
@@ -300,3 +466,4 @@ class ProfileRegistryService {
 module.exports = ProfileRegistryService;
 module.exports.DEFAULT_MAX_PROFILES = DEFAULT_MAX_PROFILES;
 module.exports.MAX_LABEL_LENGTH = MAX_LABEL_LENGTH;
+module.exports.DELETION_DELAY_MS = DELETION_DELAY_MS;

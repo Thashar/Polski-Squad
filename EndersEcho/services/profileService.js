@@ -139,7 +139,8 @@ class ProfileService {
                     label: prof.label,
                     playerKey: prof.playerKey,
                     isCurrent: prof.playerKey === targetPlayerKey,
-                    isTracked: prof.index === (this._profileRegistry.getActiveIndex(targetUserId)),
+                    isMain: prof.isMain,
+                    pendingDeleteAt: prof.pendingDeleteAt || null,
                     score: idx !== -1 ? globalRanking[idx].score : null,
                     globalPosition: idx !== -1 ? idx + 1 : null,
                 });
@@ -244,17 +245,17 @@ class ProfileService {
         // Lista profili gracza — widać, że wszystkie wyniki należą do tej samej osoby
         if (Array.isArray(data.ownerProfiles) && data.ownerProfiles.length > 1) {
             const profileLines = data.ownerProfiles.map(p => {
-                const marker = p.index === 1 ? '🏠' : getProfileMarker(p.index);
-                const name = p.index === 1
-                    ? t('Main', 'Main')
-                    : `${t('Profil', 'Profile')} ${p.index}`;
+                const marker = getProfileButtonEmoji(p.index) || getProfileMarker(p.index) || '•';
+                const name = `${t('Profil', 'Profile')} ${p.index}`;
                 const labelPart = p.label ? ` — *${p.label}*` : '';
                 const scorePart = p.score
                     ? ` · **${p.score}** *(#${p.globalPosition} ${t('globalnie', 'globally')})*`
                     : ` · ${t('brak wyniku', 'no score')}`;
-                // 📌 = profil śledzony (jego dane pokazują /ranking, /achievements i /profile)
-                const trackedPart = p.isTracked ? ' 📌' : '';
-                const line = `${marker} ${name}${labelPart}${scorePart}${trackedPart}`;
+                // 📌 = main (jego dane pokazują /ranking, /achievements i /profile; nie da się go usunąć)
+                const trackedPart = p.isMain ? ' 📌' : '';
+                // ⏳ = profil zgłoszony do usunięcia (dane znikną po 7 dniach, chyba że gracz odwoła)
+                const pendingPart = p.pendingDeleteAt ? ` · ⏳ <t:${Math.floor(Date.parse(p.pendingDeleteAt) / 1000)}:R>` : '';
+                const line = `${marker} ${name}${labelPart}${scorePart}${trackedPart}${pendingPart}`;
                 return p.isCurrent ? `**▸ ${line}**` : line;
             });
             embed.addFields({
@@ -374,7 +375,7 @@ class ProfileService {
         const t = (pol, eng) => isPol ? pol : eng;
         const {
             view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed,
-            ownProfiles = [], currentProfileIndex = 1, trackedProfileIndex = 1,
+            ownProfiles = [], currentProfileIndex = 1, mainProfileIndex = 1,
         } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
@@ -426,9 +427,9 @@ class ProfileService {
             const hasMany = profiles.length > 1;
 
             const viewButtons = hasMany ? profiles.map(prof => {
-                const label = prof.index === 1
-                    ? t('Main', 'Main')
-                    : (prof.label || `${t('Profil', 'Profile')} ${prof.index}`);
+                // Etykieta = nick w grze albo numer slotu; pinezka pokazuje, który profil jest mainem
+                const base = prof.label || `${t('Profil', 'Profile')} ${prof.index}`;
+                const label = prof.index === mainProfileIndex ? `📌 ${base}` : base;
                 const btn = new ButtonBuilder()
                     .setCustomId(`profile_view_${prof.index}`)
                     .setLabel(label.slice(0, 80))
@@ -441,16 +442,17 @@ class ProfileService {
 
             const toolButtons = [];
             if (hasMany) {
-                // Profil do ŚLEDZENIA — rządzi statystykami w /ranking, /achievements i /profile
-                const isTracked = currentProfileIndex === trackedProfileIndex;
+                // MAIN — rządzi statystykami w /ranking, /achievements i /profile,
+                // jest podpowiadany przy /update i jako jedyny nie może zostać usunięty
+                const isMain = currentProfileIndex === mainProfileIndex;
                 toolButtons.push(
                     new ButtonBuilder()
                         .setCustomId('profile_track')
-                        .setLabel(isTracked
-                            ? t('📌 Śledzony', '📌 Tracked')
-                            : t('📌 Śledź ten profil', '📌 Track this profile'))
-                        .setStyle(isTracked ? ButtonStyle.Success : ButtonStyle.Secondary)
-                        .setDisabled(isTracked)
+                        .setLabel(isMain
+                            ? t('📌 Main', '📌 Main')
+                            : t('📌 Ustaw jako main', '📌 Set as main'))
+                        .setStyle(isMain ? ButtonStyle.Success : ButtonStyle.Secondary)
+                        .setDisabled(isMain)
                 );
             }
             // Przy jednym profilu przycisk prowadzi do wyjaśnienia „po co drugie konto",

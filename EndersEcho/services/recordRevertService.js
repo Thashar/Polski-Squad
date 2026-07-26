@@ -184,6 +184,31 @@ class RecordRevertService {
         return session;
     }
 
+    /**
+     * Przepina sesje cofnięcia na nowy klucz profilu (przenumerowanie slotów) —
+     * bez tego przycisk „Cofnij wynik" pod ogłoszeniem przestałby rozpoznawać właściciela.
+     * @returns {Promise<number>} liczba przepiętych sesji
+     */
+    async renamePlayerKey(oldKey, newKey) {
+        if (oldKey === newKey) return 0;
+        let moved = 0;
+        for (const session of Object.values(this._sessions)) {
+            if (session.playerKey === oldKey) {
+                session.playerKey = newKey;
+                moved++;
+            }
+        }
+        for (const key of Object.keys(this._latest)) {
+            const sep = key.lastIndexOf('_');
+            if (sep === -1) continue;
+            if (key.slice(0, sep) !== oldKey) continue;
+            this._latest[`${newKey}${key.slice(sep)}`] = this._latest[key];
+            delete this._latest[key];
+        }
+        if (moved > 0) await this._save();
+        return moved;
+    }
+
     /** Oznacza jako cofniętą sesję ostatniego rekordu profilu (ścieżki bez ID ogłoszenia). */
     async markLatestReverted(playerKey, guildId, by, actorName = null) {
         const msgId = this._latest[this._latestKey(playerKey, guildId)];

@@ -234,6 +234,26 @@ class AchievementService {
      * Usuwa WSZYSTKIE osiągnięcia i cały progress gracza na danym serwerze.
      * Wywoływane przez head admina z poziomu /manage → Reset osiągnięć.
      */
+    /**
+     * Przenosi osiągnięcia pod nowy playerKey (przenumerowanie slotów profili).
+     * @returns {Promise<boolean>} czy było co przenosić
+     */
+    async renamePlayerKey(guildId, oldKey, newKey) {
+        if (oldKey === newKey) return false;
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                if (!data[oldKey]) return false;
+                data[newKey] = data[oldKey];
+                delete data[oldKey];
+                await this.saveData(guildId, data);
+                return true;
+            } catch {
+                return false;
+            }
+        });
+    }
+
     async resetAllAchievements(guildId, playerKey) {
         return this._enqueue(guildId, async () => {
             try {

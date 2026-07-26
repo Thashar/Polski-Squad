@@ -1631,6 +1631,30 @@ class RankingService {
      * @param {string} guildId
      * @returns {Promise<boolean>}
      */
+    /**
+     * Przenosi wpis rankingowy pod nowy playerKey (przenumerowanie slotów profili
+     * po usunięciu jednego z nich). Pola tożsamości wpisu są przeliczane, bo klucz
+     * niesie numer profilu.
+     * @returns {Promise<boolean>} czy było co przenosić
+     */
+    async renamePlayerKey(guildId, oldKey, newKey) {
+        if (oldKey === newKey) return false;
+        return this._enqueue(guildId, async () => {
+            const ranking = await this.loadRanking(guildId);
+            const entry = ranking[oldKey];
+            if (!entry) return false;
+            delete ranking[oldKey];
+            ranking[newKey] = {
+                ...entry,
+                playerKey: newKey,
+                userId: getOwnerId(newKey),
+                profileIndex: getProfileIndex(newKey),
+            };
+            await this.saveRanking(guildId, ranking);
+            return true;
+        });
+    }
+
     async removePlayerFromRanking(playerKey, guildId) {
         try {
             const ranking = await this.loadRanking(guildId);

@@ -79,6 +79,22 @@ class BossRecordService {
      * Usuwa WSZYSTKIE rekordy bossów gracza na danym serwerze (np. przy usunięciu gracza z rankingu).
      * @returns {number} liczba usuniętych rekordów bossów
      */
+    /**
+     * Przenosi rekordy bossów pod nowy playerKey (przenumerowanie slotów profili).
+     * @returns {Promise<boolean>} czy było co przenosić
+     */
+    async renamePlayerKey(guildId, oldKey, newKey) {
+        if (oldKey === newKey) return false;
+        return this._enqueue(guildId, async () => {
+            const data = await this._load(guildId);
+            if (!data[oldKey]) return false;
+            data[newKey] = { ...(data[newKey] || {}), ...data[oldKey] };
+            delete data[oldKey];
+            await this._save(guildId, data);
+            return true;
+        });
+    }
+
     async removeAllUserBossRecords(guildId, playerKey) {
         return this._enqueue(guildId, async () => {
             const data = await this._load(guildId);

@@ -34,6 +34,25 @@ class ScoreHistoryService {
         await fs.writeFile(file, JSON.stringify(entries, null, 2), 'utf8');
     }
 
+    /**
+     * Przenosi historię wyników pod nowy playerKey (przenumerowanie slotów profili).
+     * Gdy plik docelowy istnieje (nie powinien — slot jest wolny), wpisy są scalane
+     * chronologicznie, żeby nic nie przepadło.
+     * @returns {Promise<boolean>} czy było co przenosić
+     */
+    async renamePlayerKey(guildId, oldKey, newKey) {
+        if (oldKey === newKey) return false;
+        const entries = await this._load(guildId, oldKey);
+        if (entries.length === 0) return false;
+        const target = await this._load(guildId, newKey);
+        const merged = [...target, ...entries].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+        await this._save(guildId, newKey, merged);
+        await fs.unlink(this._file(guildId, oldKey)).catch(() => {});
+        return true;
+    }
+
     async addEntry(guildId, playerKey, entry) {
         const entries = await this._load(guildId, playerKey);
         entries.push(entry);

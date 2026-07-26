@@ -136,7 +136,9 @@ const PROFILE_MARKERS = ['', '', '②', '③'];
 // Znaki z PROFILE_MARKERS (②, ③) to zwykłe znaki Unicode, a NIE emoji — Discord
 // odrzuca je w polu emoji komponentu błędem COMPONENT_INVALID_EMOJI. Do komponentów
 // używamy więc keycapów (cyfra + VS16 + COMBINING ENCLOSING KEYCAP), które są emoji.
-const PROFILE_BUTTON_EMOJIS = ['', '🏠', '2️⃣', '3️⃣'];
+// Emoji oznacza SLOT (stały numer profilu), nie to, który profil jest mainem —
+// main jest oznaczany osobno pinezką 📌, bo może nim być dowolny slot.
+const PROFILE_BUTTON_EMOJIS = ['', '1️⃣', '2️⃣', '3️⃣'];
 
 /**
  * Buduje playerKey z ID właściciela i numeru profilu.

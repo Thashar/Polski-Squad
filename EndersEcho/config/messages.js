@@ -30,7 +30,7 @@ const pol = {
     rankingYourServerPos: 'Na serwerze',
     rankingYourGlobalPos: 'Globalnie',
     rankingNotInRanking: 'Nie jesteś jeszcze w rankingu.',
-    rankingTrackedNoScore: 'Śledzony profil (**{profile}**) nie ma jeszcze wyniku.\nZmień śledzony profil w `/profile` → 📌',
+    rankingMainNoScore: 'Twój profil **main** (**{profile}**) nie ma jeszcze wyniku.\nUstaw mainem inny profil w `/profile` → 📌',
     chartTitle: '📈 Historia Rekordów',
     globalPlayerGrowthChartTitle: '📊 Przyrost Unikalnych Graczy',
 
@@ -51,32 +51,37 @@ const pol = {
     updateProfileSessionExpired: '⏳ Wybór profilu wygasł. Użyj komendy ponownie.',
     updateProfileNotYours: '❌ To nie Twój wybór profilu.',
     profileCmdTitle: '👥 Twoje profile',
-    profileCmdDescription: 'Masz **{count}** z **{max}** możliwych profili.\nProfil oznaczony **📌** jest Twoim profilem do śledzenia — to jego statystyki, pozycję, wykres i osiągnięcia pokazuje `/ranking` i `/profile`, i to on jest podpowiadany przy `/update`.',
-    profileCmdMainName: 'Main (profil główny)',
+    profileCmdDescription: 'Masz **{count}** z **{max}** możliwych profili.\nProfil z pinezką **📌** jest Twoim **mainem** — to jego statystyki, pozycję, wykres i osiągnięcia pokazuje `/ranking` i `/profile`, to on jest podpowiadany przy `/update` i **tylko jego nie da się usunąć**.',
     profileCmdSlotName: 'Profil {index}',
     profileCmdNoScore: 'brak wyniku',
-    profileCmdActiveHint: 'śledzony',
+    profileCmdMainHint: 'main',
     profileCmdBtnAdd: '➕ Dodaj profil',
     profileCmdBtnRename: '✏️ Zmień nazwę',
     profileCmdBtnDelete: '🗑️ Usuń profil',
-    profileCmdBtnSwitch: '📌 Ustaw profil do śledzenia',
+    profileCmdBtnSwitch: '📌 Ustaw jako main',
+    profileCmdBtnCancelDelete: '↩️ Odwołaj usuwanie',
     profileCmdAdded: '✅ Dodano **{profile}**. Przy następnym `/update` wybierzesz, do którego profilu zapisać wynik.\nWpisz `/profile` ponownie, aby przełączać się między profilami.',
     profileCmdAddLimit: '❌ Osiągnięto limit **{limit}** profili.',
     profileCmdDuplicateLabel: '❌ Masz już profil o tej nazwie.',
     profileCmdRenamed: '✅ Nazwa profilu zmieniona na **{label}**.',
     profileCmdRenameCleared: '✅ Nazwa profilu usunięta.',
-    profileCmdSwitched: '✅ Profil do śledzenia: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
-    profileCmdDeleted: '✅ Usunięto **{profile}** wraz z jego wynikami ({records} rekordów).',
-    profileCmdDeleteMain: '❌ Profilu głównego nie można usunąć.',
-    profileCmdDeleteConfirm: '⚠️ Usunąć **{profile}**?\n\nSkasowane zostaną **wszystkie wyniki tego profilu**: wpis w rankingu, rekordy bossów, historia wyników i osiągnięcia. Tej operacji nie można cofnąć.',
+    profileCmdMainSet: '📌 Main: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil, a `/update` podpowiada go jako pierwszy. Tego profilu nie da się usunąć, dopóki jest mainem.',
+    profileCmdDeleteMain: '❌ Nie można usunąć profilu ustawionego jako **main**.\nNajpierw wskaż mainem inny profil (📌 **Ustaw jako main**) — wtedy ten będzie można usunąć.',
+    profileCmdDeleteConfirm: '⚠️ Usunąć **{profile}**?\n\n{record}\n\nProfil zostanie skasowany dopiero **po 7 dniach** — do tego czasu możesz się rozmyślić przyciskiem **↩️ Odwołaj usuwanie**. Przez ten tydzień profil działa normalnie: wynik zostaje w rankingu, a pinezką możesz go nawet ustawić mainem (usuwanie zostanie wtedy odwołane).\n\nPo terminie znikną **wszystkie dane tego profilu**: wpis w rankingu, rekordy bossów, historia wyników i osiągnięcia. Tego już nie da się cofnąć.',
+    profileCmdDeleteRecord: '📊 Aktualny rekord profilu: **{score}** · 👾 {boss} · {date}',
+    profileCmdDeleteNoRecord: '📊 Ten profil nie ma jeszcze żadnego wyniku.',
+    profileCmdDeleteScheduled: '🗑️ **{profile}** zostanie usunięty {when} ({relative}).\nDo tego czasu możesz to odwołać: `/profile` → **👥 Moje profile** → **↩️ Odwołaj usuwanie**.',
+    profileCmdDeleteCancelled: '↩️ Odwołano usuwanie **{profile}** — profil zostaje ze wszystkimi danymi.',
+    profileCmdDeletePending: 'usunięcie {when}',
+    profileCmdNoPendingDeletions: 'ℹ️ Żaden Twój profil nie czeka na usunięcie.',
     profileCmdModalTitle: 'Nazwa profilu',
     profileCmdModalLabel: 'Nick w grze (opcjonalnie)',
     profileCmdModalPlaceholder: 'np. Smurf',
     profileCmdSelectPrompt: '👥 Wybierz profil:',
     profileCmdNotFound: '❌ Nie znaleziono tego profilu.',
-    profileTrackButton: '📌 Śledź ten profil',
-    profileTrackedButton: '📌 Śledzony',
-    profileTrackedSet: '✅ Śledzony profil: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
+    profileSetMainButton: '📌 Ustaw jako main',
+    profileIsMainButton: '📌 Main',
+    profileSetMainDone: '📌 Main: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil. Dopóki jest mainem, nie można go usunąć.',
 
     // Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu
     profileIntroTitle: '👥 Dodatkowy profil — przeczytaj, zanim dodasz',
@@ -86,12 +91,19 @@ const pol = {
         + '• W rankingu dodatkowy profil występuje jako Twój nick z Discorda ze znacznikiem cyfry (np. `Nick ②`), więc od razu widać, że oba wyniki są Twoje.\n'
         + '• Przy `/update` bot zapyta, do którego profilu zapisać wynik ze screena.\n'
         + '• Osiągnięcia, rekordy bossów i subskrypcje też są w `/profile` — każdy profil ma je osobno.\n'
-        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌** wybierasz profil śledzony — to jego statystyki, pozycję, wykres i osiągnięcia pokazują `/ranking` i `/profile`.\n\n'
+        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌 Ustaw jako main** wskazujesz swoje konto główne.\n\n'
+        + '**Konto main (📌)**\n'
+        + '• To jego wynik, pozycję, wykres i osiągnięcia pokazują `/ranking` i `/profile`, i to on jest podpowiadany przy `/update`.\n'
+        + '• **Maina nie da się usunąć.** Chcesz skasować akurat to konto? Najpierw ustaw mainem inny profil — wtedy poprzedni main można usunąć.\n'
+        + '• Numery slotów są stałe: po usunięciu profilu numer zostaje wolny i trafi do niego dopiero kolejne nowe konto.\n\n'
+        + '**Usuwanie profilu trwa 7 dni**\n'
+        + '• Po kliknięciu **🗑️ Usuń profil** zobaczysz aktualny rekord tego konta (wynik, boss, data) i termin skasowania.\n'
+        + '• Przez te 7 dni profil działa normalnie, a Ty możesz się rozmyślić: `/profile` → **👥 Moje profile** → **↩️ Odwołaj usuwanie**.\n'
+        + '• Dopiero po terminie znikają **nieodwracalnie** wszystkie dane profilu: wpis w rankingu, rekordy bossów, historia wyników i osiągnięcia.\n\n'
         + '**O czym warto wiedzieć**\n'
         + '• Dzienny limit `/update`, cooldown i blokady są **wspólne dla wszystkich Twoich profili** — drugie konto nie daje więcej zgłoszeń.\n'
         + '• Rolę TOP dostajesz raz, według swojego najlepszego profilu — dodatkowe konta nie zajmują progów innym graczom.\n'
-        + '• Usunięcie profilu **nieodwracalnie** kasuje jego wyniki, rekordy bossów, historię i osiągnięcia.\n'
-        + '• Limit: **{max}** profile łącznie z głównym.',
+        + '• Limit: **{max}** profile łącznie z mainem.',
     profileIntroFooter: 'Potwierdź, że przeczytałeś, aby przejść do dodawania profilu',
     profileIntroBtnOk: '✅ Przeczytałem — dodaj profil',
     profileIntroBtnCancel: 'Anuluj',
@@ -503,7 +515,7 @@ const eng = {
     rankingYourServerPos: 'On server',
     rankingYourGlobalPos: 'Global',
     rankingNotInRanking: 'You are not in the ranking yet.',
-    rankingTrackedNoScore: 'Your tracked profile (**{profile}**) has no score yet.\nSwitch the tracked profile in `/profile` → 📌',
+    rankingMainNoScore: 'Your **main** profile (**{profile}**) has no score yet.\nPin another profile as main in `/profile` → 📌',
     chartTitle: '📈 Score History',
     globalPlayerGrowthChartTitle: '📊 Unique Player Growth',
 
@@ -524,46 +536,58 @@ const eng = {
     updateProfileSessionExpired: '⏳ Profile selection expired. Please run the command again.',
     updateProfileNotYours: '❌ This profile selection is not yours.',
     profileCmdTitle: '👥 Your profiles',
-    profileCmdDescription: 'You have **{count}** of **{max}** available profiles.\nThe profile marked with **📌** is your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`, and it is preselected in `/update`.',
-    profileCmdMainName: 'Main (primary profile)',
+    profileCmdDescription: 'You have **{count}** of **{max}** available profiles.\nThe profile pinned with **📌** is your **main** — `/ranking` and `/profile` show its stats, position, chart and achievements, `/update` suggests it first, and **it is the only one that cannot be deleted**.',
     profileCmdSlotName: 'Profile {index}',
     profileCmdNoScore: 'no score',
-    profileCmdActiveHint: 'tracked',
+    profileCmdMainHint: 'main',
     profileCmdBtnAdd: '➕ Add profile',
     profileCmdBtnRename: '✏️ Rename',
     profileCmdBtnDelete: '🗑️ Delete profile',
-    profileCmdBtnSwitch: '📌 Set tracked profile',
+    profileCmdBtnSwitch: '📌 Set as main',
+    profileCmdBtnCancelDelete: '↩️ Cancel deletion',
     profileCmdAdded: '✅ Added **{profile}**. On your next `/update` you will choose which profile the score belongs to.\nRun `/profile` again to switch between profiles.',
     profileCmdAddLimit: '❌ Profile limit of **{limit}** reached.',
     profileCmdDuplicateLabel: '❌ You already have a profile with that name.',
     profileCmdRenamed: '✅ Profile renamed to **{label}**.',
     profileCmdRenameCleared: '✅ Profile name cleared.',
-    profileCmdSwitched: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
-    profileCmdDeleted: '✅ Deleted **{profile}** together with its scores ({records} records).',
-    profileCmdDeleteMain: '❌ The main profile cannot be deleted.',
-    profileCmdDeleteConfirm: '⚠️ Delete **{profile}**?\n\nThis removes **all scores of that profile**: ranking entry, boss records, score history and achievements. This cannot be undone.',
+    profileCmdMainSet: '📌 Main: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile and `/update` suggests it first. While it is your main, it cannot be deleted.',
+    profileCmdDeleteMain: '❌ The profile set as **main** cannot be deleted.\nSet another profile as main first (📌 **Set as main**) — then this one can be deleted.',
+    profileCmdDeleteConfirm: '⚠️ Delete **{profile}**?\n\n{record}\n\nThe profile will be erased only **after 7 days** — until then you can change your mind with **↩️ Cancel deletion**. During that week the profile works normally: its score stays in the ranking and you can even pin it as your main (which cancels the deletion).\n\nAfter the deadline **all data of this profile** is gone: ranking entry, boss records, score history and achievements. That cannot be undone.',
+    profileCmdDeleteRecord: '📊 Current profile record: **{score}** · 👾 {boss} · {date}',
+    profileCmdDeleteNoRecord: '📊 This profile has no score yet.',
+    profileCmdDeleteScheduled: '🗑️ **{profile}** will be deleted {when} ({relative}).\nUntil then you can cancel it: `/profile` → **👥 My Profiles** → **↩️ Cancel deletion**.',
+    profileCmdDeleteCancelled: '↩️ Deletion of **{profile}** cancelled — the profile keeps all its data.',
+    profileCmdDeletePending: 'deletion {when}',
+    profileCmdNoPendingDeletions: 'ℹ️ None of your profiles is scheduled for deletion.',
     profileCmdModalTitle: 'Profile name',
     profileCmdModalLabel: 'In-game nickname (optional)',
     profileCmdModalPlaceholder: 'e.g. Smurf',
     profileCmdSelectPrompt: '👥 Choose a profile:',
     profileCmdNotFound: '❌ Profile not found.',
-    profileTrackButton: '📌 Track this profile',
-    profileTrackedButton: '📌 Tracked',
-    profileTrackedSet: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
+    profileSetMainButton: '📌 Set as main',
+    profileIsMainButton: '📌 Main',
+    profileSetMainDone: '📌 Main: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile. While it is your main, it cannot be deleted.',
 
     // Educational gate before adding the FIRST additional profile
     profileIntroTitle: '👥 Additional profile — read this before adding',
-    profileIntroBody: '**An additional profile is your second in-game account.** Scores from both accounts stay separate — every profile has its own ranking entry, boss records, history and achievements.\n\n'
-        + '**How to use it**\n'
-        + '• When adding a profile you may enter your in-game nick — it is only for you to tell the accounts apart, and you can skip it.\n'
-        + '• In the ranking an additional profile appears as your Discord nick with a number marker (e.g. `Nick ②`), so everyone can see both scores are yours.\n'
-        + '• On `/update` the bot will ask which profile the score from the screenshot belongs to.\n'
+    profileIntroBody: '**An additional profile is your second in-game account.** Scores from both accounts stay separate — each profile has its own ranking entry, boss records, history and achievements.\n\n'
+        + '**How it works**\n'
+        + '• When creating a profile you can enter your in-game nickname — it is only for you to tell the accounts apart and can be skipped.\n'
+        + '• In the ranking an additional profile shows up as your Discord nickname with a digit marker (e.g. `Nick ②`), so it is obvious both scores are yours.\n'
+        + '• On `/update` the bot asks which profile the screenshot belongs to.\n'
         + '• Achievements, boss records and subscriptions live in `/profile` too — each profile has its own.\n'
-        + '• In `/profile` you switch between accounts, and the **📌** button picks your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`.\n\n'
+        + '• In `/profile` you switch between accounts, and **📌 Set as main** marks your primary account.\n\n'
+        + '**The main account (📌)**\n'
+        + '• `/ranking` and `/profile` show its score, position, chart and achievements, and `/update` suggests it first.\n'
+        + '• **The main cannot be deleted.** Want to remove that exact account? Set another profile as main first — then the previous main can be deleted.\n'
+        + '• Slot numbers are fixed: a deleted profile leaves its slot free, and only a brand-new account takes it over.\n\n'
+        + '**Deleting a profile takes 7 days**\n'
+        + '• After clicking **🗑️ Delete profile** you see that account\'s current record (score, boss, date) and the deletion date.\n'
+        + '• During those 7 days the profile works normally and you can change your mind: `/profile` → **👥 My Profiles** → **↩️ Cancel deletion**.\n'
+        + '• Only after the deadline all profile data is **irreversibly** gone: ranking entry, boss records, score history and achievements.\n\n'
         + '**Good to know**\n'
         + '• The daily `/update` limit, cooldown and blocks are **shared across all your profiles** — a second account does not give you more submissions.\n'
-        + '• You get one TOP role, based on your best profile — additional accounts never take role slots from other players.\n'
-        + '• Deleting a profile **permanently** removes its scores, boss records, history and achievements.\n'
+        + '• You get a TOP role once, based on your best profile — extra accounts do not take tier slots from other players.\n'
         + '• Limit: **{max}** profiles including the main one.',
     profileIntroFooter: 'Confirm you have read this to continue to adding a profile',
     profileIntroBtnOk: '✅ I have read this — add profile',

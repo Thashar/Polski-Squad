@@ -105,6 +105,30 @@ class NotificationService {
     }
 
     /**
+     * Przepina subskrypcje na nowy klucz profilu (przenumerowanie slotów po usunięciu
+     * jednego z profili obserwowanego gracza) — obserwujący nie traci subskrypcji.
+     * @returns {Promise<number>} liczba przepiętych subskrypcji
+     */
+    async renameTargetPlayerKey(oldKey, newKey) {
+        if (oldKey === newKey) return 0;
+        const data = await this.load();
+        let moved = 0;
+        for (const subs of Object.values(data)) {
+            for (const sub of subs) {
+                if (this._keyOf(sub) === oldKey) {
+                    sub.targetPlayerKey = newKey;
+                    moved++;
+                }
+            }
+        }
+        if (moved > 0) {
+            await this.save(data);
+            logger.info(`🔔 Przepięto ${moved} subskrypcji z profilu ${oldKey} na ${newKey}`);
+        }
+        return moved;
+    }
+
+    /**
      * Usuwa wszystkie subskrypcje wskazujące na dany profil (np. po usunięciu profilu).
      * @returns {Promise<number>} liczba usuniętych subskrypcji
      */

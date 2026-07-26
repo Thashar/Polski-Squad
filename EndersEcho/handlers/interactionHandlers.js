@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
-const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker, getProfileButtonEmoji } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileButtonEmoji } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
@@ -4656,7 +4656,7 @@ class InteractionHandler {
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
                     globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
                     rolePositions: [],
-                    noScoreNote: globalIdx === -1 ? this._trackedProfileNoScoreNote(callerUserId, msgs) : null
+                    noScoreNote: globalIdx === -1 ? this._mainProfileNoScoreNote(callerUserId, msgs) : null
                 };
                 if (this.roleRankingConfigService) {
                     const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
@@ -4690,7 +4690,7 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, 0, totalPages, interaction.user.id, guild,
-                { mode: 'server', client: null, messages: msgs, callerStats, callerPlayerKey: this._trackedPlayerKey(interaction.user.id) }
+                { mode: 'server', client: null, messages: msgs, callerStats, callerPlayerKey: this._mainPlayerKey(interaction.user.id) }
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, {
                 userPage, mode: 'server', guildId, guildName: guild?.name || null
@@ -4701,7 +4701,7 @@ class InteractionHandler {
             if (this.scoreHistoryService && this.chartService) {
                 try {
                     const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [guildId];
-                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, this.profileRegistryService?.getActivePlayerKey(interaction.user.id) || interaction.user.id, 365);
+                    const callerHistory = await this.scoreHistoryService.getUserHistoryAllGuilds(allGuildIds, this.profileRegistryService?.getMainPlayerKey(interaction.user.id) || interaction.user.id, 365);
                     if (callerHistory.length >= 2) {
                         const chartTitle = msgs.chartTitle;
                         const callerUsername = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
@@ -5122,72 +5122,70 @@ class InteractionHandler {
     // ═══════════════════════════════════════════════════════════════════════════
 
     /**
-     * Nazwa profilu do wyświetlenia: "Main (profil główny)" / "② Profil 2 — Smurf".
-     * @param {{ index: number, label: string|null }} prof
+     * Nazwa profilu do wyświetlenia: „1️⃣ Profil 1 — Nick 📌".
+     * Emoji oznacza SLOT (stały numer), pinezka — który profil jest mainem.
+     * @param {{ index: number, label: string|null, isMain?: boolean }} prof
      * @param {Object} msgs
      * @returns {string}
      */
     _profileDisplayName(prof, msgs) {
-        if (prof.index === 1) {
-            return prof.label ? `🏠 ${msgs.profileCmdMainName} — ${prof.label}` : `🏠 ${msgs.profileCmdMainName}`;
-        }
-        const marker = getProfileMarker(prof.index);
-        const base = `${marker} ${formatMessage(msgs.profileCmdSlotName, { index: prof.index })}`;
-        return prof.label ? `${base} — ${prof.label}` : base;
+        const emoji = getProfileButtonEmoji(prof.index);
+        const base = `${emoji ? `${emoji} ` : ''}${formatMessage(msgs.profileCmdSlotName, { index: prof.index })}`;
+        const withLabel = prof.label ? `${base} — ${prof.label}` : base;
+        return prof.isMain ? `${withLabel} 📌` : withLabel;
     }
 
     /**
      * Klucz profilu, którego dotyczą statystyki i podkreślenie w rankingach:
-     * ZAWSZE profil ustawiony do ŚLEDZENIA (/profile → „📌 Śledź ten profil").
-     * Gracz bez wpisu w rejestrze profili → własne ID (profil główny).
+     * ZAWSZE profil MAIN (pinezka 📌 w `/profile`).
+     * Gracz bez wpisu w rejestrze profili → własne ID (slot 1).
      * @param {string} userId - Discord ID gracza
      * @returns {string|null}
      */
-    _trackedPlayerKey(userId) {
+    _mainPlayerKey(userId) {
         if (!userId) return null;
         const ownerId = String(userId);
-        return this.profileRegistryService?.getActivePlayerKey(ownerId) || ownerId;
+        return this.profileRegistryService?.getMainPlayerKey(ownerId) || ownerId;
     }
 
     /**
-     * Notka do pola „Twoje statystyki", gdy ŚLEDZONY profil dodatkowy nie ma jeszcze
-     * wyniku. Bez niej gracz widział tylko „Nie jesteś jeszcze w rankingu" i nie
-     * wiedział, że wynik ma na innym (nieśledzonym) profilu.
+     * Notka do pola „Twoje statystyki", gdy profil MAIN nie ma jeszcze wyniku, a gracz
+     * ma kilka profili. Bez niej widział tylko „Nie jesteś jeszcze w rankingu" i nie
+     * wiedział, że wynik ma na innym profilu (nie-mainie).
      * @param {string} userId
      * @param {Object} msgs
-     * @returns {string|null} null dla profilu głównego (komunikat domyślny wystarcza)
+     * @returns {string|null} null gdy gracz ma jeden profil (komunikat domyślny wystarcza)
      */
-    _trackedProfileNoScoreNote(userId, msgs) {
-        const idx = getProfileIndex(this._trackedPlayerKey(userId));
-        if (idx <= 1) return null;
-        const prof = this.profileRegistryService?.getProfiles(userId)?.find(p => p.index === idx);
-        const name = prof?.label || formatMessage(msgs.profileCmdSlotName, { index: idx });
-        const marker = getProfileMarker(idx);
-        return formatMessage(msgs.rankingTrackedNoScore, {
-            profile: marker ? `${marker} ${name}` : name
+    _mainProfileNoScoreNote(userId, msgs) {
+        const registry = this.profileRegistryService;
+        if (!registry?.hasMultipleProfiles(userId)) return null;
+        const idx = getProfileIndex(this._mainPlayerKey(userId));
+        const prof = registry.getProfiles(userId).find(p => p.index === idx);
+        return formatMessage(msgs.rankingMainNoScore, {
+            profile: prof ? this._profileDisplayName({ ...prof, isMain: false }, msgs) : `#${idx}`
         });
     }
 
     /**
      * Pozycja gracza na liście rankingowej z uwzględnieniem profili.
-     * Liczy się WYŁĄCZNIE profil śledzony — brak jego wyniku oznacza brak pozycji
+     * Liczy się WYŁĄCZNIE profil MAIN — brak jego wyniku oznacza brak pozycji
      * (-1). Świadomie nie ma fallbacku na inny profil gracza: pokazywanie wyniku
-     * z maina, gdy śledzony jest profil dodatkowy, myliło graczy.
+     * z innego profilu, gdy main go nie ma, myliło graczy.
      * @param {Array} players - lista wpisów rankingu (z playerKey lub userId)
      * @param {string} userId - Discord ID gracza
      * @returns {number} indeks w liście lub -1
      */
     _findCallerIndex(players, userId) {
         if (!Array.isArray(players) || !userId) return -1;
-        const trackedKey = this._trackedPlayerKey(userId);
+        const trackedKey = this._mainPlayerKey(userId);
         return players.findIndex(p => (p.playerKey || p.userId) === trackedKey);
     }
 
-    /** Krótka etykieta na przycisk (limit 80 znaków). */
+    /** Krótka etykieta na przycisk (limit 80 znaków) — pinezka oznacza maina. */
     _profileButtonLabel(prof, msgs) {
-        const base = prof.index === 1 ? 'Main' : formatMessage(msgs.profileCmdSlotName, { index: prof.index });
+        const base = formatMessage(msgs.profileCmdSlotName, { index: prof.index });
         const label = prof.label ? `${base} — ${prof.label}` : base;
-        return label.slice(0, 80);
+        return `${prof.isMain ? '📌 ' : ''}${label}`.slice(0, 80);
     }
 
     /**
@@ -5344,7 +5342,7 @@ class InteractionHandler {
     async _buildProfilesPanel(userId, guildId, client) {
         const msgs = this.msgs(guildId);
         const profiles = this.profileRegistryService.getProfiles(userId);
-        const activeIdx = this.profileRegistryService.getActiveIndex(userId);
+        const activeIdx = this.profileRegistryService.getMainIndex(userId);
         const maxProfiles = this.profileRegistryService.getMaxProfiles();
 
         // Wyniki profili z rankingu globalnego (żeby gracz widział, co jest gdzie zapisane)
@@ -5359,8 +5357,11 @@ class InteractionHandler {
                 : `*${msgs.profileCmdNoScore}*`;
             const isActive = prof.index === activeIdx;
             const name = this._profileDisplayName(prof, msgs);
-            const activeHint = isActive ? ` · *${msgs.profileCmdActiveHint}*` : '';
-            return `${isActive ? '**▸** ' : '　'}${name} — ${scorePart}${activeHint}`;
+            // Profil czekający na skasowanie — data w formacie względnym Discorda
+            const pendingHint = prof.pendingDeleteAt
+                ? ` · ⏳ *${formatMessage(msgs.profileCmdDeletePending, { when: this._discordTs(prof.pendingDeleteAt, 'R') })}*`
+                : '';
+            return `${isActive ? '**▸** ' : '　'}${name} — ${scorePart}${pendingHint}`;
         });
 
         const embed = new EmbedBuilder()
@@ -5372,6 +5373,7 @@ class InteractionHandler {
 
         const canAdd = profiles.length < maxProfiles;
         const hasAlts = profiles.some(pr => !pr.isMain);
+        const hasPending = profiles.some(pr => pr.pendingDeleteAt);
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('prof_add')
@@ -5393,8 +5395,46 @@ class InteractionHandler {
                 .setStyle(ButtonStyle.Danger)
                 .setDisabled(!hasAlts),
         );
+        // Odwołanie usuwania pokazujemy tylko wtedy, gdy jest co odwoływać
+        if (hasPending) {
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId('prof_delete_cancel')
+                    .setLabel(msgs.profileCmdBtnCancelDelete)
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        }
 
         return { embed, components: [row] };
+    }
+
+    /** Znacznik czasu Discorda (`<t:sekundy:styl>`) — sam się lokalizuje u odbiorcy. */
+    _discordTs(iso, style = 'F') {
+        const ms = Date.parse(iso);
+        if (!Number.isFinite(ms)) return '—';
+        return `<t:${Math.floor(ms / 1000)}:${style}>`;
+    }
+
+    /**
+     * Linijka „aktualny rekord profilu" do okna potwierdzenia usunięcia — gracz widzi,
+     * co dokładnie straci (wynik, boss, data), zanim zdecyduje.
+     * @returns {Promise<string>}
+     */
+    async _profileRecordSummary(playerKey, client, msgs) {
+        try {
+            const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const activeGuildIds = new Set(configuredIds.filter(gid => client.guilds.cache.has(gid)));
+            const globalRanking = await this.rankingService.getGlobalRanking(activeGuildIds);
+            const entry = globalRanking.find(p => (p.playerKey || p.userId) === playerKey);
+            if (!entry) return msgs.profileCmdDeleteNoRecord;
+            return formatMessage(msgs.profileCmdDeleteRecord, {
+                score: entry.score || this.rankingService.formatScore(entry.scoreValue),
+                boss: entry.bossName || msgs.unknownBoss,
+                date: this._discordTs(entry.timestamp, 'D'),
+            });
+        } catch {
+            return msgs.profileCmdDeleteNoRecord;
+        }
     }
 
     /** Odświeża panel profili w miejscu. */
@@ -5459,7 +5499,8 @@ class InteractionHandler {
         if (customId === 'prof_switch' || customId === 'prof_rename' || customId === 'prof_delete') {
             const action = customId.split('_')[1]; // switch | rename | delete
             const profiles = registry.getProfiles(userId)
-                .filter(pr => action !== 'delete' || !pr.isMain); // profilu głównego nie można usunąć
+                // Maina nie da się usunąć — nie pokazujemy go nawet na liście wyboru
+                .filter(pr => action !== 'delete' || !pr.isMain);
             if (profiles.length === 0) {
                 await interaction.reply({ content: msgs.profileCmdNotFound, flags: ['Ephemeral'] });
                 return;
@@ -5484,14 +5525,14 @@ class InteractionHandler {
         // Ustawienie domyślnego profilu
         if (customId.startsWith('prof_switch_do_')) {
             const idx = parseInt(customId.slice('prof_switch_do_'.length), 10);
-            const ok = await registry.setActive(userId, idx);
+            const ok = await registry.setMain(userId, idx);
             if (!ok) {
                 await interaction.update({ content: msgs.profileCmdNotFound, components: [] });
                 return;
             }
             const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
             await interaction.update({
-                content: formatMessage(msgs.profileCmdSwitched, { profile: this._profileDisplayName(prof, msgs) }),
+                content: formatMessage(msgs.profileCmdMainSet, { profile: this._profileDisplayName(prof, msgs) }),
                 components: [],
             });
             return;
@@ -5504,20 +5545,64 @@ class InteractionHandler {
             return;
         }
 
-        // Usunięcie profilu — potwierdzenie
-        if (customId.startsWith('prof_delete_do_')) {
-            const idx = parseInt(customId.slice('prof_delete_do_'.length), 10);
-            if (idx === 1) {
-                await interaction.update({ content: msgs.profileCmdDeleteMain, components: [] });
+        // Odwołanie zaplanowanego usunięcia — lista profili czekających na skasowanie
+        if (customId === 'prof_delete_cancel') {
+            const pending = registry.getProfiles(userId).filter(pr => pr.pendingDeleteAt);
+            if (pending.length === 0) {
+                await interaction.reply({ content: msgs.profileCmdNoPendingDeletions, flags: ['Ephemeral'] });
                 return;
             }
+            const cancelRow = new ActionRowBuilder();
+            for (const prof of pending.slice(0, 5)) {
+                const btn = new ButtonBuilder()
+                    .setCustomId(`prof_delete_cancel_do_${prof.index}`)
+                    .setLabel(this._profileButtonLabel(prof, msgs))
+                    .setStyle(ButtonStyle.Success);
+                const emoji = getProfileButtonEmoji(prof.index);
+                if (emoji) btn.setEmoji(emoji);
+                cancelRow.addComponents(btn);
+            }
+            await interaction.reply({ content: msgs.profileCmdSelectPrompt, components: [cancelRow], flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (customId.startsWith('prof_delete_cancel_do_')) {
+            const idx = parseInt(customId.slice('prof_delete_cancel_do_'.length), 10);
+            const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
+            const res = await registry.cancelDeletion(userId, idx, interaction.member?.displayName || interaction.user.username);
+            if (!res.ok) {
+                await interaction.update({ content: msgs.profileCmdNoPendingDeletions, components: [] });
+                return;
+            }
+            this.logService._gl(interaction.guildId).info(
+                `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, userId)} odwołał usunięcie profilu #${idx}`
+            );
+            await interaction.update({
+                content: formatMessage(msgs.profileCmdDeleteCancelled, { profile: this._profileDisplayName(prof || { index: idx, label: null }, msgs) }),
+                components: [],
+            });
+            return;
+        }
+
+        // Usunięcie profilu — potwierdzenie (z aktualnym rekordem, żeby gracz wiedział, co traci)
+        if (customId.startsWith('prof_delete_do_')) {
+            const idx = parseInt(customId.slice('prof_delete_do_'.length), 10);
             const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
             if (!prof) {
                 await interaction.update({ content: msgs.profileCmdNotFound, components: [] });
                 return;
             }
+            // Maina nie da się usunąć — dopiero po wskazaniu pinezką innego profilu
+            if (prof.isMain) {
+                await interaction.update({ content: msgs.profileCmdDeleteMain, components: [] });
+                return;
+            }
+            const recordLine = await this._profileRecordSummary(prof.playerKey, interaction.client, msgs);
             await interaction.update({
-                content: formatMessage(msgs.profileCmdDeleteConfirm, { profile: this._profileDisplayName(prof, msgs) }),
+                content: formatMessage(msgs.profileCmdDeleteConfirm, {
+                    profile: this._profileDisplayName(prof, msgs),
+                    record: recordLine,
+                }),
                 components: [new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
                         .setCustomId(`prof_delete_confirm_${idx}`)
@@ -5528,17 +5613,27 @@ class InteractionHandler {
             return;
         }
 
-        // Usunięcie profilu — wykonanie (ranking + bossowie + historia + osiągnięcia + subskrypcje)
+        // Usunięcie profilu — PLANOWANIE (dane kasuje sweep dopiero po 7 dniach)
         if (customId.startsWith('prof_delete_confirm_')) {
             const idx = parseInt(customId.slice('prof_delete_confirm_'.length), 10);
-            await interaction.deferUpdate();
-            const result = await this._deleteProfileData(userId, idx, interaction);
-            if (!result.ok) {
-                await interaction.editReply({ content: msgs.profileCmdNotFound, components: [] });
+            const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
+            const res = await registry.scheduleDeletion(userId, idx, interaction.member?.displayName || interaction.user.username);
+            if (!res.ok) {
+                await interaction.update({
+                    content: res.reason === 'IS_MAIN' ? msgs.profileCmdDeleteMain : msgs.profileCmdNotFound,
+                    components: [],
+                });
                 return;
             }
-            await interaction.editReply({
-                content: formatMessage(msgs.profileCmdDeleted, { profile: result.profileName, records: result.removedRecords }),
+            this.logService._gl(interaction.guildId).info(
+                `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, userId)} zaplanował usunięcie profilu #${idx} (termin: ${res.deleteAt})`
+            );
+            await interaction.update({
+                content: formatMessage(msgs.profileCmdDeleteScheduled, {
+                    profile: this._profileDisplayName(prof || { index: idx, label: null }, msgs),
+                    when: this._discordTs(res.deleteAt, 'F'),
+                    relative: this._discordTs(res.deleteAt, 'R'),
+                }),
                 components: [],
             });
             return;
@@ -5610,20 +5705,27 @@ class InteractionHandler {
     }
 
     /**
-     * Usuwa profil wraz ze WSZYSTKIMI jego danymi na wszystkich serwerach.
+     * Kasuje profil wraz ze WSZYSTKIMI jego danymi na wszystkich serwerach.
+     * Wywoływane WYŁĄCZNIE przez sweep rejestru po upływie 7 dni od zaplanowania
+     * usunięcia (gracz do tego czasu może się rozmyślić) — nie z interakcji.
      * Numer slotu nie jest odzyskiwany przez przenumerowanie — pozostaje wolny.
+     * @param {string} userId
+     * @param {number} profileIndex
+     * @param {{ client: import('discord.js').Client, logGuildId?: string|null }} ctx
      * @returns {Promise<{ ok: boolean, profileName?: string, removedRecords?: number }>}
      */
-    async _deleteProfileData(userId, profileIndex, interaction) {
-        const msgs = this.msgs(interaction.guildId);
+    async _purgeProfileData(userId, profileIndex, { client, logGuildId = null }) {
+        const msgs = this.msgs(logGuildId);
         const registry = this.profileRegistryService;
         const prof = registry.getProfiles(userId).find(pr => pr.index === profileIndex);
+        // Main mógł zostać przestawiony po zaplanowaniu usunięcia — wtedy nie kasujemy
         if (!prof || prof.isMain) return { ok: false };
 
         const playerKey = prof.playerKey;
         const profileName = this._profileDisplayName(prof, msgs);
+        const gl = this.logService._gl(logGuildId);
         const guildIds = this.guildConfigService?.getAllConfiguredGuildIds()
-            || Array.from(interaction.client.guilds.cache.keys());
+            || Array.from(client.guilds.cache.keys());
 
         let removedRecords = 0;
         for (const gid of guildIds) {
@@ -5640,13 +5742,13 @@ class InteractionHandler {
                     await this.scoreHistoryService.removeEntriesAfter(gid, playerKey, 0).catch(() => 0);
                 }
                 // Role TOP na serwerze mogą się zmienić po usunięciu wpisu z rankingu
-                const guildObj = interaction.client.guilds.cache.get(gid);
+                const guildObj = client.guilds.cache.get(gid);
                 const guildCfg = this.config.getGuildConfig(gid);
                 if (wasRemoved && guildObj && guildCfg?.topRoles) {
                     this.roleService.updateTopRoles(guildObj, null, guildCfg.topRoles).catch(() => {});
                 }
             } catch (err) {
-                this.logService._gl(interaction.guildId).warn(`⚠️ Błąd usuwania danych profilu ${playerKey} na serwerze ${gid}: ${err.message}`);
+                gl.warn(`⚠️ Błąd usuwania danych profilu ${playerKey} na serwerze ${gid}: ${err.message}`);
             }
         }
 
@@ -5654,16 +5756,58 @@ class InteractionHandler {
         // Powód „profile_deleted" → etykieta „🗑️ Profil usunięty" zamiast „Cofnął admin"
         // (żaden admin tu nie interweniował — wynik zniknął razem z profilem)
         for (const gid of guildIds) {
-            await this._invalidateUndoForPlayer(interaction.client, playerKey, gid, profileName, { by: 'profile_deleted' }).catch(() => {});
+            await this._invalidateUndoForPlayer(client, playerKey, gid, profileName, { by: 'profile_deleted' }).catch(() => {});
         }
         // Subskrypcje wskazujące na ten profil tracą sens
         await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
-        await registry.removeProfile(userId, profileIndex, interaction.member?.displayName || interaction.user.username);
 
-        this.logService._gl(interaction.guildId).info(
-            `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, userId)} usunął profil #${profileIndex} (wpisy w rankingu: ${removedRecords})`
-        );
-        return { ok: true, profileName, removedRecords };
+        // Rejestr przenumerowuje pozostałe profile (2→1, 3→2) i mówi, co przenieść
+        const removal = await registry.removeProfile(userId, profileIndex);
+        for (const move of removal.renumbered || []) {
+            await this._migratePlayerKey(move.fromKey, move.toKey, guildIds, gl);
+        }
+
+        gl.info(`👥 Skasowano profil #${profileIndex} gracza <@${userId}> po 7 dniach od zgłoszenia (wpisy w rankingu: ${removedRecords})`);
+        this.adminPanelService?.refresh();
+        return { ok: true, profileName, removedRecords, renumbered: removal.renumbered || [] };
+    }
+
+    /**
+     * Przenosi WSZYSTKIE dane profilu pod nowy playerKey — po usunięciu profilu numery
+     * pozostałych zjeżdżają w dół (2→1, 3→2), a numer slotu jest częścią klucza danych.
+     * Pominięcie któregokolwiek magazynu = osierocone dane, więc lista musi być pełna:
+     * ranking, rekordy bossów, osiągnięcia, historia wyników (plik na profil),
+     * subskrypcje, sesje cofnięcia rekordu i sesje weryfikacji społeczności.
+     * @param {string[]} guildIds
+     * @param {Object} gl - logger serwerowy
+     */
+    async _migratePlayerKey(fromKey, toKey, guildIds, gl) {
+        for (const gid of guildIds) {
+            try {
+                await this.rankingService.renamePlayerKey(gid, fromKey, toKey);
+                await this.bossRecordService?.renamePlayerKey(gid, fromKey, toKey);
+                await this.achievementService?.renamePlayerKey(gid, fromKey, toKey);
+                await this.scoreHistoryService?.renamePlayerKey(gid, fromKey, toKey);
+            } catch (err) {
+                gl.warn(`⚠️ Błąd przenoszenia danych profilu ${fromKey} → ${toKey} na serwerze ${gid}: ${err.message}`);
+            }
+        }
+        await this.notificationService?.renameTargetPlayerKey?.(fromKey, toKey).catch(() => {});
+        await this.recordRevertService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
+        await this.communityVerificationService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
+        gl.info(`👥 Przeniesiono dane profilu ${fromKey} → ${toKey}`);
+    }
+
+    /**
+     * Sweep odroczonych usunięć profili — uruchamiany przy starcie bota i co godzinę.
+     * Rejestr trzyma terminy, kasowanie danych należy do handlera (ma dostęp do wszystkich serwisów).
+     * @param {import('discord.js').Client} client
+     */
+    startProfileDeletionSweep(client) {
+        if (!this.profileRegistryService) return;
+        this.profileRegistryService.start(async ({ userId, index }) => {
+            await this._purgeProfileData(userId, index, { client });
+        });
     }
 
     /**
@@ -5783,7 +5927,7 @@ class InteractionHandler {
         // porzucony wybór nie może kosztować gracza próby.
         const profileList = this.profileRegistryService?.getProfiles(interaction.user.id) || [];
         if (!playerKey && profileList.length > 1) {
-            const activeIdx = this.profileRegistryService.getActiveIndex(interaction.user.id);
+            const activeIdx = this.profileRegistryService.getMainIndex(interaction.user.id);
             // showModal MUSI być pierwszą odpowiedzią na interakcję — dlatego wszystkie
             // walidacje wyżej kończą się `return` i żadna nie odpowiada w happy path.
             await interaction.showModal(
@@ -8099,7 +8243,7 @@ class InteractionHandler {
                         client: rankingData.mode === 'global' ? interaction.client : null,
                         messages: msgs,
                         callerStats: rankingData.callerStats || null,
-                        callerPlayerKey: this._trackedPlayerKey(rankingData.userId)
+                        callerPlayerKey: this._mainPlayerKey(rankingData.userId)
                     }
                 );
             }
@@ -8759,7 +8903,7 @@ class InteractionHandler {
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
                     globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
                     rolePositions: [],
-                    noScoreNote: globalIdx === -1 ? this._trackedProfileNoScoreNote(callerUserId, this.msgs(interaction.guildId)) : null
+                    noScoreNote: globalIdx === -1 ? this._mainProfileNoScoreNote(callerUserId, this.msgs(interaction.guildId)) : null
                 };
 
                 // Pozycje w rankingach ról — sprawdzamy tylko role które użytkownik ma (zero extra requestów na role check)
@@ -8828,7 +8972,7 @@ class InteractionHandler {
                     client: mode === 'global' ? interaction.client : null,
                     messages: rankMsgs,
                     callerStats,
-                    callerPlayerKey: this._trackedPlayerKey(interaction.user.id)
+                    callerPlayerKey: this._mainPlayerKey(interaction.user.id)
                 }
             );
             const buttons = this.rankingService.createRankingButtons(
@@ -8974,7 +9118,7 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, 0, totalPages, parentUserId, guild,
-                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, callerPlayerKey: this._trackedPlayerKey(parentUserId), titleOverride: formatMessage(msgs.roleRankingTitle, { roleName }) }
+                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, callerPlayerKey: this._mainPlayerKey(parentUserId), titleOverride: formatMessage(msgs.roleRankingTitle, { roleName }) }
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, btnOptions);
 
@@ -9176,7 +9320,7 @@ class InteractionHandler {
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(userId) || userId, lang, 'overview', null
+                allAchGuildIds, this.profileRegistryService?.getMainPlayerKey(userId) || userId, lang, 'overview', null
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -9197,7 +9341,7 @@ class InteractionHandler {
             const lang = this.config.getGuildConfig(guildId)?.lang || 'pol';
             const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
             const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(userId) || userId, lang, view, category
+                allAchGuildIds, this.profileRegistryService?.getMainPlayerKey(userId) || userId, lang, view, category
             );
             await interaction.editReply({ embeds: [embed], components });
         } catch (err) {
@@ -9233,7 +9377,7 @@ class InteractionHandler {
             const viewerId    = interaction.user.id;
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
             // Domyślnie pokazujemy aktywny profil gracza (przełączanie przyciskami niżej)
-            const viewerPlayerKey = this.profileRegistryService?.getActivePlayerKey(viewerId) || viewerId;
+            const viewerPlayerKey = this.profileRegistryService?.getMainPlayerKey(viewerId) || viewerId;
             const viewerProfiles = this.profileRegistryService?.getProfiles(viewerId) || [];
 
             // Zawsze używaj serwera skąd pochodzi najlepszy wynik profilu
@@ -9256,7 +9400,7 @@ class InteractionHandler {
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: true,
                     ownProfiles: viewerProfiles,
                     currentProfileIndex: getProfileIndex(viewerPlayerKey),
-                    trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
+                    mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
                 },
                 isPol
             );
@@ -9328,19 +9472,21 @@ class InteractionHandler {
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
             if (customId === 'profile_track') {
-                // Ustawienie profilu do ŚLEDZENIA — od teraz jego dane pokazują
-                // /ranking (statystyki, „Moja pozycja", wykres), /achievements i /profile
+                // Ustawienie profilu MAIN (pinezka) — od teraz jego dane pokazują
+                // /ranking (statystyki, „Moja pozycja", wykres), /achievements i /profile,
+                // jest podpowiadany przy /update i nie można go usunąć.
+                // setMain odwołuje też ewentualne zaplanowane usunięcie tego profilu.
                 const wantedIdx = getProfileIndex(state.targetPlayerKey);
-                // Cudzy profil pomijamy — nie da się go „śledzić" jako swojego
+                // Cudzy profil pomijamy — mainem można ustawić wyłącznie własny
                 if (getOwnerId(state.targetPlayerKey) === state.viewerId
-                    && await this.profileRegistryService?.setActive(state.viewerId, wantedIdx)) {
+                    && await this.profileRegistryService?.setMain(state.viewerId, wantedIdx)) {
                     const prof = this.profileRegistryService.getProfiles(state.viewerId).find(pr => pr.index === wantedIdx);
                     const profName = prof ? this._profileDisplayName(prof, msgs) : `#${wantedIdx}`;
                     this.logService._gl(guildId).info(
-                        `📌 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, state.viewerId)} ustawił profil do śledzenia: ${wantedIdx}`
+                        `📌 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, state.viewerId)} ustawił profil #${wantedIdx} jako main`
                     );
                     await interaction.followUp({
-                        content: formatMessage(msgs.profileTrackedSet, { profile: profName }),
+                        content: formatMessage(msgs.profileSetMainDone, { profile: profName }),
                         flags: ['Ephemeral'],
                     }).catch(() => {});
                 }
@@ -9359,7 +9505,7 @@ class InteractionHandler {
                     state.lang = this._getProfileLang(guildId, state.targetGuildId);
                 }
             } else if (customId === 'profile_back') {
-                state.targetPlayerKey   = this.profileRegistryService?.getActivePlayerKey(state.viewerId) || state.viewerId;
+                state.targetPlayerKey   = this.profileRegistryService?.getMainPlayerKey(state.viewerId) || state.viewerId;
                 state.view           = 'main';
                 state.category       = null;
                 state.bossPage       = 0;
@@ -9452,7 +9598,7 @@ class InteractionHandler {
                 isSubscribed: state.isSubscribed || false,
                 ownProfiles: isOwnProfileNow ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
                 currentProfileIndex: getProfileIndex(state.targetPlayerKey),
-                trackedProfileIndex: this.profileRegistryService?.getActiveIndex(state.viewerId) || 1,
+                mainProfileIndex: this.profileRegistryService?.getMainIndex(state.viewerId) || 1,
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -9503,7 +9649,7 @@ class InteractionHandler {
                             bossMaxPage: state.bossMaxPage, isOwnProfile: isOwnPrev,
                             ownProfiles: isOwnPrev ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
                             currentProfileIndex: getProfileIndex(state.targetPlayerKey),
-                            trackedProfileIndex: this.profileRegistryService?.getActiveIndex(state.viewerId) || 1,
+                            mainProfileIndex: this.profileRegistryService?.getMainIndex(state.viewerId) || 1,
                         },
                         isPol
                     );
@@ -9548,7 +9694,7 @@ class InteractionHandler {
                         view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed,
                         ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
                         currentProfileIndex: getProfileIndex(targetPlayerKey),
-                        trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
+                        mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
                     },
                     newIsPol
                 );
@@ -9616,7 +9762,7 @@ class InteractionHandler {
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed,
                     ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
                     currentProfileIndex: getProfileIndex(targetPlayerKey),
-                    trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
+                    mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
                 },
                 isPol
             );
@@ -13790,7 +13936,7 @@ class InteractionHandler {
                 // Powrót do własnych osiągnięć
                 const allAchGuildIds = this._getProfileAllGuildIds(interaction.client);
                 const { embed, components } = await this.achievementService.buildAchievementsViewGlobal(
-                    allAchGuildIds, this.profileRegistryService?.getActivePlayerKey(interaction.user.id) || interaction.user.id, lang, 'cat', 'score'
+                    allAchGuildIds, this.profileRegistryService?.getMainPlayerKey(interaction.user.id) || interaction.user.id, lang, 'cat', 'score'
                 );
                 await interaction.editReply({ embeds: [embed], components });
                 return;
@@ -14001,7 +14147,7 @@ class InteractionHandler {
                 } catch {}
             }
 
-            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl, this._trackedPlayerKey(interaction.user.id));
+            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl, this._mainPlayerKey(interaction.user.id));
             const buttons = this.achievementService.createAchRankingButtons(
                 0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
@@ -14040,7 +14186,7 @@ class InteractionHandler {
         this._achRankings.set(interaction.message.id, data);
 
         const embed = this.achievementService.buildAchRankingEmbed(
-            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl, this._trackedPlayerKey(data.userId)
+            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl, this._mainPlayerKey(data.userId)
         );
         const buttons = this.achievementService.createAchRankingButtons(
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
@@ -15064,7 +15210,7 @@ class InteractionHandler {
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            bossName, players, 0, perPage, msgs, bossImageName, this._trackedPlayerKey(interaction.user.id), interaction.client
+            bossName, players, 0, perPage, msgs, bossImageName, this._mainPlayerKey(interaction.user.id), interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
 
@@ -15135,7 +15281,7 @@ class InteractionHandler {
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, this._trackedPlayerKey(interaction.user.id), interaction.client
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, this._mainPlayerKey(interaction.user.id), interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
 

@@ -133,6 +133,23 @@ class CommunityVerificationService {
     }
 
     /**
+     * Przepina sesje zgłoszeń na nowy klucz profilu (przenumerowanie slotów profili).
+     * @returns {Promise<number>} liczba przepiętych sesji
+     */
+    async renamePlayerKey(oldKey, newKey) {
+        if (oldKey === newKey) return 0;
+        let moved = 0;
+        for (const session of Object.values(this._sessions)) {
+            if ((session.playerKey || session.userId) === oldKey) {
+                session.playerKey = newKey;
+                moved++;
+            }
+        }
+        if (moved > 0) await this._save();
+        return moved;
+    }
+
+    /**
      * Zamyka wszystkie pending sesje gracza na danym serwerze (gdy pobił nowy rekord).
      * Zwraca listę zamkniętych sessionId (messageId).
      */
