@@ -49,7 +49,10 @@
   - profil główny: `"123456789"` — **identyczny z dawnym userId**, więc istniejące dane działają bez migracji
   - profil dodatkowy: `"123456789#2"`, `"123456789#3"`
 - **Separator `#`** wybrany świadomie: customId komponentów Discorda parsowane są przez `split('_')` i `split(':')`, więc te znaki nie mogą wystąpić w kluczu; `#` jest też bezpieczny w nazwach plików (`wyniki/{playerKey}.json`)
-- **Helpery** (`utils/helpers.js`): `makePlayerKey(userId, idx)`, `getOwnerId(playerKey)`, `getProfileIndex(playerKey)`, `isAltProfile`, `formatProfileDisplayName(nick, idx)`, `getProfileMarker(idx)`
+- **Helpery** (`utils/helpers.js`): `makePlayerKey(userId, idx)`, `getOwnerId(playerKey)`, `getProfileIndex(playerKey)`, `isAltProfile`, `formatProfileDisplayName(nick, idx)`, `getProfileMarker(idx)`, `getProfileButtonEmoji(idx)`
+- **Dwa zestawy znaczników profilu (NIE mieszać!):**
+  - `getProfileMarker(idx)` → **tekst** w embedach i nazwach wyświetlanych: `②`, `③` (profil 1 → `null`)
+  - `getProfileButtonEmoji(idx)` → **emoji komponentu** (przycisk, opcja select menu): `🏠`, `2️⃣`, `3️⃣`. Znaki `②`/`③` to zwykły Unicode, a NIE emoji — Discord odrzuca je w polu `emoji` komponentu błędem `COMPONENT_INVALID_EMOJI` (Invalid Form Body). Helper zwraca `null` poza zakresem (przy podniesionym `ENDERSECHO_MAX_PROFILES`), a wywołania ustawiają emoji tylko gdy niepuste — komponent zostaje wtedy z samą etykietą
 - **Rejestr profili** — `data/profiles.json`: `{ [userId]: { active, profiles: [{ index, label, createdAt }] } }`
   - Profil główny istnieje **niejawnie** — gracz, który nigdy nie użył `/profiles`, nie ma wpisu w pliku i działa dokładnie jak przed wdrożeniem
   - **Numery slotów są stabilne** — po usunięciu profilu numery NIE są przenumerowywane (inaczej rozjechałyby się subskrypcje, dane rankingowe i customId); wolny slot jest odzyskiwany przy kolejnym dodaniu

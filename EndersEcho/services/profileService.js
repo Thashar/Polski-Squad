@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const fs   = require('fs').promises;
 const path = require('path');
-const { getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
+const { getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker, getProfileButtonEmoji } = require('../utils/helpers');
 
 const BOSSES_PER_PAGE = 15;
 
@@ -429,12 +429,14 @@ class ProfileService {
                 const label = prof.index === 1
                     ? t('Main', 'Main')
                     : (prof.label || `${t('Profil', 'Profile')} ${prof.index}`);
-                return new ButtonBuilder()
+                const btn = new ButtonBuilder()
                     .setCustomId(`profile_view_${prof.index}`)
                     .setLabel(label.slice(0, 80))
-                    .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
                     .setStyle(prof.index === currentProfileIndex ? ButtonStyle.Primary : ButtonStyle.Secondary)
                     .setDisabled(prof.index === currentProfileIndex);
+                const emoji = getProfileButtonEmoji(prof.index);
+                if (emoji) btn.setEmoji(emoji);
+                return btn;
             }) : [];
 
             const toolButtons = [];
