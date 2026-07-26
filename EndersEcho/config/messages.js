@@ -77,6 +77,25 @@ const pol = {
     profileTrackedButton: '📌 Śledzony',
     profileTrackedSet: '✅ Śledzony profil: **{profile}**.\nOd teraz `/ranking`, `/achievements` i `/profile` pokazują ten profil.',
 
+    // Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu
+    profileIntroTitle: '👥 Dodatkowy profil — przeczytaj, zanim dodasz',
+    profileIntroBody: '**Dodatkowy profil to Twoje drugie konto w grze.** Wyniki z obu kont się nie mieszają — każdy profil ma własny wpis w rankingu, własne rekordy bossów, historię i osiągnięcia.\n\n'
+        + '**Jak z tego korzystać**\n'
+        + '• Zakładając profil możesz podać swój nick z gry — służy tylko Tobie do rozpoznawania kont i możesz go pominąć.\n'
+        + '• W rankingu dodatkowy profil występuje jako Twój nick z Discorda ze znacznikiem cyfry (np. `Nick ②`), więc od razu widać, że oba wyniki są Twoje.\n'
+        + '• Przy `/update` bot zapyta, do którego profilu zapisać wynik ze screena.\n'
+        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌** wybierasz profil śledzony — to jego statystyki, pozycję i wykres pokazują `/ranking`, `/achievements` i `/profile`.\n\n'
+        + '**O czym warto wiedzieć**\n'
+        + '• Dzienny limit `/update`, cooldown i blokady są **wspólne dla wszystkich Twoich profili** — drugie konto nie daje więcej zgłoszeń.\n'
+        + '• Rolę TOP dostajesz raz, według swojego najlepszego profilu — dodatkowe konta nie zajmują progów innym graczom.\n'
+        + '• Usunięcie profilu **nieodwracalnie** kasuje jego wyniki, rekordy bossów, historię i osiągnięcia.\n'
+        + '• Limit: **{max}** profile łącznie z głównym.',
+    profileIntroFooter: 'Potwierdź, że przeczytałeś, aby przejść do dodawania profilu',
+    profileIntroBtnOk: '✅ Przeczytałem — dodaj profil',
+    profileIntroBtnCancel: 'Anuluj',
+    profileIntroCancelled: '❌ Anulowano — profil nie został dodany.',
+    profileCmdBtnAddFirst: 'Dodaj profil',
+
     // Cofnięcie własnego rekordu (przycisk pod ogłoszeniem)
     recordUndoButton: '↩️ Cofnij wynik',
     recordUndoByOwner: '↩️ Cofnął właściciel',
@@ -527,6 +546,25 @@ const eng = {
     profileTrackButton: '📌 Track this profile',
     profileTrackedButton: '📌 Tracked',
     profileTrackedSet: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking`, `/achievements` and `/profile` show this profile.',
+
+    // Educational gate before adding the FIRST additional profile
+    profileIntroTitle: '👥 Additional profile — read this before adding',
+    profileIntroBody: '**An additional profile is your second in-game account.** Scores from both accounts stay separate — every profile has its own ranking entry, boss records, history and achievements.\n\n'
+        + '**How to use it**\n'
+        + '• When adding a profile you may enter your in-game nick — it is only for you to tell the accounts apart, and you can skip it.\n'
+        + '• In the ranking an additional profile appears as your Discord nick with a number marker (e.g. `Nick ②`), so everyone can see both scores are yours.\n'
+        + '• On `/update` the bot will ask which profile the score from the screenshot belongs to.\n'
+        + '• In `/profile` you switch between accounts, and the **📌** button picks your tracked profile — its stats, position and chart are shown by `/ranking`, `/achievements` and `/profile`.\n\n'
+        + '**Good to know**\n'
+        + '• The daily `/update` limit, cooldown and blocks are **shared across all your profiles** — a second account does not give you more submissions.\n'
+        + '• You get one TOP role, based on your best profile — additional accounts never take role slots from other players.\n'
+        + '• Deleting a profile **permanently** removes its scores, boss records, history and achievements.\n'
+        + '• Limit: **{max}** profiles including the main one.',
+    profileIntroFooter: 'Confirm you have read this to continue to adding a profile',
+    profileIntroBtnOk: '✅ I have read this — add profile',
+    profileIntroBtnCancel: 'Cancel',
+    profileIntroCancelled: '❌ Cancelled — no profile was added.',
+    profileCmdBtnAddFirst: 'Add Profile',
 
     // Undoing your own record (button under the announcement)
     recordUndoButton: '↩️ Undo score',

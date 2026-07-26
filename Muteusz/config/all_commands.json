@@ -636,7 +636,7 @@
         },
         {
           "name": "/profile",
-          "description": "Profil gracza: rekordy, bossowie, osiągnięcia oraz panel Moje profile (kilka kont w grze — dodawanie, przełączanie, śledzenie, usuwanie)",
+          "description": "Profil gracza: rekordy, bossowie, osiągnięcia oraz obsługa kilku kont w grze (Dodaj profil / panel Moje profile — przełączanie, śledzenie, usuwanie)",
           "usage": "/profile [gracz:fragment nicku]",
           "requiredPermission": "public"
         },

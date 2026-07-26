@@ -5242,6 +5242,49 @@ class InteractionHandler {
     }
 
     /**
+     * Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu.
+     * Discord nie pozwala umieścić w okienku modalnym sformatowanego tekstu ani
+     * przycisków (tylko pola i listy), dlatego wyjaśnienie jest osobnym ephemeralem
+     * z potwierdzeniem — okno z nazwą profilu otwiera się dopiero po nim.
+     * @param {import('discord.js').ButtonInteraction} interaction
+     */
+    async handleProfileAddIntro(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        const registry = this.profileRegistryService;
+        if (!registry) {
+            await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
+            return;
+        }
+        const maxProfiles = registry.getMaxProfiles();
+        if (registry.getProfiles(interaction.user.id).length >= maxProfiles) {
+            await interaction.reply({
+                content: formatMessage(msgs.profileCmdAddLimit, { limit: maxProfiles }),
+                flags: ['Ephemeral'],
+            });
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.profileIntroTitle)
+            .setDescription(formatMessage(msgs.profileIntroBody, { max: maxProfiles }))
+            .setFooter({ text: msgs.profileIntroFooter });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('prof_intro_ok')
+                .setLabel(msgs.profileIntroBtnOk)
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('prof_intro_cancel')
+                .setLabel(msgs.profileIntroBtnCancel)
+                .setStyle(ButtonStyle.Secondary),
+        );
+
+        await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
+    }
+
+    /**
      * Buduje embed + przyciski panelu profili gracza.
      */
     async _buildProfilesPanel(userId, guildId, client) {
@@ -5321,6 +5364,27 @@ class InteractionHandler {
         const registry = this.profileRegistryService;
         if (!registry) {
             await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Bramka edukacyjna: potwierdzenie przeczytania → okno z nazwą profilu
+        if (customId === 'prof_intro_ok') {
+            if (registry.getProfiles(userId).length >= registry.getMaxProfiles()) {
+                await interaction.update({
+                    content: formatMessage(msgs.profileCmdAddLimit, { limit: registry.getMaxProfiles() }),
+                    embeds: [],
+                    components: [],
+                });
+                return;
+            }
+            // Tryb „addfirst" — po dodaniu zamyka wyjaśnienie, żeby nie dało się
+            // kliknąć potwierdzenia drugi raz i dodać profilu, o który nikt nie prosił
+            await this._showProfileNameModal(interaction, 'addfirst', null, msgs);
+            return;
+        }
+
+        if (customId === 'prof_intro_cancel') {
+            await interaction.update({ content: msgs.profileIntroCancelled, embeds: [], components: [] });
             return;
         }
 
@@ -5454,7 +5518,7 @@ class InteractionHandler {
         const idx = parseInt(parts[3], 10);
         const label = interaction.fields.getTextInputValue('prof_label')?.trim() || null;
 
-        if (mode === 'add') {
+        if (mode === 'add' || mode === 'addfirst') {
             const res = await registry.addProfile(interaction.user.id, label, interaction.member?.displayName || interaction.user.username);
             if (!res.ok) {
                 const content = res.reason === 'LIMIT'
@@ -5464,10 +5528,13 @@ class InteractionHandler {
                 return;
             }
             const prof = registry.getProfiles(interaction.user.id).find(pr => pr.index === res.index);
-            await interaction.reply({
-                content: formatMessage(msgs.profileCmdAdded, { profile: this._profileDisplayName(prof, msgs) }),
-                flags: ['Ephemeral'],
-            });
+            const addedContent = formatMessage(msgs.profileCmdAdded, { profile: this._profileDisplayName(prof, msgs) });
+            if (mode === 'addfirst' && interaction.isFromMessage?.()) {
+                // Zamiast osobnej wiadomości: wyjaśnienie zamienia się w potwierdzenie
+                await interaction.update({ content: addedContent, embeds: [], components: [] });
+            } else {
+                await interaction.reply({ content: addedContent, flags: ['Ephemeral'] });
+            }
             this.logService._gl(interaction.guildId).info(
                 `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)} dodał profil #${res.index}${label ? ` ("${label}")` : ''}`
             );
@@ -7378,6 +7445,7 @@ class InteractionHandler {
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
                 customId === 'profile_back' || customId === 'profile_search' ||
                 customId === 'profile_manage_subs' || customId === 'profile_manage_prof' ||
+                customId === 'profile_add_intro' ||
                 customId === 'profile_subscribe' ||
                 customId === 'profile_unsubscribe' || customId === 'profile_track' ||
                 customId.startsWith('profile_view_')) {
@@ -9181,6 +9249,12 @@ class InteractionHandler {
         // żeby modale nazwy i potwierdzenia nie kolidowały ze stanem widoku profilu
         if (customId === 'profile_manage_prof') {
             await this.handleProfilesPanel(interaction);
+            return;
+        }
+
+        // Pierwsze dodatkowe konto — najpierw wyjaśnienie, potem dopiero nazwa profilu
+        if (customId === 'profile_add_intro') {
+            await this.handleProfileAddIntro(interaction);
             return;
         }
 

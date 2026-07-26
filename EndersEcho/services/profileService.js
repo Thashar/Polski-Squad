@@ -451,12 +451,19 @@ class ProfileService {
                         .setDisabled(isTracked)
                 );
             }
-            toolButtons.push(
-                new ButtonBuilder()
+            // Przy jednym profilu przycisk prowadzi do wyjaśnienia „po co drugie konto",
+            // a nie do panelu — gracz i tak nie ma tam czym zarządzać poza dodaniem
+            toolButtons.push(hasMany
+                ? new ButtonBuilder()
                     .setCustomId('profile_manage_prof')
                     .setLabel(t('Moje profile', 'My Profiles'))
                     .setEmoji('👥')
                     .setStyle(ButtonStyle.Secondary)
+                : new ButtonBuilder()
+                    .setCustomId('profile_add_intro')
+                    .setLabel(t('Dodaj profil', 'Add Profile'))
+                    .setEmoji('➕')
+                    .setStyle(ButtonStyle.Success)
             );
 
             // Narzędzia zawsze w ostatnim rzędzie; nadmiar profili (limit > 3) idzie wyżej
