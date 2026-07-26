@@ -636,7 +636,7 @@
         },
         {
           "name": "/profile",
-          "description": "Profil gracza: rekordy, bossowie, osiągnięcia oraz obsługa kilku kont w grze (Dodaj profil / panel Moje profile — przełączanie, śledzenie, usuwanie)",
+          "description": "Wszystko dla gracza w jednym miejscu: profil i rekordy, bossowie, osiągnięcia, subskrypcje DM oraz kilka kont w grze (Dodaj profil / panel Moje profile — przełączanie, śledzenie, usuwanie)",
           "usage": "/profile [gracz:fragment nicku]",
           "requiredPermission": "public"
         },
@@ -644,12 +644,6 @@
           "name": "/ranking",
           "description": "Wyświetla prywatny ranking wyników bossów (paginacja 10/stronę)",
           "usage": "/ranking",
-          "requiredPermission": "public"
-        },
-        {
-          "name": "/subscribe",
-          "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
-          "usage": "/subscribe",
           "requiredPermission": "public"
         },
         {

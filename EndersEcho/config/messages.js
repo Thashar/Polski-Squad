@@ -50,7 +50,7 @@ const pol = {
     updateProfileSessionExpired: '⏳ Wybór profilu wygasł. Użyj komendy ponownie.',
     updateProfileNotYours: '❌ To nie Twój wybór profilu.',
     profileCmdTitle: '👥 Twoje profile',
-    profileCmdDescription: 'Masz **{count}** z **{max}** możliwych profili.\nProfil oznaczony **📌** jest Twoim profilem do śledzenia — to jego statystyki, pozycję i wykres pokazuje `/ranking`, `/achievements` i `/profile`, i to on jest podpowiadany przy `/update`.',
+    profileCmdDescription: 'Masz **{count}** z **{max}** możliwych profili.\nProfil oznaczony **📌** jest Twoim profilem do śledzenia — to jego statystyki, pozycję, wykres i osiągnięcia pokazuje `/ranking` i `/profile`, i to on jest podpowiadany przy `/update`.',
     profileCmdMainName: 'Main (profil główny)',
     profileCmdSlotName: 'Profil {index}',
     profileCmdNoScore: 'brak wyniku',
@@ -64,7 +64,7 @@ const pol = {
     profileCmdDuplicateLabel: '❌ Masz już profil o tej nazwie.',
     profileCmdRenamed: '✅ Nazwa profilu zmieniona na **{label}**.',
     profileCmdRenameCleared: '✅ Nazwa profilu usunięta.',
-    profileCmdSwitched: '✅ Profil do śledzenia: **{profile}**.\nOd teraz `/ranking`, `/achievements` i `/profile` pokazują ten profil.',
+    profileCmdSwitched: '✅ Profil do śledzenia: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
     profileCmdDeleted: '✅ Usunięto **{profile}** wraz z jego wynikami ({records} rekordów).',
     profileCmdDeleteMain: '❌ Profilu głównego nie można usunąć.',
     profileCmdDeleteConfirm: '⚠️ Usunąć **{profile}**?\n\nSkasowane zostaną **wszystkie wyniki tego profilu**: wpis w rankingu, rekordy bossów, historia wyników i osiągnięcia. Tej operacji nie można cofnąć.',
@@ -75,7 +75,7 @@ const pol = {
     profileCmdNotFound: '❌ Nie znaleziono tego profilu.',
     profileTrackButton: '📌 Śledź ten profil',
     profileTrackedButton: '📌 Śledzony',
-    profileTrackedSet: '✅ Śledzony profil: **{profile}**.\nOd teraz `/ranking`, `/achievements` i `/profile` pokazują ten profil.',
+    profileTrackedSet: '✅ Śledzony profil: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
 
     // Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu
     profileIntroTitle: '👥 Dodatkowy profil — przeczytaj, zanim dodasz',
@@ -84,7 +84,8 @@ const pol = {
         + '• Zakładając profil możesz podać swój nick z gry — służy tylko Tobie do rozpoznawania kont i możesz go pominąć.\n'
         + '• W rankingu dodatkowy profil występuje jako Twój nick z Discorda ze znacznikiem cyfry (np. `Nick ②`), więc od razu widać, że oba wyniki są Twoje.\n'
         + '• Przy `/update` bot zapyta, do którego profilu zapisać wynik ze screena.\n'
-        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌** wybierasz profil śledzony — to jego statystyki, pozycję i wykres pokazują `/ranking`, `/achievements` i `/profile`.\n\n'
+        + '• Osiągnięcia, rekordy bossów i subskrypcje też są w `/profile` — każdy profil ma je osobno.\n'
+        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌** wybierasz profil śledzony — to jego statystyki, pozycję, wykres i osiągnięcia pokazują `/ranking` i `/profile`.\n\n'
         + '**O czym warto wiedzieć**\n'
         + '• Dzienny limit `/update`, cooldown i blokady są **wspólne dla wszystkich Twoich profili** — drugie konto nie daje więcej zgłoszeń.\n'
         + '• Rolę TOP dostajesz raz, według swojego najlepszego profilu — dodatkowe konta nie zajmują progów innym graczom.\n'
@@ -520,7 +521,7 @@ const eng = {
     updateProfileSessionExpired: '⏳ Profile selection expired. Please run the command again.',
     updateProfileNotYours: '❌ This profile selection is not yours.',
     profileCmdTitle: '👥 Your profiles',
-    profileCmdDescription: 'You have **{count}** of **{max}** available profiles.\nThe profile marked with **📌** is your tracked profile — its stats, position and chart are shown by `/ranking`, `/achievements` and `/profile`, and it is preselected in `/update`.',
+    profileCmdDescription: 'You have **{count}** of **{max}** available profiles.\nThe profile marked with **📌** is your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`, and it is preselected in `/update`.',
     profileCmdMainName: 'Main (primary profile)',
     profileCmdSlotName: 'Profile {index}',
     profileCmdNoScore: 'no score',
@@ -534,7 +535,7 @@ const eng = {
     profileCmdDuplicateLabel: '❌ You already have a profile with that name.',
     profileCmdRenamed: '✅ Profile renamed to **{label}**.',
     profileCmdRenameCleared: '✅ Profile name cleared.',
-    profileCmdSwitched: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking`, `/achievements` and `/profile` show this profile.',
+    profileCmdSwitched: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
     profileCmdDeleted: '✅ Deleted **{profile}** together with its scores ({records} records).',
     profileCmdDeleteMain: '❌ The main profile cannot be deleted.',
     profileCmdDeleteConfirm: '⚠️ Delete **{profile}**?\n\nThis removes **all scores of that profile**: ranking entry, boss records, score history and achievements. This cannot be undone.',
@@ -545,7 +546,7 @@ const eng = {
     profileCmdNotFound: '❌ Profile not found.',
     profileTrackButton: '📌 Track this profile',
     profileTrackedButton: '📌 Tracked',
-    profileTrackedSet: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking`, `/achievements` and `/profile` show this profile.',
+    profileTrackedSet: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
 
     // Educational gate before adding the FIRST additional profile
     profileIntroTitle: '👥 Additional profile — read this before adding',
@@ -554,7 +555,8 @@ const eng = {
         + '• When adding a profile you may enter your in-game nick — it is only for you to tell the accounts apart, and you can skip it.\n'
         + '• In the ranking an additional profile appears as your Discord nick with a number marker (e.g. `Nick ②`), so everyone can see both scores are yours.\n'
         + '• On `/update` the bot will ask which profile the score from the screenshot belongs to.\n'
-        + '• In `/profile` you switch between accounts, and the **📌** button picks your tracked profile — its stats, position and chart are shown by `/ranking`, `/achievements` and `/profile`.\n\n'
+        + '• Achievements, boss records and subscriptions live in `/profile` too — each profile has its own.\n'
+        + '• In `/profile` you switch between accounts, and the **📌** button picks your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`.\n\n'
         + '**Good to know**\n'
         + '• The daily `/update` limit, cooldown and blocks are **shared across all your profiles** — a second account does not give you more submissions.\n'
         + '• You get one TOP role, based on your best profile — additional accounts never take role slots from other players.\n'
