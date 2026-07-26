@@ -153,10 +153,21 @@ class ProfileRegistryService {
     }
 
     /**
+     * Nazwa gracza do logów — nick z Discorda, gdy wywołujący go zna;
+     * w ostateczności wzmianka (`<@id>`), żeby w logach nie lądowało samo ID.
+     * @param {string} userId
+     * @param {string|null} logName
+     * @returns {string}
+     */
+    _logName(userId, logName = null) {
+        return logName ? `${logName} (<@${userId}>)` : `<@${userId}>`;
+    }
+
+    /**
      * Dodaje nowy profil w pierwszym wolnym slocie.
      * @returns {Promise<{ ok: boolean, reason?: string, index?: number, playerKey?: string }>}
      */
-    async addProfile(userId, label = null) {
+    async addProfile(userId, label = null, logName = null) {
         const existing = this.getProfiles(userId);
         if (existing.length >= this._maxProfiles) {
             return { ok: false, reason: 'LIMIT', limit: this._maxProfiles };
@@ -184,7 +195,7 @@ class ProfileRegistryService {
             createdAt: new Date().toISOString(),
         });
         await this._save();
-        logger.info(`👥 Nowy profil #${index}${cleanLabel ? ` ("${cleanLabel}")` : ''} dla użytkownika ${userId}`);
+        logger.info(`👥 Nowy profil #${index}${cleanLabel ? ` ("${cleanLabel}")` : ''} — gracz ${this._logName(userId, logName)}`);
         return { ok: true, index, playerKey: makePlayerKey(userId, index) };
     }
 
@@ -193,7 +204,7 @@ class ProfileRegistryService {
      * Profilu głównego nie można usunąć.
      * @returns {Promise<{ ok: boolean, reason?: string }>}
      */
-    async removeProfile(userId, profileIndex) {
+    async removeProfile(userId, profileIndex, logName = null) {
         const idx = Number(profileIndex) || 1;
         if (idx === 1) return { ok: false, reason: 'MAIN_PROFILE' };
         if (!this.hasProfile(userId, idx)) return { ok: false, reason: 'NOT_FOUND' };
@@ -207,7 +218,7 @@ class ProfileRegistryService {
             delete this._data[userId];
         }
         await this._save();
-        logger.info(`👥 Usunięto profil #${idx} użytkownika ${userId}`);
+        logger.info(`👥 Usunięto profil #${idx} — gracz ${this._logName(userId, logName)}`);
         return { ok: true };
     }
 

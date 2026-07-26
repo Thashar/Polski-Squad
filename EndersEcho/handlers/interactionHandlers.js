@@ -4656,8 +4656,8 @@ class InteractionHandler {
             try {
                 const callerUserId = interaction.user.id;
                 const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-                const globalIdx = globalRanking.findIndex(p => p.userId === callerUserId);
-                const serverIdx = players.findIndex(p => p.userId === callerUserId);
+                const globalIdx = this._findCallerIndex(globalRanking, callerUserId);
+                const serverIdx = this._findCallerIndex(players, callerUserId);
                 callerStats = {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
@@ -4671,7 +4671,7 @@ class InteractionHandler {
                         for (const rr of roleRankings) {
                             if (!memberRoles.has(rr.roleId)) continue;
                             const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, guild, this.roleRankingConfigService);
-                            const roleIdx = rolePlayers.findIndex(p => p.userId === callerUserId);
+                            const roleIdx = this._findCallerIndex(rolePlayers, callerUserId);
                             if (roleIdx !== -1) callerStats.rolePositions.push({ roleName: rr.roleName, position: roleIdx + 1 });
                         }
                     }
@@ -4691,7 +4691,7 @@ class InteractionHandler {
                 }
             }
 
-            const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+            const callerIdx = this._findCallerIndex(players, interaction.user.id);
             const userPage = callerIdx !== -1 ? Math.floor(callerIdx / this.config.ranking.playersPerPage) : null;
 
             const embed = await this.rankingService.createRankingEmbed(
@@ -5119,6 +5119,24 @@ class InteractionHandler {
         return prof.label ? `${base} — ${prof.label}` : base;
     }
 
+    /**
+     * Pozycja gracza na liście rankingowej z uwzględnieniem profili.
+     * Celuje w profil ustawiony do ŚLEDZENIA (/profile → „📌 Śledź ten profil"),
+     * a gdy ten nie ma jeszcze wyniku — w najlepszy profil gracza (lista jest
+     * posortowana malejąco, więc pierwsze trafienie po właścicielu = najlepszy).
+     * @param {Array} players - lista wpisów rankingu (z playerKey lub userId)
+     * @param {string} userId - Discord ID gracza
+     * @returns {number} indeks w liście lub -1
+     */
+    _findCallerIndex(players, userId) {
+        if (!Array.isArray(players) || !userId) return -1;
+        const ownerId = String(userId);
+        const trackedKey = this.profileRegistryService?.getActivePlayerKey(ownerId) || ownerId;
+        const trackedIdx = players.findIndex(p => (p.playerKey || p.userId) === trackedKey);
+        if (trackedIdx !== -1) return trackedIdx;
+        return players.findIndex(p => getOwnerId(p.playerKey || p.userId) === ownerId);
+    }
+
     /** Krótka etykieta na przycisk (limit 80 znaków). */
     _profileButtonLabel(prof, msgs) {
         const base = prof.index === 1 ? 'Main' : formatMessage(msgs.profileCmdSlotName, { index: prof.index });
@@ -5443,7 +5461,7 @@ class InteractionHandler {
         const label = interaction.fields.getTextInputValue('prof_label')?.trim() || null;
 
         if (mode === 'add') {
-            const res = await registry.addProfile(interaction.user.id, label);
+            const res = await registry.addProfile(interaction.user.id, label, interaction.member?.displayName || interaction.user.username);
             if (!res.ok) {
                 const content = res.reason === 'LIMIT'
                     ? formatMessage(msgs.profileCmdAddLimit, { limit: res.limit })
@@ -5523,7 +5541,7 @@ class InteractionHandler {
         }
         // Subskrypcje wskazujące na ten profil tracą sens
         await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
-        await registry.removeProfile(userId, profileIndex);
+        await registry.removeProfile(userId, profileIndex, interaction.member?.displayName || interaction.user.username);
 
         this.logService._gl(interaction.guildId).info(
             `👥 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, userId)} usunął profil #${profileIndex} (wpisy w rankingu: ${removedRecords})`
@@ -7366,7 +7384,8 @@ class InteractionHandler {
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
                 customId === 'profile_back' || customId === 'profile_search' ||
                 customId === 'profile_manage_subs' || customId === 'profile_subscribe' ||
-                customId === 'profile_unsubscribe' || customId.startsWith('profile_view_')) {
+                customId === 'profile_unsubscribe' || customId === 'profile_track' ||
+                customId.startsWith('profile_view_')) {
                 await this._handleProfileButton(interaction);
                 return;
             }
@@ -8608,9 +8627,9 @@ class InteractionHandler {
             try {
                 const callerUserId = interaction.user.id;
                 const globalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
-                const globalIdx = globalRanking.findIndex(p => p.userId === callerUserId);
+                const globalIdx = this._findCallerIndex(globalRanking, callerUserId);
                 const serverPlayers = await this.rankingService.getSortedPlayers(interaction.guildId);
-                const serverIdx = serverPlayers.findIndex(p => p.userId === callerUserId);
+                const serverIdx = this._findCallerIndex(serverPlayers, callerUserId);
                 callerStats = {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
@@ -8627,7 +8646,7 @@ class InteractionHandler {
                         for (const rr of roleRankings) {
                             if (!memberRoles.has(rr.roleId)) continue;
                             const rolePlayers = await this.rankingService.getSortedPlayersByRole(guildId, rr.roleId, rankingGuild, this.roleRankingConfigService);
-                            const roleIdx = rolePlayers.findIndex(p => p.userId === callerUserId);
+                            const roleIdx = this._findCallerIndex(rolePlayers, callerUserId);
                             if (roleIdx !== -1) {
                                 callerStats.rolePositions.push({ roleName: rr.roleName, position: roleIdx + 1 });
                             }
@@ -8652,7 +8671,7 @@ class InteractionHandler {
             }
 
             // Strona użytkownika w bieżącym rankingu (dla przycisku "Moja pozycja")
-            const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+            const callerIdx = this._findCallerIndex(players, interaction.user.id);
             const userPage = callerIdx !== -1
                 ? Math.floor(callerIdx / this.config.ranking.playersPerPage)
                 : null;
@@ -8800,7 +8819,7 @@ class InteractionHandler {
             const players = await this.rankingService.getSortedPlayersByRole(guildId, roleId, guild, this.roleRankingConfigService);
 
             // Strona z wynikiem użytkownika w rankingu roli
-            const callerIdx = players.findIndex(p => p.userId === parentUserId);
+            const callerIdx = this._findCallerIndex(players, parentUserId);
             const userPage = callerIdx !== -1
                 ? Math.floor(callerIdx / this.config.ranking.playersPerPage)
                 : null;
@@ -9111,6 +9130,7 @@ class InteractionHandler {
                     view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile: true,
                     ownProfiles: viewerProfiles,
                     currentProfileIndex: getProfileIndex(viewerPlayerKey),
+                    trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
                 },
                 isPol
             );
@@ -9168,7 +9188,24 @@ class InteractionHandler {
             const isPol   = (state.lang || 'pol') === 'pol';
             const allGuildIds = this._getProfileAllGuildIds(interaction.client);
 
-            if (customId.startsWith('profile_view_')) {
+            if (customId === 'profile_track') {
+                // Ustawienie profilu do ŚLEDZENIA — od teraz jego dane pokazują
+                // /ranking (statystyki, „Moja pozycja", wykres), /achievements i /profile
+                const wantedIdx = getProfileIndex(state.targetPlayerKey);
+                // Cudzy profil pomijamy — nie da się go „śledzić" jako swojego
+                if (getOwnerId(state.targetPlayerKey) === state.viewerId
+                    && await this.profileRegistryService?.setActive(state.viewerId, wantedIdx)) {
+                    const prof = this.profileRegistryService.getProfiles(state.viewerId).find(pr => pr.index === wantedIdx);
+                    const profName = prof ? this._profileDisplayName(prof, msgs) : `#${wantedIdx}`;
+                    this.logService._gl(guildId).info(
+                        `📌 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, state.viewerId)} ustawił profil do śledzenia: ${wantedIdx}`
+                    );
+                    await interaction.followUp({
+                        content: formatMessage(msgs.profileTrackedSet, { profile: profName }),
+                        flags: ['Ephemeral'],
+                    }).catch(() => {});
+                }
+            } else if (customId.startsWith('profile_view_')) {
                 // Przełączenie widoku na inny profil TEGO SAMEGO gracza
                 const wantedIdx = parseInt(customId.slice('profile_view_'.length), 10);
                 if (this.profileRegistryService?.hasProfile(state.viewerId, wantedIdx)) {
@@ -9276,6 +9313,7 @@ class InteractionHandler {
                 isSubscribed: state.isSubscribed || false,
                 ownProfiles: isOwnProfileNow ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
                 currentProfileIndex: getProfileIndex(state.targetPlayerKey),
+                trackedProfileIndex: this.profileRegistryService?.getActiveIndex(state.viewerId) || 1,
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -9319,8 +9357,15 @@ class InteractionHandler {
                 // Przywróć poprzedni embed profilu jeśli mamy cached data
                 if (state?.cachedData && state.view !== 'select') {
                     const prevEmbed = this.profileService.buildMainEmbed(state.cachedData, isPol);
+                    const isOwnPrev = getOwnerId(state.targetPlayerKey) === state.viewerId;
                     const prevComponents = this.profileService.buildProfileComponents(
-                        { view: state.view || 'main', category: state.category, bossPage: state.bossPage, bossMaxPage: state.bossMaxPage, isOwnProfile: getOwnerId(state.targetPlayerKey) === state.viewerId },
+                        {
+                            view: state.view || 'main', category: state.category, bossPage: state.bossPage,
+                            bossMaxPage: state.bossMaxPage, isOwnProfile: isOwnPrev,
+                            ownProfiles: isOwnPrev ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
+                            currentProfileIndex: getProfileIndex(state.targetPlayerKey),
+                            trackedProfileIndex: this.profileRegistryService?.getActiveIndex(state.viewerId) || 1,
+                        },
                         isPol
                     );
                     await interaction.editReply({
@@ -9360,7 +9405,12 @@ class InteractionHandler {
                     isSubscribed, subscriberCount,
                 };
                 const components = this.profileService.buildProfileComponents(
-                    { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed },
+                    {
+                        view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed,
+                        ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
+                        currentProfileIndex: getProfileIndex(targetPlayerKey),
+                        trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
+                    },
                     newIsPol
                 );
                 await interaction.editReply({ content: null, embeds: [embed], components });
@@ -9423,7 +9473,12 @@ class InteractionHandler {
                 isSubscribed, subscriberCount,
             };
             const components = this.profileService.buildProfileComponents(
-                { view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed },
+                {
+                    view: 'main', category: null, bossPage: 0, bossMaxPage: 1, isOwnProfile, isSubscribed,
+                    ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
+                    currentProfileIndex: getProfileIndex(targetPlayerKey),
+                    trackedProfileIndex: this.profileRegistryService?.getActiveIndex(viewerId) || 1,
+                },
                 isPol
             );
             await interaction.editReply({ content: null, embeds: [embed], components });
@@ -13793,7 +13848,7 @@ class InteractionHandler {
             const totalPages = Math.ceil(players.length / perPage) || 1;
 
             // Strona wywołującego
-            const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+            const callerIdx = this._findCallerIndex(players, interaction.user.id);
             const userPage = callerIdx !== -1 ? Math.floor(callerIdx / perPage) : null;
 
             // Przyciski ról (tylko dla trybu serwera)
@@ -14842,7 +14897,7 @@ class InteractionHandler {
 
         const perPage = this.config.ranking.playersPerPage || 10;
         const totalPages = Math.max(1, Math.ceil(players.length / perPage));
-        const callerIdx = players.findIndex(p => p.userId === interaction.user.id);
+        const callerIdx = this._findCallerIndex(players, interaction.user.id);
         const userPage = callerIdx !== -1 ? Math.floor(callerIdx / perPage) : null;
 
         // Zdjęcie bossa

@@ -636,13 +636,13 @@
         },
         {
           "name": "/profile",
-          "description": "Wyświetl profil gracza: rekordy, bossowie i osiągnięcia (z przełączaniem między własnymi profilami)",
+          "description": "Wyświetl profil gracza: rekordy, bossowie i osiągnięcia (przełączanie między własnymi profilami + wybór profilu do śledzenia)",
           "usage": "/profile [gracz:fragment nicku]",
           "requiredPermission": "public"
         },
         {
           "name": "/profiles",
-          "description": "Zarządzanie profilami gracza (kilka kont w grze) — dodawanie, przełączanie domyślnego, zmiana nazwy, usuwanie",
+          "description": "Zarządzanie profilami gracza (kilka kont w grze) — dodawanie, ustawianie profilu do śledzenia, zmiana nazwy, usuwanie",
           "usage": "/profiles",
           "requiredPermission": "public"
         },

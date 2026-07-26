@@ -139,6 +139,7 @@ class ProfileService {
                     label: prof.label,
                     playerKey: prof.playerKey,
                     isCurrent: prof.playerKey === targetPlayerKey,
+                    isTracked: prof.index === (this._profileRegistry.getActiveIndex(targetUserId)),
                     score: idx !== -1 ? globalRanking[idx].score : null,
                     globalPosition: idx !== -1 ? idx + 1 : null,
                 });
@@ -251,7 +252,9 @@ class ProfileService {
                 const scorePart = p.score
                     ? ` · **${p.score}** *(#${p.globalPosition} ${t('globalnie', 'globally')})*`
                     : ` · ${t('brak wyniku', 'no score')}`;
-                const line = `${marker} ${name}${labelPart}${scorePart}`;
+                // 📌 = profil śledzony (jego dane pokazują /ranking, /achievements i /profile)
+                const trackedPart = p.isTracked ? ' 📌' : '';
+                const line = `${marker} ${name}${labelPart}${scorePart}${trackedPart}`;
                 return p.isCurrent ? `**▸ ${line}**` : line;
             });
             embed.addFields({
@@ -371,7 +374,7 @@ class ProfileService {
         const t = (pol, eng) => isPol ? pol : eng;
         const {
             view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed,
-            ownProfiles = [], currentProfileIndex = 1,
+            ownProfiles = [], currentProfileIndex = 1, trackedProfileIndex = 1,
         } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
@@ -418,7 +421,7 @@ class ProfileService {
         // Rząd przełączania profili — tylko na własnym profilu i tylko gdy gracz ma ich więcej niż jeden
         if (isOwnProfile && Array.isArray(ownProfiles) && ownProfiles.length > 1) {
             const profileRow = new ActionRowBuilder();
-            for (const prof of ownProfiles.slice(0, 5)) {
+            for (const prof of ownProfiles.slice(0, 4)) {
                 const label = prof.index === 1
                     ? t('Main', 'Main')
                     : (prof.label || `${t('Profil', 'Profile')} ${prof.index}`);
@@ -431,6 +434,18 @@ class ProfileService {
                         .setDisabled(prof.index === currentProfileIndex)
                 );
             }
+            // Ustawienie profilu do ŚLEDZENIA — pojawia się wyłącznie gdy gracz ma więcej niż
+            // jeden profil; ten profil rządzi statystykami w /ranking, /achievements i /profile
+            const isTracked = currentProfileIndex === trackedProfileIndex;
+            profileRow.addComponents(
+                new ButtonBuilder()
+                    .setCustomId('profile_track')
+                    .setLabel(isTracked
+                        ? t('📌 Śledzony', '📌 Tracked')
+                        : t('📌 Śledź ten profil', '📌 Track this profile'))
+                    .setStyle(isTracked ? ButtonStyle.Success : ButtonStyle.Secondary)
+                    .setDisabled(isTracked)
+            );
             rows.push(profileRow);
         }
 
