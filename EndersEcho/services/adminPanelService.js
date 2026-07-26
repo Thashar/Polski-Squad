@@ -476,7 +476,8 @@ class AdminPanelService {
             let playerCount = 0;
             try {
                 const ranking = await this._services.rankingService?.loadRanking(guildId).catch(() => ({})) ?? {};
-                playerCount = Object.keys(ranking).length;
+                // Klucze rankingu to PROFILE — licznik serwera pokazuje OSOBY (dedup po właścicielu)
+                playerCount = new Set(Object.keys(ranking).map(getOwnerId)).size;
             } catch { /* pomiń */ }
             const ocrBlocked = cfg.ocrBlocked || [];
             const entry = {

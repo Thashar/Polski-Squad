@@ -173,6 +173,18 @@ class RankingService {
     }
 
     /**
+     * Ile OSÓB stoi za listą wpisów rankingowych — profile dodatkowe tego samego gracza
+     * liczą się raz. Każdy licznik „graczy" pokazywany użytkownikom musi iść przez tę
+     * metodę, inaczej gracz z drugim kontem podbija statystyki serwera.
+     * @param {Array<{userId?: string, playerKey?: string}>} players
+     * @returns {number}
+     */
+    countPeople(players) {
+        if (!Array.isArray(players)) return 0;
+        return new Set(players.map(p => p.userId || getOwnerId(p.playerKey))).size;
+    }
+
+    /**
      * Oblicza ranking serwerów — suma wyników top 30 graczy per serwer.
      * @param {import('discord.js').Client} client
      * @returns {Promise<Array<{guildId,guildName,totalScoreValue,totalScore,playerCount,topScore,topScoreValue}>>}
@@ -196,7 +208,9 @@ class RankingService {
                 tag: guildCfg.tag || null,
                 totalScoreValue,
                 totalScore: this.formatScore(totalScoreValue),
-                playerCount: players.length,
+                // OSOBY, nie wpisy — gracz z kilkoma profilami nie zawyża liczby graczy serwera
+                playerCount: this.countPeople(players),
+                profileCount: players.length,
                 topScore: players[0]?.score || '0',
                 topScoreValue: players[0]?.scoreValue || 0
             });
@@ -504,9 +518,13 @@ class RankingService {
         const serverCount = isGlobal
             ? this.config.getAllGuilds().filter(g => client?.guilds?.cache?.has(g.id)).length
             : 0;
+        // Liczba GRACZY = osoby; profile dodatkowe pokazujemy osobno w nawiasie,
+        // żeby liczba nie kłóciła się z liczbą wierszy listy
+        const peopleCount = this.countPeople(players);
         const statsLines = [
             ...(isGlobal ? [formatMessage(msgs.rankingServersCount, { count: serverCount })] : []),
-            formatMessage(msgs.rankingPlayersCount, { count: players.length })
+            formatMessage(msgs.rankingPlayersCount, { count: peopleCount })
+                + (players.length > peopleCount ? formatMessage(msgs.rankingProfilesSuffix, { count: players.length }) : '')
         ];
         if (players.length > 0) {
             statsLines.push(formatMessage(msgs.rankingHighestScore, { score: players[0].score || this.formatScore(players[0].scoreValue) }));
@@ -801,8 +819,10 @@ class RankingService {
 
         if (!rankingText.trim()) rankingText = msgs.rankingEmpty || 'Brak wyników.';
 
+        const bossPeopleCount = this.countPeople(players);
         const statsLines = [
-            formatMessage(msgs.rankingPlayersCount, { count: players.length })
+            formatMessage(msgs.rankingPlayersCount, { count: bossPeopleCount })
+                + (players.length > bossPeopleCount ? formatMessage(msgs.rankingProfilesSuffix, { count: players.length }) : '')
         ];
         if (players.length > 0) {
             statsLines.push(formatMessage(msgs.rankingHighestScore, { score: players[0].score || this.formatScore(players[0].scoreValue) }));

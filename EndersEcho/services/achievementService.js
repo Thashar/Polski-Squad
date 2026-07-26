@@ -793,10 +793,11 @@ class AchievementService {
             .setColor(mode === 'global' ? 0x5865f2 : 0xf1c40f)
             .setTitle(title)
             .setDescription(lines.length > 0 ? lines.join('\n') : t('Brak danych.', 'No data.'))
-            .setFooter({ text: t(
-                `Strona ${page + 1}/${totalPages} • ${players.length} graczy`,
-                `Page ${page + 1}/${totalPages} • ${players.length} players`
-            ) });
+            // Licznik pokazuje OSOBY — profile dodatkowe tego samego gracza liczą się raz
+            .setFooter({ text: (peopleCount => t(
+                `Strona ${page + 1}/${totalPages} • ${peopleCount} graczy`,
+                `Page ${page + 1}/${totalPages} • ${peopleCount} players`
+            ))(new Set(players.map(p => p.userId || getOwnerId(p.playerKey))).size) });
         if (iconUrl) embed.setThumbnail(iconUrl);
         return embed;
     }
