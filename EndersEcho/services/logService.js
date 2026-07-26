@@ -215,14 +215,18 @@ class LogService {
                 embed.setFooter({ text: `👥 ${globalPlayerCount} unikalnych graczy globalnie` });
             }
 
-            this._enqueueOcr(client || this._client, targetChannelId, embed, components || null);
+            this._enqueueOcr(client || this._client, targetChannelId, embed, components || null, options.onSent || null);
         } catch (err) {
             this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
         }
     }
 
-    _enqueueOcr(activeClient, channelId, embed, components) {
-        this._ocrQueue.push({ activeClient, channelId, embed, components });
+    /**
+     * @param {Function|null} onSent - wywoływane z wysłaną wiadomością; pozwala zapamiętać
+     *   jej ID (np. do późniejszej dezaktywacji przycisku „Cofnij wynik")
+     */
+    _enqueueOcr(activeClient, channelId, embed, components, onSent = null) {
+        this._ocrQueue.push({ activeClient, channelId, embed, components, onSent });
         setImmediate(() => this._processOcrQueue());
     }
 
@@ -230,14 +234,17 @@ class LogService {
         if (this._ocrProcessing || this._ocrQueue.length === 0) return;
         this._ocrProcessing = true;
         while (this._ocrQueue.length > 0) {
-            const { activeClient, channelId, embed, components } = this._ocrQueue.shift();
+            const { activeClient, channelId, embed, components, onSent } = this._ocrQueue.shift();
             try {
                 if (!activeClient) { this.logger.warn('[OCR Log] Brak klienta Discord — embed pominięty'); continue; }
                 const ch = await activeClient.channels.fetch(channelId).catch(() => null);
                 if (!ch) { this.logger.warn(`[OCR Log] Nie znaleziono kanału ${channelId}`); continue; }
                 const payload = { embeds: [embed] };
                 if (components) payload.components = components;
-                await ch.send(payload);
+                const sent = await ch.send(payload);
+                if (onSent) {
+                    try { await onSent(sent); } catch (cbErr) { this.logger.warn(`[OCR Log] Błąd callbacku onSent: ${cbErr.message}`); }
+                }
                 await new Promise(r => setTimeout(r, 500));
             } catch (err) {
                 this.logger.warn(`[OCR Log] Błąd wysyłania embeda: ${err.message}`);

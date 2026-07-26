@@ -122,7 +122,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null, profileRegistryService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null, profileRegistryService = null, recordRevertService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -151,6 +151,7 @@ class InteractionHandler {
         this.commandUsageService = commandUsageService;
         this.milestoneService = milestoneService;
         this.profileRegistryService = profileRegistryService;
+        this.recordRevertService = recordRevertService;
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -3611,6 +3612,9 @@ class InteractionHandler {
                     await this.bossRecordService.removeAllUserBossRecords(targetGuildId, targetPlayerKey)
                         .catch(e => logger.warn(`Błąd usuwania rekordów bossów po usunięciu z rankingu: ${e.message}`));
                 }
+                // Rekord już nie istnieje → przycisk „Cofnij wynik" pod ogłoszeniem traci ważność
+                await this._invalidateUndoForPlayer(interaction.client, targetPlayerKey, targetGuildId,
+                    interaction.member?.displayName || interaction.user.username).catch(() => {});
                 const guildNameLog = targetGuild?.name || targetGuildId;
                 await this.logService.logMessage('success', `Gracz ${playerName} usunięty z rankingu${resetAllAchievements ? ' (z wszystkimi osiągnięciami)' : ''} (serwer ${guildNameLog}) przez panel admina`, interaction);
             } catch (roleError) {
@@ -3938,6 +3942,9 @@ class InteractionHandler {
                 }
             }
 
+            // Usunięty wpis mógł być rekordem, którego dotyczy przycisk „Cofnij wynik" — unieważnij go
+            await this._invalidateUndoForPlayer(interaction.client, targetPlayerKey, targetGuildId,
+                interaction.member?.displayName || interaction.user.username).catch(() => {});
             this._ccAudit(interaction, `🧹 Usunięto wynik ${removed?.score || ''} gracza ${oldUsername}`);
             this.adminPanelService?.refresh();
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
@@ -4777,6 +4784,319 @@ class InteractionHandler {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    //  COFANIE REKORDU (przycisk gracza pod ogłoszeniem + przycisk admina w logu)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Komponenty pod publicznym ogłoszeniem rekordu: opcjonalne „⚠️ Zgłoś" (weryfikacja
+     * społeczności) + „↩️ Cofnij wynik" dla właściciela wyniku.
+     * @param {string} publicMsgId
+     * @param {boolean} cvEnabled
+     * @param {Object} msgs - komunikaty serwera (dwujęzyczne)
+     * @returns {ActionRowBuilder[]}
+     */
+    _buildRecordAnnouncementRows(publicMsgId, cvEnabled, msgs) {
+        const row = new ActionRowBuilder();
+        if (cvEnabled) {
+            row.addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`cv_vote_${publicMsgId}`)
+                    .setLabel(msgs.cvVoteButton)
+                    .setStyle(ButtonStyle.Secondary)
+            );
+        }
+        row.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`rec_undo_${publicMsgId}`)
+                .setLabel(msgs.recordUndoButton)
+                .setStyle(ButtonStyle.Secondary)
+        );
+        return [row];
+    }
+
+    /**
+     * Komponenty ogłoszenia po cofnięciu wyniku: jeden nieaktywny CZERWONY przycisk
+     * informujący KTO cofnął rekord.
+     * @param {'owner'|'admin'} by
+     */
+    _buildRevertedRows(by, msgs) {
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`rec_undone_${by}`)
+                .setLabel(by === 'owner' ? msgs.recordUndoByOwner : msgs.recordUndoByAdmin)
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(true)
+        )];
+    }
+
+    /**
+     * Rejestruje opublikowane ogłoszenie rekordu jako sesję cofnięcia i podpina przyciski.
+     * Poprzednie ogłoszenie tego profilu traci możliwość cofnięcia — cofnąć można
+     * WYŁĄCZNIE ostatni rekord, więc jego przycisk jest dezaktywowany.
+     *
+     * @returns {Promise<Object|null>} utworzona sesja
+     */
+    async _registerRecordAnnouncement(interaction, publicMsg, data) {
+        if (!this.recordRevertService || !publicMsg) return null;
+        const msgs = this.msgs(data.guildId);
+        try {
+            const { session, previous } = await this.recordRevertService.register({
+                publicMsgId: publicMsg.id,
+                publicChannelId: publicMsg.channelId,
+                guildId: data.guildId,
+                playerKey: data.playerKey,
+                userId: getOwnerId(data.playerKey),
+                previousRecord: data.previousRecord ?? null,
+                newRecord: data.newRecord ?? null,
+                previousBossRecord: data.previousBossRecord ?? null,
+                bossName: data.bossName ?? null,
+                skipGlobalRevert: data.skipGlobalRevert === true,
+            });
+
+            // Przyciski pod nowym ogłoszeniem
+            await publicMsg.edit({
+                components: this._buildRecordAnnouncementRows(publicMsg.id, data.cvEnabled === true, msgs),
+            }).catch(() => {});
+
+            // Stare ogłoszenie: przycisk cofnięcia przestaje działać
+            if (previous) await this._disablePreviousUndoButton(interaction.client, previous);
+            return session;
+        } catch (err) {
+            this.logService._gl(data.guildId).warn(`⚠️ Nie udało się zarejestrować sesji cofnięcia: ${err.message}`);
+            return null;
+        }
+    }
+
+    /** Dezaktywuje przycisk cofnięcia pod poprzednim (już nieaktualnym) ogłoszeniem. */
+    async _disablePreviousUndoButton(client, session) {
+        if (!session?.publicMsgId || !session?.publicChannelId) return;
+        const msgs = this.msgs(session.guildId);
+        try {
+            const chan = client.channels.cache.get(session.publicChannelId)
+                || await client.channels.fetch(session.publicChannelId).catch(() => null);
+            if (!chan) return;
+            const msg = await chan.messages.fetch(session.publicMsgId).catch(() => null);
+            if (!msg) return;
+            // Zachowujemy istniejące przyciski (np. „Zgłoś"), wyłączamy tylko cofnięcie
+            const rows = [];
+            for (const row of msg.components || []) {
+                const rebuilt = new ActionRowBuilder();
+                for (const comp of row.components || []) {
+                    const btn = ButtonBuilder.from(comp);
+                    if (comp.customId?.startsWith('rec_undo_')) {
+                        btn.setDisabled(true).setStyle(ButtonStyle.Secondary).setLabel(msgs.recordUndoButton);
+                    }
+                    rebuilt.addComponents(btn);
+                }
+                if (rebuilt.components.length > 0) rows.push(rebuilt);
+            }
+            if (rows.length > 0) await msg.edit({ components: rows }).catch(() => {});
+        } catch { /* stare ogłoszenie mogło zostać usunięte */ }
+    }
+
+    /**
+     * Po cofnięciu rekordu synchronizuje OBA miejsca:
+     * - publiczne ogłoszenie → nieaktywny czerwony przycisk + notka
+     * - embed w kanale logów OCR (przycisk admina) → nieaktywny czerwony przycisk
+     * Pomija wiadomość, na której admin/gracz właśnie kliknął (`skipMessageId`) — tę
+     * aktualizuje sama obsługa interakcji.
+     *
+     * @param {'owner'|'admin'} by
+     */
+    async _applyRevertVisuals(client, session, by, actorName, { skipMessageId = null, publicNote = null } = {}) {
+        const msgs = this.msgs(session.guildId);
+        const revertedRows = this._buildRevertedRows(by, msgs);
+
+        // 1) Publiczne ogłoszenie
+        if (session.publicMsgId && session.publicChannelId && session.publicMsgId !== skipMessageId) {
+            try {
+                const chan = client.channels.cache.get(session.publicChannelId)
+                    || await client.channels.fetch(session.publicChannelId).catch(() => null);
+                const msg = chan ? await chan.messages.fetch(session.publicMsgId).catch(() => null) : null;
+                if (msg) {
+                    const payload = { components: revertedRows };
+                    if (publicNote) {
+                        const existing = msg.content ? `${msg.content}\n` : '';
+                        payload.content = `${existing}${publicNote}`;
+                    }
+                    await msg.edit(payload).catch(() => {});
+                }
+            } catch { /* ogłoszenie mogło zostać usunięte */ }
+        }
+
+        // 2) Embed w kanale logów OCR (przycisk admina)
+        if (session.adminMsgId && session.adminChannelId && session.adminMsgId !== skipMessageId) {
+            try {
+                const chan = client.channels.cache.get(session.adminChannelId)
+                    || await client.channels.fetch(session.adminChannelId).catch(() => null);
+                const msg = chan ? await chan.messages.fetch(session.adminMsgId).catch(() => null) : null;
+                if (msg) {
+                    const embeds = msg.embeds?.length
+                        ? [EmbedBuilder.from(msg.embeds[0]).addFields({
+                            name: '↩️ Cofnięto',
+                            value: by === 'owner'
+                                ? `przez **właściciela wyniku**${actorName ? ` (${actorName})` : ''}`
+                                : `przez **${actorName || 'administratora'}**`,
+                            inline: false,
+                        })]
+                        : msg.embeds;
+                    await msg.edit({ embeds, components: revertedRows }).catch(() => {});
+                }
+            } catch { /* embed mógł zostać usunięty */ }
+        }
+    }
+
+    /**
+     * Zwraca przycisk „↩️ Cofnij wynik" dla danego ogłoszenia albo null, gdy rekord
+     * został już cofnięty lub przestał być najnowszy. Używane wszędzie tam, gdzie inny
+     * przepływ (np. zgłoszenie CV) przebudowuje komponenty wiadomości — bez tego
+     * przycisk gracza znikałby po pierwszym zgłoszeniu.
+     * @returns {ButtonBuilder|null}
+     */
+    _undoButtonFor(publicMsgId, msgs) {
+        const session = this.recordRevertService?.get(publicMsgId);
+        if (!session) return null;
+        if (session.status !== 'active') return null;
+        return new ButtonBuilder()
+            .setCustomId(`rec_undo_${publicMsgId}`)
+            .setLabel(msgs.recordUndoButton)
+            .setStyle(ButtonStyle.Secondary);
+    }
+
+    /**
+     * Wiersz z przyciskiem cofnięcia dla admina (embed w kanale logów OCR).
+     * Kluczem jest ID publicznego ogłoszenia — dzięki temu przycisk admina i przycisk
+     * gracza dotyczą DOKŁADNIE tego samego rekordu. Fallback na starą postać
+     * `{playerKey}_{guildId}` gdy ogłoszenia nie ma (np. błąd publikacji).
+     * @returns {Object[]} tablica JSON komponentów (format oczekiwany przez logService)
+     */
+    _buildAdminRevertRow(publicMsgId, playerKey, guildId) {
+        const token = publicMsgId || `${playerKey}_${guildId}`;
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ocr_revert_${token}`)
+                .setLabel('↩️ Cofnij wynik')
+                .setStyle(ButtonStyle.Secondary)
+        ).toJSON()];
+    }
+
+    /**
+     * Callback do `logService.sendOcrAnalysisEmbed({ onSent })` — zapamiętuje ID embeda
+     * admina w sesji cofnięcia, żeby po cofnięciu przez gracza dało się dezaktywować
+     * przycisk również po stronie admina.
+     */
+    _adminMsgTracker(publicMsgId) {
+        if (!publicMsgId || !this.recordRevertService) return null;
+        return async (sentMsg) => {
+            if (!sentMsg?.id) return;
+            await this.recordRevertService.attachAdminMessage(publicMsgId, sentMsg.id, sentMsg.channelId);
+        };
+    }
+
+    /**
+     * Kliknięcie „↩️ Cofnij wynik" przez gracza pod ogłoszeniem rekordu.
+     * Cofnąć może WYŁĄCZNIE właściciel wyniku i WYŁĄCZNIE swój najnowszy rekord.
+     */
+    async _handleRecordUndo(interaction, customId) {
+        const publicMsgId = customId.slice('rec_undo_'.length);
+        const session = this.recordRevertService?.get(publicMsgId);
+        const msgs = this.msgs(session?.guildId || interaction.guildId);
+
+        if (!session) {
+            await interaction.reply({ content: msgs.recordUndoExpired, flags: ['Ephemeral'] });
+            return;
+        }
+        // Właściciel = osoba (dowolny profil tej osoby cofa własny wynik)
+        if (getOwnerId(session.playerKey) !== interaction.user.id) {
+            await interaction.reply({ content: msgs.recordUndoNotOwner, flags: ['Ephemeral'] });
+            return;
+        }
+        if (session.status === 'owner' || session.status === 'admin') {
+            await interaction.reply({ content: msgs.recordUndoAlready, flags: ['Ephemeral'] });
+            return;
+        }
+        if (session.status === 'superseded' || !this.recordRevertService.isLatest(publicMsgId)) {
+            // Ogłoszenie przestało być najnowsze — dezaktywuj przycisk, żeby nie mylił
+            await interaction.reply({ content: msgs.recordUndoNotLatest, flags: ['Ephemeral'] });
+            await this._disablePreviousUndoButton(interaction.client, session).catch(() => {});
+            return;
+        }
+
+        // Potwierdzenie — cofnięcia nie da się odwrócić
+        await interaction.reply({
+            content: msgs.recordUndoConfirmTitle,
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`rec_undo_ok_${publicMsgId}`)
+                    .setLabel(msgs.recordUndoConfirmYes)
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId('rec_undo_no')
+                    .setLabel(msgs.recordUndoConfirmNo)
+                    .setStyle(ButtonStyle.Secondary)
+            )],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    /** Potwierdzone cofnięcie własnego rekordu przez gracza. */
+    async _handleRecordUndoConfirm(interaction, customId) {
+        const publicMsgId = customId.slice('rec_undo_ok_'.length);
+        const session = this.recordRevertService?.get(publicMsgId);
+        const msgs = this.msgs(session?.guildId || interaction.guildId);
+
+        if (!session) {
+            await interaction.update({ content: msgs.recordUndoExpired, components: [] });
+            return;
+        }
+        if (getOwnerId(session.playerKey) !== interaction.user.id) {
+            await interaction.update({ content: msgs.recordUndoNotOwner, components: [] });
+            return;
+        }
+        if (session.status === 'owner' || session.status === 'admin') {
+            await interaction.update({ content: msgs.recordUndoAlready, components: [] });
+            return;
+        }
+        if (!this.recordRevertService.isLatest(publicMsgId)) {
+            await interaction.update({ content: msgs.recordUndoNotLatest, components: [] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+        const gl = this.logService._gl(session.guildId);
+        const actorName = interaction.member?.displayName || interaction.user.username;
+
+        // Blokada przed podwójnym kliknięciem — status ustawiamy PRZED cofnięciem danych
+        await this.recordRevertService.markReverted(publicMsgId, 'owner', actorName);
+
+        try {
+            await this._cvRemoveRecord(session, { skipUndoInvalidate: true });
+
+            // Role TOP mogły się zmienić po cofnięciu wyniku
+            const guild = interaction.client.guilds.cache.get(session.guildId);
+            if (guild) {
+                const guildCfg = this.config.getGuildConfig(session.guildId);
+                await this.roleService.updateTopRoles(guild, null, guildCfg?.topRoles || null).catch(() => {});
+            }
+            // Zgłoszenia CV dotyczące cofniętego rekordu tracą sens
+            if (this.communityVerificationService) {
+                await this.communityVerificationService.expireUserSessions(session.playerKey, session.guildId).catch(() => {});
+            }
+            this.ocrStatsService?.recordReverted().catch(() => {});
+            this.adminPanelService?.refresh();
+
+            await this._applyRevertVisuals(interaction.client, session, 'owner', actorName, {
+                publicNote: msgs.recordUndoOwnerNote,
+            });
+            await interaction.editReply({ content: msgs.recordUndoDone, components: [] });
+            gl.info(`↩️ ${this.logService.nickLink(actorName, interaction.user.id)} samodzielnie cofnął swój ostatni rekord${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
+        } catch (err) {
+            gl.error(`❌ Błąd cofania rekordu przez właściciela: ${err.message}`);
+            await interaction.editReply({ content: msgs.updateError, components: [] }).catch(() => {});
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     //  PROFILE GRACZA (kilka kont w grze)
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -5176,6 +5496,10 @@ class InteractionHandler {
             }
         }
 
+        // Przyciski cofnięcia pod ogłoszeniami usuwanego profilu tracą ważność
+        for (const gid of guildIds) {
+            await this._invalidateUndoForPlayer(interaction.client, playerKey, gid, profileName).catch(() => {});
+        }
         // Subskrypcje wskazujące na ten profil tracą sens
         await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
         await registry.removeProfile(userId, profileIndex);
@@ -5671,14 +5995,6 @@ class InteractionHandler {
                     const csFiles = [imageAttachmentCs];
                     if (csBossImageAttachment) csFiles.push(csBossImageAttachment);
 
-                    // Przycisk cofnięcia (admin) — keyed na POPRZEDNI serwer, gdzie zapisano rekord bossa
-                    const csRevertRow = [new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`ocr_revert_${playerKey}_${sourceGuildId}`)
-                            .setLabel('↩️ Cofnij wynik')
-                            .setStyle(ButtonStyle.Secondary)
-                    ).toJSON()];
-
                     // /test (dryRun): podgląd ephemeral, bez publicznego ogłoszenia i bez sesji cofnięcia
                     if (dryRun) {
                         _ocrEmbedParams = { profileIndex, profileLabel, type: 'test_boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score };
@@ -5691,23 +6007,26 @@ class InteractionHandler {
                     const csPublicMsg = await interaction.followUp({ embeds: csEmbeds, files: csFiles });
                     this._addRecordAutoReaction(csPublicMsg, guildId);
 
-                    // Sesja cofnięcia rekordu bossa — globalny ranking niezmieniony (skipGlobalRevert), cel = poprzedni serwer
-                    const csRevertKey = `${playerKey}_${sourceGuildId}`;
-                    this._ocrRevertSessions.set(csRevertKey, {
+                    // Sesja cofnięcia rekordu bossa — dane zapisano na POPRZEDNIM serwerze gracza,
+                    // więc cofnięcie musi celować w niego (guildId: sourceGuildId), a globalny ranking zostaje nietknięty
+                    await this._registerRecordAnnouncement(interaction, csPublicMsg, {
                         guildId: sourceGuildId,
-                        userId,
-                    playerKey,
+                        playerKey,
                         previousRecord: null,
-                        skipGlobalRevert: true,
-                        newRecord: { timestamp: bossTs, bossName },
-                        bossName: bossName || null,
+                        newRecord: { score: bestScore, bossName, timestamp: bossTs },
                         previousBossRecord: csServerAPrevBoss ?? null,
-                        publicMsgId: csPublicMsg?.id || null,
-                        publicChannelId: csPublicMsg?.channelId || null,
+                        bossName: bossName || null,
+                        skipGlobalRevert: true,
+                        cvEnabled: false,   // CV nie obejmuje ogłoszeń cross-server
                     });
-                    setTimeout(() => this._ocrRevertSessions.delete(csRevertKey), 24 * 60 * 60 * 1000);
 
-                    _ocrEmbedParams = { profileIndex, profileLabel, type: 'boss_record', userName, userId, score: bestScore, bossName, commandName, previousScore: csPrevBossRecord?.score, revertComponents: csRevertRow };
+                    _ocrEmbedParams = {
+                        profileIndex, profileLabel, type: 'boss_record', userName, userId,
+                        score: bestScore, bossName, commandName,
+                        previousScore: csPrevBossRecord?.score,
+                        revertComponents: this._buildAdminRevertRow(csPublicMsg?.id, playerKey, sourceGuildId),
+                        onSent: this._adminMsgTracker(csPublicMsg?.id),
+                    };
                     gl.info(`🎯 [/${commandName}] Duplikat globalny cross-server, ale pobito rekord bossa "${bossName}" — zapis na serwerze "${sourceGuildName}"`);
                     return;
                 }
@@ -6057,26 +6376,13 @@ class InteractionHandler {
                     return;
                 }
 
-                // non-dryRun: publiczne ogłoszenie
-                const bossRevertRow = [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
-                        .setLabel('↩️ Cofnij wynik')
-                        .setStyle(ButtonStyle.Secondary)
-                ).toJSON()];
-
-                _ocrEmbedParams = {
-                    type: 'boss_record',
-                    userName, userId, score: bestScore, bossName, commandName,
-                    previousScore: previousBossRecord?.score,
-                    revertComponents: bossRevertRow,
-                };
-
                 await interaction.editReply({ content: msgs.bossRecordOnlyConfirmed || '✅ Nowy rekord na bossie ogłoszony!' });
 
                 // Sprawdź czy community verification włączona
                 const cvCfgBoss = this.guildConfigService?.getCommunityVerification(guildId);
                 const cvEnabledBoss = cvCfgBoss?.enabled === true && this.communityVerificationService;
+                // Wspólny timestamp dla sesji CV i sesji cofnięcia — obie muszą wskazywać ten sam moment
+                const bossAnnounceTs = new Date().toISOString();
 
                 const bossPublicMsg = await interaction.followUp({ embeds: bossPublicEmbeds, files: bossPublicFiles });
                 this._addRecordAutoReaction(bossPublicMsg, guildId);
@@ -6090,7 +6396,6 @@ class InteractionHandler {
                 // CV: przycisk Zgłoś + sesja weryfikacji (usuwa tylko rekord bossa, nie globalny)
                 if (cvEnabledBoss && bossPublicMsg) {
                     try {
-                        const bossTs = new Date().toISOString();
                         const expired = await this.communityVerificationService.expireUserSessions(playerKey, guildId);
                         for (const oldMsgId of expired) {
                             try {
@@ -6105,12 +6410,6 @@ class InteractionHandler {
                             } catch {}
                         }
 
-                        const bossCvBtn = new ButtonBuilder()
-                            .setCustomId(`cv_vote_${bossPublicMsg.id}`)
-                            .setLabel(msgs.cvVoteButton)
-                            .setStyle(ButtonStyle.Secondary);
-                        await bossPublicMsg.edit({ components: [new ActionRowBuilder().addComponents(bossCvBtn)] }).catch(() => {});
-
                         const bossMsgUrl = `https://discord.com/channels/${guildId}/${bossPublicMsg.channelId}/${bossPublicMsg.id}`;
                         await this.communityVerificationService.createSession({
                             guildId,
@@ -6121,7 +6420,7 @@ class InteractionHandler {
                             messageUrl: bossMsgUrl,
                             previousRecord: null,        // globalny ranking niezmieniony
                             skipGlobalRevert: true,      // przy cofnięciu nie ruszaj globalnego rankingu
-                            newRecord: { score: bestScore, bossName, timestamp: bossTs },
+                            newRecord: { score: bestScore, bossName, timestamp: bossAnnounceTs },
                             newAchievements,
                             previousBossRecord: previousBossRecord ?? null,
                         });
@@ -6131,21 +6430,27 @@ class InteractionHandler {
                     }
                 }
 
-                // Sesja cofnięcia dla admina (boss record only — globalny ranking niezmieniony)
-                const bossRevertKey = `${playerKey}_${guildId}`;
-                this._ocrRevertSessions.set(bossRevertKey, {
+                // Sesja cofnięcia (przycisk gracza pod ogłoszeniem + przycisk admina w logu OCR).
+                // Globalny ranking niezmieniony → skipGlobalRevert.
+                await this._registerRecordAnnouncement(interaction, bossPublicMsg, {
                     guildId,
-                    userId,
                     playerKey,
                     previousRecord: null,
-                    skipGlobalRevert: true,
-                    newRecord: { timestamp: new Date().toISOString() },
-                    bossName: bossName || null,
+                    newRecord: { score: bestScore, bossName, timestamp: bossAnnounceTs },
                     previousBossRecord: previousBossRecord ?? null,
-                    publicMsgId: bossPublicMsg?.id || null,
-                    publicChannelId: bossPublicMsg?.channelId || null,
+                    bossName: bossName || null,
+                    skipGlobalRevert: true,
+                    cvEnabled: cvEnabledBoss,
                 });
-                setTimeout(() => this._ocrRevertSessions.delete(bossRevertKey), 24 * 60 * 60 * 1000);
+
+                _ocrEmbedParams = {
+                    profileIndex, profileLabel,
+                    type: 'boss_record',
+                    userName, userId, score: bestScore, bossName, commandName,
+                    previousScore: previousBossRecord?.score,
+                    revertComponents: this._buildAdminRevertRow(bossPublicMsg?.id, playerKey, guildId),
+                    onSent: this._adminMsgTracker(bossPublicMsg?.id),
+                };
 
                 return;
             }
@@ -6349,6 +6654,7 @@ class InteractionHandler {
             if (bossImageAttachment) publicFiles.push(bossImageAttachment);
 
             let _newRecordPublicMsg = null;
+            let _recordRevertSession = null;
             try {
                 if (dryRun) {
                     // Tryb testowy: wynik wyświetlany wyłącznie ephemeral,
@@ -6380,10 +6686,10 @@ class InteractionHandler {
                         if (_ubSess) { _ubSess.publicMsgId = publicMsg.id; _ubSess.publicChannelId = publicMsg.channelId; }
                     }
 
-                    // Jeśli CV włączone — teraz znamy ID wiadomości, dodaj przycisk i utwórz sesję
+                    // Jeśli CV włączone — teraz znamy ID wiadomości, utwórz sesję zgłoszeń
                     if (cvEnabled && publicMsg) {
                         try {
-                            // Wygaś stare pending sesje tego gracza i usuń przyciski ze starych wiadomości
+                            // Wygaś stare pending sesje tego gracza i usuń przyciski zgłoszeń ze starych wiadomości
                             const expired = await this.communityVerificationService.expireUserSessions(playerKey, guildId);
                             for (const oldMsgId of expired) {
                                 try {
@@ -6397,13 +6703,6 @@ class InteractionHandler {
                                     }
                                 } catch {}
                             }
-
-                            // Dodaj przycisk Zgłoś z prawidłowym ID wiadomości
-                            const voteBtn = new ButtonBuilder()
-                                .setCustomId(`cv_vote_${publicMsg.id}`)
-                                .setLabel(msgs.cvVoteButton)
-                                .setStyle(ButtonStyle.Secondary);
-                            await publicMsg.edit({ components: [new ActionRowBuilder().addComponents(voteBtn)] }).catch(() => {});
 
                             const msgUrl = `https://discord.com/channels/${guildId}/${publicMsg.channelId}/${publicMsg.id}`;
                             await this.communityVerificationService.createSession({
@@ -6422,6 +6721,19 @@ class InteractionHandler {
                             gl.warn(`⚠️ community verification session error: ${cvErr.message}`);
                         }
                     }
+
+                    // Przyciski pod ogłoszeniem: „⚠️ Zgłoś" (gdy CV włączone) + „↩️ Cofnij wynik" dla właściciela.
+                    // Rejestracja unieważnia przycisk pod poprzednim ogłoszeniem tego profilu.
+                    _recordRevertSession = await this._registerRecordAnnouncement(interaction, publicMsg, {
+                        guildId,
+                        playerKey,
+                        previousRecord: previousRecordSnapshot ?? null,
+                        newRecord: { score: bestScore, bossName, timestamp: newRecordTimestamp || new Date().toISOString() },
+                        previousBossRecord: previousBossRecord ?? null,
+                        bossName: bossName || null,
+                        skipGlobalRevert: false,
+                        cvEnabled,
+                    });
 
                     gl.info('✅ Wysłano publiczne ogłoszenie nowego rekordu');
                 }
@@ -6453,49 +6765,13 @@ class InteractionHandler {
                 await this.roleService.updateTopRoles(interaction.guild, updatedPlayers, guildConfig?.topRoles || null);
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
-                const revertKey = `${playerKey}_${guildId}`;
-                this._ocrRevertSessions.set(revertKey, {
-                    guildId,
-                    userId,
-                    playerKey,
-                    previousRecord: previousRecordSnapshot ?? null,
-                    newRecord: { timestamp: newRecordTimestamp },
-                    bossName: bossName || null,
-                    previousBossRecord: previousBossRecord ?? null,
-                    publicMsgId: _newRecordPublicMsg?.id || null,
-                    publicChannelId: _newRecordPublicMsg?.channelId || null,
-                });
-                setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
-                const revertRow = [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
-                        .setLabel('↩️ Cofnij wynik')
-                        .setStyle(ButtonStyle.Secondary)
-                ).toJSON()];
-                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow };
+                const revertRow = this._buildAdminRevertRow(_newRecordPublicMsg?.id, playerKey, guildId);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
-                const revertKey = `${playerKey}_${guildId}`;
-                this._ocrRevertSessions.set(revertKey, {
-                    guildId,
-                    userId,
-                    playerKey,
-                    previousRecord: previousRecordSnapshot ?? null,
-                    newRecord: { timestamp: newRecordTimestamp },
-                    bossName: bossName || null,
-                    previousBossRecord: previousBossRecord ?? null,
-                    publicMsgId: _newRecordPublicMsg?.id || null,
-                    publicChannelId: _newRecordPublicMsg?.channelId || null,
-                });
-                setTimeout(() => this._ocrRevertSessions.delete(revertKey), 24 * 60 * 60 * 1000);
-                const revertRow = [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`ocr_revert_${playerKey}_${guildId}`)
-                        .setLabel('↩️ Cofnij wynik')
-                        .setStyle(ButtonStyle.Secondary)
-                ).toJSON()];
-                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow };
+                const revertRow = this._buildAdminRevertRow(_newRecordPublicMsg?.id, playerKey, guildId);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
             }
 
             // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza
@@ -6766,6 +7042,25 @@ class InteractionHandler {
 
         try {
 
+            // === Cofnięcie własnego rekordu przez gracza ===
+            if (customId.startsWith('rec_undo_ok_')) {
+                await this._handleRecordUndoConfirm(interaction, customId);
+                return;
+            }
+            if (customId === 'rec_undo_no') {
+                await interaction.update({ content: this.msgs(interaction.guildId).recordUndoCancelled, components: [] });
+                return;
+            }
+            if (customId.startsWith('rec_undo_')) {
+                await this._handleRecordUndo(interaction, customId);
+                return;
+            }
+            if (customId.startsWith('rec_undone_')) {
+                // Nieaktywny znacznik „cofnięto" — klik nie powinien się zdarzyć (przycisk disabled)
+                await interaction.deferUpdate().catch(() => {});
+                return;
+            }
+
             // === Profile gracza (kilka kont w grze) ===
             if (customId.startsWith('upd_prof_')) {
                 await this._handleUpdateProfilePick(interaction, customId);
@@ -6861,19 +7156,41 @@ class InteractionHandler {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                // ocr_revert_{playerKey}_{guildId} — playerKey może zawierać "#N" (profil dodatkowy)
-                const parts = customId.replace('ocr_revert_', '').split('_');
-                const [targetPlayerKey, targetGuildId] = parts;
-                const targetUserId = getOwnerId(targetPlayerKey);
-                const revertKey = `${targetPlayerKey}_${targetGuildId}`;
-                const session = this._ocrRevertSessions.get(revertKey);
+                // ocr_revert_{publicMsgId} (nowy format) albo ocr_revert_{playerKey}_{guildId}
+                // (stare embedy sprzed wdrożenia przycisku gracza — wtedy cofamy OSTATNI rekord profilu)
+                const token = customId.replace('ocr_revert_', '');
+                let session = null;
+                if (token.includes('_')) {
+                    const [legacyPlayerKey, legacyGuildId] = token.split('_');
+                    session = this.recordRevertService?.getLatest(legacyPlayerKey, legacyGuildId)
+                        || this._ocrRevertSessions.get(`${legacyPlayerKey}_${legacyGuildId}`)
+                        || null;
+                } else {
+                    session = this.recordRevertService?.get(token) || null;
+                }
                 if (!session) {
                     await interaction.reply({ content: '❌ Sesja wygasła lub wynik został już cofnięty.', flags: ['Ephemeral'] });
                     return;
                 }
+                if (session.status === 'owner' || session.status === 'admin') {
+                    await interaction.reply({
+                        content: session.status === 'owner'
+                            ? '❌ Ten wynik został już cofnięty przez właściciela.'
+                            : '❌ Ten wynik został już cofnięty.',
+                        flags: ['Ephemeral'],
+                    });
+                    return;
+                }
+                const targetPlayerKey = session.playerKey;
+                const targetGuildId = session.guildId;
+                const targetUserId = getOwnerId(targetPlayerKey);
                 await interaction.deferUpdate();
-                this._ocrRevertSessions.delete(revertKey);
-                await this._cvRemoveRecord(session);
+                if (session.publicMsgId) {
+                    await this.recordRevertService?.markReverted(session.publicMsgId, 'admin',
+                        interaction.member?.displayName || interaction.user.username);
+                }
+                this._ocrRevertSessions.delete(`${targetPlayerKey}_${targetGuildId}`);
+                await this._cvRemoveRecord(session, { skipUndoInvalidate: true });
                 // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
                 if (this.ocrStatsService && targetUserId !== interaction.user.id) {
                     this.ocrStatsService.recordReverted().catch(() => {});
@@ -6897,25 +7214,16 @@ class InteractionHandler {
                     .setStyle(ButtonStyle.Secondary)
                     .setDisabled(true);
                 await interaction.message.edit({ embeds: [updatedEmbed], components: [new ActionRowBuilder().addComponents(disabledOcrRevertBtn)] }).catch(() => {});
-                // Dodaj notkę do ogłoszenia publicznego
-                if (session.publicMsgId && session.publicChannelId) {
-                    try {
-                        const _pubChan = interaction.client.channels.cache.get(session.publicChannelId)
-                            || await interaction.client.channels.fetch(session.publicChannelId).catch(() => null);
-                        if (_pubChan) {
-                            const _pubMsg = await _pubChan.messages.fetch(session.publicMsgId).catch(() => null);
-                            if (_pubMsg) {
-                                const _t = this._panelT(targetGuildId);
-                                const _noteText = _t(
-                                    `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
-                                    `↩️ Administrator **${adminName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
-                                );
-                                const _existingContent = _pubMsg.content ? `${_pubMsg.content}\n` : '';
-                                await _pubMsg.edit({ content: `${_existingContent}${_noteText}` }).catch(() => null);
-                            }
-                        }
-                    } catch {}
-                }
+                // Ogłoszenie publiczne: notka + nieaktywny czerwony przycisk „Cofnął admin"
+                const _t = this._panelT(targetGuildId);
+                const _noteText = _t(
+                    `↩️ Administrator **${adminName}** cofnął wynik oraz wszystkie osiągnięcia do stanu sprzed pobicia tego rekordu z powodu naruszenia zasad.`,
+                    `↩️ Administrator **${adminName}** reverted the score and all achievements to the state before this record was set due to a rules violation.`
+                );
+                await this._applyRevertVisuals(interaction.client, session, 'admin', adminName, {
+                    skipMessageId: interaction.message.id,
+                    publicNote: _noteText,
+                });
                 return;
             }
 
@@ -7775,7 +8083,11 @@ class InteractionHandler {
                 .setCustomId(`cv_vote_${messageId}`)
                 .setLabel(`${msgs.cvVoteButton} (${count})`)
                 .setStyle(ButtonStyle.Secondary);
-            await interaction.update({ components: [new ActionRowBuilder().addComponents(voteBtn)] });
+            const voteRow = new ActionRowBuilder().addComponents(voteBtn);
+            // Zachowaj przycisk „Cofnij wynik" właściciela — przebudowa komponentów by go usunęła
+            const keepUndoBtn = this._undoButtonFor(messageId, this.config.getMessages(session.guildId));
+            if (keepUndoBtn) voteRow.addComponents(keepUndoBtn);
+            await interaction.update({ components: [voteRow] });
         } catch {
             await interaction.reply({ content: msgs.cvVoteRegistered.replace('{count}', count).replace('{threshold}', threshold), flags: ['Ephemeral'] }).catch(() => {});
         }
@@ -7960,7 +8272,7 @@ class InteractionHandler {
             }
 
         } else if (action === 'remove') {
-            await this._cvRemoveRecord(session);
+            await this._cvRemoveRecord(session, { by: 'admin', actorName: adminName, client: interaction.client });
             if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'removed');
             if (this.userBlockService) {
@@ -7976,7 +8288,7 @@ class InteractionHandler {
                     session.userId, 'unknown', session.guildId, 'unknown', '', true
                 );
             }
-            await this._cvRemoveRecord(session);
+            await this._cvRemoveRecord(session, { by: 'admin', actorName: adminName, client: interaction.client });
             if (this.ocrStatsService) this.ocrStatsService.recordReverted().catch(() => {});
             await this.communityVerificationService.closeSession(messageId, 'blocked');
             await this._updateOriginalRecordButton(interaction.client, session, 'blocked');
@@ -8011,13 +8323,25 @@ class InteractionHandler {
                 .setStyle(style)
                 .setDisabled(true);
 
-            await msg.edit({ components: [new ActionRowBuilder().addComponents(doneBtn)] }).catch(() => {});
+            const doneRow = new ActionRowBuilder().addComponents(doneBtn);
+            // Zgłoszenie odrzucone (rekord zostaje) → właściciel nadal może cofnąć swój wynik
+            if (action === 'approved') {
+                const keepUndoBtn = this._undoButtonFor(session.messageId, sourceMsgs);
+                if (keepUndoBtn) doneRow.addComponents(keepUndoBtn);
+            }
+            await msg.edit({ components: [doneRow] }).catch(() => {});
         } catch (e) {
             logger.warn(`CV _updateOriginalRecordButton error: ${e.message}`);
         }
     }
 
-    async _cvRemoveRecord(session) {
+    /**
+     * @param {Object} session - sesja CV / cofnięcia rekordu
+     * @param {{ by?: 'owner'|'admin', actorName?: string|null, client?: object|null, skipUndoInvalidate?: boolean }} opts
+     *   Po cofnięciu unieważniamy przycisk „Cofnij wynik" gracza — inaczej ten sam rekord
+     *   dałoby się cofnąć drugi raz (podwójny revert rankingu i osiągnięć).
+     */
+    async _cvRemoveRecord(session, opts = {}) {
         // Wszystkie cofnięcia dotyczą PROFILU z sesji (session.playerKey);
         // sesje utworzone przed wdrożeniem profili mają tylko userId = profil główny.
         // Cofaj ranking do stanu sprzed zgłoszenia (ignoruje rekordy B, C pobite po A)
@@ -8059,6 +8383,40 @@ class InteractionHandler {
                 ).catch(e => logger.error(`CV _cvRemoveRecord revert boss record error: ${e.message}`));
             }
         }
+
+        // Przycisk „Cofnij wynik" pod ogłoszeniem przestaje działać (rekord już cofnięty)
+        if (!opts.skipUndoInvalidate) {
+            await this._invalidateUndoForSession(session, opts).catch(() => {});
+        }
+    }
+
+    /**
+     * Oznacza rekord jako cofnięty w magazynie sesji i (gdy podano klienta) aktualizuje
+     * przyciski: ogłoszenie publiczne + embed admina dostają nieaktywny czerwony przycisk.
+     */
+    async _invalidateUndoForSession(session, { by = 'admin', actorName = null, client = null } = {}) {
+        if (!this.recordRevertService) return;
+        const key = session.publicMsgId || session.messageId || null;
+        const recSession = key
+            ? this.recordRevertService.get(key)
+            : this.recordRevertService.getLatest(session.playerKey || session.userId, session.guildId);
+        if (!recSession || recSession.status === 'owner' || recSession.status === 'admin') return;
+        await this.recordRevertService.markReverted(recSession.publicMsgId, by, actorName);
+        if (client) {
+            await this._applyRevertVisuals(client, recSession, by, actorName).catch(() => {});
+        }
+    }
+
+    /**
+     * Unieważnia przycisk cofnięcia dla OSTATNIEGO rekordu profilu — używane tam, gdzie admin
+     * usuwa dane inną drogą niż przycisk cofnięcia (usunięcie gracza/wyniku, kasowanie profilu).
+     */
+    async _invalidateUndoForPlayer(client, playerKey, guildId, actorName = null) {
+        if (!this.recordRevertService) return;
+        const recSession = this.recordRevertService.getLatest(playerKey, guildId);
+        if (!recSession || recSession.status === 'owner' || recSession.status === 'admin') return;
+        await this.recordRevertService.markReverted(recSession.publicMsgId, 'admin', actorName);
+        if (client) await this._applyRevertVisuals(client, recSession, 'admin', actorName).catch(() => {});
     }
 
     async _updateAllCvReportMsgs(client, session, statusText, newComponents) {
@@ -10935,6 +11293,22 @@ class InteractionHandler {
                         });
                         gl.info(`✅ [Analizuj] Ogłoszenie wysłane na kanał ${announcementChannelId}`);
 
+                        // Przycisk „↩️ Cofnij wynik" dla właściciela — jak przy zwykłym /update
+                        await this._registerRecordAnnouncement(interaction, analyzePublicMsg, {
+                            guildId: targetGuildId,
+                            playerKey: targetPlayerKey,
+                            previousRecord: currentScore ?? null,
+                            newRecord: {
+                                score: aiResult.score,
+                                bossName: aiResult.bossName,
+                                timestamp: isNewRecord ? (updatedRanking[targetPlayerKey]?.timestamp ?? new Date().toISOString()) : new Date().toISOString(),
+                            },
+                            previousBossRecord: previousBossRecord ?? null,
+                            bossName: aiResult.bossName || null,
+                            skipGlobalRevert: !isNewRecord,
+                            cvEnabled: false,   // ogłoszenie z ręcznej analizy nie podlega zgłoszeniom CV
+                        });
+
                         // DM do subskrybentów — cały stos embedów (jak dla /update)
                         if (this.notificationService && analyzePublicMsg && analyzeSubscribers.length > 0) {
                             try {
@@ -11090,6 +11464,8 @@ class InteractionHandler {
                 : `↩️ Wynik cofnięty przez **${reverterName}** → gracz usunięty z rankingu | ${now}`;
             this._ccAudit(interaction, `↩️ Cofnięto wynik (Analizuj): ${userName}`);
             this.adminPanelService?.refresh();
+            // Przycisk gracza „Cofnij wynik" pod ogłoszeniem przestaje działać (rekord już cofnięty)
+            await this._invalidateUndoForPlayer(interaction.client, targetPlayerKey, targetGuildId, reverterName).catch(() => {});
 
             const updatedEmbeds = interaction.message.embeds.map(e => {
                 const builder = EmbedBuilder.from(e);

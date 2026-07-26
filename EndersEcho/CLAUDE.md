@@ -70,6 +70,22 @@
 - **Ręczna analiza admina:** raport odrzuconego screena niesie profil w stopce (`pk:{playerKey}`, tylko dla profili dodatkowych); `_handleAnalyzeConfirmed` czyta go i zapisuje wynik na właściwym profilu (stare raporty bez `pk:` → profil główny)
 - **Eksport `shared_data/endersecho_ranking.json`:** `players[]` zawiera **jeden wpis na osobę** (najlepszy profil) — Stalker czyta `find(p => p.userId === …)` i `players.length`, więc widzi osoby i nie zawyża liczby graczy; pełna lista profili w nowym polu `profiles[]` (z `playerKey`, `profileIndex`)
 
+**Cofanie rekordu (przycisk gracza + przycisk admina)** — `recordRevertService.js`:
+- **Pod KAŻDYM ogłoszeniem rekordu** (`/update` — nowy rekord, sam rekord bossa, rekord bossa cross-server, oraz ogłoszenie z panelu „Analizuj") pojawia się `↩️ Cofnij wynik` obok `⚠️ Zgłoś` (ten drugi tylko gdy CV włączone). `/test` (dryRun) nie tworzy sesji ani przycisków
+- **Kliknąć może WYŁĄCZNIE właściciel wyniku** (porównanie po `getOwnerId(playerKey)` — dowolny profil gracza cofa własny wynik); ktokolwiek inny dostaje `recordUndoNotOwner`
+- **Tylko OSTATNI rekord jest cofalny.** Rejestracja nowego ogłoszenia ustawia poprzedniemu status `superseded` i **dezaktywuje jego przycisk** (`_disablePreviousUndoButton` — wyłącza sam przycisk cofnięcia, zostawiając „Zgłoś"). Kliknięcie starego przycisku → `recordUndoNotLatest`
+- **Potwierdzenie przed cofnięciem:** ephemeral z listą konsekwencji (`recordUndoConfirmTitle` — wynik, rekord bossa, wpis historii i osiągnięcia wrócą do stanu sprzed rekordu, operacji nie da się odwrócić) + `↩️ Tak, cofnij wynik` / `❌ Anuluj`
+- **Efekt cofnięcia = ten sam co u admina** (`_cvRemoveRecord`): revert rankingu, historii wyników, osiągnięć od momentu rekordu i rekordu bossa; dodatkowo aktualizacja ról TOP, wygaszenie sesji CV, `ocrStats.recordReverted()`, refresh Centrum Dowodzenia
+- **Synchronizacja obu stron** (`_applyRevertVisuals`):
+  - gracz cofnął → embed w kanale logów OCR dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął właściciel` + pole „↩️ Cofnięto"
+  - admin cofnął → ogłoszenie publiczne dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął admin` + notkę w treści
+  - referencja do embeda admina zapamiętywana przez `logService.sendOcrAnalysisEmbed({ onSent })` → `recordRevertService.attachAdminMessage()`
+- **Klucz sesji = ID publicznego ogłoszenia.** Przycisk admina używa `ocr_revert_{publicMsgId}` (stary format `ocr_revert_{playerKey}_{guildId}` nadal obsługiwany → cofa ostatni rekord profilu), dzięki czemu oba przyciski dotyczą DOKŁADNIE tego samego rekordu
+- **Ochrona przed podwójnym cofnięciem:** status (`active` → `owner`/`admin`/`superseded`) ustawiany PRZED modyfikacją danych. Każda inna ścieżka usuwająca rekord unieważnia przycisk gracza: `_cvRemoveRecord` (CV: usuń rekord / zablokuj, cofnięcie z „Analizuj"), panel `🗑️ Usuń gracza`, panel `🧹 Usuń wynik`, usunięcie profilu w `/profiles`
+- **Przycisk przeżywa przebudowę komponentów:** zgłoszenie CV (aktualizacja licznika `⚠️ Zgłoś (N)`) i zatwierdzenie zgłoszenia (`cvBtnStatusApproved` — rekord zostaje) dokładają go z powrotem przez `_undoButtonFor()`
+- **Persystencja:** `data/record_reverts.json` (`{ sessions: { [publicMsgId]: {...} }, latest: { "playerKey_guildId": publicMsgId } }`) wczytywany przy starcie — bez tego restart bota unieważniałby przyciski pod opublikowanymi ogłoszeniami. Sesje starsze niż 30 dni czyszczone przy starcie
+- **CustomIDs:** `rec_undo_{publicMsgId}` | `rec_undo_ok_{publicMsgId}` | `rec_undo_no` | `rec_undone_{owner|admin}` (nieaktywny znacznik)
+
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
@@ -631,7 +647,9 @@ EndersEcho/data/
 ├── token_usage.json               # Koszty AI (Gemini)
 ├── testers.json                   # Lista testerów OCR
 ├── banned_guilds.json             # Zbanowane serwery
-└── community_votes.json           # Sesje weryfikacji społeczności
+├── community_votes.json           # Sesje weryfikacji społeczności
+├── profiles.json                  # Profile graczy (kilka kont w grze)
+└── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
 ```
 Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
 
@@ -767,7 +785,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
   1. Webhook przez `guildLogger.sendEmbed(embed)` / `logService.sendEmbed(embed)` (`ENDERSECHO_LOGS_WEBHOOK_URL` — opcjonalne)
   2. Kanał Discord: `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
 - **Embedy OCR analiz:** `logService.sendOcrAnalysisEmbed(guildId, options, guildObj, components)` — wysyła embed po każdej analizie OCR (/update, /test, panel Analizuj) na `ENDERSECHO_OCR_LOG_CHANNEL_ID`. Typy i kolory: 🏆 `new_record` zielony, ⚠️ `role_error` żółty, 🚫 `rejected` czerwony, 📊 `no_record` niebieski, 🧪 `test_record`/`test_no_record` cyan/blurple, 🔬 `analyze_panel` pomarańczowy, 🔄 `cross_server` szary. Embed zawiera: gracza, komendę, admina (panel), wynik, boss, poprzedni rekord, powód odrzucenia, szczegóły AI, błąd ról. Komponenty (np. przycisk ↩️ Cofnij) dołączane przez `components` array.
-- **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{userId}_{guildId}`) — dołączany do embedów `new_record` i `role_error` (nie dotyczy `dryRun`/`/test`). Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i **dezaktywuje przycisk** (zamiast usuwać). Jeśli w sesji jest `publicMsgId` — w ogłoszeniu rekordu dodawana jest notka "↩️ Administrator X cofnął wynik oraz wszystkie osiągnięcia". Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId`; zawiera `publicMsgId`/`publicChannelId` — referencja do ogłoszenia publicznego). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
+- **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{publicMsgId}`; stary format `ocr_revert_{userId}_{guildId}` nadal obsługiwany) — dołączany do embedów `new_record`, `role_error` i `boss_record` (nie dotyczy `dryRun`/`/test`). Sesja trzymana w **persystentnym** `recordRevertService` (`data/record_reverts.json`), nie w RAM; po cofnięciu ogłoszenie publiczne dostaje nieaktywny czerwony przycisk `↩️ Cofnął admin`. Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i **dezaktywuje przycisk** (zamiast usuwać). Jeśli w sesji jest `publicMsgId` — w ogłoszeniu rekordu dodawana jest notka "↩️ Administrator X cofnął wynik oraz wszystkie osiągnięcia". Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId`; zawiera `publicMsgId`/`publicChannelId` — referencja do ogłoszenia publicznego). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
 - **Przycisk ↩️ Cofnij wynik (panel Analizuj)** (`ee_analyze_revert_{globalMsgId}`) — dołączany do embeda raportu odrzuconego screena po manualnej analizie admina. Po kliknięciu: identyczne cofnięcie co `ocr_revert`, **dezaktywacja przycisku** w raporcie i notka w ogłoszeniu publicznym. Sesja `_analyzeRevertSessions` zawiera `publicMsgId`/`publicChannelId`.
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
 - **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli zmiana pozycji globalnej)
