@@ -71,7 +71,10 @@ class RoleService {
 
         let stats = null;
         try {
-            const players = await this.rankingService.getSortedPlayers(guildId);
+            // Progi ról liczone na liście z JEDNYM (najlepszym) profilem na użytkownika Discorda.
+            // Member Discorda może mieć tylko jedną rolę TOP, a profile dodatkowe nie mogą
+            // zajmować progów i odbierać ról innym graczom.
+            const players = await this.rankingService.getSortedPlayersByUser(guildId);
             stats = await this._applyRoleDiff(guild, players, guildTopRoles, gl, { fullFetch });
         } catch (error) {
             gl.error(`❌ Błąd podczas aktualizacji ról TOP: ${error.message}`);

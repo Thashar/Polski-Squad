@@ -767,6 +767,8 @@ ENDERSECHO_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx
 ENDERSECHO_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 # Centrum Dowodzenia Head Admina — Live Dashboard (opcjonalne)
 ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
+# Profile gracza (kilka kont w grze) — max profili na użytkownika, domyślnie 3
+ENDERSECHO_MAX_PROFILES=3
 
 # ===== KONTROLER BOT =====
 KONTROLER_TOKEN=bot_token_here

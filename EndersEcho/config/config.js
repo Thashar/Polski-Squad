@@ -196,6 +196,12 @@ module.exports = {
         paginationTimeout: 3600000 // 1 godzina
     },
 
+    // Profile gracza — jeden użytkownik Discorda może mieć kilka kont w grze
+    profiles: {
+        // Maksymalna liczba profili na użytkownika (łącznie z głównym)
+        maxPerUser: parseInt(process.env.ENDERSECHO_MAX_PROFILES || '3', 10),
+    },
+
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),

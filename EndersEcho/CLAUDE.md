@@ -44,6 +44,68 @@
 **Komunikaty systemowe** (`messages.js`):
 - Nowe klucze MUSZĄ być dodane do obu sekcji: `pol` i `eng`
 
+**Profile gracza (kilka kont w grze)** — `profileRegistryService.js` + `utils/helpers.js`:
+- **Tożsamość wpisu = `playerKey`**, nie `userId`:
+  - profil główny: `"123456789"` — **identyczny z dawnym userId**, więc istniejące dane działają bez migracji
+  - profil dodatkowy: `"123456789#2"`, `"123456789#3"`
+- **Separator `#`** wybrany świadomie: customId komponentów Discorda parsowane są przez `split('_')` i `split(':')`, więc te znaki nie mogą wystąpić w kluczu; `#` jest też bezpieczny w nazwach plików (`wyniki/{playerKey}.json`)
+- **Helpery** (`utils/helpers.js`): `makePlayerKey(userId, idx)`, `getOwnerId(playerKey)`, `getProfileIndex(playerKey)`, `isAltProfile`, `formatProfileDisplayName(nick, idx)`, `getProfileMarker(idx)`
+- **Rejestr profili** — `data/profiles.json`: `{ [userId]: { active, profiles: [{ index, label, createdAt }] } }`
+  - Profil główny istnieje **niejawnie** — gracz, który nigdy nie użył `/profiles`, nie ma wpisu w pliku i działa dokładnie jak przed wdrożeniem
+  - **Numery slotów są stabilne** — po usunięciu profilu numery NIE są przenumerowywane (inaczej rozjechałyby się subskrypcje, dane rankingowe i customId); wolny slot jest odzyskiwany przy kolejnym dodaniu
+  - Limit: `ENDERSECHO_MAX_PROFILES` (domyślnie 3, `config.profiles.maxPerUser`)
+  - Etykiety (nick w grze) sanityzowane: usuwane markdown/wzmianki/`#`, max 24 znaki, unikalne w obrębie gracza
+  - **Persystencja:** plik JSON wczytywany przy starcie (`profileRegistryService.load()` w `index.js`) — przeżywa restart
+- **Standaryzacja nazw w rankingach:** profil główny = nick Discord bez zmian; profile dodatkowe = nick + znacznik cyfry w kółku (`Thashar ②`, `Thashar ③`). Baza nazwy zawsze pochodzi z Discorda, więc od razu widać, że wyniki należą do tej samej osoby, a gracz nie może wpisać cudzego nicku. Etykieta profilu (nick w grze) pokazywana jest w `/profiles`, `/profile` i embedzie rekordu
+- **Panel zarządzania profilami — WEWNĄTRZ `/profile`** (osobnej komendy `/profiles` NIE MA, została usunięta): przycisk `👥 Moje profile` (`profile_manage_prof`) otwiera panel jako **nowy ephemeral** (`handleProfilesPanel`, wzorzec z `profile_manage_subs`) — lista profili z wynikami i pozycjami globalnymi, `➕ Dodaj profil` (modal nazwy), `📌 Ustaw profil do śledzenia`, `✏️ Zmień nazwę`, `🗑️ Usuń profil` (potwierdzenie → kasuje wpis rankingowy, rekordy bossów, historię, osiągnięcia i subskrypcje profilu na wszystkich serwerach + aktualizuje role TOP)
+  - Panel jako **osobna wiadomość**, nie edycja widoku profilu — modale nazwy i potwierdzenia nie kolidują ze stanem sesji `_profileStates`
+  - Przycisk `👥 Moje profile` pokazuje się **na własnym profilu od DRUGIEGO profilu** i **nigdy na cudzym**
+  - **Gracz z jednym profilem widzi zamiast panelu `➕ Dodaj profil`** (`profile_add_intro`, Success) — jedyne wejście do drugiego konta. Panel (zmiana nazwy, usuwanie, śledzenie) dochodzi od drugiego profilu, bo przy jednym nie ma czym zarządzać
+- **Bramka edukacyjna przed PIERWSZYM dodatkowym profilem** (`handleProfileAddIntro`):
+  - `➕ Dodaj profil` → ephemeral embed `profileIntroTitle` + `profileIntroBody` (czym jest profil, nick w grze, znacznik `②` w rankingu, pytanie przy `/update`, śledzenie 📌, **wspólny limit/cooldown**, jedna rola TOP wg najlepszego profilu, nieodwracalne usunięcie, limit `{max}`) + przyciski `prof_intro_ok` (Success) i `prof_intro_cancel` (Secondary)
+  - Dopiero `prof_intro_ok` otwiera okno nazwy w trybie **`addfirst`** (`prof_modal_addfirst_0`); `prof_intro_cancel` zamyka bramkę komunikatem `profileIntroCancelled`
+  - **Dlaczego nie okno modalne Discorda:** modal przyjmuje wyłącznie pola tekstowe i listy w `Label` — nie ma w nim miejsca na sformatowane wyjaśnienie ani przycisk „przeczytałem"
+  - Tryb `addfirst` po dodaniu robi `interaction.update()` (wyjaśnienie zamienia się w potwierdzenie), więc **nie da się kliknąć potwierdzenia dwa razy** i dodać profilu, o który nikt nie prosił. Tryb `add` z panelu działa jak dotąd (osobny ephemeral, panel zostaje)
+  - Limit sprawdzany **dwa razy**: przy otwieraniu bramki i przy potwierdzeniu (gracz mógł w międzyczasie dodać profil w innym oknie)
+  - Panel nie odświeża wiadomości `/profile`, dlatego `profileCmdAdded` przypomina o ponownym użyciu `/profile`, żeby zobaczyć rząd przełączania
+- **Profil do ŚLEDZENIA** (`active` w `profiles.json`, `getActiveIndex` / `getActivePlayerKey`) — wybór gracza, który profil bot pokazuje jako „jego" w widokach personalnych:
+  - Ustawiany przyciskiem `📌 Śledź ten profil` w `/profile` (rząd profili) oraz z panelu `👥 Moje profile`. Przycisk **pojawia się dopiero gdy gracz ma więcej niż jeden profil** i na aktualnie śledzonym profilu jest wyłączony (zielony `📌 Śledzony`)
+  - **Co za nim idzie:** `/ranking` — pole `👤 Twoje statystyki`, przycisk `Moja pozycja` (serwer, globalny, rankingi ról), wykres historii rekordów; zakładka `🏆 Osiągnięcia` w `/profile`; domyślnie otwierany profil w `/profile`; rankingi osiągnięć i bossów (`Moja pozycja`)
+  - **Helper `_findCallerIndex(players, userId)`** (`interactionHandlers.js`) — jedno miejsce liczące pozycję gracza: najpierw szuka `playerKey` śledzonego profilu, a gdy ten nie ma jeszcze wyniku, spada na **najlepszy** profil gracza (listy są posortowane malejąco, więc pierwsze trafienie po właścicielu = najlepszy). Wszystkie widoki `Moja pozycja` używają tego helpera — bez niego wykres pokazywałby jeden profil, a statystyki obok niego drugi
+  - **Nie miesza się z pozostałymi dwoma pojęciami:** *Main* = slot 1 (nieusuwalny, klucz zgodny z dawnym `userId`), *najlepszy profil* = wyliczany automatycznie (progi ról TOP, eksport do `shared_data`). Śledzenie zmienia WYŁĄCZNIE to, co gracz widzi — nie wpływa na role, ranking ani eksport
+  - **Podświetlenie wiersza w rankingu** pozostaje po właścicielu — gracz z kilkoma profilami widzi wyróżnione WSZYSTKIE swoje wpisy (celowo, żeby nie „zgubić" własnego profilu na liście)
+- **Wybór profilu przy `/update` i `/test`** — `_runUpdateFlow` → `_handleUpdateProfileModal` → `_runUpdateAnalysis`:
+  - Gracz z **jednym** profilem: flow bez zmian (żadnego dodatkowego kroku)
+  - Gracz z **kilkoma** profilami: **modal (okno pop-up) z select menu** — `🏠 Main`, `② …`, `③ …` (kolejność = numery slotów, domyślny profil gracza wstępnie zaznaczony przez `setDefault`, etykieta profilu jako opis opcji). Modal buduje `_buildProfileModal()`, customId `upd_prof_modal_{interactionId}`, sesja w `_updateProfileSessions` (TTL 10 min)
+  - **Przyciski w modalu są niemożliwe** — Discord dopuszcza w modalach wyłącznie pola tekstowe i select menu owinięte w komponent `Label` (`LabelBuilder`, type 18). Stąd lista rozwijana zamiast przycisków
+  - **`showModal()` musi być PIERWSZĄ odpowiedzią na interakcję** — wszystkie walidacje w `_runUpdateFlow` (blokada gracza, AI OCR, typ/rozmiar pliku, blokady OCR, cooldown) kończą się `return` i w happy path nie odpowiadają na interakcję. Zmieniając cokolwiek w tym miejscu trzeba to utrzymać (i zmieścić się w 3 s od wywołania komendy)
+  - **Dalszy flow korzysta z interakcji MODALA, nie komendy** — po odpowiedzi typu „modal" pierwotna interakcja nie ma wiadomości, którą dałoby się edytować. `_runUpdateAnalysis` dostaje `ModalSubmitInteraction` i przez nią leci `deferReply`/`editReply` (postęp analizy) oraz `followUp` (publiczne ogłoszenie)
+  - **Załącznik przekazywany parametrem** (`opts.attachment`) — `ModalSubmitInteraction` nie ma opcji komendy, więc screen zapamiętywany jest w sesji przy otwieraniu modala
+  - Wybór odczytywany przez `interaction.fields.getStringSelectValues('upd_prof_sel')`
+  - **Limit dzienny i cooldown naliczane są dopiero po wyborze** — porzucony modal nie kosztuje gracza próby
+- **Zakres per OSOBA (bez zmian, klucz `userId`):** blokady (`user_blocks.json`), dzienny limit `/update` (`usage_limits.json`), cooldown (`update_cooldowns.json`), koszty tokenów, statystyki odrzuceń, osiągnięcia „Eksplorator" (rankingViews, profileSearches, subscriptions). Profile **nie mnożą** limitu ani nie pozwalają obejść cooldownu
+- **Zakres per PROFIL (klucz `playerKey`):** `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json`, subskrypcje (`targetPlayerKey`), sesje CV i cofnięcia wyniku
+- **Progi ról TOP liczone na liście zdeduplikowanej** (`getSortedPlayersByUser`) — jeden member Discorda ma jedną rolę, a profile dodatkowe nie mogą zajmować progów i odbierać ról innym graczom. Ranking pokazuje wszystkie profile, ale role przydzielane są wg pozycji OSOBY. Nagłówek embeda rekordu (author = rola TOP) używa pozycji osoby, nie profilu
+- **Liczniki graczy pokazują OSOBY:** `getCountedPlayers()` dedupuje po `userId` (`{ total, playerIds, profileCount }`), statystyki historii agregują po właścicielu (`getOwnerId(nazwaPliku)`); Centrum Dowodzenia pokazuje `N (M profili)` gdy profile istnieją
+- **Ręczna analiza admina:** raport odrzuconego screena niesie profil w stopce (`pk:{playerKey}`, tylko dla profili dodatkowych); `_handleAnalyzeConfirmed` czyta go i zapisuje wynik na właściwym profilu (stare raporty bez `pk:` → profil główny)
+- **Eksport `shared_data/endersecho_ranking.json`:** `players[]` zawiera **jeden wpis na osobę** (najlepszy profil) — Stalker czyta `find(p => p.userId === …)` i `players.length`, więc widzi osoby i nie zawyża liczby graczy; pełna lista profili w nowym polu `profiles[]` (z `playerKey`, `profileIndex`)
+
+**Cofanie rekordu (przycisk gracza + przycisk admina)** — `recordRevertService.js`:
+- **Pod KAŻDYM ogłoszeniem rekordu** (`/update` — nowy rekord, sam rekord bossa, rekord bossa cross-server, oraz ogłoszenie z panelu „Analizuj") pojawia się `↩️ Cofnij wynik` obok `⚠️ Zgłoś` (ten drugi tylko gdy CV włączone). `/test` (dryRun) nie tworzy sesji ani przycisków
+- **Kliknąć może WYŁĄCZNIE właściciel wyniku** (porównanie po `getOwnerId(playerKey)` — dowolny profil gracza cofa własny wynik); ktokolwiek inny dostaje `recordUndoNotOwner`
+- **Tylko OSTATNI rekord jest cofalny.** Rejestracja nowego ogłoszenia ustawia poprzedniemu status `superseded` i **dezaktywuje jego przycisk** (`_disablePreviousUndoButton` — wyłącza sam przycisk cofnięcia, zostawiając „Zgłoś"). Kliknięcie starego przycisku → `recordUndoNotLatest`
+- **Potwierdzenie przed cofnięciem:** ephemeral z listą konsekwencji (`recordUndoConfirmTitle` — wynik, rekord bossa, wpis historii i osiągnięcia wrócą do stanu sprzed rekordu, operacji nie da się odwrócić) + `↩️ Tak, cofnij wynik` / `❌ Anuluj`
+- **Efekt cofnięcia = ten sam co u admina** (`_cvRemoveRecord`): revert rankingu, historii wyników, osiągnięć od momentu rekordu i rekordu bossa; dodatkowo aktualizacja ról TOP, wygaszenie sesji CV, `ocrStats.recordReverted()`, refresh Centrum Dowodzenia
+- **Synchronizacja obu stron** (`_applyRevertVisuals`):
+  - gracz cofnął → embed w kanale logów OCR dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął właściciel` + pole „↩️ Cofnięto"
+  - admin cofnął → ogłoszenie publiczne dostaje **nieaktywny czerwony** przycisk `↩️ Cofnął admin` + notkę w treści
+  - referencja do embeda admina zapamiętywana przez `logService.sendOcrAnalysisEmbed({ onSent })` → `recordRevertService.attachAdminMessage()`
+- **Klucz sesji = ID publicznego ogłoszenia.** Przycisk admina używa `ocr_revert_{publicMsgId}` (stary format `ocr_revert_{playerKey}_{guildId}` nadal obsługiwany → cofa ostatni rekord profilu), dzięki czemu oba przyciski dotyczą DOKŁADNIE tego samego rekordu
+- **Ochrona przed podwójnym cofnięciem:** status (`active` → `owner`/`admin`/`superseded`) ustawiany PRZED modyfikacją danych. Każda inna ścieżka usuwająca rekord unieważnia przycisk gracza: `_cvRemoveRecord` (CV: usuń rekord / zablokuj, cofnięcie z „Analizuj"), panel `🗑️ Usuń gracza`, panel `🧹 Usuń wynik`, usunięcie profilu w `/profiles`
+- **Przycisk przeżywa przebudowę komponentów:** zgłoszenie CV (aktualizacja licznika `⚠️ Zgłoś (N)`) i zatwierdzenie zgłoszenia (`cvBtnStatusApproved` — rekord zostaje) dokładają go z powrotem przez `_undoButtonFor()`
+- **Persystencja:** `data/record_reverts.json` (`{ sessions: { [publicMsgId]: {...} }, latest: { "playerKey_guildId": publicMsgId } }`) wczytywany przy starcie — bez tego restart bota unieważniałby przyciski pod opublikowanymi ogłoszeniami. Sesje starsze niż 30 dni czyszczone przy starcie
+- **CustomIDs:** `rec_undo_{publicMsgId}` | `rec_undo_ok_{publicMsgId}` | `rec_undo_no` | `rec_undone_{owner|admin}` (nieaktywny znacznik)
+
 **4 Systemy:**
 1. **OCR Wyników** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, preprocessing Sharp, ekstrakcja "Best" (K/M/B/T/Q/Qi), korekcja błędów (TT→1T)
@@ -85,15 +147,18 @@
      - Respektuje `isAllowedChannel`, blokadę użytkownika (`userBlockService`) oraz globalny blok OCR (`ocrBlockService.isBlocked('test')`)
 
 2. **Rankingi Multi-Server** - `rankingService.js`:
-   - **Per-serwer:** Osobny plik `data/guilds/{guildId}/ranking.json` dla każdego serwera
-   - **Globalny:** `getGlobalRanking()` — najlepszy wynik gracza ze wszystkich serwerów (z adnotacją skąd pochodzi)
-   - Eksport do `shared_data/endersecho_ranking.json` (globalny, format: `{updatedAt, players: [{rank, userId, username, score, scoreValue, bossName, timestamp, sourceGuildId}]}`)
+   - **Per-serwer:** Osobny plik `data/guilds/{guildId}/ranking.json` dla każdego serwera; **klucz wpisu = `playerKey`** (profil), wartość niesie `userId` (właściciel), `playerKey`, `profileIndex`, `profileLabel`
+   - **Normalizacja przy odczycie:** `loadRanking()` rozkłada klucz mapy i dopisuje `playerKey`/`userId`/`profileIndex` do każdego wpisu — dzięki temu KAŻDA ścieżka odczytu ma te pola bez zmian w miejscach wywołania
+   - **Globalny:** `getGlobalRanking()` — najlepszy wynik **profilu** ze wszystkich serwerów (dedup po `playerKey`, nie po `userId`); `getGlobalRankingByUser()` — jeden (najlepszy) profil na osobę, do progów ról i eksportu
+   - **Dedup cross-server** (`_removeWeakerScoresFromOtherGuilds`) operuje na `playerKey` — bez tego rekord jednego profilu wykasowałby wpisy pozostałych profili tej samej osoby
+   - Eksport do `shared_data/endersecho_ranking.json` (`players[]` = jeden wpis na osobę — najlepszy profil, format: `{rank, userId, playerKey, profileIndex, username, score, scoreValue, bossName, timestamp, sourceGuildId, serverRank, serverTotalPlayers}`; `profiles[]` = wszystkie profile w tym samym formacie)
    - Eksport przy każdym zapisie i przy starcie bota
    - **Migracja:** Przy pierwszym starcie stary `ranking.json` jest automatycznie migrowany do `ranking_{guild1Id}.json`
    - **Tie-break przy remisie (identyczny `scoreValue`):** `compareByScoreThenTimestamp` (`utils/helpers.js`) — gracz który zdobył dany wynik **wcześniej** (starszy `timestamp`) jest wyżej; ten kto powtórzył identyczny wynik jako drugi ląduje niżej. Używane we wszystkich sortowaniach po wyniku: ranking serwera (`getSortedPlayers`), ranking globalny (`getGlobalRanking`, `saveSharedRanking`), symulacje `/test` (`simulateSortedPlayers`, `simulateGlobalRanking`), ranking per-boss (`bossRecordService.getGlobalBossRanking`, `simulateGlobalBossRanking`) oraz pomocnicze wyliczenia „poprzednia pozycja" (delta ▲/▼ w ogłoszeniach rekordu)
 
 3. **Role TOP (opcjonalne)** - `roleService.js`:
    - Do **10 w pełni konfigurowalnych progów** per serwer; każdy próg = zakres pozycji rankingowych + rola Discord
+   - **Progi liczone na liście z jednym profilem na osobę** (`rankingService.getSortedPlayersByUser`) — gracz z kilkoma profilami nie zablokuje dwóch progów i nie odbierze roli innym
    - **Format danych:** `{ tiers: [{ from, to, roleId }] }` w `guild_configs.json`; backward compat ze starym formatem `{ top1, top2, top3, top4to10, top11to30 }` przez `normalizeTiers()`
    - **Backward compat:** `normalizeTiers(topRoles)` konwertuje stary format na `tiers[]` on-the-fly; istniejące konfiguracje działają bez migracji
    - Role są **opcjonalne per serwer** — jeśli serwer nie ma skonfigurowanych ról, bot je pomija
@@ -179,14 +244,14 @@
    - **Powiadomienie:** w embeddzie rekordu pojawia się pole `🎉 Nowe osiągnięcia` WYŁĄCZNIE z osiągnięciami faktycznie odblokowanymi w danym zgłoszeniu (`processSubmission` zwraca tylko ID dodane w tym wywołaniu — `newlyUnlocked`). **NIE** filtrujemy już po `lastRecordBeatAt`: poprzedni filtr `!prevLastBeat || unlockedAt > prevLastBeat` przy `lastRecordBeatAt === null` lub niespójnych `unlockedAt` (dane legacy/odtworzone z backupu) ogłaszał ponownie WSZYSTKIE posiadane osiągnięcia ("ponowne przyznawanie"). Pole `lastRecordBeatAt` jest nadal aktualizowane (używane przez `clearAchievementsAfter`/revert), ale nie decyduje o tym, co pokazać.
    - **Persistencja:** `data/guilds/{guildId}/achievements.json` — per-serwer; przeżywa restart
    - **Serializacja zapisu (anti-race):** wszystkie operacje mutujące (`processSubmission`, `_trackExplorer` używane przez metody `track*`, `revert*`, `clear*`, `reset*`, `removeOneAchievement`) przechodzą przez kolejkę per-serwer `_enqueue(guildId, fn)` (wzorzec z `rankingService`, timeout 30s). Zapobiega to race condition: bez kolejki częste metody `track*` (wołane przy każdym podejrzeniu rankingu/subskrypcji/wyszukaniu profilu) mogły nadpisać świeży zapis `processSubmission` swoim starym snapshotem, cofając `lastRecordBeatAt` — co powodowało **ponowne ogłaszanie już posiadanych osiągnięć** w embedzie rekordu. Wszystkie metody `track*` współdzielą helper `_trackExplorer(guildId, userId, incrementFn)`.
-   - **Komenda /achievements:** ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania + przycisk "Sprawdź gracza". Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie` + `🔍 Sprawdź gracza`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po `/achievements`: kategoria `score`. **Osiągnięcia cross-server:** `buildAchievementsViewGlobal(allGuildIds, userId, ...)` merguje dane ze WSZYSTKICH serwerów (`_mergeAchievements`); to samo dla `/profile` i "Sprawdź gracza".
+   - **Widok osiągnięć** (zakładka `🏆 Osiągnięcia` w `/profile` — osobnej komendy `/achievements` NIE MA): ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania + przycisk "Sprawdź gracza". Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie` + `🔍 Sprawdź gracza`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po wejściu w zakładkę: kategoria `score`. **Osiągnięcia cross-server:** `buildAchievementsViewGlobal(allGuildIds, userId, ...)` merguje dane ze WSZYSTKICH serwerów (`_mergeAchievements`); to samo dla `/profile` i "Sprawdź gracza".
    - **Sprawdź gracza (`ach_check_player`):** otwiera modal z polem nicku → wyszukuje cross-server przez `getGlobalRanking()` → jeśli 1 trafienie: od razu pokazuje osiągnięcia; jeśli wiele: StringSelectMenu (`ach_check_sel`). Wyświetla osiągnięcia ze **wszystkich serwerów** (`buildAchievementsViewForUserGlobal`). **Bez opisów jak zdobyć** — format: `emoji (rarity_emoji) **nazwa** *(rarity)* — data`. Przyciski nawigacji osadzają userId+guildId w customId (`ach_vc_{cat}_{userId}_{guildId}`, `ach_vo_{userId}_{guildId}`). Powrót do własnych osiągnięć przez `ach_vb`.
    - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm`; `trackNonRecord(guildId, userId)` — wołane w `_runUpdateFlow` gdy `!isNewRecord && !dryRun`; `trackCvApproved(guildId, userId)` — wołane w CV approve handler; `trackAiAnalyzed(guildId, userId)` — wołane w `_handleAnalyzeButton` po zapisaniu wyniku; `trackProfileSearch(guildId, userId)` — wołane w `_handleProfileSearchModal` gdy znaleziono ≥1 wynik
    - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`, `progress.profileSearches`
    - **Context w processSubmission:** `ctx.scoreValue`, `ctx.isNewRecord`, `ctx.prevScoreValue`, `ctx.currentPosition` (pozycja na serwerze), `ctx.bossName`, `ctx.globalPosition` (pozycja w rankingu globalnym — 0 jeśli brak)
    - **CustomIDs:** `ach_cat_{categoryKey}` (score/records/bosses/prestige/explorer) | `ach_overview` | `ach_check_player` | `ach_check_modal` | `ach_check_sel` | `ach_vc_{cat}_{userId}_{guildId}` | `ach_vo_{userId}_{guildId}` | `ach_vb`
 
-8. **Ranking Osiągnięć** — przycisk `🏆 Ranking osiągnięć` w `/achievements`:
+8. **Ranking Osiągnięć** — przycisk `🏆 Ranking osiągnięć` w widoku osiągnięć (`/profile` → `🏆 Osiągnięcia`):
    - Komenda analogiczna do `/ranking` ale sortuje wg liczby zdobytych osiągnięć
    - Przy wejściu: przyciski wyboru serwera (wszystkie gildie bota) + `🌐 Global`
    - Per-serwer: `achievementService.getAchievementRanking(guildId, rankingService)` — gracze z `ranking.json` posortowani po liczbie osiągnięć (gracze bez osiągnięć = 0)
@@ -226,7 +291,9 @@
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
    - **Centrum Dowodzenia (head admin):** panel 6 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
-**Komendy slash:** `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
+**Komendy slash (KOMPLETNA lista rejestrowana w `getSlashCommands()`):** `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
+
+**⚠️ Wszystko dla gracza siedzi w `/profile`** — osobnych komend `/achievements`, `/subscribe` ani `/profiles` **NIE MA** (osiągnięcia = zakładka `🏆 Osiągnięcia`, subskrypcje = przycisk `🔔 Subskrypcje`, profile = `➕ Dodaj profil` / `👥 Moje profile`). W `handleCommand` zostały martwe `case 'achievements'` i `case 'subscribe'` — nigdy nie zostaną wywołane, bo te komendy nie są rejestrowane. **Nie odwołuj się do nich w komunikatach dla graczy.**
 
 **`/help`** — publiczna komenda (ephemeral), działa też na serwerach bez konfiguracji. Embed z linkiem do strony `https://endersecho.thashar.dev/`, sekcją "Dokumenty" (polityka prywatności `/privacy`, regulamin `/terms` — wymóg Sekcji 5(a) Warunków Discorda) i linkiem do serwera pomocy.
 
@@ -466,13 +533,17 @@
 - Opcjonalny parametr `gracz` — fragment nicku do wyszukania; puste = własny profil
 - **Zakładka 👤 Profil (main):** rekord serwera (#pozycja / total), pozycja globalna, rola TOP, najlepszy wynik (score + boss + data), wycinek globalnego rankingu (gracz ±1), rankingi ról; na cudzym profilu dołącza pole 🔔 Obserwatorzy (liczba subskrybentów)
 - **Zakładka 🎯 Bossowie:** lista WSZYSTKICH znanych bossów (z `bossAliasService.getExtraEnglishNames()`), posortowana alfabetycznie, 15/stronę; ✅ z rekordem (score + data), — bez rekordu; paginacja gdy >15
-- **Zakładka 🏆 Osiągnięcia:** używa `achievementService.buildAchievementsViewGlobal/ForUserGlobal` — dane mergowane ze WSZYSTKICH serwerów; własny profil — z opisami jak /achievements; cudzy — bez opisów
+- **Zakładka 🏆 Osiągnięcia:** używa `achievementService.buildAchievementsViewGlobal/ForUserGlobal` — dane mergowane ze WSZYSTKICH serwerów; własny profil — z opisami osiągnięć; cudzy — bez opisów
 - **Szukaj gracza (🔍):** otwiera modal → wyszukiwanie cross-server w globalRanking → 1 trafienie: od razu profil; wiele: StringSelectMenu
 - **Własny profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | Szukaj gracza | 🔔 Subskrypcje (otwiera panel zarządzania subskrypcjami jako nowy ephemeral)
+- **Własny profil — Rząd profili (zawsze):** przyciski profili `🏠 Main` | `② …` | `③ …` (`profile_view_{index}`, aktualnie oglądany Primary + disabled) **tylko gdy gracz ma >1 profil**, dalej `📌 Śledź ten profil` / `📌 Śledzony` (`profile_track`, Success + disabled gdy już śledzony — też tylko przy >1 profilu), a na końcu `👥 Moje profile` (`profile_manage_prof`). **Gracz z jednym profilem widzi w tym rzędzie wyłącznie `➕ Dodaj profil`** (`profile_add_intro`, Success) — panel dochodzi od drugiego profilu
+  - **Układ rzędu:** narzędzia (`profile_track`, `profile_manage_prof`) zawsze na końcu **ostatniego** rzędu; przy podniesionym `ENDERSECHO_MAX_PROFILES` nadmiar przycisków profili przechodzi do rzędu wyżej (chunkowanie po 5), więc żaden rząd nie przekracza limitu Discorda
+  - Kliknięcie `profile_track` zapisuje wybór w `profiles.json` (`setActive`), wysyła ephemeral potwierdzenie i przerysowuje przyciski. Na cudzym profilu rzędu profili nie ma wcale
+- **Pole 👥 Profile tego gracza** w zakładce Profil — lista profili z wynikami, `📌` przy śledzonym
 - **Cudzy profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | Szukaj gracza. **Rząd 2:** ◀️ Wróć do siebie (Danger, pierwszy) | 🔔 Subskrybuj / 🔕 Odsubskrybuj (ostatni, zmienia się po kliknięciu)
-- **Stan sesji:** `_profileStates` Map (messageId → state), TTL 15 min; pola: `viewerId, targetUserId, targetGuildId, view, category, bossPage, bossMaxPage, cachedData, isSubscribed, subscriberCount`
+- **Stan sesji:** `_profileStates` Map (messageId → state), TTL 15 min; pola: `viewerId, targetPlayerKey, targetGuildId, lang, view, category, bossPage, bossMaxPage, cachedData, isSubscribed, subscriberCount` (**`targetPlayerKey`, nie `targetUserId`** — widok dotyczy konkretnego profilu)
 - **Dane per-boss:** `bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, userId)` — merge najlepszych wyników ze wszystkich serwerów
-- **CustomIDs:** `profile_main` | `profile_bosses` | `profile_bosses_prev` | `profile_bosses_next` | `profile_ach_overview` | `profile_ach_cat_{key}` | `profile_search` | `profile_search_modal` | `profile_search_sel` | `profile_back` | `profile_manage_subs` | `profile_subscribe` | `profile_unsubscribe`
+- **CustomIDs:** `profile_main` | `profile_bosses` | `profile_bosses_prev` | `profile_bosses_next` | `profile_ach_overview` | `profile_ach_cat_{key}` | `profile_search` | `profile_search_modal` | `profile_search_sel` | `profile_back` | `profile_manage_subs` | `profile_manage_prof` | `profile_add_intro` | `profile_subscribe` | `profile_unsubscribe` | `profile_view_{index}` | `profile_track` (wszystkie routowane przez whitelistę w `handleButtonInteraction` — nowy customId `profile_*` MUSI tam trafić, inaczej przycisk nie zadziała)
 - **Serwis:** `services/profileService.js` — `collectData`, `buildMainEmbed(data, isPol, subscriberCount?)`, `buildBossesEmbed`, `buildProfileComponents`
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
@@ -578,7 +649,7 @@
 - `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); gdy `ENDERSECHO_CONFIGURE_ADMIN_ONLY=true` → tylko Administrator; błąd: `configureNotAdmin`
 - `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
-- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/subscribe`, `/profile`, `/achievements`
+- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/profile`
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
@@ -602,7 +673,9 @@ EndersEcho/data/
 ├── token_usage.json               # Koszty AI (Gemini)
 ├── testers.json                   # Lista testerów OCR
 ├── banned_guilds.json             # Zbanowane serwery
-└── community_votes.json           # Sesje weryfikacji społeczności
+├── community_votes.json           # Sesje weryfikacji społeczności
+├── profiles.json                  # Profile graczy (kilka kont w grze)
+└── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
 ```
 Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
 
@@ -641,6 +714,9 @@ Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreV
 ```env
 ENDERSECHO_TOKEN=bot_token_here
 ENDERSECHO_CLIENT_ID=client_id
+
+# Profile gracza — maksymalna liczba profili na użytkownika (łącznie z głównym; domyślnie 3)
+ENDERSECHO_MAX_PROFILES=3
 
 # Serwer 1
 ENDERSECHO_GUILD_1_ID=guild_id
@@ -735,7 +811,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
   1. Webhook przez `guildLogger.sendEmbed(embed)` / `logService.sendEmbed(embed)` (`ENDERSECHO_LOGS_WEBHOOK_URL` — opcjonalne)
   2. Kanał Discord: `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
 - **Embedy OCR analiz:** `logService.sendOcrAnalysisEmbed(guildId, options, guildObj, components)` — wysyła embed po każdej analizie OCR (/update, /test, panel Analizuj) na `ENDERSECHO_OCR_LOG_CHANNEL_ID`. Typy i kolory: 🏆 `new_record` zielony, ⚠️ `role_error` żółty, 🚫 `rejected` czerwony, 📊 `no_record` niebieski, 🧪 `test_record`/`test_no_record` cyan/blurple, 🔬 `analyze_panel` pomarańczowy, 🔄 `cross_server` szary. Embed zawiera: gracza, komendę, admina (panel), wynik, boss, poprzedni rekord, powód odrzucenia, szczegóły AI, błąd ról. Komponenty (np. przycisk ↩️ Cofnij) dołączane przez `components` array.
-- **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{userId}_{guildId}`) — dołączany do embedów `new_record` i `role_error` (nie dotyczy `dryRun`/`/test`). Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i **dezaktywuje przycisk** (zamiast usuwać). Jeśli w sesji jest `publicMsgId` — w ogłoszeniu rekordu dodawana jest notka "↩️ Administrator X cofnął wynik oraz wszystkie osiągnięcia". Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId`; zawiera `publicMsgId`/`publicChannelId` — referencja do ogłoszenia publicznego). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
+- **Przycisk ↩️ Cofnij wynik** (`ocr_revert_{publicMsgId}`; stary format `ocr_revert_{userId}_{guildId}` nadal obsługiwany) — dołączany do embedów `new_record`, `role_error` i `boss_record` (nie dotyczy `dryRun`/`/test`). Sesja trzymana w **persystentnym** `recordRevertService` (`data/record_reverts.json`), nie w RAM; po cofnięciu ogłoszenie publiczne dostaje nieaktywny czerwony przycisk `↩️ Cofnął admin`. Dostępny tylko dla head admina. Po kliknięciu: cofa wynik przez `_cvRemoveRecord` (revert rankingu + historia + osiągnięcia), aktualizuje role TOP, edytuje embed dodając pole "↩️ Cofnięto przez X" i **dezaktywuje przycisk** (zamiast usuwać). Jeśli w sesji jest `publicMsgId` — w ogłoszeniu rekordu dodawana jest notka "↩️ Administrator X cofnął wynik oraz wszystkie osiągnięcia". Sesja rewertu przechowywana w `_ocrRevertSessions` Map (RAM, TTL 24h, klucz `userId_guildId`; zawiera `publicMsgId`/`publicChannelId` — referencja do ogłoszenia publicznego). Wymaga webhooka aplikacyjnego (bot-owned) żeby interakcje były routowane.
 - **Przycisk ↩️ Cofnij wynik (panel Analizuj)** (`ee_analyze_revert_{globalMsgId}`) — dołączany do embeda raportu odrzuconego screena po manualnej analizie admina. Po kliknięciu: identyczne cofnięcie co `ocr_revert`, **dezaktywacja przycisku** w raporcie i notka w ogłoszeniu publicznym. Sesja `_analyzeRevertSessions` zawiera `publicMsgId`/`publicChannelId`.
 - **Nick w logach:** Zawsze używaj `interaction.member?.displayName || interaction.user.displayName || interaction.user.username` — nigdy samego `interaction.user.username`
 - **Logi /update (8 linii happy path):** start → `[AI Test] Test wzorca: "OK"` → AI OCR wynik+boss+total → logScoreUpdate → ogłoszenie → Role TOP → Snippet globalny (jeśli zmiana pozycji globalnej)

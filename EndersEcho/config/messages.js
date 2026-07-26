@@ -40,6 +40,77 @@ const pol = {
 
     // /update — przetwarzanie (postęp krok po kroku)
     updateDownloading: '📥 Pobieranie obrazu...',
+
+    // Profile gracza (kilka kont w grze)
+    updateProfileModalTitle: 'Do którego profilu zapisać wynik?',
+    updateProfileModalLabel: 'Profil gracza',
+    updateProfileModalDescription: 'Konto w grze, na którym zdobyłeś ten wynik',
+    updateProfileSelectPlaceholder: 'Wybierz profil...',
+    updateProfileNotSelected: '❌ Nie wybrano profilu. Użyj komendy ponownie.',
+    updateProfileSessionExpired: '⏳ Wybór profilu wygasł. Użyj komendy ponownie.',
+    updateProfileNotYours: '❌ To nie Twój wybór profilu.',
+    profileCmdTitle: '👥 Twoje profile',
+    profileCmdDescription: 'Masz **{count}** z **{max}** możliwych profili.\nProfil oznaczony **📌** jest Twoim profilem do śledzenia — to jego statystyki, pozycję, wykres i osiągnięcia pokazuje `/ranking` i `/profile`, i to on jest podpowiadany przy `/update`.',
+    profileCmdMainName: 'Main (profil główny)',
+    profileCmdSlotName: 'Profil {index}',
+    profileCmdNoScore: 'brak wyniku',
+    profileCmdActiveHint: 'śledzony',
+    profileCmdBtnAdd: '➕ Dodaj profil',
+    profileCmdBtnRename: '✏️ Zmień nazwę',
+    profileCmdBtnDelete: '🗑️ Usuń profil',
+    profileCmdBtnSwitch: '📌 Ustaw profil do śledzenia',
+    profileCmdAdded: '✅ Dodano **{profile}**. Przy następnym `/update` wybierzesz, do którego profilu zapisać wynik.\nWpisz `/profile` ponownie, aby przełączać się między profilami.',
+    profileCmdAddLimit: '❌ Osiągnięto limit **{limit}** profili.',
+    profileCmdDuplicateLabel: '❌ Masz już profil o tej nazwie.',
+    profileCmdRenamed: '✅ Nazwa profilu zmieniona na **{label}**.',
+    profileCmdRenameCleared: '✅ Nazwa profilu usunięta.',
+    profileCmdSwitched: '✅ Profil do śledzenia: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
+    profileCmdDeleted: '✅ Usunięto **{profile}** wraz z jego wynikami ({records} rekordów).',
+    profileCmdDeleteMain: '❌ Profilu głównego nie można usunąć.',
+    profileCmdDeleteConfirm: '⚠️ Usunąć **{profile}**?\n\nSkasowane zostaną **wszystkie wyniki tego profilu**: wpis w rankingu, rekordy bossów, historia wyników i osiągnięcia. Tej operacji nie można cofnąć.',
+    profileCmdModalTitle: 'Nazwa profilu',
+    profileCmdModalLabel: 'Nick w grze (opcjonalnie)',
+    profileCmdModalPlaceholder: 'np. Smurf',
+    profileCmdSelectPrompt: '👥 Wybierz profil:',
+    profileCmdNotFound: '❌ Nie znaleziono tego profilu.',
+    profileTrackButton: '📌 Śledź ten profil',
+    profileTrackedButton: '📌 Śledzony',
+    profileTrackedSet: '✅ Śledzony profil: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil.',
+
+    // Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu
+    profileIntroTitle: '👥 Dodatkowy profil — przeczytaj, zanim dodasz',
+    profileIntroBody: '**Dodatkowy profil to Twoje drugie konto w grze.** Wyniki z obu kont się nie mieszają — każdy profil ma własny wpis w rankingu, własne rekordy bossów, historię i osiągnięcia.\n\n'
+        + '**Jak z tego korzystać**\n'
+        + '• Zakładając profil możesz podać swój nick z gry — służy tylko Tobie do rozpoznawania kont i możesz go pominąć.\n'
+        + '• W rankingu dodatkowy profil występuje jako Twój nick z Discorda ze znacznikiem cyfry (np. `Nick ②`), więc od razu widać, że oba wyniki są Twoje.\n'
+        + '• Przy `/update` bot zapyta, do którego profilu zapisać wynik ze screena.\n'
+        + '• Osiągnięcia, rekordy bossów i subskrypcje też są w `/profile` — każdy profil ma je osobno.\n'
+        + '• W `/profile` przełączasz się między kontami, a przyciskiem **📌** wybierasz profil śledzony — to jego statystyki, pozycję, wykres i osiągnięcia pokazują `/ranking` i `/profile`.\n\n'
+        + '**O czym warto wiedzieć**\n'
+        + '• Dzienny limit `/update`, cooldown i blokady są **wspólne dla wszystkich Twoich profili** — drugie konto nie daje więcej zgłoszeń.\n'
+        + '• Rolę TOP dostajesz raz, według swojego najlepszego profilu — dodatkowe konta nie zajmują progów innym graczom.\n'
+        + '• Usunięcie profilu **nieodwracalnie** kasuje jego wyniki, rekordy bossów, historię i osiągnięcia.\n'
+        + '• Limit: **{max}** profile łącznie z głównym.',
+    profileIntroFooter: 'Potwierdź, że przeczytałeś, aby przejść do dodawania profilu',
+    profileIntroBtnOk: '✅ Przeczytałem — dodaj profil',
+    profileIntroBtnCancel: 'Anuluj',
+    profileIntroCancelled: '❌ Anulowano — profil nie został dodany.',
+    profileCmdBtnAddFirst: 'Dodaj profil',
+
+    // Cofnięcie własnego rekordu (przycisk pod ogłoszeniem)
+    recordUndoButton: '↩️ Cofnij wynik',
+    recordUndoByOwner: '↩️ Cofnął właściciel',
+    recordUndoByAdmin: '↩️ Cofnął admin',
+    recordUndoNotOwner: '❌ Tylko właściciel tego wyniku może go cofnąć.',
+    recordUndoNotLatest: '❌ Ten rekord nie jest już Twoim ostatnim wynikiem — cofnąć można wyłącznie najnowszy rekord.',
+    recordUndoAlready: '❌ Ten wynik został już cofnięty.',
+    recordUndoExpired: '❌ Nie znaleziono danych tego wyniku — cofnięcie nie jest już możliwe.',
+    recordUndoConfirmTitle: '⚠️ **Czy na pewno cofnąć swój ostatni rekord?**\nWynik wróci do stanu sprzed jego pobicia, razem z rekordem bossa, wpisem w historii i osiągnięciami zdobytymi tym wynikiem. Tej operacji nie można odwrócić.',
+    recordUndoConfirmYes: '↩️ Tak, cofnij wynik',
+    recordUndoConfirmNo: '❌ Anuluj',
+    recordUndoCancelled: '❌ Anulowano — Twój rekord pozostaje bez zmian.',
+    recordUndoDone: '✅ Twój ostatni rekord został cofnięty.',
+    recordUndoOwnerNote: '↩️ Właściciel wyniku samodzielnie cofnął ten rekord.',
     updateComparingTemplate: '🔍 Analiza zgodności obrazu ze wzorcem...',
     updateRetryTemplate: '⏳ API przeciążone — ponawiam sprawdzanie wzorca (próba {attempt}/{total})...',
     updateExtractingData: '✅ Analiza OK — odczytuję dane rekordu...',
@@ -88,6 +159,8 @@ const pol = {
     recordAgo: 'temu',
     recordDateLocale: 'pl-PL',
     recordFollowerLabel: '🔔 SUBSKRYPCJE:',
+    recordProfileLabel: '👥 Profil',
+    recordProfileMain: 'główny',
 
     // Wieloembedowe ogłoszenie /update (nagłówki sekcji)
     globalRankingEmbedTitle: 'Ranking globalny',
@@ -438,6 +511,77 @@ const eng = {
 
     // /update — processing (step by step progress)
     updateDownloading: '📥 Downloading image...',
+
+    // Player profiles (multiple in-game accounts)
+    updateProfileModalTitle: 'Which profile gets this score?',
+    updateProfileModalLabel: 'Player profile',
+    updateProfileModalDescription: 'The in-game account you achieved this score on',
+    updateProfileSelectPlaceholder: 'Choose a profile...',
+    updateProfileNotSelected: '❌ No profile selected. Please run the command again.',
+    updateProfileSessionExpired: '⏳ Profile selection expired. Please run the command again.',
+    updateProfileNotYours: '❌ This profile selection is not yours.',
+    profileCmdTitle: '👥 Your profiles',
+    profileCmdDescription: 'You have **{count}** of **{max}** available profiles.\nThe profile marked with **📌** is your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`, and it is preselected in `/update`.',
+    profileCmdMainName: 'Main (primary profile)',
+    profileCmdSlotName: 'Profile {index}',
+    profileCmdNoScore: 'no score',
+    profileCmdActiveHint: 'tracked',
+    profileCmdBtnAdd: '➕ Add profile',
+    profileCmdBtnRename: '✏️ Rename',
+    profileCmdBtnDelete: '🗑️ Delete profile',
+    profileCmdBtnSwitch: '📌 Set tracked profile',
+    profileCmdAdded: '✅ Added **{profile}**. On your next `/update` you will choose which profile the score belongs to.\nRun `/profile` again to switch between profiles.',
+    profileCmdAddLimit: '❌ Profile limit of **{limit}** reached.',
+    profileCmdDuplicateLabel: '❌ You already have a profile with that name.',
+    profileCmdRenamed: '✅ Profile renamed to **{label}**.',
+    profileCmdRenameCleared: '✅ Profile name cleared.',
+    profileCmdSwitched: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
+    profileCmdDeleted: '✅ Deleted **{profile}** together with its scores ({records} records).',
+    profileCmdDeleteMain: '❌ The main profile cannot be deleted.',
+    profileCmdDeleteConfirm: '⚠️ Delete **{profile}**?\n\nThis removes **all scores of that profile**: ranking entry, boss records, score history and achievements. This cannot be undone.',
+    profileCmdModalTitle: 'Profile name',
+    profileCmdModalLabel: 'In-game nickname (optional)',
+    profileCmdModalPlaceholder: 'e.g. Smurf',
+    profileCmdSelectPrompt: '👥 Choose a profile:',
+    profileCmdNotFound: '❌ Profile not found.',
+    profileTrackButton: '📌 Track this profile',
+    profileTrackedButton: '📌 Tracked',
+    profileTrackedSet: '✅ Tracked profile: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile.',
+
+    // Educational gate before adding the FIRST additional profile
+    profileIntroTitle: '👥 Additional profile — read this before adding',
+    profileIntroBody: '**An additional profile is your second in-game account.** Scores from both accounts stay separate — every profile has its own ranking entry, boss records, history and achievements.\n\n'
+        + '**How to use it**\n'
+        + '• When adding a profile you may enter your in-game nick — it is only for you to tell the accounts apart, and you can skip it.\n'
+        + '• In the ranking an additional profile appears as your Discord nick with a number marker (e.g. `Nick ②`), so everyone can see both scores are yours.\n'
+        + '• On `/update` the bot will ask which profile the score from the screenshot belongs to.\n'
+        + '• Achievements, boss records and subscriptions live in `/profile` too — each profile has its own.\n'
+        + '• In `/profile` you switch between accounts, and the **📌** button picks your tracked profile — its stats, position, chart and achievements are shown by `/ranking` and `/profile`.\n\n'
+        + '**Good to know**\n'
+        + '• The daily `/update` limit, cooldown and blocks are **shared across all your profiles** — a second account does not give you more submissions.\n'
+        + '• You get one TOP role, based on your best profile — additional accounts never take role slots from other players.\n'
+        + '• Deleting a profile **permanently** removes its scores, boss records, history and achievements.\n'
+        + '• Limit: **{max}** profiles including the main one.',
+    profileIntroFooter: 'Confirm you have read this to continue to adding a profile',
+    profileIntroBtnOk: '✅ I have read this — add profile',
+    profileIntroBtnCancel: 'Cancel',
+    profileIntroCancelled: '❌ Cancelled — no profile was added.',
+    profileCmdBtnAddFirst: 'Add Profile',
+
+    // Undoing your own record (button under the announcement)
+    recordUndoButton: '↩️ Undo score',
+    recordUndoByOwner: '↩️ Undone by owner',
+    recordUndoByAdmin: '↩️ Undone by admin',
+    recordUndoNotOwner: '❌ Only the owner of this score can undo it.',
+    recordUndoNotLatest: '❌ This record is no longer your latest score — only the most recent record can be undone.',
+    recordUndoAlready: '❌ This score has already been undone.',
+    recordUndoExpired: '❌ Data for this score was not found — it can no longer be undone.',
+    recordUndoConfirmTitle: '⚠️ **Undo your latest record?**\nThe score will be restored to the state before it was set, along with the boss record, the history entry and the achievements earned with it. This cannot be reversed.',
+    recordUndoConfirmYes: '↩️ Yes, undo the score',
+    recordUndoConfirmNo: '❌ Cancel',
+    recordUndoCancelled: '❌ Cancelled — your record stays unchanged.',
+    recordUndoDone: '✅ Your latest record has been undone.',
+    recordUndoOwnerNote: '↩️ The owner of this score undid this record themselves.',
     updateComparingTemplate: '🔍 Checking image against template...',
     updateRetryTemplate: '⏳ API overloaded — retrying template check (attempt {attempt}/{total})...',
     updateExtractingData: '✅ Match confirmed — reading record data...',
@@ -486,6 +630,8 @@ const eng = {
     recordAgo: 'ago',
     recordDateLocale: 'en-GB',
     recordFollowerLabel: '🔔 SUBSCRIPTIONS:',
+    recordProfileLabel: '👥 Profile',
+    recordProfileMain: 'main',
 
     // Multi-embed /update announcement (section headers)
     globalRankingEmbedTitle: 'Global Ranking',

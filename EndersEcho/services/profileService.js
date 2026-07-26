@@ -1,6 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
 const fs   = require('fs').promises;
 const path = require('path');
+const { getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
 
 const BOSSES_PER_PAGE = 15;
 
@@ -15,36 +16,40 @@ class ProfileService {
         this._roleService          = services.roleService;
         this._roleRankingCfg       = services.roleRankingConfigService;
         this._guildConfigService   = services.guildConfigService;
+        this._profileRegistry      = services.profileRegistryService || null;
         this._dataDir              = services.dataDir || null;
     }
 
     /**
      * Zbiera wszystkie dane gracza ze wszystkich serwisów.
      * @param {string} guildId - serwer kontekstowy (skąd pochodzi zapytanie)
-     * @param {string} targetUserId
+     * @param {string} targetPlayerKey - profil gracza ("userId" lub "userId#N")
      * @param {Set|string[]} allGuildIds
      * @param {import('discord.js').Client} client
      * @returns {Promise<Object>} profileData
      */
-    async collectData(guildId, targetUserId, allGuildIds, client) {
+    async collectData(guildId, targetPlayerKey, allGuildIds, client) {
         const guild = client.guilds.cache.get(guildId);
+        // Właściciel profilu — do wszystkich operacji Discord (member, avatar, role)
+        const targetUserId = getOwnerId(targetPlayerKey);
+        const targetProfileIndex = getProfileIndex(targetPlayerKey);
         const guildConfig = this._guildConfigService?.getConfig(guildId);
 
         const [sortedPlayers, globalRanking, allBossRecords, knownBossNamesRaw, bossGlobalPositions] = await Promise.all([
             this._rankingService.getSortedPlayers(guildId).catch(() => []),
             this._rankingService.getGlobalRanking(allGuildIds).catch(() => []),
-            this._bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, targetUserId).catch(() => ({})),
+            this._bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, targetPlayerKey).catch(() => ({})),
             Promise.resolve(this._bossAliasService.getExtraEnglishNames()),
-            this._bossRecordService.getPlayerBossPositions(allGuildIds, targetUserId).catch(() => ({})),
+            this._bossRecordService.getPlayerBossPositions(allGuildIds, targetPlayerKey).catch(() => ({})),
         ]);
 
-        // Pozycja na serwerze
-        const serverIdx = sortedPlayers.findIndex(p => p.userId === targetUserId);
+        // Pozycja na serwerze (po profilu, nie po osobie)
+        const serverIdx = sortedPlayers.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
         const serverRecord   = serverIdx !== -1 ? sortedPlayers[serverIdx] : null;
         const serverPosition = serverIdx !== -1 ? serverIdx + 1 : null;
 
         // Pozycja globalna
-        const globalIdx    = globalRanking.findIndex(p => p.userId === targetUserId);
+        const globalIdx    = globalRanking.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
         const globalRecord = globalIdx !== -1 ? globalRanking[globalIdx] : null;
         const globalPosition = globalIdx !== -1 ? globalIdx + 1 : null;
 
@@ -57,7 +62,7 @@ class ProfileService {
                 snippetPlayers.push({
                     ...globalRanking[i],
                     position: i + 1,
-                    isTarget: globalRanking[i].userId === targetUserId,
+                    isTarget: (globalRanking[i].playerKey || globalRanking[i].userId) === targetPlayerKey,
                 });
             }
         }
@@ -107,7 +112,7 @@ class ProfileService {
                     const rolePlayers = await this._rankingService
                         .getSortedPlayersByRole(guildId, rr.roleId, guild, this._roleRankingCfg)
                         .catch(() => []);
-                    const roleIdx = rolePlayers.findIndex(p => p.userId === targetUserId);
+                    const roleIdx = rolePlayers.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
                     if (roleIdx !== -1) {
                         rolePositions.push({
                             roleName: rr.roleName,
@@ -119,7 +124,27 @@ class ProfileService {
             } catch { /* pomiń */ }
         }
 
-        const username = serverRecord?.username || globalRecord?.username || targetUserId;
+        const baseUsername = member?.displayName || serverRecord?.username || globalRecord?.username || targetUserId;
+        const username = formatProfileDisplayName(baseUsername, targetProfileIndex);
+        const profileLabel = this._profileRegistry?.getLabel(targetUserId, targetProfileIndex) || null;
+
+        // Wszystkie profile właściciela z ich pozycjami globalnymi — pokazuje, że wyniki
+        // należą do tej samej osoby (wymóg standaryzacji profili)
+        const ownerProfiles = [];
+        if (this._profileRegistry) {
+            for (const prof of this._profileRegistry.getProfiles(targetUserId)) {
+                const idx = globalRanking.findIndex(p => (p.playerKey || p.userId) === prof.playerKey);
+                ownerProfiles.push({
+                    index: prof.index,
+                    label: prof.label,
+                    playerKey: prof.playerKey,
+                    isCurrent: prof.playerKey === targetPlayerKey,
+                    isTracked: prof.index === (this._profileRegistry.getActiveIndex(targetUserId)),
+                    score: idx !== -1 ? globalRanking[idx].score : null,
+                    globalPosition: idx !== -1 ? idx + 1 : null,
+                });
+            }
+        }
         const knownBossNames = Array.isArray(knownBossNamesRaw) ? [...knownBossNamesRaw].sort() : [];
         const botAvatarURL = client.user?.displayAvatarURL({ size: 128 }) || null;
 
@@ -135,6 +160,10 @@ class ProfileService {
 
         return {
             guildId,
+            targetPlayerKey,
+            targetProfileIndex,
+            profileLabel,
+            ownerProfiles,
             guildName: guild?.name || guildId,
             globalGuildName,
             guildTags,
@@ -175,6 +204,16 @@ class ProfileService {
             .setColor(0x5865F2)
             .setTitle(`👤 ${username} — ${globalGuildName}`);
 
+        // Etykieta profilu (nick w grze) w podtytule — tylko dla profili dodatkowych
+        if (data.targetProfileIndex > 1) {
+            const marker = getProfileMarker(data.targetProfileIndex);
+            embed.setAuthor({
+                name: data.profileLabel
+                    ? `${marker} ${t('Profil', 'Profile')} ${data.targetProfileIndex} — ${data.profileLabel}`
+                    : `${marker} ${t('Profil', 'Profile')} ${data.targetProfileIndex}`,
+            });
+        }
+
         if (data.userAvatarURL) embed.setThumbnail(data.userAvatarURL);
 
         const roleValue = rolePositions.length > 0
@@ -202,11 +241,35 @@ class ProfileService {
             { name: t('🌐 Pozycja Globalna',        '🌐 Global Position'),    value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',         inline: false }
         );
 
+        // Lista profili gracza — widać, że wszystkie wyniki należą do tej samej osoby
+        if (Array.isArray(data.ownerProfiles) && data.ownerProfiles.length > 1) {
+            const profileLines = data.ownerProfiles.map(p => {
+                const marker = p.index === 1 ? '🏠' : getProfileMarker(p.index);
+                const name = p.index === 1
+                    ? t('Main', 'Main')
+                    : `${t('Profil', 'Profile')} ${p.index}`;
+                const labelPart = p.label ? ` — *${p.label}*` : '';
+                const scorePart = p.score
+                    ? ` · **${p.score}** *(#${p.globalPosition} ${t('globalnie', 'globally')})*`
+                    : ` · ${t('brak wyniku', 'no score')}`;
+                // 📌 = profil śledzony (jego dane pokazują /ranking, /achievements i /profile)
+                const trackedPart = p.isTracked ? ' 📌' : '';
+                const line = `${marker} ${name}${labelPart}${scorePart}${trackedPart}`;
+                return p.isCurrent ? `**▸ ${line}**` : line;
+            });
+            embed.addFields({
+                name: t('👥 Profile tego gracza', '👥 This player\'s profiles'),
+                value: profileLines.join('\n'),
+                inline: false,
+            });
+        }
+
         if (snippetPlayers.length > 0) {
             const lines = snippetPlayers.map(p => {
                 const medal = p.position === 1 ? '🥇' : p.position === 2 ? '🥈' : p.position === 3 ? '🥉' : '';
                 const posStr = medal ? `${medal} \`#${p.position}\`` : `\`#${p.position}\``;
-                const nameStr = p.isTarget ? `**__${p.username}__**` : `**${p.username}**`;
+                const pName = formatProfileDisplayName(p.username, p.profileIndex || getProfileIndex(p.playerKey));
+                const nameStr = p.isTarget ? `**__${pName}__**` : `**${pName}**`;
                 const tag = guildTags?.[p.sourceGuildId] ? ` · ${guildTags[p.sourceGuildId]}` : '';
                 return `${posStr} ${nameStr} · ${p.score}${tag}`;
             });
@@ -309,7 +372,10 @@ class ProfileService {
      */
     buildProfileComponents(state, isPol) {
         const t = (pol, eng) => isPol ? pol : eng;
-        const { view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed } = state;
+        const {
+            view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed,
+            ownProfiles = [], currentProfileIndex = 1, trackedProfileIndex = 1,
+        } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
 
@@ -351,6 +417,63 @@ class ProfileService {
         }
 
         const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
+
+        // Rząd profili (tylko własny profil): przełączanie kont, śledzenie i wejście
+        // do panelu zarządzania. Osobnej komendy nie ma — wszystko żyje w /profile,
+        // dlatego przycisk „Moje profile" pokazuje się nawet przy jednym profilu.
+        if (isOwnProfile) {
+            const profiles = Array.isArray(ownProfiles) ? ownProfiles : [];
+            const hasMany = profiles.length > 1;
+
+            const viewButtons = hasMany ? profiles.map(prof => {
+                const label = prof.index === 1
+                    ? t('Main', 'Main')
+                    : (prof.label || `${t('Profil', 'Profile')} ${prof.index}`);
+                return new ButtonBuilder()
+                    .setCustomId(`profile_view_${prof.index}`)
+                    .setLabel(label.slice(0, 80))
+                    .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
+                    .setStyle(prof.index === currentProfileIndex ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(prof.index === currentProfileIndex);
+            }) : [];
+
+            const toolButtons = [];
+            if (hasMany) {
+                // Profil do ŚLEDZENIA — rządzi statystykami w /ranking, /achievements i /profile
+                const isTracked = currentProfileIndex === trackedProfileIndex;
+                toolButtons.push(
+                    new ButtonBuilder()
+                        .setCustomId('profile_track')
+                        .setLabel(isTracked
+                            ? t('📌 Śledzony', '📌 Tracked')
+                            : t('📌 Śledź ten profil', '📌 Track this profile'))
+                        .setStyle(isTracked ? ButtonStyle.Success : ButtonStyle.Secondary)
+                        .setDisabled(isTracked)
+                );
+            }
+            // Przy jednym profilu przycisk prowadzi do wyjaśnienia „po co drugie konto",
+            // a nie do panelu — gracz i tak nie ma tam czym zarządzać poza dodaniem
+            toolButtons.push(hasMany
+                ? new ButtonBuilder()
+                    .setCustomId('profile_manage_prof')
+                    .setLabel(t('Moje profile', 'My Profiles'))
+                    .setEmoji('👥')
+                    .setStyle(ButtonStyle.Secondary)
+                : new ButtonBuilder()
+                    .setCustomId('profile_add_intro')
+                    .setLabel(t('Dodaj profil', 'Add Profile'))
+                    .setEmoji('➕')
+                    .setStyle(ButtonStyle.Success)
+            );
+
+            // Narzędzia zawsze w ostatnim rzędzie; nadmiar profili (limit > 3) idzie wyżej
+            const perLastRow = 5 - toolButtons.length;
+            const pending = [...viewButtons];
+            while (pending.length > perLastRow) {
+                rows.push(new ActionRowBuilder().addComponents(...pending.splice(0, 5)));
+            }
+            rows.push(new ActionRowBuilder().addComponents(...pending, ...toolButtons));
+        }
 
         // Rząd 2: 5 kategorii osiągnięć (gdy w widoku ach)
         if (inAch) {

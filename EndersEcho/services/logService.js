@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { formatProfileDisplayName } = require('../utils/helpers');
 
 // Konfiguracja typów embedów OCR — kolor, emoji, etykieta
 const OCR_EMBED_TYPES = {
@@ -149,6 +150,8 @@ class LogService {
                 adminName,
                 roleError,
                 globalPlayerCount = null,
+                profileIndex = null,
+                profileLabel = null,
             } = options;
 
             const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
@@ -171,10 +174,19 @@ class LogService {
             if (thumbnailUrl) embed.setThumbnail(thumbnailUrl);
 
             if (userName) {
+                // Profil dodatkowy → znacznik przy nicku, żeby log wskazywał konkretne konto gracza
+                const displayName = formatProfileDisplayName(userName, profileIndex || 1);
                 const playerVal = userId
-                    ? `[${userName}](https://discord.com/users/${userId})`
-                    : userName;
+                    ? `[${displayName}](https://discord.com/users/${userId})`
+                    : displayName;
                 embed.addFields({ name: '👤 Gracz', value: playerVal, inline: true });
+            }
+            if (profileIndex && profileIndex > 1) {
+                embed.addFields({
+                    name: '👥 Profil',
+                    value: profileLabel ? `#${profileIndex} — ${profileLabel}` : `#${profileIndex}`,
+                    inline: true,
+                });
             }
             if (commandName) {
                 embed.addFields({ name: '⌨️ Komenda', value: `/${commandName}`, inline: true });
@@ -203,14 +215,18 @@ class LogService {
                 embed.setFooter({ text: `👥 ${globalPlayerCount} unikalnych graczy globalnie` });
             }
 
-            this._enqueueOcr(client || this._client, targetChannelId, embed, components || null);
+            this._enqueueOcr(client || this._client, targetChannelId, embed, components || null, options.onSent || null);
         } catch (err) {
             this.logger.warn(`sendOcrAnalysisEmbed błąd: ${err.message}`);
         }
     }
 
-    _enqueueOcr(activeClient, channelId, embed, components) {
-        this._ocrQueue.push({ activeClient, channelId, embed, components });
+    /**
+     * @param {Function|null} onSent - wywoływane z wysłaną wiadomością; pozwala zapamiętać
+     *   jej ID (np. do późniejszej dezaktywacji przycisku „Cofnij wynik")
+     */
+    _enqueueOcr(activeClient, channelId, embed, components, onSent = null) {
+        this._ocrQueue.push({ activeClient, channelId, embed, components, onSent });
         setImmediate(() => this._processOcrQueue());
     }
 
@@ -218,14 +234,17 @@ class LogService {
         if (this._ocrProcessing || this._ocrQueue.length === 0) return;
         this._ocrProcessing = true;
         while (this._ocrQueue.length > 0) {
-            const { activeClient, channelId, embed, components } = this._ocrQueue.shift();
+            const { activeClient, channelId, embed, components, onSent } = this._ocrQueue.shift();
             try {
                 if (!activeClient) { this.logger.warn('[OCR Log] Brak klienta Discord — embed pominięty'); continue; }
                 const ch = await activeClient.channels.fetch(channelId).catch(() => null);
                 if (!ch) { this.logger.warn(`[OCR Log] Nie znaleziono kanału ${channelId}`); continue; }
                 const payload = { embeds: [embed] };
                 if (components) payload.components = components;
-                await ch.send(payload);
+                const sent = await ch.send(payload);
+                if (onSent) {
+                    try { await onSent(sent); } catch (cbErr) { this.logger.warn(`[OCR Log] Błąd callbacku onSent: ${cbErr.message}`); }
+                }
                 await new Promise(r => setTimeout(r, 500));
             } catch (err) {
                 this.logger.warn(`[OCR Log] Błąd wysyłania embeda: ${err.message}`);

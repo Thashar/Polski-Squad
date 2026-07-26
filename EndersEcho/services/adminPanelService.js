@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const { formatProfileDisplayName, getOwnerId } = require('../utils/helpers');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -583,12 +584,18 @@ class AdminPanelService {
 
     // ─── EMBED 2: Użytkownicy ─────────────────────────────────────────────────
     _buildUsersEmbed(globalRanking, blockedUsersArr, activeCooldownCount, pendingCvCount, activityStats = null) {
-        const totalPlayers = globalRanking.length;
+        // globalRanking zawiera PROFILE; licznik graczy musi pokazywać OSOBY (dedup po userId),
+        // tak jak rankingService.getCountedPlayers() i kamienie milowe
+        const uniqueOwners = new Set(globalRanking.map(p => p.userId));
+        const totalPlayers = uniqueOwners.size;
+        const totalProfiles = globalRanking.length;
         const blockedCount = Array.isArray(blockedUsersArr) ? blockedUsersArr.length : 0;
 
         // Statystyki graczy wyliczane z globalnego rankingu
         const top1 = globalRanking[0] || null;
-        const leaderValue = top1 ? `**${top1.username || top1.userId}** — ${top1.score || '—'}` : '—';
+        const leaderValue = top1
+            ? `**${formatProfileDisplayName(top1.username || top1.userId, top1.profileIndex || 1)}** — ${top1.score || '—'}`
+            : '—';
 
         // Najświeższy rekord w rankingu (kiedy ustanowiono)
         let newestTs = null;
@@ -633,7 +640,7 @@ class AdminPanelService {
             .setColor(0x57F287)
             .setTitle('👥 Użytkownicy')
             .addFields(
-                { name: '👥 Łącznie graczy', value: `${totalPlayers}`, inline: true },
+                { name: '👥 Łącznie graczy', value: totalProfiles > totalPlayers ? `${totalPlayers}  *(${totalProfiles} profili)*` : `${totalPlayers}`, inline: true },
                 { name: '⏳ Aktywne cooldowny', value: `${activeCooldownCount}`, inline: true },
                 { name: '🗳️ Oczekujące CV', value: `${pendingCvCount}`, inline: true },
                 { name: '👑 Lider globalny', value: capField(leaderValue, 256), inline: true },

@@ -636,7 +636,7 @@
         },
         {
           "name": "/profile",
-          "description": "Wyświetla pełny profil gracza: rekord serwera, pozycja globalna, wycinek rankingu globalnego, rola TOP, rankingi ról, rekordy per boss, osiągnięcia. Można przeglądać profile innych graczy przez wyszukiwanie nicku.",
+          "description": "Wszystko dla gracza w jednym miejscu: profil i rekordy, bossowie, osiągnięcia, subskrypcje DM oraz kilka kont w grze (Dodaj profil / panel Moje profile — przełączanie, śledzenie, usuwanie)",
           "usage": "/profile [gracz:fragment nicku]",
           "requiredPermission": "public"
         },
@@ -647,12 +647,6 @@
           "requiredPermission": "public"
         },
         {
-          "name": "/subscribe",
-          "description": "Zarządza subskrypcjami DM o nowych rekordach graczy",
-          "usage": "/subscribe",
-          "requiredPermission": "public"
-        },
-        {
           "name": "/test",
           "description": "Testuje analizę screenshota przez AI — porównuje z wzorcem i wyciąga dane (boss + wynik) bez zapisu. Pokazuje ephemeral podgląd czy byłby to nowy rekord. Tylko dla administratorów z ENDERSECHO_BLOCK_OCR_USER_IDS.",
           "usage": "/test obraz:[screenshot do przetestowania]",
@@ -660,7 +654,7 @@
         },
         {
           "name": "/update",
-          "description": "Aktualizuje swój wynik w rankingu (OCR screenshot)",
+          "description": "Dodaj nowy wynik Ender's Echo do analizy (przy kilku profilach bot pokaże okno wyboru konta)",
           "usage": "/update załącznik:[screenshot z wynikiem]",
           "requiredPermission": "public"
         }
