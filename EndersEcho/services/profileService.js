@@ -418,35 +418,54 @@ class ProfileService {
 
         const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
 
-        // Rząd przełączania profili — tylko na własnym profilu i tylko gdy gracz ma ich więcej niż jeden
-        if (isOwnProfile && Array.isArray(ownProfiles) && ownProfiles.length > 1) {
-            const profileRow = new ActionRowBuilder();
-            for (const prof of ownProfiles.slice(0, 4)) {
+        // Rząd profili (tylko własny profil): przełączanie kont, śledzenie i wejście
+        // do panelu zarządzania. Osobnej komendy nie ma — wszystko żyje w /profile,
+        // dlatego przycisk „Moje profile" pokazuje się nawet przy jednym profilu.
+        if (isOwnProfile) {
+            const profiles = Array.isArray(ownProfiles) ? ownProfiles : [];
+            const hasMany = profiles.length > 1;
+
+            const viewButtons = hasMany ? profiles.map(prof => {
                 const label = prof.index === 1
                     ? t('Main', 'Main')
                     : (prof.label || `${t('Profil', 'Profile')} ${prof.index}`);
-                profileRow.addComponents(
+                return new ButtonBuilder()
+                    .setCustomId(`profile_view_${prof.index}`)
+                    .setLabel(label.slice(0, 80))
+                    .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
+                    .setStyle(prof.index === currentProfileIndex ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDisabled(prof.index === currentProfileIndex);
+            }) : [];
+
+            const toolButtons = [];
+            if (hasMany) {
+                // Profil do ŚLEDZENIA — rządzi statystykami w /ranking, /achievements i /profile
+                const isTracked = currentProfileIndex === trackedProfileIndex;
+                toolButtons.push(
                     new ButtonBuilder()
-                        .setCustomId(`profile_view_${prof.index}`)
-                        .setLabel(label.slice(0, 80))
-                        .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
-                        .setStyle(prof.index === currentProfileIndex ? ButtonStyle.Primary : ButtonStyle.Secondary)
-                        .setDisabled(prof.index === currentProfileIndex)
+                        .setCustomId('profile_track')
+                        .setLabel(isTracked
+                            ? t('📌 Śledzony', '📌 Tracked')
+                            : t('📌 Śledź ten profil', '📌 Track this profile'))
+                        .setStyle(isTracked ? ButtonStyle.Success : ButtonStyle.Secondary)
+                        .setDisabled(isTracked)
                 );
             }
-            // Ustawienie profilu do ŚLEDZENIA — pojawia się wyłącznie gdy gracz ma więcej niż
-            // jeden profil; ten profil rządzi statystykami w /ranking, /achievements i /profile
-            const isTracked = currentProfileIndex === trackedProfileIndex;
-            profileRow.addComponents(
+            toolButtons.push(
                 new ButtonBuilder()
-                    .setCustomId('profile_track')
-                    .setLabel(isTracked
-                        ? t('📌 Śledzony', '📌 Tracked')
-                        : t('📌 Śledź ten profil', '📌 Track this profile'))
-                    .setStyle(isTracked ? ButtonStyle.Success : ButtonStyle.Secondary)
-                    .setDisabled(isTracked)
+                    .setCustomId('profile_manage_prof')
+                    .setLabel(t('Moje profile', 'My Profiles'))
+                    .setEmoji('👥')
+                    .setStyle(ButtonStyle.Secondary)
             );
-            rows.push(profileRow);
+
+            // Narzędzia zawsze w ostatnim rzędzie; nadmiar profili (limit > 3) idzie wyżej
+            const perLastRow = 5 - toolButtons.length;
+            const pending = [...viewButtons];
+            while (pending.length > perLastRow) {
+                rows.push(new ActionRowBuilder().addComponents(...pending.splice(0, 5)));
+            }
+            rows.push(new ActionRowBuilder().addComponents(...pending, ...toolButtons));
         }
 
         // Rząd 2: 5 kategorii osiągnięć (gdy w widoku ach)

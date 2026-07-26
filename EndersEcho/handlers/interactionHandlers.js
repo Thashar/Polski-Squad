@@ -250,8 +250,8 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('profile')
-                .setDescription('View player profile: records, bosses and achievements')
-                .setDescriptionLocalizations(pl('Wyświetl profil gracza: rekordy, bossowie i osiągnięcia')),
+                .setDescription('Player profile: records, bosses, achievements and your in-game accounts')
+                .setDescriptionLocalizations(pl('Profil gracza: rekordy, bossowie, osiągnięcia i Twoje konta w grze')),
 
 
             new SlashCommandBuilder()
@@ -264,12 +264,6 @@ class InteractionHandler {
                 .setName('manage')
                 .setDescription('Open EndersEcho admin panel (admins and moderators)')
                 .setDescriptionLocalizations(pl('Otwórz panel administracyjny EndersEcho (adminowie i moderatorzy)')),
-
-            new SlashCommandBuilder()
-                .setName('profiles')
-                .setNameLocalizations(pl('profile'))
-                .setDescription('Manage your player profiles (multiple in-game accounts)')
-                .setDescriptionLocalizations(pl('Zarządzaj swoimi profilami gracza (kilka kont w grze)')),
 
             new SlashCommandBuilder()
                 .setName('help')
@@ -401,7 +395,6 @@ class InteractionHandler {
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
                 case 'achievements': await this.handleAchievementsCommand(interaction);   break;
                 case 'profile':      await this.handleProfileCommand(interaction);        break;
-                case 'profiles':     await this.handleProfilesCommand(interaction);       break;
             }
         } else if (interaction.isButton()) {
             await this.handleButtonInteraction(interaction);
@@ -5234,11 +5227,12 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /profiles (/profile w PL: „profile") — panel zarządzania profilami gracza.
-     * @param {CommandInteraction} interaction
+     * Panel zarządzania profilami gracza — otwierany przyciskiem „👥 Moje profile"
+     * w `/profile` (osobnej komendy nie ma). Odpowiada nowym ephemeralem, więc
+     * modale nazwy i potwierdzenia nie ruszają wiadomości z widokiem profilu.
+     * @param {import('discord.js').ButtonInteraction} interaction
      */
-    async handleProfilesCommand(interaction) {
-        await this.logService.logCommandUsage('profiles', interaction);
+    async handleProfilesPanel(interaction) {
         if (!this.profileRegistryService) {
             await interaction.reply({ content: this.msgs(interaction.guildId).updateError, flags: ['Ephemeral'] });
             return;
@@ -7383,7 +7377,8 @@ class InteractionHandler {
                 customId === 'profile_ach_overview' || customId.startsWith('profile_ach_cat_') ||
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
                 customId === 'profile_back' || customId === 'profile_search' ||
-                customId === 'profile_manage_subs' || customId === 'profile_subscribe' ||
+                customId === 'profile_manage_subs' || customId === 'profile_manage_prof' ||
+                customId === 'profile_subscribe' ||
                 customId === 'profile_unsubscribe' || customId === 'profile_track' ||
                 customId.startsWith('profile_view_')) {
                 await this._handleProfileButton(interaction);
@@ -9179,6 +9174,13 @@ class InteractionHandler {
 
         if (customId === 'profile_manage_subs') {
             await this.handleNotificationsCommand(interaction);
+            return;
+        }
+
+        // Panel zarządzania profilami (kilka kont w grze) — osobny ephemeral,
+        // żeby modale nazwy i potwierdzenia nie kolidowały ze stanem widoku profilu
+        if (customId === 'profile_manage_prof') {
+            await this.handleProfilesPanel(interaction);
             return;
         }
 

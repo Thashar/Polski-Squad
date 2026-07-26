@@ -636,14 +636,8 @@
         },
         {
           "name": "/profile",
-          "description": "Wyświetl profil gracza: rekordy, bossowie i osiągnięcia (przełączanie między własnymi profilami + wybór profilu do śledzenia)",
+          "description": "Profil gracza: rekordy, bossowie, osiągnięcia oraz panel Moje profile (kilka kont w grze — dodawanie, przełączanie, śledzenie, usuwanie)",
           "usage": "/profile [gracz:fragment nicku]",
-          "requiredPermission": "public"
-        },
-        {
-          "name": "/profiles",
-          "description": "Zarządzanie profilami gracza (kilka kont w grze) — dodawanie, ustawianie profilu do śledzenia, zmiana nazwy, usuwanie",
-          "usage": "/profiles",
           "requiredPermission": "public"
         },
         {
