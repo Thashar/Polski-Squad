@@ -42,8 +42,11 @@ const pol = {
     updateDownloading: '📥 Pobieranie obrazu...',
 
     // Profile gracza (kilka kont w grze)
-    updateChooseProfile: '👥 **Do którego profilu przypisać ten wynik?**\nWybierz konto, na którym zdobyłeś ten wynik.',
-    updateProfileChosen: '👥 Wybrany profil: **{profile}**',
+    updateProfileModalTitle: 'Do którego profilu zapisać wynik?',
+    updateProfileModalLabel: 'Profil gracza',
+    updateProfileModalDescription: 'Konto w grze, na którym zdobyłeś ten wynik',
+    updateProfileSelectPlaceholder: 'Wybierz profil...',
+    updateProfileNotSelected: '❌ Nie wybrano profilu. Użyj komendy ponownie.',
     updateProfileSessionExpired: '⏳ Wybór profilu wygasł. Użyj komendy ponownie.',
     updateProfileNotYours: '❌ To nie Twój wybór profilu.',
     profileCmdTitle: '👥 Twoje profile',
@@ -487,8 +490,11 @@ const eng = {
     updateDownloading: '📥 Downloading image...',
 
     // Player profiles (multiple in-game accounts)
-    updateChooseProfile: '👥 **Which profile should this score go to?**\nPick the account you achieved this score on.',
-    updateProfileChosen: '👥 Selected profile: **{profile}**',
+    updateProfileModalTitle: 'Which profile gets this score?',
+    updateProfileModalLabel: 'Player profile',
+    updateProfileModalDescription: 'The in-game account you achieved this score on',
+    updateProfileSelectPlaceholder: 'Choose a profile...',
+    updateProfileNotSelected: '❌ No profile selected. Please run the command again.',
     updateProfileSessionExpired: '⏳ Profile selection expired. Please run the command again.',
     updateProfileNotYours: '❌ This profile selection is not yours.',
     profileCmdTitle: '👥 Your profiles',

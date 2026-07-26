@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
@@ -418,6 +418,10 @@ class InteractionHandler {
             }
             if (interaction.customId.startsWith('prof_modal_')) {
                 await this._handleProfileNameModal(interaction);
+                return;
+            }
+            if (interaction.customId.startsWith('upd_prof_modal_')) {
+                await this._handleUpdateProfileModal(interaction);
                 return;
             }
             if (interaction.customId.startsWith('ee_block_modal_')) {
@@ -5123,74 +5127,91 @@ class InteractionHandler {
     }
 
     /**
-     * Przyciski wyboru profilu przy /update i /test.
-     * Kolejność: Main, potem profile 2, 3… (zgodnie z numeracją slotów).
+     * Modal wyboru profilu przy /update i /test — okno pop-up z listą kont gracza.
+     * Kolejność opcji: Main, potem profile 2, 3… (zgodnie z numeracją slotów);
+     * domyślny profil gracza jest wstępnie zaznaczony.
+     *
+     * Discord dopuszcza w modalach wyłącznie pola tekstowe i select menu (owinięte
+     * w komponent Label) — przyciski są tu niemożliwe, stąd lista rozwijana.
+     *
      * @param {string} sessionId - ID interakcji komendy (klucz sesji)
      * @param {Array} profiles
-     * @param {number} activeIdx - domyślny profil (wyróżniony)
-     * @returns {ActionRowBuilder[]}
+     * @param {number} activeIdx - domyślnie zaznaczony profil
+     * @returns {ModalBuilder}
      */
-    _buildProfilePickerRows(sessionId, profiles, activeIdx, guildId, commandName) {
+    _buildProfileModal(sessionId, profiles, activeIdx, guildId) {
         const msgs = this.msgs(guildId);
-        const rows = [];
-        let row = new ActionRowBuilder();
-        for (const prof of profiles) {
-            if (row.components.length === 5) {
-                rows.push(row);
-                row = new ActionRowBuilder();
-            }
-            row.addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`upd_prof_${prof.index}_${sessionId}`)
-                    .setLabel(this._profileButtonLabel(prof, msgs))
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('upd_prof_sel')
+            .setPlaceholder(msgs.updateProfileSelectPlaceholder)
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(profiles.map(prof => {
+                const option = new StringSelectMenuOptionBuilder()
+                    .setValue(String(prof.index))
+                    .setLabel(this._profileButtonLabel(prof, msgs).slice(0, 100))
                     .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
-                    .setStyle(prof.index === activeIdx ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                    .setDefault(prof.index === activeIdx);
+                if (prof.label) option.setDescription(prof.label.slice(0, 100));
+                return option;
+            }));
+
+        return new ModalBuilder()
+            .setCustomId(`upd_prof_modal_${sessionId}`)
+            .setTitle(msgs.updateProfileModalTitle.slice(0, 45))
+            .addLabelComponents(
+                new LabelBuilder()
+                    .setLabel(msgs.updateProfileModalLabel.slice(0, 45))
+                    .setDescription(msgs.updateProfileModalDescription.slice(0, 100))
+                    .setStringSelectMenuComponent(select)
             );
-        }
-        if (row.components.length > 0) rows.push(row);
-        return rows;
     }
 
     /**
-     * Kliknięcie przycisku wyboru profilu przy /update lub /test.
-     * Komponent jest tylko potwierdzany (deferUpdate) — dalszy flow korzysta z ORYGINALNEJ
-     * interakcji komendy, dzięki czemu publiczne ogłoszenie (followUp) działa jak dotąd.
+     * Wysłanie modala wyboru profilu przy /update lub /test.
+     * Dalszy flow korzysta z interakcji MODALA (nie komendy) — po odpowiedzi typu „modal"
+     * pierwotna interakcja nie ma już wiadomości, którą dałoby się edytować, więc postęp
+     * analizy i publiczne ogłoszenie idą przez interakcję modala.
      */
-    async _handleUpdateProfilePick(interaction, customId) {
+    async _handleUpdateProfileModal(interaction) {
         const msgs = this.msgs(interaction.guildId);
-        // upd_prof_{index}_{sessionId}
-        const parts = customId.split('_');
-        const profileIndex = parseInt(parts[2], 10);
-        const sessionId = parts.slice(3).join('_');
+        const sessionId = interaction.customId.slice('upd_prof_modal_'.length);
 
         const session = this._updateProfileSessions.get(sessionId);
         if (!session) {
-            await interaction.update({ content: msgs.updateProfileSessionExpired, components: [] }).catch(() => {});
+            await interaction.reply({ content: msgs.updateProfileSessionExpired, flags: ['Ephemeral'] });
             return;
         }
         if (session.userId !== interaction.user.id) {
             await interaction.reply({ content: msgs.updateProfileNotYours, flags: ['Ephemeral'] });
             return;
         }
+
+        const selected = interaction.fields.getStringSelectValues('upd_prof_sel');
+        const profileIndex = parseInt(selected?.[0], 10);
+        if (!Number.isFinite(profileIndex)) {
+            await interaction.reply({ content: msgs.updateProfileNotSelected, flags: ['Ephemeral'] });
+            return;
+        }
         if (!this.profileRegistryService?.hasProfile(interaction.user.id, profileIndex)) {
-            await interaction.update({ content: msgs.profileCmdNotFound, components: [] }).catch(() => {});
+            await interaction.reply({ content: msgs.profileCmdNotFound, flags: ['Ephemeral'] });
             return;
         }
 
         this._updateProfileSessions.delete(sessionId);
-        await interaction.deferUpdate().catch(() => {});
 
         const playerKey = makePlayerKey(interaction.user.id, profileIndex);
         const gl = this.logService._gl(interaction.guildId);
         const prof = this.profileRegistryService.getProfiles(interaction.user.id).find(pr => pr.index === profileIndex);
         gl.info(`👥 [/${session.commandName}] Wybrano profil ${profileIndex}${prof?.label ? ` ("${prof.label}")` : ''} — ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)}`);
 
-        await this._runUpdateAnalysis(session.interaction, {
+        await this._runUpdateAnalysis(interaction, {
             dryRun: session.dryRun,
             commandName: session.commandName,
             ocrBlockKey: session.ocrBlockKey,
             playerKey,
-            alreadyReplied: true,
+            alreadyReplied: false,
+            attachment: session.attachment,
         });
     }
 
@@ -5628,22 +5649,22 @@ class InteractionHandler {
         const profileList = this.profileRegistryService?.getProfiles(interaction.user.id) || [];
         if (!playerKey && profileList.length > 1) {
             const activeIdx = this.profileRegistryService.getActiveIndex(interaction.user.id);
-            const rows = this._buildProfilePickerRows(interaction.id, profileList, activeIdx, interaction.guildId, commandName);
-            await interaction.reply({
-                content: this.msgs(interaction.guildId).updateChooseProfile,
-                components: rows,
-                flags: ['Ephemeral'],
-            });
+            // showModal MUSI być pierwszą odpowiedzią na interakcję — dlatego wszystkie
+            // walidacje wyżej kończą się `return` i żadna nie odpowiada w happy path.
+            await interaction.showModal(
+                this._buildProfileModal(interaction.id, profileList, activeIdx, interaction.guildId)
+            );
+            // Załącznik zapamiętujemy tutaj — interakcja modala nie ma dostępu do opcji komendy
             this._updateProfileSessions.set(interaction.id, {
-                interaction,
+                attachment,
                 dryRun,
                 commandName,
                 ocrBlockKey,
                 userId: interaction.user.id,
                 createdAt: Date.now(),
             });
-            setTimeout(() => this._updateProfileSessions.delete(interaction.id), 5 * 60 * 1000);
-            gl.info(`👥 [/${commandName}] Oczekuję na wybór profilu (${profileList.length} profile) — ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)}`);
+            setTimeout(() => this._updateProfileSessions.delete(interaction.id), 10 * 60 * 1000);
+            gl.info(`👥 [/${commandName}] Otwarto modal wyboru profilu (${profileList.length} profile) — ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)}`);
             return;
         }
 
@@ -5653,6 +5674,7 @@ class InteractionHandler {
             ocrBlockKey,
             playerKey: playerKey || interaction.user.id,
             alreadyReplied: false,
+            attachment,
         });
     }
 
@@ -5664,14 +5686,15 @@ class InteractionHandler {
      *   (po wyborze profilu komponent jest tylko potwierdzany przez deferUpdate, a dalszy
      *   flow korzysta z tokenu komendy — dzięki temu publiczne ogłoszenie followUp działa
      *   dokładnie tak jak przed wprowadzeniem profili).
-     * @param {{ dryRun: boolean, commandName: string, ocrBlockKey: string, playerKey: string, alreadyReplied: boolean }} opts
+     * @param {{ dryRun: boolean, commandName: string, ocrBlockKey: string, playerKey: string, alreadyReplied: boolean, attachment: object|null }} opts
      */
-    async _runUpdateAnalysis(interaction, { dryRun, commandName, ocrBlockKey, playerKey, alreadyReplied = false }) {
+    async _runUpdateAnalysis(interaction, { dryRun, commandName, ocrBlockKey, playerKey, alreadyReplied = false, attachment = null }) {
         const gl = this.logService._gl(interaction.guildId);
         const msgs = this.msgs(interaction.guildId);
         let _ocrEmbedParams = null; // zbieramy przez cały flow, wysyłamy w finally
 
-        const attachment = interaction.options.getAttachment('image');
+        // ModalSubmitInteraction nie ma opcji komendy — załącznik przychodzi z sesji wyboru profilu
+        const image = attachment || interaction.options?.getAttachment?.('image');
         const profileIndex = getProfileIndex(playerKey);
         const profileLabel = this.profileRegistryService?.getLabel(interaction.user.id, profileIndex) || null;
 
@@ -5714,8 +5737,8 @@ class InteractionHandler {
         try {
             await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
 
-            tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${attachment.name}`);
-            await downloadFile(attachment.url, tempImagePath);
+            tempImagePath = path.join(this.config.ocr.tempDir, `temp_${Date.now()}_${image.name}`);
+            await downloadFile(image.url, tempImagePath);
 
             await editReplyStep(msgs.updateComparingTemplate);
 
@@ -5738,7 +5761,7 @@ class InteractionHandler {
             const guildLang = this.config.getGuildConfig(interaction.guildId)?.lang || 'pol';
             const aiResult = await this.aiOcrService.analyzeTestImage(tempImagePath, gl, null, guildLang, onProgress, onRetry);
 
-            const fileExtension = attachment.name ? attachment.name.split('.').pop() : 'png';
+            const fileExtension = image.name ? image.name.split('.').pop() : 'png';
 
             if (aiResult.tokenUsage && this.tokenUsageService) {
                 const { promptTokens, outputTokens } = aiResult.tokenUsage;
@@ -7062,10 +7085,6 @@ class InteractionHandler {
             }
 
             // === Profile gracza (kilka kont w grze) ===
-            if (customId.startsWith('upd_prof_')) {
-                await this._handleUpdateProfilePick(interaction, customId);
-                return;
-            }
             if (customId.startsWith('prof_')) {
                 await this.handleProfileRegistryButton(interaction, customId);
                 return;

@@ -666,7 +666,7 @@
         },
         {
           "name": "/update",
-          "description": "Dodaj nowy wynik Ender's Echo do analizy (przy kilku profilach bot zapyta, do którego przypisać wynik)",
+          "description": "Dodaj nowy wynik Ender's Echo do analizy (przy kilku profilach bot pokaże okno wyboru konta)",
           "usage": "/update załącznik:[screenshot z wynikiem]",
           "requiredPermission": "public"
         }
