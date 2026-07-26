@@ -432,6 +432,9 @@ class RankingService {
      */
     async createRankingEmbed(players, page, totalPages, userId, guild, options = {}) {
         const { mode = 'server', client = null, callerStats = null } = options;
+        // Podkreślamy WYŁĄCZNIE wiersz śledzonego profilu — pozostałe profile tej samej
+        // osoby są zwykłymi wpisami rankingu. Brak klucza (gracz bez profili) → własne ID.
+        const callerKey = options.callerPlayerKey || userId;
         const msgs = options.messages || this.config.messages;
         const isGlobal = mode === 'global';
 
@@ -470,7 +473,7 @@ class RankingService {
                 displayName = formatProfileDisplayName(displayName, player.profileIndex || getProfileIndex(player.playerKey));
 
                 const bossName = player.bossName || msgs.unknownBoss;
-                const isCurrentUser = player.userId === userId;
+                const isCurrentUser = (player.playerKey || player.userId) === callerKey;
                 const nickDisplay = isCurrentUser ? `**__${displayName}__**` : `**${displayName}**`;
                 let tagSuffix = '';
                 if (isGlobal) {
@@ -521,7 +524,7 @@ class RankingService {
         if (callerStats !== null) {
             let callerValue;
             if (!callerStats.score) {
-                callerValue = msgs.rankingNotInRanking;
+                callerValue = callerStats.noScoreNote || msgs.rankingNotInRanking;
             } else {
                 const lines = [
                     `🎯 **${msgs.rankingYourScore}:** ${callerStats.score}`,
@@ -777,7 +780,8 @@ class RankingService {
                 p.username || `ID:${p.userId}`,
                 p.profileIndex || getProfileIndex(p.playerKey)
             );
-            const isMe = p.userId === callerUserId;
+            // callerUserId to klucz śledzonego profilu (playerKey), nie samo ID właściciela
+            const isMe = (p.playerKey || p.userId) === callerUserId;
             const nickDisplay = isMe ? `**__${displayName}__**` : `**${displayName}**`;
 
             const score = p.score || this.formatScore(p.scoreValue);

@@ -764,7 +764,8 @@ class AchievementService {
             const tag = guildTagMap ? (guildTagMap.get(p.sourceGuildId) || '') : '';
             const tagSuffix = tag ? ` • ${tag}` : '';
             const displayName = formatProfileDisplayName(p.username, p.profileIndex || 1);
-            const name = p.userId === callerId ? `**${displayName}**` : displayName;
+            // callerId to klucz śledzonego profilu (playerKey) — pogrubiamy tylko jego wiersz
+            const name = (p.playerKey || p.userId) === callerId ? `**${displayName}**` : displayName;
             return `${medal} ${name} — **${p.count}**${tagSuffix}`;
         });
 

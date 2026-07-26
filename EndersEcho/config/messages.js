@@ -30,6 +30,7 @@ const pol = {
     rankingYourServerPos: 'Na serwerze',
     rankingYourGlobalPos: 'Globalnie',
     rankingNotInRanking: 'Nie jesteś jeszcze w rankingu.',
+    rankingTrackedNoScore: 'Śledzony profil (**{profile}**) nie ma jeszcze wyniku.\nZmień śledzony profil w `/profile` → 📌',
     chartTitle: '📈 Historia Rekordów',
     globalPlayerGrowthChartTitle: '📊 Przyrost Unikalnych Graczy',
 
@@ -501,6 +502,7 @@ const eng = {
     rankingYourServerPos: 'On server',
     rankingYourGlobalPos: 'Global',
     rankingNotInRanking: 'You are not in the ranking yet.',
+    rankingTrackedNoScore: 'Your tracked profile (**{profile}**) has no score yet.\nSwitch the tracked profile in `/profile` → 📌',
     chartTitle: '📈 Score History',
     globalPlayerGrowthChartTitle: '📊 Unique Player Growth',
 

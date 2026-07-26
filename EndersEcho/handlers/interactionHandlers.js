@@ -4655,7 +4655,8 @@ class InteractionHandler {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
                     globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
-                    rolePositions: []
+                    rolePositions: [],
+                    noScoreNote: globalIdx === -1 ? this._trackedProfileNoScoreNote(callerUserId, msgs) : null
                 };
                 if (this.roleRankingConfigService) {
                     const roleRankings = await this.roleRankingConfigService.loadRoleRankings(guildId);
@@ -4689,7 +4690,7 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, 0, totalPages, interaction.user.id, guild,
-                { mode: 'server', client: null, messages: msgs, callerStats }
+                { mode: 'server', client: null, messages: msgs, callerStats, callerPlayerKey: this._trackedPlayerKey(interaction.user.id) }
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, {
                 userPage, mode: 'server', guildId, guildName: guild?.name || null
@@ -5115,21 +5116,50 @@ class InteractionHandler {
     }
 
     /**
+     * Klucz profilu, którego dotyczą statystyki i podkreślenie w rankingach:
+     * ZAWSZE profil ustawiony do ŚLEDZENIA (/profile → „📌 Śledź ten profil").
+     * Gracz bez wpisu w rejestrze profili → własne ID (profil główny).
+     * @param {string} userId - Discord ID gracza
+     * @returns {string|null}
+     */
+    _trackedPlayerKey(userId) {
+        if (!userId) return null;
+        const ownerId = String(userId);
+        return this.profileRegistryService?.getActivePlayerKey(ownerId) || ownerId;
+    }
+
+    /**
+     * Notka do pola „Twoje statystyki", gdy ŚLEDZONY profil dodatkowy nie ma jeszcze
+     * wyniku. Bez niej gracz widział tylko „Nie jesteś jeszcze w rankingu" i nie
+     * wiedział, że wynik ma na innym (nieśledzonym) profilu.
+     * @param {string} userId
+     * @param {Object} msgs
+     * @returns {string|null} null dla profilu głównego (komunikat domyślny wystarcza)
+     */
+    _trackedProfileNoScoreNote(userId, msgs) {
+        const idx = getProfileIndex(this._trackedPlayerKey(userId));
+        if (idx <= 1) return null;
+        const prof = this.profileRegistryService?.getProfiles(userId)?.find(p => p.index === idx);
+        const name = prof?.label || formatMessage(msgs.profileCmdSlotName, { index: idx });
+        const marker = getProfileMarker(idx);
+        return formatMessage(msgs.rankingTrackedNoScore, {
+            profile: marker ? `${marker} ${name}` : name
+        });
+    }
+
+    /**
      * Pozycja gracza na liście rankingowej z uwzględnieniem profili.
-     * Celuje w profil ustawiony do ŚLEDZENIA (/profile → „📌 Śledź ten profil"),
-     * a gdy ten nie ma jeszcze wyniku — w najlepszy profil gracza (lista jest
-     * posortowana malejąco, więc pierwsze trafienie po właścicielu = najlepszy).
+     * Liczy się WYŁĄCZNIE profil śledzony — brak jego wyniku oznacza brak pozycji
+     * (-1). Świadomie nie ma fallbacku na inny profil gracza: pokazywanie wyniku
+     * z maina, gdy śledzony jest profil dodatkowy, myliło graczy.
      * @param {Array} players - lista wpisów rankingu (z playerKey lub userId)
      * @param {string} userId - Discord ID gracza
      * @returns {number} indeks w liście lub -1
      */
     _findCallerIndex(players, userId) {
         if (!Array.isArray(players) || !userId) return -1;
-        const ownerId = String(userId);
-        const trackedKey = this.profileRegistryService?.getActivePlayerKey(ownerId) || ownerId;
-        const trackedIdx = players.findIndex(p => (p.playerKey || p.userId) === trackedKey);
-        if (trackedIdx !== -1) return trackedIdx;
-        return players.findIndex(p => getOwnerId(p.playerKey || p.userId) === ownerId);
+        const trackedKey = this._trackedPlayerKey(userId);
+        return players.findIndex(p => (p.playerKey || p.userId) === trackedKey);
     }
 
     /** Krótka etykieta na przycisk (limit 80 znaków). */
@@ -8045,7 +8075,8 @@ class InteractionHandler {
                         mode: rankingData.mode,
                         client: rankingData.mode === 'global' ? interaction.client : null,
                         messages: msgs,
-                        callerStats: rankingData.callerStats || null
+                        callerStats: rankingData.callerStats || null,
+                        callerPlayerKey: this._trackedPlayerKey(rankingData.userId)
                     }
                 );
             }
@@ -8700,7 +8731,8 @@ class InteractionHandler {
                     score: globalIdx !== -1 ? globalRanking[globalIdx].score : null,
                     serverPosition: serverIdx !== -1 ? serverIdx + 1 : null,
                     globalPosition: globalIdx !== -1 ? globalIdx + 1 : null,
-                    rolePositions: []
+                    rolePositions: [],
+                    noScoreNote: globalIdx === -1 ? this._trackedProfileNoScoreNote(callerUserId, this.msgs(interaction.guildId)) : null
                 };
 
                 // Pozycje w rankingach ról — sprawdzamy tylko role które użytkownik ma (zero extra requestów na role check)
@@ -8768,7 +8800,8 @@ class InteractionHandler {
                     mode,
                     client: mode === 'global' ? interaction.client : null,
                     messages: rankMsgs,
-                    callerStats
+                    callerStats,
+                    callerPlayerKey: this._trackedPlayerKey(interaction.user.id)
                 }
             );
             const buttons = this.rankingService.createRankingButtons(
@@ -8914,7 +8947,7 @@ class InteractionHandler {
 
             const embed = await this.rankingService.createRankingEmbed(
                 players, 0, totalPages, parentUserId, guild,
-                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, titleOverride: formatMessage(msgs.roleRankingTitle, { roleName }) }
+                { mode: 'server', client: null, messages: msgs, callerStats: parentCallerStats, callerPlayerKey: this._trackedPlayerKey(parentUserId), titleOverride: formatMessage(msgs.roleRankingTitle, { roleName }) }
             );
             const buttons = this.rankingService.createRankingButtons(0, totalPages, false, msgs, roleRows, btnOptions);
 
@@ -13941,7 +13974,7 @@ class InteractionHandler {
                 } catch {}
             }
 
-            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl, interaction.user.id);
+            const embed = this.achievementService.buildAchRankingEmbed(players, 0, perPage, mode, guildName, isPol, iconUrl, this._trackedPlayerKey(interaction.user.id));
             const buttons = this.achievementService.createAchRankingButtons(
                 0, totalPages, mode, guildId, guildName, roleRows, isPol, userPage, parentGuildId, parentGuildName
             );
@@ -13980,7 +14013,7 @@ class InteractionHandler {
         this._achRankings.set(interaction.message.id, data);
 
         const embed = this.achievementService.buildAchRankingEmbed(
-            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl, data.userId
+            data.players, data.currentPage, data.perPage, data.mode, data.guildName, data.isPol, data.iconUrl, this._trackedPlayerKey(data.userId)
         );
         const buttons = this.achievementService.createAchRankingButtons(
             data.currentPage, data.totalPages, data.mode, data.guildId, data.guildName,
@@ -15004,7 +15037,7 @@ class InteractionHandler {
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            bossName, players, 0, perPage, msgs, bossImageName, interaction.user.id, interaction.client
+            bossName, players, 0, perPage, msgs, bossImageName, this._trackedPlayerKey(interaction.user.id), interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
 
@@ -15075,7 +15108,7 @@ class InteractionHandler {
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, interaction.user.id, interaction.client
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, this._trackedPlayerKey(interaction.user.id), interaction.client
         );
         const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
 
