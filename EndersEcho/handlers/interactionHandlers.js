@@ -4852,7 +4852,9 @@ class InteractionHandler {
 
             // Przyciski pod nowym ogłoszeniem
             await publicMsg.edit({
-                components: this._buildRecordAnnouncementRows(publicMsg.id, data.cvEnabled === true, msgs),
+                // cvEnabled bywa przekazane jako wartość prawdziwościowa (np. instancja serwisu),
+                // dlatego świadomie sprawdzamy truthy, a nie === true
+                components: this._buildRecordAnnouncementRows(publicMsg.id, !!data.cvEnabled, msgs),
             }).catch(() => {});
 
             // Stare ogłoszenie: przycisk cofnięcia przestaje działać
@@ -6483,7 +6485,7 @@ class InteractionHandler {
 
                 // Sprawdź czy community verification włączona
                 const cvCfgBoss = this.guildConfigService?.getCommunityVerification(guildId);
-                const cvEnabledBoss = cvCfgBoss?.enabled === true && this.communityVerificationService;
+                const cvEnabledBoss = !!(cvCfgBoss?.enabled === true && this.communityVerificationService);
                 // Wspólny timestamp dla sesji CV i sesji cofnięcia — obie muszą wskazywać ten sam moment
                 const bossAnnounceTs = new Date().toISOString();
 
@@ -6773,7 +6775,7 @@ class InteractionHandler {
 
                     // Sprawdź czy community verification włączona
                     const cvCfg = this.guildConfigService?.getCommunityVerification(guildId);
-                    const cvEnabled = cvCfg?.enabled === true && this.communityVerificationService;
+                    const cvEnabled = !!(cvCfg?.enabled === true && this.communityVerificationService);
 
                     // Wyślij publiczne ogłoszenie (stos 4 embedów; przycisk CV dodany niżej, gdy znamy ID wiadomości)
                     const publicMsg = await interaction.followUp({
