@@ -128,7 +128,15 @@ const PROFILE_SEPARATOR = '#';
 
 // Znaczniki profili w nazwach wyświetlanych: profil 1 = brak znacznika (bez zmian dla graczy
 // z jednym profilem), profile 2+ = cyfra w kółku doklejona do nicku Discord.
-const PROFILE_MARKERS = ['', '', '②', '③', '④', '⑤', '⑥', '⑦', '⑧', '⑨'];
+// Tablice pokrywają domyślny limit ENDERSECHO_MAX_PROFILES=3; przy wyższym limicie
+// znacznik degraduje się do "(N)", a emoji na komponencie znika (sama etykieta).
+const PROFILE_MARKERS = ['', '', '②', '③'];
+
+// Znaczniki profili na KOMPONENTACH Discorda (przyciski, opcje select menu).
+// Znaki z PROFILE_MARKERS (②, ③) to zwykłe znaki Unicode, a NIE emoji — Discord
+// odrzuca je w polu emoji komponentu błędem COMPONENT_INVALID_EMOJI. Do komponentów
+// używamy więc keycapów (cyfra + VS16 + COMBINING ENCLOSING KEYCAP), które są emoji.
+const PROFILE_BUTTON_EMOJIS = ['', '🏠', '2️⃣', '3️⃣'];
 
 /**
  * Buduje playerKey z ID właściciela i numeru profilu.
@@ -208,6 +216,20 @@ function getProfileMarker(profileIndexOrKey) {
     return PROFILE_MARKERS[idx] || `(${idx})`;
 }
 
+/**
+ * Emoji profilu na przycisk / opcję select menu Discorda.
+ * Profil główny → 🏠, profile 2–9 → keycap (2️⃣…9️⃣), poza zakresem → null
+ * (komponent zostaje bez emoji, sama etykieta — zamiast błędu walidacji Discorda).
+ * @param {number|string} profileIndexOrKey
+ * @returns {string|null}
+ */
+function getProfileButtonEmoji(profileIndexOrKey) {
+    const idx = typeof profileIndexOrKey === 'number'
+        ? profileIndexOrKey
+        : getProfileIndex(profileIndexOrKey);
+    return PROFILE_BUTTON_EMOJIS[idx] || null;
+}
+
 module.exports = {
     formatMessage,
     downloadFile,
@@ -219,5 +241,6 @@ module.exports = {
     getProfileIndex,
     isAltProfile,
     formatProfileDisplayName,
-    getProfileMarker
+    getProfileMarker,
+    getProfileButtonEmoji
 };

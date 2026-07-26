@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
-const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
+const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker, getProfileButtonEmoji } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
@@ -5161,8 +5161,9 @@ class InteractionHandler {
                 const option = new StringSelectMenuOptionBuilder()
                     .setValue(String(prof.index))
                     .setLabel(this._profileButtonLabel(prof, msgs).slice(0, 100))
-                    .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
                     .setDefault(prof.index === activeIdx);
+                const emoji = getProfileButtonEmoji(prof.index);
+                if (emoji) option.setEmoji(emoji);
                 if (prof.label) option.setDescription(prof.label.slice(0, 100));
                 return option;
             }));
@@ -5414,13 +5415,13 @@ class InteractionHandler {
             let row = new ActionRowBuilder();
             for (const prof of profiles) {
                 if (row.components.length === 5) { rows.push(row); row = new ActionRowBuilder(); }
-                row.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`prof_${action}_do_${prof.index}`)
-                        .setLabel(this._profileButtonLabel(prof, msgs))
-                        .setEmoji(prof.index === 1 ? '🏠' : getProfileMarker(prof.index))
-                        .setStyle(action === 'delete' ? ButtonStyle.Danger : ButtonStyle.Secondary)
-                );
+                const btn = new ButtonBuilder()
+                    .setCustomId(`prof_${action}_do_${prof.index}`)
+                    .setLabel(this._profileButtonLabel(prof, msgs))
+                    .setStyle(action === 'delete' ? ButtonStyle.Danger : ButtonStyle.Secondary);
+                const emoji = getProfileButtonEmoji(prof.index);
+                if (emoji) btn.setEmoji(emoji);
+                row.addComponents(btn);
             }
             if (row.components.length > 0) rows.push(row);
             await interaction.reply({ content: msgs.profileCmdSelectPrompt, components: rows, flags: ['Ephemeral'] });
