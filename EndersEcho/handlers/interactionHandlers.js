@@ -6780,9 +6780,11 @@ class InteractionHandler {
                     : await this.rankingService.getGlobalRanking(new Set(activeGuildIds));
                 // Licznik w stopce zawsze z REALNEGO rankingu — przy /test symulacja dokłada gracza,
                 // który nie jest jeszcze w rankingu, i stopka pokazywała N+1.
+                // Liczymy OSOBY, nie wpisy: `newGlobalRanking` zawiera profile, więc gracz
+                // z drugim kontem zawyżałby „N unikalnych graczy globalnie".
                 globalPlayerCount = dryRun
                     ? (await this.rankingService.getCountedPlayers(new Set(activeGuildIds))).total
-                    : newGlobalRanking.length;
+                    : this.rankingService.countPeople(newGlobalRanking);
                 globalSnippetData = await this.globalTop10Service.buildSnippetFieldData(
                     playerKey, newGlobalRanking, prevGlobalPosition, msgs, interaction.client
                 );

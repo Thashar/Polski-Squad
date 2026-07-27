@@ -105,6 +105,7 @@
   - `rankingService.getCountedPlayers()` — dedup po `userId` (`{ total, playerIds, profileCount }`); używane przez kamienie milowe, stopkę logu OCR i CC
   - `rankingService.countPeople(players)` — **helper dla każdego licznika liczonego z listy wpisów**; użyty w `createRankingEmbed` (pole `👥 Liczba graczy`, ranking serwera/globalny/ról), `createBossRankingEmbed` i `getGuildScores().playerCount` (ranking serwerów; liczba profili została jako osobne `profileCount`)
   - Gdy profili jest więcej niż osób, embed dokleja `rankingProfilesSuffix` → `👥 Liczba graczy: 12  *(14 profili)*`, żeby liczba nie kłóciła się z liczbą wierszy listy
+  - Stopka embeda analizy OCR dla admina (`logService.sendOcrAnalysisEmbed` → `👥 N unikalnych graczy globalnie`) — `globalPlayerCount` liczony przez `countPeople(newGlobalRanking)` (ścieżka `/update`) albo `getCountedPlayers().total` (`/test`, żeby symulowany wpis nie dawał N+1)
   - `achievementService.buildAchRankingEmbed` — stopka `N graczy` po dedupie; `adminPanelService` — lista serwerów w CC dedupuje klucze `ranking.json` przez `getOwnerId`
   - Statystyki historii (`getActivePlayersStats`, `getAllUsersFirstEntries`, `getGuildPlayerCounts`) agregują po właścicielu (`getOwnerId(nazwaPliku)`); Centrum Dowodzenia pokazuje `N (M profili)` gdy profile istnieją
   - **Dodając nowy licznik graczy** przepuść listę przez `countPeople()` / `getOwnerId` — inaczej gracz z drugim kontem podbija statystyki
