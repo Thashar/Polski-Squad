@@ -618,6 +618,23 @@ class AdminPanelService {
             }).join('\n')
             : '—';
 
+        // Gracze z dodatkowymi profilami — ilu ich jest i po ile kont mają.
+        // Nick bierzemy z rankingu (dowolny profil właściciela), bo rejestr trzyma same ID.
+        const altUsers = this._services.profileRegistryService?.getUsersWithAltProfiles?.() || [];
+        let altProfilesValue = '—';
+        if (altUsers.length > 0) {
+            const totalAlts = altUsers.reduce((sum, u) => sum + u.altCount, 0);
+            const lines = [`**${altUsers.length}** graczy · **${totalAlts}** dodatkowych profili`];
+            for (const u of altUsers.slice(0, 10)) {
+                const name = usernameMap.get(u.userId);
+                const label = name ? `**${name}**` : `<@${u.userId}>`;
+                const pendingPart = u.pendingCount > 0 ? ` · ⏳ ${u.pendingCount}` : '';
+                lines.push(`• ${label} — **${u.profileCount}** profile${pendingPart}`);
+            }
+            if (altUsers.length > 10) lines.push(`... i ${altUsers.length - 10} więcej`);
+            altProfilesValue = lines.join('\n');
+        }
+
         let blockedValue = `${blockedCount}`;
         if (blockedCount > 0) {
             const show = blockedUsersArr.slice(0, 3);
@@ -647,6 +664,7 @@ class AdminPanelService {
                 { name: '👑 Lider globalny', value: capField(leaderValue, 256), inline: true },
                 { name: '🕐 Ostatni rekord', value: newestValue, inline: true },
                 { name: '🏆 TOP10 pobijających rekordy', value: capField(topSettersValue), inline: false },
+                { name: '👥 Dodatkowe profile', value: capField(altProfilesValue), inline: false },
                 { name: '🔒 Zablokowanych', value: capField(blockedValue), inline: false },
             );
     }

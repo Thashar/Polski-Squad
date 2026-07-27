@@ -449,6 +449,27 @@ class ProfileRegistryService {
     }
 
     /**
+     * Gracze, którzy założyli profile dodatkowe — do Centrum Dowodzenia.
+     * Sortowane malejąco po liczbie profili (przy remisie po ID, żeby kolejność
+     * była stabilna między odświeżeniami panelu).
+     * @returns {Array<{ userId: string, profileCount: number, altCount: number, pendingCount: number }>}
+     */
+    getUsersWithAltProfiles() {
+        const out = [];
+        for (const userId of Object.keys(this._data)) {
+            const profiles = this._rawProfiles(userId);
+            if (profiles.length <= 1) continue;
+            out.push({
+                userId,
+                profileCount: profiles.length,
+                altCount: profiles.length - 1,
+                pendingCount: profiles.filter(p => p.pendingDeleteAt).length,
+            });
+        }
+        return out.sort((a, b) => b.profileCount - a.profileCount || a.userId.localeCompare(b.userId));
+    }
+
+    /**
      * Wszystkie playerKey profili spoza maina
      * (np. do audytu spójności danych rankingowych).
      */
