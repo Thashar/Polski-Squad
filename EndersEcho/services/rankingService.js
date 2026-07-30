@@ -725,20 +725,68 @@ class RankingService {
                 .setCustomId('ranking_next')
                 .setEmoji('▶️')
                 .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled || page >= totalPages - 1),
-
-            switchBtn,
-            backBtn
+                .setDisabled(disabled || page >= totalPages - 1)
         );
+
+        if (mode === 'server') {
+            // Rząd 1: nawigacja (◀ 🎯 ▶) · Rząd 2: Global | Ranking bossów serwera | Rankingi serwerów
+            // Rząd 3+: rankingi ról
+            const bossSrvLabel = guildName
+                ? formatMessage(msgs.buttonBossRankingServer || 'Ranking bossów {guildName}', { guildName }).substring(0, 80)
+                : (msgs.buttonBossRanking || 'Ranking Bossów');
+
+            const modeRow = new ActionRowBuilder().addComponents(
+                switchBtn,
+                new ButtonBuilder()
+                    .setCustomId(`ranking_boss_srv_${guildId || ''}`)
+                    .setEmoji('👾')
+                    .setLabel(bossSrvLabel)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled || !guildId),
+                backBtn
+            );
+
+            return [navRow, modeRow, ...roleRows];
+        }
+
+        navRow.addComponents(switchBtn, backBtn);
 
         return [navRow, ...roleRows];
     }
 
     /**
      * Tworzy przyciski nawigacji dla rankingu bossa (tryb 'boss').
+     * @param {object} options
+     * @param {string|null} options.guildId - ranking per-serwer (null = globalny)
+     * @param {string|null} options.guildName - nazwa serwera (etykieta przycisku powrotu)
      */
-    createBossRankingButtons(page, totalPages, userPage, disabled, messages) {
+    createBossRankingButtons(page, totalPages, userPage, disabled, messages, options = {}) {
         const msgs = messages || this.config.messages;
+        const { guildId = null, guildName = null } = options;
+
+        // Powrót do listy bossów — tej samej, z której wszedł użytkownik (globalna albo serwerowa)
+        const listBtn = new ButtonBuilder()
+            .setCustomId(guildId ? `ranking_boss_srv_${guildId}` : 'ranking_boss_list')
+            .setEmoji('📋')
+            .setLabel(msgs.bossRankingBackList || 'Lista bossów')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled);
+
+        // Wyjście z rankingu bossa — do rankingu serwera (tryb serwerowy) albo globalnego
+        const exitBtn = guildId
+            ? new ButtonBuilder()
+                .setCustomId(`ranking_select_server_${guildId}`)
+                .setEmoji('↩️')
+                .setLabel((guildName || msgs.buttonBack || 'Powrót').substring(0, 70))
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled)
+            : new ButtonBuilder()
+                .setCustomId('ranking_select_global')
+                .setEmoji('🌐')
+                .setLabel(msgs.buttonGlobal || 'Global')
+                .setStyle(ButtonStyle.Danger)
+                .setDisabled(disabled);
+
         const navRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('ranking_prev')
@@ -759,27 +807,17 @@ class RankingService {
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(disabled || page >= totalPages - 1),
 
-            new ButtonBuilder()
-                .setCustomId('ranking_boss_list')
-                .setEmoji('📋')
-                .setLabel(msgs.bossRankingBackList || 'Lista bossów')
-                .setStyle(ButtonStyle.Secondary)
-                .setDisabled(disabled),
-
-            new ButtonBuilder()
-                .setCustomId('ranking_select_global')
-                .setEmoji('🌐')
-                .setLabel(msgs.buttonGlobal || 'Global')
-                .setStyle(ButtonStyle.Danger)
-                .setDisabled(disabled)
+            listBtn,
+            exitBtn
         );
         return [navRow];
     }
 
     /**
-     * Tworzy embed rankingu bossa (globalny, tryb 'boss').
+     * Tworzy embed rankingu bossa (globalny lub per-serwer, tryb 'boss').
+     * @param {string|null} guildName - nazwa serwera; podana = ranking zawężony do tego serwera
      */
-    createBossRankingEmbed(bossName, players, page, perPage, messages, bossImageName = null, callerUserId = null, client = null) {
+    createBossRankingEmbed(bossName, players, page, perPage, messages, bossImageName = null, callerUserId = null, client = null, guildName = null) {
         const msgs = messages || this.config.messages;
         const startIdx = page * perPage;
         const pagePlayers = players.slice(startIdx, startIdx + perPage);
@@ -809,7 +847,8 @@ class RankingService {
                 ? `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`
                 : '—';
 
-            const guildTag = p.sourceGuildId
+            // W rankingu per-serwer wszystkie wpisy pochodzą z tego samego serwera — tag byłby szumem
+            const guildTag = (!guildName && p.sourceGuildId)
                 ? (this.config.getAllGuilds().find(g => g.id === p.sourceGuildId)?.tag || null)
                 : null;
             const tagSuffix = guildTag ? `  ·  ${guildTag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
@@ -828,11 +867,16 @@ class RankingService {
             statsLines.push(formatMessage(msgs.rankingHighestScore, { score: players[0].score || this.formatScore(players[0].scoreValue) }));
         }
 
+        // Ranking per-serwer złoty (jak ranking serwera), globalny niebieski
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
-            .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}`)
+            .setColor(guildName ? 0xF1C40F : 0x5865F2)
+            .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}${guildName ? ` · ${guildName}` : ''}`.substring(0, 256))
             .setDescription(rankingText)
-            .addFields({ name: msgs.rankingStatsGlobal || msgs.rankingStats || '📊 Statystyki', value: statsLines.join('\n'), inline: false })
+            .addFields({
+                name: (guildName ? (msgs.rankingStats || msgs.rankingStatsGlobal) : (msgs.rankingStatsGlobal || msgs.rankingStats)) || '📊 Statystyki',
+                value: statsLines.join('\n'),
+                inline: false
+            })
             .setFooter({ text: formatMessage(msgs.rankingPage, { current: page + 1, total: totalPages }) })
             .setTimestamp();
 
@@ -1083,6 +1127,7 @@ class RankingService {
             globalSnippetData = null,
             bossRecordData = null,
             bossSnippetData = null,
+            bossServerPosition = null, // { position, total } — pozycja w rankingu bossa NA SERWERZE (Embed 1)
             bossName = null,
             botName = null,
             botIconUrl = null,
@@ -1184,6 +1229,15 @@ class RankingService {
                 posLine += `  *(${msgs.recordNewEntry})*`;
             }
             descLines.push(posLine);
+        }
+        // Pozycja w rankingu danego bossa NA SERWERZE (nie globalnie) — jedna linijka
+        if (bossServerPosition?.position) {
+            const bossLabel = formatMessage(
+                msgs.recordBossServerPosition || '👾 Pozycja na serwerze (boss {bossName})',
+                { bossName: bossName || bossRecordData?.bossName || '' }
+            );
+            const totalSuffix = bossServerPosition.total ? ` / ${bossServerPosition.total}` : '';
+            descLines.push(`**${bossLabel}:** #${bossServerPosition.position}${totalSuffix}`);
         }
         if (rolePositions?.length > 0) {
             for (const rp of rolePositions) {
