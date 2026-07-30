@@ -167,6 +167,7 @@ const pol = {
     recordProgress: '📈 Progres',
     recordRanking: '🏅 Pozycja',
     recordBossRanking: '👾 Pozycja (boss)',
+    recordBossServerPosition: '👾 Pozycja na serwerze (boss {bossName})',
     recordPromotionBy: 'awans o',
     recordNewEntry: 'nowy w rankingu',
     recordDateLabel: '📅 Data',
@@ -444,10 +445,12 @@ const pol = {
 
     // Ranking bossów / osiągnięć
     buttonBossRanking: 'Ranking Bossów',
+    buttonBossRankingServer: 'Ranking bossów {guildName}',
     buttonAchRanking: 'Ranking Osiągnięć',
     bossRankingTitle: '👾 Ranking',
     bossRankingSelectTitle: '👾 Wybierz bossa',
     bossRankingSelectDesc: 'Wybierz bossa z listy aby zobaczyć globalny ranking.',
+    bossRankingSelectDescServer: 'Wybierz bossa z listy aby zobaczyć ranking serwera **{guildName}**.',
     bossRankingSelectPlaceholder: 'Wybierz bossa...',
     bossRankingNoBosses: '📭 Brak wyników bossów do wyświetlenia.\nGracze muszą wysyłać screeny przez `/update` aby pojawili się w rankingu.',
     bossRankingBackList: 'Lista bossów',
@@ -653,6 +656,7 @@ const eng = {
     recordProgress: '📈 Progress',
     recordRanking: '🏅 Position',
     recordBossRanking: '👾 Position (boss)',
+    recordBossServerPosition: '👾 Server position (boss {bossName})',
     recordPromotionBy: 'promoted by',
     recordNewEntry: 'new entry',
     recordDateLabel: '📅 Date',
@@ -930,10 +934,12 @@ const eng = {
 
     // Boss / achievement rankings
     buttonBossRanking: 'Boss Rankings',
+    buttonBossRankingServer: 'Boss rankings {guildName}',
     buttonAchRanking: 'Achievement Ranking',
     bossRankingTitle: '👾 Ranking',
     bossRankingSelectTitle: '👾 Select a Boss',
     bossRankingSelectDesc: 'Choose a boss from the list to view the global ranking.',
+    bossRankingSelectDescServer: 'Choose a boss from the list to view the **{guildName}** server ranking.',
     bossRankingSelectPlaceholder: 'Choose a boss...',
     bossRankingNoBosses: '📭 No boss records to display yet.\nPlayers need to submit screenshots via `/update` to appear in the ranking.',
     bossRankingBackList: 'Boss list',

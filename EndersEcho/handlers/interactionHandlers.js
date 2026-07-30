@@ -6270,6 +6270,12 @@ class InteractionHandler {
                     const safeUserNameCs = userName.replace(/[^a-zA-Z0-9]/g, '_');
                     const imageAttachmentCs = new AttachmentBuilder(tempImagePath, { name: `rekord_${safeUserNameCs}_${Date.now()}.${fileExtension}` });
 
+                    // Pozycja w rankingu bossa na serwerze, na którym wynik faktycznie leży (poprzedni serwer gracza)
+                    const csBossServerPosition = wasUnknownBossCs ? null : await this._buildBossServerPosition(
+                        sourceGuildId, bossName, playerKey,
+                        { dryRun, scoreValue: bossScoreValue, score: bestScore, username: userName }
+                    );
+
                     const _botUserCs = interaction.client.user;
                     const csEmbeds = await this.rankingService.createRecordEmbeds({
                         userName,
@@ -6288,6 +6294,7 @@ class InteractionHandler {
                         globalSnippetData: null, // brak Embedu 2 (ranking globalny niezmieniony)
                         bossRecordData: { isNewBossRecord: true, previousBossRecord: csPrevBossRecord, bossName },
                         bossSnippetData: csBossSnippet,
+                        bossServerPosition: csBossServerPosition,
                         bossName,
                         botName: _botUserCs?.username || null,
                         botIconUrl: _botUserCs?.displayAvatarURL() || null,
@@ -6642,6 +6649,12 @@ class InteractionHandler {
                     } catch { /* bez ikony bossa */ }
                 }
 
+                // Pozycja w rankingu bossa NA SERWERZE (Embed 1)
+                const bossOnlyServerPosition = wasUnknownBoss ? null : await this._buildBossServerPosition(
+                    guildId, bossName, playerKey,
+                    { dryRun, scoreValue: this.rankingService.parseScoreValue(bestScore), score: bestScore, username: userName }
+                );
+
                 const _botUserBoss = interaction.client.user;
                 const bossPublicEmbeds = await this.rankingService.createRecordEmbeds({
                     userName,
@@ -6660,6 +6673,7 @@ class InteractionHandler {
                     globalSnippetData: null, // brak Embedu 2
                     bossRecordData: { isNewBossRecord: true, previousBossRecord, bossName },
                     bossSnippetData: bossSnippetDataLocal,
+                    bossServerPosition: bossOnlyServerPosition,
                     bossName,
                     botName: _botUserBoss?.username || null,
                     botIconUrl: _botUserBoss?.displayAvatarURL() || null,
@@ -6816,6 +6830,14 @@ class InteractionHandler {
                 }
             }
 
+            // Pozycja w rankingu bossa NA SERWERZE (Embed 1) — pokazywana zawsze gdy boss jest znany
+            let bossServerPositionData = null;
+            if (bossName && !wasUnknownBoss) {
+                bossServerPositionData = await this._buildBossServerPosition(guildId, bossName, playerKey, {
+                    dryRun, scoreValue: _newScoreValue, score: bestScore, username: userName,
+                });
+            }
+
             // === Komunikaty systemowe (Embed 4) ===
             const systemNotices = [];
             if (wasUnknownBoss && isNewBossRecord && bossName) {
@@ -6936,6 +6958,7 @@ class InteractionHandler {
                 globalSnippetData,
                 bossRecordData: isNewBossRecord && !wasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName } : null,
                 bossSnippetData,
+                bossServerPosition: bossServerPositionData,
                 bossName,
                 botName: _botUser?.username || null,
                 botIconUrl: _botUser?.displayAvatarURL() || null,
@@ -8115,6 +8138,11 @@ class InteractionHandler {
                 await this._handleRankingBossList(interaction);
                 return;
             }
+            // Ranking bossów zawężony do jednego serwera
+            if (customId.startsWith('ranking_boss_srv_')) {
+                await this._handleRankingBossList(interaction, customId.replace('ranking_boss_srv_', ''));
+                return;
+            }
             if (customId === 'panel_ban_guild') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -8820,6 +8848,26 @@ class InteractionHandler {
         }
     }
 
+    /**
+     * Pozycja profilu w rankingu danego bossa NA SERWERZE (nie globalnie) — linijka w Embedzie 1.
+     * /test (dryRun) korzysta z symulacji, żeby podgląd był identyczny jak po zapisie.
+     * @returns {Promise<{position: number, total: number}|null>}
+     */
+    async _buildBossServerPosition(guildId, bossName, playerKey, opts = {}) {
+        if (!this.bossRecordService || !guildId || !bossName || !playerKey) return null;
+        const { dryRun = false, scoreValue = 0, score = null, username = null } = opts;
+        try {
+            const ranking = dryRun
+                ? await this.bossRecordService.simulateGlobalBossRanking([guildId], bossName, playerKey, scoreValue, score, username, guildId)
+                : await this.bossRecordService.getGlobalBossRanking([guildId], bossName);
+            const idx = ranking.findIndex(p => (p.playerKey || p.userId) === playerKey);
+            if (idx === -1) return null;
+            return { position: idx + 1, total: ranking.length };
+        } catch {
+            return null;
+        }
+    }
+
     // Buduje dane snippetu zmiany w rankingu bossa (format identyczny jak globalSnippetData).
     // Zwraca { title, description } lub null.
     async _buildBossSnippetData(playerKey, bossName, previousBossRecord, allGuildIds, msgs, client, bossRankingOverride = null) {
@@ -8861,6 +8909,9 @@ class InteractionHandler {
 
     async _handleRankingSelect(interaction, customId) {
         await interaction.deferUpdate();
+
+        // Wychodzimy z rankingu bossa — inaczej paginacja tej wiadomości wracałaby do bossa
+        this._bossRankings.delete(interaction.message.id);
 
         // Język użytkownika = język serwera, na którym kliknął przycisk
         const msgs = this.msgs(interaction.guildId);
@@ -9028,6 +9079,7 @@ class InteractionHandler {
      */
     async _handleRankingBack(interaction) {
         await interaction.deferUpdate();
+        this._bossRankings.delete(interaction.message.id);
         const msgs = this.msgs(interaction.guildId);
         const selectRows = this.rankingService.createServerSelectButtons(interaction.client, msgs, interaction.guildId, 0);
         await interaction.editReply({
@@ -9059,6 +9111,7 @@ class InteractionHandler {
      */
     async _handleRoleRankingSelect(interaction, customId) {
         await interaction.deferUpdate();
+        this._bossRankings.delete(interaction.message.id);
         const msgs = this.msgs(interaction.guildId);
 
         // customId: ranking_role_{guildId}_{roleId}
@@ -9143,6 +9196,8 @@ class InteractionHandler {
      */
     async _handleGuildRankingSelect(interaction) {
         await interaction.deferUpdate();
+        // Wychodzimy z rankingu bossa — inaczej paginacja tej wiadomości wracałaby do bossa
+        this._bossRankings.delete(interaction.message.id);
         const msgs = this.msgs(interaction.guildId);
 
         // Pobierz poprzedni stan — potrzebny parentGuildId
@@ -9904,6 +9959,11 @@ class InteractionHandler {
 
             if (customId === 'ranking_boss_sel') {
                 await this._handleRankingBossShow(interaction);
+                return;
+            }
+
+            if (customId.startsWith('ranking_boss_ssel_')) {
+                await this._handleRankingBossShow(interaction, customId.replace('ranking_boss_ssel_', ''));
                 return;
             }
 
@@ -11597,6 +11657,11 @@ class InteractionHandler {
                             } catch { /* bez ikony bossa */ }
                         }
 
+                        // Pozycja w rankingu bossa NA SERWERZE (Embed 1)
+                        const analyzeBossServerPosition = (aiResult.bossName && !analyzeWasUnknownBoss)
+                            ? await this._buildBossServerPosition(targetGuildId, aiResult.bossName, targetPlayerKey)
+                            : null;
+
                         const _analyzeBotUser = interaction.client.user;
                         const manualVerificationNote = formatMessage(targetMsgs.analyzeManualAnnouncement, {
                             userId: targetUserId,
@@ -11624,6 +11689,7 @@ class InteractionHandler {
                             globalSnippetData: analyzeGlobalSnippetData,
                             bossRecordData: isNewBossRecord && !analyzeWasUnknownBoss ? { isNewBossRecord, previousBossRecord, bossName: aiResult.bossName } : null,
                             bossSnippetData: analyzeBossSnippetData,
+                            bossServerPosition: analyzeBossServerPosition,
                             bossName: aiResult.bossName,
                             botName: _analyzeBotUser?.username || null,
                             botIconUrl: _analyzeBotUser?.displayAvatarURL() || null,
@@ -15119,27 +15185,36 @@ class InteractionHandler {
     // =========================================================================
 
     /** Wyświetla select menu z listą bossów mających rekordy */
-    async _handleRankingBossList(interaction) {
+    async _handleRankingBossList(interaction, srvGuildId = null) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
         if (!this.bossRecordService) {
             await interaction.editReply({ content: msgs.rankingError, embeds: [], components: [] });
             return;
         }
-        const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds()
-            || Array.from(interaction.client.guilds.cache.keys());
+        // srvGuildId = ranking bossów zawężony do jednego serwera; null = ranking globalny
+        const rankGuildIds = srvGuildId
+            ? [srvGuildId]
+            : (this.guildConfigService?.getAllConfiguredGuildIds() || Array.from(interaction.client.guilds.cache.keys()));
+        const guildName = srvGuildId
+            ? (interaction.client.guilds.cache.get(srvGuildId)?.name || srvGuildId)
+            : null;
         const knownNames = this.bossAliasService?.getExtraEnglishNames() || [];
-        const bosses = await this.bossRecordService.getBossesWithRecords(allGuildIds, knownNames);
+        const bosses = await this.bossRecordService.getBossesWithRecords(rankGuildIds, knownNames);
+
+        const embedColor = srvGuildId ? 0xF1C40F : 0x5865F2;
+        const backBtn = srvGuildId
+            ? new ButtonBuilder().setCustomId(`ranking_select_server_${srvGuildId}`).setEmoji('↩️')
+                .setLabel((guildName || msgs.buttonBack || 'Powrót').substring(0, 70)).setStyle(ButtonStyle.Danger)
+            : new ButtonBuilder().setCustomId('ranking_select_global').setEmoji('🌐')
+                .setLabel(msgs.rankingGlobal || 'Global').setStyle(ButtonStyle.Secondary);
 
         if (!bosses.length) {
-            const backRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('ranking_select_global').setEmoji('🌐').setLabel(msgs.rankingGlobal || 'Global').setStyle(ButtonStyle.Primary),
-            );
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor(0x5865F2)
+                embeds: [new EmbedBuilder().setColor(embedColor)
                     .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
                     .setDescription(msgs.bossRankingNoBosses || '📭 Brak wyników bossów do wyświetlenia.')],
-                components: [backRow],
+                components: [new ActionRowBuilder().addComponents(backBtn)],
                 files: [],
                 attachments: [],
             });
@@ -15153,24 +15228,26 @@ class InteractionHandler {
                 .setDescription(`${b.totalPlayers} ${msgs.bossRankingPlayers || 'graczy'}`)
         );
         const select = new StringSelectMenuBuilder()
-            .setCustomId('ranking_boss_sel')
+            .setCustomId(srvGuildId ? `ranking_boss_ssel_${srvGuildId}` : 'ranking_boss_sel')
             .setPlaceholder(msgs.bossRankingSelectPlaceholder || 'Wybierz bossa...')
             .addOptions(options);
-        const backRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('ranking_select_global').setEmoji('🌐').setLabel(msgs.rankingGlobal || 'Global').setStyle(ButtonStyle.Secondary),
-        );
+
+        const description = srvGuildId
+            ? formatMessage(msgs.bossRankingSelectDescServer || 'Wybierz bossa z listy aby zobaczyć ranking serwera **{guildName}**.', { guildName })
+            : (msgs.bossRankingSelectDesc || 'Wybierz bossa z listy aby zobaczyć globalny ranking.');
+
         await interaction.editReply({
-            embeds: [new EmbedBuilder().setColor(0x5865F2)
+            embeds: [new EmbedBuilder().setColor(embedColor)
                 .setTitle(msgs.bossRankingSelectTitle || '🎯 Ranking Bossów')
-                .setDescription(msgs.bossRankingSelectDesc || 'Wybierz bossa z listy aby zobaczyć globalny ranking.')],
-            components: [new ActionRowBuilder().addComponents(select), backRow],
+                .setDescription(description)],
+            components: [new ActionRowBuilder().addComponents(select), new ActionRowBuilder().addComponents(backBtn)],
             files: [],
             attachments: [],
         });
     }
 
-    /** Wyświetla globalny ranking dla wybranego bossa */
-    async _handleRankingBossShow(interaction) {
+    /** Wyświetla ranking dla wybranego bossa — globalny albo zawężony do jednego serwera */
+    async _handleRankingBossShow(interaction, srvGuildId = null) {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
         if (!this.bossRecordService) {
@@ -15178,8 +15255,12 @@ class InteractionHandler {
             return;
         }
         const bossName = interaction.values[0];
-        const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds()
-            || Array.from(interaction.client.guilds.cache.keys());
+        const guildName = srvGuildId
+            ? (interaction.client.guilds.cache.get(srvGuildId)?.name || srvGuildId)
+            : null;
+        const allGuildIds = srvGuildId
+            ? [srvGuildId]
+            : (this.guildConfigService?.getAllConfiguredGuildIds() || Array.from(interaction.client.guilds.cache.keys()));
         const players = await this.bossRecordService.getGlobalBossRanking(allGuildIds, bossName);
 
         const perPage = this.config.ranking.playersPerPage || 10;
@@ -15202,19 +15283,19 @@ class InteractionHandler {
             }
         }
 
-        // Wykres postępu graczy dla bossów — tylko wyniki z tego bossa
+        // Wykres postępu graczy dla bossów — tylko wyniki z tego bossa (i tylko z serwerów rankingu)
         let chartAttachment = null;
         try {
-            const allGuildIdsForChart = this.guildConfigService?.getAllConfiguredGuildIds()
-                || Array.from(interaction.client.guilds.cache.keys());
             const t = this._panelT(interaction.guildId);
-            chartAttachment = await this._buildBossRankingChartAttachment(players, 0, allGuildIdsForChart, bossName, t);
+            chartAttachment = await this._buildBossRankingChartAttachment(players, 0, allGuildIds, bossName, t);
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            bossName, players, 0, perPage, msgs, bossImageName, this._mainPlayerKey(interaction.user.id), interaction.client
+            bossName, players, 0, perPage, msgs, bossImageName, this._mainPlayerKey(interaction.user.id), interaction.client, guildName
         );
-        const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs);
+        const buttons = this.rankingService.createBossRankingButtons(0, totalPages, userPage, false, msgs, {
+            guildId: srvGuildId, guildName
+        });
 
         const rankingData = {
             bossName,
@@ -15224,6 +15305,8 @@ class InteractionHandler {
             userId: interaction.user.id,
             userPage,
             allGuildIds,
+            srvGuildId,
+            guildName,
         };
         const reply = await interaction.fetchReply();
         this._bossRankings.set(reply.id, rankingData);
@@ -15283,9 +15366,12 @@ class InteractionHandler {
         } catch { /* wykres opcjonalny */ }
 
         const embed = this.rankingService.createBossRankingEmbed(
-            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName, this._mainPlayerKey(interaction.user.id), interaction.client
+            rankingData.bossName, rankingData.players, newPage, perPage, msgs, bossImageName,
+            this._mainPlayerKey(interaction.user.id), interaction.client, rankingData.guildName || null
         );
-        const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs);
+        const buttons = this.rankingService.createBossRankingButtons(newPage, rankingData.totalPages, rankingData.userPage, false, msgs, {
+            guildId: rankingData.srvGuildId || null, guildName: rankingData.guildName || null
+        });
 
         const files = [];
         const embeds = [embed];

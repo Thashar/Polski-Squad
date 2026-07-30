@@ -193,7 +193,8 @@
    - **Ogłoszenie rekordu — STOS 4 EMBEDÓW** (`rankingService.createRecordEmbeds` → zwraca `EmbedBuilder[]`):
      - Wszystkie embedy wysyłane w **jednej wiadomości** (`followUp({ embeds, files })`) — pojawiają się jednocześnie, atomowo (jeden `message.id`). Komponenty (przycisk CV „Zgłoś") renderują się pod całą wiadomością, czyli pod ostatnim (4.) embedem.
      - **Kolor jednolity** dla wszystkich 4 embedów wg pozycji gracza (`getPositionColor`): 🥇 złoty (TOP1), 🥈 srebrny (TOP2), 🥉 brązowy (TOP3), niebieski (TOP4-10), zielony (TOP11+ / brak pozycji)
-     - **Embed 1 — 🏆 Gratulacje (BEZ bossa):** tytuł `🏆 GRATULACJE!`, author = ikona+nazwa roli TOP, thumbnail = avatar gracza, opis = postęp (`stary ➜ nowy (+X)`) + **pozycja w klanie** (`medal #N (+awans)`) + **pozycje w rankingach ról** (🎖️) + czas od ostatniego rekordu; pola: `🎉 Nowe osiągnięcia`, `🔔 SUBSKRYPCJE: N`
+     - **Embed 1 — 🏆 Gratulacje (BEZ bossa):** tytuł `🏆 GRATULACJE!`, author = ikona+nazwa roli TOP, thumbnail = avatar gracza, opis = postęp (`stary ➜ nowy (+X)`) + **pozycja w klanie** (`medal #N (+awans)`) + **pozycja na serwerze w rankingu tego bossa** + **pozycje w rankingach ról** (🎖️) + czas od ostatniego rekordu; pola: `🎉 Nowe osiągnięcia`, `🔔 SUBSKRYPCJE: N`
+       - **Linijka pozycji bossa na serwerze** (`bossServerPosition` w `createRecordEmbeds`, klucz `recordBossServerPosition`): `👾 **Pozycja na serwerze (boss {bossName}):** #3 / 17` — pozycja i liczba graczy w rankingu tego bossa **wyłącznie na tym serwerze** (nie globalnie). Liczona helperem `_buildBossServerPosition(guildId, bossName, playerKey, opts)` przez `bossRecordService.getGlobalBossRanking([guildId], boss)` (`/test` → `simulateGlobalBossRanking`, żeby podgląd był identyczny jak po zapisie). Pokazywana **zawsze gdy boss jest znany** — także gdy rekord bossa nie został pobity (to aktualna pozycja, nie zmiana). Pomijana dla nieznanej nazwy bossa (`wasUnknownBoss`). W ścieżce cross-server (rekord bossa zostaje na poprzednim serwerze) liczona dla `sourceGuildId`, czyli serwera, na którym wynik faktycznie leży. Dotyczy wszystkich ogłoszeń rekordu: `/update`, `/test`, ścieżki „tylko rekord bossa", cross-server i panelu „Analizuj"
      - **Embed 2 — 🌍 Ranking globalny:** tytuł `globalRankingEmbedTitle`, opis = snippet globalny, **thumbnail = generowana grafika z numerem NOWEJ pozycji globalnej** (`services/positionIconService.js`, SVG→PNG przez sharp, plik `global_position.png` via `attachment://`; tiery: #1 złoty medal z koroną+laurem+czerwoną wstęgą, #2 srebrny medal z niebieską wstęgą, #3 brązowy medal z zieloną wstęgą, #4–10 blurple tarcza z gwiazdą, #11–30 fioletowy heksagon, #31–100 stalowy okrągły badge, #101+ grafitowy okrąg; fallback przy błędzie generowania = statyczna ikona CDN), `image` = wykres progresu (`score_history.png`, ten sam co w `/ranking`, gdy ≥2 wpisy historii), footer z ikoną globalną. Pozycja liczbowa pochodzi z `globalSnippetData.newGlobalPosition` (zwracana przez `globalTop10Service.buildSnippetFieldData`). Grafika generowana i dołączana w `/update`, `/test` (dryRun) i panelu „Analizuj"; DM subskrybentów odtwarza załącznik pod tą samą nazwą. **Pokazywany WYŁĄCZNIE gdy zmieniła się pozycja globalna** (`globalSnippetData != null`) — gdy brak zmiany, embed jest pomijany (a wykres nie jest generowany).
      - **Embed 3 — 👾 Ranking bossa:** tytuł `bossRankingEmbedTitle` z `{bossName}`, thumbnail = **ikona bossa** (`bossAliasService.getBossImagePath` → `data/boss_images/`, fallback ikona bota), opis = `👾 Rekord na bossie` (`stary ➜ nowy` / „pierwszy wynik") + snippet rankingu bossa. Pokazywany gdy pobito rekord bossa (`isNewBossRecord && bossName && !wasUnknownBoss`).
      - **Embed 4 — ℹ️ Informacje systemowe:** tytuł `systemInfoEmbedTitle`, `image` = **screenshot przesłany do analizy**, footer z timestampem. Opis (description) i pola (fields) zależą od sytuacji:
@@ -234,7 +235,11 @@
    - Ranking globalny wyróżniony kolorem niebieskim (0x5865f2), serwer złotym (0xffd700)
    - W rankingu globalnym każda linia zawiera nazwę serwera źródłowego
    - **Wyświetlany wynik = oryginalny string `score`** zapisany przy OCR (z fallbackiem na `formatScore(scoreValue)` dla starych wpisów). NIE odtwarzamy wyniku z `scoreValue` przez `formatScore()` w listach rankingowych — `formatScore` zaokrągla do 2 miejsc po przecinku, więc pobicie rekordu o małą wartość (np. wysokie wyniki typu `12345B` → `12.34T`) nie zmieniało wyświetlanej liczby mimo nowego rekordu (boss i data się zmieniały, sam wynik nie). Dotyczy `createRankingEmbed` (lista + statystyka "najwyższy wynik") oraz `globalTop10Service` (raport cykliczny + snippet w embeddzie rekordu). `scoreValue` nadal używany WYŁĄCZNIE do sortowania i porównań. Sumy klanów (`createGuildRankingEmbed` → `totalScore`) nadal przez `formatScore` — brak stringa źródłowego.
-   - Przycisk Powrót (`ranking_back`) w wierszu paginacji jako 5. przycisk (na końcu)
+   - **Układ przycisków w widoku rankingu SERWERA** (`createRankingButtons`, `mode: 'server'`):
+     - Rząd 1: `◀️ ranking_prev` · `🎯 Moja pozycja` · `▶️ ranking_next`
+     - Rząd 2: `🌐 Global` · `👾 Ranking bossów {nazwa serwera}` (`ranking_boss_srv_{guildId}`) · `↩️ Rankingi serwerów` (`ranking_back`, powrót do ekranu wyboru serwera)
+     - Rząd 3+: rankingi ról (`createRoleRankingButtons`)
+   - Tryby `global` / `guild_ranking` / `role` mają układ jak dotychczas (Powrót jako ostatni przycisk wiersza paginacji, w trybie global w osobnym rzędzie)
 
 6. **Rankingi Ról** - `roleRankingConfigService.js` + `interactionHandlers.js`:
    - Zarządzanie przez `/configure` krok 7 (admin) → przyciski: "Dodaj ranking roli" (RoleSelectMenu), "Usuń ranking roli" (StringSelectMenu), "Gotowe / Pomiń"
@@ -498,8 +503,10 @@
 | `boss_cfg_set_img` | Przycisk "🖼️ Przypisz zdjęcie" — otwiera select bossów |
 | `boss_cfg_img_boss_sel` | StringSelectMenu — wybrany boss → otwiera modal z polem na link do zdjęcia |
 | `boss_cfg_img_modal` | Modal z linkiem do zdjęcia (Discord CDN) → pobranie i zapis pliku |
-| `ranking_boss_list` | Przycisk "🎯 Ranking Bossów" w widoku global ranking |
+| `ranking_boss_list` | Przycisk "👾 Ranking Bossów" w widoku global ranking |
 | `ranking_boss_sel` | StringSelectMenu — wybrany boss → pokazuje per-boss ranking globalny |
+| `ranking_boss_srv_{guildId}` | Przycisk "👾 Ranking bossów {nazwa serwera}" w widoku rankingu serwera → lista bossów tego serwera |
+| `ranking_boss_ssel_{guildId}` | StringSelectMenu — wybrany boss → per-boss ranking zawężony do tego serwera |
 
 **9. System aliasów bossów** — `services/bossAliasService.js` + `data/boss_aliases.json`:
 - **Cel:** Normalizacja nazw bossów z różnych języków → jedna angielska nazwa (np. "Robak" PL → "Shardstone Bug" EN = jeden boss w osiągnięciach).
@@ -543,11 +550,18 @@
 - **Embed rekordu:** Pole `🎯 Rekord na bossie` (msgs.bossRecordField) pokazywane gdy `isNewBossRecord = true`, PRZED polem osiągnięć. Dla pobitego rekordu bossa bez globalnego — pole `🎯 Nowy rekord na bossie` (msgs.bossRecordUpdated) w zielonym embedzie.
 - **Struktura danych:** `data/guilds/{guildId}/boss_records.json` = `{ userId: { bossName: { score, scoreValue, timestamp, username } } }`. Write queue per-guild (`_enqueue`).
 - **Ranking Bossów (globalny):**
-  - Przycisk `🎯 Ranking Bossów` w widoku Global rankingu → `_handleRankingBossList` → StringSelectMenu z bossami mającymi ≥1 rekord (filtruje do znanych angielskich nazw)
-  - Wybór bossa → `_handleRankingBossShow` → globalny ranking per-boss embed (`createBossRankingEmbed`) z thumbnail zdjęcia bossa (jeśli ustawione)
+  - Przycisk `👾 Ranking Bossów` w widoku Global rankingu → `_handleRankingBossList(interaction)` → StringSelectMenu `ranking_boss_sel` z bossami mającymi ≥1 rekord (filtruje do znanych angielskich nazw)
+  - Wybór bossa → `_handleRankingBossShow(interaction)` → globalny ranking per-boss embed (`createBossRankingEmbed`, kolor blurple `0x5865F2`) z thumbnail zdjęcia bossa (jeśli ustawione)
   - Paginacja: `ranking_prev/next/mypos` (te same przyciski co standardowy ranking; routing przez `_bossRankings.has(messageId)`)
-  - Stan paginacji: `_bossRankings` Map (RAM, per messageId)
+  - Stan paginacji: `_bossRankings` Map (RAM, per messageId). **Wpis kasowany przy wyjściu z rankingu bossa** (`_handleRankingSelect`, `_handleRoleRankingSelect`, `_handleGuildRankingSelect`, `_handleRankingBack`) — bez tego routing paginacji (`_bossRankings.has(messageId)` sprawdzane PRZED `getActiveRanking`) po powrocie do rankingu serwera/global dalej przerysowywałby ranking bossa
   - Powrót: przyciski `📋 Lista bossów` i `🌐 Global` w `createBossRankingButtons`
+- **Ranking Bossów per SERWER:**
+  - Przycisk `👾 Ranking bossów {nazwa serwera}` (`ranking_boss_srv_{guildId}`) w rzędzie 2 widoku rankingu serwera → ta sama metoda `_handleRankingBossList(interaction, guildId)`, ale lista bossów liczona z **jednego** serwera (`getBossesWithRecords([guildId], …)`)
+  - Wybór bossa → StringSelectMenu `ranking_boss_ssel_{guildId}` → `_handleRankingBossShow(interaction, guildId)` → ranking zawężony do serwera (`getGlobalBossRanking([guildId], boss)`); embed **złoty** (`0xF1C40F`, jak ranking serwera), tytuł `👾 Ranking — {boss} · {serwer}`, bez tagu serwera przy wpisach (wszystkie z tego samego serwera)
+  - Wykres progresu graczy budowany wyłącznie z historii tego serwera (`_buildBossRankingChartAttachment` dostaje `[guildId]`)
+  - Nawigacja: `📋 Lista bossów` wraca do listy tego samego zakresu (serwerowej albo globalnej), ostatni przycisk to `↩️ {nazwa serwera}` (powrót do rankingu serwera) zamiast `🌐 Global`
+  - Zakres (`srvGuildId`, `guildName`, `allGuildIds`) trzymany w `_bossRankings` — paginacja nie gubi kontekstu serwera
+  - Wspólna implementacja z rankingiem globalnym: jedyna różnica to lista ID serwerów przekazana do `bossRecordService`
 - **Zdjęcia bossów:** Plik zapisywany w `data/boss_images/{safeName}.{ext}`. Ścieżka (tylko `{safeName}.{ext}`) przechowywana w `boss_aliases.json` jako `images["BossEN"]`. Używane jako thumbnail w `createBossRankingEmbed` (AttachmentBuilder + `attachment://filename`).
 - **Filtrowanie rankingów:** `getBossesWithRecords(allGuildIds, knownEnglishNames)` — pokazuje TYLKO bossów z angielską nazwą (admin musi zmapować alias). Nieznane surowe nazwy niewidoczne w UI dopóki nie zostają zmapowane.
 
