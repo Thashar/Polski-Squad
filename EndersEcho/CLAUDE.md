@@ -557,7 +557,7 @@
   - Powrót: przyciski `📋 Lista bossów` i `🌐 Global` w `createBossRankingButtons`
 - **Ranking Bossów per SERWER:**
   - Przycisk `👾 Ranking bossów {nazwa serwera}` (`ranking_boss_srv_{guildId}`) w rzędzie 2 widoku rankingu serwera → ta sama metoda `_handleRankingBossList(interaction, guildId)`, ale lista bossów liczona z **jednego** serwera (`getBossesWithRecords([guildId], …)`)
-  - Wybór bossa → StringSelectMenu `ranking_boss_ssel_{guildId}` → `_handleRankingBossShow(interaction, guildId)` → ranking zawężony do serwera (`getGlobalBossRanking([guildId], boss)`); embed **złoty** (`0xF1C40F`, jak ranking serwera), tytuł `👾 Ranking — {boss} · {serwer}`, bez tagu serwera przy wpisach (wszystkie z tego samego serwera)
+  - Wybór bossa → StringSelectMenu `ranking_boss_ssel_{guildId}` → `_handleRankingBossShow(interaction, guildId)` → ranking zawężony do serwera (`getGlobalBossRanking([guildId], boss)`); embed **złoty** (`0xF1C40F`, jak ranking serwera), tytuł `👾 Ranking — {boss}` (**bez nazwy serwera** — zakres widać po kolorze, przycisku powrotu i nagłówku statystyk), bez tagu serwera przy wpisach (wszystkie z tego samego serwera), nagłówek statystyk `📊 Statystyki` zamiast `📊 Statystyki globalne`
   - Wykres progresu graczy budowany wyłącznie z historii tego serwera (`_buildBossRankingChartAttachment` dostaje `[guildId]`)
   - Nawigacja: `📋 Lista bossów` wraca do listy tego samego zakresu (serwerowej albo globalnej), ostatni przycisk to `↩️ {nazwa serwera}` (powrót do rankingu serwera) zamiast `🌐 Global`
   - Zakres (`srvGuildId`, `guildName`, `allGuildIds`) trzymany w `_bossRankings` — paginacja nie gubi kontekstu serwera

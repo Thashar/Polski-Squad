@@ -870,7 +870,7 @@ class RankingService {
         // Ranking per-serwer złoty (jak ranking serwera), globalny niebieski
         const embed = new EmbedBuilder()
             .setColor(guildName ? 0xF1C40F : 0x5865F2)
-            .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}${guildName ? ` · ${guildName}` : ''}`.substring(0, 256))
+            .setTitle(`${msgs.bossRankingTitle || '🎯 Ranking'} — ${bossName}`.substring(0, 256))
             .setDescription(rankingText)
             .addFields({
                 name: (guildName ? (msgs.rankingStats || msgs.rankingStatsGlobal) : (msgs.rankingStatsGlobal || msgs.rankingStats)) || '📊 Statystyki',
