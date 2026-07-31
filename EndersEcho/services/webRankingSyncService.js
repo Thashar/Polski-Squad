@@ -164,7 +164,7 @@ class WebRankingSyncService {
             }
             if (!guilds.length) return;
 
-            await this._post({ guilds, replaceAll: true });
+            await this._post({ guilds, replaceAll: true, totalGuilds: ids.length });
             for (const g of guilds) this._hashes[g.id] = this._hashTop(g);
             this._lastSync = { at: new Date().toISOString(), kind: 'full', count: guilds.length, guildName: null };
             await this._saveState();
@@ -188,7 +188,11 @@ class WebRankingSyncService {
             const hash = this._hashTop(payload);
             if (this._hashes[guildId] === hash) return false; // TOP 10 bez zmian — nic nie wysyłamy
 
-            await this._post({ guilds: [payload] });
+            // totalGuilds liczymy też tutaj — nowy serwer bywa widoczny na stronie
+            // zanim padnie kolejny restart bota z pełnym snapshotem.
+            const activeCount = (this.guildConfigService?.getAllConfiguredGuildIds() || [])
+                .filter(id => client?.guilds?.cache?.has(id)).length;
+            await this._post({ guilds: [payload], totalGuilds: activeCount || undefined });
             this._hashes[guildId] = hash;
             this._lastSync = { at: new Date().toISOString(), kind: 'guild', count: 1, guildName: payload.name };
             await this._saveState();
