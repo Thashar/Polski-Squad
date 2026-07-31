@@ -126,6 +126,8 @@ const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
 const commandUsageService = new CommandUsageService(config.ranking.dataDir);
+// Wysyłka TOP 10 na stronę (endersecho.thashar.dev) — kierunek bot → strona
+const webRankingSyncService = new WebRankingSyncService(config, logger, { rankingService, guildConfigService });
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
     rankingService,
     ocrStatsService,
@@ -142,9 +144,8 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     bossRecordService,
     commandUsageService,
     profileRegistryService,
+    webRankingSyncService,
 });
-// Wysyłka TOP 10 na stronę (endersecho.thashar.dev) — kierunek bot → strona
-const webRankingSyncService = new WebRankingSyncService(config, logger, { rankingService, guildConfigService });
 // Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
 aiOcrService.setStatsService(ocrStatsService);
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService, profileRegistryService, recordRevertService, webRankingSyncService);

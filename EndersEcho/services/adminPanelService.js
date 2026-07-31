@@ -1107,6 +1107,22 @@ class AdminPanelService {
             }
         } catch { /* pomiń */ }
 
+        // Wysyłka rankingów TOP 10 na stronę — kiedy poszła ostatnio i czego dotyczyła
+        let webSync = '⚪ Wyłączona (brak `ENDERSECHO_WEB_SYNC_URL` / `ENDERSECHO_WEB_SYNC_TOKEN`)';
+        try {
+            const st = this._services.webRankingSyncService?.getStatus();
+            if (st?.enabled) {
+                if (!st.lastSync) {
+                    webSync = '✅ Włączona — jeszcze nic nie wysłano';
+                } else {
+                    const what = st.lastSync.kind === 'full'
+                        ? `pełny snapshot (${st.lastSync.count} serwer(ów))`
+                        : `serwer **${st.lastSync.guildName || '—'}**`;
+                    webSync = `✅ ${fmtTs(st.lastSync.at)} — ${what}\nŚledzonych serwerów: **${st.guildsTracked}**`;
+                }
+            }
+        } catch { /* pole opcjonalne */ }
+
         return new EmbedBuilder()
             .setColor(0x95A5A6)
             .setTitle('⚙️ Narzędzia')
@@ -1115,6 +1131,7 @@ class AdminPanelService {
                 { name: '🔄 OCR zablokowany per-serwer', value: `${perGuildBlocked}`, inline: true },
                 { name: '📅 Następny Global TOP10', value: nextTop10, inline: true },
                 { name: '🌐 Globalny OCR', value: globalState, inline: false },
+                { name: '📤 Rankingi na stronie', value: capField(webSync), inline: false },
             );
     }
 
