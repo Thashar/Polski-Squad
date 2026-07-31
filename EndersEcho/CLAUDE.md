@@ -709,7 +709,7 @@
 **Plik:** `services/webRankingSyncService.js` · **Stan:** `data/web_sync.json` · **Odbiornik:** `POST /api/ee-rankings` w workerze repo `thashar.dev`
 
 - **Kierunek jest jeden: bot → strona.** Strona NIGDY nie odpytuje bota, więc serwer produkcyjny zostaje zamknięty na świat, a ranking na stronie działa nawet gdy bot jest zrestartowany (Worker oddaje ostatni snapshot z Durable Object)
-- **Co jedzie:** nazwa serwera, tag, liczba graczy (osób, `countPeople`) i TOP 10 — pozycja, nick (`formatProfileDisplayName`, więc profile dodatkowe mają `②`), wynik, boss i data. **ŚWIADOMIE bez ID Discorda i avatarów** — nick wystarcza do rankingu, a ID dałoby się połączyć z kontem
+- **Co jedzie:** nazwa serwera, tag, **data dołączenia bota do serwera** (`guild.joinedAt` — strona układa po niej kafelki, w kolejności dołączania), liczba graczy (osób, `countPeople`) i TOP 10 — pozycja, nick (`formatProfileDisplayName`, więc profile dodatkowe mają `②`), wynik jako string, **`scoreValue`** (strona rysuje z niego wykres porównania wyników — odpowiednik `generatePlayersProgressChart`), boss i data. **ŚWIADOMIE bez ID Discorda i avatarów** — nick wystarcza do rankingu, a ID dałoby się połączyć z kontem
 - **Kiedy:**
   - przy starcie bota → `syncAll(client)`: pełny snapshot wszystkich skonfigurowanych serwerów, na których bot jest obecny, z flagą `replaceAll` (Worker kasuje wtedy serwery, których bot już nie obsługuje — inaczej wisiałyby na stronie z zamrożonym rankingiem)
   - po każdym zapisanym wyniku → `syncGuild(guildId, client)` **tylko gdy TOP 10 faktycznie się zmienił** (porównanie skrótu SHA-1 listy: pozycja + nick + wynik + boss). Zwykłe `/update`, które nie rusza czołówki, nie generuje żadnego ruchu

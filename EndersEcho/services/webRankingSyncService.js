@@ -91,6 +91,9 @@ class WebRankingSyncService {
             rank: idx + 1,
             name: formatProfileDisplayName(p.username || 'Unknown', p.profileIndex || getProfileIndex(p.playerKey)),
             score: p.score || this.rankingService.formatScore(p.scoreValue),
+            // Wartość liczbowa — strona rysuje z niej wykres porównania wyników
+            // (proporcja paska do lidera), tak jak generatePlayersProgressChart w bocie.
+            scoreValue: typeof p.scoreValue === 'number' ? p.scoreValue : null,
             bossName: p.bossName || null,
             date: p.timestamp || null,
         }));
@@ -99,6 +102,9 @@ class WebRankingSyncService {
             id: guildId,
             name: guildName,
             tag: cfg?.tag || null,
+            // Moment dołączenia bota do serwera — strona układa po nim kafelki
+            // (kolejność dołączania, tak jak dawna statyczna lista w HTML-u).
+            joinedAt: guild?.joinedAt ? guild.joinedAt.toISOString() : null,
             totalPlayers: this.rankingService.countPeople(players),
             top,
         };
