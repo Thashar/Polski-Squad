@@ -1230,12 +1230,10 @@ class RankingService {
             }
             descLines.push(posLine);
         }
-        // Pozycja w rankingu danego bossa NA SERWERZE (nie globalnie) — jedna linijka
+        // Pozycja w rankingu danego bossa NA SERWERZE (nie globalnie) — jedna linijka.
+        // Bez nazwy bossa w etykiecie: ta sama nazwa jest w Embedzie 3 (ranking bossa).
         if (bossServerPosition?.position) {
-            const bossLabel = formatMessage(
-                msgs.recordBossServerPosition || '👾 Pozycja na serwerze (boss {bossName})',
-                { bossName: bossName || bossRecordData?.bossName || '' }
-            );
+            const bossLabel = msgs.recordBossServerPosition || '👾 Pozycja (boss)';
             const totalSuffix = bossServerPosition.total ? ` / ${bossServerPosition.total}` : '';
             descLines.push(`**${bossLabel}:** #${bossServerPosition.position}${totalSuffix}`);
         }
