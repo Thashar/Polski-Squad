@@ -1233,7 +1233,7 @@ class RankingService {
         // Pozycja w rankingu danego bossa NA SERWERZE (nie globalnie) — jedna linijka.
         // Bez nazwy bossa w etykiecie: ta sama nazwa jest w Embedzie 3 (ranking bossa).
         if (bossServerPosition?.position) {
-            const bossLabel = msgs.recordBossServerPosition || '👾 Pozycja (boss)';
+            const bossLabel = msgs.recordBossServerPosition || '👾 Pozycja (Boss)';
             const totalSuffix = bossServerPosition.total ? ` / ${bossServerPosition.total}` : '';
             descLines.push(`**${bossLabel}:** #${bossServerPosition.position}${totalSuffix}`);
         }
