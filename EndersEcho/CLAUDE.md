@@ -718,6 +718,7 @@
 - **Persistencja skrótów:** `data/web_sync.json` — po restarcie bot nie wysyła wszystkiego ponownie tylko dlatego, że zapomniał, co już wysłał (pełny `syncAll` przy starcie i tak odświeża stronę)
 - **Wyłączone bez konfiguracji:** brak `ENDERSECHO_WEB_SYNC_URL` lub `ENDERSECHO_WEB_SYNC_TOKEN` → `isEnabled()` zwraca `false` i serwis nic nie robi (żadnych błędów w logach)
 - **Błędy nie przerywają flow** — wysyłka jest fire-and-forget, a niepowodzenie ląduje jako `warn` w logu
+- **Licznik społeczności:** payload niesie też `totalGuilds` — liczbę WSZYSTKICH serwerów z botem (także tych bez wyników). Strona pokazuje ją w napisie „N Discord communities…” nad listą kafelków; kafelek dostają tylko serwery z rankingiem, więc te dwie liczby mogą się różnić
 - **Po stronie strony:** kafelki klanów w sekcji „COMMUNITIES USING THE BOT" renderowane są z tych danych i dopiero wtedy stają się klikalne; klik otwiera nakładkę z embedem TOP 10 w stylu bota. Gdy API nie odpowie, zostaje statyczna, nieklikalna lista z HTML-a
 
 **Struktura danych:**
