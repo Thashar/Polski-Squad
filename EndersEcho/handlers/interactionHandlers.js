@@ -79,6 +79,9 @@ const _HOMOGLYPHS = {
     '\u{1F164}':'u','\u{1F165}':'v','\u{1F166}':'w','\u{1F167}':'x',
     '\u{1F168}':'y','\u{1F169}':'z',
     '\u{1F170}':'a','\u{1F171}':'b','\u{1F17E}':'o','\u{1F17F}':'p',
+    // Polskie „ł" — NFD go NIE rozkłada (to osobny znak, nie l + diakryt), więc bez tego
+    // wpisu „polbog" nie znajdowało „Półbóg", a „michal" nicku „Michał".
+    'ł':'l', 'Ł':'l',
 };
 
 function normalizeForSearch(str) {
@@ -186,6 +189,9 @@ class InteractionHandler {
         this._profileStates = new Map();
         // Oczekujące wybory profilu przy /update i /test (interactionId -> { interaction, dryRun, commandName, ocrBlockKey, userId })
         this._updateProfileSessions = new Map();
+        // Panel „Usuń osiągnięcia" (userId -> { playerKey, guildId, query, selected, ts }) — filtr nazwy
+        // i zaznaczenie wielu osiągnięć nie zmieszczą się w customId (limit 100 znaków)
+        this._achDelSessions = new Map();
     }
 
     /**
@@ -511,6 +517,14 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelAchDelSearch(interaction);
+                return;
+            }
+            if (interaction.customId === 'panel_ach_del_q_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelQuerySubmit(interaction);
                 return;
             }
             if (interaction.customId.startsWith('panel_block_modal_')) {
@@ -3869,6 +3883,7 @@ class InteractionHandler {
             // Czy usunięty wpis był aktualnym rekordem? → przelicz ranking z pozostałej historii
             let rankingChanged = false;
             let newRecordInfo = null;
+            let removedAchievements = [];
             const removedVal = typeof removed.scoreValue === 'number' ? removed.scoreValue : this.rankingService.parseScoreValue(removed.score);
             if (oldRecord && removedVal >= this.rankingService.parseScoreValue(oldRecord.score)) {
                 const remaining = await this.scoreHistoryService.getAllUserEntries(targetGuildId, targetPlayerKey);
@@ -3877,6 +3892,23 @@ class InteractionHandler {
                     const v = typeof e.scoreValue === 'number' ? e.scoreValue : this.rankingService.parseScoreValue(e.score);
                     if (!best || v > best._v || (v === best._v && new Date(e.timestamp) > new Date(best.timestamp))) {
                         best = { ...e, _v: v };
+                    }
+                }
+
+                // Osiągnięcia przypisane do TEGO wyniku — kasujemy tylko gdy usuwany wpis jest
+                // ostatnim (najnowszym) w historii. Wtedy „odblokowane od jego momentu" = dokładnie
+                // te nadane przy jego zapisie; przy starszym wpisie cięcie po czasie zabrałoby
+                // osiągnięcia za późniejsze, legalne wyniki. Kategoria explorer zostaje nietknięta.
+                const removedTs = new Date(removed.timestamp).getTime();
+                const isLatestEntry = remaining.every(e => new Date(e.timestamp).getTime() <= removedTs);
+                if (this.achievementService && removed.timestamp && isLatestEntry) {
+                    try {
+                        removedAchievements = await this.achievementService.clearRecordAchievementsAfter(
+                            targetGuildId, targetPlayerKey, removed.timestamp,
+                            { removedRecordCount: 1, previousRecord: best ? { timestamp: best.timestamp } : null }
+                        );
+                    } catch (achErr) {
+                        logger.warn(`Błąd cofania osiągnięć po usunięciu wyniku: ${achErr.message}`);
                     }
                 }
                 if (!best) {
@@ -3960,7 +3992,16 @@ class InteractionHandler {
                     ? t(`\nRekord bossa \`${removed.bossName}\` cofnięty do: **${newBossRecordInfo}**.`, `\nBoss record \`${removed.bossName}\` reverted to: **${newBossRecordInfo}**.`)
                     : t(`\nRekord bossa \`${removed.bossName}\` usunięty (brak innych wyników na tym bossie).`, `\nBoss record \`${removed.bossName}\` removed (no other scores on this boss).`);
             }
-            await this.logService.logMessage('success', `Usunięto wynik ${removed.score} gracza ${oldUsername} z historii (serwer ${guildName || targetGuildId})${rankingChanged ? ', ranking przeliczony' : ''}${bossRecordReverted ? ', rekord bossa cofnięty' : ''} przez panel admina`, interaction);
+            if (removedAchievements.length > 0) {
+                const isPolDesc = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+                const achNames = this.achievementService.getAchievementDefs(removedAchievements)
+                    .map(a => `${a.icon} ${isPolDesc ? a.namePol : a.nameEng}`);
+                desc += t(
+                    `\nCofnięto osiągnięcia zdobyte za ten wynik (**${removedAchievements.length}**): ${achNames.join(', ')}`,
+                    `\nAchievements earned for this score reverted (**${removedAchievements.length}**): ${achNames.join(', ')}`
+                );
+            }
+            await this.logService.logMessage('success', `Usunięto wynik ${removed.score} gracza ${oldUsername} z historii (serwer ${guildName || targetGuildId})${rankingChanged ? ', ranking przeliczony' : ''}${bossRecordReverted ? ', rekord bossa cofnięty' : ''}${removedAchievements.length ? `, cofnięto ${removedAchievements.length} osiągnięć` : ''} przez panel admina`, interaction);
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0x57F287).setTitle(t('✅ Wynik usunięty', '✅ Score Removed')).setDescription(desc)],
                 components: [new ActionRowBuilder().addComponents(
@@ -5015,8 +5056,19 @@ class InteractionHandler {
     }
 
     /**
-     * Kliknięcie „↩️ Cofnij wynik" przez gracza pod ogłoszeniem rekordu.
-     * Cofnąć może WYŁĄCZNIE właściciel wyniku i WYŁĄCZNIE swój najnowszy rekord.
+     * Czy klikający może cofnąć CUDZY rekord: administrator serwera, na którym rekord padł,
+     * albo head admin. Admin z innego serwera nie rusza cudzych danych.
+     */
+    _canAdminUndoRecord(interaction, session) {
+        if (this._isHeadAdmin(interaction.user.id)) return true;
+        if (!session?.guildId || interaction.guildId !== session.guildId) return false;
+        return interaction.member?.permissions?.has('Administrator') === true;
+    }
+
+    /**
+     * Kliknięcie „↩️ Cofnij wynik" pod ogłoszeniem rekordu.
+     * Cofnąć może właściciel wyniku ALBO administrator serwera (head admin zawsze),
+     * i WYŁĄCZNIE najnowszy rekord danego profilu.
      */
     async _handleRecordUndo(interaction, customId) {
         const publicMsgId = customId.slice('rec_undo_'.length);
@@ -5028,7 +5080,9 @@ class InteractionHandler {
             return;
         }
         // Właściciel = osoba (dowolny profil tej osoby cofa własny wynik)
-        if (getOwnerId(session.playerKey) !== interaction.user.id) {
+        const isOwner = getOwnerId(session.playerKey) === interaction.user.id;
+        const isAdmin = !isOwner && this._canAdminUndoRecord(interaction, session);
+        if (!isOwner && !isAdmin) {
             await interaction.reply({ content: msgs.recordUndoNotOwner, flags: ['Ephemeral'] });
             return;
         }
@@ -5045,7 +5099,7 @@ class InteractionHandler {
 
         // Potwierdzenie — cofnięcia nie da się odwrócić
         await interaction.reply({
-            content: msgs.recordUndoConfirmTitle,
+            content: isOwner ? msgs.recordUndoConfirmTitle : msgs.recordUndoAdminConfirmTitle,
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId(`rec_undo_ok_${publicMsgId}`)
@@ -5060,7 +5114,7 @@ class InteractionHandler {
         });
     }
 
-    /** Potwierdzone cofnięcie własnego rekordu przez gracza. */
+    /** Potwierdzone cofnięcie rekordu — przez właściciela albo przez admina serwera. */
     async _handleRecordUndoConfirm(interaction, customId) {
         const publicMsgId = customId.slice('rec_undo_ok_'.length);
         const session = this.recordRevertService?.get(publicMsgId);
@@ -5070,7 +5124,10 @@ class InteractionHandler {
             await interaction.update({ content: msgs.recordUndoExpired, components: [] });
             return;
         }
-        if (getOwnerId(session.playerKey) !== interaction.user.id) {
+        // Rolę ustalamy ponownie tutaj — customId nie jest źródłem prawdy o uprawnieniach
+        const isOwner = getOwnerId(session.playerKey) === interaction.user.id;
+        const isAdmin = !isOwner && this._canAdminUndoRecord(interaction, session);
+        if (!isOwner && !isAdmin) {
             await interaction.update({ content: msgs.recordUndoNotOwner, components: [] });
             return;
         }
@@ -5088,7 +5145,8 @@ class InteractionHandler {
         const actorName = interaction.member?.displayName || interaction.user.username;
 
         // Blokada przed podwójnym kliknięciem — status ustawiamy PRZED cofnięciem danych
-        await this.recordRevertService.markReverted(publicMsgId, 'owner', actorName);
+        const by = isOwner ? 'owner' : 'admin';
+        await this.recordRevertService.markReverted(publicMsgId, by, actorName);
 
         try {
             await this._cvRemoveRecord(session, { skipUndoInvalidate: true });
@@ -5106,13 +5164,21 @@ class InteractionHandler {
             this.ocrStatsService?.recordReverted().catch(() => {});
             this.adminPanelService?.refresh();
 
-            await this._applyRevertVisuals(interaction.client, session, 'owner', actorName, {
-                publicNote: msgs.recordUndoOwnerNote,
+            // Ogłoszenie dostaje notkę i nieaktywny czerwony przycisk: „Cofnął właściciel" albo „Cofnął admin"
+            await this._applyRevertVisuals(interaction.client, session, by, actorName, {
+                publicNote: isOwner
+                    ? msgs.recordUndoOwnerNote
+                    : formatMessage(msgs.recordUndoAdminNote, { adminName: actorName }),
             });
-            await interaction.editReply({ content: msgs.recordUndoDone, components: [] });
-            gl.info(`↩️ ${this.logService.nickLink(actorName, interaction.user.id)} samodzielnie cofnął swój ostatni rekord${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
+            await interaction.editReply({ content: isOwner ? msgs.recordUndoDone : msgs.recordUndoAdminDone, components: [] });
+            if (isOwner) {
+                gl.info(`↩️ ${this.logService.nickLink(actorName, interaction.user.id)} samodzielnie cofnął swój ostatni rekord${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
+            } else {
+                gl.info(`↩️ Administrator ${this.logService.nickLink(actorName, interaction.user.id)} cofnął rekord gracza ${session.playerKey}${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
+                this._ccAudit(interaction, `↩️ Cofnięto rekord gracza ${session.playerKey} (przycisk pod ogłoszeniem)`);
+            }
         } catch (err) {
-            gl.error(`❌ Błąd cofania rekordu przez właściciela: ${err.message}`);
+            gl.error(`❌ Błąd cofania rekordu (${isOwner ? 'właściciel' : 'admin'}): ${err.message}`);
             await interaction.editReply({ content: msgs.updateError, components: [] }).catch(() => {});
         }
     }
@@ -7917,12 +7983,41 @@ class InteractionHandler {
                 await this._handlePanelAchDel(interaction);
                 return;
             }
+            if (customId === 'panel_ach_ok_n') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelConfirmMany(interaction);
+                return;
+            }
             if (customId.startsWith('panel_ach_ok_')) {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
                 await this._handlePanelAchDelConfirm(interaction, customId.replace('panel_ach_ok_', ''));
+                return;
+            }
+            // Filtr osiągnięć po nazwie (PL/ENG), czyszczenie filtra i powrót do listy
+            if (customId === 'panel_ach_del_q') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelAchDelQuery(interaction);
+                return;
+            }
+            if (customId === 'panel_ach_del_clear' || customId === 'panel_ach_del_back') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const achSession = this._getAchDelSession(interaction.user.id);
+                if (achSession && customId === 'panel_ach_del_clear') achSession.query = '';
+                if (achSession) achSession.selected = [];
+                await interaction.deferUpdate();
+                await this._renderAchDelView(interaction);
                 return;
             }
             if (customId === 'panel_ocr') {
@@ -12795,8 +12890,49 @@ class InteractionHandler {
     async _handlePanelAchDelPlayerSelect(interaction) {
         const value = interaction.values[0]; // format: userId:guildId
         const [targetPlayerKey, targetGuildId] = value.split(':');
-        const t = this._panelT(interaction.guildId);
         await interaction.deferUpdate();
+        // Sesja panelu: gracz + filtr nazwy + zaznaczone osiągnięcia. Lista ID nie zmieści się
+        // w customId (limit 100 znaków), więc wybór wielu osiągnięć trzymamy tutaj.
+        this._achDelSessions.set(interaction.user.id, {
+            playerKey: targetPlayerKey, guildId: targetGuildId, query: '', selected: [], ts: Date.now()
+        });
+        await this._renderAchDelView(interaction);
+    }
+
+    /** Sesja panelu „Usuń osiągnięcia" (RAM, TTL 15 min — czysto UI, restart bota tylko ją zeruje) */
+    _getAchDelSession(userId) {
+        const s = this._achDelSessions.get(userId);
+        if (!s) return null;
+        if (Date.now() - s.ts > 15 * 60 * 1000) {
+            this._achDelSessions.delete(userId);
+            return null;
+        }
+        s.ts = Date.now();
+        return s;
+    }
+
+    /**
+     * Widok wyboru osiągnięć do usunięcia: multi-select (do 25 pozycji naraz) + filtr po
+     * nazwie polskiej ORAZ angielskiej. Bez filtra gracz z >25 osiągnięciami nie zmieściłby
+     * się w limicie select menu Discorda — stąd wyszukiwarka.
+     */
+    async _renderAchDelView(interaction, notice = null) {
+        const t = this._panelT(interaction.guildId);
+        const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+        const session = this._getAchDelSession(interaction.user.id);
+        if (!session) {
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                    .setTitle(t('🏆 Sesja wygasła', '🏆 Session Expired'))
+                    .setDescription(t('Rozpocznij wyszukiwanie gracza od nowa.', 'Start the player search again.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Szukaj gracza', 'Search Player')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+                )]
+            });
+            return;
+        }
+        const { playerKey: targetPlayerKey, guildId: targetGuildId, query } = session;
         try {
             const players = await this.rankingService.getSortedPlayers(targetGuildId);
             const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
@@ -12809,6 +12945,7 @@ class InteractionHandler {
                 : [];
 
             if (unlockedAchs.length === 0) {
+                this._achDelSessions.delete(interaction.user.id);
                 await interaction.editReply({
                     embeds: [new EmbedBuilder().setColor(0xFF6B35)
                         .setTitle(t('🏆 Brak osiągnięć', '🏆 No Achievements'))
@@ -12824,80 +12961,199 @@ class InteractionHandler {
                 return;
             }
 
-            const achOptions = [
-                {
-                    label: t('🗑️ Usuń WSZYSTKIE osiągnięcia', '🗑️ Remove ALL achievements'),
-                    description: t(`Usuwa wszystkie ${unlockedAchs.length} osiągnięcia i cały progress`, `Removes all ${unlockedAchs.length} achievements and all progress`).slice(0, 100),
-                    value: `all:${targetPlayerKey}:${targetGuildId}`,
-                },
-                ...unlockedAchs.slice(0, 24).map(a => ({
-                    label: `${a.icon} ${(a.namePol || a.nameEng || a.id).slice(0, 90)}`.slice(0, 100),
-                    description: (a.descPol || a.descEng || '').slice(0, 100),
-                    value: `${a.id}:${targetPlayerKey}:${targetGuildId}`,
-                })),
+            // Filtr obejmuje OBIE wersje nazwy (i ID), niezależnie od języka serwera —
+            // admin może znać osiągnięcie pod polską albo angielską nazwą.
+            const q = normalizeForSearch(query || '');
+            const matching = q
+                ? unlockedAchs.filter(a =>
+                    normalizeForSearch(a.namePol || '').includes(q) ||
+                    normalizeForSearch(a.nameEng || '').includes(q) ||
+                    normalizeForSearch(a.id || '').includes(q))
+                : unlockedAchs;
+
+            const shown = matching.slice(0, 25);
+            const descLines = [
+                t(`Gracz: **${displayName}**${serverNote}`, `Player: **${displayName}**${serverNote}`),
+                t(`Odblokowanych osiągnięć: **${unlockedAchs.length}**`, `Unlocked achievements: **${unlockedAchs.length}**`),
             ];
+            if (q) {
+                descLines.push(t(
+                    `Filtr: \`${query}\` — pasujących: **${matching.length}**`,
+                    `Filter: \`${query}\` — matching: **${matching.length}**`
+                ));
+            }
+            if (matching.length > 25) {
+                descLines.push(t(
+                    `⚠️ Lista obcięta do 25 — zawęź wyszukiwanie.`,
+                    `⚠️ List truncated to 25 — narrow your search.`
+                ));
+            }
+            descLines.push('');
+            descLines.push(t(
+                'Zaznacz jedno lub kilka osiągnięć do usunięcia.',
+                'Select one or more achievements to remove.'
+            ));
+            if (notice) descLines.unshift(notice, '');
+
+            const components = [];
+            if (shown.length > 0) {
+                components.push(new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder().setCustomId('panel_ach_del_as')
+                        .setPlaceholder(t('Wybierz osiągnięcia...', 'Select achievements...'))
+                        .setMinValues(1)
+                        .setMaxValues(shown.length)
+                        .addOptions(shown.map(a => ({
+                            // Etykieta w języku serwera, druga wersja nazwy w opisie —
+                            // dzięki temu widać, po czym jeszcze można wyszukiwać.
+                            label: `${a.icon} ${((isPol ? a.namePol : a.nameEng) || a.id).slice(0, 90)}`.slice(0, 100),
+                            description: `${(isPol ? a.nameEng : a.namePol) || a.id} | ${(isPol ? a.descPol : a.descEng) || ''}`.slice(0, 100),
+                            value: a.id,
+                        })))
+                ));
+            } else {
+                descLines.push(t('\n❌ Żadne osiągnięcie nie pasuje do filtra.', '\n❌ No achievement matches the filter.'));
+            }
+
+            const btnRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('panel_ach_del_q').setEmoji('🔎').setLabel(t('Szukaj osiągnięcia', 'Search Achievement')).setStyle(ButtonStyle.Primary),
+            );
+            if (q) {
+                btnRow.addComponents(
+                    new ButtonBuilder().setCustomId('panel_ach_del_clear').setEmoji('🧹').setLabel(t('Wyczyść filtr', 'Clear Filter')).setStyle(ButtonStyle.Secondary)
+                );
+            }
+            btnRow.addComponents(
+                new ButtonBuilder().setCustomId(`panel_ach_ok_all:${targetPlayerKey}:${targetGuildId}`).setEmoji('🗑️').setLabel(t('Usuń wszystkie', 'Remove All')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Inny gracz', 'Other Player')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
+            );
+            components.push(btnRow);
 
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0xFF6B35)
-                    .setTitle(t('🏆 Wybierz osiągnięcie', '🏆 Select Achievement'))
-                    .setDescription(t(
-                        `Gracz: **${displayName}**${serverNote}\nOdblokowanych osiągnięć: **${unlockedAchs.length}**\n\nWybierz osiągnięcie do usunięcia lub opcję "Usuń wszystkie".`,
-                        `Player: **${displayName}**${serverNote}\nUnlocked achievements: **${unlockedAchs.length}**\n\nSelect an achievement to remove or "Remove ALL".`
-                    ))],
-                components: [
-                    new ActionRowBuilder().addComponents(
-                        new StringSelectMenuBuilder().setCustomId('panel_ach_del_as')
-                            .setPlaceholder(t('Wybierz osiągnięcie...', 'Select achievement...'))
-                            .addOptions(achOptions)
-                    ),
-                    new ActionRowBuilder().addComponents(
-                        new ButtonBuilder().setCustomId('panel_ach_del').setEmoji('🔍').setLabel(t('Nowe wyszukiwanie', 'New Search')).setStyle(ButtonStyle.Primary),
-                        new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
-                    )
-                ]
+                    .setTitle(t('🏆 Wybierz osiągnięcia', '🏆 Select Achievements'))
+                    .setDescription(descLines.join('\n'))],
+                components
             });
         } catch (err) {
-            logger.error(`Błąd _handlePanelAchDelPlayerSelect (gracz ${targetPlayerKey}, serwer ${targetGuildId}):`, err);
+            logger.error(`Błąd _renderAchDelView (gracz ${targetPlayerKey}, serwer ${targetGuildId}):`, err);
             await interaction.editReply({ content: t('❌ Błąd wczytywania osiągnięć.', '❌ Error loading achievements.'), embeds: [], components: [] });
         }
     }
 
-    async _handlePanelAchDelAchSelect(interaction) {
-        const value = interaction.values[0]; // format: achId:userId:guildId  lub  all:userId:guildId
-        const parts = value.split(':');
-        // achId może zawierać '_' ale nie ':', więc pierwsze dwie ostatnie wartości to userId i guildId
-        const targetGuildId = parts[parts.length - 1];
-        const targetPlayerKey = parts[parts.length - 2];
-        const achId = parts.slice(0, parts.length - 2).join(':');
-        const isAll = achId === 'all';
+    /** Modal filtra osiągnięć — szuka po nazwie polskiej i angielskiej */
+    async _handlePanelAchDelQuery(interaction) {
         const t = this._panelT(interaction.guildId);
+        const session = this._getAchDelSession(interaction.user.id);
+        if (!session) {
+            await interaction.reply({ content: t('❌ Sesja wygasła — zacznij od wyszukania gracza.', '❌ Session expired — start by searching for a player.'), flags: ['Ephemeral'] });
+            return;
+        }
+        const modal = new ModalBuilder()
+            .setCustomId('panel_ach_del_q_modal')
+            .setTitle(t('🔎 Szukaj osiągnięcia', '🔎 Search Achievement'))
+            .addComponents(new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('ach_del_name')
+                    .setLabel(t('Nazwa PL lub ENG', 'Name in PL or ENG'))
+                    .setStyle(TextInputStyle.Short)
+                    .setPlaceholder(t('np. Lewiatan albo Leviathan', 'e.g. Leviathan or Lewiatan'))
+                    .setRequired(false)
+                    .setMaxLength(60)
+            ));
+        await interaction.showModal(modal);
+    }
 
+    async _handlePanelAchDelQuerySubmit(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const session = this._getAchDelSession(interaction.user.id);
+        await interaction.deferUpdate();
+        if (!session) {
+            await this._renderAchDelView(interaction);
+            return;
+        }
+        session.query = (interaction.fields.getTextInputValue('ach_del_name') || '').trim();
+        session.selected = [];
+        await this._renderAchDelView(interaction);
+    }
+
+    /** Zaznaczenie osiągnięć (multi-select) → ekran potwierdzenia z ich listą */
+    async _handlePanelAchDelAchSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+        const session = this._getAchDelSession(interaction.user.id);
+        if (!session) {
+            await interaction.deferUpdate();
+            await this._renderAchDelView(interaction);
+            return;
+        }
+        const achIds = interaction.values || [];
+        session.selected = achIds;
+
+        const { playerKey: targetPlayerKey, guildId: targetGuildId } = session;
         const players = await this.rankingService.getSortedPlayers(targetGuildId);
         const player = players.find(p => (p.playerKey || p.userId) === targetPlayerKey);
         const displayName = formatProfileDisplayName(player?.username || getOwnerId(targetPlayerKey), getProfileIndex(targetPlayerKey));
         const targetGuildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
         const serverNote = targetGuildName ? ` (${targetGuildName})` : '';
 
-        const confirmId = isAll
-            ? `panel_ach_ok_all:${targetPlayerKey}:${targetGuildId}`
-            : `panel_ach_ok_1:${achId}:${targetPlayerKey}:${targetGuildId}`;
-
-        const descPol = isAll
-            ? `Czy na pewno chcesz usunąć **WSZYSTKIE** osiągnięcia i cały progress gracza **${displayName}**${serverNote}?\n\nTej operacji nie można cofnąć.`
-            : `Czy na pewno chcesz usunąć osiągnięcie **${achId}** gracza **${displayName}**${serverNote}?`;
-        const descEng = isAll
-            ? `Are you sure you want to remove **ALL** achievements and progress of player **${displayName}**${serverNote}?\n\nThis action cannot be undone.`
-            : `Are you sure you want to remove achievement **${achId}** of player **${displayName}**${serverNote}?`;
+        const defs = this.achievementService?.getAchievementDefs(achIds) || [];
+        const list = defs.map(a => `${a.icon} **${(isPol ? a.namePol : a.nameEng) || a.id}**`).join('\n') || achIds.join(', ');
 
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0xFF6B35)
                 .setTitle(t('🏆 Potwierdzenie', '🏆 Confirm'))
-                .setDescription(t(descPol, descEng))],
+                .setDescription(t(
+                    `Usunąć **${achIds.length}** osiągnięcie(a) gracza **${displayName}**${serverNote}?\n\n${list}`,
+                    `Remove **${achIds.length}** achievement(s) of player **${displayName}**${serverNote}?\n\n${list}`
+                ))],
             components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(confirmId).setEmoji('✅').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_ach_ok_n').setEmoji('✅').setLabel(t('Usuń zaznaczone', 'Remove Selected')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('panel_ach_del_back').setEmoji('◀️').setLabel(t('Wróć do listy', 'Back to List')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('panel_back').setEmoji('❌').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
             )]
         });
+    }
+
+    /** Usunięcie zaznaczonych osiągnięć (lista w sesji — nie mieści się w customId) */
+    async _handlePanelAchDelConfirmMany(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+        await interaction.deferUpdate();
+        const session = this._getAchDelSession(interaction.user.id);
+        if (!session || !session.selected?.length) {
+            await this._renderAchDelView(interaction, t('⚠️ Zaznaczenie wygasło — wybierz ponownie.', '⚠️ Selection expired — pick again.'));
+            return;
+        }
+        const { playerKey: targetPlayerKey, guildId: targetGuildId, selected } = session;
+        try {
+            const removed = await this.achievementService.removeAchievements(targetGuildId, targetPlayerKey, selected);
+            const defs = this.achievementService.getAchievementDefs(removed);
+            const names = defs.map(a => `${a.icon} **${(isPol ? a.namePol : a.nameEng) || a.id}**`).join('\n');
+            const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
+            const serverNote = guildName ? ` (${guildName})` : '';
+
+            await this.logService.logMessage('success', `Usunięto ${removed.length} osiągnięć gracza ${targetPlayerKey} (serwer ${guildName || targetGuildId}) przez panel admina`, interaction);
+            this._ccAudit(interaction, `🏆 Usunięto ${removed.length} osiągnięć gracza ${targetPlayerKey}`);
+            this.adminPanelService?.refresh();
+
+            session.selected = [];
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle(t('✅ Osiągnięcia usunięte', '✅ Achievements Removed'))
+                    .setDescription(t(
+                        `Gracz <@${getOwnerId(targetPlayerKey)}>${serverNote} stracił **${removed.length}** osiągnięcie(a):\n\n${names}`,
+                        `Player <@${getOwnerId(targetPlayerKey)}>${serverNote} lost **${removed.length}** achievement(s):\n\n${names}`
+                    ))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ach_del_back').setEmoji('🏆').setLabel(t('Usuń kolejne', 'Remove More')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Powrót do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary)
+                )]
+            });
+        } catch (err) {
+            logger.error(`Błąd _handlePanelAchDelConfirmMany (gracz ${targetPlayerKey}, serwer ${targetGuildId}):`, err);
+            await interaction.editReply({ content: t('❌ Błąd usuwania osiągnięć.', '❌ Error removing achievements.'), embeds: [], components: [] });
+        }
     }
 
     async _handlePanelAchDelConfirm(interaction, rawValue) {
