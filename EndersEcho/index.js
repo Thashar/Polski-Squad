@@ -45,6 +45,7 @@ const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const cron = require('node-cron');
 const AdminPanelService = require('./services/adminPanelService');
+const WebRankingSyncService = require('./services/webRankingSyncService');
 const CommandUsageService = require('./services/commandUsageService');
 
 const logger = createBotLogger('EndersEcho');
@@ -142,9 +143,11 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
     commandUsageService,
     profileRegistryService,
 });
+// Wysyłka TOP 10 na stronę (endersecho.thashar.dev) — kierunek bot → strona
+const webRankingSyncService = new WebRankingSyncService(config, logger, { rankingService, guildConfigService });
 // Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
 aiOcrService.setStatsService(ocrStatsService);
-const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService, profileRegistryService, recordRevertService);
+const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService, profileRegistryService, recordRevertService, webRankingSyncService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -216,6 +219,12 @@ async function initializeBot() {
         await adminPanelService.load();
         if (adminPanelService.isConfigured()) {
             adminPanelService.refresh();
+        }
+
+        // Pełny snapshot rankingów TOP 10 na stronę (potem już tylko zmiany po /update)
+        if (webRankingSyncService.isEnabled()) {
+            await webRankingSyncService.load();
+            webRankingSyncService.syncAll(client).catch(() => {});
         }
 
         // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
