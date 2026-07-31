@@ -276,6 +276,84 @@ class AchievementService {
         });
     }
 
+    /**
+     * Usuwa kilka wskazanych osiągnięć naraz (jeden zapis zamiast N).
+     * @param {string} guildId
+     * @param {string} playerKey
+     * @param {string[]} achIds
+     * @returns {Promise<string[]>} faktycznie usunięte ID (pomija te, których gracz nie miał)
+     */
+    async removeAchievements(guildId, playerKey, achIds) {
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                const unlocked = data[playerKey]?.unlocked;
+                if (!unlocked) return [];
+                const removed = [];
+                for (const id of achIds || []) {
+                    if (!unlocked[id]) continue;
+                    delete unlocked[id];
+                    removed.push(id);
+                }
+                if (removed.length > 0) await this.saveData(guildId, data);
+                return removed;
+            } catch { return []; }
+        });
+    }
+
+    /**
+     * Usuwa osiągnięcia przypisane do cofanego rekordu — czyli te odblokowane od jego
+     * momentu (`unlockedAt >= fromTimestamp`), ale WYŁĄCZNIE z kategorii zależnych od
+     * wyniku (score/records/bosses/prestige). Kategoria `explorer` zostaje nietknięta:
+     * jej osiągnięcia biorą się z przeglądania rankingu, subskrypcji i wyszukiwania
+     * profili, więc nie mają nic wspólnego z usuwanym wynikiem.
+     * Używane przy „🧹 Usuń wynik", gdy kasowany wpis jest ostatnim (aktualnym) rekordem
+     * gracza — tylko wtedy cięcie po czasie nie zabiera osiągnięć za późniejsze, legalne wyniki.
+     * @param {string} guildId
+     * @param {string} playerKey
+     * @param {string} fromTimestamp - timestamp usuwanego wpisu (ISO)
+     * @param {{ removedRecordCount?: number, previousRecord?: Object|null }} [opts]
+     * @returns {Promise<string[]>} ID usuniętych osiągnięć
+     */
+    async clearRecordAchievementsAfter(guildId, playerKey, fromTimestamp, { removedRecordCount = 0, previousRecord = null } = {}) {
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                const userData = data[playerKey];
+                if (!userData?.unlocked) return [];
+                const cutoff = new Date(fromTimestamp).getTime();
+                const scoreRelated = new Set(
+                    ACHIEVEMENTS.filter(a => a.category !== 'explorer').map(a => a.id)
+                );
+                const removed = [];
+                for (const [id, info] of Object.entries(userData.unlocked)) {
+                    if (!scoreRelated.has(id)) continue;
+                    const ts = info?.unlockedAt ? new Date(info.unlockedAt).getTime() : 0;
+                    if (ts >= cutoff) {
+                        delete userData.unlocked[id];
+                        removed.push(id);
+                    }
+                }
+                if (userData.progress) {
+                    userData.progress.recordCount = Math.max(0, (userData.progress.recordCount || 0) - removedRecordCount);
+                    userData.progress.lastRecordAt = previousRecord?.timestamp || null;
+                    userData.progress.lastRecordBeatAt = fromTimestamp;
+                }
+                if (removed.length > 0 || removedRecordCount > 0) await this.saveData(guildId, data);
+                return removed;
+            } catch (err) {
+                logger.error(`clearRecordAchievementsAfter error (gracz ID ${playerKey}, serwer "${this.config.guilds?.find(g => g.id === guildId)?.tag || guildId}"): ${err.message}`);
+                return [];
+            }
+        });
+    }
+
+    /** Definicje osiągnięć po ID — do etykiet w panelu admina. */
+    getAchievementDefs(achIds) {
+        const wanted = new Set(achIds || []);
+        return ACHIEVEMENTS.filter(a => wanted.has(a.id));
+    }
+
     async getUnlockedAchievements(guildId, playerKey) {
         try {
             const data = await this.loadData(guildId);
