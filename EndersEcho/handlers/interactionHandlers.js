@@ -8014,8 +8014,25 @@ class InteractionHandler {
                     return;
                 }
                 const achSession = this._getAchDelSession(interaction.user.id);
-                if (achSession && customId === 'panel_ach_del_clear') achSession.query = '';
+                if (achSession && customId === 'panel_ach_del_clear') {
+                    achSession.query = '';
+                    achSession.page = 0;
+                }
                 if (achSession) achSession.selected = [];
+                await interaction.deferUpdate();
+                await this._renderAchDelView(interaction);
+                return;
+            }
+            if (customId === 'panel_ach_del_pg_prev' || customId === 'panel_ach_del_pg_next') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                const achSession = this._getAchDelSession(interaction.user.id);
+                if (achSession) {
+                    achSession.page = Math.max(0, (achSession.page || 0) + (customId === 'panel_ach_del_pg_next' ? 1 : -1));
+                    achSession.selected = [];
+                }
                 await interaction.deferUpdate();
                 await this._renderAchDelView(interaction);
                 return;
@@ -12894,7 +12911,7 @@ class InteractionHandler {
         // Sesja panelu: gracz + filtr nazwy + zaznaczone osiągnięcia. Lista ID nie zmieści się
         // w customId (limit 100 znaków), więc wybór wielu osiągnięć trzymamy tutaj.
         this._achDelSessions.set(interaction.user.id, {
-            playerKey: targetPlayerKey, guildId: targetGuildId, query: '', selected: [], ts: Date.now()
+            playerKey: targetPlayerKey, guildId: targetGuildId, query: '', selected: [], page: 0, ts: Date.now()
         });
         await this._renderAchDelView(interaction);
     }
@@ -12971,7 +12988,15 @@ class InteractionHandler {
                     normalizeForSearch(a.id || '').includes(q))
                 : unlockedAchs;
 
-            const shown = matching.slice(0, 25);
+            // Select menu Discorda mieści maks. 25 opcji, a osiągnięć może być kilkadziesiąt —
+            // stąd paginacja. Strona trzymana w sesji i przycinana do zakresu, bo liczba
+            // pozycji zmienia się po filtrze i po usunięciu osiągnięć.
+            const PER_PAGE = 25;
+            const totalPages = Math.max(1, Math.ceil(matching.length / PER_PAGE));
+            const page = Math.min(Math.max(0, session.page || 0), totalPages - 1);
+            session.page = page;
+            const shown = matching.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
+
             const descLines = [
                 t(`Gracz: **${displayName}**${serverNote}`, `Player: **${displayName}**${serverNote}`),
                 t(`Odblokowanych osiągnięć: **${unlockedAchs.length}**`, `Unlocked achievements: **${unlockedAchs.length}**`),
@@ -12982,10 +13007,10 @@ class InteractionHandler {
                     `Filter: \`${query}\` — matching: **${matching.length}**`
                 ));
             }
-            if (matching.length > 25) {
+            if (totalPages > 1) {
                 descLines.push(t(
-                    `⚠️ Lista obcięta do 25 — zawęź wyszukiwanie.`,
-                    `⚠️ List truncated to 25 — narrow your search.`
+                    `Strona **${page + 1}/${totalPages}** (pozycje ${page * PER_PAGE + 1}–${page * PER_PAGE + shown.length})`,
+                    `Page **${page + 1}/${totalPages}** (items ${page * PER_PAGE + 1}–${page * PER_PAGE + shown.length})`
                 ));
             }
             descLines.push('');
@@ -13028,6 +13053,17 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Do panelu', 'To Panel')).setStyle(ButtonStyle.Secondary),
             );
             components.push(btnRow);
+
+            if (totalPages > 1) {
+                components.push(new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('panel_ach_del_pg_prev').setEmoji('◀️')
+                        .setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+                    new ButtonBuilder().setCustomId('panel_ach_del_pg_info')
+                        .setLabel(`${page + 1}/${totalPages}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+                    new ButtonBuilder().setCustomId('panel_ach_del_pg_next').setEmoji('▶️')
+                        .setStyle(ButtonStyle.Secondary).setDisabled(page >= totalPages - 1),
+                ));
+            }
 
             await interaction.editReply({
                 embeds: [new EmbedBuilder().setColor(0xFF6B35)
@@ -13074,6 +13110,7 @@ class InteractionHandler {
         }
         session.query = (interaction.fields.getTextInputValue('ach_del_name') || '').trim();
         session.selected = [];
+        session.page = 0; // nowy filtr → wracamy na pierwszą stronę
         await this._renderAchDelView(interaction);
     }
 
