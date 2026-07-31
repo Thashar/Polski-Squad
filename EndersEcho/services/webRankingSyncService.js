@@ -43,6 +43,7 @@ class WebRankingSyncService {
 
         this.stateFile = path.join(config.ranking?.dataDir || path.join(__dirname, '../data'), 'web_sync.json');
         this._hashes = {};          // guildId → skrót ostatnio wysłanego TOP 10
+        this._lastSync = null;      // { at, kind: 'full'|'guild', count, guildName } — do Centrum Dowodzenia
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
     }
 
@@ -56,8 +57,10 @@ class WebRankingSyncService {
             const raw = await fs.readFile(this.stateFile, 'utf8');
             const data = JSON.parse(raw);
             this._hashes = data?.hashes || {};
+            this._lastSync = data?.lastSync || null;
         } catch {
             this._hashes = {};
+            this._lastSync = null;
         }
     }
 
@@ -65,7 +68,7 @@ class WebRankingSyncService {
         this._queue = this._queue.then(async () => {
             try {
                 await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-                await fs.writeFile(this.stateFile, JSON.stringify({ hashes: this._hashes }, null, 2), 'utf8');
+                await fs.writeFile(this.stateFile, JSON.stringify({ hashes: this._hashes, lastSync: this._lastSync }, null, 2), 'utf8');
             } catch (err) {
                 this.logger.warn(`⚠️ Nie udało się zapisać stanu wysyłki rankingów: ${err.message}`);
             }
@@ -110,6 +113,18 @@ class WebRankingSyncService {
         };
     }
 
+    /**
+     * Informacja o ostatniej wysyłce — pokazywana w Centrum Dowodzenia.
+     * @returns {{ enabled: boolean, lastSync: Object|null, guildsTracked: number }}
+     */
+    getStatus() {
+        return {
+            enabled: this.isEnabled(),
+            lastSync: this._lastSync,
+            guildsTracked: Object.keys(this._hashes).length,
+        };
+    }
+
     /** Skrót TOP 10 — porównanie decyduje, czy w ogóle wysyłać. */
     _hashTop(payload) {
         const material = JSON.stringify(payload.top.map(p => [p.rank, p.name, p.score, p.bossName]));
@@ -151,6 +166,7 @@ class WebRankingSyncService {
 
             await this._post({ guilds, replaceAll: true });
             for (const g of guilds) this._hashes[g.id] = this._hashTop(g);
+            this._lastSync = { at: new Date().toISOString(), kind: 'full', count: guilds.length, guildName: null };
             await this._saveState();
             this.logger.info(`🌐 Wysłano rankingi na stronę: ${guilds.length} serwer(ów)`);
         } catch (err) {
@@ -174,6 +190,7 @@ class WebRankingSyncService {
 
             await this._post({ guilds: [payload] });
             this._hashes[guildId] = hash;
+            this._lastSync = { at: new Date().toISOString(), kind: 'guild', count: 1, guildName: payload.name };
             await this._saveState();
             this.logger.info(`🌐 Zaktualizowano ranking serwera "${payload.name}" na stronie`);
             return true;
