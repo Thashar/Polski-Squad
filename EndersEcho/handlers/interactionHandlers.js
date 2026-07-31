@@ -125,7 +125,7 @@ function buildGeminiUsage(aiResult) {
 }
 
 class InteractionHandler {
-    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null, profileRegistryService = null, recordRevertService = null) {
+    constructor(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, _botOps, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService = null, chartService = null, guildBanService = null, globalTop10Service = null, bossAliasService = null, ocrStatsService = null, bossRecordService = null, adminPanelService = null, commandUsageService = null, milestoneService = null, profileRegistryService = null, recordRevertService = null, webRankingSyncService = null) {
         this.config = config;
         this.ocrService = ocrService;
         this.aiOcrService = aiOcrService;
@@ -155,6 +155,7 @@ class InteractionHandler {
         this.milestoneService = milestoneService;
         this.profileRegistryService = profileRegistryService;
         this.recordRevertService = recordRevertService;
+        this.webRankingSyncService = webRankingSyncService;
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -3976,6 +3977,7 @@ class InteractionHandler {
                 interaction.member?.displayName || interaction.user.username).catch(() => {});
             this._ccAudit(interaction, `🧹 Usunięto wynik ${removed?.score || ''} gracza ${oldUsername}`);
             this.adminPanelService?.refresh();
+            this.webRankingSyncService?.syncGuild(targetGuildId, interaction.client).catch(() => {});
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
             let desc = t(
@@ -5163,6 +5165,8 @@ class InteractionHandler {
             }
             this.ocrStatsService?.recordReverted().catch(() => {});
             this.adminPanelService?.refresh();
+            // Cofnięcie mogło zmienić TOP 10 — odśwież ranking na stronie
+            this.webRankingSyncService?.syncGuild(session.guildId, interaction.client).catch(() => {});
 
             // Ogłoszenie dostaje notkę i nieaktywny czerwony przycisk: „Cofnął właściciel" albo „Cofnął admin"
             await this._applyRevertVisuals(interaction.client, session, by, actorName, {
@@ -6472,6 +6476,8 @@ class InteractionHandler {
                     this.adminPanelService.setLastRecord(userName, bestScore, bossName, guildId);
                     this.adminPanelService.refresh();
                 }
+                // TOP 10 na stronie — wysyłka tylko gdy czołówka serwera faktycznie się zmieniła
+                this.webRankingSyncService?.syncGuild(guildId, interaction.client).catch(() => {});
             }
 
             // Per-boss rekord (zawsze po pozytywnym OCR, niezależnie od isNewRecord)

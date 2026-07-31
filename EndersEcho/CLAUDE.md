@@ -704,6 +704,21 @@
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
+## Rankingi TOP 10 na stronie (endersecho.thashar.dev)
+
+**Plik:** `services/webRankingSyncService.js` · **Stan:** `data/web_sync.json` · **Odbiornik:** `POST /api/ee-rankings` w workerze repo `thashar.dev`
+
+- **Kierunek jest jeden: bot → strona.** Strona NIGDY nie odpytuje bota, więc serwer produkcyjny zostaje zamknięty na świat, a ranking na stronie działa nawet gdy bot jest zrestartowany (Worker oddaje ostatni snapshot z Durable Object)
+- **Co jedzie:** nazwa serwera, tag, liczba graczy (osób, `countPeople`) i TOP 10 — pozycja, nick (`formatProfileDisplayName`, więc profile dodatkowe mają `②`), wynik, boss i data. **ŚWIADOMIE bez ID Discorda i avatarów** — nick wystarcza do rankingu, a ID dałoby się połączyć z kontem
+- **Kiedy:**
+  - przy starcie bota → `syncAll(client)`: pełny snapshot wszystkich skonfigurowanych serwerów, na których bot jest obecny, z flagą `replaceAll` (Worker kasuje wtedy serwery, których bot już nie obsługuje — inaczej wisiałyby na stronie z zamrożonym rankingiem)
+  - po każdym zapisanym wyniku → `syncGuild(guildId, client)` **tylko gdy TOP 10 faktycznie się zmienił** (porównanie skrótu SHA-1 listy: pozycja + nick + wynik + boss). Zwykłe `/update`, które nie rusza czołówki, nie generuje żadnego ruchu
+  - dodatkowo po cofnięciu rekordu (`rec_undo_*`) i po `🧹 Usuń wynik` — obie akcje mogą zmienić czołówkę
+- **Persistencja skrótów:** `data/web_sync.json` — po restarcie bot nie wysyła wszystkiego ponownie tylko dlatego, że zapomniał, co już wysłał (pełny `syncAll` przy starcie i tak odświeża stronę)
+- **Wyłączone bez konfiguracji:** brak `ENDERSECHO_WEB_SYNC_URL` lub `ENDERSECHO_WEB_SYNC_TOKEN` → `isEnabled()` zwraca `false` i serwis nic nie robi (żadnych błędów w logach)
+- **Błędy nie przerywają flow** — wysyłka jest fire-and-forget, a niepowodzenie ląduje jako `warn` w logu
+- **Po stronie strony:** kafelki klanów w sekcji „COMMUNITIES USING THE BOT" renderowane są z tych danych i dopiero wtedy stają się klikalne; klik otwiera nakładkę z embedem TOP 10 w stylu bota. Gdy API nie odpowie, zostaje statyczna, nieklikalna lista z HTML-a
+
 **Struktura danych:**
 ```
 EndersEcho/data/
@@ -961,6 +976,12 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) bot **automatycz
 **Konfiguracja (zmienna env):**
 ```env
 ENDERSECHO_ADMIN_PANEL_CHANNEL_ID=id_kanalu_head_admina
+
+# Rankingi TOP 10 na stronie (opcjonalne) — bez tych zmiennych wysyłka jest wyłączona
+# URL endpointu workera + sekret ustawiony po stronie Cloudflare (wrangler secret put EE_RANKING_TOKEN)
+ENDERSECHO_WEB_SYNC_URL=https://endersecho.thashar.dev/api/ee-rankings
+ENDERSECHO_WEB_SYNC_TOKEN=ten_sam_sekret_co_w_cloudflare
+ENDERSECHO_WEB_SYNC_TOP=10
 ```
 
 **Działanie:** Panel to **7 osobnych wiadomości** (każda: 1 embed + własne rzędy przycisków) na kanale head admina. Edytowane automatycznie po każdym zdarzeniu. Kolejność sekcji = `SECTION_KEYS` w `adminPanelService.js`: `system, users, servers, bosses, stats, costs, tools`. Przy zmianie układu sekcji stare wiadomości są usuwane (iteracja po `Object.values(_messageIds)` — także osierocone klucze starych układów) i wysyłane od nowa. Wszystkie dynamiczne pola przycinane helperem `capField()` (limit 1024/pole, 4096/opis) — zabezpieczenie przed crashem.
