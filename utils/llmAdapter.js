@@ -78,11 +78,16 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
     /**
      * Wywołanie Gemini (multimodal). Zwraca znormalizowany payload.
      */
-    async function callGemini({ model, parts, maxOutputTokens, safetySettings, meta }) {
+    async function callGemini({ model, parts, maxOutputTokens, temperature, safetySettings, meta }) {
         const client = getGemini();
+        const generationConfig = { maxOutputTokens };
+        // temperature podawana jawnie (np. 0 dla OCR) - bez tego Gemini używa domyślnej 1.0,
+        // co przy zadaniach odczytu daje niedeterministyczne odpowiedzi (raz lista, raz odmowa)
+        if (typeof temperature === 'number') generationConfig.temperature = temperature;
+
         const generative = client.getGenerativeModel({
             model,
-            generationConfig: { maxOutputTokens },
+            generationConfig,
             safetySettings,
         });
 
@@ -162,6 +167,7 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
         parts,
         messages,        // alternatywa dla parts (chat completions)
         maxOutputTokens,
+        temperature,      // opcjonalna - gdy pominięta, provider używa własnej domyślnej
         safetySettings,
         meta = {},
     }) {
@@ -195,6 +201,7 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
             // porównywać koszty/tokens/durację dla różnych kombinacji.
             if (meta.promptName)     span.setAttribute('llm.prompt.name',    meta.promptName);
             if (meta.promptVersion)  span.setAttribute('llm.prompt.version', meta.promptVersion);
+            if (typeof temperature === 'number') span.setAttribute('llm.temperature', temperature);
 
             // input.value — serializujemy messages/parts. Dla obrazów w inlineData
             // zastępujemy base64 placeholderem, żeby nie wrzucać MB-ów do Langfuse.
@@ -204,7 +211,7 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
             } catch (_) { /* cicho — atrybut jest pomocniczy */ }
 
             try {
-                const raw = await driver({ model, parts, messages, maxOutputTokens, safetySettings, meta });
+                const raw = await driver({ model, parts, messages, maxOutputTokens, temperature, safetySettings, meta });
                 const durationMs = Date.now() - startedAt;
 
                 span.setAttribute('llm.usage.prompt_tokens',     raw.inputTokens);
