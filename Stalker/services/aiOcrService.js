@@ -12,10 +12,23 @@ const SAFETY_SETTINGS_OFF = [
 
 const PROMPT_VERSIONS = {
     'extract-results':       'v1',
-    'extract-results-batch': 'v4',
-    'extract-nicks-batch':   'v2',
+    'extract-results-batch': 'v5',
+    'extract-nicks-batch':   'v3',
     'extract-equipment':     'v1',
 };
+
+// OCR to zadanie odczytu, nie kreatywne - domyślna temperatura Gemini (1.0) powodowała,
+// że model przy identycznym wejściu raz zwracał listę, a raz odmawiał ("potrzebuję
+// czytelniejszych zdjęć") mimo wyraźnych screenów.
+const OCR_TEMPERATURE = 0;
+
+// Fragment doklejany do promptu przy ponowieniu, gdy AI zamiast listy zwróciło prozę
+// (odmowa / prośba o lepsze zdjęcia). Wymusza sam format odpowiedzi.
+const RETRY_FORMAT_REMINDER = `
+
+UWAGA: poprzednia odpowiedź była nieprawidłowa - zawierała komentarz zamiast listy.
+Odpowiedz TERAZ wyłącznie liniami w wymaganym formacie, bez żadnego zdania wprowadzającego,
+bez wyjaśnień i bez próśb o inne zdjęcia. Odczytaj tyle, ile jesteś w stanie odczytać.`;
 
 const logger = createBotLogger('Stalker');
 
@@ -52,7 +65,7 @@ class AIOCRService {
      * Błędy 503 (przeciążone API) retry do 10x niezależnie od parametru `retries`.
      * Po 10 nieudanych próbach 503 rzuca błąd z flagą `isAPIOverloaded = true`.
      */
-    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3) {
+    async _generateContent(parts, maxOutputTokens, meta = {}, retries = 3, temperature = OCR_TEMPERATURE) {
         let lastError;
         let regularAttempts = 0;
         let overloadedAttempts = 0;
@@ -65,6 +78,7 @@ class AIOCRService {
                     model:    this.modelName,
                     parts,
                     maxOutputTokens,
+                    temperature,
                     safetySettings: SAFETY_SETTINGS_OFF,
                     meta,
                 });
@@ -102,6 +116,58 @@ class AIOCRService {
                 await new Promise(r => setTimeout(r, delay));
             }
         }
+    }
+
+    /**
+     * Czy odpowiedź to krótki, właściwy sygnał "brak wyników na zdjęciu" (a nie odmowa prozą).
+     * Legalny sygnał jest jednozdaniowy - dłuższy tekst bez sparsowanych graczy oznacza,
+     * że model zszedł z formatu (np. wymyślił, że zdjęcia są nieczytelne).
+     * @param {string} text
+     * @returns {boolean}
+     */
+    _isShortNoDataSignal(text) {
+        const trimmed = (text || '').trim();
+        return trimmed.length <= 60 && trimmed.toLowerCase().includes('nie wykryto');
+    }
+
+    /**
+     * Wysyła zapytanie batch i - gdy model odpowie prozą zamiast listy - ponawia JEDEN raz
+     * z doklejonym przypomnieniem o formacie. Chroni przed odmowami typu "potrzebuję
+     * czytelniejszych zdjęć", które przy poprawnych screenach kończyły sesję z 0 graczy.
+     * @param {{parts: Array, prompt: string, logPrefix: string, meta: Object, parse: Function}} opts
+     * @returns {Promise<Object>} wynik parsera
+     */
+    async _requestWithFormatRetry({ parts, prompt, logPrefix, meta, parse }) {
+        let lastResult = null;
+
+        for (let attempt = 1; attempt <= 2; attempt++) {
+            const promptText = attempt === 1 ? prompt : prompt + RETRY_FORMAT_REMINDER;
+            const attemptParts = [...parts, { text: promptText }];
+
+            logger.info(`${logPrefix} Wysyłam zapytanie zbiorcze do Gemini Vision${attempt > 1 ? ' (ponowienie - wymuszenie formatu)' : ''}...`);
+
+            const res = await this._generateContent(attemptParts, 4000, meta);
+
+            logger.info(`${logPrefix} Odpowiedź Gemini:`);
+            logger.info(res.text);
+
+            lastResult = parse(res.text);
+
+            if (lastResult.players.length > 0) return lastResult;
+
+            if (this._isShortNoDataSignal(res.text)) {
+                logger.info(`${logPrefix} Model zgłosił brak danych na zdjęciach - bez ponawiania`);
+                return lastResult;
+            }
+
+            if (attempt === 1) {
+                logger.warn(`${logPrefix} Odpowiedź poza formatem (0 graczy, tekst opisowy) - ponawiam z wymuszeniem formatu`);
+            } else {
+                logger.error(`${logPrefix} Ponowienie też nie zwróciło listy graczy - zwracam pusty wynik`);
+            }
+        }
+
+        return lastResult;
     }
 
     /**
@@ -192,27 +258,29 @@ REGUŁY KRYTYCZNE:
 - Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. Zdjęcie zawiera tylko kilka nicków i wyników - lista w odpowiedzi ma być TAK SAMO krótka.
 - NIE wypisuj graczy z listy Discord, których NIE MA na zdjęciach. Osoby bez dopasowania na zdjęciu POMIŃ całkowicie - NIE podawaj dla nich wyniku 0 ani żadnego innego.
 - Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
-- NIE wymyślaj wyników. Jeśli gracz jest widoczny, ale jego wynik jest nieczytelny, pomiń tego gracza.
+- Wynik przepisz dokładnie tak, jak widnieje na zdjęciu - nie zaokrąglaj i nie przeliczaj.
 
-Zwróć wynik w następującym formacie (jeden gracz na linię):
-<nick na discordzie> - <wynik>
+FORMAT ODPOWIEDZI (bezwzględnie obowiązkowy):
+- Odpowiedź ma zawierać WYŁĄCZNIE linie w formacie: <nick na discordzie> - <wynik>
+- ŻADNYCH zdań wprowadzających, komentarzy, wyjaśnień, podsumowań ani formatowania markdown.
+- NIGDY nie proś o inne, wyraźniejsze czy pełniejsze zdjęcia - pracujesz na tym, co dostałeś.
+- Częściowa nieczytelność NIE jest powodem do odmowy: wypisz wszystkich graczy, których odczytałeś, a pojedynczego gracza z nieczytelnym wynikiem po prostu pomiń w liście.
 
-Jeśli nie możesz odczytać wyników lub zdjęcia nie zawierają wyników graczy, odpowiedz: "Nie wykryto wyników graczy".`;
+Wyjątek - JEDYNY przypadek innej odpowiedzi: gdy na zdjęciach nie ma w ogóle tabeli wyników z gry
+(np. zupełnie inny ekran, zrzut spoza gry). Odpowiedz wtedy dokładnie: "Nie wykryto wyników graczy".`;
 
-            parts.push({ text: prompt });
-
-            logger.info('[AI OCR - Batch] Wysyłam zapytanie zbiorcze do Gemini Vision...');
-
-            const res = await this._generateContent(parts, 4000, {
-                step:          'extract-results-batch',
-                promptName:    'extract-results-batch',
-                promptVersion: PROMPT_VERSIONS['extract-results-batch'],
+            const result = await this._requestWithFormatRetry({
+                parts,
+                prompt,
+                logPrefix: '[AI OCR - Batch]',
+                meta: {
+                    step:          'extract-results-batch',
+                    promptName:    'extract-results-batch',
+                    promptVersion: PROMPT_VERSIONS['extract-results-batch'],
+                },
+                parse: text => this.parseAIResponse(text, options),
             });
 
-            logger.info('[AI OCR - Batch] Odpowiedź Gemini:');
-            logger.info(res.text);
-
-            const result = this.parseAIResponse(res.text, options);
             logger.info(`[AI OCR - Batch] Wynik parsowania: ${result.players.length} graczy`);
 
             return result;
@@ -262,24 +330,27 @@ REGUŁY KRYTYCZNE:
 - Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. NIE wypisuj członków listy Discord, których nie ma na zdjęciach.
 - Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
 
-Zwróć TYLKO nicki, jeden nick na linię, bez numeracji, bez wyników i bez żadnego dodatkowego tekstu.
+FORMAT ODPOWIEDZI (bezwzględnie obowiązkowy):
+- Zwróć TYLKO nicki, jeden nick na linię, bez numeracji, bez wyników i bez żadnego dodatkowego tekstu.
+- ŻADNYCH zdań wprowadzających, komentarzy ani wyjaśnień.
+- NIGDY nie proś o inne, wyraźniejsze czy pełniejsze zdjęcia - pracujesz na tym, co dostałeś.
+- Częściowa nieczytelność NIE jest powodem do odmowy: wypisz wszystkie nicki, które odczytałeś.
 
-Jeśli zdjęcia nie zawierają listy graczy, odpowiedz: "Nie wykryto graczy".`;
+Wyjątek - JEDYNY przypadek innej odpowiedzi: gdy na zdjęciach nie ma w ogóle listy graczy z gry.
+Odpowiedz wtedy dokładnie: "Nie wykryto graczy".`;
 
-            parts.push({ text: prompt });
-
-            logger.info('[AI OCR - Nicks] Wysyłam zapytanie zbiorcze do Gemini Vision...');
-
-            const res = await this._generateContent(parts, 4000, {
-                step:          'extract-nicks-batch',
-                promptName:    'extract-nicks-batch',
-                promptVersion: PROMPT_VERSIONS['extract-nicks-batch'],
+            const result = await this._requestWithFormatRetry({
+                parts,
+                prompt,
+                logPrefix: '[AI OCR - Nicks]',
+                meta: {
+                    step:          'extract-nicks-batch',
+                    promptName:    'extract-nicks-batch',
+                    promptVersion: PROMPT_VERSIONS['extract-nicks-batch'],
+                },
+                parse: text => this.parseAINickResponse(text),
             });
 
-            logger.info('[AI OCR - Nicks] Odpowiedź Gemini:');
-            logger.info(res.text);
-
-            const result = this.parseAINickResponse(res.text);
             logger.info(`[AI OCR - Nicks] Wynik parsowania: ${result.players.length} graczy`);
 
             return result;
