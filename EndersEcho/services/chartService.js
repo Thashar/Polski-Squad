@@ -56,11 +56,34 @@ function formatDateYear(isoString) {
     return d.getFullYear();
 }
 
-// Skrócone nazwy miesięcy na oś X
-const MONTH_SHORT = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+// Skrócone nazwy miesięcy na oś X (per język serwera)
+const MONTH_SHORT = {
+    pol: ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'],
+    eng: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+};
+
+// Etykiety tekstowe wykresów per język — librsvg nie renderuje emoji, więc tylko czysty tekst
+const CHART_LABELS = {
+    pol: {
+        archiveZone: 'max / mies.',
+        recentZone: 'ostatnie 3 mies.',
+        players: 'graczy',
+    },
+    eng: {
+        archiveZone: 'max / month',
+        recentZone: 'last 3 months',
+        players: 'players',
+    },
+};
+
+// Normalizuje kod języka serwera ('pol' / 'eng') — nieznana wartość → 'pol'
+function normLang(lang) {
+    return lang === 'eng' ? 'eng' : 'pol';
+}
 
 // Buduje etykiety miesięcy na osi X (pionowa kreska + nazwa miesiąca przy każdej granicy miesiąca)
-function buildMonthAxisSvg(tMin, tMax, toX, baseY) {
+function buildMonthAxisSvg(tMin, tMax, toX, baseY, lang = 'pol') {
+    const months = MONTH_SHORT[normLang(lang)];
     const lines = [];
     const start = new Date(tMin);
     let cur = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
@@ -68,8 +91,8 @@ function buildMonthAxisSvg(tMin, tMax, toX, baseY) {
         const x = toX(cur.getTime());
         const monthIdx = cur.getUTCMonth();
         const label = monthIdx === 0
-            ? `${MONTH_SHORT[monthIdx]} '${String(cur.getUTCFullYear()).slice(2)}`
-            : MONTH_SHORT[monthIdx];
+            ? `${months[monthIdx]} '${String(cur.getUTCFullYear()).slice(2)}`
+            : months[monthIdx];
         lines.push(`<line x1="${x.toFixed(1)}" y1="${baseY}" x2="${x.toFixed(1)}" y2="${(baseY + 4).toFixed(1)}" stroke="#3C3F45" stroke-width="1"/>`);
         lines.push(`<text x="${x.toFixed(1)}" y="${(baseY + 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="middle">${label}</text>`);
         cur = new Date(Date.UTC(cur.getUTCFullYear(), cur.getUTCMonth() + 1, 1));
@@ -136,10 +159,12 @@ function buildAreaPath(points, baseY) {
  * @param {string} chartTitle
  * @param {Object} guildTagMap   { guildId: 'PS' | 'CS' | ... }  — krótki tag do badge'y przejść
  * @param {Object} guildNameMap  { guildId: 'Polski Squad' | ... } — pełna nazwa do legendy
+ * @param {string} lang          Język serwera ('pol' | 'eng') — miesiące na osi X i podpisy stref
  * @returns {Promise<Buffer|null>}
  */
-async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}, guildNameMap = {}) {
+async function generateScoreHistoryChart(history, username, chartTitle, guildTagMap = {}, guildNameMap = {}, lang = 'pol') {
     const sharp = require('sharp');
+    const L = CHART_LABELS[normLang(lang)];
 
     const rawAll = [...history].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     if (rawAll.length === 0) return null;
@@ -392,8 +417,8 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
         archiveZoneSvg = [
             `<rect x="${M.left}" y="${M.top}" width="${(bX - M.left).toFixed(1)}" height="${cH}" fill="#242529"/>`,
             `<line x1="${bX.toFixed(1)}" y1="${M.top}" x2="${bX.toFixed(1)}" y2="${baseY}" stroke="#4E5058" stroke-width="1" stroke-dasharray="5,4"/>`,
-            `<text x="${(bX - 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85" text-anchor="end">max / mies.</text>`,
-            `<text x="${(bX + 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85">ostatnie 3 mies.</text>`,
+            `<text x="${(bX - 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85" text-anchor="end">${escapeXml(L.archiveZone)}</text>`,
+            `<text x="${(bX + 6).toFixed(1)}" y="${(M.top + 12).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#7A7E85">${escapeXml(L.recentZone)}</text>`,
         ].join('\n  ');
     }
 
@@ -462,7 +487,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
   ${dotsSvg}
 
   <!-- Etykiety miesięcy na osi X -->
-  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY, lang)}
 
   <!-- Separator legendy + legenda -->
   ${legendSep}
@@ -478,7 +503,7 @@ async function generateScoreHistoryChart(history, username, chartTitle, guildTag
  * @param {string} chartTitle - tytuł wykresu (PL lub EN)
  * @returns {Promise<Buffer|null>}
  */
-async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0, chartSubtitle = '', displayTotal = null) {
+async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers = [], totalSubmissions = 0, chartSubtitle = '', displayTotal = null, lang = 'pol') {
     const sharp = require('sharp');
 
     // Wykres zaczyna się od 1 maja 2026 — baseline to liczba graczy sprzed tej daty
@@ -651,7 +676,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
   <text x="${last.x.toFixed(1)}" y="${(last.y - 14).toFixed(1)}" font-family="Arial,sans-serif" font-size="12" fill="${color}" text-anchor="middle" font-weight="bold" stroke="#1E1F22" stroke-width="4" paint-order="stroke fill">${displayTotal ?? maxCount}</text>
 
   <!-- Etykiety miesięcy na osi X -->
-  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY, lang)}
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
@@ -666,7 +691,7 @@ async function generateGlobalPlayerGrowthChart(entries, chartTitle, guildMarkers
  * @param {number|null} sharedTMax - wspólne tMax z wykresu globalnego
  * @returns {Promise<Buffer|null>}
  */
-async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTitle, sharedTMin = null, sharedTMax = null) {
+async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTitle, sharedTMin = null, sharedTMax = null, lang = 'pol') {
     const sharp = require('sharp');
     const growthCutoff = Date.UTC(2026, 3, 1);
 
@@ -782,7 +807,7 @@ async function generatePerServerGrowthChart(perGuildEntries, guildInfo, chartTit
   <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
   <line x1="${M.left}" y1="${baseY}" x2="${W - M.right}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
   ${curves}
-  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY, lang)}
   ${legendItems}
 </svg>`;
 
@@ -906,7 +931,8 @@ async function generatePlayersProgressChart(playerHistories, chartTitle) {
  * @param {string} chartTitle
  * @returns {Promise<Buffer|null>}
  */
-async function generateGuildComparisonChart(guildScores, chartTitle) {
+async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol') {
+    const L = CHART_LABELS[normLang(lang)];
     const sharp = require('sharp');
 
     const series = guildScores.filter(gs => gs.totalScoreValue > 0);
@@ -947,7 +973,7 @@ async function generateGuildComparisonChart(guildScores, chartTitle) {
 
         const rankName = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1" text-anchor="end">${label}</text>`;
         const scoreText = `<text x="${(M.left + cW + 8).toFixed(1)}" y="${(cy + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="${c}" font-weight="bold">${escapeXml(gs.totalScore)}</text>`;
-        const playerCount = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="end">${gs.playerCount} graczy</text>`;
+        const playerCount = `<text x="${(M.left - 8).toFixed(1)}" y="${(cy + 16).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#5C5F66" text-anchor="end">${gs.playerCount} ${escapeXml(L.players)}</text>`;
 
         const separator = i < series.length - 1
             ? `<line x1="${M.left}" y1="${(cy + ROW_H / 2).toFixed(1)}" x2="${(M.left + cW)}" y2="${(cy + ROW_H / 2).toFixed(1)}" stroke="#25272B" stroke-width="1"/>`

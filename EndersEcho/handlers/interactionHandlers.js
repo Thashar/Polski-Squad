@@ -2521,6 +2521,15 @@ class InteractionHandler {
     }
 
     /**
+     * Język serwera dla tekstów wypalanych w bitmapę wykresu (miesiące na osi X, podpisy stref).
+     * @param {string} guildId
+     * @returns {'pol'|'eng'}
+     */
+    _chartLang(guildId) {
+        return (this.config.getGuildConfig(guildId)?.lang || 'pol') === 'eng' ? 'eng' : 'pol';
+    }
+
+    /**
      * Rozbija datę na składowe wg strefy Europe/Warsaw (uwzględnia CET/CEST).
      */
     _warsawParts(date) {
@@ -4755,7 +4764,7 @@ class InteractionHandler {
                             guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
                             guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
                         }
-                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle, guildTagMap, guildNameMap);
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, callerUsername, chartTitle, guildTagMap, guildNameMap, this._chartLang(guildId));
                         if (chartBuffer) {
                             scoreHistoryAttachment = new AttachmentBuilder(chartBuffer, { name: 'score_history.png' });
                         }
@@ -6969,7 +6978,7 @@ class InteractionHandler {
                             guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
                             guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
                         }
-                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, userName, msgs.chartTitle, guildTagMap, guildNameMap);
+                        const chartBuffer = await this.chartService.generateScoreHistoryChart(callerHistory, userName, msgs.chartTitle, guildTagMap, guildNameMap, this._chartLang(guildId));
                         if (chartBuffer) {
                             chartName = 'score_history.png';
                             chartAttachment = new AttachmentBuilder(chartBuffer, { name: chartName });
@@ -8415,7 +8424,7 @@ class InteractionHandler {
                     const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
                     const perPage = this.config.ranking.playersPerPage;
                     const pageGuildScores = rankingData.guildScores.slice(newPage * perPage, (newPage + 1) * perPage);
-                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle);
+                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle, this._chartLang(interaction.guildId));
                     if (buf) {
                         paginationChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
                         paginationChartFilename = 'guild_comparison.png';
@@ -9355,7 +9364,7 @@ class InteractionHandler {
                     const t = this._panelT(interaction.guildId);
                     const chartTitle = t('📊 Porównanie Serwerów', '📊 Server Comparison');
                     const pageGuildScores = guildScores.slice(0, perPage);
-                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle);
+                    const buf = await this.chartService.generateGuildComparisonChart(pageGuildScores, chartTitle, this._chartLang(interaction.guildId));
                     if (buf) {
                         const { AttachmentBuilder } = require('discord.js');
                         guildChartAttachment = new AttachmentBuilder(buf, { name: 'guild_comparison.png' });
@@ -11735,7 +11744,7 @@ class InteractionHandler {
                                         guildTagMap[g.id] = g.tag || discordName?.slice(0, 14) || g.id.slice(-4);
                                         guildNameMap[g.id] = discordName || g.tag || g.id.slice(-4);
                                     }
-                                    const chartBuffer = await this.chartService.generateScoreHistoryChart(analyzeHistory, userName, targetMsgs.chartTitle, guildTagMap, guildNameMap);
+                                    const chartBuffer = await this.chartService.generateScoreHistoryChart(analyzeHistory, userName, targetMsgs.chartTitle, guildTagMap, guildNameMap, this._chartLang(targetGuildId));
                                     if (chartBuffer) {
                                         analyzeChartName = 'score_history.png';
                                         analyzeChartAttachment = new AttachmentBuilder(chartBuffer, { name: analyzeChartName });
@@ -14069,7 +14078,7 @@ class InteractionHandler {
                             const name = interaction.client.guilds.cache.get(gid)?.name || gid;
                             return { firstTimestamp: guildFirstTs[gid], tag: cfg?.tag || name, name };
                         });
-                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, totalPlayers);
+                    const buf = await this.chartService.generateGlobalPlayerGrowthChart(firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, totalPlayers, this._chartLang(interaction.guildId));
                     if (buf) chartAttachment = new AttachmentBuilder(buf, { name: 'player_growth.png' });
                 } catch (chartErr) {
                     logger.warn('Błąd generowania wykresu przyrostu graczy:', chartErr);
@@ -14086,7 +14095,7 @@ class InteractionHandler {
                     });
                     const chartTitle2 = t('📊 Przyrost Graczy per Serwer', '📊 Player Growth per Server');
                     const buf2 = await this.chartService.generatePerServerGrowthChart(
-                        perGuildEntries, guildInfoForChart, chartTitle2, sharedTMin, sharedTMax
+                        perGuildEntries, guildInfoForChart, chartTitle2, sharedTMin, sharedTMax, this._chartLang(interaction.guildId)
                     );
                     if (buf2) chart2Attachment = new AttachmentBuilder(buf2, { name: 'player_growth_per_server.png' });
                 } catch (chartErr) {

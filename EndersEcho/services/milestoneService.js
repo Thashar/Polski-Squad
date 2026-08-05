@@ -182,7 +182,8 @@ class MilestoneService {
             let buffer = null;
             try {
                 buffer = await this.chartService.generateGlobalPlayerGrowthChart(
-                    firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, total
+                    firstEntries, chartTitle, guildMarkers, totalSubmissions, chartSubtitle, total,
+                    isPol ? 'pol' : 'eng'
                 );
             } catch (err) {
                 logger.warn(`[Milestone] Błąd generowania wykresu: ${err.message}`);
