@@ -1,5 +1,5 @@
 const path = require('path');
-const { Client, GatewayIntentBits, EmbedBuilder, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, ActivityType, Partials } = require('discord.js');
 const config = require('./config/config');
 const GuildConfigService = require('./services/guildConfigService');
 
@@ -46,6 +46,7 @@ const { createLlmAdapter } = require('../utils/llmAdapter');
 const cron = require('node-cron');
 const AdminPanelService = require('./services/adminPanelService');
 const WebRankingSyncService = require('./services/webRankingSyncService');
+const BroadcastReactionService = require('./services/broadcastReactionService');
 const CommandUsageService = require('./services/commandUsageService');
 
 const logger = createBotLogger('EndersEcho');
@@ -91,8 +92,15 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers
-    ]
+        GatewayIntentBits.GuildMembers,
+        // Zbiorcze liczniki reakcji pod rozgłoszeniami (/info, ogłoszenie nowego serwera).
+        // Intent NIEuprzywilejowany — nie wymaga zmian w Developer Portalu.
+        GatewayIntentBits.GuildMessageReactions
+    ],
+    // Ogłoszenia żyją tygodniami, a po restarcie cache wiadomości jest pusty. Bez partiali
+    // reakcja pod wiadomością spoza cache'u NIE wywołałaby zdarzenia w ogóle, więc licznik
+    // działałby tylko do pierwszego restartu bota.
+    partials: [Partials.Message, Partials.Reaction, Partials.Channel]
 });
 
 const bossAliasService = new BossAliasService();
@@ -128,6 +136,7 @@ const kingBumChatService = new KingBumChatService(config, rankingService);
 const commandUsageService = new CommandUsageService(config.ranking.dataDir);
 // Wysyłka TOP 10 na stronę (endersecho.thashar.dev) — kierunek bot → strona
 const webRankingSyncService = new WebRankingSyncService(config, logger, { rankingService, guildConfigService });
+const broadcastReactionService = new BroadcastReactionService(config, logger);
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
     rankingService,
     ocrStatsService,
@@ -149,6 +158,9 @@ const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, 
 // Globalne liczniki zapytań API AI (requests/rejected/fullFailures) — zapisywane przez OcrStatsService
 aiOcrService.setStatsService(ocrStatsService);
 const interactionHandler = new InteractionHandler(config, ocrService, aiOcrService, rankingService, logService, roleService, notificationService, userBlockService, roleRankingConfigService, usageLimitService, tokenUsageService, null, guildConfigService, ocrBlockService, updateCooldownService, testerService, achievementService, communityVerificationService, scoreHistoryService, chartService, guildBanService, globalTop10Service, bossAliasService, ocrStatsService, bossRecordService, adminPanelService, commandUsageService, milestoneService, profileRegistryService, recordRevertService, webRankingSyncService);
+// Setterem, nie kolejnym parametrem pozycyjnym — konstruktor ma ich już 31 i dokładanie
+// następnego to proszenie się o przestawienie argumentów przy kolejnej zmianie.
+interactionHandler.setBroadcastReactionService(broadcastReactionService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -231,6 +243,9 @@ async function initializeBot() {
             webRankingSyncService.startAutoSync(client);
         }
 
+        // Zbiorcze liczniki reakcji pod rozgłoszeniami — rejestr kopii wiadomości
+        await broadcastReactionService.load();
+
         // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
         cron.schedule('0 10 * * *', async () => {
             try {
@@ -298,6 +313,52 @@ async function initializeBot() {
 }
 
 client.once('ready', initializeBot);
+
+/**
+ * Reakcje pod rozgłoszeniami (/info, ogłoszenie nowego serwera) — przeliczenie sum
+ * ze WSZYSTKICH serwerów i przebudowa przycisków-liczników.
+ *
+ * Zdarzenia bywają częściowe (partial), bo wiadomość nie musi być w cache'u — do
+ * rozpoznania rozgłoszenia wystarczy jednak samo `message.id`, więc nie dociągamy
+ * pełnych obiektów. Reakcje własne bota pomijamy: nic by nie zmieniły, a wywołałyby
+ * zbędny przelicz.
+ */
+const onBroadcastReaction = (reaction, user) => {
+    try {
+        if (user?.bot) return;
+        broadcastReactionService.onReactionEvent(reaction?.message?.id, client);
+    } catch (error) {
+        logger.warn(`Błąd obsługi reakcji rozgłoszenia: ${error.message}`);
+    }
+};
+
+// Dodanie reakcji dodatkowo zapamiętuje AUTORA (rząd „ostatnia reakcja").
+// Usunięcie zmienia tylko liczniki — poprzedniego autora i tak nie dałoby się odtworzyć.
+client.on('messageReactionAdd', async (reaction, user) => {
+    if (user?.bot) return;
+    try {
+        await broadcastReactionService.recordLastReaction(reaction, user, client);
+    } catch (error) {
+        logger.warn(`Błąd zapisu ostatniej reakcji: ${error.message}`);
+    }
+    onBroadcastReaction(reaction, user);
+});
+client.on('messageReactionRemove', onBroadcastReaction);
+// Masowe czyszczenie reakcji nie niesie użytkownika — licznik i tak musi zejść do zera
+client.on('messageReactionRemoveAll', (message) => {
+    try {
+        broadcastReactionService.onReactionEvent(message?.id, client);
+    } catch (error) {
+        logger.warn(`Błąd obsługi usunięcia reakcji rozgłoszenia: ${error.message}`);
+    }
+});
+client.on('messageReactionRemoveEmoji', (reaction) => {
+    try {
+        broadcastReactionService.onReactionEvent(reaction?.message?.id, client);
+    } catch (error) {
+        logger.warn(`Błąd obsługi usunięcia emotki rozgłoszenia: ${error.message}`);
+    }
+});
 
 client.on('interactionCreate', async (interaction) => {
     try {
@@ -496,6 +557,7 @@ async function stopBot() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     globalTop10Service.stop();
     webRankingSyncService.stopAutoSync();
+    broadcastReactionService.stop();
     try {
         if (client.readyAt) {
             await client.destroy();
