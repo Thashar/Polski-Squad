@@ -1006,7 +1006,8 @@ Dotyczy TRZECH rozgłoszeń idących na wszystkie serwery: **`📢 Wyślij Info`
 - **⚠️ WYMAGANIA GATEWAY (`index.js`)** — bez nich funkcja jest martwa:
   - intent **`GuildMessageReactions`** — nieuprzywilejowany, nie wymaga zmian w Developer Portalu
   - partials **`Message`, `Reaction`, `Channel`** — ogłoszenia żyją tygodniami, a po restarcie cache wiadomości jest pusty; bez partiali reakcja pod wiadomością spoza cache'u **NIE wywołuje zdarzenia w ogóle**, więc licznik działałby tylko do pierwszego restartu
-- **Zdarzenia:** `messageReactionAdd`, `messageReactionRemove`, `messageReactionRemoveAll`, `messageReactionRemoveEmoji`. Reakcje botów pomijane (nic by nie zmieniły, a wywołałyby zbędny przelicz)
+- **Zdarzenia:** `messageReactionAdd`, `messageReactionRemove`, `messageReactionRemoveAll`, `messageReactionRemoveEmoji` — usuwanie obsłużone tak samo jak dodawanie: liczniki schodzą w dół, a emotka bez reakcji znika z rzędu. Reakcje botów pomijane (nic by nie zmieniły, a wywołałyby zbędny przelicz)
+- **⚠️ `_fetchMessage` MUSI używać `fetch({ message, force: true })`.** Przy włączonych partialach zdarzenie reakcji pod wiadomością spoza cache'u wstawia do cache'u **niekompletny** obiekt wiadomości — z jedną reakcją, tą ze zdarzenia. Zwykły `fetch()` oddałby tę wydmuszkę i sumy policzyłyby się z niej: **wszystkie pozostałe emotki zniknęłyby z rzędu liczników**. Najłatwiej wywołać to usunięciem reakcji pod starszym ogłoszeniem. Nie zamieniaj tego na zwykły `fetch()` „dla oszczędności" — wymuszony odczyt jest fundamentem zasady „przeliczamy od nowa, z prawdy"
 - **Wstrzykiwanie:** `interactionHandler.setBroadcastReactionService(service)` — setterem, nie kolejnym parametrem pozycyjnym (konstruktor `InteractionHandler` ma ich już 31)
 
 ---

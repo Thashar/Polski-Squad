@@ -271,12 +271,21 @@ class BroadcastReactionService {
         return updated > 0;
     }
 
-    /** Pobiera wiadomość po referencji; null gdy zniknęła albo bot stracił dostęp. */
+    /**
+     * Pobiera wiadomość po referencji; null gdy zniknęła albo bot stracił dostęp.
+     *
+     * `force: true` jest tu OBOWIĄZKOWE, nie optymalizacją do usunięcia. Przy włączonych
+     * partialach zdarzenie reakcji pod wiadomością spoza cache'u wstawia do cache'u
+     * NIEKOMPLETNY obiekt wiadomości — z jedną reakcją, tą ze zdarzenia. Zwykły `fetch()`
+     * oddałby wtedy tę wydmuszkę, a my policzylibyśmy sumy z niej: wszystkie pozostałe
+     * emotki zniknęłyby z rzędu liczników. Wymuszony odczyt z API daje pełny, aktualny
+     * stan reakcji — a to jest cały fundament „przeliczamy od nowa, z prawdy".
+     */
     async _fetchMessage(client, ref) {
         try {
             const channel = await client.channels.fetch(ref.channelId).catch(() => null);
             if (!channel?.messages) return null;
-            return await channel.messages.fetch(ref.messageId).catch(() => null);
+            return await channel.messages.fetch({ message: ref.messageId, force: true }).catch(() => null);
         } catch {
             return null;
         }
