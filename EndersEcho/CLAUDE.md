@@ -982,6 +982,25 @@ Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) bot **automatycz
 
 ---
 
+## Zbiorcze liczniki reakcji pod rozgłoszeniami
+
+**Plik:** `services/broadcastReactionService.js` · **Stan:** `data/broadcast_reactions.json`
+
+Dotyczy DWÓCH rozgłoszeń idących na wszystkie serwery: **`📢 Wyślij Info`** (`_handleInfoSend`) i **ogłoszenia nowego serwera** (`_broadcastNewServerAnnouncement`). Pod każdą kopią embeda bot dokleja rząd przycisków: ikona reakcji + **suma tej reakcji ze WSZYSTKICH serwerów**. Gracz na serwerze A widzi więc, że embed zebrał 40 👍, choć u niego kliknęły go 3 osoby.
+
+- **Układ: 4 najczęstsze reakcje z ikoną + zbiorczy `➕` na końcu** (`TOP_BUTTONS = 4`). Do zbiorczego wpada wszystko, co nie dostało własnego przycisku: reakcje poza czołową czwórką **oraz** emotki customowe z serwerów, na których nie ma bota (Discord odrzuciłby taki komponent — nie da się ich pokazać z ikoną). Dzięki temu suma przycisków zawsze równa się sumie reakcji, a całość mieści się w JEDNYM rzędzie niezależnie od liczby różnych emotek
+- **Przyciski są klikalne, ale świadomie nic nie robią** — to wyłącznie licznik. CustomId `bcr_*` jest routowany na początku `handleButtonInteraction` do samego `deferUpdate()`. **Bez tej obsługi Discord pokazałby „This interaction failed"**; przycisk `disabled` odpada, bo nie byłby klikalny
+- **Liczby przeliczane OD NOWA po każdym zdarzeniu** — bot pobiera wszystkie kopie wiadomości i sumuje `reaction.count`. Licznik trzymany w pliku dryfowałby przy usunięciach reakcji, `RemoveAll` i restartach
+- **Debounce 5 s per rozgłoszenie** (`DEBOUNCE_MS`) — bez tego seria reakcji = seria edycji × liczba serwerów i wpadamy w rate limit
+- **Rejestr kopii** (`register(type, messages)`) zapisywany PO rozesłaniu embeda: `broadcastId → [{ guildId, channelId, messageId }]`. Bez niego kopie nie mają jak się odnaleźć — **to fundament całej funkcji**. Retencja 30 dni (`RETENTION_DAYS`); kopie skasowane na Discordzie wypadają z rejestru przy pierwszym nieudanym pobraniu
+- **⚠️ WYMAGANIA GATEWAY (`index.js`)** — bez nich funkcja jest martwa:
+  - intent **`GuildMessageReactions`** — nieuprzywilejowany, nie wymaga zmian w Developer Portalu
+  - partials **`Message`, `Reaction`, `Channel`** — ogłoszenia żyją tygodniami, a po restarcie cache wiadomości jest pusty; bez partiali reakcja pod wiadomością spoza cache'u **NIE wywołuje zdarzenia w ogóle**, więc licznik działałby tylko do pierwszego restartu
+- **Zdarzenia:** `messageReactionAdd`, `messageReactionRemove`, `messageReactionRemoveAll`, `messageReactionRemoveEmoji`. Reakcje botów pomijane (nic by nie zmieniły, a wywołałyby zbędny przelicz)
+- **Wstrzykiwanie:** `interactionHandler.setBroadcastReactionService(service)` — setterem, nie kolejnym parametrem pozycyjnym (konstruktor `InteractionHandler` ma ich już 31)
+
+---
+
 ## Centrum Dowodzenia Head Admina (Admin Panel Live Dashboard)
 
 **Plik serwisu:** `services/adminPanelService.js`

@@ -156,6 +156,7 @@ class InteractionHandler {
         this.profileRegistryService = profileRegistryService;
         this.recordRevertService = recordRevertService;
         this.webRankingSyncService = webRankingSyncService;
+        this.broadcastReactionService = null; // ustawiany setterem z index.js
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -7451,8 +7452,23 @@ class InteractionHandler {
      * Obsługuje interakcje przycisków
      * @param {ButtonInteraction} interaction
      */
+    /**
+     * Serwis zbiorczych liczników reakcji pod rozgłoszeniami — wstrzykiwany z `index.js`.
+     * @param {Object} service
+     */
+    setBroadcastReactionService(service) {
+        this.broadcastReactionService = service;
+    }
+
     async handleButtonInteraction(interaction) {
         const customId = interaction.customId;
+
+        // === Licznik reakcji pod rozgłoszeniem — przycisk celowo NIC nie robi ===
+        // Kliknięcie i tak trzeba potwierdzić, inaczej Discord pokaże „This interaction failed".
+        if (customId.startsWith('bcr_')) {
+            await interaction.deferUpdate().catch(() => {});
+            return;
+        }
 
         // === Community Verification — poza głównym try (własne error handling) ===
         if (customId.startsWith('cv_vote_')) {
@@ -10925,18 +10941,23 @@ class InteractionHandler {
         const serverNumber = configuredIds.length;
         const { embedPL, embedEN } = this._buildNewServerAnnouncementEmbeds(targetGuild, serverNumber);
 
+        const sentMessages = [];
         for (const guildCfg of this.config.getAllGuilds()) {
             const lang = guildCfg.lang || 'pol';
             const embed = lang === 'eng' ? embedEN : embedPL;
             try {
                 const channel = await client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
                 if (!channel) continue;
-                await channel.send({ embeds: [embed] });
+                const sent = await channel.send({ embeds: [embed] });
+                sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: sent.id });
             } catch (err) {
                 const guildName = client.guilds.cache.get(guildCfg.id)?.name || guildCfg.id;
                 logger.error(`Błąd wysyłania ogłoszenia nowego serwera do "${guildName}": ${err.message}`);
             }
         }
+
+        // Rejestr kopii — bez niego reakcje z różnych serwerów nie mają jak się zsumować
+        await this.broadcastReactionService?.register('new_server', sentMessages).catch(() => {});
     }
 
     /**
@@ -10953,6 +10974,7 @@ class InteractionHandler {
         await interaction.deferUpdate();
 
         const results = [];
+        const sentMessages = [];
 
         for (const guildCfg of this.config.getAllGuilds()) {
             const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
@@ -10978,7 +11000,8 @@ class InteractionHandler {
                 }
                 const description = lang === 'pol' ? data.descriptionPol : data.descriptionEng;
                 const embed = this._buildInfoEmbed(data, data.user, description);
-                await channel.send({ embeds: [embed] });
+                const sent = await channel.send({ embeds: [embed] });
+                sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: sent.id });
                 results.push({ label: guildLabel, id: guildCfg.id, status: 'ok', lang, guildObj });
             } catch (err) {
                 logger.error(`Błąd wysyłania /info do serwera "${guildLabel}": ${err.message}`);
@@ -10991,6 +11014,9 @@ class InteractionHandler {
         }
 
         this._clearInfoSession(interaction.user.id);
+
+        // Rejestr kopii — bez niego reakcje z różnych serwerów nie mają jak się zsumować
+        await this.broadcastReactionService?.register('info', sentMessages).catch(() => {});
 
         // DM do właścicieli serwerów z błędami (tylko gdy bot jest na serwerze)
         const infoCtx = { titlePol: '⚠️ Błąd wysyłania wiadomości /info', titleEng: '⚠️ Failed to deliver /info message' };
