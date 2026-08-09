@@ -332,7 +332,17 @@ const onBroadcastReaction = (reaction, user) => {
     }
 };
 
-client.on('messageReactionAdd', onBroadcastReaction);
+// Dodanie reakcji dodatkowo zapamiętuje AUTORA (rząd „ostatnia reakcja").
+// Usunięcie zmienia tylko liczniki — poprzedniego autora i tak nie dałoby się odtworzyć.
+client.on('messageReactionAdd', async (reaction, user) => {
+    if (user?.bot) return;
+    try {
+        await broadcastReactionService.recordLastReaction(reaction, user, client);
+    } catch (error) {
+        logger.warn(`Błąd zapisu ostatniej reakcji: ${error.message}`);
+    }
+    onBroadcastReaction(reaction, user);
+});
 client.on('messageReactionRemove', onBroadcastReaction);
 // Masowe czyszczenie reakcji nie niesie użytkownika — licznik i tak musi zejść do zera
 client.on('messageReactionRemoveAll', (message) => {
