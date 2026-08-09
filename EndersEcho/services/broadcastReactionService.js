@@ -545,6 +545,7 @@ class BroadcastReactionService {
 
             const entries = collected.map(({ user, emoji }) => ({
                 name: members?.get(user.id)?.displayName || user.displayName || user.username,
+                emojiKey: emoji.id || emoji.name,
                 emoji: this._emojiDisplay(emoji),
             }));
 
@@ -552,7 +553,52 @@ class BroadcastReactionService {
             groups.push({ guildName, entries });
         }
 
-        return { groups, total, label };
+        // Grupowanie PER EMOTKA — potrzebne, żeby każda dostała własną ikonę.
+        // Emotki customowej z serwera bez bota Discord NIE wyrenderuje w treści (pokaże
+        // goły `:nazwa:`), ale jej obrazek w CDN jest publiczny i można go wstawić jako
+        // ikonę embeda — i to jedyny sposób, żeby taka emotka była widoczna jako ikona.
+        const byEmoji = new Map();
+        for (const group of groups) {
+            for (const entry of group.entries) {
+                if (!byEmoji.has(entry.emojiKey)) {
+                    const src = totals.get(entry.emojiKey)?.emoji || null;
+                    byEmoji.set(entry.emojiKey, {
+                        key: entry.emojiKey,
+                        display: entry.emoji,
+                        iconUrl: this._emojiImageUrl(src),
+                        name: src?.name || entry.emojiKey,
+                        isCustom: !!src?.id,
+                        total: 0,
+                        groups: new Map(),
+                    });
+                }
+                const bucket = byEmoji.get(entry.emojiKey);
+                bucket.total++;
+                if (!bucket.groups.has(group.guildName)) bucket.groups.set(group.guildName, []);
+                bucket.groups.get(group.guildName).push(entry.name);
+            }
+        }
+
+        // Ta sama kolejność co na przyciskach: malejąco po liczbie, remis → starsza wyżej
+        const emojis = [...byEmoji.values()]
+            .map(e => ({ ...e, groups: [...e.groups.entries()].map(([guildName, names]) => ({ guildName, names })) }))
+            .sort((a, b) =>
+                b.total - a.total
+                || (firstSeen[a.key] ?? 0) - (firstSeen[b.key] ?? 0));
+
+        return { groups, emojis, total, label };
+    }
+
+    /**
+     * Publiczny obrazek emotki w CDN Discorda — działa dla KAŻDEJ emotki customowej,
+     * także tej, do której bot nie ma dostępu.
+     *
+     * Zawsze `.png`, również dla animowanych: CDN oddaje wtedy statyczną klatkę. Wersja
+     * `.gif` wymagałaby pewności co do flagi `animated`, a ta bywa fałszywie ujemna przy
+     * zdarzeniach partial — błędne rozszerzenie dałoby zepsuty obrazek zamiast ikony.
+     */
+    _emojiImageUrl(emoji) {
+        return emoji?.id ? `https://cdn.discordapp.com/emojis/${emoji.id}.png?size=44` : null;
     }
 
     /** Emotka w formie nadającej się do wklejenia w treść embeda. */
