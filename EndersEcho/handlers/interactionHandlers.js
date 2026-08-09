@@ -7460,13 +7460,91 @@ class InteractionHandler {
         this.broadcastReactionService = service;
     }
 
+    /**
+     * Klik w licznik reakcji pod rozgłoszeniem → ephemeral z listą osób, które zareagowały,
+     * pogrupowaną po serwerze. Przycisk „ostatnia reakcja" pozostaje bezczynny — cała jego
+     * treść jest już na etykiecie.
+     *
+     * CustomID: `bcr_{broadcastId}_e_{kluczEmotki}` | `bcr_{broadcastId}_other` | `bcr_{broadcastId}_last`
+     */
+    async _handleBroadcastReactionButton(interaction, customId) {
+        const rest = customId.slice('bcr_'.length);
+        const sep = rest.indexOf('_');
+        if (sep === -1) { await interaction.deferUpdate().catch(() => {}); return; }
+
+        const broadcastId = rest.slice(0, sep);
+        const suffix = rest.slice(sep + 1);
+
+        // Rząd „ostatnia reakcja" — nic nie pokazuje, ale klik trzeba potwierdzić,
+        // inaczej Discord wyświetli „This interaction failed"
+        if (suffix === 'last') { await interaction.deferUpdate().catch(() => {}); return; }
+
+        const target = suffix === 'other'
+            ? { type: 'other' }
+            : { type: 'emoji', key: suffix.startsWith('e_') ? suffix.slice(2) : suffix };
+
+        const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+        // Zebranie listy to odczyt N wiadomości + użytkownicy reakcji — grubo ponad 3 s,
+        // które Discord daje na pierwszą odpowiedź
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        try {
+            const data = await this.broadcastReactionService?.collectReactors(broadcastId, target, interaction.client);
+            if (!data || !data.total) {
+                await interaction.editReply(isPol
+                    ? '🔍 Nikt jeszcze nie zareagował tą emotką.'
+                    : '🔍 Nobody has reacted with this emoji yet.');
+                return;
+            }
+
+            const title = suffix === 'other'
+                ? (isPol ? '➕ Pozostałe reakcje' : '➕ Other reactions')
+                : (isPol ? `${data.label || ''} Kto zareagował` : `${data.label || ''} Who reacted`).trim();
+
+            const embed = new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle(title)
+                .setDescription(isPol
+                    ? `Łącznie: **${data.total}** ze wszystkich serwerów`
+                    : `Total: **${data.total}** across all servers`);
+
+            // Limity Discorda: 25 pól na embed, 1024 znaki na pole
+            for (const group of data.groups.slice(0, 25)) {
+                const names = group.entries.map(e =>
+                    suffix === 'other' ? `${e.emoji} ${e.name}` : e.name);
+                let value = '';
+                let shown = 0;
+                for (const n of names) {
+                    if (value.length + n.length + 2 > 980) break;
+                    value += (value ? ', ' : '') + n;
+                    shown++;
+                }
+                if (shown < names.length) {
+                    value += isPol ? ` … i ${names.length - shown} więcej` : ` … and ${names.length - shown} more`;
+                }
+                embed.addFields({ name: `${group.guildName} (${group.entries.length})`, value: value || '—' });
+            }
+            if (data.groups.length > 25) {
+                embed.setFooter({ text: isPol
+                    ? `Pokazano 25 z ${data.groups.length} serwerów`
+                    : `Showing 25 of ${data.groups.length} servers` });
+            }
+
+            await interaction.editReply({ embeds: [embed] });
+        } catch (err) {
+            logger.warn(`Błąd listy reagujących: ${err.message}`);
+            await interaction.editReply(isPol
+                ? '❌ Nie udało się pobrać listy osób.'
+                : '❌ Could not load the list of people.').catch(() => {});
+        }
+    }
+
     async handleButtonInteraction(interaction) {
         const customId = interaction.customId;
 
-        // === Licznik reakcji pod rozgłoszeniem — przycisk celowo NIC nie robi ===
-        // Kliknięcie i tak trzeba potwierdzić, inaczej Discord pokaże „This interaction failed".
+        // === Liczniki reakcji pod rozgłoszeniem ===
         if (customId.startsWith('bcr_')) {
-            await interaction.deferUpdate().catch(() => {});
+            await this._handleBroadcastReactionButton(interaction, customId);
             return;
         }
 
