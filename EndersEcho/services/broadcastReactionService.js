@@ -448,7 +448,7 @@ class BroadcastReactionService {
             rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
         }
 
-        const lastRow = this._buildLastReactionRow(broadcastId, client, lang);
+        const lastRow = this._buildLastReactionRow(broadcastId, client, lang, tryAllEmojis);
         if (lastRow) rows.push(lastRow);
 
         return rows;
@@ -481,7 +481,7 @@ class BroadcastReactionService {
      * Rząd 2: „<nick> z <nazwa serwera>" z emotką tej reakcji jako ikoną.
      * @returns {Object|null} ActionRow albo null, gdy nikt jeszcze nie zareagował
      */
-    _buildLastReactionRow(broadcastId, client, lang) {
+    _buildLastReactionRow(broadcastId, client, lang, tryAllEmojis = false) {
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
         const bc = this._broadcasts[broadcastId];
         const last = bc?.lastReaction;
@@ -496,10 +496,11 @@ class BroadcastReactionService {
             .setLabel(label)
             .setStyle(ButtonStyle[styleName]);
 
-        // Emotka z serwera bez bota jest nierenderowalna — cały komponent zostałby odrzucony,
-        // więc w takim wypadku pokazujemy neutralny znacznik zamiast gubić całą wiadomość
+        // Emotkę spoza zasięgu bota wstawiamy OPTYMISTYCZNIE, tak samo jak na licznikach —
+        // dopiero odrzucenie komponentu przez Discorda przełącza całe rozgłoszenie na wariant
+        // zachowawczy i wtedy tutaj ląduje neutralny 💬 (lepszy niż utrata całej wiadomości).
         if (last.emoji?.id) {
-            if (client.emojis.cache.has(last.emoji.id)) {
+            if (tryAllEmojis || client.emojis.cache.has(last.emoji.id)) {
                 btn.setEmoji({ id: last.emoji.id, animated: !!last.emoji.animated });
             } else {
                 btn.setEmoji('💬');
