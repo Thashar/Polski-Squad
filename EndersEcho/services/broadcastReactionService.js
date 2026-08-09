@@ -11,9 +11,12 @@ const path = require('path');
  * reakcji ze wszystkich serwerów. Dzięki temu gracz na serwerze A widzi, że embed
  * zebrał 40 👍, nawet jeśli u niego kliknęły go 3 osoby.
  *
- * Przyciski są klikalne, ale świadomie nic nie robią — to wyłącznie licznik.
- * Klik i tak MUSI zostać potwierdzony (`deferUpdate`), bo inaczej Discord pokazuje
- * „This interaction failed"; przycisk wyłączony odpada, bo nie byłby klikalny.
+ * Klik w licznik pokazuje ephemeral z listą osób, które zareagowały, pogrupowaną po
+ * serwerze (`collectReactors`). Przycisk „ostatnia reakcja" pozostaje bezczynny — jego
+ * treść jest już w etykiecie — ale klik i tak MUSI zostać potwierdzony (`deferUpdate`),
+ * bo inaczej Discord pokazuje „This interaction failed".
+ *
+ * Kolejność liczników: malejąco po sumie, a przy remisie STARSZA reakcja wyżej.
  *
  * Skąd biorą się liczby: po każdym zdarzeniu reakcji przeliczamy stan OD NOWA —
  * pobieramy wszystkie kopie wiadomości i sumujemy `reaction.count`. Licznik trzymany
@@ -209,17 +212,18 @@ class BroadcastReactionService {
     }
 
     /**
-     * Przelicza sumy ze wszystkich kopii i przebudowuje przyciski na każdej z nich.
-     * @returns {Promise<boolean>} czy cokolwiek zaktualizowano
+     * Pobiera wszystkie żyjące kopie rozgłoszenia i sumuje reakcje. Jedno źródło prawdy
+     * dla liczników i dla listy osób — inaczej klik w przycisk mógłby pokazać co innego,
+     * niż mówi liczba na nim.
+     *
+     * Kopie, których już nie ma (skasowana wiadomość/kanał), wypadają z rejestru — inaczej
+     * próbowalibyśmy ich w nieskończoność.
+     *
+     * @returns {Promise<{live: Array, totals: Map}>}
      */
-    async refresh(broadcastId, client) {
-        const bc = this._broadcasts[broadcastId];
-        if (!bc) return false;
-
-        // 1. Zbierz kopie wiadomości. Te, których już nie ma (skasowany kanał/wiadomość),
-        //    wypadają z rejestru — inaczej próbowalibyśmy ich w nieskończoność.
+    async _collect(bc, client) {
         const live = [];
-        const totals = new Map(); // klucz emoji → { count, emoji }
+        const totals = new Map(); // klucz emoji → { count, emoji, order }
         let dropped = false;
 
         for (const ref of bc.messages) {
@@ -227,20 +231,91 @@ class BroadcastReactionService {
             if (!msg) { dropped = true; continue; }
             live.push({ ref, msg });
 
+            // Discord zwraca reakcje wiadomości w kolejności PIERWSZEGO dodania, więc pozycja
+            // na tej liście jest wskazówką o wieku emotki. Bierzemy najmniejszą pozycję ze
+            // wszystkich serwerów — to rozstrzyga remisy wewnątrz jednej rundy przeliczania.
+            let position = 0;
             for (const reaction of msg.reactions.cache.values()) {
                 const emoji = reaction.emoji;
                 const key = emoji.id || emoji.name;
+                position++;
                 if (!key) continue;
                 const prev = totals.get(key);
-                totals.set(key, { count: (prev?.count || 0) + (reaction.count || 0), emoji });
+                totals.set(key, {
+                    count: (prev?.count || 0) + (reaction.count || 0),
+                    emoji,
+                    order: Math.min(prev?.order ?? Number.MAX_SAFE_INTEGER, position),
+                });
+            }
+        }
+
+        // Kiedy emotka pojawiła się pierwszy raz — Discord nie daje znacznika czasu na
+        // reakcji, więc zapisujemy moment pierwszego zaobserwowania. Bez tego „od najstarszej"
+        // przy równych licznikach nie miałoby się o co oprzeć i kolejność skakałaby.
+        bc.firstSeen = bc.firstSeen || {};
+        let firstSeenChanged = false;
+        const now = Date.now();
+        for (const key of totals.keys()) {
+            if (bc.firstSeen[key] === undefined) {
+                bc.firstSeen[key] = now;
+                firstSeenChanged = true;
             }
         }
 
         if (dropped) {
             bc.messages = live.map(l => l.ref);
             this._rebuildIndex();
-            await this._saveState();
         }
+        if (dropped || firstSeenChanged) await this._saveState();
+
+        return { live, totals, firstSeen: bc.firstSeen };
+    }
+
+    /**
+     * Dzieli reakcje na te z własnym przyciskiem i te wrzucone do zbiorczego `➕`.
+     * Używane i przy budowie przycisków, i przy liście osób — dzięki temu klik w zbiorczy
+     * pokazuje dokładnie tych ludzi, których on zlicza.
+     *
+     * @returns {{shown: Array, hidden: Array}} pary [klucz, { count, emoji }]
+     */
+    _splitShownHidden(totals, client, firstSeen = {}) {
+        const renderable = [];
+        const hidden = [];
+
+        for (const [key, entry] of totals) {
+            if (entry.count <= 0) continue;
+            // Emotka z serwera bez bota jest nierenderowalna — Discord odrzuciłby komponent
+            if (entry.emoji.id && !client.emojis.cache.has(entry.emoji.id)) hidden.push([key, entry]);
+            else renderable.push([key, entry]);
+        }
+
+        // Kolejność: najpierw najliczniejsze, a przy remisie STARSZA reakcja wyżej.
+        // Wiek bierzemy z momentu pierwszego zaobserwowania, a gdy i on jest równy
+        // (emotki dodane w tym samym oknie przeliczania) — z pozycji na liście reakcji
+        // wiadomości, którą Discord porządkuje wg pierwszego dodania.
+        const byCountThenAge = (a, b) =>
+            b[1].count - a[1].count
+            || (firstSeen[a[0]] ?? 0) - (firstSeen[b[0]] ?? 0)
+            || (a[1].order ?? 0) - (b[1].order ?? 0);
+
+        renderable.sort(byCountThenAge);
+        hidden.sort(byCountThenAge);
+
+        return {
+            shown: renderable.slice(0, TOP_BUTTONS),
+            hidden: [...hidden, ...renderable.slice(TOP_BUTTONS)].sort(byCountThenAge),
+        };
+    }
+
+    /**
+     * Przelicza sumy ze wszystkich kopii i przebudowuje przyciski na każdej z nich.
+     * @returns {Promise<boolean>} czy cokolwiek zaktualizowano
+     */
+    async refresh(broadcastId, client) {
+        const bc = this._broadcasts[broadcastId];
+        if (!bc) return false;
+
+        const { live, totals, firstSeen } = await this._collect(bc, client);
         if (!live.length) return false;
 
         // 2. Zbuduj przyciski. Liczniki są wszędzie identyczne, ale rząd „ostatnia reakcja"
@@ -248,7 +323,7 @@ class BroadcastReactionService {
         //    żeby nie renderować go od nowa dla każdego serwera.
         const rowsByLang = new Map();
         const rowsFor = (lang) => {
-            if (!rowsByLang.has(lang)) rowsByLang.set(lang, this._buildRows(broadcastId, totals, client, lang));
+            if (!rowsByLang.has(lang)) rowsByLang.set(lang, this._buildRows(broadcastId, totals, client, lang, firstSeen));
             return rowsByLang.get(lang);
         };
 
@@ -271,12 +346,21 @@ class BroadcastReactionService {
         return updated > 0;
     }
 
-    /** Pobiera wiadomość po referencji; null gdy zniknęła albo bot stracił dostęp. */
+    /**
+     * Pobiera wiadomość po referencji; null gdy zniknęła albo bot stracił dostęp.
+     *
+     * `force: true` jest tu OBOWIĄZKOWE, nie optymalizacją do usunięcia. Przy włączonych
+     * partialach zdarzenie reakcji pod wiadomością spoza cache'u wstawia do cache'u
+     * NIEKOMPLETNY obiekt wiadomości — z jedną reakcją, tą ze zdarzenia. Zwykły `fetch()`
+     * oddałby wtedy tę wydmuszkę, a my policzylibyśmy sumy z niej: wszystkie pozostałe
+     * emotki zniknęłyby z rzędu liczników. Wymuszony odczyt z API daje pełny, aktualny
+     * stan reakcji — a to jest cały fundament „przeliczamy od nowa, z prawdy".
+     */
     async _fetchMessage(client, ref) {
         try {
             const channel = await client.channels.fetch(ref.channelId).catch(() => null);
             if (!channel?.messages) return null;
-            return await channel.messages.fetch(ref.messageId).catch(() => null);
+            return await channel.messages.fetch({ message: ref.messageId, force: true }).catch(() => null);
         } catch {
             return null;
         }
@@ -300,30 +384,18 @@ class BroadcastReactionService {
      * @param {string} lang - 'pol' | 'eng' — dotyczy wyłącznie rzędu 2 (liczniki są bez tekstu)
      * @returns {Array} ActionRow[]
      */
-    _buildRows(broadcastId, totals, client, lang = 'pol') {
+    _buildRows(broadcastId, totals, client, lang = 'pol', firstSeen = {}) {
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-        const renderable = [];
-        let hiddenTotal = 0;
+        const { shown, hidden } = this._splitShownHidden(totals, client, firstSeen);
+        const hiddenTotal = hidden.reduce((sum, [, entry]) => sum + entry.count, 0);
 
-        for (const { count, emoji } of totals.values()) {
-            if (count <= 0) continue;
-            if (emoji.id && !client.emojis.cache.has(emoji.id)) {
-                hiddenTotal += count; // emotka z obcego serwera — nie da się wstawić na przycisk
-                continue;
-            }
-            renderable.push({ count, emoji });
-        }
-        renderable.sort((a, b) => b.count - a.count);
-
-        const shown = renderable.slice(0, TOP_BUTTONS);
-
-        // Wszystko poza czołową czwórką trafia do zbiorczego — suma ma się zgadzać
-        for (const extra of renderable.slice(TOP_BUTTONS)) hiddenTotal += extra.count;
-
-        const buttons = shown.map((entry, idx) => {
+        const buttons = shown.map(([key, entry]) => {
+            // Klucz emotki SIEDZI W customId, a nie pozycja na liście: kolejność przycisków
+            // zmienia się wraz z licznikami, więc indeks wskazywałby po chwili inną emotkę,
+            // gdyby ktoś kliknął przycisk sprzed odświeżenia
             const btn = new ButtonBuilder()
-                .setCustomId(`bcr_${broadcastId}_${idx}`)
+                .setCustomId(`bcr_${broadcastId}_e_${key}`)
                 .setLabel(String(entry.count))
                 .setStyle(ButtonStyle.Secondary);
             // Unicode → sam znak; customowa → { id, animated } (Discord odrzuca surowy `<a:x:id>` w tym polu)
@@ -407,6 +479,88 @@ class BroadcastReactionService {
         }
 
         return new ActionRowBuilder().addComponents(btn);
+    }
+
+    /**
+     * Lista osób, które zareagowały — pod przycisk licznika (ephemeral).
+     *
+     * @param {string} broadcastId
+     * @param {{type: 'emoji', key: string}|{type: 'other'}} target
+     *        'emoji' — konkretna emotka; 'other' — wszystko, co zlicza zbiorczy `➕`
+     * @param {Object} client
+     * @returns {Promise<{groups: Array<{guildName: string, entries: Array}>, total: number, label: string|null}|null>}
+     */
+    async collectReactors(broadcastId, target, client) {
+        const bc = this._broadcasts[broadcastId];
+        if (!bc) return null;
+
+        const { live, totals, firstSeen } = await this._collect(bc, client);
+        if (!live.length) return null;
+
+        // Zbiorczy przycisk musi pokazać DOKŁADNIE tych, których zlicza — dlatego zestaw
+        // kluczy bierzemy z tego samego podziału, którego użyto do zbudowania przycisków
+        let keys;
+        let label = null;
+        if (target.type === 'other') {
+            const { hidden } = this._splitShownHidden(totals, client, firstSeen);
+            keys = new Set(hidden.map(([key]) => key));
+        } else {
+            keys = new Set([target.key]);
+            const entry = totals.get(target.key);
+            label = entry ? this._emojiDisplay(entry.emoji) : null;
+        }
+        if (!keys.size) return { groups: [], total: 0, label };
+
+        const langByGuild = new Map((this.config.getAllGuilds() || []).map(g => [g.id, g]));
+        const groups = [];
+        let total = 0;
+
+        for (const { ref, msg } of live) {
+            const matching = [...msg.reactions.cache.values()]
+                .filter(r => keys.has(r.emoji.id || r.emoji.name));
+            if (!matching.length) continue;
+
+            const guild = client.guilds?.cache?.get(ref.guildId) || null;
+            const guildName = guild?.name || langByGuild.get(ref.guildId)?.tag || ref.guildId;
+
+            // Najpierw zbieramy użytkowników wszystkich pasujących reakcji, dopiero potem
+            // jednym zapytaniem dociągamy członków — nick serwerowy wymaga membera, a
+            // pobieranie ich pojedynczo to prosta droga do rate limitu
+            const collected = [];
+            for (const reaction of matching) {
+                const users = await reaction.users.fetch().catch(() => null);
+                if (!users) continue;
+                for (const user of users.values()) {
+                    if (user.bot) continue;
+                    collected.push({ user, emoji: reaction.emoji });
+                }
+            }
+            if (!collected.length) continue;
+
+            let members = null;
+            if (guild) {
+                const ids = [...new Set(collected.map(c => c.user.id))];
+                members = await guild.members.fetch({ user: ids }).catch(() => null);
+            }
+
+            const entries = collected.map(({ user, emoji }) => ({
+                name: members?.get(user.id)?.displayName || user.displayName || user.username,
+                emoji: this._emojiDisplay(emoji),
+            }));
+
+            total += entries.length;
+            groups.push({ guildName, entries });
+        }
+
+        return { groups, total, label };
+    }
+
+    /** Emotka w formie nadającej się do wklejenia w treść embeda. */
+    _emojiDisplay(emoji) {
+        if (!emoji) return '';
+        return emoji.id
+            ? `<${emoji.animated ? 'a' : ''}:${emoji.name || 'emoji'}:${emoji.id}>`
+            : (emoji.name || '');
     }
 
     /** Zatrzymuje oczekujące przebudowy (graceful shutdown). */
