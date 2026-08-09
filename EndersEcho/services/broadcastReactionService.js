@@ -5,7 +5,7 @@ const path = require('path');
 
 /**
  * Zbiorcze liczniki reakcji pod embedami rozsyłanymi na WSZYSTKIE serwery
- * (`📢 Wyślij Info` i ogłoszenie nowego serwera).
+ * (`📢 Wyślij Info`, ogłoszenie nowego serwera i cykliczny raport Global TOP10).
  *
  * Każda kopia embeda dostaje pod spodem rząd przycisków: ikona reakcji + SUMA tej
  * reakcji ze wszystkich serwerów. Dzięki temu gracz na serwerze A widzi, że embed
@@ -278,14 +278,17 @@ class BroadcastReactionService {
      *
      * @returns {{shown: Array, hidden: Array}} pary [klucz, { count, emoji }]
      */
-    _splitShownHidden(totals, client, firstSeen = {}) {
+    _splitShownHidden(totals, client, firstSeen = {}, tryAllEmojis = false) {
         const renderable = [];
         const hidden = [];
 
         for (const [key, entry] of totals) {
             if (entry.count <= 0) continue;
-            // Emotka z serwera bez bota jest nierenderowalna — Discord odrzuciłby komponent
-            if (entry.emoji.id && !client.emojis.cache.has(entry.emoji.id)) hidden.push([key, entry]);
+            // Emotka z serwera bez bota MOŻE nie dać się wstawić na przycisk. `tryAllEmojis`
+            // każe spróbować mimo to — jeśli Discord odrzuci komponent, `refresh` wycofa się
+            // do wariantu zachowawczego i zapamięta to na przyszłość.
+            const risky = entry.emoji.id && !client.emojis.cache.has(entry.emoji.id);
+            if (risky && !tryAllEmojis) hidden.push([key, entry]);
             else renderable.push([key, entry]);
         }
 
@@ -321,10 +324,18 @@ class BroadcastReactionService {
         // 2. Zbuduj przyciski. Liczniki są wszędzie identyczne, ale rząd „ostatnia reakcja"
         //    ma tekst, a bot jest dwujęzyczny — więc budujemy zestaw PER JĘZYK i cache'ujemy,
         //    żeby nie renderować go od nowa dla każdego serwera.
+        // Domyślnie PRÓBUJEMY wstawić na przyciski także emotki z serwerów bez bota — dopiero
+        // odrzucenie komponentu przez Discorda przełącza to rozgłoszenie na wariant zachowawczy
+        // (takie emotki lądują wtedy w zbiorczym `➕`). Flaga jest persystowana, żeby nie
+        // ponawiać skazanej próby przy każdym przeliczeniu.
+        let tryAll = !bc.buttonEmojiFallback;
         const rowsByLang = new Map();
         const rowsFor = (lang) => {
-            if (!rowsByLang.has(lang)) rowsByLang.set(lang, this._buildRows(broadcastId, totals, client, lang, firstSeen));
-            return rowsByLang.get(lang);
+            const cacheKey = `${lang}:${tryAll}`;
+            if (!rowsByLang.has(cacheKey)) {
+                rowsByLang.set(cacheKey, this._buildRows(broadcastId, totals, client, lang, firstSeen, tryAll));
+            }
+            return rowsByLang.get(cacheKey);
         };
 
         // 3. Nanieś na wszystkie kopie. Mapę języków budujemy RAZ — `getAllGuilds()` składa
@@ -336,10 +347,29 @@ class BroadcastReactionService {
 
         let updated = 0;
         for (const { ref, msg } of live) {
+            const lang = langByGuild.get(ref.guildId) || 'pol';
             try {
-                await msg.edit({ components: rowsFor(langByGuild.get(ref.guildId) || 'pol') });
+                await msg.edit({ components: rowsFor(lang) });
                 updated++;
             } catch (err) {
+                // Najbardziej prawdopodobna przyczyna: emotka, której bot nie może użyć,
+                // trafiła na przycisk i Discord odrzucił komponent. Wycofujemy się do
+                // wariantu zachowawczego (taka emotka idzie do zbiorczego `➕`), zapamiętujemy
+                // to dla rozgłoszenia i ponawiamy — inaczej liczniki zamarłyby na tej kopii.
+                if (tryAll) {
+                    tryAll = false;
+                    bc.buttonEmojiFallback = true;
+                    await this._saveState();
+                    this.logger.warn('⚠️ Discord odrzucił emotkę na przycisku — przechodzę na wariant zachowawczy');
+                    try {
+                        await msg.edit({ components: rowsFor(lang) });
+                        updated++;
+                        continue;
+                    } catch (retryErr) {
+                        this.logger.warn(`⚠️ Nie udało się zaktualizować liczników reakcji: ${retryErr.message}`);
+                        continue;
+                    }
+                }
                 this.logger.warn(`⚠️ Nie udało się zaktualizować liczników reakcji: ${err.message}`);
             }
         }
@@ -384,10 +414,10 @@ class BroadcastReactionService {
      * @param {string} lang - 'pol' | 'eng' — dotyczy wyłącznie rzędu 2 (liczniki są bez tekstu)
      * @returns {Array} ActionRow[]
      */
-    _buildRows(broadcastId, totals, client, lang = 'pol', firstSeen = {}) {
+    _buildRows(broadcastId, totals, client, lang = 'pol', firstSeen = {}, tryAllEmojis = false) {
         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
-        const { shown, hidden } = this._splitShownHidden(totals, client, firstSeen);
+        const { shown, hidden } = this._splitShownHidden(totals, client, firstSeen, tryAllEmojis);
         const hiddenTotal = hidden.reduce((sum, [, entry]) => sum + entry.count, 0);
 
         const buttons = shown.map(([key, entry]) => {
