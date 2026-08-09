@@ -116,6 +116,12 @@ class BroadcastReactionService {
         const clean = (messages || []).filter(m => m?.messageId && m?.channelId);
         if (!clean.length) return null;
 
+        // Czyścimy też TUTAJ, nie tylko przy starcie: bot potrafi chodzić tygodniami bez
+        // restartu, a wtedy retencja liczona wyłącznie w `load()` nigdy by nie zadziałała
+        // i plik rósłby w nieskończoność
+        this._pruneOld();
+        this._rebuildIndex();
+
         const broadcastId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
         this._broadcasts[broadcastId] = { createdAt: new Date().toISOString(), type, messages: clean };
         for (const m of clean) this._messageIndex.set(m.messageId, broadcastId);
