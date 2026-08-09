@@ -7497,40 +7497,60 @@ class InteractionHandler {
                 return;
             }
 
-            const title = suffix === 'other'
-                ? (isPol ? '➕ Pozostałe reakcje' : '➕ Other reactions')
-                : (isPol ? `${data.label || ''} Kto zareagował` : `${data.label || ''} Who reacted`).trim();
+            // JEDEN EMBED NA EMOTKĘ, a jej obrazek idzie jako ikona autora. Discord renderuje
+            // w treści tylko emotki customowe, do których BOT ma dostęp — pozostałe pokazuje
+            // jako goły `:nazwa:`. Ikona z CDN nie podlega temu ograniczeniu, więc widać
+            // każdą emotkę, także tę z serwera bez bota. Limit: 10 embedów na wiadomość.
+            const embeds = [];
+            const emojiList = data.emojis.slice(0, 10);
 
-            const embed = new EmbedBuilder()
-                .setColor(0x5865F2)
-                .setTitle(title)
-                .setDescription(isPol
-                    ? `Łącznie: **${data.total}** ze wszystkich serwerów`
-                    : `Total: **${data.total}** across all servers`);
+            for (const [idx, item] of emojiList.entries()) {
+                const embed = new EmbedBuilder().setColor(0x5865F2);
 
-            // Limity Discorda: 25 pól na embed, 1024 znaki na pole
-            for (const group of data.groups.slice(0, 25)) {
-                const names = group.entries.map(e =>
-                    suffix === 'other' ? `${e.emoji} ${e.name}` : e.name);
-                let value = '';
-                let shown = 0;
-                for (const n of names) {
-                    if (value.length + n.length + 2 > 980) break;
-                    value += (value ? ', ' : '') + n;
-                    shown++;
+                // Unicode renderuje się w tekście bez problemu, customowa dostaje ikonę
+                const headline = item.isCustom
+                    ? `${item.name} — ${item.total}`
+                    : `${item.display} — ${item.total}`;
+                embed.setAuthor(item.iconUrl
+                    ? { name: headline, iconURL: item.iconUrl }
+                    : { name: headline });
+
+                // Pierwszy embed niesie podsumowanie całości
+                if (idx === 0) {
+                    embed.setTitle(suffix === 'other'
+                        ? (isPol ? '➕ Pozostałe reakcje' : '➕ Other reactions')
+                        : (isPol ? 'Kto zareagował' : 'Who reacted'));
+                    embed.setDescription(isPol
+                        ? `Łącznie: **${data.total}** ze wszystkich serwerów`
+                        : `Total: **${data.total}** across all servers`);
                 }
-                if (shown < names.length) {
-                    value += isPol ? ` … i ${names.length - shown} więcej` : ` … and ${names.length - shown} more`;
+
+                // Limity Discorda: 25 pól na embed, 1024 znaki na pole
+                for (const group of item.groups.slice(0, 25)) {
+                    let value = '';
+                    let shown = 0;
+                    for (const name of group.names) {
+                        if (value.length + name.length + 2 > 980) break;
+                        value += (value ? ', ' : '') + name;
+                        shown++;
+                    }
+                    if (shown < group.names.length) {
+                        value += isPol
+                            ? ` … i ${group.names.length - shown} więcej`
+                            : ` … and ${group.names.length - shown} more`;
+                    }
+                    embed.addFields({ name: `${group.guildName} (${group.names.length})`, value: value || '—' });
                 }
-                embed.addFields({ name: `${group.guildName} (${group.entries.length})`, value: value || '—' });
-            }
-            if (data.groups.length > 25) {
-                embed.setFooter({ text: isPol
-                    ? `Pokazano 25 z ${data.groups.length} serwerów`
-                    : `Showing 25 of ${data.groups.length} servers` });
+                embeds.push(embed);
             }
 
-            await interaction.editReply({ embeds: [embed] });
+            if (data.emojis.length > emojiList.length) {
+                embeds[embeds.length - 1].setFooter({ text: isPol
+                    ? `Pokazano ${emojiList.length} z ${data.emojis.length} emotek`
+                    : `Showing ${emojiList.length} of ${data.emojis.length} emojis` });
+            }
+
+            await interaction.editReply({ embeds });
         } catch (err) {
             logger.warn(`Błąd listy reagujących: ${err.message}`);
             await interaction.editReply(isPol
