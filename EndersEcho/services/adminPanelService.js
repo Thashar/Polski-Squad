@@ -1117,7 +1117,9 @@ class AdminPanelService {
                 } else {
                     const what = st.lastSync.kind === 'full'
                         ? `pełny snapshot (${st.lastSync.count} serwer(ów))`
-                        : `serwer **${st.lastSync.guildName || '—'}**`;
+                        : st.lastSync.kind === 'remove'
+                            ? `usunięcie serwera **${st.lastSync.guildName || '—'}** (brak graczy)`
+                            : `serwer **${st.lastSync.guildName || '—'}**`;
                     webSync = `✅ ${fmtTs(st.lastSync.at)} — ${what}\nŚledzonych serwerów: **${st.guildsTracked}**`;
                 }
             }

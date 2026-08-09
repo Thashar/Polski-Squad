@@ -222,10 +222,13 @@ async function initializeBot() {
             adminPanelService.refresh();
         }
 
-        // Pełny snapshot rankingów TOP 10 na stronę (potem już tylko zmiany po /update)
+        // Pełny snapshot rankingów TOP 10 na stronę (potem już tylko zmiany po /update).
+        // Cykliczny snapshot to siatka bezpieczeństwa — gdyby jakaś ścieżka zmieniająca
+        // ranking nie zawołała wysyłki, strona dogoni bota bez czekania na restart.
         if (webRankingSyncService.isEnabled()) {
             await webRankingSyncService.load();
             webRankingSyncService.syncAll(client).catch(() => {});
+            webRankingSyncService.startAutoSync(client);
         }
 
         // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
@@ -492,6 +495,7 @@ async function startBot() {
 async function stopBot() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     globalTop10Service.stop();
+    webRankingSyncService.stopAutoSync();
     try {
         if (client.readyAt) {
             await client.destroy();

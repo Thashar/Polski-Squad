@@ -3643,6 +3643,8 @@ class InteractionHandler {
             }
             this._ccAudit(interaction, `🗑️ Usunięto gracza z rankingu: ${playerName}`);
             this.adminPanelService?.refresh();
+            // Usunięcie mogło ruszyć czołówkę — odśwież ranking serwera na stronie
+            this.webRankingSyncService?.syncGuild(targetGuildId, interaction.client).catch(() => {});
             const guildName = interaction.client.guilds.cache.get(targetGuildId)?.name;
             const serverNote = guildName ? ` (${guildName})` : '';
             await interaction.editReply({
@@ -5160,7 +5162,7 @@ class InteractionHandler {
         await this.recordRevertService.markReverted(publicMsgId, by, actorName);
 
         try {
-            await this._cvRemoveRecord(session, { skipUndoInvalidate: true });
+            await this._cvRemoveRecord(session, { skipUndoInvalidate: true, client: interaction.client });
 
             // Role TOP mogły się zmienić po cofnięciu wyniku
             const guild = interaction.client.guilds.cache.get(session.guildId);
@@ -5174,8 +5176,7 @@ class InteractionHandler {
             }
             this.ocrStatsService?.recordReverted().catch(() => {});
             this.adminPanelService?.refresh();
-            // Cofnięcie mogło zmienić TOP 10 — odśwież ranking na stronie
-            this.webRankingSyncService?.syncGuild(session.guildId, interaction.client).catch(() => {});
+            // Wysyłka rankingu na stronę leci z `_cvRemoveRecord` (wspólna dla wszystkich cofnięć)
 
             // Ogłoszenie dostaje notkę i nieaktywny czerwony przycisk: „Cofnął właściciel" albo „Cofnął admin"
             await this._applyRevertVisuals(interaction.client, session, by, actorName, {
@@ -5807,10 +5808,14 @@ class InteractionHandler {
             || Array.from(client.guilds.cache.keys());
 
         let removedRecords = 0;
+        const touchedGuildIds = [];
         for (const gid of guildIds) {
             try {
                 const wasRemoved = await this.rankingService.removePlayerFromRanking(playerKey, gid);
-                if (wasRemoved) removedRecords++;
+                if (wasRemoved) {
+                    removedRecords++;
+                    touchedGuildIds.push(gid);
+                }
                 if (this.bossRecordService) {
                     await this.bossRecordService.removeAllUserBossRecords(gid, playerKey).catch(() => 0);
                 }
@@ -5848,6 +5853,11 @@ class InteractionHandler {
 
         gl.info(`👥 Skasowano profil #${profileIndex} gracza <@${userId}> po 7 dniach od zgłoszenia (wpisy w rankingu: ${removedRecords})`);
         this.adminPanelService?.refresh();
+        // Profil znika ze WSZYSTKICH serwerów naraz — każdy z nich musi dostać nowy TOP 10.
+        // Przy przenumerowaniu (2→1, 3→2) zmienia się też znacznik profilu w nicku, więc
+        // wtedy odświeżamy komplet serwerów, nie tylko te, z których coś usunięto.
+        const syncTargets = (removal.renumbered || []).length ? guildIds : touchedGuildIds;
+        this.webRankingSyncService?.syncGuilds(syncTargets, client).catch(() => {});
         return { ok: true, profileName, removedRecords, renumbered: removal.renumbered || [] };
     }
 
@@ -6485,8 +6495,11 @@ class InteractionHandler {
                     this.adminPanelService.setLastRecord(userName, bestScore, bossName, guildId);
                     this.adminPanelService.refresh();
                 }
-                // TOP 10 na stronie — wysyłka tylko gdy czołówka serwera faktycznie się zmieniła
-                this.webRankingSyncService?.syncGuild(guildId, interaction.client).catch(() => {});
+                // TOP 10 na stronie — wysyłka tylko gdy czołówka serwera faktycznie się zmieniła.
+                // Razem z bieżącym serwerem lecą te z `affectedGuildIds`: pobicie rekordu kasuje
+                // słabszy wpis gracza na pozostałych serwerach, a bez ich odświeżenia ten sam
+                // gracz zostaje na stronie w dwóch rankingach naraz.
+                this.webRankingSyncService?.syncGuilds([guildId, ...affectedGuildIds], interaction.client).catch(() => {});
             }
 
             // Per-boss rekord (zawsze po pozytywnym OCR, niezależnie od isNewRecord)
@@ -7323,6 +7336,9 @@ class InteractionHandler {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP po usunięciu gracza: ${roleError.message}`, interaction);
             }
 
+            // Usunięcie mogło ruszyć czołówkę — odśwież ranking serwera na stronie
+            this.webRankingSyncService?.syncGuild(guildId, interaction.client).catch(() => {});
+
             await interaction.editReply(formatMessage(msgs.playerRemovedSuccess, { tag: targetUser.tag }));
 
         } catch (error) {
@@ -7594,7 +7610,7 @@ class InteractionHandler {
                         interaction.member?.displayName || interaction.user.username);
                 }
                 this._ocrRevertSessions.delete(`${targetPlayerKey}_${targetGuildId}`);
-                await this._cvRemoveRecord(session, { skipUndoInvalidate: true });
+                await this._cvRemoveRecord(session, { skipUndoInvalidate: true, client: interaction.client });
                 // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
                 if (this.ocrStatsService && targetUserId !== interaction.user.id) {
                     this.ocrStatsService.recordReverted().catch(() => {});
@@ -8846,6 +8862,17 @@ class InteractionHandler {
         // Przycisk „Cofnij wynik" pod ogłoszeniem przestaje działać (rekord już cofnięty)
         if (!opts.skipUndoInvalidate) {
             await this._invalidateUndoForSession(session, opts).catch(() => {});
+        }
+
+        // Cofnięcie rekordu potrafi zmienić czołówkę — odśwież ranking serwera na stronie.
+        // Sync siedzi TUTAJ, a nie w wywołaniach, żeby objął każdą ścieżkę cofnięcia
+        // (przycisk gracza/admina, akcje CV „usuń rekord" i „zablokuj").
+        // Bez klienta payload nie zna daty dołączenia bota do serwera, a to ona ustawia
+        // kolejność kafelków na stronie — wtedy odpuszczamy i czeka na cykliczny snapshot.
+        if (opts.client) {
+            this.webRankingSyncService?.syncGuild(session.guildId, opts.client).catch(() => {});
+        } else if (this.webRankingSyncService?.isEnabled()) {
+            logger.warn('_cvRemoveRecord bez opts.client — pominięto wysyłkę rankingu na stronę');
         }
     }
 
@@ -11536,6 +11563,9 @@ class InteractionHandler {
                 this.adminPanelService.setLastRecord(userName, aiResult.score, aiResult.bossName, targetGuildId);
                 this.adminPanelService.refresh();
             }
+            // Zapis z panelu to normalny rekord — razem z serwerem docelowym lecą te,
+            // z których dedup cross-server usunął słabszy wpis gracza
+            this.webRankingSyncService?.syncGuilds([targetGuildId, ...analyzeAffectedGuilds], interaction.client).catch(() => {});
 
             // Per-boss rekord (zawsze gdy jest bossName — niezależnie od isNewRecord)
             let isNewBossRecord = false;

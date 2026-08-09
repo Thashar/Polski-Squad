@@ -6,6 +6,14 @@ const crypto = require('crypto');
 const { formatProfileDisplayName, getProfileIndex } = require('../utils/helpers');
 
 /**
+ * Odstęp cyklicznego pełnego snapshotu. Siatka bezpieczeństwa: gdyby kiedyś doszła
+ * ścieżka zmieniająca ranking bez wysyłki, strona i tak dogoni stan bota w tym czasie,
+ * zamiast czekać na restart. Guard po skrócie SHA-1 sprawia, że przy braku zmian
+ * jest to jeden POST, a nie realny ruch.
+ */
+const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 h
+
+/**
  * Wysyłka rankingów TOP 10 na stronę (endersecho.thashar.dev).
  *
  * Kierunek jest jeden: bot → strona. Strona nigdy nie odpytuje bota, więc serwer
@@ -18,9 +26,16 @@ const { formatProfileDisplayName, getProfileIndex } = require('../utils/helpers'
  *
  * Kiedy wysyłamy:
  *   • przy starcie bota — pełny snapshot wszystkich serwerów (`syncAll`),
- *   • po każdym zapisanym wyniku — tylko ten serwer i tylko gdy TOP 10 faktycznie
- *     się zmienił (`syncGuild`, porównanie po skrócie SHA-1 listy).
+ *   • cyklicznie co `AUTO_SYNC_INTERVAL_MS` — ten sam pełny snapshot (`startAutoSync`),
+ *   • po każdej zmianie w rankingu — tylko dotknięte serwery i tylko gdy ich TOP 10
+ *     faktycznie się zmienił (`syncGuild`/`syncGuilds`, porównanie po skrócie SHA-1).
  * Dzięki temu zwykłe `/update`, które nie rusza czołówki, nie generuje ruchu.
+ *
+ * WAŻNE: jedna akcja potrafi zmienić ranking KILKU serwerów naraz — pobicie rekordu
+ * kasuje słabszy wpis gracza na pozostałych serwerach (`affectedGuildIds`), a usunięcie
+ * profilu czyści go wszędzie. Takie ścieżki MUSZĄ wołać `syncGuilds` z pełną listą,
+ * inaczej stary serwer zostaje na stronie ze snapshotem sprzed zmiany i ten sam gracz
+ * widnieje w dwóch rankingach aż do restartu bota.
  *
  * Persystencja skrótów: `data/web_sync.json` — po restarcie bot nie wysyła
  * wszystkiego ponownie tylko dlatego, że zapomniał, co już wysłał.
@@ -43,8 +58,9 @@ class WebRankingSyncService {
 
         this.stateFile = path.join(config.ranking?.dataDir || path.join(__dirname, '../data'), 'web_sync.json');
         this._hashes = {};          // guildId → skrót ostatnio wysłanego TOP 10
-        this._lastSync = null;      // { at, kind: 'full'|'guild', count, guildName } — do Centrum Dowodzenia
+        this._lastSync = null;      // { at, kind: 'full'|'guild'|'remove', count, guildName } — do Centrum Dowodzenia
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
+        this._autoTimer = null;     // cykliczny pełny snapshot (siatka bezpieczeństwa)
     }
 
     /** Czy wysyłka jest w ogóle skonfigurowana (brak zmiennych = funkcja wyłączona). */
@@ -165,7 +181,12 @@ class WebRankingSyncService {
             if (!guilds.length) return;
 
             await this._post({ guilds, replaceAll: true, totalGuilds: ids.length });
-            for (const g of guilds) this._hashes[g.id] = this._hashTop(g);
+            // Skróty budujemy OD ZERA: `replaceAll` skasował po stronie strony serwery,
+            // których tu nie ma. Gdyby ich skróty zostały, późniejszy `syncGuild` uznałby
+            // niezmieniony TOP 10 za „już wysłany" i serwer nigdy nie wróciłby na stronę.
+            const nextHashes = {};
+            for (const g of guilds) nextHashes[g.id] = this._hashTop(g);
+            this._hashes = nextHashes;
             this._lastSync = { at: new Date().toISOString(), kind: 'full', count: guilds.length, guildName: null };
             await this._saveState();
             this.logger.info(`🌐 Wysłano rankingi na stronę: ${guilds.length} serwer(ów)`);
@@ -183,7 +204,9 @@ class WebRankingSyncService {
         if (!this.isEnabled() || !guildId) return false;
         try {
             const payload = await this.buildGuildPayload(guildId, client);
-            if (!payload) return false;
+            // Ranking serwera zrobił się pusty (ostatni gracz usunięty / profil skasowany) —
+            // kafelek musi zniknąć ze strony, inaczej wisiałby z zamrożoną listą do restartu.
+            if (!payload) return await this._removeGuild(guildId, client);
 
             const hash = this._hashTop(payload);
             if (this._hashes[guildId] === hash) return false; // TOP 10 bez zmian — nic nie wysyłamy
@@ -201,6 +224,66 @@ class WebRankingSyncService {
         } catch (err) {
             this.logger.warn(`⚠️ Błąd wysyłki rankingu serwera na stronę: ${err.message}`);
             return false;
+        }
+    }
+
+    /**
+     * Wysyła TOP 10 kilku serwerów naraz — po jednej akcji, która mogła zmienić rankingi
+     * na więcej niż jednym serwerze (dedup cross-server, migracja wpisu, usunięcie profilu).
+     * Duplikaty i puste wartości są odsiewane; każdy serwer i tak przechodzi przez guard
+     * po skrócie, więc te bez realnej zmiany nie generują ruchu.
+     *
+     * @param {Array<string>} guildIds
+     * @param {Object} client
+     * @returns {Promise<number>} ile serwerów faktycznie wysłano
+     */
+    async syncGuilds(guildIds, client) {
+        if (!this.isEnabled()) return 0;
+        const unique = [...new Set((guildIds || []).filter(Boolean))];
+        let sent = 0;
+        for (const id of unique) {
+            if (await this.syncGuild(id, client)) sent++;
+        }
+        return sent;
+    }
+
+    /**
+     * Kasuje serwer ze strony (ranking zszedł do zera). Nie ruszamy serwerów, których
+     * nigdy nie wysłaliśmy — nie ma tam czego kasować, a POST byłby czystym hałasem.
+     * @returns {Promise<boolean>} czy poszła wysyłka
+     */
+    async _removeGuild(guildId, client) {
+        if (!(guildId in this._hashes)) return false;
+        const guildName = client?.guilds?.cache?.get(guildId)?.name
+            || this.guildConfigService?.getConfig(guildId)?.guildName
+            || guildId;
+        const activeCount = (this.guildConfigService?.getAllConfiguredGuildIds() || [])
+            .filter(id => client?.guilds?.cache?.has(id)).length;
+
+        await this._post({ guilds: [], removeGuildIds: [guildId], totalGuilds: activeCount || undefined });
+        delete this._hashes[guildId];
+        this._lastSync = { at: new Date().toISOString(), kind: 'remove', count: 1, guildName };
+        await this._saveState();
+        this.logger.info(`🌐 Usunięto ranking serwera "${guildName}" ze strony (brak graczy)`);
+        return true;
+    }
+
+    /**
+     * Uruchamia cykliczny pełny snapshot. Wołane raz, przy starcie bota, PO `syncAll`.
+     * @param {Object} client
+     */
+    startAutoSync(client) {
+        if (!this.isEnabled() || this._autoTimer) return;
+        this._autoTimer = setInterval(() => {
+            this.syncAll(client).catch(() => {});
+        }, AUTO_SYNC_INTERVAL_MS);
+    }
+
+    /** Zatrzymuje cykliczny snapshot (graceful shutdown / testy). */
+    stopAutoSync() {
+        if (this._autoTimer) {
+            clearInterval(this._autoTimer);
+            this._autoTimer = null;
         }
     }
 }
