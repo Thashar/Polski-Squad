@@ -151,7 +151,9 @@ class BroadcastReactionService {
         const entry = (bc.messages || []).find(m => m.messageId === messageId);
         const guildId = entry?.guildId || reaction?.message?.guildId || null;
         const guildCfg = this.config.getAllGuilds().find(g => g.id === guildId) || null;
-        const guildLabel = guildCfg?.tag || client?.guilds?.cache?.get(guildId)?.name || '?';
+        // Na przycisku pokazujemy NAZWĘ serwera; tag zostaje jako zapas, gdy bot nie ma
+        // serwera w cache'u (np. tuż po restarcie)
+        const guildName = client?.guilds?.cache?.get(guildId)?.name || guildCfg?.tag || '?';
 
         const resolvedUser = user?.partial ? await user.fetch().catch(() => null) : user;
         const userName = await this._resolveMemberName(client, guildId, resolvedUser || user);
@@ -159,7 +161,8 @@ class BroadcastReactionService {
         const emoji = reaction.emoji;
         bc.lastReaction = {
             userName,
-            guildTag: guildLabel,
+            guildName,
+            guildTag: guildCfg?.tag || null,
             emoji: { id: emoji?.id || null, name: emoji?.name || null, animated: !!emoji?.animated },
             at: new Date().toISOString(),
         };
@@ -344,7 +347,30 @@ class BroadcastReactionService {
     }
 
     /**
-     * Rząd 2: „<nick> z serwera <tag> zostawił reakcję" z emotką tej reakcji jako ikoną.
+     * Etykieta rzędu 2: „<nick> z <nazwa serwera>" / „<nick> from <server name>".
+     *
+     * Czasownika NIE ma świadomie: emotka reakcji jest ikoną tego samego przycisku, a rząd
+     * stoi pod licznikami reakcji, więc „zostawił reakcję" nic nie wnosiło — za to polska
+     * forma męska misgenderowała każdego, kto nie jest mężczyzną.
+     *
+     * Nazwa serwera na Discordzie sięga 100 znaków, a etykieta przycisku ma limit 80, więc
+     * przycinamy — z pierwszeństwem dla nicku, bo to on identyfikuje osobę.
+     */
+    _composeLastLabel(userName, serverName, lang) {
+        const infix = lang === 'eng' ? ' from ' : ' z ';
+        let nick = String(userName || 'Unknown');
+        const nickCap = MAX_LABEL - infix.length - 3; // zostaw miejsce na skróconą nazwę serwera
+        if (nick.length > nickCap) nick = `${nick.slice(0, nickCap - 1)}…`;
+
+        let name = String(serverName || '?');
+        const budget = MAX_LABEL - nick.length - infix.length;
+        if (name.length > budget) name = `${name.slice(0, Math.max(1, budget - 1))}…`;
+
+        return `${nick}${infix}${name}`;
+    }
+
+    /**
+     * Rząd 2: „<nick> z <nazwa serwera>" z emotką tej reakcji jako ikoną.
      * @returns {Object|null} ActionRow albo null, gdy nikt jeszcze nie zareagował
      */
     _buildLastReactionRow(broadcastId, client, lang) {
@@ -353,10 +379,8 @@ class BroadcastReactionService {
         const last = bc?.lastReaction;
         if (!last) return null;
 
-        const label = (lang === 'eng'
-            ? `${last.userName} from ${last.guildTag} left a reaction`
-            : `${last.userName} z serwera ${last.guildTag} zostawił reakcję`
-        ).slice(0, MAX_LABEL);
+        // Stare wpisy (sprzed przejścia na nazwę serwera) mają tylko tag — nie gubimy ich
+        const label = this._composeLastLabel(last.userName, last.guildName || last.guildTag, lang);
 
         const styleName = LAST_REACTION_STYLES[bc.styleIndex % LAST_REACTION_STYLES.length] || 'Success';
         const btn = new ButtonBuilder()
