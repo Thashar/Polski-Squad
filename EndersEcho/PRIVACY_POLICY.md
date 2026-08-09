@@ -1,6 +1,6 @@
 # Privacy Policy — Ender's Echo
 
-**Last updated: 11 June 2026**
+**Last updated: 9 August 2026**
 
 This Privacy Policy explains what data the **Ender's Echo** Discord application ("the bot") collects, how it is used, and who it is shared with. By adding the bot to a server or interacting with it, you agree to this policy.
 
@@ -13,6 +13,7 @@ The bot stores only the minimum data needed to run game leaderboards:
 - **Score history** — past records, used to draw personal progress charts.
 - **DM notification subscriptions** — only if you choose to subscribe; stores which player you want to be notified about.
 - **Per-server configuration** — settings configured by server administrators (e.g. ranking channel, rank-role tiers, language).
+- **Last reaction on bot announcements** — when someone reacts to an announcement the bot posts across servers, we store the reacting member's **display name**, the server name and the emoji, so the announcement can show who reacted most recently. No Discord user ID is stored for this, and it is overwritten by the next reaction. Reaction counts and the list of who reacted are **not** stored — they are read live from Discord each time.
 
 ## 2. Data we process but do NOT store
 
@@ -32,6 +33,8 @@ We do **not** sell your data or share it with anyone other than the processors l
 ## 4. Data retention
 
 Stored scores and configuration are kept for as long as the bot is in use on your server. You can request deletion of your data at any time (see Contact). If the bot is removed from a server, that server's configuration is no longer used.
+
+Announcement reaction data (see Section 1) is deleted automatically **30 days** after the announcement was posted.
 
 ## 5. Your rights
 
