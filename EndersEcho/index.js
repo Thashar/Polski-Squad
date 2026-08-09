@@ -161,6 +161,9 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
 // Setterem, nie kolejnym parametrem pozycyjnym — konstruktor ma ich już 31 i dokładanie
 // następnego to proszenie się o przestawienie argumentów przy kolejnej zmianie.
 interactionHandler.setBroadcastReactionService(broadcastReactionService);
+// Cykliczny raport Global TOP10 też idzie na wszystkie serwery naraz — jego reakcje
+// mają się sumować tak samo jak pod /info i ogłoszeniem nowego serwera
+globalTop10Service.setBroadcastReactionService(broadcastReactionService);
 
 /**
  * Inicjalizuje bota EndersEcho

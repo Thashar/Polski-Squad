@@ -35,6 +35,14 @@ class GlobalTop10Service {
         this._configFile      = path.join(dataDir, 'global_top10_config.json');
         this._cfg             = null;
         this._timer           = null;
+        // Zbiorcze liczniki reakcji pod raportem — wstrzykiwane z index.js (setterem, bo
+        // serwis powstaje wcześniej niż broadcastReactionService)
+        this.broadcastReactionService = null;
+    }
+
+    /** @param {Object} service - BroadcastReactionService */
+    setBroadcastReactionService(service) {
+        this.broadcastReactionService = service;
     }
 
     setClient(client) {
@@ -190,6 +198,7 @@ class GlobalTop10Service {
         this._save();
 
         const sent = [], failed = [];
+        const sentMessages = [];
 
         for (const guildCfg of guilds) {
             try {
@@ -201,12 +210,17 @@ class GlobalTop10Service {
                     top10, lastSnapshot, bossName, msgs, guildCfg, this.client
                 );
 
-                await channel.send({ embeds: [embed] });
+                const msg = await channel.send({ embeds: [embed] });
+                sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: msg.id });
                 sent.push(guildCfg.tag || guildCfg.id);
             } catch (err) {
                 failed.push(`${guildCfg.tag || guildCfg.id} (${err.message})`);
             }
         }
+
+        // Raport idzie na wszystkie serwery naraz, więc traktujemy go jak każde inne
+        // rozgłoszenie: kopie rejestrujemy razem, żeby reakcje sumowały się cross-server
+        await this.broadcastReactionService?.register('global_top10', sentMessages).catch(() => {});
 
         if (sent.length)   logger.info(`[GlobalTop10] Wysłano: ${sent.join(', ')}`);
         if (failed.length) logger.warn(`[GlobalTop10] Błędy: ${failed.join(', ')}`);
