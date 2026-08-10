@@ -545,10 +545,22 @@
           "requiredPermission": "public"
         },
         {
+          "name": "/add_reward",
+          "description": "Dopisuje własną zdobytą nagrodę - nie liczy się do rankingu /stats, widoczna w /rewards",
+          "usage": "/add_reward nagroda:[nazwa] [ilość:1]",
+          "requiredPermission": "public"
+        },
+        {
           "name": "/correct",
           "description": "Koryguje liczbę nagród specjalnych użytkownika (dodatnia ilość dodaje, ujemna usuwa)",
-          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1]",
+          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1] [typ:party/manual]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/rewards",
+          "description": "Pokazuje wszystkie Twoje nagrody - zdobyte w party i dodane samodzielnie",
+          "usage": "/rewards",
+          "requiredPermission": "public"
         },
         {
           "name": "/stats",

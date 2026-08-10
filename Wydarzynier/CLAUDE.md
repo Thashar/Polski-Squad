@@ -19,9 +19,17 @@
   - Rezerwacja przez `tryRegisterClaim(promptMessageId, userId)` w `nagrodyService.js` - **synchroniczna**, więc dwa równocześnie otwarte ephemerale tego samego gracza nie doliczą nagrody dwa razy. Gdy doliczenie rzuci błąd, rezerwacja jest cofana (`releaseClaim`)
   - Historia zgłoszeń: `claims` w `nagrody.json` (`messageId pytania -> [userId]`), limit 200 ostatnich losowań (`maxClaimEntries`), najstarsze usuwane automatycznie
 - **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
-- **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, lastReward } }, claims: {} }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
-- **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
-- **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
+- **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, manualRewards, manualTotal, lastReward } }, claims: {} }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
+**Dwa niezależne liczniki nagród (`nagrodyService.js`):**
+- `rewards` / `total` - nagrody z systemu Party (przycisk pod pytaniem w wątku). **Tylko one liczą się do rankingu `/stats`**
+- `manualRewards` / `manualTotal` - nagrody dopisane samodzielnie przez `/add_reward`. **Nigdy nie trafiają do `/stats`** - widoczne wyłącznie w `/rewards` właściciela
+- `ensureUser()` migruje w locie wpisy sprzed wprowadzenia nagród własnych (dopisuje `manualRewards`/`manualTotal`), `recalculateTotals()` przelicza obie sumy
+
+**Komendy nagród:**
+- **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród z party i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
+- **`/add_reward`:** Publiczna (każdy użytkownik), odpowiedź ephemeral. Parametry: `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, 1-100, domyślnie 1). Dopisuje nagrodę do własnego licznika poza rankingiem
+- **`/rewards`:** Ephemeral embed z nagrodami **wyłącznie osoby wywołującej** - per nagroda `suma (party: N, własne: N)` + pola z sumami: z party / dodane samodzielnie / łącznie
+- **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100), `typ` (opcjonalny: `party` - domyślny, liczony do rankingu, lub `manual` - nagrody z `/add_reward`). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
 **System Przypomnień i Eventów (skopiowane z STAR bota):**
 5. **Przypomnienia** - `przypomnieniaMenedzer.js`: Szablony (text/embed) + Zaplanowane przypomnienia z interwałami (1s-28d lub "ee")
@@ -52,7 +60,7 @@
 - **Zarządzanie:** Dodawanie, edycja, usuwanie eventów przez panel kontrolny
 - **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
-**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`, `/stats`, `/correct`
+**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`, `/stats`, `/rewards`, `/add_reward`, `/correct`
 **Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot3):**

@@ -74,6 +74,29 @@ class InteractionHandler {
                 .setDescription('Ranking nagród specjalnych zdobytych w party'),
 
             new SlashCommandBuilder()
+                .setName('add_reward')
+                .setDescription('Dopisuje nagrodę zdobytą poza party (nie liczy się do rankingu /stats)')
+                .addStringOption(option =>
+                    option.setName('nagroda')
+                        .setDescription('Zdobyta nagroda')
+                        .setRequired(true)
+                        .addChoices(
+                            ...this.config.rewards.map(reward => ({ name: reward.name, value: reward.key }))
+                        )
+                )
+                .addIntegerOption(option =>
+                    option.setName('ilość')
+                        .setDescription('Liczba zdobytych nagród (domyślnie 1)')
+                        .setRequired(false)
+                        .setMinValue(1)
+                        .setMaxValue(100)
+                ),
+
+            new SlashCommandBuilder()
+                .setName('rewards')
+                .setDescription('Pokazuje wszystkie Twoje nagrody - z party i dodane samodzielnie'),
+
+            new SlashCommandBuilder()
                 .setName('correct')
                 .setDescription('Koryguje liczbę nagród użytkownika (tylko administratorzy)')
                 .addUserOption(option =>
@@ -95,6 +118,15 @@ class InteractionHandler {
                         .setRequired(false)
                         .setMinValue(-100)
                         .setMaxValue(100)
+                )
+                .addStringOption(option =>
+                    option.setName('typ')
+                        .setDescription('Które nagrody korygować (domyślnie: z party)')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'Z party (ranking /stats)', value: 'party' },
+                            { name: 'Dodane samodzielnie (/add_reward)', value: 'manual' }
+                        )
                 )
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
@@ -179,6 +211,10 @@ class InteractionHandler {
             await this.handlePartyAddCommand(interaction, sharedState);
         } else if (commandName === 'stats') {
             await this.handleStatsCommand(interaction, sharedState);
+        } else if (commandName === 'add_reward') {
+            await this.handleAddRewardCommand(interaction, sharedState);
+        } else if (commandName === 'rewards') {
+            await this.handleRewardsCommand(interaction, sharedState);
         } else if (commandName === 'correct') {
             await this.handleCorrectCommand(interaction, sharedState);
         }
@@ -876,6 +912,105 @@ class InteractionHandler {
     }
 
     /**
+     * Obsługuje komendę /add_reward - samodzielne dopisanie zdobytej nagrody.
+     * Nagrody z tej komendy NIE trafiają do rankingu /stats.
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleAddRewardCommand(interaction, sharedState) {
+        try {
+            const rewardKey = interaction.options.getString('nagroda');
+            const amount = interaction.options.getInteger('ilość') ?? 1;
+            const displayName = interaction.member?.displayName || interaction.user.username;
+
+            const result = await sharedState.nagrodyService.addManualReward(
+                interaction.user.id,
+                displayName,
+                rewardKey,
+                amount
+            );
+
+            if (!result) {
+                await interaction.reply({
+                    content: '❌ Nieznana nagroda.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const { reward, current } = result;
+
+            await interaction.reply({
+                content: `✅ Dopisano ${reward.emoji} **${reward.name}** ×${amount} do Twoich nagród.\n` +
+                    `Masz teraz ${reward.emoji} ×${current} dodanych samodzielnie.\n` +
+                    `*Nagrody dodane tą komendą nie są liczone do rankingu \`/stats\` - zobaczysz je przez \`/rewards\`.*`,
+                ephemeral: true
+            });
+
+            logger.info(`📝 ${displayName} dopisał samodzielnie nagrodę ${reward.name} ×${amount}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas dopisywania nagrody:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas dopisywania nagrody.',
+                ephemeral: true
+            }).catch(() => {});
+        }
+    }
+
+    /**
+     * Obsługuje komendę /rewards - podsumowanie własnych nagród (party + dodane samodzielnie)
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardsCommand(interaction, sharedState) {
+        try {
+            const displayName = interaction.member?.displayName || interaction.user.username;
+            const stats = sharedState.nagrodyService.getUserStats(interaction.user.id);
+
+            if (!stats || (stats.total === 0 && stats.manualTotal === 0)) {
+                await interaction.reply({
+                    content: '🎁 Nie masz jeszcze żadnych nagród. Zdobądź nagrodę w party albo dopisz ją przez `/add_reward`.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const lines = this.config.rewards
+                .filter(reward => (stats.rewards[reward.key] || 0) > 0 || (stats.manualRewards[reward.key] || 0) > 0)
+                .map(reward => {
+                    const fromParty = stats.rewards[reward.key] || 0;
+                    const manual = stats.manualRewards[reward.key] || 0;
+
+                    return `${reward.emoji} **${reward.name}** — **${fromParty + manual}** (party: ${fromParty}, własne: ${manual})`;
+                });
+
+            const allRewards = stats.total + stats.manualTotal;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎁 Twoje nagrody — ${displayName}`)
+                .setColor('#e74c3c')
+                .setDescription(lines.join('\n'))
+                .addFields(
+                    { name: '🎉 Z party', value: `${stats.total} ${this.pluralizeRewards(stats.total)}`, inline: true },
+                    { name: '📝 Dodane samodzielnie', value: `${stats.manualTotal} ${this.pluralizeRewards(stats.manualTotal)}`, inline: true },
+                    { name: '📦 Łącznie', value: `${allRewards} ${this.pluralizeRewards(allRewards)}`, inline: true }
+                )
+                .setFooter({ text: 'Do rankingu /stats liczą się wyłącznie nagrody z party' })
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyświetlania nagród użytkownika:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas pobierania Twoich nagród.',
+                ephemeral: true
+            }).catch(() => {});
+        }
+    }
+
+    /**
      * Obsługuje komendę /correct - korekta nagród przez administratora
      * @param {CommandInteraction} interaction - Interakcja komendy
      * @param {Object} sharedState - Współdzielony stan aplikacji
@@ -893,6 +1028,7 @@ class InteractionHandler {
             const targetUser = interaction.options.getUser('użytkownik');
             const rewardKey = interaction.options.getString('nagroda');
             const amount = interaction.options.getInteger('ilość') ?? 1;
+            const source = interaction.options.getString('typ') ?? 'party';
 
             if (amount === 0) {
                 await interaction.reply({
@@ -909,7 +1045,8 @@ class InteractionHandler {
                 targetUser.id,
                 displayName,
                 rewardKey,
-                amount
+                amount,
+                source
             );
 
             if (!result) {
@@ -921,7 +1058,8 @@ class InteractionHandler {
             }
 
             const { reward, previous, current, applied } = result;
-            let content = `✅ Skorygowano nagrody gracza **${displayName}**\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
+            const sourceLabel = source === 'manual' ? 'dodane samodzielnie' : 'z party';
+            let content = `✅ Skorygowano nagrody gracza **${displayName}** (${sourceLabel})\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
 
             if (applied !== amount) {
                 content += `\n⚠️ Nie można zejść poniżej 0 - zastosowano zmianę **${applied}** zamiast **${amount}**.`;
@@ -929,7 +1067,7 @@ class InteractionHandler {
 
             await interaction.reply({ content, ephemeral: true });
 
-            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
+            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę ${reward.name} (${sourceLabel}) gracza ${displayName}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty nagród:', error);

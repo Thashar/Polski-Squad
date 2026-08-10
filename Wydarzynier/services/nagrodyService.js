@@ -119,7 +119,45 @@ class NagrodyService {
     }
 
     /**
-     * Dolicza nagrodę na konto użytkownika
+     * Zapewnia istnienie wpisu użytkownika i aktualizuje jego nick
+     * @param {string} userId - ID użytkownika
+     * @param {string} displayName - Nazwa użytkownika na serwerze
+     * @returns {Object} - Wpis użytkownika
+     */
+    ensureUser(userId, displayName) {
+        if (!this.users[userId]) {
+            this.users[userId] = {
+                displayName: displayName,
+                rewards: {},        // Nagrody z systemu Party (liczone do rankingu /stats)
+                total: 0,
+                manualRewards: {},  // Nagrody dodane samodzielnie przez /add_reward (poza rankingiem)
+                manualTotal: 0,
+                lastReward: null
+            };
+        }
+
+        const userStats = this.users[userId];
+        userStats.displayName = displayName;
+
+        // Uzupełnij pola dla wpisów sprzed wprowadzenia nagród własnych
+        if (!userStats.rewards) userStats.rewards = {};
+        if (!userStats.manualRewards) userStats.manualRewards = {};
+        if (typeof userStats.manualTotal !== 'number') userStats.manualTotal = 0;
+
+        return userStats;
+    }
+
+    /**
+     * Przelicza sumy nagród użytkownika
+     * @param {Object} userStats - Wpis użytkownika
+     */
+    recalculateTotals(userStats) {
+        userStats.total = Object.values(userStats.rewards).reduce((sum, count) => sum + count, 0);
+        userStats.manualTotal = Object.values(userStats.manualRewards).reduce((sum, count) => sum + count, 0);
+    }
+
+    /**
+     * Dolicza nagrodę z systemu Party na konto użytkownika (liczy się do rankingu)
      * @param {string} userId - ID użytkownika
      * @param {string} displayName - Nazwa użytkownika na serwerze
      * @param {string} rewardKey - Klucz nagrody
@@ -129,24 +167,44 @@ class NagrodyService {
         const reward = this.getRewardDefinition(rewardKey);
         if (!reward) return null;
 
-        if (!this.users[userId]) {
-            this.users[userId] = {
-                displayName: displayName,
-                rewards: {},
-                total: 0,
-                lastReward: null
-            };
-        }
-
-        const userStats = this.users[userId];
-        userStats.displayName = displayName;
+        const userStats = this.ensureUser(userId, displayName);
         userStats.rewards[rewardKey] = (userStats.rewards[rewardKey] || 0) + 1;
-        userStats.total = Object.values(userStats.rewards).reduce((sum, count) => sum + count, 0);
         userStats.lastReward = Date.now();
+        this.recalculateTotals(userStats);
 
         await this.saveRewards();
 
         return userStats;
+    }
+
+    /**
+     * Dolicza nagrodę dodaną samodzielnie przez użytkownika (/add_reward).
+     * Takie nagrody NIE są widoczne w rankingu /stats - tylko w /rewards właściciela.
+     * @param {string} userId - ID użytkownika
+     * @param {string} displayName - Nazwa użytkownika na serwerze
+     * @param {string} rewardKey - Klucz nagrody
+     * @param {number} amount - Liczba nagród do dodania (domyślnie 1)
+     * @returns {Object|null} - { reward, previous, current, manualTotal } lub null gdy nagroda nieznana
+     */
+    async addManualReward(userId, displayName, rewardKey, amount = 1) {
+        const reward = this.getRewardDefinition(rewardKey);
+        if (!reward) return null;
+
+        const userStats = this.ensureUser(userId, displayName);
+        const previous = userStats.manualRewards[rewardKey] || 0;
+
+        userStats.manualRewards[rewardKey] = previous + amount;
+        userStats.lastReward = Date.now();
+        this.recalculateTotals(userStats);
+
+        await this.saveRewards();
+
+        return {
+            reward,
+            previous,
+            current: userStats.manualRewards[rewardKey],
+            manualTotal: userStats.manualTotal
+        };
     }
 
     /**
@@ -155,34 +213,26 @@ class NagrodyService {
      * @param {string} displayName - Nazwa użytkownika na serwerze
      * @param {string} rewardKey - Klucz nagrody
      * @param {number} delta - Zmiana liczby nagród (dodatnia = dodaj, ujemna = usuń)
-     * @returns {Object|null} - { reward, previous, current, applied } lub null gdy nagroda nieznana
+     * @param {string} source - 'party' (domyślnie, liczy się do rankingu) lub 'manual' (nagrody własne)
+     * @returns {Object|null} - { reward, previous, current, applied, source } lub null gdy nagroda nieznana
      */
-    async correctReward(userId, displayName, rewardKey, delta) {
+    async correctReward(userId, displayName, rewardKey, delta, source = 'party') {
         const reward = this.getRewardDefinition(rewardKey);
         if (!reward) return null;
 
-        if (!this.users[userId]) {
-            this.users[userId] = {
-                displayName: displayName,
-                rewards: {},
-                total: 0,
-                lastReward: null
-            };
-        }
+        const userStats = this.ensureUser(userId, displayName);
+        const bucket = source === 'manual' ? userStats.manualRewards : userStats.rewards;
 
-        const userStats = this.users[userId];
-        userStats.displayName = displayName;
-
-        const previous = userStats.rewards[rewardKey] || 0;
+        const previous = bucket[rewardKey] || 0;
         const current = Math.max(0, previous + delta);
 
         if (current === 0) {
-            delete userStats.rewards[rewardKey];
+            delete bucket[rewardKey];
         } else {
-            userStats.rewards[rewardKey] = current;
+            bucket[rewardKey] = current;
         }
 
-        userStats.total = Object.values(userStats.rewards).reduce((sum, count) => sum + count, 0);
+        this.recalculateTotals(userStats);
 
         await this.saveRewards();
 
@@ -190,7 +240,8 @@ class NagrodyService {
             reward,
             previous,
             current,
-            applied: current - previous // Ile faktycznie zmieniono (może być mniej niż delta przy odejmowaniu)
+            applied: current - previous, // Ile faktycznie zmieniono (może być mniej niż delta przy odejmowaniu)
+            source
         };
     }
 
@@ -200,7 +251,16 @@ class NagrodyService {
      * @returns {Object|null} - Statystyki lub null
      */
     getUserStats(userId) {
-        return this.users[userId] || null;
+        const userStats = this.users[userId];
+        if (!userStats) return null;
+
+        return {
+            displayName: userStats.displayName || 'Nieznany',
+            rewards: userStats.rewards || {},
+            total: userStats.total || 0,
+            manualRewards: userStats.manualRewards || {},
+            manualTotal: userStats.manualTotal || 0
+        };
     }
 
     /**
