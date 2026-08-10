@@ -633,7 +633,7 @@ class InteractionHandler {
 
         await thread.send({
             content: this.config.messages.rewardPrompt,
-            components: this.buildRewardButtons(false)
+            components: this.buildRewardButtons()
         });
 
         lobby.rewardPromptSent = true;
@@ -645,10 +645,9 @@ class InteractionHandler {
 
     /**
      * Buduje rzędy przycisków nagród (same emoji, bez opisów)
-     * @param {boolean} disabled - Czy przyciski mają być nieaktywne
      * @returns {Array} - Rzędy przycisków
      */
-    buildRewardButtons(disabled = false) {
+    buildRewardButtons() {
         const rows = [];
 
         for (let i = 0; i < this.config.rewards.length; i += 5) {
@@ -657,22 +656,12 @@ class InteractionHandler {
                     .setCustomId(`reward_pick_${reward.key}`)
                     .setEmoji(reward.emoji)
                     .setStyle(ButtonStyle.Secondary)
-                    .setDisabled(disabled)
             );
 
             rows.push(new ActionRowBuilder().addComponents(...buttons));
         }
 
         return rows;
-    }
-
-    /**
-     * Sprawdza czy przyciski nagród w wiadomości są już nieaktywne (nagroda zgłoszona)
-     * @param {Message} message - Wiadomość z pytaniem o nagrodę
-     * @returns {boolean} - Czy nagroda została już zgłoszona
-     */
-    isRewardPromptClaimed(message) {
-        return message?.components?.[0]?.components?.[0]?.disabled === true;
     }
 
     /**
@@ -724,7 +713,7 @@ class InteractionHandler {
     async handleRewardConfirmButton(interaction, sharedState) {
         try {
             // Format: reward_yes_<klucz>_<idKanału>_<idWiadomości>
-            const [, , rewardKey, promptChannelId, promptMessageId] = interaction.customId.split('_');
+            const [, , rewardKey, , promptMessageId] = interaction.customId.split('_');
             const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
 
             if (!reward) {
@@ -735,13 +724,14 @@ class InteractionHandler {
                 return;
             }
 
-            // Pobierz wiadomość z pytaniem i sprawdź czy nagroda nie została już zgłoszona
-            const promptChannel = await sharedState.client.channels.fetch(promptChannelId).catch(() => null);
-            const promptMessage = promptChannel
-                ? await promptChannel.messages.fetch(promptMessageId).catch(() => null)
-                : null;
+            // Blokada per użytkownik - każdy uczestnik może zgłosić jedną nagrodę na losowanie,
+            // ale zgłoszenie jednej osoby nie blokuje pozostałych
+            const claimRegistered = sharedState.nagrodyService.tryRegisterClaim(
+                promptMessageId,
+                interaction.user.id
+            );
 
-            if (promptMessage && this.isRewardPromptClaimed(promptMessage)) {
+            if (!claimRegistered) {
                 await interaction.update({
                     content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
                     components: []
@@ -752,21 +742,18 @@ class InteractionHandler {
             const member = interaction.member;
             const displayName = member?.displayName || interaction.user.username;
 
-            await sharedState.nagrodyService.addReward(interaction.user.id, displayName, rewardKey);
+            try {
+                await sharedState.nagrodyService.addReward(interaction.user.id, displayName, rewardKey);
+            } catch (error) {
+                // Zwolnij rezerwację, żeby użytkownik mógł spróbować ponownie
+                sharedState.nagrodyService.releaseClaim(promptMessageId, interaction.user.id);
+                throw error;
+            }
 
             await interaction.update({
                 content: this.config.messages.rewardAccepted(reward.name, reward.emoji),
                 components: []
             });
-
-            // Dezaktywuj przyciski nagród w wiadomości z pytaniem
-            if (promptMessage) {
-                try {
-                    await promptMessage.edit({ components: this.buildRewardButtons(true) });
-                } catch (error) {
-                    logger.error('❌ Błąd podczas dezaktywacji przycisków nagród:', error);
-                }
-            }
 
             // Ogłoszenie na kanale party
             try {

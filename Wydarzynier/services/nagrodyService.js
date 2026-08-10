@@ -12,6 +12,8 @@ class NagrodyService {
         this.config = config;
         this.dataPath = path.join(__dirname, '../data/nagrody.json');
         this.users = {}; // userId -> { displayName, rewards: { key: count }, total, lastReward }
+        this.claims = {}; // messageId pytania -> [userId] - kto już zgłosił nagrodę w danym losowaniu
+        this.maxClaimEntries = 200; // Limit zapamiętanych losowań
     }
 
     /**
@@ -23,19 +25,23 @@ class NagrodyService {
 
             if (!data || data.trim() === '') {
                 this.users = {};
+                this.claims = {};
                 return;
             }
 
             const parsed = JSON.parse(data);
             this.users = parsed.users || {};
+            this.claims = parsed.claims || {};
 
             logger.info(`🎁 Wczytano statystyki nagród dla ${Object.keys(this.users).length} użytkowników`);
         } catch (error) {
             if (error.code === 'ENOENT') {
                 this.users = {};
+                this.claims = {};
             } else {
                 logger.error('❌ Błąd podczas wczytywania nagród:', error);
                 this.users = {};
+                this.claims = {};
             }
         }
     }
@@ -46,7 +52,7 @@ class NagrodyService {
     async saveRewards() {
         try {
             await fs.mkdir(path.dirname(this.dataPath), { recursive: true });
-            await fs.writeFile(this.dataPath, JSON.stringify({ users: this.users }, null, 2));
+            await fs.writeFile(this.dataPath, JSON.stringify({ users: this.users, claims: this.claims }, null, 2));
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania nagród:', error);
         }
@@ -59,6 +65,57 @@ class NagrodyService {
      */
     getRewardDefinition(rewardKey) {
         return this.config.rewards.find(reward => reward.key === rewardKey) || null;
+    }
+
+    /**
+     * Sprawdza czy użytkownik zgłosił już nagrodę w danym losowaniu
+     * @param {string} promptMessageId - ID wiadomości z pytaniem o nagrodę
+     * @param {string} userId - ID użytkownika
+     * @returns {boolean} - Czy użytkownik już zgłosił nagrodę
+     */
+    hasClaimed(promptMessageId, userId) {
+        return (this.claims[promptMessageId] || []).includes(userId);
+    }
+
+    /**
+     * Rezerwuje zgłoszenie nagrody dla użytkownika w danym losowaniu.
+     * Synchroniczne - zapobiega podwójnemu zgłoszeniu z dwóch otwartych ephemerali.
+     * @param {string} promptMessageId - ID wiadomości z pytaniem o nagrodę
+     * @param {string} userId - ID użytkownika
+     * @returns {boolean} - false gdy użytkownik już zgłosił nagrodę w tym losowaniu
+     */
+    tryRegisterClaim(promptMessageId, userId) {
+        if (this.hasClaimed(promptMessageId, userId)) return false;
+
+        if (!this.claims[promptMessageId]) {
+            this.claims[promptMessageId] = [];
+
+            // Usuń najstarsze losowania gdy przekroczono limit
+            const messageIds = Object.keys(this.claims);
+            if (messageIds.length > this.maxClaimEntries) {
+                messageIds
+                    .slice(0, messageIds.length - this.maxClaimEntries)
+                    .forEach(oldId => delete this.claims[oldId]);
+            }
+        }
+
+        this.claims[promptMessageId].push(userId);
+        return true;
+    }
+
+    /**
+     * Cofa rezerwację zgłoszenia (gdy doliczenie nagrody się nie powiodło)
+     * @param {string} promptMessageId - ID wiadomości z pytaniem o nagrodę
+     * @param {string} userId - ID użytkownika
+     */
+    releaseClaim(promptMessageId, userId) {
+        const claimedUsers = this.claims[promptMessageId];
+        if (!claimedUsers) return;
+
+        const index = claimedUsers.indexOf(userId);
+        if (index > -1) claimedUsers.splice(index, 1);
+
+        if (claimedUsers.length === 0) delete this.claims[promptMessageId];
     }
 
     /**

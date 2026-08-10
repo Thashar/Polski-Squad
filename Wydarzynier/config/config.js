@@ -121,7 +121,7 @@ module.exports = {
             'Nie klikaj w przyciski jeżeli nie dostałeś czerwonej nagrody. To jest system do zliczania Twoich wygranych, żebyś na koniec eventu wiedział ile zarobiłeś!',
 
         rewardAlreadyClaimed:
-            'Nagroda z tego losowania została już zgłoszona.',
+            'W tym losowaniu zgłosiłeś już swoją nagrodę. Jeżeli to pomyłka, zgłoś się do administratora.',
 
         rewardAnnouncement: (userId, rewardEmoji) =>
             `<@${userId}> właśnie zgarnął nagrodę specjalną! ${rewardEmoji}.`,

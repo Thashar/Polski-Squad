@@ -13,11 +13,13 @@
 - **Pytanie o nagrodę:** 30 sekund po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 9 przyciskami (same emoji nagród, bez opisów, 2 rzędy: 5+4)
 - **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
 - **Potwierdzenie:** Kliknięcie emoji → ephemeral „Czy na pewno otrzymałeś taką nagrodę…" z przyciskami **Tak** / **Nie**
-  - **Tak** → nagroda doliczana na konto użytkownika, przyciski emoji w wiadomości stają się nieaktywne (jedna nagroda na losowanie), ogłoszenie na kanale `/party`: `<@user> właśnie zgarnął nagrodę specjalną! <emoji>.`
+  - **Tak** → nagroda doliczana na konto użytkownika + ogłoszenie na kanale `/party`: `<@user> właśnie zgarnął nagrodę specjalną! <emoji>.`
   - **Nie** → ephemeral z pouczeniem o niezaburzaniu statystyk (nic nie jest zliczane)
-- **Ochrona przed podwójnym zgłoszeniem:** Przed doliczeniem bot sprawdza czy przyciski w wiadomości z pytaniem nie są już wyłączone (`isRewardPromptClaimed`) - obsługuje wyścig dwóch otwartych ephemerali
+- **Blokada per użytkownik (NIE globalna):** Przyciski emoji pozostają aktywne dla wszystkich - zgłoszenie jednej osoby nie blokuje pozostałych uczestników party. Każdy uczestnik może zgłosić **jedną** nagrodę na dane losowanie; przy drugiej próbie dostaje `rewardAlreadyClaimed`
+  - Rezerwacja przez `tryRegisterClaim(promptMessageId, userId)` w `nagrodyService.js` - **synchroniczna**, więc dwa równocześnie otwarte ephemerale tego samego gracza nie doliczą nagrody dwa razy. Gdy doliczenie rzuci błąd, rezerwacja jest cofana (`releaseClaim`)
+  - Historia zgłoszeń: `claims` w `nagrody.json` (`messageId pytania -> [userId]`), limit 200 ostatnich losowań (`maxClaimEntries`), najstarsze usuwane automatycznie
 - **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
-- **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, lastReward } } }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
+- **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, lastReward } }, claims: {} }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
 - **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
 - **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
