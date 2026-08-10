@@ -124,7 +124,7 @@ module.exports = {
             'W tym losowaniu zgłosiłeś już swoją nagrodę. Jeżeli to pomyłka, zgłoś się do administratora.',
 
         rewardAnnouncement: (userId, rewardEmoji) =>
-            `<@${userId}> właśnie zgarnął nagrodę specjalną! ${rewardEmoji}.`,
+            `# <@${userId}> właśnie zgarnął nagrodę specjalną! ${rewardEmoji}.\nJeżeli chcesz zobaczyć ranking nagród na serwerze użyj \`/stats\``,
 
         channelOnly:
             'Ta komenda może być używana tylko na wyznaczonym kanale!',

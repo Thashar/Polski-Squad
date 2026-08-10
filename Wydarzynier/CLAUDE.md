@@ -13,7 +13,7 @@
 - **Pytanie o nagrodę:** 1 minuta po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 9 przyciskami (same emoji nagród, bez opisów, 2 rzędy: 5+4)
 - **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
 - **Potwierdzenie:** Kliknięcie emoji → ephemeral „Czy na pewno otrzymałeś taką nagrodę…" z przyciskami **Tak** / **Nie**
-  - **Tak** → nagroda doliczana na konto użytkownika + ogłoszenie na kanale `/party`: `<@user> właśnie zgarnął nagrodę specjalną! <emoji>.`
+  - **Tak** → nagroda doliczana na konto użytkownika + ogłoszenie na kanale `/party` (nagłówek `#`): `# <@user> właśnie zgarnął nagrodę specjalną! <emoji>.` + linia zachęty do użycia `/stats`
   - **Nie** → ephemeral z pouczeniem o niezaburzaniu statystyk (nic nie jest zliczane)
 - **Blokada per użytkownik (NIE globalna):** Przyciski emoji pozostają aktywne dla wszystkich - zgłoszenie jednej osoby nie blokuje pozostałych uczestników party. Każdy uczestnik może zgłosić **jedną** nagrodę na dane losowanie; przy drugiej próbie dostaje `rewardAlreadyClaimed`
   - Rezerwacja przez `tryRegisterClaim(promptMessageId, userId)` w `nagrodyService.js` - **synchroniczna**, więc dwa równocześnie otwarte ephemerale tego samego gracza nie doliczą nagrody dwa razy. Gdy doliczenie rzuci błąd, rezerwacja jest cofana (`releaseClaim`)
