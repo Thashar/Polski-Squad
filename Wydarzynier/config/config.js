@@ -70,7 +70,7 @@ module.exports = {
     // Ustawienia lobby
     lobby: {
         maxPlayers: 7, // Założyciel + 6 osób
-        rewardPromptDelay: 30 * 1000, // 30 sekund od zapełnienia lobby - pytanie o nagrodę specjalną
+        rewardPromptDelay: 60 * 1000, // 1 minuta od zapełnienia lobby - pytanie o nagrodę specjalną
         discussionTime: 15 * 60 * 1000, // 15 minut w ms po zapełnieniu
         maxDuration: 15 * 60 * 1000, // 15 minut maksymalny czas trwania lobby
         fullLobbyDuration: 15 * 60 * 1000, // 15 minut po zapełnieniu lobby

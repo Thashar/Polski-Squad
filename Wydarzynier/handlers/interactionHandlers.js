@@ -535,7 +535,7 @@ class InteractionHandler {
                 components: [notificationButton]
             });
 
-            // Zaplanuj pytanie o nagrodę specjalną (30s po zapełnieniu lobby)
+            // Zaplanuj pytanie o nagrodę specjalną (1 minuta po zapełnieniu lobby)
             await this.scheduleRewardPrompt(lobby, sharedState);
 
             // Ustaw nowy timer na 15 minut od zapełnienia
@@ -590,7 +590,7 @@ class InteractionHandler {
     }
 
     /**
-     * Planuje pytanie o nagrodę specjalną (30s po zapełnieniu lobby)
+     * Planuje pytanie o nagrodę specjalną (1 minuta po zapełnieniu lobby)
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */

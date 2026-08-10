@@ -10,7 +10,7 @@
 8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
 
 **Funkcjonalność Nagród Specjalnych:**
-- **Pytanie o nagrodę:** 30 sekund po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 9 przyciskami (same emoji nagród, bez opisów, 2 rzędy: 5+4)
+- **Pytanie o nagrodę:** 1 minuta po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 9 przyciskami (same emoji nagród, bez opisów, 2 rzędy: 5+4)
 - **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
 - **Potwierdzenie:** Kliknięcie emoji → ephemeral „Czy na pewno otrzymałeś taką nagrodę…" z przyciskami **Tak** / **Nie**
   - **Tak** → nagroda doliczana na konto użytkownika + ogłoszenie na kanale `/party`: `<@user> właśnie zgarnął nagrodę specjalną! <emoji>.`
