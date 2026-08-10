@@ -75,14 +75,11 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('add_reward')
-                .setDescription('Koryguje Twoje własne nagrody spoza party (nie liczą się do rankingu /stats)')
-                .addIntegerOption(option =>
-                    option.setName('ilość')
-                        .setDescription('Dodatnia = dodaj, ujemna = usuń (domyślnie 1)')
-                        .setRequired(false)
-                        .setMinValue(-100)
-                        .setMaxValue(100)
-                ),
+                .setDescription('Dopisuje jedną własną nagrodę spoza party (nie liczy się do rankingu /stats)'),
+
+            new SlashCommandBuilder()
+                .setName('remove_reward')
+                .setDescription('Odejmuje jedną własną nagrodę spoza party (nie liczy się do rankingu /stats)'),
 
             new SlashCommandBuilder()
                 .setName('rewards')
@@ -204,7 +201,9 @@ class InteractionHandler {
         } else if (commandName === 'stats') {
             await this.handleStatsCommand(interaction, sharedState);
         } else if (commandName === 'add_reward') {
-            await this.handleAddRewardCommand(interaction, sharedState);
+            await this.handleOwnRewardCommand(interaction, sharedState, 1);
+        } else if (commandName === 'remove_reward') {
+            await this.handleOwnRewardCommand(interaction, sharedState, -1);
         } else if (commandName === 'rewards') {
             await this.handleRewardsCommand(interaction, sharedState);
         } else if (commandName === 'correct') {
@@ -367,7 +366,7 @@ class InteractionHandler {
             return;
         }
 
-        // Wybór nagrody w komendzie /add_reward
+        // Wybór nagrody w komendach /add_reward i /remove_reward
         if (customId.startsWith('myreward_')) {
             await this.handleMyRewardButton(interaction, sharedState);
             return;
@@ -912,26 +911,17 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /add_reward - działa jak /correct, ale tylko na własnych nagrodach
-     * spoza party. Nagrody z tej komendy NIE trafiają do rankingu /stats.
+     * Obsługuje komendy /add_reward i /remove_reward - zmiana wyłącznie własnych nagród
+     * spoza party, zawsze po jednej sztuce. Nagrody te NIE trafiają do rankingu /stats.
      * @param {CommandInteraction} interaction - Interakcja komendy
      * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @param {number} amount - 1 dla /add_reward, -1 dla /remove_reward
      */
-    async handleAddRewardCommand(interaction, sharedState) {
+    async handleOwnRewardCommand(interaction, sharedState, amount) {
         try {
-            const amount = interaction.options.getInteger('ilość') ?? 1;
-
-            if (amount === 0) {
-                await interaction.reply({
-                    content: '❌ Ilość nie może wynosić 0 (dodatnia = dodaj, ujemna = usuń).',
-                    ephemeral: true
-                });
-                return;
-            }
-
             const action = amount > 0
-                ? `dodać **+${amount}**`
-                : `usunąć **${amount}**`;
+                ? 'dopisać **+1**'
+                : 'odjąć **-1**';
 
             await interaction.reply({
                 content: `Wybierz nagrodę, do której chcesz ${action}:\n` +
@@ -950,24 +940,16 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje wybór nagrody w komendzie /add_reward - koryguje własne nagrody spoza rankingu
+     * Obsługuje wybór nagrody w /add_reward i /remove_reward - zmienia własne nagrody spoza rankingu
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleMyRewardButton(interaction, sharedState) {
         try {
-            // Format: myreward_<klucz>_<ilość>
+            // Format: myreward_<klucz>_<1|-1> - zawsze po jednej sztuce
             const [, rewardKey, rawAmount] = interaction.customId.split('_');
-            const amount = parseInt(rawAmount, 10);
+            const amount = rawAmount === '-1' ? -1 : 1;
             const displayName = interaction.member?.displayName || interaction.user.username;
-
-            if (!Number.isInteger(amount) || amount === 0) {
-                await interaction.update({
-                    content: '❌ Nieprawidłowa ilość.',
-                    components: []
-                });
-                return;
-            }
 
             // Zawsze własne konto i zawsze licznik spoza rankingu
             const result = await sharedState.nagrodyService.correctReward(

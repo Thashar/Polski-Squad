@@ -546,8 +546,8 @@
         },
         {
           "name": "/add_reward",
-          "description": "Dodaje lub usuwa własną nagrodę spoza party (wybór ikoną) - nie liczy się do rankingu /stats, widoczna w /rewards",
-          "usage": "/add_reward [ilość:1] → wybór nagrody przyciskiem z ikoną",
+          "description": "Dopisuje jedną własną nagrodę spoza party (wybór ikoną) - nie liczy się do rankingu /stats, widoczna w /rewards",
+          "usage": "/add_reward → wybór nagrody przyciskiem z ikoną",
           "requiredPermission": "public"
         },
         {
@@ -555,6 +555,12 @@
           "description": "Koryguje liczbę nagród specjalnych użytkownika (dodatnia ilość dodaje, ujemna usuwa)",
           "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1] [typ:party/manual]",
           "requiredPermission": "administrator"
+        },
+        {
+          "name": "/remove_reward",
+          "description": "Odejmuje jedną własną nagrodę spoza party (wybór ikoną) - dotyczy tylko nagród dodanych przez /add_reward",
+          "usage": "/remove_reward → wybór nagrody przyciskiem z ikoną",
+          "requiredPermission": "public"
         },
         {
           "name": "/rewards",
