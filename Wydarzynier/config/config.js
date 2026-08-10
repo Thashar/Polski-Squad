@@ -82,7 +82,7 @@ module.exports = {
     // Wiadomości
     messages: {
         lobbyCreated: (userId) =>
-            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 15 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-add @użytkownik\` - dodaj gracza bezpośrednio do lobby\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby`,
+            `<@${userId}> to Twoje lobby.\nPoniżej otrzymasz propozycje dołączenia do Twojego party.\nMożesz akceptować bądź odrzucać chętnych.\nWybierz 6 chętnych, masz na to 15 minut, po tym czasie wątek lobby zostanie usunięty.\n\n💡 **Komendy właściciela:**\n• \`/party-add @użytkownik\` - dodaj gracza bezpośrednio do lobby\n• \`/party-kick @użytkownik\` - usuń gracza z lobby\n• \`/party-close\` - zamknij lobby\n\n🎁 **Nagrody specjalne (dla wszystkich w party):**\n• \`/rewards\` - podgląd Twoich nagród, widoczny tylko dla Ciebie\n• \`/stats\` - ranking nagród zdobytych w party na serwerze\n• \`/add_reward\` - dopisz sobie **+1** nagrodę zdobytą poza party (wybierasz ikoną, nie wchodzi do rankingu)\n• \`/remove_reward\` - odejmij **-1** taką nagrodę, gdy się pomylisz`,
 
         partyAnnouncement: (displayName, currentPlayers, maxPlayers) =>
             `# ${displayName} stworzył/a lobby i szuka osób do <@&1272573347946954833> <:I_Party:1400207104685510853> (${currentPlayers}/${maxPlayers})`,

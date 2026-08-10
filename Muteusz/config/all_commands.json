@@ -552,8 +552,8 @@
         },
         {
           "name": "/correct",
-          "description": "Koryguje liczbę nagród specjalnych użytkownika (dodatnia ilość dodaje, ujemna usuwa)",
-          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1] [typ:party/manual]",
+          "description": "Koryguje nagrody gracza zdobyte w party - wpływa na ranking /stats (dodatnia ilość dodaje, ujemna usuwa)",
+          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1]",
           "requiredPermission": "administrator"
         },
         {

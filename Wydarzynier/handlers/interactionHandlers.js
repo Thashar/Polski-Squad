@@ -87,7 +87,7 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('correct')
-                .setDescription('Koryguje liczbę nagród użytkownika (tylko administratorzy)')
+                .setDescription('Koryguje nagrody gracza z party - wpływa na ranking /stats (tylko administratorzy)')
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik, któremu korygujemy nagrody')
@@ -107,15 +107,6 @@ class InteractionHandler {
                         .setRequired(false)
                         .setMinValue(-100)
                         .setMaxValue(100)
-                )
-                .addStringOption(option =>
-                    option.setName('typ')
-                        .setDescription('Które nagrody korygować (domyślnie: z party)')
-                        .setRequired(false)
-                        .addChoices(
-                            { name: 'Z party (ranking /stats)', value: 'party' },
-                            { name: 'Dodane samodzielnie (/add_reward)', value: 'manual' }
-                        )
                 )
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
@@ -1060,7 +1051,6 @@ class InteractionHandler {
             const targetUser = interaction.options.getUser('użytkownik');
             const rewardKey = interaction.options.getString('nagroda');
             const amount = interaction.options.getInteger('ilość') ?? 1;
-            const source = interaction.options.getString('typ') ?? 'party';
 
             if (amount === 0) {
                 await interaction.reply({
@@ -1073,12 +1063,13 @@ class InteractionHandler {
             const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
             const displayName = member?.displayName || targetUser.username;
 
+            // Zawsze licznik z party - czyli ten, który buduje ranking /stats
             const result = await sharedState.nagrodyService.correctReward(
                 targetUser.id,
                 displayName,
                 rewardKey,
                 amount,
-                source
+                'party'
             );
 
             if (!result) {
@@ -1090,8 +1081,7 @@ class InteractionHandler {
             }
 
             const { reward, previous, current, applied } = result;
-            const sourceLabel = source === 'manual' ? 'dodane samodzielnie' : 'z party';
-            let content = `✅ Skorygowano nagrody gracza **${displayName}** (${sourceLabel})\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
+            let content = `✅ Skorygowano nagrody z party gracza **${displayName}** (ranking \`/stats\`)\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
 
             if (applied !== amount) {
                 content += `\n⚠️ Nie można zejść poniżej 0 - zastosowano zmianę **${applied}** zamiast **${amount}**.`;
@@ -1099,7 +1089,7 @@ class InteractionHandler {
 
             await interaction.reply({ content, ephemeral: true });
 
-            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę ${reward.name} (${sourceLabel}) gracza ${displayName}: ${previous} → ${current}`);
+            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę z party ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty nagród:', error);

@@ -5,6 +5,7 @@
 **Lobby Party (oryginalne):**
 1. **Lobby Party** - `lobbyService.js`: Max 7 (1+6), 15min dyskusja/czas trwania, 5min ostrzeżenie, prywatny wątek
 2. **Zaproszenia** - Join button → Accept/Reject workflow, tylko zaakceptowani (wyjątek admin), auto-usuwanie
+   - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`, `/add_reward`, `/remove_reward`) z krótkim opisem każdej
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
 4. **Subskrypcje** - Toggle role notifications po zapełnieniu, ephemeral feedback
 8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
@@ -31,7 +32,7 @@
   - Nagrodę wybiera się **przyciskami z ikonami** (customId `myreward_<klucz>_<1|-1>`), bo listy wyboru slash commands nie renderują emotek serwera - pokazałyby surowy tekst `<:II_RC:...>`
   - Licznik nie schodzi poniżej 0 - przy odejmowaniu z zera bot informuje, że zmiana nie została zastosowana
 - **`/rewards`:** Ephemeral embed z nagrodami **wyłącznie osoby wywołującej** - per nagroda `suma (party: N, własne: N)` + pola z sumami: z party / dodane samodzielnie / łącznie
-- **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100), `typ` (opcjonalny: `party` - domyślny, liczony do rankingu, lub `manual` - nagrody z `/add_reward`). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
+- **`/correct`:** Tylko administrator. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party` - nie ma parametru wyboru licznika; nagrodami z `/add_reward` gracze zarządzają sami). Parametry: `użytkownik`, `nagroda` (lista wyboru), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
 **System Przypomnień i Eventów (skopiowane z STAR bota):**
 5. **Przypomnienia** - `przypomnieniaMenedzer.js`: Szablony (text/embed) + Zaplanowane przypomnienia z interwałami (1s-28d lub "ee")
