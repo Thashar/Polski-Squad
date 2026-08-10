@@ -917,15 +917,26 @@ class InteractionHandler {
         const manualTotal = stats?.manualTotal || 0;
         const allRewards = partyTotal + manualTotal;
 
+        // Tylko nagrody, które faktycznie posiadasz - reszta jest dostępna na przyciskach poniżej
+        const owned = this.config.rewards.filter(reward =>
+            (fromParty[reward.key] || 0) > 0 || (manual[reward.key] || 0) > 0
+        );
+
         // Trzy kolumny obok siebie: z party | dodane samodzielnie | razem
-        const column = counter => this.config.rewards
+        const column = counter => owned
             .map(reward => `${reward.emoji} **${counter(reward)}**`)
             .join('\n');
 
         const embed = new EmbedBuilder()
             .setTitle(`🎁 Twoje nagrody — ${displayName}`)
             .setColor('#e74c3c')
-            .addFields(
+            .setFooter({ text: 'Zielone +1 i czerwone -1 zmieniają WYŁĄCZNIE nagrody dodane samodzielnie · do rankingu /stats liczą się tylko nagrody z party' })
+            .setTimestamp();
+
+        if (owned.length === 0) {
+            embed.setDescription('Nie masz jeszcze żadnych nagród.\nZdobądź je w party albo dopisz sobie zielonym przyciskiem **+1** poniżej.');
+        } else {
+            embed.addFields(
                 {
                     name: '🎉 Z party',
                     value: column(reward => fromParty[reward.key] || 0),
@@ -946,9 +957,8 @@ class InteractionHandler {
                     value: `🎉 Z party: **${partyTotal}** · 📝 Dodane samodzielnie: **${manualTotal}** ` +
                         `· 📦 Łącznie: **${allRewards}** ${this.pluralizeRewards(allRewards)}`
                 }
-            )
-            .setFooter({ text: 'Zielone +1 i czerwone -1 zmieniają WYŁĄCZNIE nagrody dodane samodzielnie · do rankingu /stats liczą się tylko nagrody z party' })
-            .setTimestamp();
+            );
+        }
 
         if (lastChange) {
             embed.addFields({ name: 'Ostatnia zmiana (dodane samodzielnie)', value: lastChange });
@@ -1109,9 +1119,12 @@ class InteractionHandler {
         const rewards = stats?.rewards || {};
         const total = stats?.total || 0;
 
-        const description = this.config.rewards
-            .map(reward => `${reward.emoji} **${reward.name}** — **${rewards[reward.key] || 0}**`)
-            .join('\n');
+        // Tylko posiadane nagrody - resztę i tak można dodać przyciskami poniżej
+        const owned = this.config.rewards.filter(reward => (rewards[reward.key] || 0) > 0);
+
+        const description = owned.length > 0
+            ? owned.map(reward => `${reward.emoji} **${reward.name}** — **${rewards[reward.key]}**`).join('\n')
+            : 'Gracz nie ma jeszcze żadnych nagród z party.';
 
         const embed = new EmbedBuilder()
             .setTitle(`🛠️ Korekta nagród — ${displayName}`)
