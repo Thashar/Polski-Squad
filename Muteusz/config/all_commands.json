@@ -546,8 +546,8 @@
         },
         {
           "name": "/add_reward",
-          "description": "Dopisuje własną zdobytą nagrodę - nie liczy się do rankingu /stats, widoczna w /rewards",
-          "usage": "/add_reward nagroda:[nazwa] [ilość:1]",
+          "description": "Dodaje lub usuwa własną nagrodę spoza party (wybór ikoną) - nie liczy się do rankingu /stats, widoczna w /rewards",
+          "usage": "/add_reward [ilość:1] → wybór nagrody przyciskiem z ikoną",
           "requiredPermission": "public"
         },
         {

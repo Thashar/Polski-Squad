@@ -178,37 +178,9 @@ class NagrodyService {
     }
 
     /**
-     * Dolicza nagrodę dodaną samodzielnie przez użytkownika (/add_reward).
-     * Takie nagrody NIE są widoczne w rankingu /stats - tylko w /rewards właściciela.
-     * @param {string} userId - ID użytkownika
-     * @param {string} displayName - Nazwa użytkownika na serwerze
-     * @param {string} rewardKey - Klucz nagrody
-     * @param {number} amount - Liczba nagród do dodania (domyślnie 1)
-     * @returns {Object|null} - { reward, previous, current, manualTotal } lub null gdy nagroda nieznana
-     */
-    async addManualReward(userId, displayName, rewardKey, amount = 1) {
-        const reward = this.getRewardDefinition(rewardKey);
-        if (!reward) return null;
-
-        const userStats = this.ensureUser(userId, displayName);
-        const previous = userStats.manualRewards[rewardKey] || 0;
-
-        userStats.manualRewards[rewardKey] = previous + amount;
-        userStats.lastReward = Date.now();
-        this.recalculateTotals(userStats);
-
-        await this.saveRewards();
-
-        return {
-            reward,
-            previous,
-            current: userStats.manualRewards[rewardKey],
-            manualTotal: userStats.manualTotal
-        };
-    }
-
-    /**
-     * Koryguje liczbę nagród użytkownika (komenda /correct dla administratorów)
+     * Koryguje liczbę nagród użytkownika.
+     * Używane przez /correct (administrator, dowolny gracz) oraz /add_reward
+     * (użytkownik, wyłącznie własne nagrody spoza rankingu).
      * @param {string} userId - ID użytkownika
      * @param {string} displayName - Nazwa użytkownika na serwerze
      * @param {string} rewardKey - Klucz nagrody

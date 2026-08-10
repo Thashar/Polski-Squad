@@ -75,20 +75,12 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('add_reward')
-                .setDescription('Dopisuje nagrodę zdobytą poza party (nie liczy się do rankingu /stats)')
-                .addStringOption(option =>
-                    option.setName('nagroda')
-                        .setDescription('Zdobyta nagroda')
-                        .setRequired(true)
-                        .addChoices(
-                            ...this.config.rewards.map(reward => ({ name: reward.name, value: reward.key }))
-                        )
-                )
+                .setDescription('Koryguje Twoje własne nagrody spoza party (nie liczą się do rankingu /stats)')
                 .addIntegerOption(option =>
                     option.setName('ilość')
-                        .setDescription('Liczba zdobytych nagród (domyślnie 1)')
+                        .setDescription('Dodatnia = dodaj, ujemna = usuń (domyślnie 1)')
                         .setRequired(false)
-                        .setMinValue(1)
+                        .setMinValue(-100)
                         .setMaxValue(100)
                 ),
 
@@ -372,6 +364,12 @@ class InteractionHandler {
 
         if (customId === 'reward_no') {
             await this.handleRewardRejectButton(interaction, sharedState);
+            return;
+        }
+
+        // Wybór nagrody w komendzie /add_reward
+        if (customId.startsWith('myreward_')) {
+            await this.handleMyRewardButton(interaction, sharedState);
             return;
         }
 
@@ -680,16 +678,18 @@ class InteractionHandler {
     }
 
     /**
-     * Buduje rzędy przycisków nagród (same emoji, bez opisów)
+     * Buduje rzędy przycisków nagród (same ikony, bez opisów).
+     * Emotki serwera renderują się na przyciskach - w listach wyboru slash commands nie.
+     * @param {Function} idFactory - Funkcja budująca customId dla nagrody
      * @returns {Array} - Rzędy przycisków
      */
-    buildRewardButtons() {
+    buildRewardButtons(idFactory = reward => `reward_pick_${reward.key}`) {
         const rows = [];
 
         for (let i = 0; i < this.config.rewards.length; i += 5) {
             const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
                 new ButtonBuilder()
-                    .setCustomId(`reward_pick_${reward.key}`)
+                    .setCustomId(idFactory(reward))
                     .setEmoji(reward.emoji)
                     .setStyle(ButtonStyle.Secondary)
             );
@@ -912,48 +912,98 @@ class InteractionHandler {
     }
 
     /**
-     * Obsługuje komendę /add_reward - samodzielne dopisanie zdobytej nagrody.
-     * Nagrody z tej komendy NIE trafiają do rankingu /stats.
+     * Obsługuje komendę /add_reward - działa jak /correct, ale tylko na własnych nagrodach
+     * spoza party. Nagrody z tej komendy NIE trafiają do rankingu /stats.
      * @param {CommandInteraction} interaction - Interakcja komendy
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleAddRewardCommand(interaction, sharedState) {
         try {
-            const rewardKey = interaction.options.getString('nagroda');
             const amount = interaction.options.getInteger('ilość') ?? 1;
-            const displayName = interaction.member?.displayName || interaction.user.username;
 
-            const result = await sharedState.nagrodyService.addManualReward(
-                interaction.user.id,
-                displayName,
-                rewardKey,
-                amount
-            );
-
-            if (!result) {
+            if (amount === 0) {
                 await interaction.reply({
-                    content: '❌ Nieznana nagroda.',
+                    content: '❌ Ilość nie może wynosić 0 (dodatnia = dodaj, ujemna = usuń).',
                     ephemeral: true
                 });
                 return;
             }
 
-            const { reward, current } = result;
+            const action = amount > 0
+                ? `dodać **+${amount}**`
+                : `usunąć **${amount}**`;
 
             await interaction.reply({
-                content: `✅ Dopisano ${reward.emoji} **${reward.name}** ×${amount} do Twoich nagród.\n` +
-                    `Masz teraz ${reward.emoji} ×${current} dodanych samodzielnie.\n` +
-                    `*Nagrody dodane tą komendą nie są liczone do rankingu \`/stats\` - zobaczysz je przez \`/rewards\`.*`,
+                content: `Wybierz nagrodę, do której chcesz ${action}:\n` +
+                    `*Nagrody z tej komendy nie są liczone do rankingu \`/stats\` - zobaczysz je przez \`/rewards\`.*`,
+                components: this.buildRewardButtons(reward => `myreward_${reward.key}_${amount}`),
                 ephemeral: true
             });
 
-            logger.info(`📝 ${displayName} dopisał samodzielnie nagrodę ${reward.name} ×${amount}`);
+        } catch (error) {
+            logger.error('❌ Błąd podczas otwierania wyboru nagrody:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas otwierania wyboru nagrody.',
+                ephemeral: true
+            }).catch(() => {});
+        }
+    }
+
+    /**
+     * Obsługuje wybór nagrody w komendzie /add_reward - koryguje własne nagrody spoza rankingu
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleMyRewardButton(interaction, sharedState) {
+        try {
+            // Format: myreward_<klucz>_<ilość>
+            const [, rewardKey, rawAmount] = interaction.customId.split('_');
+            const amount = parseInt(rawAmount, 10);
+            const displayName = interaction.member?.displayName || interaction.user.username;
+
+            if (!Number.isInteger(amount) || amount === 0) {
+                await interaction.update({
+                    content: '❌ Nieprawidłowa ilość.',
+                    components: []
+                });
+                return;
+            }
+
+            // Zawsze własne konto i zawsze licznik spoza rankingu
+            const result = await sharedState.nagrodyService.correctReward(
+                interaction.user.id,
+                displayName,
+                rewardKey,
+                amount,
+                'manual'
+            );
+
+            if (!result) {
+                await interaction.update({
+                    content: '❌ Nieznana nagroda.',
+                    components: []
+                });
+                return;
+            }
+
+            const { reward, previous, current, applied } = result;
+            let content = `✅ Skorygowano Twoje nagrody\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
+
+            if (applied !== amount) {
+                content += `\n⚠️ Nie można zejść poniżej 0 - zastosowano zmianę **${applied}** zamiast **${amount}**.`;
+            }
+
+            content += `\n*Podgląd wszystkich Twoich nagród: \`/rewards\`*`;
+
+            await interaction.update({ content, components: [] });
+
+            logger.info(`📝 ${displayName} skorygował własną nagrodę ${reward.name}: ${previous} → ${current}`);
 
         } catch (error) {
-            logger.error('❌ Błąd podczas dopisywania nagrody:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas dopisywania nagrody.',
-                ephemeral: true
+            logger.error('❌ Błąd podczas korekty własnych nagród:', error);
+            await interaction.update({
+                content: '❌ Wystąpił błąd podczas korekty nagród.',
+                components: []
             }).catch(() => {});
         }
     }

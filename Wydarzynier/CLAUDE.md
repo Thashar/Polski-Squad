@@ -27,7 +27,7 @@
 
 **Komendy nagród:**
 - **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród z party i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
-- **`/add_reward`:** Publiczna (każdy użytkownik), odpowiedź ephemeral. Parametry: `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, 1-100, domyślnie 1). Dopisuje nagrodę do własnego licznika poza rankingiem
+- **`/add_reward`:** Publiczna (każdy użytkownik), wszystko ephemeral. Działa jak `/correct`, ale **wyłącznie na własnych nagrodach spoza rankingu** - nie ma parametru `użytkownik` ani `typ`, źródło jest na sztywno `manual`. Parametr: `ilość` (opcjonalna, -100..100, domyślnie 1; dodatnia dodaje, ujemna usuwa, 0 odrzucane). Nagrodę wybiera się **przyciskami z ikonami** (customId `myreward_<klucz>_<ilość>`), bo listy wyboru slash commands nie renderują emotek serwera - pokazałyby surowy tekst `<:II_RC:...>`. Licznik nie schodzi poniżej 0
 - **`/rewards`:** Ephemeral embed z nagrodami **wyłącznie osoby wywołującej** - per nagroda `suma (party: N, własne: N)` + pola z sumami: z party / dodane samodzielnie / łącznie
 - **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100), `typ` (opcjonalny: `party` - domyślny, liczony do rankingu, lub `manual` - nagrody z `/add_reward`). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
