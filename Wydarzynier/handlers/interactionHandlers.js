@@ -357,6 +357,12 @@ class InteractionHandler {
             return;
         }
 
+        // Wyszarzone przyciski po zgłoszeniu nagrody - nieklikalne, zabezpieczenie na wszelki wypadek
+        if (customId.startsWith('reward_done_')) {
+            await interaction.deferUpdate();
+            return;
+        }
+
         // Wybór nagrody w komendach /add_reward i /remove_reward
         if (customId.startsWith('myreward_')) {
             await this.handleMyRewardButton(interaction, sharedState);
@@ -671,9 +677,10 @@ class InteractionHandler {
      * Buduje rzędy przycisków nagród (same ikony, bez opisów).
      * Emotki serwera renderują się na przyciskach - w listach wyboru slash commands nie.
      * @param {Function} idFactory - Funkcja budująca customId dla nagrody
+     * @param {boolean} disabled - Czy przyciski mają być nieaktywne (wyszarzone)
      * @returns {Array} - Rzędy przycisków
      */
-    buildRewardButtons(idFactory = reward => `reward_pick_${reward.key}`) {
+    buildRewardButtons(idFactory = reward => `reward_pick_${reward.key}`, disabled = false) {
         const rows = [];
 
         for (let i = 0; i < this.config.rewards.length; i += 5) {
@@ -682,6 +689,7 @@ class InteractionHandler {
                     .setCustomId(idFactory(reward))
                     .setEmoji(reward.emoji)
                     .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
             );
 
             rows.push(new ActionRowBuilder().addComponents(...buttons));
@@ -703,6 +711,18 @@ class InteractionHandler {
             if (!reward) {
                 await interaction.reply({
                     content: '❌ Nieznana nagroda.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Kto już zgłosił nagrodę w tym losowaniu, dostaje własny komplet wyszarzonych przycisków.
+            // Discord nie potrafi wyłączyć przycisków wspólnej wiadomości tylko dla jednej osoby,
+            // więc blokada jest pokazywana w ephemeralu - pozostali gracze klikają dalej normalnie.
+            if (sharedState.nagrodyService.hasClaimed(interaction.message.id, interaction.user.id)) {
+                await interaction.reply({
+                    content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
+                    components: this.buildRewardButtons(r => `reward_done_${r.key}`, true),
                     ephemeral: true
                 });
                 return;
@@ -760,7 +780,7 @@ class InteractionHandler {
             if (!claimRegistered) {
                 await interaction.update({
                     content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
-                    components: []
+                    components: this.buildRewardButtons(r => `reward_done_${r.key}`, true)
                 });
                 return;
             }
@@ -776,9 +796,10 @@ class InteractionHandler {
                 throw error;
             }
 
+            // Wyszarzone przyciski w ephemeralu = potwierdzenie, że dla tej osoby zgłaszanie jest zamknięte
             await interaction.update({
                 content: this.config.messages.rewardAccepted(reward.name, reward.emoji),
-                components: []
+                components: this.buildRewardButtons(r => `reward_done_${r.key}`, true)
             });
 
             // Ogłoszenie na kanale party
