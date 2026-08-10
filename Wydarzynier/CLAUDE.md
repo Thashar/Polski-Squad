@@ -18,7 +18,7 @@
 - **Ochrona przed podwójnym zgłoszeniem:** Przed doliczeniem bot sprawdza czy przyciski w wiadomości z pytaniem nie są już wyłączone (`isRewardPromptClaimed`) - obsługuje wyścig dwóch otwartych ephemerali
 - **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
 - **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, lastReward } } }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
-- **`/stats`:** Publiczny embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
+- **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
 - **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
 **System Przypomnień i Eventów (skopiowane z STAR bota):**

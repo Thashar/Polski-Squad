@@ -877,7 +877,7 @@ class InteractionHandler {
                 })
                 .setTimestamp();
 
-            await interaction.reply({ embeds: [embed] });
+            await interaction.reply({ embeds: [embed], ephemeral: true });
 
         } catch (error) {
             logger.error('❌ Błąd podczas wyświetlania rankingu nagród:', error);
