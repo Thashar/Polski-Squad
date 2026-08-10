@@ -545,27 +545,15 @@
           "requiredPermission": "public"
         },
         {
-          "name": "/add_reward",
-          "description": "Dopisuje jedną własną nagrodę spoza party (wybór ikoną) - nie liczy się do rankingu /stats, widoczna w /rewards",
-          "usage": "/add_reward → wybór nagrody przyciskiem z ikoną",
-          "requiredPermission": "public"
-        },
-        {
           "name": "/correct",
           "description": "Panel korekty nagród gracza z party - embed ze stanem i przyciski +1/-1 dla każdej nagrody, wpływa na ranking /stats",
           "usage": "/correct użytkownik:@user → przyciski +1 (zielone) i -1 (czerwone)",
           "requiredPermission": "administrator"
         },
         {
-          "name": "/remove_reward",
-          "description": "Odejmuje jedną własną nagrodę spoza party (wybór ikoną) - dotyczy tylko nagród dodanych przez /add_reward",
-          "usage": "/remove_reward → wybór nagrody przyciskiem z ikoną",
-          "requiredPermission": "public"
-        },
-        {
           "name": "/rewards",
-          "description": "Pokazuje wszystkie Twoje nagrody - zdobyte w party i dodane samodzielnie",
-          "usage": "/rewards",
+          "description": "Panel Twoich nagród - osobno z party i dodane samodzielnie, z przyciskami +1/-1 działającymi tylko na dodane samodzielnie",
+          "usage": "/rewards → przyciski +1 (zielone) i -1 (czerwone)",
           "requiredPermission": "public"
         },
         {

@@ -5,7 +5,7 @@
 **Lobby Party (oryginalne):**
 1. **Lobby Party** - `lobbyService.js`: Max 7 (1+6), 15min dyskusja/czas trwania, 5min ostrzeżenie, prywatny wątek
 2. **Zaproszenia** - Join button → Accept/Reject workflow, tylko zaakceptowani (wyjątek admin), auto-usuwanie
-   - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`, `/add_reward`, `/remove_reward`) z krótkim opisem każdej
+   - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`) z krótkim opisem każdej
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
 4. **Subskrypcje** - Toggle role notifications po zapełnieniu, ephemeral feedback
 8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
@@ -29,10 +29,11 @@
 
 **Komendy nagród:**
 - **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród z party i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
-- **`/add_reward` (+1) i `/remove_reward` (-1):** Publiczne (każdy użytkownik), bez parametrów, wszystko ephemeral. Zmieniają **wyłącznie własne nagrody spoza rankingu** (źródło na sztywno `manual`, brak parametru `użytkownik`), zawsze **po jednej sztuce**. Obie obsługiwane przez `handleOwnRewardCommand(interaction, sharedState, amount)` - `1` albo `-1`
-  - Nagrodę wybiera się **przyciskami z ikonami** (customId `myreward_<klucz>_<1|-1>`), bo listy wyboru slash commands nie renderują emotek serwera - pokazałyby surowy tekst `<:II_RC:...>`
-  - Licznik nie schodzi poniżej 0 - przy odejmowaniu z zera bot informuje, że zmiana nie została zastosowana
-- **`/rewards`:** Ephemeral embed z nagrodami **wyłącznie osoby wywołującej** - per nagroda `suma (party: N, własne: N)` + pola z sumami: z party / dodane samodzielnie / łącznie
+- **`/rewards`:** Publiczna (każdy użytkownik), bez parametrów, **interaktywny panel** ephemeral, dotyczy **wyłącznie osoby wywołującej**
+  - **Embed** (`buildOwnRewardsEmbed`): trzy kolumny inline z ikoną i liczbą dla wszystkich 9 nagród - `🎉 Z party` | `📝 Dodane samodzielnie` | `📦 Razem`, poniżej pole `Podsumowanie` z sumami obu źródeł i łączną liczbą, a po korekcie `Ostatnia zmiana`
+  - **Przyciski** (`buildOwnRewardsButtons`): 4 rzędy × 18 przycisków - 2 rzędy zielonych `+1` i 2 rzędy czerwonych `−1` z ikoną nagrody (customId `myrw_<klucz>_<1|-1>`, bez ID użytkownika - zawsze konto klikającego)
+  - Zmieniają **wyłącznie licznik `manualRewards`** (dodane samodzielnie). Nagród z party ta komenda nie rusza, więc nie da się nią podbić rankingu `/stats`. Licznik nie schodzi poniżej 0
+  - Zastąpiła wcześniejsze osobne komendy `/add_reward` i `/remove_reward` (usunięte)
 - **`/correct`:** Tylko administrator, **interaktywny panel**, wszystko ephemeral. Jedyny parametr: `użytkownik`. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party`; nagrodami z `/add_reward` gracze zarządzają sami)
   - **Embed** (`buildCorrectionEmbed`): stan wszystkich 9 nagród gracza (także zerowych), suma z party, pole „Ostatnia zmiana" po każdym kliknięciu
   - **Przyciski** (`buildCorrectionButtons`): 4 rzędy × 18 przycisków - 2 rzędy zielonych `+1` i 2 rzędy czerwonych `−1`, każdy z ikoną nagrody i znakiem kierunku jako labelem (customId `corr_<idGracza>_<klucz>_<1|-1>`)
@@ -68,7 +69,7 @@
 - **Zarządzanie:** Dodawanie, edycja, usuwanie eventów przez panel kontrolny
 - **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
-**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`, `/stats`, `/rewards`, `/add_reward`, `/remove_reward`, `/correct`
+**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`, `/stats`, `/rewards`, `/correct`
 **Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot3):**
