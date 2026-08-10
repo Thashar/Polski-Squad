@@ -1,12 +1,25 @@
 ### 🎉 Wydarzynier Bot
 
-**7 Systemów:**
+**8 Systemów:**
 
 **Lobby Party (oryginalne):**
 1. **Lobby Party** - `lobbyService.js`: Max 7 (1+6), 15min dyskusja/czas trwania, 5min ostrzeżenie, prywatny wątek
 2. **Zaproszenia** - Join button → Accept/Reject workflow, tylko zaakceptowani (wyjątek admin), auto-usuwanie
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
 4. **Subskrypcje** - Toggle role notifications po zapełnieniu, ephemeral feedback
+8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
+
+**Funkcjonalność Nagród Specjalnych:**
+- **Pytanie o nagrodę:** 30 sekund po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 9 przyciskami (same emoji nagród, bez opisów, 2 rzędy: 5+4)
+- **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
+- **Potwierdzenie:** Kliknięcie emoji → ephemeral „Czy na pewno otrzymałeś taką nagrodę…" z przyciskami **Tak** / **Nie**
+  - **Tak** → nagroda doliczana na konto użytkownika, przyciski emoji w wiadomości stają się nieaktywne (jedna nagroda na losowanie), ogłoszenie na kanale `/party`: `<@user> właśnie zgarnął nagrodę specjalną! <emoji>.`
+  - **Nie** → ephemeral z pouczeniem o niezaburzaniu statystyk (nic nie jest zliczane)
+- **Ochrona przed podwójnym zgłoszeniem:** Przed doliczeniem bot sprawdza czy przyciski w wiadomości z pytaniem nie są już wyłączone (`isRewardPromptClaimed`) - obsługuje wyścig dwóch otwartych ephemerali
+- **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
+- **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, lastReward } } }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
+- **`/stats`:** Publiczny embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
+- **`/correct`:** Tylko administrator. Parametry: `użytkownik`, `nagroda` (lista wyboru z `config.rewards`), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
 
 **System Przypomnień i Eventów (skopiowane z STAR bota):**
 5. **Przypomnienia** - `przypomnieniaMenedzer.js`: Szablony (text/embed) + Zaplanowane przypomnienia z interwałami (1s-28d lub "ee")
@@ -37,7 +50,7 @@
 - **Zarządzanie:** Dodawanie, edycja, usuwanie eventów przez panel kontrolny
 - **Subskrypcja:** Zielony przycisk 🔔 pod listą - toggle roli powiadomień o eventach (1297587256101699776)
 
-**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`
+**Komendy:** `/party`, `/party-add`, `/party-kick`, `/party-close`, `/stats`, `/correct`
 **Env:** TOKEN, NOTIFICATIONS_BOARD_CHANNEL, ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot3):**
@@ -91,6 +104,7 @@ Wydarzynier/
 │   └── reactionHandlers.js
 ├── services/
 │   ├── lobbyService.js                # Lobby party (oryginalne)
+│   ├── nagrodyService.js              # Nagrody specjalne - zliczanie i ranking
 │   ├── timerService.js                # Timery lobby (oryginalne)
 │   ├── bazarService.js                # Bazar (oryginalne)
 │   ├── przypomnieniaMenedzer.js       # CRUD szablonów i przypomnień (z STAR)
@@ -100,7 +114,8 @@ Wydarzynier/
 │   ├── listaEventowMenedzer.js        # Lista eventów na kanale (z STAR)
 │   └── strefaCzasowaManager.js        # Zarządzanie strefą czasową (z STAR)
 └── data/
-    ├── lobbies.json                   # Aktywne lobby (oryginalne)
+    ├── lobbies.json                   # Aktywne lobby (oryginalne, + rewardPromptAt/rewardPromptSent)
+    ├── nagrody.json                   # Statystyki nagród specjalnych
     ├── timers.json                    # Timery lobby (oryginalne)
     ├── przypomnienia.json             # Szablony i zaplanowane (z STAR)
     ├── eventy.json                    # Eventy i kanał listy (z STAR)

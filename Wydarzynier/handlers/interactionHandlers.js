@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { delay } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
@@ -67,7 +67,36 @@ class InteractionHandler {
                     option.setName('użytkownik')
                         .setDescription('Użytkownik do dodania do lobby')
                         .setRequired(true)
+                ),
+
+            new SlashCommandBuilder()
+                .setName('stats')
+                .setDescription('Ranking nagród specjalnych zdobytych w party'),
+
+            new SlashCommandBuilder()
+                .setName('correct')
+                .setDescription('Koryguje liczbę nagród użytkownika (tylko administratorzy)')
+                .addUserOption(option =>
+                    option.setName('użytkownik')
+                        .setDescription('Użytkownik, któremu korygujemy nagrody')
+                        .setRequired(true)
                 )
+                .addStringOption(option =>
+                    option.setName('nagroda')
+                        .setDescription('Nagroda do skorygowania')
+                        .setRequired(true)
+                        .addChoices(
+                            ...this.config.rewards.map(reward => ({ name: reward.name, value: reward.key }))
+                        )
+                )
+                .addIntegerOption(option =>
+                    option.setName('ilość')
+                        .setDescription('Dodatnia = dodaj, ujemna = usuń (domyślnie 1)')
+                        .setRequired(false)
+                        .setMinValue(-100)
+                        .setMaxValue(100)
+                )
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -148,6 +177,10 @@ class InteractionHandler {
             await this.handlePartyCloseCommand(interaction, sharedState);
         } else if (commandName === 'party-add') {
             await this.handlePartyAddCommand(interaction, sharedState);
+        } else if (commandName === 'stats') {
+            await this.handleStatsCommand(interaction, sharedState);
+        } else if (commandName === 'correct') {
+            await this.handleCorrectCommand(interaction, sharedState);
         }
     }
 
@@ -287,6 +320,22 @@ class InteractionHandler {
         // Obsługa przycisku powiadomień o party (dostępny dla wszystkich)
         if (customId === 'toggle_party_notifications' || customId === 'party_access_notifications') {
             await this.handleToggleNotifications(interaction, sharedState);
+            return;
+        }
+
+        // Obsługa przycisków nagród specjalnych (czerwone skrzynki)
+        if (customId.startsWith('reward_pick_')) {
+            await this.handleRewardPickButton(interaction, sharedState);
+            return;
+        }
+
+        if (customId.startsWith('reward_yes_')) {
+            await this.handleRewardConfirmButton(interaction, sharedState);
+            return;
+        }
+
+        if (customId === 'reward_no') {
+            await this.handleRewardRejectButton(interaction, sharedState);
             return;
         }
 
@@ -486,6 +535,9 @@ class InteractionHandler {
                 components: [notificationButton]
             });
 
+            // Zaplanuj pytanie o nagrodę specjalną (30s po zapełnieniu lobby)
+            await this.scheduleRewardPrompt(lobby, sharedState);
+
             // Ustaw nowy timer na 15 minut od zapełnienia
             const warningCallback = async (lobbyId) => {
                 try {
@@ -534,6 +586,370 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi pełnego lobby:', error);
+        }
+    }
+
+    /**
+     * Planuje pytanie o nagrodę specjalną (30s po zapełnieniu lobby)
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async scheduleRewardPrompt(lobby, sharedState) {
+        try {
+            // Nie planuj ponownie jeśli pytanie już zostało wysłane lub zaplanowane
+            if (lobby.rewardPromptSent || lobby.rewardPromptAt) return;
+
+            const delayMs = this.config.lobby.rewardPromptDelay;
+
+            lobby.rewardPromptAt = Date.now() + delayMs;
+            lobby.rewardPromptSent = false;
+            await sharedState.lobbyService.saveLobbies();
+
+            setTimeout(() => {
+                this.sendRewardPrompt(lobby.id, sharedState).catch(error => {
+                    logger.error(`❌ Błąd podczas wysyłania pytania o nagrodę dla lobby ${lobby.id}:`, error);
+                });
+            }, delayMs);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas planowania pytania o nagrodę:', error);
+        }
+    }
+
+    /**
+     * Wysyła pytanie o nagrodę specjalną wraz z przyciskami emoji
+     * @param {string} lobbyId - ID lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async sendRewardPrompt(lobbyId, sharedState) {
+        const lobby = sharedState.lobbyService.getLobby(lobbyId);
+        if (!lobby || lobby.rewardPromptSent) return;
+
+        const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
+        if (!thread) {
+            logger.warn(`⚠️ Nie znaleziono wątku lobby ${lobbyId} - pytanie o nagrodę pominięte`);
+            return;
+        }
+
+        await thread.send({
+            content: this.config.messages.rewardPrompt,
+            components: this.buildRewardButtons(false)
+        });
+
+        lobby.rewardPromptSent = true;
+        lobby.rewardPromptAt = null;
+        await sharedState.lobbyService.saveLobbies();
+
+        logger.info(`🎁 Wysłano pytanie o nagrodę specjalną w lobby ${lobbyId}`);
+    }
+
+    /**
+     * Buduje rzędy przycisków nagród (same emoji, bez opisów)
+     * @param {boolean} disabled - Czy przyciski mają być nieaktywne
+     * @returns {Array} - Rzędy przycisków
+     */
+    buildRewardButtons(disabled = false) {
+        const rows = [];
+
+        for (let i = 0; i < this.config.rewards.length; i += 5) {
+            const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
+                new ButtonBuilder()
+                    .setCustomId(`reward_pick_${reward.key}`)
+                    .setEmoji(reward.emoji)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            );
+
+            rows.push(new ActionRowBuilder().addComponents(...buttons));
+        }
+
+        return rows;
+    }
+
+    /**
+     * Sprawdza czy przyciski nagród w wiadomości są już nieaktywne (nagroda zgłoszona)
+     * @param {Message} message - Wiadomość z pytaniem o nagrodę
+     * @returns {boolean} - Czy nagroda została już zgłoszona
+     */
+    isRewardPromptClaimed(message) {
+        return message?.components?.[0]?.components?.[0]?.disabled === true;
+    }
+
+    /**
+     * Obsługuje kliknięcie przycisku nagrody - pyta o potwierdzenie
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardPickButton(interaction, sharedState) {
+        try {
+            const rewardKey = interaction.customId.replace('reward_pick_', '');
+            const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
+
+            if (!reward) {
+                await interaction.reply({
+                    content: '❌ Nieznana nagroda.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const confirmRow = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`reward_yes_${rewardKey}_${interaction.channelId}_${interaction.message.id}`)
+                        .setLabel('Tak')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('reward_no')
+                        .setLabel('Nie')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            await interaction.reply({
+                content: this.config.messages.rewardConfirmation(reward.name, reward.emoji),
+                components: [confirmRow],
+                ephemeral: true
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi przycisku nagrody:', error);
+        }
+    }
+
+    /**
+     * Obsługuje potwierdzenie nagrody ("Tak")
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardConfirmButton(interaction, sharedState) {
+        try {
+            // Format: reward_yes_<klucz>_<idKanału>_<idWiadomości>
+            const [, , rewardKey, promptChannelId, promptMessageId] = interaction.customId.split('_');
+            const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
+
+            if (!reward) {
+                await interaction.update({
+                    content: '❌ Nieznana nagroda.',
+                    components: []
+                });
+                return;
+            }
+
+            // Pobierz wiadomość z pytaniem i sprawdź czy nagroda nie została już zgłoszona
+            const promptChannel = await sharedState.client.channels.fetch(promptChannelId).catch(() => null);
+            const promptMessage = promptChannel
+                ? await promptChannel.messages.fetch(promptMessageId).catch(() => null)
+                : null;
+
+            if (promptMessage && this.isRewardPromptClaimed(promptMessage)) {
+                await interaction.update({
+                    content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
+                    components: []
+                });
+                return;
+            }
+
+            const member = interaction.member;
+            const displayName = member?.displayName || interaction.user.username;
+
+            await sharedState.nagrodyService.addReward(interaction.user.id, displayName, rewardKey);
+
+            await interaction.update({
+                content: this.config.messages.rewardAccepted(reward.name, reward.emoji),
+                components: []
+            });
+
+            // Dezaktywuj przyciski nagród w wiadomości z pytaniem
+            if (promptMessage) {
+                try {
+                    await promptMessage.edit({ components: this.buildRewardButtons(true) });
+                } catch (error) {
+                    logger.error('❌ Błąd podczas dezaktywacji przycisków nagród:', error);
+                }
+            }
+
+            // Ogłoszenie na kanale party
+            try {
+                const partyChannel = await sharedState.client.channels.fetch(this.config.channels.party);
+                await partyChannel.send(
+                    this.config.messages.rewardAnnouncement(interaction.user.id, reward.emoji)
+                );
+            } catch (error) {
+                logger.error('❌ Błąd podczas wysyłania ogłoszenia o nagrodzie:', error);
+            }
+
+            logger.info(`🎁 ${displayName} zgłosił nagrodę specjalną: ${reward.name}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas potwierdzania nagrody:', error);
+        }
+    }
+
+    /**
+     * Obsługuje odrzucenie potwierdzenia nagrody ("Nie")
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardRejectButton(interaction, sharedState) {
+        try {
+            await interaction.update({
+                content: this.config.messages.rewardDenied,
+                components: []
+            });
+        } catch (error) {
+            logger.error('❌ Błąd podczas odrzucania nagrody:', error);
+        }
+    }
+
+    /**
+     * Odmienia słowo "nagroda" według liczby
+     * @param {number} count - Liczba nagród
+     * @returns {string} - Odmieniona forma
+     */
+    pluralizeRewards(count) {
+        if (count === 1) return 'nagroda';
+
+        const mod10 = count % 10;
+        const mod100 = count % 100;
+
+        if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'nagrody';
+        return 'nagród';
+    }
+
+    /**
+     * Obsługuje komendę /stats - ranking nagród specjalnych
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleStatsCommand(interaction, sharedState) {
+        try {
+            const ranking = sharedState.nagrodyService.getRanking();
+
+            if (ranking.length === 0) {
+                await interaction.reply({
+                    content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const medals = ['🥇', '🥈', '🥉'];
+            let description = '';
+            let hiddenUsers = 0;
+
+            ranking.forEach((entry, index) => {
+                const position = medals[index] || `**${index + 1}.**`;
+                const rewardsText = this.config.rewards
+                    .filter(reward => (entry.rewards[reward.key] || 0) > 0)
+                    .map(reward => `${reward.emoji} ×${entry.rewards[reward.key]}`)
+                    .join(' ');
+
+                const line = `${position} **${entry.displayName}** — ${entry.total} ${this.pluralizeRewards(entry.total)}\n${rewardsText}`;
+
+                // Limit opisu embeda to 4096 znaków
+                if (description.length + line.length + 2 > 3800) {
+                    hiddenUsers++;
+                    return;
+                }
+
+                description += (description ? '\n\n' : '') + line;
+            });
+
+            if (hiddenUsers > 0) {
+                description += `\n\n…oraz **${hiddenUsers}** kolejnych graczy.`;
+            }
+
+            const totals = sharedState.nagrodyService.getTotalsByReward();
+            const totalsText = this.config.rewards
+                .filter(reward => (totals[reward.key] || 0) > 0)
+                .map(reward => `${reward.emoji} ×${totals[reward.key]}`)
+                .join(' ') || 'brak';
+
+            const allRewards = ranking.reduce((sum, entry) => sum + entry.total, 0);
+
+            const embed = new EmbedBuilder()
+                .setTitle('🎁 Ranking nagród specjalnych')
+                .setColor('#e74c3c')
+                .setDescription(description)
+                .addFields({
+                    name: `Łącznie: ${allRewards} ${this.pluralizeRewards(allRewards)}`,
+                    value: totalsText
+                })
+                .setTimestamp();
+
+            await interaction.reply({ embeds: [embed] });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyświetlania rankingu nagród:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas pobierania rankingu.',
+                ephemeral: true
+            }).catch(() => {});
+        }
+    }
+
+    /**
+     * Obsługuje komendę /correct - korekta nagród przez administratora
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleCorrectCommand(interaction, sharedState) {
+        try {
+            if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+                await interaction.reply({
+                    content: '❌ Tylko administratorzy mogą korygować nagrody.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const targetUser = interaction.options.getUser('użytkownik');
+            const rewardKey = interaction.options.getString('nagroda');
+            const amount = interaction.options.getInteger('ilość') ?? 1;
+
+            if (amount === 0) {
+                await interaction.reply({
+                    content: '❌ Ilość nie może wynosić 0 (dodatnia = dodaj, ujemna = usuń).',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            const displayName = member?.displayName || targetUser.username;
+
+            const result = await sharedState.nagrodyService.correctReward(
+                targetUser.id,
+                displayName,
+                rewardKey,
+                amount
+            );
+
+            if (!result) {
+                await interaction.reply({
+                    content: '❌ Nieznana nagroda.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            const { reward, previous, current, applied } = result;
+            let content = `✅ Skorygowano nagrody gracza **${displayName}**\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
+
+            if (applied !== amount) {
+                content += `\n⚠️ Nie można zejść poniżej 0 - zastosowano zmianę **${applied}** zamiast **${amount}**.`;
+            }
+
+            await interaction.reply({ content, ephemeral: true });
+
+            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas korekty nagród:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas korekty nagród.',
+                ephemeral: true
+            }).catch(() => {});
         }
     }
 

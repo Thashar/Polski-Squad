@@ -9,6 +9,7 @@ const { handleMessageUpdate } = require('./handlers/messageHandlers');
 const LobbyService = require('./services/lobbyService');
 const TimerService = require('./services/timerService');
 const BazarService = require('./services/bazarService');
+const NagrodyService = require('./services/nagrodyService');
 const PrzypomnieniaMenedzer = require('./services/przypomnieniaMenedzer');
 const Harmonogram = require('./services/harmonogram');
 const TablicaMenedzer = require('./services/tablicaMenedzer');
@@ -35,6 +36,7 @@ const client = new Client({
 const lobbyService = new LobbyService(config);
 const timerService = new TimerService(config);
 const bazarService = new BazarService(config);
+const nagrodyService = new NagrodyService(config);
 
 const przypomnieniaMenedzer = new PrzypomnieniaMenedzer(config, logger);
 const strefaCzasowaManager = new StrefaCzasowaManager(logger);
@@ -48,6 +50,7 @@ const sharedState = {
     lobbyService,
     timerService,
     bazarService,
+    nagrodyService,
     przypomnieniaMenedzer,
     strefaCzasowaManager,
     eventMenedzer,
@@ -139,6 +142,7 @@ client.once(Events.ClientReady, async () => {
         await lobbyService.loadLobbies();
         await timerService.restoreTimers(sharedState);
         await bazarService.initialize(client);
+        await nagrodyService.loadRewards();
 
         await przypomnieniaMenedzer.initialize();
         await eventMenedzer.initialize();
@@ -159,6 +163,8 @@ client.once(Events.ClientReady, async () => {
         const { InteractionHandler } = require('./handlers/interactionHandlers');
         const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
         await interactionHandler.registerSlashCommands(client);
+
+        restoreRewardPrompts(interactionHandler, sharedState);
 
         startRepositionSystem(sharedState);
 
@@ -402,6 +408,29 @@ process.on('uncaughtException', error => {
     logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     process.exit(1);
 });
+
+/**
+ * Przywraca zaplanowane pytania o nagrodę specjalną po restarcie bota
+ * @param {InteractionHandler} interactionHandler - Handler interakcji
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+function restoreRewardPrompts(interactionHandler, sharedState) {
+    const lobbies = sharedState.lobbyService.getAllActiveLobbies();
+
+    for (const lobby of lobbies) {
+        if (lobby.rewardPromptSent || !lobby.rewardPromptAt) continue;
+
+        const remaining = Math.max(0, lobby.rewardPromptAt - Date.now());
+
+        setTimeout(() => {
+            interactionHandler.sendRewardPrompt(lobby.id, sharedState).catch(error => {
+                logger.error(`❌ Błąd podczas wysyłania przywróconego pytania o nagrodę (${lobby.id}):`, error);
+            });
+        }, remaining);
+
+        logger.info(`🎁 Przywrócono pytanie o nagrodę dla lobby ${lobby.id} - za ${Math.round(remaining / 1000)}s`);
+    }
+}
 
 function startRepositionSystem(sharedState) {
     setInterval(async () => {

@@ -248,7 +248,9 @@ class LobbyService {
                     isFull: lobby.isFull,
                     createdAt: lobby.createdAt,
                     lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt,
-                    isExtended: lobby.isExtended || false
+                    isExtended: lobby.isExtended || false,
+                    rewardPromptAt: lobby.rewardPromptAt || null, // Kiedy wysłać pytanie o nagrodę specjalną
+                    rewardPromptSent: lobby.rewardPromptSent || false
                 };
             }
 

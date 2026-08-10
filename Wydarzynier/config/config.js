@@ -54,9 +54,23 @@ module.exports = {
         pin: '<:N_SSS:1275068676508356640>' // Emoji do przypinania w bazarze
     },
 
+    // Nagrody specjalne (czerwone skrzynki) - kolejność = kolejność przycisków
+    rewards: [
+        { key: 'petaw',   name: 'Pet AW',              emoji: '<:II_PetAW:1407383326830104658>' },
+        { key: 'rc',      name: 'RC',                  emoji: '<:II_RC:1385139885924421653>' },
+        { key: 'chip',    name: 'Chip',                emoji: '<:II_Chip:1402532787059294229>' },
+        { key: 'aw',      name: 'AW',                  emoji: '<:II_AW:1402532745804124242>' },
+        { key: 'collred', name: 'Czerwona kolekcja',   emoji: '<:J_CollRed:1402533014080065546>' },
+        { key: 'mcore',   name: 'Mount Core',          emoji: '<:II_MountCore:1492137886680748113>' },
+        { key: 'csel',    name: 'Chest Core Selector', emoji: '<:J_ChestCoreSelector:1402533058548338741>' },
+        { key: 'pcryst',  name: 'Pet Crystal',         emoji: '<:JJ_PetCrystal:1409859481000607784>' },
+        { key: 'pshard',  name: 'Panda Shard',         emoji: '<:IG_PandaShard:1402533951511461940>' }
+    ],
+
     // Ustawienia lobby
     lobby: {
         maxPlayers: 7, // Założyciel + 6 osób
+        rewardPromptDelay: 30 * 1000, // 30 sekund od zapełnienia lobby - pytanie o nagrodę specjalną
         discussionTime: 15 * 60 * 1000, // 15 minut w ms po zapełnieniu
         maxDuration: 15 * 60 * 1000, // 15 minut maksymalny czas trwania lobby
         fullLobbyDuration: 15 * 60 * 1000, // 15 minut po zapełnieniu lobby
@@ -93,6 +107,24 @@ module.exports = {
 
         lobbyFullEphemeral:
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',
+
+        rewardPrompt:
+            '## Jeżeli trafiłeś czerwoną skrzynkę w tym losowaniu kliknij przycisk odpowiadający nagrodzie.\n*Jeżeli nie trafiłeś nie klikaj nic żeby nie zaburzyć statystyk!*',
+
+        rewardConfirmation: (rewardName, rewardEmoji) =>
+            `Czy na pewno otrzymałeś taką nagrodę w tym losowaniu? ${rewardEmoji} **${rewardName}**`,
+
+        rewardAccepted: (rewardName, rewardEmoji) =>
+            `✅ Doliczono nagrodę ${rewardEmoji} **${rewardName}** na Twoje konto!`,
+
+        rewardDenied:
+            'Nie klikaj w przyciski jeżeli nie dostałeś czerwonej nagrody. To jest system do zliczania Twoich wygranych, żebyś na koniec eventu wiedział ile zarobiłeś!',
+
+        rewardAlreadyClaimed:
+            'Nagroda z tego losowania została już zgłoszona.',
+
+        rewardAnnouncement: (userId, rewardEmoji) =>
+            `<@${userId}> właśnie zgarnął nagrodę specjalną! ${rewardEmoji}.`,
 
         channelOnly:
             'Ta komenda może być używana tylko na wyznaczonym kanale!',

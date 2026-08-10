@@ -543,6 +543,18 @@
           "description": "Dodaje użytkownika bezpośrednio do twojego party lobby",
           "usage": "/party-add użytkownik:@user",
           "requiredPermission": "public"
+        },
+        {
+          "name": "/correct",
+          "description": "Koryguje liczbę nagród specjalnych użytkownika (dodatnia ilość dodaje, ujemna usuwa)",
+          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1]",
+          "requiredPermission": "administrator"
+        },
+        {
+          "name": "/stats",
+          "description": "Ranking nagród specjalnych (czerwonych skrzynek) zdobytych w party",
+          "usage": "/stats",
+          "requiredPermission": "public"
         }
       ]
     },
