@@ -33,7 +33,11 @@
   - Nagrodę wybiera się **przyciskami z ikonami** (customId `myreward_<klucz>_<1|-1>`), bo listy wyboru slash commands nie renderują emotek serwera - pokazałyby surowy tekst `<:II_RC:...>`
   - Licznik nie schodzi poniżej 0 - przy odejmowaniu z zera bot informuje, że zmiana nie została zastosowana
 - **`/rewards`:** Ephemeral embed z nagrodami **wyłącznie osoby wywołującej** - per nagroda `suma (party: N, własne: N)` + pola z sumami: z party / dodane samodzielnie / łącznie
-- **`/correct`:** Tylko administrator. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party` - nie ma parametru wyboru licznika; nagrodami z `/add_reward` gracze zarządzają sami). Parametry: `użytkownik`, `nagroda` (lista wyboru), `ilość` (opcjonalna, domyślnie 1; dodatnia dodaje, ujemna usuwa, zakres -100..100). Licznik nie schodzi poniżej 0 - przy przycięciu zmiany bot informuje ile faktycznie zastosowano
+- **`/correct`:** Tylko administrator, **interaktywny panel**, wszystko ephemeral. Jedyny parametr: `użytkownik`. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party`; nagrodami z `/add_reward` gracze zarządzają sami)
+  - **Embed** (`buildCorrectionEmbed`): stan wszystkich 9 nagród gracza (także zerowych), suma z party, pole „Ostatnia zmiana" po każdym kliknięciu
+  - **Przyciski** (`buildCorrectionButtons`): 4 rzędy × 18 przycisków - 2 rzędy zielonych `+1` i 2 rzędy czerwonych `−1`, każdy z ikoną nagrody i znakiem kierunku jako labelem (customId `corr_<idGracza>_<klucz>_<1|-1>`)
+  - Kliknięcie zmienia licznik o ±1 i **odświeża embed w miejscu** (`interaction.update`), więc admin może poprawiać wiele nagród bez ponownego wywoływania komendy. Uprawnienia sprawdzane ponownie przy każdym kliknięciu
+  - Licznik nie schodzi poniżej 0 - przy próbie zejścia z zera embed pokazuje ostrzeżenie o braku zmiany
 
 **System Przypomnień i Eventów (skopiowane z STAR bota):**
 5. **Przypomnienia** - `przypomnieniaMenedzer.js`: Szablony (text/embed) + Zaplanowane przypomnienia z interwałami (1s-28d lub "ee")

@@ -87,26 +87,11 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('correct')
-                .setDescription('Koryguje nagrody gracza z party - wpływa na ranking /stats (tylko administratorzy)')
+                .setDescription('Panel korekty nagród gracza z party - wpływa na ranking /stats (tylko administratorzy)')
                 .addUserOption(option =>
                     option.setName('użytkownik')
                         .setDescription('Użytkownik, któremu korygujemy nagrody')
                         .setRequired(true)
-                )
-                .addStringOption(option =>
-                    option.setName('nagroda')
-                        .setDescription('Nagroda do skorygowania')
-                        .setRequired(true)
-                        .addChoices(
-                            ...this.config.rewards.map(reward => ({ name: reward.name, value: reward.key }))
-                        )
-                )
-                .addIntegerOption(option =>
-                    option.setName('ilość')
-                        .setDescription('Dodatnia = dodaj, ujemna = usuń (domyślnie 1)')
-                        .setRequired(false)
-                        .setMinValue(-100)
-                        .setMaxValue(100)
                 )
                 .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
         ];
@@ -366,6 +351,12 @@ class InteractionHandler {
         // Wybór nagrody w komendach /add_reward i /remove_reward
         if (customId.startsWith('myreward_')) {
             await this.handleMyRewardButton(interaction, sharedState);
+            return;
+        }
+
+        // Panel korekty nagród (/correct dla administratorów)
+        if (customId.startsWith('corr_')) {
+            await this.handleCorrectionButton(interaction, sharedState);
             return;
         }
 
@@ -1070,26 +1061,117 @@ class InteractionHandler {
             }
 
             const targetUser = interaction.options.getUser('użytkownik');
-            const rewardKey = interaction.options.getString('nagroda');
-            const amount = interaction.options.getInteger('ilość') ?? 1;
+            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+            const displayName = member?.displayName || targetUser.username;
 
-            if (amount === 0) {
+            await interaction.reply({
+                embeds: [this.buildCorrectionEmbed(targetUser.id, displayName, sharedState)],
+                components: this.buildCorrectionButtons(targetUser.id),
+                ephemeral: true
+            });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas otwierania panelu korekty:', error);
+            await interaction.reply({
+                content: '❌ Wystąpił błąd podczas otwierania panelu korekty.',
+                ephemeral: true
+            }).catch(() => {});
+        }
+    }
+
+    /**
+     * Buduje embed panelu korekty ze stanem nagród gracza (licznik z party)
+     * @param {string} userId - ID korygowanego gracza
+     * @param {string} displayName - Nazwa gracza na serwerze
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @param {string} lastChange - Opis ostatniej zmiany (opcjonalny)
+     * @returns {EmbedBuilder} - Embed panelu
+     */
+    buildCorrectionEmbed(userId, displayName, sharedState, lastChange = null) {
+        const stats = sharedState.nagrodyService.getUserStats(userId);
+        const rewards = stats?.rewards || {};
+        const total = stats?.total || 0;
+
+        const description = this.config.rewards
+            .map(reward => `${reward.emoji} **${reward.name}** — **${rewards[reward.key] || 0}**`)
+            .join('\n');
+
+        const embed = new EmbedBuilder()
+            .setTitle(`🛠️ Korekta nagród — ${displayName}`)
+            .setColor('#f1c40f')
+            .setDescription(description)
+            .addFields({
+                name: 'Łącznie z party',
+                value: `${total} ${this.pluralizeRewards(total)}`
+            })
+            .setFooter({ text: 'Zielone przyciski dodają +1, czerwone odejmują -1 · zmiany wpływają na ranking /stats' })
+            .setTimestamp();
+
+        if (lastChange) {
+            embed.addFields({ name: 'Ostatnia zmiana', value: lastChange });
+        }
+
+        return embed;
+    }
+
+    /**
+     * Buduje przyciski panelu korekty - komplet nagród na plus i na minus
+     * @param {string} userId - ID korygowanego gracza
+     * @returns {Array} - Rzędy przycisków (2 rzędy na plus + 2 na minus)
+     */
+    buildCorrectionButtons(userId) {
+        const rows = [];
+
+        for (const delta of [1, -1]) {
+            const style = delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger;
+            const label = delta > 0 ? '+' : '−';
+
+            for (let i = 0; i < this.config.rewards.length; i += 5) {
+                const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
+                    new ButtonBuilder()
+                        .setCustomId(`corr_${userId}_${reward.key}_${delta}`)
+                        .setEmoji(reward.emoji)
+                        .setLabel(label)
+                        .setStyle(style)
+                );
+
+                rows.push(new ActionRowBuilder().addComponents(...buttons));
+            }
+        }
+
+        return rows;
+    }
+
+    /**
+     * Obsługuje przyciski panelu korekty - zmienia nagrodę gracza o ±1
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleCorrectionButton(interaction, sharedState) {
+        try {
+            if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
                 await interaction.reply({
-                    content: '❌ Ilość nie może wynosić 0 (dodatnia = dodaj, ujemna = usuń).',
+                    content: '❌ Tylko administratorzy mogą korygować nagrody.',
                     ephemeral: true
                 });
                 return;
             }
 
-            const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-            const displayName = member?.displayName || targetUser.username;
+            // Format: corr_<idGracza>_<klucz>_<1|-1>
+            const [, targetUserId, rewardKey, rawDelta] = interaction.customId.split('_');
+            const delta = rawDelta === '-1' ? -1 : 1;
+
+            const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+            const displayName = member?.displayName
+                || sharedState.nagrodyService.getUserStats(targetUserId)?.displayName
+                || 'Nieznany';
 
             // Zawsze licznik z party - czyli ten, który buduje ranking /stats
             const result = await sharedState.nagrodyService.correctReward(
-                targetUser.id,
+                targetUserId,
                 displayName,
                 rewardKey,
-                amount,
+                delta,
                 'party'
             );
 
@@ -1102,13 +1184,16 @@ class InteractionHandler {
             }
 
             const { reward, previous, current, applied } = result;
-            let content = `✅ Skorygowano nagrody z party gracza **${displayName}** (ranking \`/stats\`)\n${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
+            let lastChange = `${reward.emoji} **${reward.name}**: ${previous} → **${current}**`;
 
-            if (applied !== amount) {
-                content += `\n⚠️ Nie można zejść poniżej 0 - zastosowano zmianę **${applied}** zamiast **${amount}**.`;
+            if (applied === 0) {
+                lastChange += '\n⚠️ Licznik nie może zejść poniżej 0 - brak zmiany.';
             }
 
-            await interaction.reply({ content, ephemeral: true });
+            await interaction.update({
+                embeds: [this.buildCorrectionEmbed(targetUserId, displayName, sharedState, lastChange)],
+                components: this.buildCorrectionButtons(targetUserId)
+            });
 
             logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę z party ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
 

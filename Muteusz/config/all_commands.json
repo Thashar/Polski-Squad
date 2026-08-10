@@ -552,8 +552,8 @@
         },
         {
           "name": "/correct",
-          "description": "Koryguje nagrody gracza zdobyte w party - wpływa na ranking /stats (dodatnia ilość dodaje, ujemna usuwa)",
-          "usage": "/correct użytkownik:@user nagroda:[nazwa] [ilość:1]",
+          "description": "Panel korekty nagród gracza z party - embed ze stanem i przyciski +1/-1 dla każdej nagrody, wpływa na ranking /stats",
+          "usage": "/correct użytkownik:@user → przyciski +1 (zielone) i -1 (czerwone)",
           "requiredPermission": "administrator"
         },
         {
