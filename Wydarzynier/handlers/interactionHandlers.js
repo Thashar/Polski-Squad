@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { delay } = require('../utils/helpers');
+const { delay, runThreadCountdown } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
@@ -274,7 +274,8 @@ class InteractionHandler {
 
             const deleteCallback = async () => {
                 try {
-                    await this.deleteLobby(lobby, sharedState);
+                    // Czas lobby upłynął - w wątku leci odliczanie, dopiero potem znika
+                    await this.closeLobbyWithCountdown(lobby, sharedState, this.config.messages.lobbyExpiredCountdown);
                 } catch (error) {
                     logger.error(`❌ Błąd podczas usuwania lobby ${lobby.id}:`, error);
                 }
@@ -336,6 +337,12 @@ class InteractionHandler {
 
         if (customId === 'reward_no') {
             await this.handleRewardRejectButton(interaction, sharedState);
+            return;
+        }
+
+        // „Nikt z obecnych nie otrzymał czerwonej skrzynki" - tylko w pytaniu przy zamykaniu lobby
+        if (customId.startsWith('reward_none_')) {
+            await this.handleRewardNoneButton(interaction, sharedState);
             return;
         }
 
@@ -589,7 +596,8 @@ class InteractionHandler {
 
             const deleteCallback = async () => {
                 try {
-                    await this.deleteLobby(lobby, sharedState);
+                    // Czas lobby upłynął - w wątku leci odliczanie, dopiero potem znika
+                    await this.closeLobbyWithCountdown(lobby, sharedState, this.config.messages.lobbyExpiredCountdown);
                 } catch (error) {
                     logger.error(`❌ Błąd podczas usuwania pełnego lobby ${lobby.id}:`, error);
                 }
@@ -697,6 +705,7 @@ class InteractionHandler {
             lobby.rewardPromptAt = null;
             lobby.rewardPromptMessageId = null;
             lobby.rewardPromptMessagesSince = 0;
+            lobby.rewardPromptClosesLobby = false;
             await sharedState.lobbyService.saveLobbies();
 
             logger.info(`🗑️ Party ${lobby.id} przestało być pełne - usunięto pytanie o nagrodę`);
@@ -720,6 +729,9 @@ class InteractionHandler {
 
             const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channelId);
             if (!lobby?.rewardPromptMessageId) return;
+
+            // Pytania zadanego przy zamykaniu lobby nie przepisujemy - czeka na wybór i znika razem z wątkiem
+            if (lobby.rewardPromptClosesLobby) return;
 
             // Losowanie zamknięte (nagroda zgłoszona) albo przepisywanie właśnie trwa
             if (sharedState.nagrodyService.getPromptClaimer(lobby.rewardPromptMessageId)) return;
@@ -824,19 +836,122 @@ class InteractionHandler {
     }
 
     /**
+     * Wysyła pytanie o nagrodę przy zamykaniu lobby (`/party-close`), gdy zwykłe pytanie
+     * jeszcze się nie pojawiło. Pod nagrodami dochodzi przycisk „nikt nie otrzymał",
+     * a wybór dowolnej opcji kończy się odliczaniem i usunięciem wątku.
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @returns {boolean} - Czy pytanie zostało wysłane
+     */
+    async sendClosingRewardPrompt(lobby, sharedState) {
+        try {
+            const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
+            if (!thread) return false;
+
+            const message = await thread.send({
+                content: this.config.messages.rewardPromptOnClose,
+                components: this.buildClosingRewardButtons(lobby.id)
+            });
+
+            lobby.rewardPromptSent = true;
+            lobby.rewardPromptAt = null;
+            lobby.rewardPromptMessageId = message.id;
+            lobby.rewardPromptMessagesSince = 0;
+            lobby.rewardPromptClosesLobby = true;
+            await sharedState.lobbyService.saveLobbies();
+
+            logger.info(`🎁 Wysłano pytanie o nagrodę przy zamykaniu lobby ${lobby.id}`);
+            return true;
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas wysyłania pytania o nagrodę przy zamykaniu lobby ${lobby.id}:`, error);
+            return false;
+        }
+    }
+
+    /**
+     * Buduje przyciski pytania zamykającego - nagrody + przycisk „nikt nie otrzymał" na dole
+     * @param {string} lobbyId - ID lobby
+     * @param {boolean} disabled - Czy przyciski mają być nieaktywne
+     * @returns {Array} - Rzędy przycisków
+     */
+    buildClosingRewardButtons(lobbyId, disabled = false) {
+        const rows = this.buildRewardButtons(
+            reward => disabled ? `reward_done_${reward.key}` : `reward_pick_${reward.key}`,
+            disabled
+        );
+
+        // Ostatni rząd rezerwujemy na przycisk „nikt nie otrzymał" (limit Discorda to 5 rzędów)
+        if (rows.length >= 5) {
+            logger.warn(`⚠️ Za dużo nagród (${this.config.rewards.length}) - w pytaniu zamykającym mieści się 20, nadmiar pominięto`);
+            rows.length = 4;
+        }
+
+        rows.push(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`reward_none_${lobbyId}`)
+                .setLabel(this.config.messages.rewardNoneButton)
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(disabled)
+        ));
+
+        return rows;
+    }
+
+    /**
+     * Obsługuje przycisk „Nikt z obecnych nie otrzymał czerwonej skrzynki" - zamyka lobby bez nagrody
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardNoneButton(interaction, sharedState) {
+        try {
+            const lobbyId = interaction.customId.replace('reward_none_', '');
+            const lobby = sharedState.lobbyService.getLobby(lobbyId);
+
+            if (!lobby) {
+                await interaction.reply({
+                    content: '❌ To lobby zostało już zamknięte.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            await interaction.update({
+                content: `${this.config.messages.rewardPromptOnClose}\n\n${this.config.messages.rewardNoneAcknowledged(interaction.user.id)}`,
+                components: this.buildClosingRewardButtons(lobbyId, true)
+            });
+
+            logger.info(`📭 ${interaction.user.username} zamknął lobby ${lobbyId} bez zgłoszenia nagrody`);
+
+            await this.closeLobbyWithCountdown(lobby, sharedState);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas zamykania lobby bez nagrody:', error);
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas zamykania lobby.');
+        }
+    }
+
+    /**
      * Zamyka pytanie o nagrodę - wyszarza przyciski wspólnej wiadomości i dopisuje kto zgłosił nagrodę.
      * Wywoływane po pierwszym zgłoszeniu, bo w losowaniu nagrodę odbiera tylko jedna osoba.
      * @param {Message} promptMessage - Wiadomość z pytaniem o nagrodę
      * @param {string} claimerId - ID osoby, która zgłosiła nagrodę
      * @returns {boolean} - Czy udało się zamknąć pytanie
      */
-    async closeRewardPrompt(promptMessage, claimerId) {
+    async closeRewardPrompt(promptMessage, claimerId, lobby = null) {
         if (!promptMessage) return false;
+
+        // Pytanie zamykające ma inną treść i dodatkowy przycisk „nikt nie otrzymał"
+        const closesLobby = Boolean(lobby?.rewardPromptClosesLobby);
 
         try {
             await promptMessage.edit({
-                content: `${this.config.messages.rewardPrompt}\n\n${this.config.messages.rewardPromptClosed(claimerId)}`,
-                components: this.buildRewardButtons(reward => `reward_done_${reward.key}`, true)
+                content: closesLobby
+                    ? `${this.config.messages.rewardPromptOnClose}\n\n${this.config.messages.rewardPromptClosed(claimerId)}`
+                    : `${this.config.messages.rewardPrompt}\n\n${this.config.messages.rewardPromptClosed(claimerId)}`,
+                components: closesLobby
+                    ? this.buildClosingRewardButtons(lobby.id, true)
+                    : this.buildRewardButtons(reward => `reward_done_${reward.key}`, true)
             });
             return true;
         } catch (error) {
@@ -890,7 +1005,8 @@ class InteractionHandler {
                     ephemeral: true
                 });
 
-                await this.closeRewardPrompt(interaction.message, claimerId);
+                const lobby = sharedState.lobbyService.getLobbyByThreadId(interaction.channelId);
+                await this.closeRewardPrompt(interaction.message, claimerId, lobby);
                 return;
             }
 
@@ -959,7 +1075,7 @@ class InteractionHandler {
                 });
 
                 const promptMessage = await this.fetchRewardPrompt(promptChannelId, promptMessageId, sharedState);
-                await this.closeRewardPrompt(promptMessage, claimerId);
+                await this.closeRewardPrompt(promptMessage, claimerId, lobby);
                 return;
             }
 
@@ -982,7 +1098,7 @@ class InteractionHandler {
             // Wspólna wiadomość w wątku - wyszarzenie przycisków dla wszystkich uczestników party
             const promptMessage = await this.fetchRewardPrompt(promptChannelId, promptMessageId, sharedState);
 
-            if (!await this.closeRewardPrompt(promptMessage, interaction.user.id)) {
+            if (!await this.closeRewardPrompt(promptMessage, interaction.user.id, lobby)) {
                 logger.warn(`⚠️ Nie udało się wyłączyć przycisków pytania o nagrodę ${promptMessageId} - blokada działa dalej po stronie bota`);
             }
 
@@ -997,6 +1113,11 @@ class InteractionHandler {
             }
 
             logger.info(`🎁 ${displayName} zgłosił nagrodę specjalną: ${reward.name}`);
+
+            // Pytanie zadane przy zamykaniu lobby - po zgłoszeniu odliczamy i usuwamy wątek
+            if (lobby?.rewardPromptClosesLobby) {
+                await this.closeLobbyWithCountdown(lobby, sharedState);
+            }
 
         } catch (error) {
             logger.error('❌ Błąd podczas potwierdzania nagrody:', error);
@@ -1549,24 +1670,31 @@ class InteractionHandler {
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
-    async runCloseCountdown(lobby, sharedState) {
-        const seconds = this.config.lobby.closeCountdownSeconds;
-
+    async runCloseCountdown(lobby, sharedState, messageFactory = null) {
         try {
             const thread = await sharedState.client.channels.fetch(lobby.threadId);
-            const message = await thread.send(this.config.messages.lobbyCloseCountdown(seconds));
 
-            for (let remaining = seconds - 1; remaining >= 1; remaining--) {
-                await delay(1000);
-                await message.edit(this.config.messages.lobbyCloseCountdown(remaining)).catch(() => {});
-            }
-
-            await delay(1000);
+            await runThreadCountdown(
+                thread,
+                this.config.lobby.closeCountdownSeconds,
+                messageFactory || this.config.messages.lobbyCloseCountdown
+            );
 
         } catch (threadError) {
             // Bez wątku nie ma czego odliczać - lobby i tak zostanie zamknięte
             logger.error('❌ Błąd podczas odliczania do usunięcia wątku:', threadError);
         }
+    }
+
+    /**
+     * Odlicza i usuwa lobby - wspólne domknięcie dla wygasłych timerów i pytania o nagrodę przy zamykaniu
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @param {Function} messageFactory - Treść odliczania (domyślnie „zamknięte przez właściciela")
+     */
+    async closeLobbyWithCountdown(lobby, sharedState, messageFactory = null) {
+        await this.runCloseCountdown(lobby, sharedState, messageFactory);
+        await this.deleteLobby(lobby, sharedState);
     }
 
     /**
@@ -2119,16 +2247,22 @@ class InteractionHandler {
                 return;
             }
 
+            // Pytanie o nagrodę jeszcze się nie pojawiło (lobby nie zdążyło się zapełnić)
+            // - najpierw pytamy w wątku, a lobby zamknie się po wybraniu opcji
+            if (!ownerLobby.rewardPromptSent && await this.sendClosingRewardPrompt(ownerLobby, sharedState)) {
+                await interaction.editReply({
+                    content: '📩 W wątku pojawiło się pytanie o nagrodę - lobby zamknie się po wybraniu opcji.'
+                }).catch(() => {});
+                return;
+            }
+
             // Odliczanie trwa kilka sekund - właściciel od razu dostaje potwierdzenie
             await interaction.editReply({
                 content: `⏳ Zamykam lobby - wątek zniknie za ${this.config.lobby.closeCountdownSeconds} s.`
             }).catch(() => {});
 
             // Wiadomość pożegnalna z odliczaniem na końcu wątku - dopiero po nim znika wątek
-            await this.runCloseCountdown(ownerLobby, sharedState);
-
-            // Usuń lobby używając istniejącej funkcji
-            await this.deleteLobby(ownerLobby, sharedState);
+            await this.closeLobbyWithCountdown(ownerLobby, sharedState);
 
             try {
                 await interaction.editReply({
@@ -2281,7 +2415,8 @@ class InteractionHandler {
 
             const deleteCallback = async () => {
                 try {
-                    await this.deleteLobby(lobby, sharedState);
+                    // Czas lobby upłynął - w wątku leci odliczanie, dopiero potem znika
+                    await this.closeLobbyWithCountdown(lobby, sharedState, this.config.messages.lobbyExpiredCountdown);
                 } catch (error) {
                     logger.error(`❌ Błąd podczas usuwania przedłużonego lobby ${lobbyId}:`, error);
                 }

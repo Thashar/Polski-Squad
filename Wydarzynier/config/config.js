@@ -8,6 +8,9 @@ require('dotenv').config({ path: path.join(__dirname, '../.env') });
 // Odczyt lokalnego .env bezpośrednio - process.env.ROBOT jest współdzielony między botami
 const localEnv = require('dotenv').parse(fs.readFileSync(path.join(__dirname, '../.env')));
 
+// Odmiana słowa "sekunda" dla odliczania (1 sekundę, 2-4 sekundy, 5+ sekund)
+const secondsWord = (seconds) => seconds === 1 ? 'sekundę' : (seconds < 5 ? 'sekundy' : 'sekund');
+
 const requiredEnvVars = [
     'WYDARZYNIER_TOKEN',
     'WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL'
@@ -117,14 +120,27 @@ module.exports = {
         lobbyFullEphemeral:
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',
 
-        lobbyCloseCountdown: (seconds) => {
-            const unit = seconds === 1 ? 'sekundę' : (seconds < 5 ? 'sekundy' : 'sekund');
-            return '🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!\n\n' +
-                `🗑️ Wątek zostanie usunięty za **${seconds}** ${unit}...`;
-        },
+        lobbyCloseCountdown: (seconds) =>
+            '🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!\n\n' +
+            `🗑️ Wątek zostanie usunięty za **${seconds}** ${secondsWord(seconds)}...`,
+
+        lobbyExpiredCountdown: (seconds) =>
+            '⏰ **Czas lobby upłynął.**\nDziękujemy za udział!\n\n' +
+            `🗑️ Wątek zostanie usunięty za **${seconds}** ${secondsWord(seconds)}...`,
 
         rewardPrompt:
             '## Jeżeli trafiłeś czerwoną skrzynkę w tym losowaniu kliknij przycisk odpowiadający nagrodzie.\n*Jeżeli nie trafiłeś nie klikaj nic żeby nie zaburzyć statystyk!*\n*W jednym losowaniu nagrodę zgłasza tylko jedna osoba - po pierwszym zgłoszeniu przyciski są wyłączone.*',
+
+        // Pytanie wysyłane przy /party-close, gdy zwykłe pytanie o nagrodę jeszcze się nie pojawiło
+        rewardPromptOnClose:
+            '## Lobby jest zamykane - jeżeli ktoś trafił czerwoną skrzynkę, kliknij przycisk odpowiadający nagrodzie.\n' +
+            '*Jeżeli nikt nic nie trafił, kliknij przycisk na dole.*\n' +
+            '*Po wybraniu opcji wątek zostanie zamknięty.*',
+
+        rewardNoneButton: 'Nikt z obecnych nie otrzymał czerwonej skrzynki',
+
+        rewardNoneAcknowledged: (userId) =>
+            `📭 <@${userId}> zgłosił, że nikt z obecnych nie otrzymał czerwonej skrzynki.`,
 
         rewardPromptClosed: (userId) =>
             `✅ Nagrodę w tym losowaniu zgłosił już <@${userId}> - przyciski zostały wyłączone.`,

@@ -4,8 +4,12 @@
 
 **Lobby Party (oryginalne):**
 1. **Lobby Party** - `lobbyService.js`: Max 7 (1+6), 15min dyskusja/czas trwania, 5min ostrzeżenie, prywatny wątek
-   - **`/party-close` z odliczaniem** (`runCloseCountdown`): na końcu wątku ląduje wiadomość pożegnalna z licznikiem edytowanym co sekundę (`messages.lobbyCloseCountdown`, `lobby.closeCountdownSeconds` = 5). Dopiero po odliczeniu wywoływane jest `deleteLobby` (kasuje wątek + ogłoszenie + timer). Właściciel dostaje ephemeral z informacją od razu, a potwierdzenie zamknięcia po odliczaniu
-   - Przycisk „Zamknij lobby" (`handleCloseLobbyButton`) kasuje wątek **od razu**, bez odliczania
+   - **`/party-close` z odliczaniem** (`closeLobbyWithCountdown` → `runCloseCountdown` + `deleteLobby`): na końcu wątku ląduje wiadomość pożegnalna z licznikiem edytowanym co sekundę (`messages.lobbyCloseCountdown`, `lobby.closeCountdownSeconds` = 5). Właściciel dostaje ephemeral z informacją od razu, a potwierdzenie zamknięcia po odliczaniu
+   - **`/party-close` gdy pytanie o nagrodę się nie pojawiło** (lobby nie zdążyło się zapełnić): zamiast zamykać od razu, bot wysyła w wątku **pytanie zamykające** (`sendClosingRewardPrompt`, treść `messages.rewardPromptOnClose`) - nagrody + dodatkowy przycisk **„Nikt z obecnych nie otrzymał czerwonej skrzynki"** (`reward_none_<idLobby>`). Lobby zamyka się dopiero po wyborze: zgłoszenie nagrody (Tak) albo kliknięcie „nikt nie otrzymał" → odliczanie 5 s → `deleteLobby`
+     - Flaga `rewardPromptClosesLobby` (persistowana w `lobbies.json`) mówi, że po zgłoszeniu nagrody trzeba zamknąć lobby; steruje też treścią i przyciskami przy wyszarzaniu (`closeRewardPrompt`) i **wyłącza przepisywanie** tego pytania
+     - **Limit 20 nagród** dla pytania zamykającego (`buildClosingRewardButtons`) - piąty rząd zajmuje przycisk „nikt nie otrzymał"; przy większej liczbie `logger.warn` i obcięcie
+   - **Automatyczne zamknięcie po wygaśnięciu czasu** też ma odliczanie (`messages.lobbyExpiredCountdown`) - we wszystkich `deleteCallback` w `interactionHandlers.js` oraz w `timerService.deleteLobby` (timery przywrócone po restarcie). Wspólna mechanika w `utils/helpers.js` → `runThreadCountdown(thread, seconds, messageFactory)`
+   - Przycisk „Zamknij lobby" pod ostrzeżeniem (`handleCloseLobbyButton`) kasuje wątek **od razu**, bez odliczania i bez pytania o nagrodę
 2. **Zaproszenia** - Join button → Accept/Reject workflow, tylko zaakceptowani (wyjątek admin), auto-usuwanie
    - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`) z krótkim opisem każdej
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
@@ -36,7 +40,7 @@
   - Zgłoszenie „Tak" zapisuje claim zawsze na **aktualnym** `lobby.rewardPromptMessageId` (a nie na ID z customId), żeby potwierdzenie z ephemerala otwartego przed przepisaniem trafiło na właściwe pytanie
   - Po zgłoszeniu nagrody pytanie **nie jest już przepisywane** (losowanie zamknięte)
   - **Persistencja:** `rewardPromptMessageId` i `rewardPromptMessagesSince` w `lobbies.json` - licznik przeżywa restart bota
-- **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie), `reward_done_<klucz>` (wyszarzone po zgłoszeniu). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
+- **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie), `reward_done_<klucz>` (wyszarzone po zgłoszeniu), `reward_none_<idLobby>` („nikt nie otrzymał" w pytaniu zamykającym). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
 - **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, manualRewards, manualTotal, lastReward } }, claims: {} }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`, `rewardPromptMessageId`, `rewardPromptMessagesSince`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
 **Dwa niezależne liczniki nagród (`nagrodyService.js`):**
 - `rewards` / `total` - nagrody z systemu Party (przycisk pod pytaniem w wątku). **Tylko one liczą się do rankingu `/stats`**

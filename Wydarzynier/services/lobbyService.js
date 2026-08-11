@@ -252,7 +252,8 @@ class LobbyService {
                     rewardPromptAt: lobby.rewardPromptAt || null, // Kiedy wysłać pytanie o nagrodę specjalną
                     rewardPromptSent: lobby.rewardPromptSent || false,
                     rewardPromptMessageId: lobby.rewardPromptMessageId || null, // Aktualna wiadomość z pytaniem
-                    rewardPromptMessagesSince: lobby.rewardPromptMessagesSince || 0 // Wiadomości od ostatniego przepisania
+                    rewardPromptMessagesSince: lobby.rewardPromptMessagesSince || 0, // Wiadomości od ostatniego przepisania
+                    rewardPromptClosesLobby: lobby.rewardPromptClosesLobby || false // Pytanie zadane przy /party-close
                 };
             }
 

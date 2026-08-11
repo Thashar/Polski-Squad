@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { runThreadCountdown } = require('../utils/helpers');
 
 const logger = createBotLogger('Wydarzynier');
 
@@ -261,9 +262,15 @@ class TimerService {
      */
     async deleteLobby(lobby, sharedState) {
         try {
-            // Usuń wątek
+            // Usuń wątek - najpierw odliczanie w wątku, żeby gracze wiedzieli, że zaraz zniknie
             const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
             if (thread) {
+                await runThreadCountdown(
+                    thread,
+                    this.config.lobby.closeCountdownSeconds,
+                    this.config.messages.lobbyExpiredCountdown
+                ).catch(error => logger.error('❌ Błąd podczas odliczania do usunięcia wątku:', error));
+
                 await thread.delete('Czas lobby upłynął');
             }
 
