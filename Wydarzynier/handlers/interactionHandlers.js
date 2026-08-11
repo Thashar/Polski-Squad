@@ -1462,6 +1462,32 @@ class InteractionHandler {
     }
 
     /**
+     * Wysyła na końcu wątku wiadomość pożegnalną z odliczaniem i czeka aż dobiegnie końca.
+     * Dopiero po odliczaniu wątek może zostać usunięty.
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async runCloseCountdown(lobby, sharedState) {
+        const seconds = this.config.lobby.closeCountdownSeconds;
+
+        try {
+            const thread = await sharedState.client.channels.fetch(lobby.threadId);
+            const message = await thread.send(this.config.messages.lobbyCloseCountdown(seconds));
+
+            for (let remaining = seconds - 1; remaining >= 1; remaining--) {
+                await delay(1000);
+                await message.edit(this.config.messages.lobbyCloseCountdown(remaining)).catch(() => {});
+            }
+
+            await delay(1000);
+
+        } catch (threadError) {
+            // Bez wątku nie ma czego odliczać - lobby i tak zostanie zamknięte
+            logger.error('❌ Błąd podczas odliczania do usunięcia wątku:', threadError);
+        }
+    }
+
+    /**
      * Usuwa lobby i czyści zasoby
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
@@ -2008,13 +2034,13 @@ class InteractionHandler {
                 return;
             }
 
-            // Wyślij wiadomość pożegnalną w wątku przed zamknięciem
-            try {
-                const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
-                await thread.send(`🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!`);
-            } catch (threadError) {
-                logger.error('❌ Błąd podczas wysyłania wiadomości pożegnalnej:', threadError);
-            }
+            // Odliczanie trwa kilka sekund - właściciel od razu dostaje potwierdzenie
+            await interaction.editReply({
+                content: `⏳ Zamykam lobby - wątek zniknie za ${this.config.lobby.closeCountdownSeconds} s.`
+            }).catch(() => {});
+
+            // Wiadomość pożegnalna z odliczaniem na końcu wątku - dopiero po nim znika wątek
+            await this.runCloseCountdown(ownerLobby, sharedState);
 
             // Usuń lobby używając istniejącej funkcji
             await this.deleteLobby(ownerLobby, sharedState);

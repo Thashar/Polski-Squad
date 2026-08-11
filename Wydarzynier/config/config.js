@@ -80,6 +80,7 @@ module.exports = {
         warningTime: 5 * 60 * 1000, // 5 minut przed usunięciem - ostrzeżenie
         repositionInterval: 5 * 60 * 1000, // 5 minut - interwał repozycjonowania ogłoszeń
         rewardPromptRepositionMessages: 10, // Co ile wiadomości w wątku przepisać pytanie o nagrodę na koniec
+        closeCountdownSeconds: 5, // Odliczanie w wątku po /party-close przed usunięciem wątku
         threadName: (username) => `🎉 ${username} - Party Lobby`
     },
 
@@ -111,6 +112,12 @@ module.exports = {
 
         lobbyFullEphemeral:
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',
+
+        lobbyCloseCountdown: (seconds) => {
+            const unit = seconds === 1 ? 'sekundę' : (seconds < 5 ? 'sekundy' : 'sekund');
+            return '🔒 **Lobby zostało zamknięte przez właściciela.**\nDziękujemy za udział!\n\n' +
+                `🗑️ Wątek zostanie usunięty za **${seconds}** ${unit}...`;
+        },
 
         rewardPrompt:
             '## Jeżeli trafiłeś czerwoną skrzynkę w tym losowaniu kliknij przycisk odpowiadający nagrodzie.\n*Jeżeli nie trafiłeś nie klikaj nic żeby nie zaburzyć statystyk!*\n*W jednym losowaniu nagrodę zgłasza tylko jedna osoba - po pierwszym zgłoszeniu przyciski są wyłączone.*',

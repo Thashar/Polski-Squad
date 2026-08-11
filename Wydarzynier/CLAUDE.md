@@ -4,6 +4,8 @@
 
 **Lobby Party (oryginalne):**
 1. **Lobby Party** - `lobbyService.js`: Max 7 (1+6), 15min dyskusja/czas trwania, 5min ostrzeżenie, prywatny wątek
+   - **`/party-close` z odliczaniem** (`runCloseCountdown`): na końcu wątku ląduje wiadomość pożegnalna z licznikiem edytowanym co sekundę (`messages.lobbyCloseCountdown`, `lobby.closeCountdownSeconds` = 5). Dopiero po odliczeniu wywoływane jest `deleteLobby` (kasuje wątek + ogłoszenie + timer). Właściciel dostaje ephemeral z informacją od razu, a potwierdzenie zamknięcia po odliczaniu
+   - Przycisk „Zamknij lobby" (`handleCloseLobbyButton`) kasuje wątek **od razu**, bez odliczania
 2. **Zaproszenia** - Join button → Accept/Reject workflow, tylko zaakceptowani (wyjątek admin), auto-usuwanie
    - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`) z krótkim opisem każdej
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
