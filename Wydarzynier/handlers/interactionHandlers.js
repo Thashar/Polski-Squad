@@ -968,31 +968,51 @@ class InteractionHandler {
     }
 
     /**
-     * Buduje przyciski panelu /rewards - komplet nagród na plus i na minus.
-     * Działają wyłącznie na nagrodach dodanych samodzielnie przez właściciela panelu.
-     * @returns {Array} - Rzędy przycisków (2 rzędy na plus + 2 na minus)
+     * Buduje rzędy przycisków ±1 dla kompletu nagród, mieszcząc się w limicie 5 rzędów Discorda.
+     * Nagrody idą piątkami - każda pełna piątka dostaje rząd zielonych i rząd czerwonych,
+     * a krótszy ogon listy mieści oba znaki w jednym rzędzie (dzięki temu 11-12 nagród nadal się mieści).
+     * @param {Function} idFactory - Funkcja budująca customId dla (nagroda, delta)
+     * @returns {Array} - Rzędy przycisków
      */
-    buildOwnRewardsButtons() {
+    buildDeltaRewardRows(idFactory) {
+        const makeButton = (reward, delta) => new ButtonBuilder()
+            .setCustomId(idFactory(reward, delta))
+            .setEmoji(reward.emoji)
+            .setLabel(delta > 0 ? '+' : '−')
+            .setStyle(delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger);
+
         const rows = [];
 
-        for (const delta of [1, -1]) {
-            const style = delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger;
-            const label = delta > 0 ? '+' : '−';
+        for (let i = 0; i < this.config.rewards.length; i += 5) {
+            const chunk = this.config.rewards.slice(i, i + 5);
 
-            for (let i = 0; i < this.config.rewards.length; i += 5) {
-                const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
-                    new ButtonBuilder()
-                        .setCustomId(`myrw_${reward.key}_${delta}`)
-                        .setEmoji(reward.emoji)
-                        .setLabel(label)
-                        .setStyle(style)
-                );
-
-                rows.push(new ActionRowBuilder().addComponents(...buttons));
+            if (chunk.length * 2 <= 5) {
+                // Krótki ogon - plusy i minusy mieszczą się w jednym rzędzie
+                rows.push(new ActionRowBuilder().addComponents(
+                    ...chunk.map(reward => makeButton(reward, 1)),
+                    ...chunk.map(reward => makeButton(reward, -1))
+                ));
+            } else {
+                rows.push(new ActionRowBuilder().addComponents(...chunk.map(reward => makeButton(reward, 1))));
+                rows.push(new ActionRowBuilder().addComponents(...chunk.map(reward => makeButton(reward, -1))));
             }
         }
 
+        if (rows.length > 5) {
+            logger.warn(`⚠️ Za dużo nagród (${this.config.rewards.length}) - panel ±1 mieści maksymalnie 12, nadmiar pominięto`);
+            return rows.slice(0, 5);
+        }
+
         return rows;
+    }
+
+    /**
+     * Buduje przyciski panelu /rewards - komplet nagród na plus i na minus.
+     * Działają wyłącznie na nagrodach dodanych samodzielnie przez właściciela panelu.
+     * @returns {Array} - Rzędy przycisków
+     */
+    buildOwnRewardsButtons() {
+        return this.buildDeltaRewardRows((reward, delta) => `myrw_${reward.key}_${delta}`);
     }
 
     /**
@@ -1147,29 +1167,10 @@ class InteractionHandler {
     /**
      * Buduje przyciski panelu korekty - komplet nagród na plus i na minus
      * @param {string} userId - ID korygowanego gracza
-     * @returns {Array} - Rzędy przycisków (2 rzędy na plus + 2 na minus)
+     * @returns {Array} - Rzędy przycisków
      */
     buildCorrectionButtons(userId) {
-        const rows = [];
-
-        for (const delta of [1, -1]) {
-            const style = delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger;
-            const label = delta > 0 ? '+' : '−';
-
-            for (let i = 0; i < this.config.rewards.length; i += 5) {
-                const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
-                    new ButtonBuilder()
-                        .setCustomId(`corr_${userId}_${reward.key}_${delta}`)
-                        .setEmoji(reward.emoji)
-                        .setLabel(label)
-                        .setStyle(style)
-                );
-
-                rows.push(new ActionRowBuilder().addComponents(...buttons));
-            }
-        }
-
-        return rows;
+        return this.buildDeltaRewardRows((reward, delta) => `corr_${userId}_${reward.key}_${delta}`);
     }
 
     /**

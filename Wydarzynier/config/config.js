@@ -64,7 +64,9 @@ module.exports = {
         { key: 'mcore',   name: 'Mount Core',          emoji: '<:II_MountCore:1492137886680748113>' },
         { key: 'csel',    name: 'Chest Core Selector', emoji: '<:J_ChestCoreSelector:1402533058548338741>' },
         { key: 'pcryst',  name: 'Pet Crystal',         emoji: '<:JJ_PetCrystal:1409859481000607784>' },
-        { key: 'pshard',  name: 'Panda Shard',         emoji: '<:IG_PandaShard:1402533951511461940>' }
+        { key: 'pshard',  name: 'Panda Shard',         emoji: '<:IG_PandaShard:1402533951511461940>' },
+        { key: 'tcore',   name: 'Transmute Core',      emoji: '<:II_TransmuteCore:1458440558602092647>' },
+        { key: 'mschest', name: 'Mount Shards Chest',  emoji: '<:J_mount_shards_chest:1536820962845261865>' }
     ],
 
     // Ustawienia lobby
