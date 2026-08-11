@@ -3,7 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const config = require('./config/config');
-const { handleInteraction, handleThreadMessage } = require('./handlers/interactionHandlers');
+const { handleInteraction, handleThreadMessage, cancelRewardPrompt } = require('./handlers/interactionHandlers');
 const { handleReactionAdd, handleReactionRemove } = require('./handlers/reactionHandlers');
 const { handleMessageUpdate } = require('./handlers/messageHandlers');
 const LobbyService = require('./services/lobbyService');
@@ -354,6 +354,9 @@ client.on(Events.ThreadMembersUpdate, async (addedMembers, removedMembers, threa
                 if (lobby.isFull && lobby.players.length < sharedState.config.lobby.maxPlayers) {
                     lobby.isFull = false;
                     await thread.send(`📢 Zwolniono miejsce w lobby! Dostępne miejsca: ${sharedState.config.lobby.maxPlayers - lobby.players.length}`);
+
+                    // Party się rozpadło - pytanie o nagrodę znika do czasu ponownego zapełnienia
+                    await cancelRewardPrompt(lobby, sharedState);
                 }
 
                 await sharedState.lobbyService.saveLobbies();

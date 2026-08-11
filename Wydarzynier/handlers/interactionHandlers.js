@@ -643,6 +643,12 @@ class InteractionHandler {
         const lobby = sharedState.lobbyService.getLobby(lobbyId);
         if (!lobby || lobby.rewardPromptSent) return;
 
+        // Party przestało być pełne albo pytanie zostało anulowane
+        if (!lobby.isFull || !lobby.rewardPromptAt) return;
+
+        // Timer sprzed anulowania - po ponownym zapełnieniu obowiązuje nowy termin
+        if (Date.now() + 1000 < lobby.rewardPromptAt) return;
+
         const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
         if (!thread) {
             logger.warn(`⚠️ Nie znaleziono wątku lobby ${lobbyId} - pytanie o nagrodę pominięte`);
@@ -664,6 +670,42 @@ class InteractionHandler {
     }
 
     /**
+     * Kasuje pytanie o nagrodę, gdy party przestało być pełne - wiadomość znika z wątku,
+     * przepisywanie się zatrzymuje, a po ponownym zapełnieniu pytanie planowane jest od nowa
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async cancelRewardPrompt(lobby, sharedState) {
+        try {
+            if (!lobby || (!lobby.rewardPromptSent && !lobby.rewardPromptAt && !lobby.rewardPromptMessageId)) return;
+
+            const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
+
+            if (thread) {
+                const prompts = await this.findRewardPromptMessages(thread);
+
+                for (const prompt of prompts) {
+                    await prompt.delete().catch(error =>
+                        logger.warn(`⚠️ Nie udało się usunąć pytania o nagrodę: ${error.message}`)
+                    );
+                }
+            }
+
+            // Wyzerowanie stanu = przy kolejnym zapełnieniu `scheduleRewardPrompt` zaplanuje pytanie ponownie
+            lobby.rewardPromptSent = false;
+            lobby.rewardPromptAt = null;
+            lobby.rewardPromptMessageId = null;
+            lobby.rewardPromptMessagesSince = 0;
+            await sharedState.lobbyService.saveLobbies();
+
+            logger.info(`🗑️ Party ${lobby.id} przestało być pełne - usunięto pytanie o nagrodę`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas usuwania pytania o nagrodę (${lobby?.id}):`, error);
+        }
+    }
+
+    /**
      * Liczy wiadomości w wątku lobby i co N wiadomości przepisuje pytanie o nagrodę na koniec,
      * żeby nie uciekło graczom w górę rozmowy (analogicznie do repozycjonowania ogłoszenia party).
      * @param {Message} message - Nowa wiadomość w wątku
@@ -676,7 +718,7 @@ class InteractionHandler {
             if (message.author?.id === sharedState.client.user.id) return;
 
             const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channelId);
-            if (!lobby?.rewardPromptMessageId) return;
+            if (!lobby?.rewardPromptMessageId || !lobby.isFull) return;
 
             // Losowanie zamknięte (nagroda zgłoszona) albo przepisywanie właśnie trwa
             if (sharedState.nagrodyService.getPromptClaimer(lobby.rewardPromptMessageId)) return;
@@ -1991,6 +2033,9 @@ class InteractionHandler {
             // Sprawdź czy lobby nie jest już pełne
             if (ownerLobby.isFull && ownerLobby.players.length < this.config.lobby.maxPlayers) {
                 ownerLobby.isFull = false;
+
+                // Party się rozpadło - pytanie o nagrodę znika do czasu ponownego zapełnienia
+                await this.cancelRewardPrompt(ownerLobby, sharedState);
             }
 
             // Zapisz zmiany
@@ -2496,8 +2541,19 @@ async function handleThreadMessage(message, sharedState) {
     await handler.handleRewardPromptReposition(message, sharedState);
 }
 
+/**
+ * Kasuje pytanie o nagrodę po tym, jak party przestało być pełne
+ * @param {Object} lobby - Dane lobby
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+async function cancelRewardPrompt(lobby, sharedState) {
+    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
+    await handler.cancelRewardPrompt(lobby, sharedState);
+}
+
 module.exports = {
     handleInteraction,
     handleThreadMessage,
+    cancelRewardPrompt,
     InteractionHandler
 };
