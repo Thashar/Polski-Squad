@@ -70,7 +70,8 @@ module.exports = {
         { key: 'etsel',   name: 'Epic Tech Selector',  emoji: '<:J_EpicTechSelector:1402533245672886293>' },
         { key: 'ssel',    name: 'Chest S Selector',    emoji: '<:J_ChestSSelector:1409858885682073683>' },
         { key: 'psel',    name: 'Pet Chest Selector',  emoji: '<:J_pet_chest_selector:1536846434651873352>' },
-        { key: 'collyel', name: 'Żółta kolekcja',      emoji: '<:J_CollYellow:1402532951492657172>' }
+        { key: 'collyel', name: 'Żółta kolekcja',      emoji: '<:J_CollYellow:1402532951492657172>' },
+        { key: 'rescoll', name: 'Chest Selector Resonance Red Coll', emoji: '<:J_ChestSelectorResonanseRedColl:1402533124277141535>' }
     ],
 
     // Ustawienia lobby
