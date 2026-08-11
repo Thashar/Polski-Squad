@@ -13,8 +13,8 @@
 8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
 
 **Funkcjonalność Nagród Specjalnych:**
-- **Pytanie o nagrodę:** 1 minuta po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 14 przyciskami (same emoji nagród, bez opisów, 3 rzędy: 5+5+4)
-- **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard, Transmute Core, Mount Shards Chest, Epic Tech Selector, Chest S Selector, Pet Chest Selector). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
+- **Pytanie o nagrodę:** 1 minuta po zapełnieniu lobby (`lobby.rewardPromptDelay`) bot wysyła w wątku pytanie z 15 przyciskami (same emoji nagród, bez opisów, 3 rzędy: 5+5+5)
+- **Definicje nagród:** `config.rewards` - lista `{ key, name, emoji }` (Pet AW, RC, Chip, AW, Czerwona kolekcja, Mount Core, Chest Core Selector, Pet Crystal, Panda Shard, Transmute Core, Mount Shards Chest, Epic Tech Selector, Chest S Selector, Pet Chest Selector, Żółta kolekcja). Kolejność w tablicy = kolejność przycisków i kolumn w rankingu
   - **Klucze nagród nie mogą zawierać `_`** - customId przycisków (`myrw_<klucz>_<delta>`, `corr_<id>_<klucz>_<delta>`) jest parsowany przez `split('_')`
 - **Potwierdzenie:** Kliknięcie emoji → ephemeral „Czy na pewno otrzymałeś taką nagrodę…" z przyciskami **Tak** / **Nie**
   - **Tak** → nagroda doliczana na konto użytkownika + ogłoszenie na kanale `/party` (nagłówek `#`): `# <@user> właśnie zgarnął nagrodę specjalną! <emoji>.` + linia zachęty do użycia `/stats`
