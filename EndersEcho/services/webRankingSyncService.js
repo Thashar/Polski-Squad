@@ -28,7 +28,9 @@ const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 h
  *   • przy starcie bota — pełny snapshot wszystkich serwerów (`syncAll`),
  *   • cyklicznie co `AUTO_SYNC_INTERVAL_MS` — ten sam pełny snapshot (`startAutoSync`),
  *   • po każdej zmianie w rankingu — tylko dotknięte serwery i tylko gdy ich TOP 10
- *     faktycznie się zmienił (`syncGuild`/`syncGuilds`, porównanie po skrócie SHA-1).
+ *     faktycznie się zmienił (`syncGuild`/`syncGuilds`, porównanie po skrócie SHA-1),
+ *   • gdy TOP 10 się nie zmienił, ale zmieniły się liczniki (nowy gracz poza czołówką,
+ *     nowy serwer) — sam nagłówek, bez rankingów (`_syncTotals`).
  * Dzięki temu zwykłe `/update`, które nie rusza czołówki, nie generuje ruchu.
  *
  * WAŻNE: jedna akcja potrafi zmienić ranking KILKU serwerów naraz — pobicie rekordu
@@ -58,7 +60,8 @@ class WebRankingSyncService {
 
         this.stateFile = path.join(config.ranking?.dataDir || path.join(__dirname, '../data'), 'web_sync.json');
         this._hashes = {};          // guildId → skrót ostatnio wysłanego TOP 10
-        this._lastSync = null;      // { at, kind: 'full'|'guild'|'remove', count, guildName } — do Centrum Dowodzenia
+        this._totals = null;        // { guilds, users } — ostatnio wysłane liczniki nagłówka
+        this._lastSync = null;      // { at, kind: 'full'|'guild'|'remove'|'totals', count, guildName } — do Centrum Dowodzenia
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
         this._autoTimer = null;     // cykliczny pełny snapshot (siatka bezpieczeństwa)
     }
@@ -73,9 +76,11 @@ class WebRankingSyncService {
             const raw = await fs.readFile(this.stateFile, 'utf8');
             const data = JSON.parse(raw);
             this._hashes = data?.hashes || {};
+            this._totals = data?.totals || null;
             this._lastSync = data?.lastSync || null;
         } catch {
             this._hashes = {};
+            this._totals = null;
             this._lastSync = null;
         }
     }
@@ -84,7 +89,7 @@ class WebRankingSyncService {
         this._queue = this._queue.then(async () => {
             try {
                 await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-                await fs.writeFile(this.stateFile, JSON.stringify({ hashes: this._hashes, lastSync: this._lastSync }, null, 2), 'utf8');
+                await fs.writeFile(this.stateFile, JSON.stringify({ hashes: this._hashes, totals: this._totals, lastSync: this._lastSync }, null, 2), 'utf8');
             } catch (err) {
                 this.logger.warn(`⚠️ Nie udało się zapisać stanu wysyłki rankingów: ${err.message}`);
             }
@@ -130,14 +135,65 @@ class WebRankingSyncService {
     }
 
     /**
+     * Liczniki z nagłówka strony: ile serwerów obsługuje bot i ilu stoi za nimi
+     * UNIKALNYCH graczy. Gracz obecny na kilku serwerach liczy się raz — to dokładnie
+     * ta sama liczba, którą bot pokazuje jako „N unikalnych graczy globalnie"
+     * (`getCountedPlayers`, dedup po ID Discorda). Na stronę idzie sama liczba.
+     * @param {Object} client
+     * @returns {Promise<{ totalGuilds: number, totalUsers: number }>}
+     */
+    async _computeTotals(client) {
+        const ids = (this.guildConfigService?.getAllConfiguredGuildIds() || [])
+            .filter(id => client?.guilds?.cache?.has(id));
+        if (!ids.length) return { totalGuilds: 0, totalUsers: 0 };
+        const counted = await this.rankingService.getCountedPlayers(new Set(ids));
+        return { totalGuilds: ids.length, totalUsers: counted.total };
+    }
+
+    /** Liczniki dopisywane do każdego POST-a; zera nie wysyłamy (Worker zostawia wtedy stary stan). */
+    _totalsFields(totals) {
+        return {
+            totalGuilds: totals.totalGuilds || undefined,
+            totalUsers: totals.totalUsers || undefined,
+        };
+    }
+
+    /** Zapamiętuje ostatnio wysłane liczniki — po nich poznajemy, że warto wysłać kolejne. */
+    _rememberTotals(totals) {
+        this._totals = { guilds: totals.totalGuilds, users: totals.totalUsers };
+    }
+
+    /**
+     * Wysyła SAME liczniki nagłówka, bez rankingów. Potrzebne, bo nowy gracz ląduje
+     * zwykle POZA TOP 10 — skrót czołówki się wtedy nie zmienia, więc bez tego licznik
+     * unikalnych graczy stałby na stronie aż do najbliższego pełnego snapshotu.
+     * @returns {Promise<boolean>} czy poszła wysyłka
+     */
+    async _syncTotals(client, precomputed = null) {
+        const totals = precomputed || await this._computeTotals(client);
+        if (!totals.totalGuilds) return false; // bot bez serwerów — nie ma czego liczyć
+        if (this._totals && this._totals.guilds === totals.totalGuilds && this._totals.users === totals.totalUsers) {
+            return false; // liczniki bez zmian — POST byłby czystym hałasem
+        }
+
+        await this._post({ guilds: [], ...this._totalsFields(totals) });
+        this._rememberTotals(totals);
+        this._lastSync = { at: new Date().toISOString(), kind: 'totals', count: 0, guildName: null };
+        await this._saveState();
+        this.logger.info(`🌐 Zaktualizowano liczniki na stronie: ${totals.totalGuilds} serwer(ów), ${totals.totalUsers} unikalnych graczy`);
+        return true;
+    }
+
+    /**
      * Informacja o ostatniej wysyłce — pokazywana w Centrum Dowodzenia.
-     * @returns {{ enabled: boolean, lastSync: Object|null, guildsTracked: number }}
+     * @returns {{ enabled: boolean, lastSync: Object|null, guildsTracked: number, totals: Object|null }}
      */
     getStatus() {
         return {
             enabled: this.isEnabled(),
             lastSync: this._lastSync,
             guildsTracked: Object.keys(this._hashes).length,
+            totals: this._totals,
         };
     }
 
@@ -180,7 +236,9 @@ class WebRankingSyncService {
             }
             if (!guilds.length) return;
 
-            await this._post({ guilds, replaceAll: true, totalGuilds: ids.length });
+            const totals = await this._computeTotals(client);
+            await this._post({ guilds, replaceAll: true, ...this._totalsFields(totals) });
+            this._rememberTotals(totals);
             // Skróty budujemy OD ZERA: `replaceAll` skasował po stronie strony serwery,
             // których tu nie ma. Gdyby ich skróty zostały, późniejszy `syncGuild` uznałby
             // niezmieniony TOP 10 za „już wysłany" i serwer nigdy nie wróciłby na stronę.
@@ -206,16 +264,28 @@ class WebRankingSyncService {
             const payload = await this.buildGuildPayload(guildId, client);
             // Ranking serwera zrobił się pusty (ostatni gracz usunięty / profil skasowany) —
             // kafelek musi zniknąć ze strony, inaczej wisiałby z zamrożoną listą do restartu.
-            if (!payload) return await this._removeGuild(guildId, client);
+            if (!payload) {
+                const removed = await this._removeGuild(guildId, client);
+                // Serwera nigdy nie wysłaliśmy (nie ma czego kasować), ale gracz i tak
+                // zniknął z rankingu — licznik unikalnych graczy trzeba odświeżyć.
+                if (!removed) await this._syncTotals(client);
+                return removed;
+            }
+
+            // Liczniki liczymy też tutaj — nowy serwer i nowy gracz mają być widoczni
+            // na stronie, zanim padnie kolejny restart bota z pełnym snapshotem.
+            const totals = await this._computeTotals(client);
 
             const hash = this._hashTop(payload);
-            if (this._hashes[guildId] === hash) return false; // TOP 10 bez zmian — nic nie wysyłamy
+            if (this._hashes[guildId] === hash) {
+                // TOP 10 bez zmian — rankingu nie wysyłamy, ale nowy gracz spoza czołówki
+                // podbija licznik unikalnych graczy, więc sam nagłówek może wymagać wysyłki.
+                await this._syncTotals(client, totals);
+                return false;
+            }
 
-            // totalGuilds liczymy też tutaj — nowy serwer bywa widoczny na stronie
-            // zanim padnie kolejny restart bota z pełnym snapshotem.
-            const activeCount = (this.guildConfigService?.getAllConfiguredGuildIds() || [])
-                .filter(id => client?.guilds?.cache?.has(id)).length;
-            await this._post({ guilds: [payload], totalGuilds: activeCount || undefined });
+            await this._post({ guilds: [payload], ...this._totalsFields(totals) });
+            this._rememberTotals(totals);
             this._hashes[guildId] = hash;
             this._lastSync = { at: new Date().toISOString(), kind: 'guild', count: 1, guildName: payload.name };
             await this._saveState();
@@ -257,10 +327,10 @@ class WebRankingSyncService {
         const guildName = client?.guilds?.cache?.get(guildId)?.name
             || this.guildConfigService?.getConfig(guildId)?.guildName
             || guildId;
-        const activeCount = (this.guildConfigService?.getAllConfiguredGuildIds() || [])
-            .filter(id => client?.guilds?.cache?.has(id)).length;
+        const totals = await this._computeTotals(client);
 
-        await this._post({ guilds: [], removeGuildIds: [guildId], totalGuilds: activeCount || undefined });
+        await this._post({ guilds: [], removeGuildIds: [guildId], ...this._totalsFields(totals) });
+        this._rememberTotals(totals);
         delete this._hashes[guildId];
         this._lastSync = { at: new Date().toISOString(), kind: 'remove', count: 1, guildName };
         await this._saveState();

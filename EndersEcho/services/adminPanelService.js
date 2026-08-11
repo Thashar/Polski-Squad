@@ -1119,8 +1119,13 @@ class AdminPanelService {
                         ? `pełny snapshot (${st.lastSync.count} serwer(ów))`
                         : st.lastSync.kind === 'remove'
                             ? `usunięcie serwera **${st.lastSync.guildName || '—'}** (brak graczy)`
-                            : `serwer **${st.lastSync.guildName || '—'}**`;
-                    webSync = `✅ ${fmtTs(st.lastSync.at)} — ${what}\nŚledzonych serwerów: **${st.guildsTracked}**`;
+                            : st.lastSync.kind === 'totals'
+                                ? 'same liczniki (serwery / unikalni gracze)'
+                                : `serwer **${st.lastSync.guildName || '—'}**`;
+                    const totals = st.totals
+                        ? `\nLiczniki na stronie: **${st.totals.guilds}** serwer(ów) · **${st.totals.users}** unikalnych graczy`
+                        : '';
+                    webSync = `✅ ${fmtTs(st.lastSync.at)} — ${what}\nŚledzonych serwerów: **${st.guildsTracked}**${totals}`;
                 }
             }
         } catch { /* pole opcjonalne */ }
