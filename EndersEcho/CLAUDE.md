@@ -742,9 +742,9 @@
 - **Co się kwalifikuje:** zmiany widoczne dla gracza albo dla admina serwera – nowe komendy i panele, zmiany w ogłoszeniach, rankingach, osiągnięciach, OCR, konfiguracji
 - **Co NIE trafia do changeloga:** refaktory, dokumentacja, logi diagnostyczne, zmiany w innych botach repo `Polski Squad`
 - **⚠️ Chronimy know-how – changelog czyta cała społeczność.** Zmiany dotyczące wyłącznie head admina **pomijamy w całości**: Centrum Dowodzenia, `/tokens` i koszty AI, panel testerów OCR, `/info`, Success Rate, liczniki analiz manualnych i użycia komend, globalny wyłącznik OCR, alerty kosztowe, dziennik akcji. Nie zdradzamy też szczegółów technicznych: nazw dostawców AI i modeli, cache'y, kolejek, mutexów, mechanizmów zapisu, retry, limitów i progów. Zmianę czysto techniczną zwijamy w ogólnik – `Poprawki wydajnościowe` (`impr`) albo `Poprawki stabilności` (`fix`) – z jednym neutralnym zdaniem. **Test:** jeżeli wpis mówi coś, czego konkurencyjny bot mógłby użyć albo czego gracz i tak nie zobaczy w Discordzie, to albo ogólnik, albo nic
-- **Format wpisu:** `[data ISO, kategoria, { pl: [tytuł, zdanie], en: [tytuł, zdanie] }]`, zawsze na górze tablicy. Kategorie: `feat` (nowość), `impr` (ulepszenie), `fix` (poprawka – wyłącznie realny błąd, który psuł dane, wynik gracza albo blokował działanie)
+- **Format wpisu:** `[data ISO, kategoria, { pl: [tytuł, zdanie], en: [tytuł, zdanie] }, "identyfikator"]`, zawsze na górze tablicy. Kategorie: `feat` (nowość), `impr` (ulepszenie), `fix` (poprawka – wyłącznie realny błąd, który psuł dane, wynik gracza albo blokował działanie). Identyfikator to stały slug z angielskiego tytułu – po nim podpinają się tłumaczenia z plików `static/changelog/{kod}.js`
 - **Jeden wpis to jedna zmiana widoczna dla gracza, nie jeden commit** – serię poprawek wokół tej samej rzeczy zwiń w jeden wpis, tytuł krótki, opis jednym zdaniem, bez żargonu z kodu
-- **Kolejność w obrębie dnia robi widok** (`fix` → `impr` → `feat`), więc nie trzeba jej pilnować w danych
+- **⚠️ Kolejność jest CHRONOLOGICZNA i pilnuje jej plik, nie widok** – najnowsza zmiana dnia stoi najwyżej. Dopisując wpis do dnia, który już istnieje, wstaw go NAD wcześniejszymi zmianami z tego dnia; nie grupuj po kategoriach
 
 **Struktura danych:**
 ```
