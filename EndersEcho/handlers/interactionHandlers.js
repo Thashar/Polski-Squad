@@ -9015,10 +9015,22 @@ class InteractionHandler {
      * @param {'admin'|'profile_deleted'} by - powód unieważnienia; decyduje o etykiecie
      *        przycisku pod ogłoszeniem („Cofnął admin" vs „Profil usunięty")
      */
-    async _invalidateUndoForPlayer(client, playerKey, guildId, actorName = null, { by = 'admin' } = {}) {
+    /**
+     * @param {string|null} expectPublicMsgId - gdy podane, unieważniamy WYŁĄCZNIE wtedy, gdy
+     *        ostatnia sesja profilu to dokładnie ten rekord. Bez tej kontroli cofnięcie jednej
+     *        akcji potrafiło ostemplować jako „cofnięty" zupełnie inny, poprawny rekord gracza
+     *        — tak zginął legalny rekord bossa przy cofaniu analizy „No record broken".
+     *        Ścieżki, które kasują dane gracza hurtem (usunięcie gracza/wyniku/profilu),
+     *        nie podają go i celują w ostatni rekord, bo o to tam właśnie chodzi.
+     */
+    async _invalidateUndoForPlayer(client, playerKey, guildId, actorName = null, { by = 'admin', expectPublicMsgId = null } = {}) {
         if (!this.recordRevertService) return;
         const recSession = this.recordRevertService.getLatest(playerKey, guildId);
         if (!recSession || this._isSessionReverted(recSession.status)) return;
+        if (expectPublicMsgId && recSession.publicMsgId !== expectPublicMsgId) {
+            logger.warn(`Pominięto unieważnienie cofnięcia: ostatni rekord profilu (${recSession.publicMsgId}) to nie ten cofany (${expectPublicMsgId})`);
+            return;
+        }
         await this.recordRevertService.markReverted(recSession.publicMsgId, by, actorName);
         if (client) await this._applyRevertVisuals(client, recSession, by, actorName).catch(() => {});
     }
@@ -12052,15 +12064,30 @@ class InteractionHandler {
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);
 
-            // Zapisz sesję revert i dodaj przycisk "Cofnij wynik" do globalnego raportu
+            // Zapisz sesję revert i dodaj przycisk "Cofnij wynik" do globalnego raportu.
+            //
+            // ⚠️ TYLKO gdy analiza FAKTYCZNIE coś zmieniła. Gdy nie pobiła ani rekordu
+            // globalnego, ani rekordu bossa, nie ma czego cofać — a przycisk mimo to istniał
+            // i jego kliknięcie unieważniało (przez `getLatest`) cofnięcie CZYJEGOŚ INNEGO,
+            // poprawnego rekordu tego gracza. Realny incydent: analiza „No record broken"
+            // ostemplowała legalny rekord bossa sprzed kilku godzin jako „cofnięty przez admina".
+            const analyzeChangedData = isNewRecord || isNewBossRecord;
             const globalMsgId = footerInfo.globalMsgId || origMsgId;
-            if (this.config.rejectedChannelId && globalMsgId) {
+            if (this.config.rejectedChannelId && globalMsgId && analyzeChangedData) {
                 this._analyzeRevertSessions.set(globalMsgId, {
                     targetUserId,
                     targetPlayerKey,
                     targetGuildId,
                     previousRecord: currentScore ?? null,
                     newRecordTimestamp: isNewRecord ? (updatedRanking[targetPlayerKey]?.timestamp ?? null) : null,
+                    // Bez tego cofnięcie zostawiało w bazie rekord bossa ustawiony przez analizę
+                    isNewRecord,
+                    isNewBossRecord,
+                    bossName: aiResult.bossName || null,
+                    previousBossRecord: previousBossRecord ?? null,
+                    // Snapshot wyniku zapisanego przez analizę — przy cofaniu sprawdzamy, czy
+                    // ranking nadal go zawiera; gracz mógł w międzyczasie ustawić nowszy rekord
+                    appliedScore: isNewRecord ? (updatedRanking[targetPlayerKey]?.score ?? null) : null,
                     userName,
                     adminName,
                     publicMsgId: analyzePublicMsg?.id || null,
@@ -12116,6 +12143,10 @@ class InteractionHandler {
         await interaction.deferUpdate();
 
         const { targetUserId, targetGuildId, previousRecord, newRecordTimestamp, userName, adminName } = session;
+        // Sesje sprzed poprawki nie mają tych pól — brak flag traktujemy jak „analiza ruszyła
+        // ranking", czyli zachowanie sprzed zmiany
+        const sessionIsNewRecord = session.isNewRecord !== false;
+        const sessionIsNewBossRecord = session.isNewBossRecord === true;
         // Sesje utworzone przed wdrożeniem profili nie mają targetPlayerKey → profil główny
         const targetPlayerKey = session.targetPlayerKey || targetUserId;
         const gl = this.logService._gl(targetGuildId);
@@ -12125,13 +12156,45 @@ class InteractionHandler {
         try {
             gl.info(`↩️ [Cofnij] ${reverterName} cofa wynik dla ${userName} (serwer: ${serverName}), poprzedni wynik: ${previousRecord?.score || 'brak'}`);
 
-            // 1. Cofnij ranking (identycznie jak CV revert)
-            await this.rankingService.revertUserRecord(targetGuildId, targetPlayerKey, previousRecord ?? null);
+            // 1. Cofnij ranking — TYLKO jeśli analiza faktycznie go zmieniła.
+            if (sessionIsNewRecord) {
+                // Snapshot `previousRecord` pochodzi z momentu analizy i bywa stary o godziny.
+                // Gdy gracz zdążył w międzyczasie ustawić nowszy rekord, przywrócenie snapshotu
+                // wymazałoby TAMTEN wynik — więc najpierw sprawdzamy, czy w rankingu nadal leży
+                // to, co zapisała analiza.
+                const currentEntry = await this.rankingService.getUserRecord(targetGuildId, targetPlayerKey).catch(() => null);
+                const stillOurs = !session.appliedScore
+                    || !currentEntry
+                    || currentEntry.score === session.appliedScore;
+
+                if (!stillOurs) {
+                    gl.warn(`↩️ [Cofnij] Przerwano: gracz ma nowszy wynik (${currentEntry.score}) niż zapisany przez analizę (${session.appliedScore})`);
+                    await interaction.followUp({
+                        content: `⚠️ Nie cofnięto: **${userName}** ma już nowszy wynik (**${currentEntry.score}**) niż ten zapisany przez analizę (**${session.appliedScore}**). Cofnięcie skasowałoby ten nowszy rekord — usuń go ręcznie przez panel, jeśli tego chcesz.`,
+                        flags: ['Ephemeral'],
+                    }).catch(() => {});
+                    return;
+                }
+
+                await this.rankingService.revertUserRecord(targetGuildId, targetPlayerKey, previousRecord ?? null);
+                gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
+            } else {
+                gl.info('↩️ [Cofnij] Analiza nie ruszyła rankingu — pomijam cofanie wpisu rankingowego');
+            }
+
+            // 1b. Cofnij rekord bossa, jeśli analiza go pobiła. Wcześniej ta ścieżka w ogóle
+            // tego nie robiła i rekord bossa ustawiony przez analizę zostawał w bazie.
+            if (sessionIsNewBossRecord && session.bossName && this.bossRecordService) {
+                await this.bossRecordService.revertBossRecord(
+                    targetGuildId, targetPlayerKey, session.bossName, session.previousBossRecord ?? null
+                ).catch(e => gl.error(`↩️ [Cofnij] Błąd cofania rekordu bossa: ${e.message}`));
+                gl.info(`↩️ [Cofnij] Rekord bossa "${session.bossName}" cofnięty → ${session.previousBossRecord?.score || 'usunięty'}`);
+            }
+
             // Cofnięcie własnego wyniku przez head admina (testowanie) — nie liczy się do statystyk
             if (this.ocrStatsService && targetUserId !== interaction.user.id) {
                 this.ocrStatsService.recordReverted().catch(() => {});
             }
-            gl.info(`↩️ [Cofnij] Ranking cofnięty → ${previousRecord?.score || 'gracz usunięty'}`);
 
             // 2. Usuń wpisy historii wyników od momentu analizowanego rekordu
             let removedRecordCount = 0;
@@ -12172,8 +12235,13 @@ class InteractionHandler {
                 : `↩️ Wynik cofnięty przez **${reverterName}** → gracz usunięty z rankingu | ${now}`;
             this._ccAudit(interaction, `↩️ Cofnięto wynik (Analizuj): ${userName}`);
             this.adminPanelService?.refresh();
-            // Przycisk gracza „Cofnij wynik" pod ogłoszeniem przestaje działać (rekord już cofnięty)
-            await this._invalidateUndoForPlayer(interaction.client, targetPlayerKey, targetGuildId, reverterName).catch(() => {});
+            // Przycisk gracza „Cofnij wynik" przestaje działać — ale WYŁĄCZNIE pod ogłoszeniem
+            // tej analizy. Bez `expectPublicMsgId` trafiało w ostatni rekord profilu, czyli
+            // potrafiło unieważnić cofnięcie zupełnie innego, legalnego wyniku.
+            if (session.publicMsgId) {
+                await this._invalidateUndoForPlayer(interaction.client, targetPlayerKey, targetGuildId, reverterName,
+                    { expectPublicMsgId: session.publicMsgId }).catch(() => {});
+            }
 
             const updatedEmbeds = interaction.message.embeds.map(e => {
                 const builder = EmbedBuilder.from(e);
