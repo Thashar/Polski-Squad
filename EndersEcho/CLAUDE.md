@@ -733,6 +733,18 @@
 - **Liczniki nagłówka (`_computeTotals`):** payload niesie też `totalGuilds` — liczbę WSZYSTKICH serwerów z botem (także tych bez wyników) — oraz `totalUsers`, czyli liczbę **unikalnych graczy** (`getCountedPlayers` z zawężeniem do aktywnych serwerów: dedup po ID Discorda, gracz z kilku serwerów i z kilku profili liczy się raz — ta sama liczba co „N unikalnych graczy globalnie” w stopce `/update`). Strona składa z nich napis „X unikalnych użytkowników z N społeczności…” nad listą kafelków. **Na stronę idzie sama liczba, żadnych ID.** Kafelek dostają tylko serwery z rankingiem, więc `totalGuilds` i liczba kafelków mogą się różnić. Zera nie wysyłamy — Worker zostawia wtedy ostatnią znaną wartość, a strona bez `totalUsers` pokazuje krótszy wariant zdania (bez liczby graczy)
 - **Po stronie strony:** kafelki klanów w sekcji „COMMUNITIES USING THE BOT" renderowane są z tych danych i dopiero wtedy stają się klikalne; klik otwiera nakładkę z embedem TOP 10 w stylu bota. Gdy API nie odpowie, zostaje statyczna, nieklikalna lista z HTML-a
 
+## Changelog na stronie (endersecho.thashar.dev)
+
+**Plik:** `enders-echo/static/changelog.js` w repo `thashar.dev` (tablica `window.EE_CHANGELOG`) · **Gdzie widać:** pływające okno obok przełącznika języka, oś czasu grupowana datami
+
+**Każdą zmianę w bocie, która nadaje się do changeloga, dopisz tam OD RAZU, w tym samym przebiegu pracy – bez pytania o zgodę.** W podsumowaniu napisz wprost, jaki wpis został dodany (albo dlaczego żaden). Gdy repo `thashar.dev` nie jest dostępne w sesji, powiedz to w podsumowaniu i podaj gotową treść wpisu do wklejenia.
+
+- **Co się kwalifikuje:** zmiany widoczne dla gracza albo dla admina serwera – nowe komendy i panele, zmiany w ogłoszeniach, rankingach, osiągnięciach, OCR, konfiguracji
+- **Co NIE trafia do changeloga:** refaktory, dokumentacja, logi diagnostyczne, zmiany w innych botach repo `Polski Squad`
+- **Format wpisu:** `[data ISO, kategoria, { pl: [tytuł, zdanie], en: [tytuł, zdanie] }]`, zawsze na górze tablicy. Kategorie: `feat` (nowość), `impr` (ulepszenie), `fix` (poprawka – wyłącznie realny błąd, który psuł dane, wynik gracza albo blokował działanie)
+- **Jeden wpis to jedna zmiana widoczna dla gracza, nie jeden commit** – serię poprawek wokół tej samej rzeczy zwiń w jeden wpis, tytuł krótki, opis jednym zdaniem, bez żargonu z kodu
+- **Kolejność w obrębie dnia robi widok** (`fix` → `impr` → `feat`), więc nie trzeba jej pilnować w danych
+
 **Struktura danych:**
 ```
 EndersEcho/data/
