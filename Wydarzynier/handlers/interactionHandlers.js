@@ -11,6 +11,10 @@ class InteractionHandler {
         this.lobbyService = lobbyService;
         this.timerService = timerService;
         this.bazarService = bazarService;
+
+        // Panele ±1 (/rewards, /correct): panelId -> webhook interakcji, która wysłała panel.
+        // Minusy są w drugiej wiadomości, więc po kliknięciu trzeba odświeżyć pierwszą (embed + plusy).
+        this.rewardPanels = new Map();
     }
 
     /**
@@ -968,38 +972,30 @@ class InteractionHandler {
     }
 
     /**
-     * Buduje rzędy przycisków ±1 dla kompletu nagród, mieszcząc się w limicie 5 rzędów Discorda.
-     * Nagrody idą piątkami - każda pełna piątka dostaje rząd zielonych i rząd czerwonych,
-     * a krótszy ogon listy mieści oba znaki w jednym rzędzie (dzięki temu 11-12 nagród nadal się mieści).
+     * Buduje rzędy przycisków nagród dla JEDNEGO znaku (osobna wiadomość na plusy, osobna na minusy).
+     * Dzięki rozbiciu na dwie wiadomości limit 5 rzędów Discorda dotyczy każdego znaku osobno,
+     * więc mieści się do 25 nagród (zamiast 12 przy wspólnej wiadomości).
+     * @param {number} delta - 1 (zielone plusy) albo -1 (czerwone minusy)
      * @param {Function} idFactory - Funkcja budująca customId dla (nagroda, delta)
      * @returns {Array} - Rzędy przycisków
      */
-    buildDeltaRewardRows(idFactory) {
-        const makeButton = (reward, delta) => new ButtonBuilder()
-            .setCustomId(idFactory(reward, delta))
-            .setEmoji(reward.emoji)
-            .setLabel(delta > 0 ? '+' : '−')
-            .setStyle(delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger);
-
+    buildSignedRewardRows(delta, idFactory) {
         const rows = [];
 
         for (let i = 0; i < this.config.rewards.length; i += 5) {
-            const chunk = this.config.rewards.slice(i, i + 5);
+            const buttons = this.config.rewards.slice(i, i + 5).map(reward =>
+                new ButtonBuilder()
+                    .setCustomId(idFactory(reward, delta))
+                    .setEmoji(reward.emoji)
+                    .setLabel(delta > 0 ? '+' : '−')
+                    .setStyle(delta > 0 ? ButtonStyle.Success : ButtonStyle.Danger)
+            );
 
-            if (chunk.length * 2 <= 5) {
-                // Krótki ogon - plusy i minusy mieszczą się w jednym rzędzie
-                rows.push(new ActionRowBuilder().addComponents(
-                    ...chunk.map(reward => makeButton(reward, 1)),
-                    ...chunk.map(reward => makeButton(reward, -1))
-                ));
-            } else {
-                rows.push(new ActionRowBuilder().addComponents(...chunk.map(reward => makeButton(reward, 1))));
-                rows.push(new ActionRowBuilder().addComponents(...chunk.map(reward => makeButton(reward, -1))));
-            }
+            rows.push(new ActionRowBuilder().addComponents(...buttons));
         }
 
         if (rows.length > 5) {
-            logger.warn(`⚠️ Za dużo nagród (${this.config.rewards.length}) - panel ±1 mieści maksymalnie 12, nadmiar pominięto`);
+            logger.warn(`⚠️ Za dużo nagród (${this.config.rewards.length}) - jedna wiadomość panelu mieści maksymalnie 25, nadmiar pominięto`);
             return rows.slice(0, 5);
         }
 
@@ -1007,35 +1003,123 @@ class InteractionHandler {
     }
 
     /**
-     * Buduje przyciski panelu /rewards - komplet nagród na plus i na minus.
-     * Działają wyłącznie na nagrodach dodanych samodzielnie przez właściciela panelu.
-     * @returns {Array} - Rzędy przycisków
+     * Generuje identyfikator panelu ±1 (bez podkreśleń - customId jest parsowany przez split('_'))
+     * @returns {string} - Identyfikator panelu
      */
-    buildOwnRewardsButtons() {
-        return this.buildDeltaRewardRows((reward, delta) => `myrw_${reward.key}_${delta}`);
+    createRewardPanelId() {
+        return Math.random().toString(36).slice(2, 10);
     }
 
     /**
-     * Obsługuje komendę /rewards - panel własnych nagród z korektą nagród dodanych samodzielnie
+     * Zapamiętuje panel ±1, żeby kliknięcie minusa (druga wiadomość) mogło odświeżyć
+     * pierwszą wiadomość z embedem. Token interakcji żyje 15 minut - wpisy wygasają razem z nim.
+     * @param {string} panelId - Identyfikator panelu
+     * @param {CommandInteraction} interaction - Interakcja, która wysłała panel
+     */
+    registerRewardPanel(panelId, interaction) {
+        const now = Date.now();
+
+        for (const [id, entry] of this.rewardPanels) {
+            if (entry.expiresAt <= now) this.rewardPanels.delete(id);
+        }
+
+        this.rewardPanels.set(panelId, {
+            webhook: interaction.webhook,
+            expiresAt: now + 14 * 60 * 1000
+        });
+    }
+
+    /**
+     * Odświeża pierwszą wiadomość panelu ±1 (embed + plusy) po kliknięciu minusa
+     * @param {string} panelId - Identyfikator panelu
+     * @param {Object} payload - Nowa treść wiadomości
+     * @returns {boolean} - Czy udało się odświeżyć
+     */
+    async refreshRewardPanel(panelId, payload) {
+        const panel = panelId ? this.rewardPanels.get(panelId) : null;
+
+        if (!panel || panel.expiresAt <= Date.now()) {
+            if (panelId) this.rewardPanels.delete(panelId);
+            return false;
+        }
+
+        try {
+            await panel.webhook.editMessage('@original', payload);
+            return true;
+        } catch (error) {
+            logger.warn(`⚠️ Nie udało się odświeżyć panelu nagród ${panelId}: ${error.message}`);
+            this.rewardPanels.delete(panelId);
+            return false;
+        }
+    }
+
+    /**
+     * Odpowiada na interakcję niezależnie od tego, czy była już potwierdzona (deferUpdate)
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {string} content - Treść odpowiedzi
+     */
+    async respondEphemeral(interaction, content) {
+        const payload = { content, ephemeral: true };
+
+        if (interaction.deferred || interaction.replied) {
+            await interaction.followUp(payload).catch(() => {});
+        } else {
+            await interaction.reply(payload).catch(() => {});
+        }
+    }
+
+    /**
+     * Wysyła drugą wiadomość panelu ±1 - same czerwone przyciski, bez tekstu.
+     * Discord nie przyjmuje wiadomości bez treści, więc content to spacja zerowej szerokości.
+     * @param {CommandInteraction} interaction - Interakcja komendy
+     * @param {Array} rows - Rzędy przycisków na minus
+     */
+    async sendMinusPanelMessage(interaction, rows) {
+        await interaction.followUp({
+            content: '​',
+            components: rows,
+            ephemeral: true
+        });
+    }
+
+    /**
+     * Buduje przyciski panelu /rewards dla jednego znaku.
+     * Działają wyłącznie na nagrodach dodanych samodzielnie przez właściciela panelu.
+     * @param {number} delta - 1 (plusy) albo -1 (minusy)
+     * @param {string} panelId - Identyfikator panelu (wymagany dla minusów)
+     * @returns {Array} - Rzędy przycisków
+     */
+    buildOwnRewardsButtons(delta = 1, panelId = null) {
+        return this.buildSignedRewardRows(delta, reward =>
+            delta > 0
+                ? `myrw_${reward.key}_1`
+                : `myrw_${reward.key}_-1_${panelId}`
+        );
+    }
+
+    /**
+     * Obsługuje komendę /rewards - panel własnych nagród z korektą nagród dodanych samodzielnie.
+     * Panel to dwie wiadomości: embed z zielonymi plusami + osobna wiadomość z czerwonymi minusami.
      * @param {CommandInteraction} interaction - Interakcja komendy
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleRewardsCommand(interaction, sharedState) {
         try {
             const displayName = interaction.member?.displayName || interaction.user.username;
+            const panelId = this.createRewardPanelId();
 
             await interaction.reply({
                 embeds: [this.buildOwnRewardsEmbed(interaction.user.id, displayName, sharedState)],
-                components: this.buildOwnRewardsButtons(),
+                components: this.buildOwnRewardsButtons(1),
                 ephemeral: true
             });
 
+            this.registerRewardPanel(panelId, interaction);
+            await this.sendMinusPanelMessage(interaction, this.buildOwnRewardsButtons(-1, panelId));
+
         } catch (error) {
             logger.error('❌ Błąd podczas wyświetlania nagród użytkownika:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas pobierania Twoich nagród.',
-                ephemeral: true
-            }).catch(() => {});
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas pobierania Twoich nagród.');
         }
     }
 
@@ -1047,10 +1131,13 @@ class InteractionHandler {
      */
     async handleOwnRewardButton(interaction, sharedState) {
         try {
-            // Format: myrw_<klucz>_<1|-1>
-            const [, rewardKey, rawDelta] = interaction.customId.split('_');
+            // Format: myrw_<klucz>_1 (plusy) albo myrw_<klucz>_-1_<idPanelu> (minusy z drugiej wiadomości)
+            const [, rewardKey, rawDelta, panelId] = interaction.customId.split('_');
             const delta = rawDelta === '-1' ? -1 : 1;
             const displayName = interaction.member?.displayName || interaction.user.username;
+
+            // Minusy siedzą w wiadomości bez embeda - potwierdzamy klik od razu, stan odświeżamy w pierwszej
+            if (delta < 0) await interaction.deferUpdate();
 
             // Zawsze własne konto i zawsze licznik spoza rankingu
             const result = await sharedState.nagrodyService.correctReward(
@@ -1062,10 +1149,7 @@ class InteractionHandler {
             );
 
             if (!result) {
-                await interaction.reply({
-                    content: '❌ Nieznana nagroda.',
-                    ephemeral: true
-                });
+                await this.respondEphemeral(interaction, '❌ Nieznana nagroda.');
                 return;
             }
 
@@ -1076,19 +1160,26 @@ class InteractionHandler {
                 lastChange += '\n⚠️ Licznik nie może zejść poniżej 0 - brak zmiany.';
             }
 
-            await interaction.update({
+            const payload = {
                 embeds: [this.buildOwnRewardsEmbed(interaction.user.id, displayName, sharedState, lastChange)],
-                components: this.buildOwnRewardsButtons()
-            });
+                components: this.buildOwnRewardsButtons(1)
+            };
+
+            if (delta > 0) {
+                await interaction.update(payload);
+            } else if (!await this.refreshRewardPanel(panelId, payload)) {
+                // Panel wygasł albo bot się zrestartował - pokazujemy przynajmniej wynik zmiany
+                await this.respondEphemeral(
+                    interaction,
+                    `${lastChange}\n\n💡 Panel jest już nieaktualny - wpisz \`/rewards\`, aby zobaczyć pełny stan.`
+                );
+            }
 
             logger.info(`📝 ${displayName} skorygował własną nagrodę ${reward.name}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty własnych nagród:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas korekty nagród.',
-                ephemeral: true
-            }).catch(() => {});
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas korekty nagród.');
         }
     }
 
@@ -1110,19 +1201,20 @@ class InteractionHandler {
             const targetUser = interaction.options.getUser('użytkownik');
             const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
             const displayName = member?.displayName || targetUser.username;
+            const panelId = this.createRewardPanelId();
 
             await interaction.reply({
                 embeds: [this.buildCorrectionEmbed(targetUser.id, displayName, sharedState)],
-                components: this.buildCorrectionButtons(targetUser.id),
+                components: this.buildCorrectionButtons(targetUser.id, 1),
                 ephemeral: true
             });
 
+            this.registerRewardPanel(panelId, interaction);
+            await this.sendMinusPanelMessage(interaction, this.buildCorrectionButtons(targetUser.id, -1, panelId));
+
         } catch (error) {
             logger.error('❌ Błąd podczas otwierania panelu korekty:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas otwierania panelu korekty.',
-                ephemeral: true
-            }).catch(() => {});
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas otwierania panelu korekty.');
         }
     }
 
@@ -1167,10 +1259,16 @@ class InteractionHandler {
     /**
      * Buduje przyciski panelu korekty - komplet nagród na plus i na minus
      * @param {string} userId - ID korygowanego gracza
+     * @param {number} delta - 1 (plusy) albo -1 (minusy)
+     * @param {string} panelId - Identyfikator panelu (wymagany dla minusów)
      * @returns {Array} - Rzędy przycisków
      */
-    buildCorrectionButtons(userId) {
-        return this.buildDeltaRewardRows((reward, delta) => `corr_${userId}_${reward.key}_${delta}`);
+    buildCorrectionButtons(userId, delta = 1, panelId = null) {
+        return this.buildSignedRewardRows(delta, reward =>
+            delta > 0
+                ? `corr_${userId}_${reward.key}_1`
+                : `corr_${userId}_${reward.key}_-1_${panelId}`
+        );
     }
 
     /**
@@ -1188,9 +1286,12 @@ class InteractionHandler {
                 return;
             }
 
-            // Format: corr_<idGracza>_<klucz>_<1|-1>
-            const [, targetUserId, rewardKey, rawDelta] = interaction.customId.split('_');
+            // Format: corr_<idGracza>_<klucz>_1 albo corr_<idGracza>_<klucz>_-1_<idPanelu>
+            const [, targetUserId, rewardKey, rawDelta, panelId] = interaction.customId.split('_');
             const delta = rawDelta === '-1' ? -1 : 1;
+
+            // Minusy siedzą w wiadomości bez embeda - potwierdzamy klik od razu, stan odświeżamy w pierwszej
+            if (delta < 0) await interaction.deferUpdate();
 
             const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
             const displayName = member?.displayName
@@ -1207,10 +1308,7 @@ class InteractionHandler {
             );
 
             if (!result) {
-                await interaction.reply({
-                    content: '❌ Nieznana nagroda.',
-                    ephemeral: true
-                });
+                await this.respondEphemeral(interaction, '❌ Nieznana nagroda.');
                 return;
             }
 
@@ -1221,19 +1319,26 @@ class InteractionHandler {
                 lastChange += '\n⚠️ Licznik nie może zejść poniżej 0 - brak zmiany.';
             }
 
-            await interaction.update({
+            const payload = {
                 embeds: [this.buildCorrectionEmbed(targetUserId, displayName, sharedState, lastChange)],
-                components: this.buildCorrectionButtons(targetUserId)
-            });
+                components: this.buildCorrectionButtons(targetUserId, 1)
+            };
+
+            if (delta > 0) {
+                await interaction.update(payload);
+            } else if (!await this.refreshRewardPanel(panelId, payload)) {
+                // Panel wygasł albo bot się zrestartował - pokazujemy przynajmniej wynik zmiany
+                await this.respondEphemeral(
+                    interaction,
+                    `${lastChange}\n\n💡 Panel jest już nieaktualny - wpisz \`/correct\` ponownie, aby zobaczyć pełny stan.`
+                );
+            }
 
             logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę z party ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty nagród:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas korekty nagród.',
-                ephemeral: true
-            }).catch(() => {});
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas korekty nagród.');
         }
     }
 
