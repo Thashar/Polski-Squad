@@ -643,8 +643,8 @@ class InteractionHandler {
         const lobby = sharedState.lobbyService.getLobby(lobbyId);
         if (!lobby || lobby.rewardPromptSent) return;
 
-        // Party przestało być pełne albo pytanie zostało anulowane
-        if (!lobby.isFull || !lobby.rewardPromptAt) return;
+        // Pytanie zostało anulowane (właściciel kogoś wyrzucił)
+        if (!lobby.rewardPromptAt) return;
 
         // Timer sprzed anulowania - po ponownym zapełnieniu obowiązuje nowy termin
         if (Date.now() + 1000 < lobby.rewardPromptAt) return;
@@ -670,8 +670,9 @@ class InteractionHandler {
     }
 
     /**
-     * Kasuje pytanie o nagrodę, gdy party przestało być pełne - wiadomość znika z wątku,
-     * przepisywanie się zatrzymuje, a po ponownym zapełnieniu pytanie planowane jest od nowa
+     * Kasuje pytanie o nagrodę po wyrzuceniu gracza przez właściciela (`/party-kick`) - wiadomość
+     * znika z wątku, przepisywanie się zatrzymuje, a po ponownym zapełnieniu pytanie jest planowane od nowa.
+     * Samodzielne wyjście gracza z lobby pytania NIE kasuje.
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
@@ -718,7 +719,7 @@ class InteractionHandler {
             if (message.author?.id === sharedState.client.user.id) return;
 
             const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channelId);
-            if (!lobby?.rewardPromptMessageId || !lobby.isFull) return;
+            if (!lobby?.rewardPromptMessageId) return;
 
             // Losowanie zamknięte (nagroda zgłoszona) albo przepisywanie właśnie trwa
             if (sharedState.nagrodyService.getPromptClaimer(lobby.rewardPromptMessageId)) return;
@@ -2034,7 +2035,7 @@ class InteractionHandler {
             if (ownerLobby.isFull && ownerLobby.players.length < this.config.lobby.maxPlayers) {
                 ownerLobby.isFull = false;
 
-                // Party się rozpadło - pytanie o nagrodę znika do czasu ponownego zapełnienia
+                // Właściciel wyrzucił gracza - pytanie o nagrodę znika do czasu ponownego zapełnienia
                 await this.cancelRewardPrompt(ownerLobby, sharedState);
             }
 
@@ -2541,19 +2542,8 @@ async function handleThreadMessage(message, sharedState) {
     await handler.handleRewardPromptReposition(message, sharedState);
 }
 
-/**
- * Kasuje pytanie o nagrodę po tym, jak party przestało być pełne
- * @param {Object} lobby - Dane lobby
- * @param {Object} sharedState - Współdzielony stan aplikacji
- */
-async function cancelRewardPrompt(lobby, sharedState) {
-    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
-    await handler.cancelRewardPrompt(lobby, sharedState);
-}
-
 module.exports = {
     handleInteraction,
     handleThreadMessage,
-    cancelRewardPrompt,
     InteractionHandler
 };
