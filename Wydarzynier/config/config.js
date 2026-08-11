@@ -67,7 +67,8 @@ module.exports = {
         { key: 'pshard',  name: 'Panda Shard',         emoji: '<:IG_PandaShard:1402533951511461940>' },
         { key: 'tcore',   name: 'Transmute Core',      emoji: '<:II_TransmuteCore:1458440558602092647>' },
         { key: 'mschest', name: 'Mount Shards Chest',  emoji: '<:J_mount_shards_chest:1536820962845261865>' },
-        { key: 'etsel',   name: 'Epic Tech Selector',  emoji: '<:J_EpicTechSelector:1402533245672886293>' }
+        { key: 'etsel',   name: 'Epic Tech Selector',  emoji: '<:J_EpicTechSelector:1402533245672886293>' },
+        { key: 'ssel',    name: 'Chest S Selector',    emoji: '<:J_ChestSSelector:1409858885682073683>' }
     ],
 
     // Ustawienia lobby
