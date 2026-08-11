@@ -112,7 +112,10 @@ module.exports = {
             'To lobby jest już pełne! Spróbuj dołączyć do innego.',
 
         rewardPrompt:
-            '## Jeżeli trafiłeś czerwoną skrzynkę w tym losowaniu kliknij przycisk odpowiadający nagrodzie.\n*Jeżeli nie trafiłeś nie klikaj nic żeby nie zaburzyć statystyk!*',
+            '## Jeżeli trafiłeś czerwoną skrzynkę w tym losowaniu kliknij przycisk odpowiadający nagrodzie.\n*Jeżeli nie trafiłeś nie klikaj nic żeby nie zaburzyć statystyk!*\n*W jednym losowaniu nagrodę zgłasza tylko jedna osoba - po pierwszym zgłoszeniu przyciski są wyłączone.*',
+
+        rewardPromptClosed: (userId) =>
+            `✅ Nagrodę w tym losowaniu zgłosił już <@${userId}> - przyciski zostały wyłączone.`,
 
         rewardConfirmation: (rewardName, rewardEmoji) =>
             `Czy na pewno otrzymałeś taką nagrodę w tym losowaniu? ${rewardEmoji} **${rewardName}**`,
@@ -125,6 +128,9 @@ module.exports = {
 
         rewardAlreadyClaimed:
             'W tym losowaniu zgłosiłeś już swoją nagrodę. Jeżeli to pomyłka, zgłoś się do administratora.',
+
+        rewardAlreadyTaken: (userId) =>
+            `W tym losowaniu nagrodę zgłosił już <@${userId}>. W jednym losowaniu nagrodę może odebrać tylko jedna osoba.`,
 
         rewardAnnouncement: (userId, rewardEmoji) =>
             `# <@${userId}> właśnie zgarnął nagrodę specjalną! ${rewardEmoji}.\nJeżeli chcesz zobaczyć ranking nagród na serwerze użyj \`/stats\``,

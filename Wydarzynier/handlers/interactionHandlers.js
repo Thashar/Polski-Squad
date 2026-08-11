@@ -682,6 +682,42 @@ class InteractionHandler {
     }
 
     /**
+     * Zamyka pytanie o nagrodę - wyszarza przyciski wspólnej wiadomości i dopisuje kto zgłosił nagrodę.
+     * Wywoływane po pierwszym zgłoszeniu, bo w losowaniu nagrodę odbiera tylko jedna osoba.
+     * @param {Message} promptMessage - Wiadomość z pytaniem o nagrodę
+     * @param {string} claimerId - ID osoby, która zgłosiła nagrodę
+     * @returns {boolean} - Czy udało się zamknąć pytanie
+     */
+    async closeRewardPrompt(promptMessage, claimerId) {
+        if (!promptMessage) return false;
+
+        try {
+            await promptMessage.edit({
+                content: `${this.config.messages.rewardPrompt}\n\n${this.config.messages.rewardPromptClosed(claimerId)}`,
+                components: this.buildRewardButtons(reward => `reward_done_${reward.key}`, true)
+            });
+            return true;
+        } catch (error) {
+            logger.error('❌ Błąd podczas wyłączania przycisków nagrody:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Pobiera wiadomość z pytaniem o nagrodę na podstawie ID kanału i wiadomości
+     * @param {string} channelId - ID kanału (wątku lobby)
+     * @param {string} messageId - ID wiadomości z pytaniem
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @returns {Message|null} - Wiadomość albo null
+     */
+    async fetchRewardPrompt(channelId, messageId, sharedState) {
+        const channel = await sharedState.client.channels.fetch(channelId).catch(() => null);
+        if (!channel) return null;
+
+        return channel.messages.fetch(messageId).catch(() => null);
+    }
+
+    /**
      * Obsługuje kliknięcie przycisku nagrody - pyta o potwierdzenie
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      * @param {Object} sharedState - Współdzielony stan aplikacji
@@ -699,15 +735,20 @@ class InteractionHandler {
                 return;
             }
 
-            // Kto już zgłosił nagrodę w tym losowaniu, dostaje własny komplet wyszarzonych przycisków.
-            // Discord nie potrafi wyłączyć przycisków wspólnej wiadomości tylko dla jednej osoby,
-            // więc blokada jest pokazywana w ephemeralu - pozostali gracze klikają dalej normalnie.
-            if (sharedState.nagrodyService.hasClaimed(interaction.message.id, interaction.user.id)) {
+            // Blokada GLOBALNA - w jednym losowaniu nagrodę zgłasza tylko jedna osoba.
+            // Przy pierwszym zgłoszeniu przyciski są wyłączane, ale gdyby edycja wiadomości
+            // się nie powiodła (albo ktoś kliknął w międzyczasie), domykamy pytanie tutaj.
+            const claimerId = sharedState.nagrodyService.getPromptClaimer(interaction.message.id);
+
+            if (claimerId) {
                 await interaction.reply({
-                    content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
-                    components: this.buildRewardButtons(r => `reward_done_${r.key}`, true),
+                    content: claimerId === interaction.user.id
+                        ? `⚠️ ${this.config.messages.rewardAlreadyClaimed}`
+                        : `⚠️ ${this.config.messages.rewardAlreadyTaken(claimerId)}`,
                     ephemeral: true
                 });
+
+                await this.closeRewardPrompt(interaction.message, claimerId);
                 return;
             }
 
@@ -742,7 +783,7 @@ class InteractionHandler {
     async handleRewardConfirmButton(interaction, sharedState) {
         try {
             // Format: reward_yes_<klucz>_<idKanału>_<idWiadomości>
-            const [, , rewardKey, , promptMessageId] = interaction.customId.split('_');
+            const [, , rewardKey, promptChannelId, promptMessageId] = interaction.customId.split('_');
             const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
 
             if (!reward) {
@@ -753,18 +794,25 @@ class InteractionHandler {
                 return;
             }
 
-            // Blokada per użytkownik - każdy uczestnik może zgłosić jedną nagrodę na losowanie,
-            // ale zgłoszenie jednej osoby nie blokuje pozostałych
+            // Blokada GLOBALNA - w losowaniu nagrodę odbiera tylko jedna osoba,
+            // więc pierwsze potwierdzenie zamyka pytanie dla całego party
             const claimRegistered = sharedState.nagrodyService.tryRegisterClaim(
                 promptMessageId,
                 interaction.user.id
             );
 
             if (!claimRegistered) {
+                const claimerId = sharedState.nagrodyService.getPromptClaimer(promptMessageId);
+
                 await interaction.update({
-                    content: `⚠️ ${this.config.messages.rewardAlreadyClaimed}`,
-                    components: this.buildRewardButtons(r => `reward_done_${r.key}`, true)
+                    content: claimerId === interaction.user.id
+                        ? `⚠️ ${this.config.messages.rewardAlreadyClaimed}`
+                        : `⚠️ ${this.config.messages.rewardAlreadyTaken(claimerId)}`,
+                    components: []
                 });
+
+                const promptMessage = await this.fetchRewardPrompt(promptChannelId, promptMessageId, sharedState);
+                await this.closeRewardPrompt(promptMessage, claimerId);
                 return;
             }
 
@@ -779,11 +827,17 @@ class InteractionHandler {
                 throw error;
             }
 
-            // Wyszarzone przyciski w ephemeralu = potwierdzenie, że dla tej osoby zgłaszanie jest zamknięte
             await interaction.update({
                 content: this.config.messages.rewardAccepted(reward.name, reward.emoji),
-                components: this.buildRewardButtons(r => `reward_done_${r.key}`, true)
+                components: []
             });
+
+            // Wspólna wiadomość w wątku - wyszarzenie przycisków dla wszystkich uczestników party
+            const promptMessage = await this.fetchRewardPrompt(promptChannelId, promptMessageId, sharedState);
+
+            if (!await this.closeRewardPrompt(promptMessage, interaction.user.id)) {
+                logger.warn(`⚠️ Nie udało się wyłączyć przycisków pytania o nagrodę ${promptMessageId} - blokada działa dalej po stronie bota`);
+            }
 
             // Ogłoszenie na kanale party
             try {

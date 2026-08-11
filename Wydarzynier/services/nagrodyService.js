@@ -68,24 +68,24 @@ class NagrodyService {
     }
 
     /**
-     * Sprawdza czy użytkownik zgłosił już nagrodę w danym losowaniu
+     * Zwraca ID osoby, która zgłosiła nagrodę w danym losowaniu (jedna na losowanie)
      * @param {string} promptMessageId - ID wiadomości z pytaniem o nagrodę
-     * @param {string} userId - ID użytkownika
-     * @returns {boolean} - Czy użytkownik już zgłosił nagrodę
+     * @returns {string|null} - ID zgłaszającego albo null gdy nikt jeszcze nie zgłosił
      */
-    hasClaimed(promptMessageId, userId) {
-        return (this.claims[promptMessageId] || []).includes(userId);
+    getPromptClaimer(promptMessageId) {
+        return (this.claims[promptMessageId] || [])[0] || null;
     }
 
     /**
-     * Rezerwuje zgłoszenie nagrody dla użytkownika w danym losowaniu.
+     * Rezerwuje zgłoszenie nagrody w danym losowaniu - blokada GLOBALNA,
+     * pierwsze zgłoszenie zamyka losowanie dla wszystkich uczestników party.
      * Synchroniczne - zapobiega podwójnemu zgłoszeniu z dwóch otwartych ephemerali.
      * @param {string} promptMessageId - ID wiadomości z pytaniem o nagrodę
      * @param {string} userId - ID użytkownika
-     * @returns {boolean} - false gdy użytkownik już zgłosił nagrodę w tym losowaniu
+     * @returns {boolean} - false gdy nagroda w tym losowaniu jest już zgłoszona
      */
     tryRegisterClaim(promptMessageId, userId) {
-        if (this.hasClaimed(promptMessageId, userId)) return false;
+        if (this.getPromptClaimer(promptMessageId)) return false;
 
         if (!this.claims[promptMessageId]) {
             this.claims[promptMessageId] = [];
