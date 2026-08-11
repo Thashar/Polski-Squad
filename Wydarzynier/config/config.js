@@ -79,6 +79,7 @@ module.exports = {
         fullLobbyDuration: 15 * 60 * 1000, // 15 minut po zapełnieniu lobby
         warningTime: 5 * 60 * 1000, // 5 minut przed usunięciem - ostrzeżenie
         repositionInterval: 5 * 60 * 1000, // 5 minut - interwał repozycjonowania ogłoszeń
+        rewardPromptRepositionMessages: 10, // Co ile wiadomości w wątku przepisać pytanie o nagrodę na koniec
         threadName: (username) => `🎉 ${username} - Party Lobby`
     },
 

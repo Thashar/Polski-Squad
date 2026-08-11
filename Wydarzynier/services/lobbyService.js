@@ -250,7 +250,9 @@ class LobbyService {
                     lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt,
                     isExtended: lobby.isExtended || false,
                     rewardPromptAt: lobby.rewardPromptAt || null, // Kiedy wysłać pytanie o nagrodę specjalną
-                    rewardPromptSent: lobby.rewardPromptSent || false
+                    rewardPromptSent: lobby.rewardPromptSent || false,
+                    rewardPromptMessageId: lobby.rewardPromptMessageId || null, // Aktualna wiadomość z pytaniem
+                    rewardPromptMessagesSince: lobby.rewardPromptMessagesSince || 0 // Wiadomości od ostatniego przepisania
                 };
             }
 

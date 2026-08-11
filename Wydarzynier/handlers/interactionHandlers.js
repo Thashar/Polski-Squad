@@ -5,16 +5,17 @@ const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
 
+// Panele ±1 (/rewards, /correct): panelId -> webhook interakcji, która wysłała panel.
+// Minusy są w drugiej wiadomości, więc po kliknięciu trzeba odświeżyć pierwszą (embed + plusy).
+// Mapa musi być modułowa - dla każdej interakcji tworzona jest nowa instancja InteractionHandler.
+const rewardPanels = new Map();
+
 class InteractionHandler {
     constructor(config, lobbyService, timerService, bazarService) {
         this.config = config;
         this.lobbyService = lobbyService;
         this.timerService = timerService;
         this.bazarService = bazarService;
-
-        // Panele ±1 (/rewards, /correct): panelId -> webhook interakcji, która wysłała panel.
-        // Minusy są w drugiej wiadomości, więc po kliknięciu trzeba odświeżyć pierwszą (embed + plusy).
-        this.rewardPanels = new Map();
     }
 
     /**
@@ -644,16 +645,75 @@ class InteractionHandler {
             return;
         }
 
-        await thread.send({
+        const promptMessage = await thread.send({
             content: this.config.messages.rewardPrompt,
             components: this.buildRewardButtons()
         });
 
         lobby.rewardPromptSent = true;
         lobby.rewardPromptAt = null;
+        lobby.rewardPromptMessageId = promptMessage.id;
+        lobby.rewardPromptMessagesSince = 0;
         await sharedState.lobbyService.saveLobbies();
 
         logger.info(`🎁 Wysłano pytanie o nagrodę specjalną w lobby ${lobbyId}`);
+    }
+
+    /**
+     * Liczy wiadomości w wątku lobby i co N wiadomości przepisuje pytanie o nagrodę na koniec,
+     * żeby nie uciekło graczom w górę rozmowy (analogicznie do repozycjonowania ogłoszenia party).
+     * @param {Message} message - Nowa wiadomość w wątku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleRewardPromptReposition(message, sharedState) {
+        try {
+            const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channelId);
+            if (!lobby?.rewardPromptMessageId) return;
+
+            // Nie liczymy samego pytania ani nie przepisujemy zamkniętego losowania
+            if (message.id === lobby.rewardPromptMessageId) return;
+            if (sharedState.nagrodyService.getPromptClaimer(lobby.rewardPromptMessageId)) return;
+
+            lobby.rewardPromptMessagesSince = (lobby.rewardPromptMessagesSince || 0) + 1;
+
+            if (lobby.rewardPromptMessagesSince < this.config.lobby.rewardPromptRepositionMessages) {
+                await sharedState.lobbyService.saveLobbies();
+                return;
+            }
+
+            await this.repositionRewardPrompt(lobby, message.channel, sharedState);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas liczenia wiadomości do przepisania pytania o nagrodę:', error);
+        }
+    }
+
+    /**
+     * Przepisuje pytanie o nagrodę na koniec wątku - stara wiadomość jest usuwana,
+     * bo zgłoszenia są kluczowane po ID wiadomości z pytaniem
+     * @param {Object} lobby - Dane lobby
+     * @param {ThreadChannel} thread - Wątek lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async repositionRewardPrompt(lobby, thread, sharedState) {
+        try {
+            const oldMessage = await thread.messages.fetch(lobby.rewardPromptMessageId).catch(() => null);
+            if (oldMessage) await oldMessage.delete().catch(() => {});
+
+            const newMessage = await thread.send({
+                content: this.config.messages.rewardPrompt,
+                components: this.buildRewardButtons()
+            });
+
+            lobby.rewardPromptMessageId = newMessage.id;
+            lobby.rewardPromptMessagesSince = 0;
+            await sharedState.lobbyService.saveLobbies();
+
+            logger.info(`🔄 Przepisano pytanie o nagrodę na koniec wątku lobby ${lobby.id}`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas przepisywania pytania o nagrodę (${lobby.id}):`, error);
+        }
     }
 
     /**
@@ -783,8 +843,13 @@ class InteractionHandler {
     async handleRewardConfirmButton(interaction, sharedState) {
         try {
             // Format: reward_yes_<klucz>_<idKanału>_<idWiadomości>
-            const [, , rewardKey, promptChannelId, promptMessageId] = interaction.customId.split('_');
+            const [, , rewardKey, promptChannelId, clickedPromptId] = interaction.customId.split('_');
             const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
+
+            // Pytanie bywa przepisywane na koniec wątku, więc zgłoszenie zapisujemy zawsze
+            // na aktualnej wiadomości - inaczej blokada nie objęłaby przepisanego pytania
+            const lobby = sharedState.lobbyService.getLobbyByThreadId(promptChannelId);
+            const promptMessageId = lobby?.rewardPromptMessageId || clickedPromptId;
 
             if (!reward) {
                 await interaction.update({
@@ -1073,11 +1138,11 @@ class InteractionHandler {
     registerRewardPanel(panelId, interaction) {
         const now = Date.now();
 
-        for (const [id, entry] of this.rewardPanels) {
-            if (entry.expiresAt <= now) this.rewardPanels.delete(id);
+        for (const [id, entry] of rewardPanels) {
+            if (entry.expiresAt <= now) rewardPanels.delete(id);
         }
 
-        this.rewardPanels.set(panelId, {
+        rewardPanels.set(panelId, {
             webhook: interaction.webhook,
             expiresAt: now + 14 * 60 * 1000
         });
@@ -1090,10 +1155,10 @@ class InteractionHandler {
      * @returns {boolean} - Czy udało się odświeżyć
      */
     async refreshRewardPanel(panelId, payload) {
-        const panel = panelId ? this.rewardPanels.get(panelId) : null;
+        const panel = panelId ? rewardPanels.get(panelId) : null;
 
         if (!panel || panel.expiresAt <= Date.now()) {
-            if (panelId) this.rewardPanels.delete(panelId);
+            if (panelId) rewardPanels.delete(panelId);
             return false;
         }
 
@@ -1102,7 +1167,7 @@ class InteractionHandler {
             return true;
         } catch (error) {
             logger.warn(`⚠️ Nie udało się odświeżyć panelu nagród ${panelId}: ${error.message}`);
-            this.rewardPanels.delete(panelId);
+            rewardPanels.delete(panelId);
             return false;
         }
     }
@@ -2356,7 +2421,18 @@ async function handleInteraction(interaction, sharedState) {
     }
 }
 
+/**
+ * Obsługuje nową wiadomość w wątku lobby - liczy wiadomości do przepisania pytania o nagrodę
+ * @param {Message} message - Nowa wiadomość
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+async function handleThreadMessage(message, sharedState) {
+    const handler = new InteractionHandler(sharedState.config, sharedState.lobbyService, sharedState.timerService, sharedState.bazarService);
+    await handler.handleRewardPromptReposition(message, sharedState);
+}
+
 module.exports = {
     handleInteraction,
+    handleThreadMessage,
     InteractionHandler
 };

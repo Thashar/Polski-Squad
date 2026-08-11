@@ -3,7 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 
 const config = require('./config/config');
-const { handleInteraction } = require('./handlers/interactionHandlers');
+const { handleInteraction, handleThreadMessage } = require('./handlers/interactionHandlers');
 const { handleReactionAdd, handleReactionRemove } = require('./handlers/reactionHandlers');
 const { handleMessageUpdate } = require('./handlers/messageHandlers');
 const LobbyService = require('./services/lobbyService');
@@ -230,6 +230,15 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
 });
 
 client.on(Events.MessageCreate, async (message) => {
+    // Wątki lobby - co N wiadomości pytanie o nagrodę jest przepisywane na koniec
+    if (message.guild && message.channel?.isThread?.()) {
+        try {
+            await handleThreadMessage(message, sharedState);
+        } catch (error) {
+            logger.error('❌ Błąd podczas obsługi wiadomości w wątku lobby:', error);
+        }
+    }
+
     if (message.channel.type === ChannelType.DM && !message.author.bot) {
         if (config.robot3Users.length > 0 && config.robot3Users.includes(message.author.id)) {
             if (message.partial) await message.fetch();
