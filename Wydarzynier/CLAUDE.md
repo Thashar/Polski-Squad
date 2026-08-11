@@ -25,8 +25,10 @@
   - Rezerwacja przez `tryRegisterClaim(promptMessageId, userId)` w `nagrodyService.js` - **synchroniczna**, więc dwa równoczesne potwierdzenia nie doliczą dwóch nagród. `getPromptClaimer(promptMessageId)` zwraca zgłaszającego. Gdy doliczenie rzuci błąd, rezerwacja jest cofana (`releaseClaim`) i losowanie znów jest otwarte
   - Historia zgłoszeń: `claims` w `nagrody.json` (`messageId pytania -> [userId]` - przy blokadzie globalnej tablica ma jeden wpis, format zostawiony dla zgodności ze starymi danymi), limit 200 ostatnich losowań (`maxClaimEntries`), najstarsze usuwane automatycznie
 - **Przepisywanie pytania na koniec wątku:** Co `lobby.rewardPromptRepositionMessages` (domyślnie **10**) wiadomości w wątku bot kasuje pytanie i wysyła je ponownie, żeby nie uciekło w górę rozmowy - analogicznie do repozycjonowania ogłoszenia party
-  - Licznik: `handleRewardPromptReposition` (wołane z `Events.MessageCreate` w `index.js` przez `handleThreadMessage`) zlicza **wszystkie** wiadomości w wątku lobby, przepisanie robi `repositionRewardPrompt`
-  - **Stara wiadomość jest kasowana** - zgłoszenia są kluczowane po ID wiadomości z pytaniem, więc dwie żywe kopie oznaczałyby dwie niezależne blokady
+  - Licznik: `handleRewardPromptReposition` (wołane z `Events.MessageCreate` w `index.js` przez `handleThreadMessage`), przepisanie robi `repositionRewardPrompt`
+  - **Wiadomości bota NIE są liczone** - inaczej samo przepisane pytanie wyzwalałoby kolejne przepisanie i pytania mnożyłyby się w nieskończoność (liczone są wiadomości graczy)
+  - **Blokada równoległych przepisań:** modułowy `Set rewardPromptRepositioning` (id lobby) + wyzerowanie licznika **przed** wysyłką - bez tego wiadomości przychodzące w trakcie kasowania/wysyłania wyzwalały drugie przepisanie i pytanie dublowało się
+  - **Stare wiadomości są kasowane** - `findRewardPromptMessages` przegląda 50 ostatnich wiadomości wątku i usuwa **każdą** kopię pytania (rozpoznawaną po przyciskach `reward_pick_`), także osieroconą po wcześniejszych błędach. Zgłoszenia są kluczowane po ID wiadomości z pytaniem, więc dwie żywe kopie oznaczałyby dwie niezależne blokady
   - Zgłoszenie „Tak" zapisuje claim zawsze na **aktualnym** `lobby.rewardPromptMessageId` (a nie na ID z customId), żeby potwierdzenie z ephemerala otwartego przed przepisaniem trafiło na właściwe pytanie
   - Po zgłoszeniu nagrody pytanie **nie jest już przepisywane** (losowanie zamknięte)
   - **Persistencja:** `rewardPromptMessageId` i `rewardPromptMessagesSince` w `lobbies.json` - licznik przeżywa restart bota

@@ -10,6 +10,10 @@ const logger = createBotLogger('Wydarzynier');
 // Mapa musi być modułowa - dla każdej interakcji tworzona jest nowa instancja InteractionHandler.
 const rewardPanels = new Map();
 
+// Lobby, dla których trwa przepisywanie pytania o nagrodę - blokada przed podwójną wysyłką
+// (również modułowa, bo każda wiadomość dostaje własną instancję InteractionHandler).
+const rewardPromptRepositioning = new Set();
+
 class InteractionHandler {
     constructor(config, lobbyService, timerService, bazarService) {
         this.config = config;
@@ -667,12 +671,16 @@ class InteractionHandler {
      */
     async handleRewardPromptReposition(message, sharedState) {
         try {
+            // Wiadomości bota nie przesuwają licznika - inaczej samo przepisane pytanie
+            // wyzwalałoby kolejne przepisanie i pytania mnożyłyby się w nieskończoność
+            if (message.author?.id === sharedState.client.user.id) return;
+
             const lobby = sharedState.lobbyService.getLobbyByThreadId(message.channelId);
             if (!lobby?.rewardPromptMessageId) return;
 
-            // Nie liczymy samego pytania ani nie przepisujemy zamkniętego losowania
-            if (message.id === lobby.rewardPromptMessageId) return;
+            // Losowanie zamknięte (nagroda zgłoszona) albo przepisywanie właśnie trwa
             if (sharedState.nagrodyService.getPromptClaimer(lobby.rewardPromptMessageId)) return;
+            if (rewardPromptRepositioning.has(lobby.id)) return;
 
             lobby.rewardPromptMessagesSince = (lobby.rewardPromptMessagesSince || 0) + 1;
 
@@ -681,7 +689,16 @@ class InteractionHandler {
                 return;
             }
 
-            await this.repositionRewardPrompt(lobby, message.channel, sharedState);
+            // Licznik zerujemy przed wysyłką - wiadomości, które przyjdą w trakcie
+            // przepisywania, nie mogą wyzwolić go drugi raz
+            lobby.rewardPromptMessagesSince = 0;
+            rewardPromptRepositioning.add(lobby.id);
+
+            try {
+                await this.repositionRewardPrompt(lobby, message.channel, sharedState);
+            } finally {
+                rewardPromptRepositioning.delete(lobby.id);
+            }
 
         } catch (error) {
             logger.error('❌ Błąd podczas liczenia wiadomości do przepisania pytania o nagrodę:', error);
@@ -689,16 +706,38 @@ class InteractionHandler {
     }
 
     /**
-     * Przepisuje pytanie o nagrodę na koniec wątku - stara wiadomość jest usuwana,
-     * bo zgłoszenia są kluczowane po ID wiadomości z pytaniem
+     * Znajduje w wątku wiadomości bota z pytaniem o nagrodę (rozpoznawane po przyciskach `reward_pick_`)
+     * @param {ThreadChannel} thread - Wątek lobby
+     * @returns {Array} - Znalezione wiadomości z pytaniem
+     */
+    async findRewardPromptMessages(thread) {
+        const messages = await thread.messages.fetch({ limit: 50 });
+
+        return [...messages.values()].filter(message =>
+            message.author?.id === thread.client.user.id &&
+            message.components?.some(row =>
+                row.components?.some(component => component.customId?.startsWith('reward_pick_'))
+            )
+        );
+    }
+
+    /**
+     * Przepisuje pytanie o nagrodę na koniec wątku - stare wiadomości są usuwane,
+     * bo zgłoszenia są kluczowane po ID wiadomości z pytaniem (dwie żywe kopie = dwie blokady)
      * @param {Object} lobby - Dane lobby
      * @param {ThreadChannel} thread - Wątek lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async repositionRewardPrompt(lobby, thread, sharedState) {
         try {
-            const oldMessage = await thread.messages.fetch(lobby.rewardPromptMessageId).catch(() => null);
-            if (oldMessage) await oldMessage.delete().catch(() => {});
+            // Kasujemy każdą kopię pytania w wątku, także osieroconą po wcześniejszych błędach
+            const oldPrompts = await this.findRewardPromptMessages(thread);
+
+            for (const oldPrompt of oldPrompts) {
+                await oldPrompt.delete().catch(error =>
+                    logger.warn(`⚠️ Nie udało się usunąć starego pytania o nagrodę: ${error.message}`)
+                );
+            }
 
             const newMessage = await thread.send({
                 content: this.config.messages.rewardPrompt,
@@ -709,7 +748,7 @@ class InteractionHandler {
             lobby.rewardPromptMessagesSince = 0;
             await sharedState.lobbyService.saveLobbies();
 
-            logger.info(`🔄 Przepisano pytanie o nagrodę na koniec wątku lobby ${lobby.id}`);
+            logger.info(`🔄 Przepisano pytanie o nagrodę na koniec wątku lobby ${lobby.id} (usunięto starych: ${oldPrompts.length})`);
 
         } catch (error) {
             logger.error(`❌ Błąd podczas przepisywania pytania o nagrodę (${lobby.id}):`, error);
