@@ -1192,8 +1192,7 @@ class PhaseService {
 
         // Zapisz nowe dane
         const members = await safeFetchMembers(guild, logger);
-        const savedCount = [];
-        let isFirstSave = true;
+        const playersToSave = [];
 
         for (const [nick, score] of finalResults.entries()) {
             // Znajdź członka Discord
@@ -1203,25 +1202,28 @@ class PhaseService {
             );
 
             if (member) {
-                await this.databaseService.savePhase1Result(
-                    session.guildId,
-                    member.id,
-                    member.displayName,
-                    parseInt(score) || 0,
-                    weekInfo.weekNumber,
-                    weekInfo.year,
-                    session.clan,
-                    isFirstSave ? createdBy : null
-                );
-                savedCount.push(nick);
-                isFirstSave = false;
+                playersToSave.push({
+                    userId: member.id,
+                    displayName: member.displayName,
+                    score: parseInt(score) || 0
+                });
             } else {
                 logger.warn(`[PHASE1] ⚠️ Nie znaleziono członka Discord dla nicka: ${nick}`);
             }
         }
 
-        logger.info(`[PHASE1] ✅ Zapisano ${savedCount.length}/${finalResults.size} wyników`);
-        return savedCount.length;
+        // Jeden zapis pliku zamiast pętli read-modify-write per gracz
+        await this.databaseService.savePhase1Results(
+            session.guildId,
+            weekInfo.weekNumber,
+            weekInfo.year,
+            session.clan,
+            playersToSave,
+            createdBy
+        );
+
+        logger.info(`[PHASE1] ✅ Zapisano ${playersToSave.length}/${finalResults.size} wyników`);
+        return playersToSave.length;
     }
 
     /**

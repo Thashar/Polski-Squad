@@ -19,6 +19,83 @@ class DatabaseService {
 
         // Cache dla indeksów graczy (zapobiega wielokrotnym odczytom podczas autocomplete)
         this.playerIndexCache = new Map();
+
+        // Kolejki zapisu per plik - zapobiegają przeplataniu się równoległych
+        // operacji read-modify-write (np. podwójne kliknięcie przycisku zapisu)
+        this.fileLocks = new Map();
+    }
+
+    /**
+     * Szereguje operacje na tym samym pliku (prosty mutex per ścieżka)
+     * Bez tego dwa równoległe zapisy mogą uszkodzić plik JSON
+     */
+    async withFileLock(filePath, operation) {
+        const previous = this.fileLocks.get(filePath) || Promise.resolve();
+        const current = previous.then(operation, operation);
+
+        // Kolejka nie może się zerwać przy błędzie - trzymamy wersję "wyciszoną"
+        const guarded = current.catch(() => {});
+        this.fileLocks.set(filePath, guarded);
+
+        try {
+            return await current;
+        } finally {
+            // Zwolnij pamięć tylko gdy nikt nie dołączył do kolejki
+            if (this.fileLocks.get(filePath) === guarded) {
+                this.fileLocks.delete(filePath);
+            }
+        }
+    }
+
+    /**
+     * Atomowy zapis JSON - zapis do pliku tymczasowego + rename
+     * Dzięki temu przerwany zapis nigdy nie zostawia uszkodzonego pliku docelowego
+     */
+    async atomicWriteJSON(filePath, data) {
+        const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+
+        try {
+            await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8');
+            await fs.rename(tempPath, filePath);
+        } catch (error) {
+            await fs.unlink(tempPath).catch(() => {});
+            throw error;
+        }
+    }
+
+    /**
+     * Wczytuje dane tygodnia fazy 1 i normalizuje strukturę
+     * Uszkodzony/pusty plik nie wywraca zapisu - traktowany jest jak nowy
+     */
+    async readPhase1WeekFile(filePath, createdBy = null) {
+        let weekData = null;
+        let isExisting = false;
+
+        try {
+            const fileContent = await fs.readFile(filePath, 'utf8');
+            weekData = safeParse(fileContent, null);
+            isExisting = true;
+        } catch (error) {
+            // Plik nie istnieje - utworzymy nową strukturę
+        }
+
+        if (!weekData || typeof weekData !== 'object' || !Array.isArray(weekData.players)) {
+            if (isExisting) {
+                logger.warn(`[PHASE1] ⚠️ Uszkodzona lub niekompletna struktura pliku - odtwarzam od nowa: ${filePath}`);
+            }
+
+            return {
+                weekData: {
+                    players: [],
+                    createdBy: createdBy,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                isExisting: false
+            };
+        }
+
+        return { weekData, isExisting };
     }
 
     async initializeDatabase() {
@@ -672,62 +749,100 @@ class DatabaseService {
         await this.ensurePhaseDirectories(guildId, 1, year);
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
-        // Wczytaj istniejące dane lub utwórz nowe
-        let weekData;
-        let isNewFile = false;
-        let isOverwriting = false;
+        const updatedAt = await this.withFileLock(filePath, async () => {
+            const { weekData, isExisting } = await this.readPhase1WeekFile(filePath, createdBy);
 
-        try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            weekData = safeParse(fileContent, {});
-            isOverwriting = true;
-        } catch (error) {
-            // Plik nie istnieje - utwórz nową strukturę
-            weekData = {
-                players: [],
-                createdBy: createdBy,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            isNewFile = true;
-        }
+            // Jeśli nadpisujemy plik, wyświetl informację
+            if (isExisting) {
+                logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan} (poprzednio: ${weekData.players.length} graczy)`);
+            }
 
-        // Jeśli nadpisujemy plik, wyświetl informację
-        if (isOverwriting && weekData.players.length === 0) {
-            logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
-        } else if (isOverwriting) {
-            logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan} (poprzednio: ${weekData.players.length} graczy)`);
-        }
+            // Sprawdź czy gracz już istnieje (aktualizuj jeśli tak)
+            const existingPlayerIndex = weekData.players.findIndex(p => p.userId === userId);
 
-        // Sprawdź czy gracz już istnieje (aktualizuj jeśli tak)
-        const existingPlayerIndex = weekData.players.findIndex(p => p.userId === userId);
+            if (existingPlayerIndex !== -1) {
+                weekData.players[existingPlayerIndex] = {
+                    userId,
+                    displayName,
+                    score,
+                    updatedAt: new Date().toISOString()
+                };
+            } else {
+                weekData.players.push({
+                    userId,
+                    displayName,
+                    score,
+                    createdAt: new Date().toISOString()
+                });
+            }
 
-        if (existingPlayerIndex !== -1) {
-            weekData.players[existingPlayerIndex] = {
-                userId,
-                displayName,
-                score,
-                updatedAt: new Date().toISOString()
-            };
-        } else {
-            weekData.players.push({
-                userId,
-                displayName,
-                score,
-                createdAt: new Date().toISOString()
-            });
-        }
+            weekData.updatedAt = new Date().toISOString();
 
-        weekData.updatedAt = new Date().toISOString();
+            // Zapisz do pliku (atomowo - tmp + rename)
+            await this.atomicWriteJSON(filePath, weekData);
+            logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan}, tydzień: ${weekNumber}/${year})`);
 
-        // Zapisz do pliku
-        await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
-        logger.info(`[PHASE1] 💾 Zapisano: ${displayName} → ${score} punktów (klan: ${clan}, tydzień: ${weekNumber}/${year})`);
+            return weekData.updatedAt;
+        });
 
         // Aktualizuj indeks graczy (normalizuje nicki jeśli się zmienił)
         // Wewnętrznie pushuje też playerIdentity + nickObservation do web API.
-        await this.updatePlayerIndex(guildId, userId, displayName, weekData.updatedAt);
+        await this.updatePlayerIndex(guildId, userId, displayName, updatedAt);
 
+    }
+
+    /**
+     * Zapisuje komplet wyników fazy 1 dla klanu w JEDNYM zapisie pliku
+     * Zastępuje pętlę pojedynczych zapisów (read-modify-write per gracz),
+     * która przy równoległym wywołaniu potrafiła uszkodzić plik JSON
+     *
+     * @param {Array<{userId, displayName, score}>} players - lista wyników
+     */
+    async savePhase1Results(guildId, weekNumber, year, clan, players, createdBy = null) {
+        await this.ensurePhaseDirectories(guildId, 1, year);
+        const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
+
+        const updatedAt = await this.withFileLock(filePath, async () => {
+            const { weekData, isExisting } = await this.readPhase1WeekFile(filePath, createdBy);
+
+            if (isExisting) {
+                logger.warn(`[PHASE1] ⚠️ Nadpisywanie danych dla tygodnia ${weekNumber}/${year}, klan: ${clan} (poprzednio: ${weekData.players.length} graczy)`);
+            }
+
+            const now = new Date().toISOString();
+
+            for (const player of players) {
+                const existingPlayerIndex = weekData.players.findIndex(p => p.userId === player.userId);
+
+                if (existingPlayerIndex !== -1) {
+                    weekData.players[existingPlayerIndex] = {
+                        userId: player.userId,
+                        displayName: player.displayName,
+                        score: player.score,
+                        updatedAt: now
+                    };
+                } else {
+                    weekData.players.push({
+                        userId: player.userId,
+                        displayName: player.displayName,
+                        score: player.score,
+                        createdAt: now
+                    });
+                }
+            }
+
+            weekData.updatedAt = now;
+
+            await this.atomicWriteJSON(filePath, weekData);
+            logger.info(`[PHASE1] 💾 Zapisano ${players.length} wyników (klan: ${clan}, tydzień: ${weekNumber}/${year})`);
+
+            return now;
+        });
+
+        // Indeks graczy aktualizujemy po zapisie pliku tygodnia
+        for (const player of players) {
+            await this.updatePlayerIndex(guildId, player.userId, player.displayName, updatedAt);
+        }
     }
 
     /**

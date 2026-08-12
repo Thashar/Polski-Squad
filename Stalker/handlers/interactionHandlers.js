@@ -4218,8 +4218,10 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     if (interaction.customId === 'phase1_cancel_session') {
         // WAŻNE: Najpierw zaktualizuj wiadomość, potem usuń sesję
@@ -4254,11 +4256,27 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
 
     // Tak, analizuj
-    await interaction.update({
-        content: '🔄 Analizuję wyniki...',
-        embeds: [],
-        components: []
-    });
+    // Blokada przed podwójnym kliknięciem (spam przyciskiem uruchamiał kilka analiz naraz)
+    if (await rejectIfPhase1Busy(interaction, session.sessionId)) {
+        return;
+    }
+    phase1BusySessions.add(session.sessionId);
+
+    try {
+        await interaction.update({
+            content: '🔄 Analizuję wyniki...',
+            embeds: [],
+            components: []
+        });
+    } catch (updateError) {
+        phase1BusySessions.delete(session.sessionId);
+
+        if (updateError.code === 10062) {
+            logger.warn('[PHASE1] ⚠️ Interakcja wygasła przed analizą - kliknij ponownie');
+            return;
+        }
+        throw updateError;
+    }
 
     try {
         // Identyfikuj konflikty
@@ -4285,7 +4303,9 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
         logger.error('[PHASE1] ❌ Błąd analizy wyników:', error);
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas analizy wyników.'
-        });
+        }).catch(() => {});
+    } finally {
+        phase1BusySessions.delete(session.sessionId);
     }
 }
 
@@ -4310,8 +4330,10 @@ async function handlePhase1ConflictResolveButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -4378,8 +4400,10 @@ async function handlePhase1ManualInputButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -4424,8 +4448,10 @@ async function handlePhase1ManualModalSubmit(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Wyciągnij nick z customId
     // Format: phase1_manual_modal_{nick}
@@ -4479,6 +4505,29 @@ async function handlePhase1ManualModalSubmit(interaction, sharedState) {
     }
 }
 
+// Sesje fazy 1 z trwającą operacją (analiza / zapis)
+// Chroni przed podwójnym kliknięciem przycisku - drugie kliknięcie uruchamiało
+// równoległy zapis tych samych danych i potrafiło uszkodzić plik tygodnia
+const phase1BusySessions = new Set();
+
+/**
+ * Zwraca true jeśli dla sesji trwa już operacja (i informuje użytkownika)
+ */
+async function rejectIfPhase1Busy(interaction, sessionId) {
+    if (!phase1BusySessions.has(sessionId)) {
+        return false;
+    }
+
+    logger.warn(`[PHASE1] ⏳ Zignorowano ponowne kliknięcie - operacja dla sesji ${sessionId} już trwa`);
+
+    await interaction.reply({
+        content: '⏳ Operacja już trwa - poczekaj na zakończenie.',
+        flags: MessageFlags.Ephemeral
+    }).catch(() => {});
+
+    return true;
+}
+
 async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     const { phaseService, ocrService } = sharedState;
 
@@ -4500,8 +4549,10 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -4532,8 +4583,25 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
     }
 
     // Zatwierdź - zapisz do bazy
+    // Blokada przed podwójnym kliknięciem (równoległy zapis uszkadzał plik tygodnia)
+    if (await rejectIfPhase1Busy(interaction, session.sessionId)) {
+        return;
+    }
+    phase1BusySessions.add(session.sessionId);
+
     // Użyj deferUpdate dla przycisku, a następnie followUp zamiast editReply
-    await interaction.deferUpdate();
+    try {
+        await interaction.deferUpdate();
+    } catch (deferError) {
+        phase1BusySessions.delete(session.sessionId);
+
+        if (deferError.code === 10062) {
+            // Token interakcji wygasł/został już użyty - nie zapisujemy, użytkownik może kliknąć ponownie
+            logger.warn('[PHASE1] ⚠️ Interakcja wygasła przed zapisem - zapis pominięty (kliknij ponownie)');
+            return;
+        }
+        throw deferError;
+    }
 
     try {
         const finalResults = phaseService.getFinalResults(session);
@@ -4653,6 +4721,8 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
         } catch (replyError) {
             logger.warn('[PHASE1] ⚠️ Nie udało się zaktualizować wiadomości (interaction expired)');
         }
+    } finally {
+        phase1BusySessions.delete(session.sessionId);
     }
 }
 
@@ -4920,8 +4990,10 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     if (interaction.customId === 'phase2_cancel_session') {
         // WAŻNE: Najpierw zaktualizuj wiadomość, potem usuń sesję
@@ -5036,8 +5108,10 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -5240,8 +5314,10 @@ async function handlePhase2ManualInputButton(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -5286,8 +5362,10 @@ async function handlePhase2ManualModalSubmit(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Wyciągnij nick z customId
     // Format: phase2_manual_modal_{nick}
@@ -5528,8 +5606,10 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
         return;
     }
 
-    // Odśwież timeout sesji OCR
-    await ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+    // Odśwież timeout sesji OCR (bez await - aktualizacja panelu OCR to zapytanie do
+    // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
+    ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+        .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
