@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { runThreadCountdown } = require('../utils/helpers');
+const { runThreadCountdown, isGoneError } = require('../utils/helpers');
 
 const logger = createBotLogger('Wydarzynier');
 
@@ -202,12 +202,12 @@ class TimerService {
             // Przywróć timery
             for (const { lobbyId, timerData, lobby } of timersToRestore) {
                 const warningCallback = async (lobbyId) => {
+                    // Pobierz aktualne dane lobby - wątek dopiero potem, na świeżo
+                    const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
+                    if (!currentLobby) return;
+
                     try {
-                        const thread = await sharedState.client.channels.fetch(lobby.threadId);
-                        
-                        // Pobierz aktualne dane lobby
-                        const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
-                        if (!currentLobby) return;
+                        const thread = await sharedState.client.channels.fetch(currentLobby.threadId);
 
                         // Utwórz przyciski dla właściciela lobby
                         const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
@@ -230,6 +230,14 @@ class TimerService {
                             components: [warningButtons]
                         });
                     } catch (error) {
+                        if (isGoneError(error)) {
+                            // Wątek przepadł, a lobby zostało w pamięci - dokończ przerwane sprzątanie
+                            logger.warn(`⚠️ Wątek lobby ${lobbyId} już nie istnieje - usuwam osierocone lobby zamiast wysyłać ostrzeżenie`);
+                            sharedState.lobbyService.removeLobby(lobbyId);
+                            this.removeTimer(lobbyId);
+                            return;
+                        }
+
                         logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla lobby ${lobbyId}:`, error);
                     }
                 };
@@ -281,15 +289,14 @@ class TimerService {
                 await announcementMessage.delete();
             }
 
-            // Usuń lobby z serwisu
-            sharedState.lobbyService.removeLobby(lobby.id);
-
-            // Usuń timer
-            this.removeTimer(lobby.id);
-
             logger.info(`🗑️ Usunięto lobby ${lobby.id} wraz z zasobami (timer expired)`);
         } catch (error) {
             logger.error('❌ Błąd podczas usuwania lobby przez timer:', error);
+        } finally {
+            // Sprzątanie stanu lokalnego niezależnie od tego, czy Discord odpowiedział -
+            // patrz komentarz w interactionHandlers.deleteLobby
+            sharedState.lobbyService.removeLobby(lobby.id);
+            this.removeTimer(lobby.id);
         }
     }
 

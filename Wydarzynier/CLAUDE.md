@@ -139,9 +139,25 @@ ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywa
 **Przyciski - potwierdzanie interakcji (KRYTYCZNE):**
 - **Handler przycisku, który przed odpowiedzią robi COKOLWIEK sięgającego poza pamięć** (request do API Discorda: `members.fetch`, `channels.fetch`, `roles.add/remove`, `thread.send`; albo zapis pliku) **MUSI zacząć od `deferReply()`/`deferUpdate()`.** Discord daje na pierwszą odpowiedź 3 s; po przekroczeniu token jest martwy i `reply`/`update` kończy się `DiscordAPIError[10062] Unknown interaction`
 - **Dlaczego to groźniejsze niż wygląda:** akcja zdążyła się WYKONAĆ (rola nadana, nagroda doliczona, prośba wysłana do wątku), a użytkownik dostaje „interakcja nie powiodła się" i klika ponownie - przy przełącznikach efekt jest wtedy odwrotny do zamierzonego (rola zdjęta), przy licznikach wartość rośnie dwa razy
-- **Wzorzec:** `defer…()` w try/catch (10062 → `logger.warn` + `return` **przed** zmianą danych) → praca → `editReply()` (po `deferReply`) albo `editReply()`/`refreshRewardPanel()` (po `deferUpdate`). W bloku catch po `deferReply` używaj `editReply`, nie `followUp` - inaczej zostaje wiszące „Bot myśli…"
-- **Handlery odpowiadające NATYCHMIAST** (same sprawdzenia w pamięci, jak przyciski wyboru nagrody czy stronicowanie `/stats`) deferu nie potrzebują - tam `reply`/`update` jest pierwszą operacją
-- Zastosowane w: `handleToggleNotifications`, `handleJoinLobbyButton`, `handleCorrectionButton`, `handleOwnRewardButton`, `handleEventNotificationsSubscribe`, `handleExtendLobbyButton`, `handleCloseLobbyButton`
+- **Wzorzec:** `if (!await this.acknowledgeInteraction(interaction, { update, label })) return;` → praca → `editReply()` (po obu rodzajach deferu) albo `refreshRewardPanel()` dla minusów w panelach ±1
+  - **`acknowledgeInteraction(interaction, { update = false, label })`** (`interactionHandlers.js`) - jedno miejsce na potwierdzanie interakcji w całym bocie. `update: true` = `deferUpdate()` (przyciski edytujące istniejącą wiadomość), domyślnie `deferReply({ ephemeral: true })`. Zwraca `false`, gdy token jest martwy → **handler musi wtedy `return` PRZED zmianą danych**
+  - Rozróżnia przyczyny w logu: wygasły token (`isGoneError`) → `logger.warn`, zanik sieci (`isNetworkError`) → `logger.error` z kodem, reszta → pełny stack
+  - `label` trafia do logu, więc opisuje **skutek przerwania**, np. `'Korekta nagród (nick) - nagroda NIE została zmieniona'`
+  - Interakcję już potwierdzoną przepuszcza bez zmian (`deferred || replied` → `true`), więc wywołanie jest idempotentne
+- **`respondEphemeral()` sam dobiera sposób odpowiedzi** na podstawie znacznika `ACK_MODE` ustawianego przez `acknowledgeInteraction`: po `deferReply` edytuje pierwotną odpowiedź (`editReply`, inaczej zostałoby wiszące „Bot myśli…"), po `deferUpdate` wysyła `followUp`
+- **Handlery odpowiadające NATYCHMIAST** (same sprawdzenia w pamięci: `handleRewardPickButton`, `handleRewardNoneButton`, `handleRewardRejectButton`, `handleStatsCommand`, `handleStatsPageButton`, `handleRewardsCommand`, `handlePartyAccessCommand`) deferu nie potrzebują - tam `reply`/`update` jest pierwszą operacją
+- Potwierdzenie stosują: `createPartyLobby` (`/party`), `handleAcceptPlayer` + `handleRejectPlayer` (przez wspólny ack w `handleButtonInteraction`, **przed** debouncem `delay(500)`), `handleRewardConfirmButton`, `handleOwnRewardButton`, `handleCorrectionButton`, `handleCorrectCommand`, `handleBazarCommand`, `handleBazarOffCommand`, `handleJoinLobbyButton`, `handleToggleNotifications`, `handleEventNotificationsSubscribe`, `handlePartyKickCommand`, `handlePartyCloseCommand`, `handlePartyAddCommand`, `handleExtendLobbyButton`, `handleCloseLobbyButton`
+- **Usuwanie starego lobby przy `/party` idzie PO potwierdzeniu** - kasowanie wątku i ogłoszenia to kilka requestów, które same przekraczały limit 3 s, zanim komenda zdążyła odpowiedzieć
+
+**Odporność na zanik sieci (KRYTYCZNE):**
+- **Objaw:** `getaddrinfo EAI_AGAIN discord.com` w logach - DNS kontenera nie odpowiada, więc request nie wychodzi. **To NIE jest limit zapytań** (ten zwraca `429` z `retry_after`); przyczyna jest infrastrukturalna, po stronie hostingu
+- **Klasyfikacja błędów** w `utils/helpers.js`:
+  - `isGoneError(error)` - zasób przepadł i nie ma czego ponawiać: `10003` Unknown Channel, `10008` Unknown Message, `10015` Unknown Webhook, `10062` Unknown interaction
+  - `isNetworkError(error)` - zanik łączności (`EAI_AGAIN`, `ENOTFOUND`, `ECONNRESET`, `ETIMEDOUT`, …, także w `error.cause.code`)
+- **Sprzątanie stanu lokalnego ZAWSZE w `finally`** - `deleteLobby` (w `interactionHandlers.js` **i** `timerService.js`) wykonuje `removeLobby()` + `removeTimer()` niezależnie od tego, czy kasowanie po stronie Discorda się powiodło. Bez tego przerwane w połowie usuwanie zostawiało lobby w pamięci i **żywy timer**, który kilka minut później strzelał ostrzeżeniem w nieistniejący wątek (`10003 Unknown Channel`)
+- **Callbacki timerów pobierają wątek na świeżo** - `sendLobbyWarning(lobbyId, sharedState)` (wspólne dla `/party`, pełnego lobby i timerów przywróconych po restarcie) czyta `threadId` z aktualnego stanu lobby zamiast trzymać obiekt wątku w domknięciu sprzed kilkunastu minut
+- **Osierocone lobby domykają się same** - gdy ostrzeżenie trafi na `isGoneError`, callback usuwa lobby i timer zamiast logować błąd w kółko
+- Globalny handler w `index.js` nazywa zanik sieci wprost, żeby nie mylił się z limitem zapytań
 
 **Lobby Party:**
 - **Logger:** createBotLogger('Wydarzynier')

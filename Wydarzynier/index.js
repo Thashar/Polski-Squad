@@ -16,7 +16,7 @@ const TablicaMenedzer = require('./services/tablicaMenedzer');
 const EventMenedzer = require('./services/eventMenedzer');
 const ListaEventowMenedzer = require('./services/listaEventowMenedzer');
 const StrefaCzasowaManager = require('./services/strefaCzasowaManager');
-const { delay } = require('./utils/helpers');
+const { delay, isNetworkError } = require('./utils/helpers');
 const { createBotLogger } = require('../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -195,7 +195,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
         await handleInteraction(interaction, sharedState);
     } catch (error) {
-        logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        // Zanik DNS/sieci na hostingu wygląda w logach jak błąd bota, a jest awarią infrastruktury -
+        // nazywamy go wprost, żeby nie mylić go z limitem zapytań Discorda (ten zwraca 429)
+        if (isNetworkError(error)) {
+            logger.error(`❌ Brak łączności z Discordem podczas obsługi interakcji (${error.code || error.cause?.code}) - problem sieci/DNS serwera, nie limit zapytań`);
+        } else {
+            logger.error('❌ Błąd podczas obsługi interakcji:', error);
+        }
+
         try {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({

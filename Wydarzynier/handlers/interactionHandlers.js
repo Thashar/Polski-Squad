@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { delay, runThreadCountdown } = require('../utils/helpers');
+const { delay, runThreadCountdown, isGoneError, isNetworkError } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
@@ -13,6 +13,11 @@ const rewardPanels = new Map();
 // Lobby, dla których trwa przepisywanie pytania o nagrodę - blokada przed podwójną wysyłką
 // (również modułowa, bo każda wiadomość dostaje własną instancję InteractionHandler).
 const rewardPromptRepositioning = new Set();
+
+// Sposób potwierdzenia interakcji (deferReply vs deferUpdate). discord.js oznacza oba
+// jako `deferred`, a odpowiedź trzeba wysłać inaczej: po deferReply wisi „Bot myśli…",
+// które domyka wyłącznie editReply; po deferUpdate nic nie wisi i pasuje followUp.
+const ACK_MODE = Symbol('wydarzynierAckMode');
 
 class InteractionHandler {
     constructor(config, lobbyService, timerService, bazarService) {
@@ -149,7 +154,7 @@ class InteractionHandler {
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleSlashCommand(interaction, sharedState) {
-        const { commandName, channelId, user, guild } = interaction;
+        const { commandName, channelId } = interaction;
 
         if (commandName === 'party') {
             // Sprawdź czy komenda jest używana na właściwym kanale
@@ -161,19 +166,8 @@ class InteractionHandler {
                 return;
             }
 
-            // Sprawdź czy użytkownik ma już aktywne lobby i usuń je
-            if (sharedState.lobbyService.hasActiveLobby(user.id)) {
-                // Znajdź istniejące lobby użytkownika
-                const existingLobby = sharedState.lobbyService.getAllActiveLobbies()
-                    .find(lobby => lobby.ownerId === user.id);
-                
-                if (existingLobby) {
-                    // Usuń stare lobby
-                    await this.deleteLobby(existingLobby, sharedState);
-                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.username} przed utworzeniem nowego`);
-                }
-            }
-
+            // Usuwanie ewentualnego starego lobby dzieje się w createPartyLobby,
+            // już po potwierdzeniu interakcji
             await this.createPartyLobby(interaction, sharedState);
         } else if (commandName === 'bazar') {
             await this.handleBazarCommand(interaction, sharedState);
@@ -203,9 +197,23 @@ class InteractionHandler {
      */
     async createPartyLobby(interaction, sharedState) {
         try {
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /party' })) return;
 
             const { user, guild, channel } = interaction;
+
+            // Jedno lobby na osobę - stare znika przed utworzeniem nowego. Kasowanie idzie PO
+            // potwierdzeniu interakcji, bo to kilka requestów do Discorda (wątek + ogłoszenie)
+            // i potrafiło samo w sobie przekroczyć 3 s na pierwszą odpowiedź
+            if (sharedState.lobbyService.hasActiveLobby(user.id)) {
+                const existingLobby = sharedState.lobbyService.getAllActiveLobbies()
+                    .find(lobby => lobby.ownerId === user.id);
+
+                if (existingLobby) {
+                    await this.deleteLobby(existingLobby, sharedState);
+                    logger.info(`🗑️ Usunięto poprzednie lobby użytkownika ${user.username} przed utworzeniem nowego`);
+                }
+            }
+
             const member = await guild.members.fetch(user.id);
             const displayName = member.displayName || user.username;
 
@@ -255,33 +263,7 @@ class InteractionHandler {
 
             // Utwórz timer dla lobby
             const warningCallback = async (lobbyId) => {
-                try {
-                    // Pobierz aktualne dane lobby
-                    const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
-                    if (!currentLobby) return;
-
-                    // Utwórz przyciski dla właściciela lobby
-                    const warningButtons = new ActionRowBuilder()
-                        .addComponents(
-                            new ButtonBuilder()
-                                .setCustomId(`extend_lobby_${lobbyId}`)
-                                .setLabel('Przedłuż o 15 min')
-                                .setEmoji('⏰')
-                                .setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder()
-                                .setCustomId(`close_lobby_${lobbyId}`)
-                                .setLabel('Zamknij lobby')
-                                .setEmoji('🔒')
-                                .setStyle(ButtonStyle.Danger)
-                        );
-
-                    await thread.send({
-                        content: this.config.messages.lobbyWarning(currentLobby.ownerId),
-                        components: [warningButtons]
-                    });
-                } catch (error) {
-                    logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla lobby ${lobbyId}:`, error);
-                }
+                await this.sendLobbyWarning(lobbyId, sharedState);
             };
 
             const deleteCallback = async () => {
@@ -360,7 +342,7 @@ class InteractionHandler {
 
         // Wyszarzone przyciski po zgłoszeniu nagrody - nieklikalne, zabezpieczenie na wszelki wypadek
         if (customId.startsWith('reward_done_')) {
-            await interaction.deferUpdate();
+            await this.acknowledgeInteraction(interaction, { update: true, label: 'Wyszarzony przycisk nagrody' });
             return;
         }
 
@@ -435,11 +417,17 @@ class InteractionHandler {
             return;
         }
 
+        if (!customId.startsWith('accept_') && !customId.startsWith('reject_')) return;
+
+        // Potwierdzenie PRZED debounce'em i pracą - obie ścieżki robią kilka requestów do
+        // Discorda (wątek, DM, ogłoszenie), a sam debounce zjadał 0,5 s z limitu 3 s
+        if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Prośba o dołączenie do lobby' })) return;
+
         await delay(500); // Mały debounce
 
         if (customId.startsWith('accept_')) {
             await this.handleAcceptPlayer(interaction, customId, lobby, sharedState);
-        } else if (customId.startsWith('reject_')) {
+        } else {
             await this.handleRejectPlayer(interaction, customId, lobby, sharedState);
         }
     }
@@ -476,9 +464,10 @@ class InteractionHandler {
                 try {
                     await interaction.message.delete();
                 } catch (error) {
-                    // Jeśli nie można usunąć wiadomości, zaktualizuj ją
+                    // Jeśli nie można usunąć wiadomości, zaktualizuj ją.
+                    // Interakcja jest już potwierdzona (deferUpdate), więc edytujemy przez editReply
                     try {
-                        await interaction.update({
+                        await interaction.editReply({
                             content: '✅ **Zaakceptowano**',
                             components: []
                         });
@@ -493,17 +482,11 @@ class InteractionHandler {
                 }
 
             } else {
-                await interaction.reply({
-                    content: '❌ Nie można dodać gracza (lobby może być pełne).',
-                    ephemeral: true
-                });
+                await this.respondEphemeral(interaction, '❌ Nie można dodać gracza (lobby może być pełne).');
             }
         } catch (error) {
             logger.error('❌ Błąd podczas akceptacji gracza:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas akceptacji gracza.',
-                ephemeral: true
-            });
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas akceptacji gracza.');
         }
     }
 
@@ -534,9 +517,10 @@ class InteractionHandler {
             try {
                 await interaction.message.delete();
             } catch (error) {
-                // Jeśli nie można usunąć wiadomości, zaktualizuj ją
+                // Jeśli nie można usunąć wiadomości, zaktualizuj ją.
+                // Interakcja jest już potwierdzona (deferUpdate), więc edytujemy przez editReply
                 try {
-                    await interaction.update({
+                    await interaction.editReply({
                         content: '❌ **Odrzucono**',
                         components: []
                     });
@@ -547,10 +531,55 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('❌ Błąd podczas odrzucania gracza:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas odrzucania gracza.',
-                ephemeral: true
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas odrzucania gracza.');
+        }
+    }
+
+    /**
+     * Wysyła w wątku ostrzeżenie o kończącym się czasie lobby wraz z przyciskami właściciela.
+     * Wątek pobierany jest na świeżo - callback odpala się kilkanaście minut po utworzeniu timera,
+     * więc obiekt wątku z domknięcia mógł już przestać istnieć.
+     * @param {string} lobbyId - ID lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async sendLobbyWarning(lobbyId, sharedState) {
+        const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
+        if (!currentLobby) return;
+
+        try {
+            const thread = await sharedState.client.channels.fetch(currentLobby.threadId);
+
+            // Przyciski dla właściciela lobby
+            const warningButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`extend_lobby_${lobbyId}`)
+                        .setLabel('Przedłuż o 15 min')
+                        .setEmoji('⏰')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`close_lobby_${lobbyId}`)
+                        .setLabel('Zamknij lobby')
+                        .setEmoji('🔒')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            await thread.send({
+                content: this.config.messages.lobbyWarning(currentLobby.ownerId),
+                components: [warningButtons]
             });
+
+        } catch (error) {
+            if (isGoneError(error)) {
+                // Wątku nie ma, choć lobby wisi w pamięci - ślad po sprzątaniu przerwanym w połowie.
+                // Dokańczamy je tutaj, zamiast raz po raz strzelać w nieistniejący kanał.
+                logger.warn(`⚠️ Wątek lobby ${lobbyId} już nie istnieje - usuwam osierocone lobby zamiast wysyłać ostrzeżenie`);
+                sharedState.lobbyService.removeLobby(lobbyId);
+                sharedState.timerService?.removeTimer(lobbyId);
+                return;
+            }
+
+            logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla lobby ${lobbyId}:`, error);
         }
     }
 
@@ -583,33 +612,7 @@ class InteractionHandler {
 
             // Ustaw nowy timer na 15 minut od zapełnienia
             const warningCallback = async (lobbyId) => {
-                try {
-                    // Pobierz aktualne dane lobby
-                    const currentLobby = sharedState.lobbyService.getLobby(lobbyId);
-                    if (!currentLobby) return;
-
-                    // Utwórz przyciski dla właściciela lobby
-                    const warningButtons = new ActionRowBuilder()
-                        .addComponents(
-                            new ButtonBuilder()
-                                .setCustomId(`extend_lobby_${lobbyId}`)
-                                .setLabel('Przedłuż o 15 min')
-                                .setEmoji('⏰')
-                                .setStyle(ButtonStyle.Primary),
-                            new ButtonBuilder()
-                                .setCustomId(`close_lobby_${lobbyId}`)
-                                .setLabel('Zamknij lobby')
-                                .setEmoji('🔒')
-                                .setStyle(ButtonStyle.Danger)
-                        );
-
-                    await thread.send({
-                        content: this.config.messages.lobbyWarning(currentLobby.ownerId),
-                        components: [warningButtons]
-                    });
-                } catch (error) {
-                    logger.error(`❌ Błąd podczas wysyłania ostrzeżenia dla pełnego lobby ${lobbyId}:`, error);
-                }
+                await this.sendLobbyWarning(lobbyId, sharedState);
             };
 
             const deleteCallback = async () => {
@@ -1058,6 +1061,10 @@ class InteractionHandler {
      */
     async handleRewardConfirmButton(interaction, sharedState) {
         try {
+            // Potwierdzenie PRZED doliczeniem nagrody - niżej leci zapis `nagrody.json`,
+            // pobranie wiadomości z pytaniem i ogłoszenie na kanale party
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Potwierdzenie nagrody' })) return;
+
             // Format: reward_yes_<klucz>_<idKanału>_<idWiadomości>
             const [, , rewardKey, promptChannelId, clickedPromptId] = interaction.customId.split('_');
             const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
@@ -1068,7 +1075,7 @@ class InteractionHandler {
             const promptMessageId = lobby?.rewardPromptMessageId || clickedPromptId;
 
             if (!reward) {
-                await interaction.update({
+                await interaction.editReply({
                     content: '❌ Nieznana nagroda.',
                     components: []
                 });
@@ -1085,7 +1092,7 @@ class InteractionHandler {
             if (!claimRegistered) {
                 const claimerId = sharedState.nagrodyService.getPromptClaimer(promptMessageId);
 
-                await interaction.update({
+                await interaction.editReply({
                     content: claimerId === interaction.user.id
                         ? `⚠️ ${this.config.messages.rewardAlreadyClaimed}`
                         : `⚠️ ${this.config.messages.rewardAlreadyTaken(claimerId)}`,
@@ -1108,10 +1115,11 @@ class InteractionHandler {
                 throw error;
             }
 
-            await interaction.update({
+            // Nagroda jest już zapisana, więc nieudana odpowiedź nie może przerwać domykania losowania
+            await interaction.editReply({
                 content: this.config.messages.rewardAccepted(reward.name, reward.emoji),
                 components: []
-            });
+            }).catch(error => logger.warn(`⚠️ Nie udało się pokazać potwierdzenia nagrody: ${error.message}`));
 
             // Wspólna wiadomość w wątku - wyszarzenie przycisków dla wszystkich uczestników party
             const promptMessage = await this.fetchRewardPrompt(promptChannelId, promptMessageId, sharedState);
@@ -1482,12 +1490,51 @@ class InteractionHandler {
     }
 
     /**
-     * Odpowiada na interakcję niezależnie od tego, czy była już potwierdzona (deferUpdate)
+     * Potwierdza interakcję ZANIM handler wykona pracę sięgającą poza pamięć bota
+     * (request do API Discorda albo zapis pliku). Discord daje 3 s na pierwszą odpowiedź -
+     * po tym czasie token jest martwy, a akcja zdążyła się wykonać bez informacji zwrotnej.
+     * @param {Interaction} interaction - Interakcja do potwierdzenia
+     * @param {Object} options - `update` = deferUpdate zamiast deferReply, `label` do logów
+     * @returns {boolean} - Czy token żyje. `false` = przerwij handler PRZED zmianą danych
+     */
+    async acknowledgeInteraction(interaction, { update = false, label = 'Interakcja' } = {}) {
+        if (interaction.deferred || interaction.replied) return true;
+
+        try {
+            if (update) {
+                await interaction.deferUpdate();
+            } else {
+                await interaction.deferReply({ ephemeral: true });
+            }
+
+            interaction[ACK_MODE] = update ? 'update' : 'reply';
+            return true;
+
+        } catch (error) {
+            if (isGoneError(error)) {
+                logger.warn(`⚠️ ${label}: token interakcji wygasł przed potwierdzeniem - przerywam bez zmiany danych`);
+            } else if (isNetworkError(error)) {
+                logger.error(`❌ ${label}: brak łączności z Discordem (${error.code || error.cause?.code}) - przerywam bez zmiany danych`);
+            } else {
+                logger.error(`❌ ${label}: nie udało się potwierdzić interakcji:`, error);
+            }
+            return false;
+        }
+    }
+
+    /**
+     * Odpowiada na interakcję niezależnie od tego, czy była już potwierdzona (defer)
      * @param {ButtonInteraction} interaction - Interakcja przycisku
      * @param {string} content - Treść odpowiedzi
      */
     async respondEphemeral(interaction, content) {
         const payload = { content, ephemeral: true };
+
+        // Po deferReply wisi „Bot myśli…" - domknie je tylko edycja pierwotnej odpowiedzi
+        if (interaction[ACK_MODE] === 'reply' && interaction.deferred && !interaction.replied) {
+            await interaction.editReply({ content, embeds: [], components: [] }).catch(() => {});
+            return;
+        }
 
         if (interaction.deferred || interaction.replied) {
             await interaction.followUp(payload).catch(() => {});
@@ -1587,15 +1634,10 @@ class InteractionHandler {
 
             // Potwierdzamy klik ZANIM zapiszemy nagrodę - to samo co w panelu /correct: przy odpowiedzi
             // po 3 s token jest już martwy (10062), a nagroda zdążyła się doliczyć bez informacji zwrotnej
-            try {
-                await interaction.deferUpdate();
-            } catch (deferError) {
-                if (deferError.code === 10062) {
-                    logger.warn(`⚠️ Interakcja własnej korekty wygasła przed potwierdzeniem - nagroda NIE została zmieniona (${displayName})`);
-                    return;
-                }
-                throw deferError;
-            }
+            if (!await this.acknowledgeInteraction(interaction, {
+                update: true,
+                label: `Korekta własnych nagród (${displayName}) - nagroda NIE została zmieniona`
+            })) return;
 
             // Zawsze własne konto i zawsze licznik spoza rankingu
             const result = await sharedState.nagrodyService.correctReward(
@@ -1658,15 +1700,18 @@ class InteractionHandler {
                 return;
             }
 
+            // Potwierdzenie przed `members.fetch` - to request do API, a po nim panel
+            // odpowiadał dopiero jako pierwsza reakcja na komendę
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /correct' })) return;
+
             const targetUser = interaction.options.getUser('użytkownik');
             const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
             const displayName = member?.displayName || targetUser.username;
             const panelId = this.createRewardPanelId();
 
-            await interaction.reply({
+            await interaction.editReply({
                 embeds: [this.buildCorrectionEmbed(targetUser.id, displayName, sharedState)],
-                components: this.buildCorrectionButtons(targetUser.id, 1),
-                ephemeral: true
+                components: this.buildCorrectionButtons(targetUser.id, 1)
             });
 
             this.registerRewardPanel(panelId, interaction);
@@ -1754,15 +1799,10 @@ class InteractionHandler {
             // a niżej idzie fetch membera (request do API) i zapis nagrody na dysk. Bez tego przy
             // wolniejszym fetchu `update()` trafiało w martwy token (10062) JUŻ PO doliczeniu nagrody:
             // admin widział "interakcja nie powiodła się", klikał ponownie i licznik rósł dwa razy.
-            try {
-                await interaction.deferUpdate();
-            } catch (deferError) {
-                if (deferError.code === 10062) {
-                    logger.warn(`⚠️ Interakcja korekty wygasła przed potwierdzeniem - nagroda NIE została zmieniona (${interaction.user.username})`);
-                    return;
-                }
-                throw deferError;
-            }
+            if (!await this.acknowledgeInteraction(interaction, {
+                update: true,
+                label: `Korekta nagród (${interaction.user.username}) - nagroda NIE została zmieniona`
+            })) return;
 
             const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
             const displayName = member?.displayName
@@ -1869,17 +1909,18 @@ class InteractionHandler {
                 await announcementMessage.delete();
             }
 
-            // Usuń lobby z serwisu
-            sharedState.lobbyService.removeLobby(lobby.id);
-
-            // Usuń timer
-            if (sharedState.timerService) {
-                sharedState.timerService.removeTimer(lobby.id);
-            }
-
             logger.info(`🗑️ Usunięto lobby ${lobby.id} wraz z zasobami`);
         } catch (error) {
             logger.error('❌ Błąd podczas usuwania lobby:', error);
+        } finally {
+            // Stan lokalny sprzątamy ZAWSZE, także gdy kasowanie po stronie Discorda padło w połowie.
+            // Inaczej zanik sieci zostawiał lobby w pamięci i żywy timer, który kilka minut później
+            // strzelał ostrzeżeniem w nieistniejący wątek (Unknown Channel).
+            sharedState.lobbyService.removeLobby(lobby.id);
+
+            if (sharedState.timerService) {
+                sharedState.timerService.removeTimer(lobby.id);
+            }
         }
     }
 
@@ -1994,7 +2035,7 @@ class InteractionHandler {
                 return;
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /bazar' })) return;
 
             const startHour = interaction.options.getInteger('godzina');
             const result = await this.bazarService.createBazar(interaction.guild, startHour);
@@ -2038,7 +2079,7 @@ class InteractionHandler {
                 return;
             }
 
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /bazar-off' })) return;
 
             const result = await this.bazarService.removeBazar(interaction.guild);
 
@@ -2076,15 +2117,9 @@ class InteractionHandler {
         // Potwierdzamy klik od razu - utworzenie prośby to trzy requesty do API (fetch wątku,
         // fetch membera, wysłanie wiadomości), więc bez tego łatwo wyjść poza 3 s Discorda
         // i wysłać prośbę do wątku, o której klikający nigdy się nie dowie (10062)
-        try {
-            await interaction.deferReply({ ephemeral: true });
-        } catch (deferError) {
-            if (deferError.code === 10062) {
-                logger.warn(`⚠️ Interakcja dołączania do lobby wygasła przed potwierdzeniem - prośba NIE została wysłana (${user.username})`);
-                return;
-            }
-            throw deferError;
-        }
+        if (!await this.acknowledgeInteraction(interaction, {
+            label: `Dołączanie do lobby (${user.username}) - prośba NIE została wysłana`
+        })) return;
 
         // Znajdź lobby na podstawie wiadomości
         const lobby = sharedState.lobbyService.getLobbyByAnnouncementId(message.id);
@@ -2189,15 +2224,9 @@ class InteractionHandler {
         // dwa requesty, a Discord daje na pierwszą odpowiedź 3 s. Bez tego rola bywała już
         // nadana, a potwierdzenie leciało w martwy token (10062): użytkownik widział
         // „interakcja nie powiodła się", klikał ponownie i przełącznik ZDEJMOWAŁ mu rolę
-        try {
-            await interaction.deferReply({ ephemeral: true });
-        } catch (deferError) {
-            if (deferError.code === 10062) {
-                logger.warn(`⚠️ Interakcja powiadomień wygasła przed potwierdzeniem - rola NIE została zmieniona (${interaction.user.username})`);
-                return;
-            }
-            throw deferError;
-        }
+        if (!await this.acknowledgeInteraction(interaction, {
+            label: `Przełącznik powiadomień (${interaction.user.username}) - rola NIE została zmieniona`
+        })) return;
 
         try {
             const { user, guild } = interaction;
@@ -2239,7 +2268,9 @@ class InteractionHandler {
         logger.info(`🔔 Obsługa przycisku subskrypcji eventów: ${interaction.user.username}`);
 
         try {
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, {
+                label: `Subskrypcja eventów (${interaction.user.username}) - rola NIE została zmieniona`
+            })) return;
 
             const { user, guild } = interaction;
             const member = await guild.members.fetch(user.id);
@@ -2293,16 +2324,19 @@ class InteractionHandler {
      */
     async handlePartyKickCommand(interaction, sharedState) {
         try {
+            // Potwierdzenie na starcie - niżej leci usunięcie z wątku, edycja ogłoszenia i DM,
+            // czyli kilka requestów, które łącznie przekraczały 3 s na pierwszą odpowiedź
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /party-kick' })) return;
+
             const targetUser = interaction.options.getUser('użytkownik');
-            
+
             // Znajdź lobby właściciela
             const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
                 .find(lobby => lobby.ownerId === interaction.user.id);
-            
+
             if (!ownerLobby) {
-                await interaction.reply({
-                    content: '❌ Nie masz aktywnego lobby.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '❌ Nie masz aktywnego lobby.'
                 });
                 return;
             }
@@ -2310,18 +2344,16 @@ class InteractionHandler {
             // Sprawdź czy użytkownik jest w lobby
             const playerIndex = ownerLobby.players.indexOf(targetUser.id);
             if (playerIndex === -1) {
-                await interaction.reply({
-                    content: `❌ ${targetUser.displayName || targetUser.username} nie jest w twoim lobby.`,
-                    ephemeral: true
+                await interaction.editReply({
+                    content: `❌ ${targetUser.displayName || targetUser.username} nie jest w twoim lobby.`
                 });
                 return;
             }
 
             // Nie można wykopać siebie
             if (targetUser.id === interaction.user.id) {
-                await interaction.reply({
-                    content: '❌ Nie możesz wykopać samego siebie z lobby.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '❌ Nie możesz wykopać samego siebie z lobby.'
                 });
                 return;
             }
@@ -2379,20 +2411,13 @@ class InteractionHandler {
                 // Ignoruj błędy DM
             }
 
-            await interaction.reply({
-                content: `✅ Usunięto **${targetUser.displayName || targetUser.username}** z lobby.`,
-                ephemeral: true
+            await interaction.editReply({
+                content: `✅ Usunięto **${targetUser.displayName || targetUser.username}** z lobby.`
             });
 
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi komendy /party-kick:', error);
-            
-            const errorMessage = '❌ Wystąpił błąd podczas usuwania gracza z lobby.';
-            if (interaction.deferred) {
-                await interaction.editReply({ content: errorMessage });
-            } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
-            }
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas usuwania gracza z lobby.');
         }
     }
 
@@ -2403,8 +2428,7 @@ class InteractionHandler {
      */
     async handlePartyCloseCommand(interaction, sharedState) {
         try {
-            // Defer interaction na początku aby uniknąć timeout
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /party-close' })) return;
 
             // Znajdź lobby właściciela
             const ownerLobby = sharedState.lobbyService.getAllActiveLobbies()
@@ -2525,9 +2549,8 @@ class InteractionHandler {
      */
     async handleExtendLobbyButton(interaction, sharedState) {
         try {
-            // Defer interaction na początku aby uniknąć timeout
-            await interaction.deferUpdate();
-            
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Przedłużenie lobby' })) return;
+
             const lobbyId = interaction.customId.replace('extend_lobby_', '');
             const lobby = sharedState.lobbyService.getLobby(lobbyId);
             
@@ -2635,9 +2658,8 @@ class InteractionHandler {
      */
     async handleCloseLobbyButton(interaction, sharedState) {
         try {
-            // Defer interaction na początku aby uniknąć timeout
-            await interaction.deferUpdate();
-            
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Zamknięcie lobby przyciskiem' })) return;
+
             const lobbyId = interaction.customId.replace('close_lobby_', '');
             const lobby = sharedState.lobbyService.getLobby(lobbyId);
             
@@ -2704,8 +2726,7 @@ class InteractionHandler {
      */
     async handlePartyAddCommand(interaction, sharedState) {
         try {
-            // Defer interaction na początku aby uniknąć timeout
-            await interaction.deferReply({ ephemeral: true });
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /party-add' })) return;
 
             const targetUser = interaction.options.getUser('użytkownik');
             
