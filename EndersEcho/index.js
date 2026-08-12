@@ -367,6 +367,13 @@ client.on('interactionCreate', async (interaction) => {
     try {
         await interactionHandler.handleInteraction(interaction);
     } catch (error) {
+        // 10062 = token interakcji wygasł (Discord daje 3s na potwierdzenie) — nie ma już
+        // czego naprawiać ani gdzie odpowiedzieć, więc wystarczy krótkie ostrzeżenie
+        if (error.code === 10062) {
+            logger.warn(`⚠️ Interakcja wygasła przed odpowiedzią (${interaction.commandName || interaction.customId || 'nieznana'}) — pominięto`);
+            return;
+        }
+
         logger.error('Błąd podczas obsługi interakcji:', error);
 
         try {

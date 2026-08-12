@@ -6062,6 +6062,21 @@ class InteractionHandler {
         const msgs = this.msgs(interaction.guildId);
         let _ocrEmbedParams = null; // zbieramy przez cały flow, wysyłamy w finally
 
+        // Potwierdź interakcję ZANIM zaczniemy cokolwiek liczyć — Discord daje na to tylko 3s,
+        // a sprawdzenie limitu dziennego czyta i zapisuje plik na dysku. Przy obciążonym
+        // serwerze te operacje wypychały deferReply poza limit → DiscordAPIError[10062].
+        if (!alreadyReplied) {
+            try {
+                await interaction.deferReply({ flags: ['Ephemeral'] });
+            } catch (deferError) {
+                if (deferError.code === 10062) {
+                    logger.warn(`⚠️ [/${commandName}] Interakcja wygasła przed potwierdzeniem — analiza pominięta (${interaction.user.username})`);
+                    return;
+                }
+                throw deferError;
+            }
+        }
+
         // ModalSubmitInteraction nie ma opcji komendy — załącznik przychodzi z sesji wyboru profilu
         const image = attachment || interaction.options?.getAttachment?.('image');
         const profileIndex = getProfileIndex(playerKey);
@@ -6069,16 +6084,13 @@ class InteractionHandler {
 
         const limitCheck = await this.usageLimitService.checkAndRecord(interaction.user.id);
         if (!limitCheck.allowed) {
-            const limitMsg = { content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }), components: [] };
-            if (alreadyReplied) {
-                await interaction.editReply(limitMsg);
-            } else {
-                await interaction.reply({ ...limitMsg, flags: ['Ephemeral'] });
-            }
+            await interaction.editReply({
+                content: formatMessage(msgs.dailyLimitExceeded, { limit: limitCheck.limit }),
+                components: []
+            });
             return;
         }
 
-        if (!alreadyReplied) await interaction.deferReply({ flags: ['Ephemeral'] });
         // components: [] usuwa przyciski wyboru profilu z wiadomości
         await interaction.editReply({ content: msgs.updateDownloading, components: [] });
         let lastMsgAt = Date.now();
