@@ -48,12 +48,13 @@
 - `ensureUser()` migruje w locie wpisy sprzed wprowadzenia nagród własnych (dopisuje `manualRewards`/`manualTotal`), `recalculateTotals()` przelicza obie sumy
 
 **Komendy nagród:**
-- **`/stats`:** Ephemeral embed z rankingiem (`buildStatsView`), 🥇🥈🥉 na pierwszej stronie, dalej numeracja
-  - **Jedna linia na gracza:** `miejsce **nick** — **N** 🎁 · **M** 📝`, a pod nią rozbicie `emoji×N` w linii `-#` (mały tekst Discorda), z nagrodami własnymi po separatorze `│ 📝 …`. Sekcja 📝 pojawia się tylko, gdy gracz ma takie nagrody
-  - **Nagrody dodane samodzielnie są widoczne, ale nie liczą się do rankingu** - sortowanie idzie po liczniku z party (`manualTotal` tylko rozstrzyga remisy). Gracze mający **wyłącznie** nagrody własne też są na liście (bez medalu, na końcu)
-  - **Stronicowanie:** `config.stats.usersPerPage` = 10; przyciski `◀ Poprzednia` / `Następna ▶` (customId `stats_page_<numer>`, `handleStatsPageButton` → `interaction.update`). Przy jednej stronie przycisków nie ma. Dane są pobierane na nowo przy każdej zmianie strony
-  - **Pola podsumowania:** `🎁 Z party — suma` z rozbiciem wg typu, a gdy ktokolwiek ma nagrody własne, także `📝 Dodane samodzielnie — suma`. Stopka: legenda ikon + `Strona X/Y` + liczba graczy
-  - **Limit opisu:** przy bardzo rozbudowanych kontach (opis > 3800 znaków) rozbicie `-#` jest pomijane i zostają same nagłówki graczy
+- **`/stats`:** Ephemeral embed z rankingiem (`buildStatsView`), układ wzorowany na rankingu **EndersEcho**
+  - **Wpis gracza** - nagłówek `` `01`  **nick**  **N** `` (numer w inline code, pogrubiony nick, suma nagród z party), pod nim linie cytatu: `> ikony×N` (nagrody z party) i `> własne  ikony×N` (dodane samodzielnie, tylko gdy są). Gracze rozdzieleni **pustą linią**
+  - **Bez systemowych emoji** - żadnych medali, 🎁/📝 ani ozdobnych separatorów; w rankingu pojawiają się wyłącznie emotki nagród, żeby nicki były czytelne
+  - **Nagrody dodane samodzielnie są widoczne, ale nie liczą się do rankingu** - sortowanie idzie po liczniku z party (`manualTotal` tylko rozstrzyga remisy). Gracze mający **wyłącznie** nagrody własne też są na liście (z sumą `0`, na końcu)
+  - **Stronicowanie:** `config.stats.usersPerPage` = 10; przyciski `Poprzednia` / `Następna` (customId `stats_page_<numer>`, `handleStatsPageButton` → `interaction.update`). Przy jednej stronie przycisków nie ma. Dane są pobierane na nowo przy każdej zmianie strony
+  - **Pola podsumowania:** `Łącznie z party   suma` z rozbiciem wg typu, a gdy ktokolwiek ma nagrody własne, także `Dodane samodzielnie   suma`. Stopka: `Strona X/Y`, liczba graczy i informacja, że ranking liczy tylko nagrody z party
+  - **Limit opisu:** przy bardzo rozbudowanych kontach (opis > 3800 znaków) linie cytatu z ikonami są pomijane i zostają same nagłówki graczy
 - **`/rewards`:** Publiczna (każdy użytkownik), bez parametrów, **interaktywny panel** ephemeral, dotyczy **wyłącznie osoby wywołującej**
   - **Embed** (`buildOwnRewardsEmbed`): trzy kolumny inline z ikoną i liczbą - `🎉 Z party` | `📝 Dodane samodzielnie` | `📦 Razem`, poniżej pole `Podsumowanie` z sumami obu źródeł i łączną liczbą, a po korekcie `Ostatnia zmiana`. **Wypisywane są tylko nagrody z niezerowym stanem** (w którymkolwiek liczniku); przy pustym koncie zamiast kolumn pojawia się zachęta do dopisania nagrody przyciskiem
   - **Przyciski** (`buildOwnRewardsButtons` → wspólny `buildSignedRewardRows`): **dwie wiadomości** - pierwsza to embed + zielone `+1`, druga to same czerwone `−1` bez tekstu (customId `myrw_<klucz>_1` oraz `myrw_<klucz>_-1_<idPanelu>`, bez ID użytkownika - zawsze konto klikającego)

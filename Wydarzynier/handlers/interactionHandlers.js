@@ -1252,31 +1252,30 @@ class InteractionHandler {
         const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
         const pageEntries = ranking.slice(currentPage * perPage, (currentPage + 1) * perPage);
 
-        const medals = ['🥇', '🥈', '🥉'];
+        // Układ jak w rankingu EndersEcho: numer w `kodzie`, pogrubiony nick, ikony dopiero
+        // w linii cytatu pod spodem, a gracze rozdzieleni pustą linią
+        const buildEntry = (entry, index, withBreakdown) => {
+            const position = String(currentPage * perPage + index + 1).padStart(2, '0');
+            const lines = [`\`${position}\`  **${entry.displayName}**  **${entry.total}**`];
 
-        // Rozbicie nagród leci w linii `-#` (mały tekst Discorda) - ranking zostaje zwarty i czytelny
-        const buildLines = (withBreakdown) => pageEntries.map((entry, index) => {
-            const position = currentPage * perPage + index;
-            const marker = entry.total > 0 && position < medals.length ? medals[position] : `**${position + 1}.**`;
+            if (withBreakdown) {
+                const party = this.formatRewardBreakdown(entry.rewards);
+                const manual = this.formatRewardBreakdown(entry.manualRewards);
 
-            const header = `${marker} **${entry.displayName}** — **${entry.total}** 🎁`
-                + (entry.manualTotal > 0 ? ` · **${entry.manualTotal}** 📝` : '');
+                if (party) lines.push(`> ${party}`);
+                if (manual) lines.push(`> własne  ${manual}`);
+            }
 
-            if (!withBreakdown) return header;
+            return lines.join('\n');
+        };
 
-            const parts = [];
-            const party = this.formatRewardBreakdown(entry.rewards);
-            const manual = this.formatRewardBreakdown(entry.manualRewards);
-
-            if (party) parts.push(party);
-            if (manual) parts.push(`📝 ${manual}`);
-
-            return parts.length > 0 ? `${header}\n-# ${parts.join(' │ ')}` : header;
-        });
+        const buildDescription = withBreakdown => pageEntries
+            .map((entry, index) => buildEntry(entry, index, withBreakdown))
+            .join('\n\n');
 
         // Przy bardzo rozbudowanych kontach rozbicie nie mieści się w limicie opisu (4096 znaków)
-        let description = buildLines(true).join('\n');
-        if (description.length > 3800) description = buildLines(false).join('\n');
+        let description = buildDescription(true);
+        if (description.length > 3800) description = buildDescription(false);
 
         const partyTotals = sharedState.nagrodyService.getTotalsByReward('party');
         const manualTotals = sharedState.nagrodyService.getTotalsByReward('manual');
@@ -1284,22 +1283,22 @@ class InteractionHandler {
         const manualSum = ranking.reduce((sum, entry) => sum + entry.manualTotal, 0);
 
         const embed = new EmbedBuilder()
-            .setTitle('🎁 Ranking nagród specjalnych')
+            .setTitle('Ranking nagród specjalnych')
             .setColor('#e74c3c')
             .setDescription(description)
             .addFields({
-                name: `🎁 Z party — ${partySum} ${this.pluralizeRewards(partySum)}`,
+                name: `Łącznie z party   ${partySum} ${this.pluralizeRewards(partySum)}`,
                 value: this.formatRewardBreakdown(partyTotals) || 'brak'
             })
             .setFooter({
-                text: `🎁 z party (liczone do rankingu) · 📝 dodane samodzielnie (poza rankingiem)`
-                    + ` · Strona ${currentPage + 1}/${totalPages} · Graczy: ${ranking.length}`
+                text: `Strona ${currentPage + 1}/${totalPages}   Graczy ${ranking.length}`
+                    + '   Ranking liczy tylko nagrody z party'
             })
             .setTimestamp();
 
         if (manualSum > 0) {
             embed.addFields({
-                name: `📝 Dodane samodzielnie — ${manualSum} ${this.pluralizeRewards(manualSum)}`,
+                name: `Dodane samodzielnie   ${manualSum} ${this.pluralizeRewards(manualSum)}`,
                 value: this.formatRewardBreakdown(manualTotals) || 'brak'
             });
         }
@@ -1319,12 +1318,12 @@ class InteractionHandler {
         return [new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`stats_page_${page - 1}`)
-                .setLabel('◀ Poprzednia')
+                .setLabel('Poprzednia')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page <= 0),
             new ButtonBuilder()
                 .setCustomId(`stats_page_${page + 1}`)
-                .setLabel('Następna ▶')
+                .setLabel('Następna')
                 .setStyle(ButtonStyle.Secondary)
                 .setDisabled(page >= totalPages - 1)
         )];
