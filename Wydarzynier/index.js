@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Partials, Events, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -184,10 +184,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
             const user = await client.users.fetch(userId);
             await user.send('System przekazywania wiadomości aktywny!');
-            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, ephemeral: true });
+            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, flags: MessageFlags.Ephemeral });
             logger.info(`[ROBOT3] Aktywowano system dla ${user.username}`);
         } catch (error) {
-            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, flags: MessageFlags.Ephemeral });
             logger.error(`[ROBOT3] Błąd aktywacji: ${error.message}`);
         }
         return;
@@ -207,7 +207,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({

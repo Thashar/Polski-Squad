@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder, MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { delay, runThreadCountdown, isGoneError, isNetworkError, interactionAge, isInteractionExpired } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
@@ -161,7 +161,7 @@ class InteractionHandler {
             if (channelId !== this.config.channels.party) {
                 await interaction.reply({
                     content: this.config.messages.channelOnly,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -403,7 +403,7 @@ class InteractionHandler {
         if (!lobby) {
             await interaction.reply({
                 content: '❌ Nie znaleziono powiązanego lobby.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -412,7 +412,7 @@ class InteractionHandler {
         if (user.id !== lobby.ownerId) {
             await interaction.reply({
                 content: this.config.messages.ownerOnly,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -1497,7 +1497,8 @@ class InteractionHandler {
      * (request do API Discorda albo zapis pliku). Discord daje 3 s na pierwszą odpowiedź -
      * po tym czasie token jest martwy, a akcja zdążyła się wykonać bez informacji zwrotnej.
      * @param {Interaction} interaction - Interakcja do potwierdzenia
-     * @param {Object} options - `update` = deferUpdate zamiast deferReply, `ephemeral`, `label` do logów
+     * @param {Object} options - `update` = deferUpdate zamiast deferReply, `ephemeral` = odpowiedź
+     *                           widoczna tylko dla klikającego (flaga `MessageFlags.Ephemeral`), `label` do logów
      * @returns {boolean} - Czy token żyje. `false` = przerwij handler PRZED zmianą danych
      */
     async acknowledgeInteraction(interaction, { update = false, ephemeral = true, label = 'Interakcja' } = {}) {
@@ -1515,7 +1516,7 @@ class InteractionHandler {
             if (update) {
                 await interaction.deferUpdate();
             } else {
-                await interaction.deferReply({ ephemeral });
+                await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
             }
 
             interaction[ACK_MODE] = update ? 'update' : 'reply';
@@ -1547,7 +1548,7 @@ class InteractionHandler {
      * @param {string} content - Treść odpowiedzi
      */
     async respondEphemeral(interaction, content) {
-        const payload = { content, ephemeral: true };
+        const payload = { content, flags: MessageFlags.Ephemeral };
 
         // Po deferReply wisi „Bot myśli…" - domknie je tylko edycja pierwotnej odpowiedzi
         if (interaction[ACK_MODE] === 'reply' && interaction.deferred && !interaction.replied) {
@@ -1572,7 +1573,7 @@ class InteractionHandler {
         await interaction.followUp({
             content: '​',
             components: rows,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 
@@ -1715,7 +1716,7 @@ class InteractionHandler {
             if (!this.canCorrectRewards(interaction)) {
                 await interaction.reply({
                     content: '❌ Nie masz uprawnień do korygowania nagród.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -1806,7 +1807,7 @@ class InteractionHandler {
             if (!this.canCorrectRewards(interaction)) {
                 await interaction.reply({
                     content: '❌ Nie masz uprawnień do korygowania nagród.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2050,7 +2051,7 @@ class InteractionHandler {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await interaction.reply({
                     content: '❌ Ta komenda wymaga uprawnień administratora.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2078,7 +2079,7 @@ class InteractionHandler {
             if (interaction.deferred) {
                 await interaction.editReply({ content: errorMessage });
             } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     }
@@ -2094,7 +2095,7 @@ class InteractionHandler {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await interaction.reply({
                     content: '❌ Ta komenda wymaga uprawnień administratora.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2121,7 +2122,7 @@ class InteractionHandler {
             if (interaction.deferred) {
                 await interaction.editReply({ content: errorMessage });
             } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     }
@@ -2328,7 +2329,7 @@ class InteractionHandler {
                 } else {
                     await interaction.reply({
                         content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             } catch (replyError) {
@@ -2506,7 +2507,7 @@ class InteractionHandler {
                 if (interaction.deferred) {
                     await interaction.editReply({ content: errorMessage });
                 } else {
-                    await interaction.reply({ content: errorMessage, ephemeral: true });
+                    await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
                 }
             } catch (replyError) {
                 // Jeśli to Unknown Message, lobby i tak zostało zamknięte
@@ -2528,7 +2529,7 @@ class InteractionHandler {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 await interaction.reply({
                     content: '❌ Ta komenda wymaga uprawnień administratora.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2559,7 +2560,7 @@ class InteractionHandler {
             if (interaction.deferred) {
                 await interaction.editReply({ content: errorMessage });
             } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     }
@@ -2579,7 +2580,7 @@ class InteractionHandler {
             if (!lobby) {
                 await interaction.followUp({
                     content: '❌ Nie znaleziono lobby.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2588,7 +2589,7 @@ class InteractionHandler {
             if (interaction.user.id !== lobby.ownerId) {
                 await interaction.followUp({
                     content: '❌ Tylko właściciel lobby może przedłużyć czas.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2664,7 +2665,7 @@ class InteractionHandler {
                 } else {
                     await interaction.reply({
                         content: '❌ Wystąpił błąd podczas przedłużania lobby.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             } catch (replyError) {
@@ -2688,7 +2689,7 @@ class InteractionHandler {
             if (!lobby) {
                 await interaction.followUp({
                     content: '❌ Nie znaleziono lobby.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2697,7 +2698,7 @@ class InteractionHandler {
             if (interaction.user.id !== lobby.ownerId) {
                 await interaction.followUp({
                     content: '❌ Tylko właściciel lobby może zamknąć lobby.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -2732,7 +2733,7 @@ class InteractionHandler {
                 } else {
                     await interaction.reply({
                         content: '❌ Wystąpił błąd podczas zamykania lobby.',
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
             } catch (replyError) {
@@ -2824,7 +2825,7 @@ class InteractionHandler {
                 if (interaction.deferred) {
                     await interaction.editReply({ content: errorMessage });
                 } else {
-                    await interaction.reply({ content: errorMessage, ephemeral: true });
+                    await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
                 }
             } catch (replyError) {
                 logger.error('❌ Nie można odpowiedzieć na interakcję /party-add:', replyError);

@@ -9,7 +9,8 @@ const {
     EmbedBuilder,
     ChannelType,
     ChannelSelectMenuBuilder,
-    RoleSelectMenuBuilder
+    RoleSelectMenuBuilder,
+    MessageFlags
 } = require('discord.js');
 
 // ==================== HELPER FUNCTIONS ====================
@@ -199,9 +200,9 @@ async function handlePrzypominienInteraction(interaction, sharedState) {
 
         try {
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: errorMessage, ephemeral: true });
+                await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
             } else if (interaction.isRepliable()) {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         } catch (followUpError) {
             // Interakcja mogła wygasnąć podczas obsługi błędu
@@ -216,7 +217,7 @@ async function handlePrzypominienInteraction(interaction, sharedState) {
 async function handleSlashCommand(interaction, sharedState) {
     await interaction.reply({
         content: '❌ Komendy slash są wyłączone. Użyj przycisków panelu kontrolnego na tablicy przypomnień.',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -246,7 +247,7 @@ async function handleNewReminderCommand(interaction, sharedState) {
     await interaction.reply({
         content: '**Krok 1:** Wybierz typ przypomnienia',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -260,7 +261,7 @@ async function handleSetReminderCommand(interaction, sharedState) {
     if (templates.length === 0) {
         await interaction.reply({
             content: '❌ Nie znaleziono szablonów przypomnień. Użyj `/new-reminder` aby utworzyć szablon.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -338,7 +339,7 @@ async function showTemplateSelectPage(interaction, sharedState, page, totalPages
         await interaction.reply({
             content,
             components: rows,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -368,7 +369,7 @@ async function handleEditReminderCommand(interaction, sharedState) {
     await interaction.reply({
         content: '**Edytuj powiadomienia** - Wybierz typ:',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -1107,7 +1108,7 @@ async function handleModalSubmit(interaction, sharedState) {
 
     logger.info(`Modal Submit: ${customId} by ${interaction.user.username}`);
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // New reminder - Text
@@ -1287,7 +1288,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 await przypomnieniaMenedzer.updateTemplate(templateId, { name, text });
                 await tablicaMenedzer.ensureControlPanel();
                 await interaction.deleteReply();
-                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!\n\n${text}`, ephemeral: true });
+                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!\n\n${text}`, flags: MessageFlags.Ephemeral });
             } else {
                 const name = interaction.fields.getTextInputValue('name');
                 const embedTitle = interaction.fields.getTextInputValue('embedTitle');
@@ -1310,7 +1311,7 @@ async function handleModalSubmit(interaction, sharedState) {
                 if (embedImage) embed.setImage(embedImage);
 
                 await interaction.deleteReply();
-                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!`, embeds: [embed], ephemeral: true });
+                await interaction.followUp({ content: `✅ Szablon **${name}** zaktualizowany!`, embeds: [embed], flags: MessageFlags.Ephemeral });
             }
 
             logger.success(`Updated template ${templateId}`);
@@ -1973,7 +1974,7 @@ async function handleScheduledPreviewEdit(interaction, sharedState) {
     // Placeholder - not used in current flow
     await interaction.reply({
         content: '✏️ Edycja...',
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -2433,7 +2434,7 @@ async function handleBoardScheduledPause(interaction, sharedState) {
         logger.error('Error pausing scheduled:', error);
         await interaction.followUp({
             content: '❌ Błąd podczas pauzowania przypomnienia.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -2452,7 +2453,7 @@ async function handleBoardScheduledResume(interaction, sharedState) {
             await tablicaMenedzer.ensureControlPanel();
             await interaction.followUp({
                 content: '⏰ Jednorazowe przypomnienie wygasło podczas wstrzymania i zostało usunięte.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2466,7 +2467,7 @@ async function handleBoardScheduledResume(interaction, sharedState) {
         logger.error('Error resuming scheduled:', error);
         await interaction.followUp({
             content: '❌ Błąd podczas wznawiania przypomnienia.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -2477,7 +2478,7 @@ async function handleGotoControlPanel(interaction, sharedState) {
     const boardChannel = tablicaMenedzer.boardChannel;
 
     if (!panelMessageId || !boardChannel) {
-        await interaction.reply({ content: '❌ Panel kontrolny nie został jeszcze utworzony.', ephemeral: true });
+        await interaction.reply({ content: '❌ Panel kontrolny nie został jeszcze utworzony.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -2485,7 +2486,7 @@ async function handleGotoControlPanel(interaction, sharedState) {
     const channelId = boardChannel.id;
     const url = `https://discord.com/channels/${guildId}/${channelId}/${panelMessageId}`;
 
-    await interaction.reply({ content: `[➡️ Przejdź do panelu kontrolnego](${url})`, ephemeral: true });
+    await interaction.reply({ content: `[➡️ Przejdź do panelu kontrolnego](${url})`, flags: MessageFlags.Ephemeral });
 }
 
 async function handleBoardScheduledPreview(interaction, sharedState) {
@@ -2495,7 +2496,7 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
     const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
 
     if (!scheduled || !scheduled.template) {
-        await interaction.reply({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', ephemeral: true });
+        await interaction.reply({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -2521,12 +2522,12 @@ async function handleBoardScheduledPreview(interaction, sharedState) {
             embeds.push(embed);
         }
 
-        await interaction.reply({ content: content || undefined, embeds, ephemeral: true });
+        await interaction.reply({ content: content || undefined, embeds, flags: MessageFlags.Ephemeral });
 
         logger.info(`Podgląd przypomnienia ${scheduledId} przez ${interaction.user.username}`);
     } catch (error) {
         logger.error('Error in handleBoardScheduledPreview:', error);
-        await interaction.reply({ content: '❌ Błąd podczas generowania podglądu.', ephemeral: true });
+        await interaction.reply({ content: '❌ Błąd podczas generowania podglądu.', flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -2539,14 +2540,14 @@ async function handleBoardScheduledSend(interaction, sharedState) {
     const scheduled = przypomnieniaMenedzer.getScheduledWithTemplate(scheduledId);
 
     if (!scheduled || !scheduled.template) {
-        await interaction.followUp({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', ephemeral: true });
+        await interaction.followUp({ content: '❌ Nie znaleziono przypomnienia lub szablonu.', flags: MessageFlags.Ephemeral });
         return;
     }
 
     try {
         const channel = await client.channels.fetch(scheduled.channelId);
         if (!channel) {
-            await interaction.followUp({ content: '❌ Nie znaleziono kanału docelowego.', ephemeral: true });
+            await interaction.followUp({ content: '❌ Nie znaleziono kanału docelowego.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -2579,7 +2580,7 @@ async function handleBoardScheduledSend(interaction, sharedState) {
         logger.info(`Testowe wysłanie przypomnienia ${scheduledId} przez ${interaction.user.username}`);
     } catch (error) {
         logger.error('Error in handleBoardScheduledSend:', error);
-        await interaction.followUp({ content: '❌ Błąd podczas wysyłania przypomnienia.', ephemeral: true });
+        await interaction.followUp({ content: '❌ Błąd podczas wysyłania przypomnienia.', flags: MessageFlags.Ephemeral });
     }
 }
 
@@ -2592,7 +2593,7 @@ async function handleBoardScheduledEdit(interaction, sharedState) {
     if (!scheduled) {
         await interaction.reply({
             content: '❌ Nie znaleziono zaplanowanego przypomnienia.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2648,7 +2649,7 @@ async function handleBoardScheduledDelete(interaction, sharedState) {
     await interaction.reply({
         content: '⚠️ **Czy na pewno chcesz usunąć to zaplanowane przypomnienie?**',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -2763,7 +2764,7 @@ async function handlePutList(interaction, sharedState) {
     await interaction.reply({
         content: '📋 **Select channel** where the events list should be displayed:',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 
     logger.info(`Ustaw Listę initiated by ${interaction.user.username}`);
@@ -2818,7 +2819,7 @@ async function handleDeleteEvent(interaction, sharedState) {
     if (events.length === 0) {
         await interaction.reply({
             content: '❌ Brak eventów do usunięcia.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2840,7 +2841,7 @@ async function handleDeleteEvent(interaction, sharedState) {
     await interaction.reply({
         content: '🗑️ **Select event to delete:**',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -2852,7 +2853,7 @@ async function handleEditEvent(interaction, sharedState) {
     if (events.length === 0) {
         await interaction.reply({
             content: '❌ Brak eventów do edycji.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2874,7 +2875,7 @@ async function handleEditEvent(interaction, sharedState) {
     await interaction.reply({
         content: '✏️ **Select event to edit:**',
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 

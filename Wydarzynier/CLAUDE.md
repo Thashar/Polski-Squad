@@ -152,6 +152,12 @@ ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywa
 - **Strażnik martwego tokenu** - `acknowledgeInteraction` liczy `interactionAge()` (czas od **utworzenia** interakcji, nie od jej odebrania) i przy wieku > 2500 ms **nie wysyła requestu w ogóle**, tylko loguje wiek i ping gatewaya. Przy wieku > 1000 ms potwierdza normalnie, ale zostawia `warn` - to wczesny sygnał zacinającego się połączenia
 - **Usuwanie starego lobby przy `/party` idzie PO potwierdzeniu** - kasowanie wątku i ogłoszenia to kilka requestów, które same przekraczały limit 3 s, zanim komenda zdążyła odpowiedzieć
 
+**Odpowiedzi ephemeralne - flaga zamiast pola:**
+- Używaj `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` - to drugie jest w discord.js v14 przestarzałe (ostrzeżenie przy starcie) i przestanie działać w v15, zamieniając prywatne odpowiedzi `/correct` i `/rewards` w publiczne
+- Dotyczy wyłącznie **pierwszej odpowiedzi**: `reply()`, `deferReply()`, `followUp()`. `update()` i `editReply()` flagi nie przyjmują - widoczność jest ustalana w momencie potwierdzenia interakcji i później się jej nie zmienia
+- W `acknowledgeInteraction` steruje tym opcja `ephemeral` (domyślnie `true`); przy `false` `deferReply()` dostaje pusty obiekt, a nie `flags: 0`
+- `MessageFlags` musi być w imporcie z `discord.js` - obecnie w `index.js`, `handlers/interactionHandlers.js`, `handlers/przypominienHandlers.js`
+
 **Odporność na zanik sieci (KRYTYCZNE):**
 - **Objaw:** `getaddrinfo EAI_AGAIN discord.com` w logach - DNS kontenera nie odpowiada, więc request nie wychodzi. **To NIE jest limit zapytań** (ten zwraca `429` z `retry_after`); przyczyna jest infrastrukturalna, po stronie hostingu
 - **Zlepki interakcji = zacinający się gateway, NIE limit zapytań.** Gdy w logu kilka zdarzeń ma identyczną sekundę, a wcześniej była cisza, znaczy to, że połączenie WebSocket zamarło i wypuściło zbuforowane zdarzenia naraz - docierają wtedy z tokenem bliskim wygaśnięcia
