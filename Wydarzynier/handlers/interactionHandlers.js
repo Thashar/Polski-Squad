@@ -27,6 +27,26 @@ class InteractionHandler {
      * @param {Client} client - Klient Discord
      */
     async registerSlashCommands(client) {
+        // /correct - domyślnie tylko administratorzy. Gdy w `WYDARZYNIER_CORRECT_ROLES` są role,
+        // komenda musi być widoczna dla wszystkich (Discord ukryłby ją przed nie-adminami),
+        // a uprawnienia sprawdza `canCorrectRewards` przy wywołaniu i przy każdym kliknięciu
+        const correctRoles = this.config.roles.correctRewards || [];
+
+        const correctCommand = new SlashCommandBuilder()
+            .setName('correct')
+            .setDescription(correctRoles.length > 0
+                ? 'Panel korekty nagród gracza z party - wpływa na ranking /stats (administratorzy i uprawnione role)'
+                : 'Panel korekty nagród gracza z party - wpływa na ranking /stats (tylko administratorzy)')
+            .addUserOption(option =>
+                option.setName('użytkownik')
+                    .setDescription('Użytkownik, któremu korygujemy nagrody')
+                    .setRequired(true)
+            );
+
+        if (correctRoles.length === 0) {
+            correctCommand.setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+        }
+
         const commands = [
             new SlashCommandBuilder()
                 .setName('party')
@@ -86,15 +106,7 @@ class InteractionHandler {
                 .setName('rewards')
                 .setDescription('Twoje nagrody - z party i dodane samodzielnie, z możliwością korekty własnych'),
 
-            new SlashCommandBuilder()
-                .setName('correct')
-                .setDescription('Panel korekty nagród gracza z party - wpływa na ranking /stats (tylko administratorzy)')
-                .addUserOption(option =>
-                    option.setName('użytkownik')
-                        .setDescription('Użytkownik, któremu korygujemy nagrody')
-                        .setRequired(true)
-                )
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+            correctCommand
         ];
 
         const rest = new REST().setToken(this.config.token);
@@ -1405,6 +1417,27 @@ class InteractionHandler {
     }
 
     /**
+     * Sprawdza, czy użytkownik może korygować nagrody (`/correct`) - administrator
+     * albo posiadacz roli z `WYDARZYNIER_CORRECT_ROLES`
+     * @param {Interaction} interaction - Interakcja komendy lub przycisku
+     * @returns {boolean} - Czy ma uprawnienia
+     */
+    canCorrectRewards(interaction) {
+        if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
+
+        const allowedRoles = this.config.roles.correctRewards || [];
+        if (allowedRoles.length === 0) return false;
+
+        // GuildMember ma kolekcję ról, surowy obiekt z API - zwykłą tablicę ID
+        const memberRoles = interaction.member?.roles;
+        const hasRole = roleId => Array.isArray(memberRoles)
+            ? memberRoles.includes(roleId)
+            : Boolean(memberRoles?.cache?.has(roleId));
+
+        return allowedRoles.some(hasRole);
+    }
+
+    /**
      * Buduje przyciski panelu /rewards dla jednego znaku.
      * Działają wyłącznie na nagrodach dodanych samodzielnie przez właściciela panelu.
      * @param {number} delta - 1 (plusy) albo -1 (minusy)
@@ -1512,9 +1545,9 @@ class InteractionHandler {
      */
     async handleCorrectCommand(interaction, sharedState) {
         try {
-            if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+            if (!this.canCorrectRewards(interaction)) {
                 await interaction.reply({
-                    content: '❌ Tylko administratorzy mogą korygować nagrody.',
+                    content: '❌ Nie masz uprawnień do korygowania nagród.',
                     ephemeral: true
                 });
                 return;
@@ -1600,9 +1633,9 @@ class InteractionHandler {
      */
     async handleCorrectionButton(interaction, sharedState) {
         try {
-            if (!interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+            if (!this.canCorrectRewards(interaction)) {
                 await interaction.reply({
-                    content: '❌ Tylko administratorzy mogą korygować nagrody.',
+                    content: '❌ Nie masz uprawnień do korygowania nagród.',
                     ephemeral: true
                 });
                 return;

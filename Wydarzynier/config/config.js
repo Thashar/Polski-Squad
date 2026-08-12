@@ -47,7 +47,13 @@ module.exports = {
 
     // Role
     roles: {
-        partyNotifications: process.env.WYDARZYNIER_PARTY_NOTIFICATIONS_ROLE || '1272573347946954833'
+        partyNotifications: process.env.WYDARZYNIER_PARTY_NOTIFICATIONS_ROLE || '1272573347946954833',
+
+        // Role, które oprócz administratorów mogą korygować nagrody komendą /correct
+        // (lista ID rozdzielona przecinkami)
+        correctRewards: process.env.WYDARZYNIER_CORRECT_ROLES
+            ? process.env.WYDARZYNIER_CORRECT_ROLES.split(',').map(id => id.trim()).filter(Boolean)
+            : []
     },
 
     // Emoji

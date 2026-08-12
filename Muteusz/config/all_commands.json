@@ -546,9 +546,9 @@
         },
         {
           "name": "/correct",
-          "description": "Panel korekty nagród gracza z party - embed ze stanem i przyciski +1/-1 dla każdej nagrody, wpływa na ranking /stats",
+          "description": "Panel korekty nagród gracza z party - embed ze stanem i przyciski +1/-1 dla każdej nagrody, wpływa na ranking /stats. Dostęp: administratorzy oraz role z WYDARZYNIER_CORRECT_ROLES",
           "usage": "/correct użytkownik:@user → przyciski +1 (zielone) i -1 (czerwone)",
-          "requiredPermission": "administrator"
+          "requiredPermission": "special_role"
         },
         {
           "name": "/rewards",

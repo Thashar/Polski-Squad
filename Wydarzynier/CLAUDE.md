@@ -54,7 +54,9 @@
   - **Przyciski** (`buildOwnRewardsButtons` → wspólny `buildSignedRewardRows`): **dwie wiadomości** - pierwsza to embed + zielone `+1`, druga to same czerwone `−1` bez tekstu (customId `myrw_<klucz>_1` oraz `myrw_<klucz>_-1_<idPanelu>`, bez ID użytkownika - zawsze konto klikającego)
   - Zmieniają **wyłącznie licznik `manualRewards`** (dodane samodzielnie). Nagród z party ta komenda nie rusza, więc nie da się nią podbić rankingu `/stats`. Licznik nie schodzi poniżej 0
   - Zastąpiła wcześniejsze osobne komendy `/add_reward` i `/remove_reward` (usunięte)
-- **`/correct`:** Tylko administrator, **interaktywny panel**, wszystko ephemeral. Jedyny parametr: `użytkownik`. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party`; nagrodami z `/add_reward` gracze zarządzają sami)
+- **`/correct`:** **interaktywny panel**, wszystko ephemeral. Jedyny parametr: `użytkownik`. Działa **wyłącznie na nagrodach z party**, czyli wpływa na ranking `/stats` (źródło na sztywno `party`; nagrodami dodanymi samodzielnie gracze zarządzają sami przez `/rewards`)
+  - **Dostęp:** administratorzy **oraz role z `WYDARZYNIER_CORRECT_ROLES`** (lista ID po przecinku). Sprawdza `canCorrectRewards(interaction)` - przy wywołaniu komendy i ponownie przy **każdym** kliknięciu przycisku korekty
+  - **Widoczność komendy:** gdy `WYDARZYNIER_CORRECT_ROLES` jest puste, komenda rejestruje się z `setDefaultMemberPermissions(Administrator)` (widzą ją tylko admini). Gdy role są ustawione, rejestruje się **bez** tego ograniczenia (inaczej Discord ukryłby ją przed nie-adminami), a dostępu pilnuje sprawdzenie w kodzie - osoby bez uprawnień dostają `❌ Nie masz uprawnień do korygowania nagród.`
   - **Embed** (`buildCorrectionEmbed`): stan **tylko posiadanych** nagród gracza (zerowe pomijane, przy pustym koncie komunikat zastępczy), suma z party, pole „Ostatnia zmiana" po każdym kliknięciu
   - **Przyciski** (`buildCorrectionButtons` → wspólny `buildSignedRewardRows`): **dwie wiadomości** - pierwsza to embed + zielone `+1`, druga to same czerwone `−1` bez tekstu (customId `corr_<idGracza>_<klucz>_1` oraz `corr_<idGracza>_<klucz>_-1_<idPanelu>`)
   - **Układ dwóch wiadomości** (`buildSignedRewardRows`, `sendMinusPanelMessage`): każdy znak ma własną wiadomość, więc limit 5 rzędów Discorda liczy się osobno dla plusów i minusów. **Mieści się 25 nagród** zamiast 12 przy wspólnej wiadomości; przy większej liczbie `logger.warn` i obcięcie do 5 rzędów
@@ -113,6 +115,7 @@ WYDARZYNIER_NOTIFICATIONS_BOARD_CHANNEL=channel_id  # Kanał z panelem kontrolny
 # Opcjonalne - z fallbackiem do wartości produkcyjnych
 WYDARZYNIER_PARTY_CHANNEL=channel_id               # Kanał /party
 WYDARZYNIER_PARTY_NOTIFICATIONS_ROLE=role_id       # Rola powiadomień o party
+WYDARZYNIER_CORRECT_ROLES=role_id1,role_id2        # Role, które oprócz adminów mogą używać /correct
 ROBOT3_FORWARD_CHANNEL=channel_id                  # Kanał forward dla Robot3
 ROBOT3_MENTION_ROLE=role_id                        # Rola do pingu (@) dla Robot3
 ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywacji Robot3
