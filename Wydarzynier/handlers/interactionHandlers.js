@@ -1266,8 +1266,9 @@ class InteractionHandler {
                 if (manual) lines.push(`> Zdobyte na randomach:  ${manual}`);
             }
 
-            // Suma z party - to ona ustawia miejsce w rankingu
-            lines.push(`> Suma: **${entry.total}**`);
+            // Suma na serwerze (licznik z party) ustawia miejsce w rankingu,
+            // suma z randomami dolicza jeszcze nagrody dopisane samodzielnie
+            lines.push(`> Suma na serwerze: **${entry.total}** | Suma z randomami: **${entry.total + entry.manualTotal}**`);
 
             return lines.join('\n');
         };
