@@ -80,6 +80,11 @@
 **Funkcjonalność Przypomnień:**
 - **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, ikoną i obrazem
   - **Opis embed jest opcjonalny** - pusty opis jest zamieniany na zero-width space (`safeEmbedDescription` w `przypominienHandlers.js`, analogiczny guard w `harmonogram.js`), bo `EmbedBuilder.setDescription` wymaga 1-4096 znaków i pusty string rzucał błąd walidacji przy podglądzie/wysyłce
+  - **Nazwa szablonu jest opcjonalna, ale nigdy nie bywa pusta** - pole `Nazwa szablonu` w modalu to `setRequired(false)`, a pusta nazwa łamała walidację select menu (`addOptions` → `Received one or more errors`, bo Discord wymaga etykiety 1-100 znaków). Pusta nazwa jest zamieniana na `Szablon <id>`:
+    - `sanitizeTemplateName()` w `przypomnieniaMenedzer.js` - przy `createTemplate` i `updateTemplate`
+    - Migracja przy starcie w `loadData()` - naprawia stare szablony bez nazwy zapisane w `przypomnienia.json`
+    - `safeSelectLabel()` w `przypominienHandlers.js` - zabezpieczenie przy budowaniu opcji select menu (szablony, zaplanowane przypomnienia, eventy); dodatkowo opis opcji jest przycinany do 100 znaków, a `value` rzutowane na string
+  - **Analogiczny guard dla eventów** - `sanitizeEventName()` w `eventMenedzer.js` (`createEvent`, `updateEvent` + migracja w `loadData()`) zamienia pustą nazwę na `Event <id>`
 - **Zaplanowane:** Ustawianie przypomień na podstawie szablonów z:
   - Pierwszym wyzwoleniem (data + czas)
   - Interwałem powtarzania (1s, 1m, 1h, 1d do max 90d, lub "ee" dla specjalnego wzorca)
@@ -91,6 +96,7 @@
   - Przyciski: Wstrzymaj/Wznów, Edytuj, Usuń
   - Auto-update co minutę
   - Panel kontrolny na dole z przyciskami zarządzania
+- **Przypomnienia jednorazowe NIE kasują szablonu** - po wyzwoleniu (lub wygaśnięciu wstrzymanego/wznowionego) usuwany jest tylko wpis `scheduled` i embed z tablicy, a szablon zostaje do ponownego użycia (`harmonogram.js` → `checkScheduled`, `przypomnieniaMenedzer.js` → `resumeScheduled`). Szablon kasuje wyłącznie ręczne potwierdzenie usunięcia (`handleConfirmDeleteTemplate`)
 - **Harmonogram:** Sprawdzanie co 30s i auto-wysyłanie przypomnień + czyszczenie starych wiadomości typu 1 (po 23h 50min)
 - **Strefa Czasowa:** Hardcoded `Europe/Warsaw` (brak możliwości zmiany przez UI)
 
