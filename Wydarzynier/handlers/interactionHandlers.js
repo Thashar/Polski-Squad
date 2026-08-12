@@ -1585,8 +1585,17 @@ class InteractionHandler {
             const delta = rawDelta === '-1' ? -1 : 1;
             const displayName = interaction.member?.displayName || interaction.user.username;
 
-            // Minusy siedzą w wiadomości bez embeda - potwierdzamy klik od razu, stan odświeżamy w pierwszej
-            if (delta < 0) await interaction.deferUpdate();
+            // Potwierdzamy klik ZANIM zapiszemy nagrodę - to samo co w panelu /correct: przy odpowiedzi
+            // po 3 s token jest już martwy (10062), a nagroda zdążyła się doliczyć bez informacji zwrotnej
+            try {
+                await interaction.deferUpdate();
+            } catch (deferError) {
+                if (deferError.code === 10062) {
+                    logger.warn(`⚠️ Interakcja własnej korekty wygasła przed potwierdzeniem - nagroda NIE została zmieniona (${displayName})`);
+                    return;
+                }
+                throw deferError;
+            }
 
             // Zawsze własne konto i zawsze licznik spoza rankingu
             const result = await sharedState.nagrodyService.correctReward(
@@ -1609,13 +1618,17 @@ class InteractionHandler {
                 lastChange += '\n⚠️ Licznik nie może zejść poniżej 0 - brak zmiany.';
             }
 
+            // Log PRZED odświeżeniem panelu - zmiana jest już zapisana
+            logger.info(`📝 ${displayName} skorygował własną nagrodę ${reward.name}: ${previous} → ${current}`);
+
             const payload = {
                 embeds: [this.buildOwnRewardsEmbed(interaction.user.id, displayName, sharedState, lastChange)],
                 components: this.buildOwnRewardsButtons(1)
             };
 
             if (delta > 0) {
-                await interaction.update(payload);
+                // Po deferUpdate edytujemy wiadomość z przyciskiem przez editReply - `update()` już nie zadziała
+                await interaction.editReply(payload);
             } else if (!await this.refreshRewardPanel(panelId, payload)) {
                 // Panel wygasł albo bot się zrestartował - pokazujemy przynajmniej wynik zmiany
                 await this.respondEphemeral(
@@ -1623,8 +1636,6 @@ class InteractionHandler {
                     `${lastChange}\n\n💡 Panel jest już nieaktualny - wpisz \`/rewards\`, aby zobaczyć pełny stan.`
                 );
             }
-
-            logger.info(`📝 ${displayName} skorygował własną nagrodę ${reward.name}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty własnych nagród:', error);
@@ -1739,8 +1750,19 @@ class InteractionHandler {
             const [, targetUserId, rewardKey, rawDelta, panelId] = interaction.customId.split('_');
             const delta = rawDelta === '-1' ? -1 : 1;
 
-            // Minusy siedzą w wiadomości bez embeda - potwierdzamy klik od razu, stan odświeżamy w pierwszej
-            if (delta < 0) await interaction.deferUpdate();
+            // Potwierdzamy klik ZANIM cokolwiek policzymy - Discord daje na pierwszą odpowiedź 3 s,
+            // a niżej idzie fetch membera (request do API) i zapis nagrody na dysk. Bez tego przy
+            // wolniejszym fetchu `update()` trafiało w martwy token (10062) JUŻ PO doliczeniu nagrody:
+            // admin widział "interakcja nie powiodła się", klikał ponownie i licznik rósł dwa razy.
+            try {
+                await interaction.deferUpdate();
+            } catch (deferError) {
+                if (deferError.code === 10062) {
+                    logger.warn(`⚠️ Interakcja korekty wygasła przed potwierdzeniem - nagroda NIE została zmieniona (${interaction.user.username})`);
+                    return;
+                }
+                throw deferError;
+            }
 
             const member = await interaction.guild.members.fetch(targetUserId).catch(() => null);
             const displayName = member?.displayName
@@ -1768,13 +1790,18 @@ class InteractionHandler {
                 lastChange += '\n⚠️ Licznik nie może zejść poniżej 0 - brak zmiany.';
             }
 
+            // Log PRZED odświeżeniem panelu - zmiana jest już zapisana, więc musi zostać w logu
+            // nawet gdyby samo odrysowanie wiadomości padło
+            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę z party ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
+
             const payload = {
                 embeds: [this.buildCorrectionEmbed(targetUserId, displayName, sharedState, lastChange)],
                 components: this.buildCorrectionButtons(targetUserId, 1)
             };
 
             if (delta > 0) {
-                await interaction.update(payload);
+                // Po deferUpdate edytujemy wiadomość z przyciskiem przez editReply - `update()` już nie zadziała
+                await interaction.editReply(payload);
             } else if (!await this.refreshRewardPanel(panelId, payload)) {
                 // Panel wygasł albo bot się zrestartował - pokazujemy przynajmniej wynik zmiany
                 await this.respondEphemeral(
@@ -1782,8 +1809,6 @@ class InteractionHandler {
                     `${lastChange}\n\n💡 Panel jest już nieaktualny - wpisz \`/correct\` ponownie, aby zobaczyć pełny stan.`
                 );
             }
-
-            logger.info(`🛠️ ${interaction.user.username} skorygował nagrodę z party ${reward.name} gracza ${displayName}: ${previous} → ${current}`);
 
         } catch (error) {
             logger.error('❌ Błąd podczas korekty nagród:', error);
