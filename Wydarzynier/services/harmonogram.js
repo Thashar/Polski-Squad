@@ -57,12 +57,11 @@ class Harmonogram {
                 const isOneTime = !sch.interval || sch.interval === null || sch.isOneTime;
 
                 if (isOneTime) {
-                    // Jednorazowe - usuń embed z tablicy, usuń scheduled i szablon, odśwież panel
+                    // Jednorazowe - usuń embed z tablicy i scheduled, ale ZOSTAW szablon do ponownego użycia
                     await this.tablicaMenedzer.deleteEmbed(sch);
                     await this.przypomnieniaMenedzer.deleteScheduled(sch.id);
-                    await this.przypomnieniaMenedzer.deleteTemplate(sch.templateId);
                     await this.tablicaMenedzer.ensureControlPanel();
-                    this.logger.info(`Wyzwolono jednorazowe przypomnienie: ${sch.id} - usunięto scheduled, szablon i embed`);
+                    this.logger.info(`Wyzwolono jednorazowe przypomnienie: ${sch.id} - usunięto scheduled i embed (szablon zachowany)`);
                 } else {
                     // Cykliczne - zaktualizuj następne wyzwolenie i embed tablicy
                     await this.przypomnieniaMenedzer.updateNextTrigger(sch.id);
@@ -82,9 +81,8 @@ class Harmonogram {
             if (now >= nextTriggerTime) {
                 await this.tablicaMenedzer.deleteEmbed(sch);
                 await this.przypomnieniaMenedzer.deleteScheduled(sch.id);
-                await this.przypomnieniaMenedzer.deleteTemplate(sch.templateId);
                 await this.tablicaMenedzer.ensureControlPanel();
-                this.logger.info(`Jednorazowe wstrzymane przypomnienie ${sch.id} wygasło - usunięto`);
+                this.logger.info(`Jednorazowe wstrzymane przypomnienie ${sch.id} wygasło - usunięto (szablon zachowany)`);
             }
         }
     }

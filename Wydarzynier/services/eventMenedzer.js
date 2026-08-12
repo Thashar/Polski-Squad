@@ -48,6 +48,20 @@ class EventMenedzer {
         try {
             const fileContent = await fs.readFile(this.dataPath, 'utf8');
             this.data = JSON.parse(fileContent);
+
+            // Migracja danych - uzupełnij puste nazwy eventów (łamały walidację select menu)
+            let fixedNames = 0;
+            for (const event of (this.data.events || [])) {
+                const safeName = this.sanitizeEventName(event.name, event.id);
+                if (event.name !== safeName) {
+                    event.name = safeName;
+                    fixedNames++;
+                }
+            }
+            if (fixedNames > 0) {
+                await this.saveData();
+                this.logger.info(`Migracja danych: uzupełniono nazwy ${fixedNames} eventów bez nazwy`);
+            }
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje, utwórz domyślną strukturę
@@ -87,6 +101,12 @@ class EventMenedzer {
 
     // ==================== EVENTY ====================
 
+    // Zwraca nazwę eventu bezpieczną dla select menu (Discord wymaga 1-100 znaków)
+    sanitizeEventName(name, eventId) {
+        const trimmed = typeof name === 'string' ? name.trim() : '';
+        return (trimmed !== '' ? trimmed : `Event ${eventId}`).substring(0, 100);
+    }
+
     // Utwórz event
     async createEvent(creatorId, name, firstTrigger, interval) {
         const id = this.generateId();
@@ -117,7 +137,8 @@ class EventMenedzer {
 
         const event = {
             id: `evt_${id}`,
-            name,
+            // Nazwa jest opcjonalna w modalu - pusta nazwa łamała walidację select menu
+            name: this.sanitizeEventName(name, `evt_${id}`),
             creator: creatorId,
             createdAt: new Date().toISOString(),
             firstTrigger: new Date(firstTrigger).toISOString(),
@@ -217,10 +238,12 @@ class EventMenedzer {
     async updateEvent(id, updates) {
         const index = this.data.events.findIndex(e => e.id === id);
         if (index !== -1) {
-            this.data.events[index] = {
+            const merged = {
                 ...this.data.events[index],
                 ...updates
             };
+            merged.name = this.sanitizeEventName(merged.name, id);
+            this.data.events[index] = merged;
             await this.saveData();
             this.logger.info(`Zaktualizowano event: ${id}`);
             return true;

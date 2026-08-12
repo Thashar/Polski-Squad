@@ -73,6 +73,20 @@ class PrzypomnieniaMenedzer {
                 await this.saveData();
                 this.logger.info('Migracja danych: dodano pole messagesToDelete');
             }
+
+            // Migracja danych - uzupełnij puste nazwy szablonów (łamały walidację select menu)
+            let fixedNames = 0;
+            for (const template of (this.data.templates || [])) {
+                const safeName = this.sanitizeTemplateName(template.name, template.id);
+                if (template.name !== safeName) {
+                    template.name = safeName;
+                    fixedNames++;
+                }
+            }
+            if (fixedNames > 0) {
+                await this.saveData();
+                this.logger.info(`Migracja danych: uzupełniono nazwy ${fixedNames} szablonów bez nazwy`);
+            }
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje, utwórz domyślną strukturę
@@ -110,12 +124,19 @@ class PrzypomnieniaMenedzer {
 
     // ==================== SZABLONY ====================
 
+    // Zwraca nazwę szablonu bezpieczną dla select menu (Discord wymaga 1-100 znaków)
+    sanitizeTemplateName(name, templateId) {
+        const trimmed = typeof name === 'string' ? name.trim() : '';
+        return (trimmed !== '' ? trimmed : `Szablon ${templateId}`).substring(0, 100);
+    }
+
     // Utwórz szablon (Tekst lub Embed)
     async createTemplate(creatorId, name, type, content) {
         const id = this.generateId();
         const template = {
             id: `tpl_${id}`,
-            name,
+            // Nazwa jest opcjonalna w modalu - pusta nazwa łamała walidację select menu
+            name: this.sanitizeTemplateName(name, `tpl_${id}`),
             type, // 'text' lub 'embed'
             creator: creatorId,
             createdAt: new Date().toISOString(),
@@ -148,10 +169,12 @@ class PrzypomnieniaMenedzer {
     async updateTemplate(id, updates) {
         const index = this.data.templates.findIndex(t => t.id === id);
         if (index !== -1) {
-            this.data.templates[index] = {
+            const merged = {
                 ...this.data.templates[index],
                 ...updates
             };
+            merged.name = this.sanitizeTemplateName(merged.name, id);
+            this.data.templates[index] = merged;
             await this.saveData();
             this.logger.info(`Zaktualizowano szablon: ${id}`);
             return true;
@@ -381,8 +404,7 @@ class PrzypomnieniaMenedzer {
         // nextTrigger minął podczas wstrzymania
         if (scheduled.isOneTime || !scheduled.interval) {
             await this.deleteScheduled(id);
-            await this.deleteTemplate(scheduled.templateId);
-            this.logger.info(`Jednorazowe przypomnienie ${id} wygasło podczas wstrzymania - usunięto`);
+            this.logger.info(`Jednorazowe przypomnienie ${id} wygasło podczas wstrzymania - usunięto (szablon zachowany)`);
             return { deleted: true };
         }
 

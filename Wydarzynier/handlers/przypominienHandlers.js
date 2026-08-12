@@ -280,9 +280,9 @@ async function showTemplateSelectPage(interaction, sharedState, page, totalPages
     const pageTemplates = templates.slice(start, end);
 
     const options = pageTemplates.map(t => ({
-        label: t.name.substring(0, 100),
-        description: `${t.type === 'text' ? '📝 Text' : '📋 Embed'} - Utworzono ${new Date(t.createdAt).toLocaleDateString('pl-PL')}`,
-        value: t.id
+        label: safeSelectLabel(t.name, `Szablon ${t.id}`),
+        description: `${t.type === 'text' ? '📝 Text' : '📋 Embed'} - Utworzono ${new Date(t.createdAt).toLocaleDateString('pl-PL')}`.substring(0, 100),
+        value: String(t.id)
     }));
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -1505,6 +1505,15 @@ function safeEmbedDescription(description) {
     return (description && description.trim() !== '') ? description : '​';
 }
 
+// Zwraca bezpieczną etykietę opcji select menu - Discord wymaga 1-100 znaków,
+// a nazwy szablonów/eventów są opcjonalne w modalach, więc pusta nazwa
+// wywoływała błąd walidacji przy addOptions() ("Received one or more errors")
+function safeSelectLabel(name, fallback = 'Bez nazwy') {
+    const trimmed = typeof name === 'string' ? name.trim() : '';
+    const label = trimmed !== '' ? trimmed : fallback;
+    return label.substring(0, 100);
+}
+
 async function showTemplatePreview(interaction, data, sessionId) {
     let previewContent = '**Template Preview:**\n\n';
     previewContent += `📝 **Name:** ${data.name}\n`;
@@ -2032,12 +2041,12 @@ async function showScheduledSelectPage(interaction, sharedState, page, list, mod
 
     const options = pageItems.map(s => {
         const template = przypomnieniaMenedzer.getTemplate(s.templateId);
-        const templateName = template ? template.name : 'Nieznany';
+        const templateName = safeSelectLabel(template?.name, template ? `Szablon ${template.id}` : 'Nieznany');
         const channel = interaction.guild?.channels.cache.get(s.channelId);
         const channelName = channel ? channel.name : s.channelId;
         return {
-            label: `${templateName} — #${channelName}`.substring(0, 100),
-            value: s.id
+            label: safeSelectLabel(`${templateName} — #${channelName}`, `Przypomnienie ${s.id}`),
+            value: String(s.id)
         };
     });
 
@@ -2816,9 +2825,9 @@ async function handleDeleteEvent(interaction, sharedState) {
 
     // Show select menu with events
     const options = events.map(e => ({
-        label: e.name.substring(0, 100),
-        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`,
-        value: e.id
+        label: safeSelectLabel(e.name, `Event ${e.id}`),
+        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`.substring(0, 100),
+        value: String(e.id)
     }));
 
     const selectMenu = new StringSelectMenuBuilder()
@@ -2850,9 +2859,9 @@ async function handleEditEvent(interaction, sharedState) {
 
     // Show select menu with events
     const options = events.map(e => ({
-        label: e.name.substring(0, 100),
-        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`,
-        value: e.id
+        label: safeSelectLabel(e.name, `Event ${e.id}`),
+        description: `Następny: ${new Date(e.nextTrigger).toLocaleDateString('pl-PL')}`.substring(0, 100),
+        value: String(e.id)
     }));
 
     const selectMenu = new StringSelectMenuBuilder()
