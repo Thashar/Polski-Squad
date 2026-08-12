@@ -51,8 +51,10 @@ function isNetworkError(error) {
 // kilkunastu sekundach ciszy i token bywa martwy, zanim handler w ogóle wystartuje.
 const INTERACTION_RESPONSE_WINDOW = 3000;
 
-// Zapas na round-trip do API - przy mniejszym budżecie odpowiedź i tak nie zdąży wrócić
-const INTERACTION_SAFETY_MARGIN = 500;
+// Zapas na round-trip do API. Trzymany nisko celowo: potwierdzenie i tak idzie PRZED
+// jakąkolwiek zmianą danych, więc nieudana próba nic nie kosztuje, a zbyt szeroki margines
+// odrzucał interakcje, które jeszcze mieściły się w limicie (odmowa przy 2682 ms z 3000 ms).
+const INTERACTION_SAFETY_MARGIN = 250;
 
 /**
  * Ile milisekund minęło od utworzenia interakcji przez Discorda
