@@ -1256,15 +1256,18 @@ class InteractionHandler {
         // w linii cytatu pod spodem, a gracze rozdzieleni pustą linią
         const buildEntry = (entry, index, withBreakdown) => {
             const position = String(currentPage * perPage + index + 1).padStart(2, '0');
-            const lines = [`\`${position}\`  **${entry.displayName}**  **${entry.total}**`];
+            const lines = [`\`${position}\`  **${entry.displayName}**`];
 
             if (withBreakdown) {
                 const party = this.formatRewardBreakdown(entry.rewards);
                 const manual = this.formatRewardBreakdown(entry.manualRewards);
 
                 if (party) lines.push(`> ${party}`);
-                if (manual) lines.push(`> własne  ${manual}`);
+                if (manual) lines.push(`> Zdobyte na randomach:  ${manual}`);
             }
+
+            // Suma z party - to ona ustawia miejsce w rankingu
+            lines.push(`> Suma: **${entry.total}**`);
 
             return lines.join('\n');
         };

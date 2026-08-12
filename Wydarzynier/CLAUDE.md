@@ -49,7 +49,7 @@
 
 **Komendy nagród:**
 - **`/stats`:** Ephemeral embed z rankingiem (`buildStatsView`), układ wzorowany na rankingu **EndersEcho**
-  - **Wpis gracza** - nagłówek `` `01`  **nick**  **N** `` (numer w inline code, pogrubiony nick, suma nagród z party), pod nim linie cytatu: `> ikony×N` (nagrody z party) i `> własne  ikony×N` (dodane samodzielnie, tylko gdy są). Gracze rozdzieleni **pustą linią**
+  - **Wpis gracza** - nagłówek `` `01`  **nick** `` (numer w inline code + pogrubiony nick, bez liczb), pod nim linie cytatu: `> ikony×N` (nagrody z party), `> Zdobyte na randomach:  ikony×N` (dodane samodzielnie, tylko gdy są) i na końcu `> Suma: **N**` (licznik z party, ten sam, który ustawia miejsce). Gracze rozdzieleni **pustą linią**
   - **Bez systemowych emoji** - żadnych medali, 🎁/📝 ani ozdobnych separatorów; w rankingu pojawiają się wyłącznie emotki nagród, żeby nicki były czytelne
   - **Nagrody dodane samodzielnie są widoczne, ale nie liczą się do rankingu** - sortowanie idzie po liczniku z party (`manualTotal` tylko rozstrzyga remisy). Gracze mający **wyłącznie** nagrody własne też są na liście (z sumą `0`, na końcu)
   - **Stronicowanie:** `config.stats.usersPerPage` = 10; przyciski `Poprzednia` / `Następna` (customId `stats_page_<numer>`, `handleStatsPageButton` → `interaction.update`). Przy jednej stronie przycisków nie ma. Dane są pobierane na nowo przy każdej zmianie strony
