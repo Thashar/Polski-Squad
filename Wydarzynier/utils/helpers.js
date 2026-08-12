@@ -46,6 +46,32 @@ function isNetworkError(error) {
     return NETWORK_ERROR_CODES.has(error?.code) || NETWORK_ERROR_CODES.has(error?.cause?.code);
 }
 
+// Discord liczy 3 s na pierwszą odpowiedź od UTWORZENIA interakcji, nie od jej odebrania
+// przez bota. Gdy połączenie gateway się zacina, zdarzenia przychodzą zlepkami po
+// kilkunastu sekundach ciszy i token bywa martwy, zanim handler w ogóle wystartuje.
+const INTERACTION_RESPONSE_WINDOW = 3000;
+
+// Zapas na round-trip do API - przy mniejszym budżecie odpowiedź i tak nie zdąży wrócić
+const INTERACTION_SAFETY_MARGIN = 500;
+
+/**
+ * Ile milisekund minęło od utworzenia interakcji przez Discorda
+ * @param {Interaction} interaction - Interakcja Discord
+ * @returns {number} - Wiek interakcji w ms
+ */
+function interactionAge(interaction) {
+    return Date.now() - interaction.createdTimestamp;
+}
+
+/**
+ * Czy nie ma już sensu odpowiadać - token wygasł albo wygaśnie w trakcie requestu
+ * @param {Interaction} interaction - Interakcja Discord
+ * @returns {boolean}
+ */
+function isInteractionExpired(interaction) {
+    return interactionAge(interaction) > INTERACTION_RESPONSE_WINDOW - INTERACTION_SAFETY_MARGIN;
+}
+
 /**
  * Wyświetla w wątku odliczanie i czeka, aż dobiegnie końca (wiadomość edytowana co sekundę).
  * Używane przed usunięciem wątku lobby - zarówno przy zamknięciu przez właściciela,
@@ -70,4 +96,6 @@ module.exports = {
     runThreadCountdown,
     isGoneError,
     isNetworkError,
+    interactionAge,
+    isInteractionExpired,
 };

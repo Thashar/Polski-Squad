@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, REST, Routes, PermissionFlagsBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { delay, runThreadCountdown, isGoneError, isNetworkError } = require('../utils/helpers');
+const { delay, runThreadCountdown, isGoneError, isNetworkError, interactionAge, isInteractionExpired } = require('../utils/helpers');
 const { handlePrzypominienInteraction } = require('./przypominienHandlers');
 
 const logger = createBotLogger('Wydarzynier');
@@ -926,18 +926,17 @@ class InteractionHandler {
      */
     async handleRewardNoneButton(interaction, sharedState) {
         try {
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Zamknięcie lobby bez nagrody' })) return;
+
             const lobbyId = interaction.customId.replace('reward_none_', '');
             const lobby = sharedState.lobbyService.getLobby(lobbyId);
 
             if (!lobby) {
-                await interaction.reply({
-                    content: '❌ To lobby zostało już zamknięte.',
-                    ephemeral: true
-                });
+                await this.respondEphemeral(interaction, '❌ To lobby zostało już zamknięte.');
                 return;
             }
 
-            await interaction.update({
+            await interaction.editReply({
                 content: `${this.config.messages.rewardPromptOnClose}\n\n${this.config.messages.rewardNoneAcknowledged(interaction.user.id)}`,
                 components: this.buildClosingRewardButtons(lobbyId, true)
             });
@@ -1002,13 +1001,14 @@ class InteractionHandler {
      */
     async handleRewardPickButton(interaction, sharedState) {
         try {
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Wybór nagrody' })) return;
+
             const rewardKey = interaction.customId.replace('reward_pick_', '');
             const reward = sharedState.nagrodyService.getRewardDefinition(rewardKey);
 
             if (!reward) {
-                await interaction.reply({
-                    content: '❌ Nieznana nagroda.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '❌ Nieznana nagroda.'
                 });
                 return;
             }
@@ -1019,11 +1019,10 @@ class InteractionHandler {
             const claimerId = sharedState.nagrodyService.getPromptClaimer(interaction.message.id);
 
             if (claimerId) {
-                await interaction.reply({
+                await interaction.editReply({
                     content: claimerId === interaction.user.id
                         ? `⚠️ ${this.config.messages.rewardAlreadyClaimed}`
-                        : `⚠️ ${this.config.messages.rewardAlreadyTaken(claimerId)}`,
-                    ephemeral: true
+                        : `⚠️ ${this.config.messages.rewardAlreadyTaken(claimerId)}`
                 });
 
                 const lobby = sharedState.lobbyService.getLobbyByThreadId(interaction.channelId);
@@ -1043,10 +1042,9 @@ class InteractionHandler {
                         .setStyle(ButtonStyle.Danger)
                 );
 
-            await interaction.reply({
+            await interaction.editReply({
                 content: this.config.messages.rewardConfirmation(reward.name, reward.emoji),
-                components: [confirmRow],
-                ephemeral: true
+                components: [confirmRow]
             });
 
         } catch (error) {
@@ -1157,7 +1155,9 @@ class InteractionHandler {
      */
     async handleRewardRejectButton(interaction, sharedState) {
         try {
-            await interaction.update({
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Odrzucenie nagrody' })) return;
+
+            await interaction.editReply({
                 content: this.config.messages.rewardDenied,
                 components: []
             });
@@ -1188,17 +1188,18 @@ class InteractionHandler {
      */
     async handleStatsCommand(interaction, sharedState) {
         try {
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /stats' })) return;
+
             const view = this.buildStatsView(sharedState, 0);
 
             if (!view) {
-                await interaction.reply({
-                    content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.'
                 });
                 return;
             }
 
-            await interaction.reply({ embeds: [view.embed], components: view.components, ephemeral: true });
+            await interaction.editReply({ embeds: [view.embed], components: view.components });
 
         } catch (error) {
             logger.error('❌ Błąd podczas wyświetlania rankingu nagród:', error);
@@ -1213,11 +1214,13 @@ class InteractionHandler {
      */
     async handleStatsPageButton(interaction, sharedState) {
         try {
+            if (!await this.acknowledgeInteraction(interaction, { update: true, label: 'Stronicowanie /stats' })) return;
+
             const page = parseInt(interaction.customId.replace('stats_page_', ''), 10) || 0;
             const view = this.buildStatsView(sharedState, page);
 
             if (!view) {
-                await interaction.update({
+                await interaction.editReply({
                     content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.',
                     embeds: [],
                     components: []
@@ -1225,7 +1228,7 @@ class InteractionHandler {
                 return;
             }
 
-            await interaction.update({ embeds: [view.embed], components: view.components });
+            await interaction.editReply({ embeds: [view.embed], components: view.components });
 
         } catch (error) {
             logger.error('❌ Błąd podczas zmiany strony rankingu:', error);
@@ -1494,20 +1497,36 @@ class InteractionHandler {
      * (request do API Discorda albo zapis pliku). Discord daje 3 s na pierwszą odpowiedź -
      * po tym czasie token jest martwy, a akcja zdążyła się wykonać bez informacji zwrotnej.
      * @param {Interaction} interaction - Interakcja do potwierdzenia
-     * @param {Object} options - `update` = deferUpdate zamiast deferReply, `label` do logów
+     * @param {Object} options - `update` = deferUpdate zamiast deferReply, `ephemeral`, `label` do logów
      * @returns {boolean} - Czy token żyje. `false` = przerwij handler PRZED zmianą danych
      */
-    async acknowledgeInteraction(interaction, { update = false, label = 'Interakcja' } = {}) {
+    async acknowledgeInteraction(interaction, { update = false, ephemeral = true, label = 'Interakcja' } = {}) {
         if (interaction.deferred || interaction.replied) return true;
+
+        // Token wygasa 3 s po UTWORZENIU interakcji, więc mógł umrzeć, zanim zdarzenie
+        // do nas dotarło. Wysyłanie requestu, który na pewno wróci z 10062, tylko dokłada
+        // ruchu w chwili, gdy połączenie i tak kuleje - lepiej od razu zapisać powód w logu.
+        if (isInteractionExpired(interaction)) {
+            logger.warn(`⚠️ ${label}: interakcja dotarła po ${interactionAge(interaction)} ms (limit 3000 ms, ping gateway ${Math.round(interaction.client.ws.ping)} ms) - token martwy, przerywam bez zmiany danych`);
+            return false;
+        }
 
         try {
             if (update) {
                 await interaction.deferUpdate();
             } else {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ ephemeral });
             }
 
             interaction[ACK_MODE] = update ? 'update' : 'reply';
+
+            // Opóźnienia rzędu sekundy oznaczają, że gateway zaczyna się zacinać -
+            // warto to widzieć w logach, zanim zamieni się w serię błędów 10062
+            const age = interactionAge(interaction);
+            if (age > 1000) {
+                logger.warn(`⚠️ ${label}: potwierdzenie zajęło ${age} ms od utworzenia interakcji (ping gateway ${Math.round(interaction.client.ws.ping)} ms)`);
+            }
+
             return true;
 
         } catch (error) {
@@ -1601,13 +1620,14 @@ class InteractionHandler {
      */
     async handleRewardsCommand(interaction, sharedState) {
         try {
+            if (!await this.acknowledgeInteraction(interaction, { label: 'Komenda /rewards' })) return;
+
             const displayName = interaction.member?.displayName || interaction.user.username;
             const panelId = this.createRewardPanelId();
 
-            await interaction.reply({
+            await interaction.editReply({
                 embeds: [this.buildOwnRewardsEmbed(interaction.user.id, displayName, sharedState)],
-                components: this.buildOwnRewardsButtons(1),
-                ephemeral: true
+                components: this.buildOwnRewardsButtons(1)
             });
 
             this.registerRewardPanel(panelId, interaction);
@@ -2522,8 +2542,10 @@ class InteractionHandler {
                         .setStyle(ButtonStyle.Success)
                 );
 
-            // Wyślij wiadomość z przyciskiem
-            await interaction.reply({
+            // Wiadomość jest publiczna, więc potwierdzamy bez `ephemeral`
+            if (!await this.acknowledgeInteraction(interaction, { ephemeral: false, label: 'Komenda /party-access' })) return;
+
+            await interaction.editReply({
                 content: 'Chcesz otrzymywać powiadomienia o tworzonych przez użytkowników **Party?**',
                 components: [notificationButton]
             });
