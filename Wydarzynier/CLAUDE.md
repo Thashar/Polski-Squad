@@ -136,6 +136,13 @@ ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywa
 
 ## Najlepsze Praktyki
 
+**Przyciski - potwierdzanie interakcji (KRYTYCZNE):**
+- **Handler przycisku, który przed odpowiedzią robi COKOLWIEK sięgającego poza pamięć** (request do API Discorda: `members.fetch`, `channels.fetch`, `roles.add/remove`, `thread.send`; albo zapis pliku) **MUSI zacząć od `deferReply()`/`deferUpdate()`.** Discord daje na pierwszą odpowiedź 3 s; po przekroczeniu token jest martwy i `reply`/`update` kończy się `DiscordAPIError[10062] Unknown interaction`
+- **Dlaczego to groźniejsze niż wygląda:** akcja zdążyła się WYKONAĆ (rola nadana, nagroda doliczona, prośba wysłana do wątku), a użytkownik dostaje „interakcja nie powiodła się" i klika ponownie - przy przełącznikach efekt jest wtedy odwrotny do zamierzonego (rola zdjęta), przy licznikach wartość rośnie dwa razy
+- **Wzorzec:** `defer…()` w try/catch (10062 → `logger.warn` + `return` **przed** zmianą danych) → praca → `editReply()` (po `deferReply`) albo `editReply()`/`refreshRewardPanel()` (po `deferUpdate`). W bloku catch po `deferReply` używaj `editReply`, nie `followUp` - inaczej zostaje wiszące „Bot myśli…"
+- **Handlery odpowiadające NATYCHMIAST** (same sprawdzenia w pamięci, jak przyciski wyboru nagrody czy stronicowanie `/stats`) deferu nie potrzebują - tam `reply`/`update` jest pierwszą operacją
+- Zastosowane w: `handleToggleNotifications`, `handleJoinLobbyButton`, `handleCorrectionButton`, `handleOwnRewardButton`, `handleEventNotificationsSubscribe`, `handleExtendLobbyButton`, `handleCloseLobbyButton`
+
 **Lobby Party:**
 - **Logger:** createBotLogger('Wydarzynier')
 - **Lobby:** Max 7 osób (1+6), 15min dyskusja

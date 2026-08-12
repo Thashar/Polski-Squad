@@ -2073,48 +2073,56 @@ class InteractionHandler {
     async handleJoinLobbyButton(interaction, sharedState) {
         const { user, message } = interaction;
 
+        // Potwierdzamy klik od razu - utworzenie prośby to trzy requesty do API (fetch wątku,
+        // fetch membera, wysłanie wiadomości), więc bez tego łatwo wyjść poza 3 s Discorda
+        // i wysłać prośbę do wątku, o której klikający nigdy się nie dowie (10062)
+        try {
+            await interaction.deferReply({ ephemeral: true });
+        } catch (deferError) {
+            if (deferError.code === 10062) {
+                logger.warn(`⚠️ Interakcja dołączania do lobby wygasła przed potwierdzeniem - prośba NIE została wysłana (${user.username})`);
+                return;
+            }
+            throw deferError;
+        }
+
         // Znajdź lobby na podstawie wiadomości
         const lobby = sharedState.lobbyService.getLobbyByAnnouncementId(message.id);
         if (!lobby) {
-            await interaction.reply({
-                content: '❌ Nie znaleziono lobby dla tej wiadomości.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Nie znaleziono lobby dla tej wiadomości.'
             });
             return;
         }
 
         // Sprawdź czy lobby nie jest pełne
         if (lobby.isFull) {
-            await interaction.reply({
-                content: sharedState.config.messages.lobbyFullEphemeral,
-                ephemeral: true
+            await interaction.editReply({
+                content: sharedState.config.messages.lobbyFullEphemeral
             });
             return;
         }
 
         // Sprawdź czy użytkownik to nie właściciel lobby
         if (user.id === lobby.ownerId) {
-            await interaction.reply({
-                content: '❌ Nie możesz dołączyć do własnego lobby.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Nie możesz dołączyć do własnego lobby.'
             });
             return;
         }
 
         // Sprawdź czy użytkownik już jest w lobby
         if (lobby.players.includes(user.id)) {
-            await interaction.reply({
-                content: '❌ Już jesteś w tym lobby.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Już jesteś w tym lobby.'
             });
             return;
         }
 
         // Sprawdź czy użytkownik ma już oczekującą prośbę
         if (sharedState.lobbyService.hasPendingRequest(lobby.id, user.id)) {
-            await interaction.reply({
-                content: '❌ Masz już wysłaną prośbę do tego lobby.',
-                ephemeral: true
+            await interaction.editReply({
+                content: '❌ Masz już wysłaną prośbę do tego lobby.'
             });
             return;
         }
@@ -2122,16 +2130,14 @@ class InteractionHandler {
         // Utwórz prośbę o dołączenie
         try {
             await this.createJoinRequestFromButton(lobby, user, sharedState);
-            await interaction.reply({
-                content: '✅ Wysłano prośbę o dołączenie do lobby!',
-                ephemeral: true
+            await interaction.editReply({
+                content: '✅ Wysłano prośbę o dołączenie do lobby!'
             });
         } catch (error) {
             logger.error('❌ Błąd podczas tworzenia prośby:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas wysyłania prośby.',
-                ephemeral: true
-            });
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas wysyłania prośby.'
+            }).catch(() => {});
         }
     }
 
@@ -2179,36 +2185,48 @@ class InteractionHandler {
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleToggleNotifications(interaction, sharedState) {
+        // Potwierdzamy klik ZANIM ruszymy API - niżej idzie fetch membera i zmiana roli, czyli
+        // dwa requesty, a Discord daje na pierwszą odpowiedź 3 s. Bez tego rola bywała już
+        // nadana, a potwierdzenie leciało w martwy token (10062): użytkownik widział
+        // „interakcja nie powiodła się", klikał ponownie i przełącznik ZDEJMOWAŁ mu rolę
+        try {
+            await interaction.deferReply({ ephemeral: true });
+        } catch (deferError) {
+            if (deferError.code === 10062) {
+                logger.warn(`⚠️ Interakcja powiadomień wygasła przed potwierdzeniem - rola NIE została zmieniona (${interaction.user.username})`);
+                return;
+            }
+            throw deferError;
+        }
+
         try {
             const { user, guild } = interaction;
             const member = await guild.members.fetch(user.id);
             const notificationRoleId = this.config.roles.partyNotifications;
-            
+
             // Sprawdź czy użytkownik ma już rolę
             const hasRole = member.roles.cache.has(notificationRoleId);
-            
+
             if (hasRole) {
                 // Usuń rolę
                 await member.roles.remove(notificationRoleId);
-                await interaction.reply({
-                    content: '🔕 Usunięto rolę powiadomień o party. Nie będziesz już otrzymywał powiadomień.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '🔕 Usunięto rolę powiadomień o party. Nie będziesz już otrzymywał powiadomień.'
                 });
             } else {
                 // Dodaj rolę
                 await member.roles.add(notificationRoleId);
-                await interaction.reply({
-                    content: '🔔 Dodano rolę powiadomień o party! Będziesz otrzymywał powiadomienia o nowych lobby.',
-                    ephemeral: true
+                await interaction.editReply({
+                    content: '🔔 Dodano rolę powiadomień o party! Będziesz otrzymywał powiadomienia o nowych lobby.'
                 });
             }
-            
+
         } catch (error) {
             logger.error('❌ Błąd podczas przełączania powiadomień:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.',
-                ephemeral: true
-            });
+            // editReply, nie followUp - inaczej po deferReply zostałoby wiszące „Bot myśli…"
+            await interaction.editReply({
+                content: '❌ Wystąpił błąd podczas zmiany ustawień powiadomień.'
+            }).catch(() => {});
         }
     }
 
