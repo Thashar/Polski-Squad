@@ -43,12 +43,17 @@
 - **customId:** `reward_pick_<klucz>` (przyciski emoji), `reward_yes_<klucz>_<idKanału>_<idWiadomości>` (Tak), `reward_no` (Nie), `reward_done_<klucz>` (wyszarzone po zgłoszeniu), `reward_none_<idLobby>` („nikt nie otrzymał" w pytaniu zamykającym). Routing przed wyszukiwaniem lobby, więc przyciski działają dla wszystkich uczestników party i przeżywają restart bota
 - **Persistencja:** `data/nagrody.json` (`{ users: { userId: { displayName, rewards, total, manualRewards, manualTotal, lastReward } }, claims: {} }`). Zaplanowane pytanie zapisywane w `lobbies.json` (`rewardPromptAt`, `rewardPromptSent`, `rewardPromptMessageId`, `rewardPromptMessagesSince`) i odtwarzane przy starcie przez `restoreRewardPrompts` w `index.js`
 **Dwa niezależne liczniki nagród (`nagrodyService.js`):**
-- `rewards` / `total` - nagrody z systemu Party (przycisk pod pytaniem w wątku). **Tylko one liczą się do rankingu `/stats`**
-- `manualRewards` / `manualTotal` - nagrody dopisane samodzielnie przez `/add_reward`. **Nigdy nie trafiają do `/stats`** - widoczne wyłącznie w `/rewards` właściciela
+- `rewards` / `total` - nagrody z systemu Party (przycisk pod pytaniem w wątku). **Tylko one budują kolejność w rankingu `/stats`**
+- `manualRewards` / `manualTotal` - nagrody dopisane samodzielnie przez `/rewards`. **Nigdy nie wpływają na kolejność w rankingu `/stats`** - są tam tylko pokazywane (ikona 📝) obok nagród z party
 - `ensureUser()` migruje w locie wpisy sprzed wprowadzenia nagród własnych (dopisuje `manualRewards`/`manualTotal`), `recalculateTotals()` przelicza obie sumy
 
 **Komendy nagród:**
-- **`/stats`:** Ephemeral embed z rankingiem (🥇🥈🥉, potem numeracja) - nick, suma nagród z party i rozbicie `emoji ×N`; na dole pole z sumą wszystkich nagród wg typu. Opis przycinany do limitu 3800 znaków z informacją o ukrytych graczach
+- **`/stats`:** Ephemeral embed z rankingiem (`buildStatsView`), 🥇🥈🥉 na pierwszej stronie, dalej numeracja
+  - **Jedna linia na gracza:** `miejsce **nick** — **N** 🎁 · **M** 📝`, a pod nią rozbicie `emoji×N` w linii `-#` (mały tekst Discorda), z nagrodami własnymi po separatorze `│ 📝 …`. Sekcja 📝 pojawia się tylko, gdy gracz ma takie nagrody
+  - **Nagrody dodane samodzielnie są widoczne, ale nie liczą się do rankingu** - sortowanie idzie po liczniku z party (`manualTotal` tylko rozstrzyga remisy). Gracze mający **wyłącznie** nagrody własne też są na liście (bez medalu, na końcu)
+  - **Stronicowanie:** `config.stats.usersPerPage` = 10; przyciski `◀ Poprzednia` / `Następna ▶` (customId `stats_page_<numer>`, `handleStatsPageButton` → `interaction.update`). Przy jednej stronie przycisków nie ma. Dane są pobierane na nowo przy każdej zmianie strony
+  - **Pola podsumowania:** `🎁 Z party — suma` z rozbiciem wg typu, a gdy ktokolwiek ma nagrody własne, także `📝 Dodane samodzielnie — suma`. Stopka: legenda ikon + `Strona X/Y` + liczba graczy
+  - **Limit opisu:** przy bardzo rozbudowanych kontach (opis > 3800 znaków) rozbicie `-#` jest pomijane i zostają same nagłówki graczy
 - **`/rewards`:** Publiczna (każdy użytkownik), bez parametrów, **interaktywny panel** ephemeral, dotyczy **wyłącznie osoby wywołującej**
   - **Embed** (`buildOwnRewardsEmbed`): trzy kolumny inline z ikoną i liczbą - `🎉 Z party` | `📝 Dodane samodzielnie` | `📦 Razem`, poniżej pole `Podsumowanie` z sumami obu źródeł i łączną liczbą, a po korekcie `Ostatnia zmiana`. **Wypisywane są tylko nagrody z niezerowym stanem** (w którymkolwiek liczniku); przy pustym koncie zamiast kolumn pojawia się zachęta do dopisania nagrody przyciskiem
   - **Przyciski** (`buildOwnRewardsButtons` → wspólny `buildSignedRewardRows`): **dwie wiadomości** - pierwsza to embed + zielone `+1`, druga to same czerwone `−1` bez tekstu (customId `myrw_<klucz>_1` oraz `myrw_<klucz>_-1_<idPanelu>`, bez ID użytkownika - zawsze konto klikającego)

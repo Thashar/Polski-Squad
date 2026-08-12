@@ -236,8 +236,9 @@ class NagrodyService {
     }
 
     /**
-     * Pobiera ranking wszystkich użytkowników posortowany po liczbie nagród
-     * @returns {Array} - Lista { userId, displayName, rewards, total }
+     * Pobiera ranking wszystkich użytkowników. O kolejności decyduje **wyłącznie** licznik z party;
+     * nagrody dodane samodzielnie są dołączone tylko informacyjnie (nie wpływają na miejsce).
+     * @returns {Array} - Lista { userId, displayName, rewards, total, manualRewards, manualTotal }
      */
     getRanking() {
         return Object.entries(this.users)
@@ -245,21 +246,29 @@ class NagrodyService {
                 userId,
                 displayName: stats.displayName || 'Nieznany',
                 rewards: stats.rewards || {},
-                total: stats.total || 0
+                total: stats.total || 0,
+                manualRewards: stats.manualRewards || {},
+                manualTotal: stats.manualTotal || 0
             }))
-            .filter(entry => entry.total > 0)
-            .sort((a, b) => b.total - a.total || a.displayName.localeCompare(b.displayName));
+            .filter(entry => entry.total > 0 || entry.manualTotal > 0)
+            .sort((a, b) =>
+                b.total - a.total
+                || b.manualTotal - a.manualTotal
+                || a.displayName.localeCompare(b.displayName)
+            );
     }
 
     /**
      * Zlicza wszystkie przyznane nagrody wg typu
+     * @param {string} source - 'party' (domyślnie) albo 'manual'
      * @returns {Object} - { rewardKey: count }
      */
-    getTotalsByReward() {
+    getTotalsByReward(source = 'party') {
         const totals = {};
+        const field = source === 'manual' ? 'manualRewards' : 'rewards';
 
         for (const stats of Object.values(this.users)) {
-            for (const [rewardKey, count] of Object.entries(stats.rewards || {})) {
+            for (const [rewardKey, count] of Object.entries(stats[field] || {})) {
                 totals[rewardKey] = (totals[rewardKey] || 0) + count;
             }
         }

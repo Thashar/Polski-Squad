@@ -364,6 +364,12 @@ class InteractionHandler {
             return;
         }
 
+        // Stronicowanie rankingu /stats
+        if (customId.startsWith('stats_page_')) {
+            await this.handleStatsPageButton(interaction, sharedState);
+            return;
+        }
+
         // Korekta własnych nagród w panelu /rewards
         if (customId.startsWith('myrw_')) {
             await this.handleOwnRewardButton(interaction, sharedState);
@@ -1174,9 +1180,9 @@ class InteractionHandler {
      */
     async handleStatsCommand(interaction, sharedState) {
         try {
-            const ranking = sharedState.nagrodyService.getRanking();
+            const view = this.buildStatsView(sharedState, 0);
 
-            if (ranking.length === 0) {
+            if (!view) {
                 await interaction.reply({
                     content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.',
                     ephemeral: true
@@ -1184,59 +1190,144 @@ class InteractionHandler {
                 return;
             }
 
-            const medals = ['🥇', '🥈', '🥉'];
-            let description = '';
-            let hiddenUsers = 0;
-
-            ranking.forEach((entry, index) => {
-                const position = medals[index] || `**${index + 1}.**`;
-                const rewardsText = this.config.rewards
-                    .filter(reward => (entry.rewards[reward.key] || 0) > 0)
-                    .map(reward => `${reward.emoji} ×${entry.rewards[reward.key]}`)
-                    .join(' ');
-
-                const line = `${position} **${entry.displayName}** — ${entry.total} ${this.pluralizeRewards(entry.total)}\n${rewardsText}`;
-
-                // Limit opisu embeda to 4096 znaków
-                if (description.length + line.length + 2 > 3800) {
-                    hiddenUsers++;
-                    return;
-                }
-
-                description += (description ? '\n\n' : '') + line;
-            });
-
-            if (hiddenUsers > 0) {
-                description += `\n\n…oraz **${hiddenUsers}** kolejnych graczy.`;
-            }
-
-            const totals = sharedState.nagrodyService.getTotalsByReward();
-            const totalsText = this.config.rewards
-                .filter(reward => (totals[reward.key] || 0) > 0)
-                .map(reward => `${reward.emoji} ×${totals[reward.key]}`)
-                .join(' ') || 'brak';
-
-            const allRewards = ranking.reduce((sum, entry) => sum + entry.total, 0);
-
-            const embed = new EmbedBuilder()
-                .setTitle('🎁 Ranking nagród specjalnych')
-                .setColor('#e74c3c')
-                .setDescription(description)
-                .addFields({
-                    name: `Łącznie: ${allRewards} ${this.pluralizeRewards(allRewards)}`,
-                    value: totalsText
-                })
-                .setTimestamp();
-
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await interaction.reply({ embeds: [view.embed], components: view.components, ephemeral: true });
 
         } catch (error) {
             logger.error('❌ Błąd podczas wyświetlania rankingu nagród:', error);
-            await interaction.reply({
-                content: '❌ Wystąpił błąd podczas pobierania rankingu.',
-                ephemeral: true
-            }).catch(() => {});
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas pobierania rankingu.');
         }
+    }
+
+    /**
+     * Obsługuje przyciski stronicowania rankingu /stats
+     * @param {ButtonInteraction} interaction - Interakcja przycisku
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async handleStatsPageButton(interaction, sharedState) {
+        try {
+            const page = parseInt(interaction.customId.replace('stats_page_', ''), 10) || 0;
+            const view = this.buildStatsView(sharedState, page);
+
+            if (!view) {
+                await interaction.update({
+                    content: '📊 Nikt jeszcze nie zgłosił żadnej nagrody specjalnej.',
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            await interaction.update({ embeds: [view.embed], components: view.components });
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas zmiany strony rankingu:', error);
+            await this.respondEphemeral(interaction, '❌ Wystąpił błąd podczas zmiany strony rankingu.');
+        }
+    }
+
+    /**
+     * Buduje wiersz nagród `emoji×N` - tylko te z niezerowym stanem
+     * @param {Object} rewards - Licznik nagród { klucz: liczba }
+     * @returns {string} - Rozbicie nagród albo pusty string
+     */
+    formatRewardBreakdown(rewards) {
+        return this.config.rewards
+            .filter(reward => (rewards[reward.key] || 0) > 0)
+            .map(reward => `${reward.emoji}×${rewards[reward.key]}`)
+            .join(' ');
+    }
+
+    /**
+     * Buduje widok rankingu /stats dla wskazanej strony (embed + przyciski stronicowania)
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     * @param {number} page - Numer strony (od 0)
+     * @returns {Object|null} - { embed, components } albo null gdy ranking jest pusty
+     */
+    buildStatsView(sharedState, page) {
+        const ranking = sharedState.nagrodyService.getRanking();
+        if (ranking.length === 0) return null;
+
+        const perPage = this.config.stats.usersPerPage;
+        const totalPages = Math.max(1, Math.ceil(ranking.length / perPage));
+        const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
+        const pageEntries = ranking.slice(currentPage * perPage, (currentPage + 1) * perPage);
+
+        const medals = ['🥇', '🥈', '🥉'];
+
+        // Rozbicie nagród leci w linii `-#` (mały tekst Discorda) - ranking zostaje zwarty i czytelny
+        const buildLines = (withBreakdown) => pageEntries.map((entry, index) => {
+            const position = currentPage * perPage + index;
+            const marker = entry.total > 0 && position < medals.length ? medals[position] : `**${position + 1}.**`;
+
+            const header = `${marker} **${entry.displayName}** — **${entry.total}** 🎁`
+                + (entry.manualTotal > 0 ? ` · **${entry.manualTotal}** 📝` : '');
+
+            if (!withBreakdown) return header;
+
+            const parts = [];
+            const party = this.formatRewardBreakdown(entry.rewards);
+            const manual = this.formatRewardBreakdown(entry.manualRewards);
+
+            if (party) parts.push(party);
+            if (manual) parts.push(`📝 ${manual}`);
+
+            return parts.length > 0 ? `${header}\n-# ${parts.join(' │ ')}` : header;
+        });
+
+        // Przy bardzo rozbudowanych kontach rozbicie nie mieści się w limicie opisu (4096 znaków)
+        let description = buildLines(true).join('\n');
+        if (description.length > 3800) description = buildLines(false).join('\n');
+
+        const partyTotals = sharedState.nagrodyService.getTotalsByReward('party');
+        const manualTotals = sharedState.nagrodyService.getTotalsByReward('manual');
+        const partySum = ranking.reduce((sum, entry) => sum + entry.total, 0);
+        const manualSum = ranking.reduce((sum, entry) => sum + entry.manualTotal, 0);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🎁 Ranking nagród specjalnych')
+            .setColor('#e74c3c')
+            .setDescription(description)
+            .addFields({
+                name: `🎁 Z party — ${partySum} ${this.pluralizeRewards(partySum)}`,
+                value: this.formatRewardBreakdown(partyTotals) || 'brak'
+            })
+            .setFooter({
+                text: `🎁 z party (liczone do rankingu) · 📝 dodane samodzielnie (poza rankingiem)`
+                    + ` · Strona ${currentPage + 1}/${totalPages} · Graczy: ${ranking.length}`
+            })
+            .setTimestamp();
+
+        if (manualSum > 0) {
+            embed.addFields({
+                name: `📝 Dodane samodzielnie — ${manualSum} ${this.pluralizeRewards(manualSum)}`,
+                value: this.formatRewardBreakdown(manualTotals) || 'brak'
+            });
+        }
+
+        return { embed, components: this.buildStatsButtons(currentPage, totalPages) };
+    }
+
+    /**
+     * Buduje przyciski stronicowania rankingu (puste, gdy wszystko mieści się na jednej stronie)
+     * @param {number} page - Aktualna strona (od 0)
+     * @param {number} totalPages - Liczba stron
+     * @returns {Array} - Rzędy przycisków
+     */
+    buildStatsButtons(page, totalPages) {
+        if (totalPages <= 1) return [];
+
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`stats_page_${page - 1}`)
+                .setLabel('◀ Poprzednia')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page <= 0),
+            new ButtonBuilder()
+                .setCustomId(`stats_page_${page + 1}`)
+                .setLabel('Następna ▶')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(page >= totalPages - 1)
+        )];
     }
 
     /**

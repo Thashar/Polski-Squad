@@ -63,6 +63,11 @@ module.exports = {
         pin: '<:N_SSS:1275068676508356640>' // Emoji do przypinania w bazarze
     },
 
+    // Ranking /stats
+    stats: {
+        usersPerPage: 10 // Ilu graczy na stronę (powyżej pojawia się paginacja)
+    },
+
     // Nagrody specjalne (czerwone skrzynki) - kolejność = kolejność przycisków
     rewards: [
         { key: 'petaw',   name: 'Pet AW',              emoji: '<:II_PetAW:1407383326830104658>' },

@@ -558,8 +558,8 @@
         },
         {
           "name": "/stats",
-          "description": "Ranking nagród specjalnych (czerwonych skrzynek) zdobytych w party",
-          "usage": "/stats",
+          "description": "Ranking nagród specjalnych (czerwonych skrzynek) zdobytych w party - z podglądem nagród dodanych samodzielnie (poza rankingiem) i stronicowaniem po 10 graczy",
+          "usage": "/stats → przyciski ◀ / ▶ przy większej liczbie graczy",
           "requiredPermission": "public"
         }
       ]
