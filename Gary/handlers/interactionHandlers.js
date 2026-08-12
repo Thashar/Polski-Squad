@@ -1,4 +1,4 @@
-const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
@@ -103,7 +103,7 @@ class InteractionHandler {
         if (!isAllowedChannel(interaction, this.config.allowedChannelIds) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({
                 content: '❌ This command can only be used in the designated channel!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -115,7 +115,7 @@ class InteractionHandler {
         if (adminOnlyCommands.includes(commandName) && !hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({ 
                 content: '❌ You do not have permission to use this command!', 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
             return;
         }
@@ -181,8 +181,7 @@ class InteractionHandler {
                                 `**Alternatywy:**\n` +
                                 `• Spróbuj ponownie za kilka minut\n` +
                                 `• Użyj \`/search [nazwa] searching:TOP500\` dla wyszukiwania w cache\n` +
-                                `• Użyj \`/player [nazwa]\` lub \`/ee [nazwa]\` które działają normalnie`,
-                        ephemeral: false
+                                `• Użyj \`/player [nazwa]\` lub \`/ee [nazwa]\` które działają normalnie`
                     });
                 } else {
                     await interaction.editReply({
@@ -220,7 +219,7 @@ class InteractionHandler {
         // Ręczne podanie ID cotygodniowego snapshotu Lunar Mine (zamiast rozwiązywania captchy automatycznie)
         if (buttonId === 'lme_manual_id_button') {
             if (!hasPermission(interaction, this.config.authorizedRoles)) {
-                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', flags: MessageFlags.Ephemeral });
                 return;
             }
             await this.showLmeManualIdModal(interaction);
@@ -230,7 +229,7 @@ class InteractionHandler {
         // Ręczne podanie Group ID dla /lunarmine i /analyse (captcha nie jest już rozwiązywana automatycznie)
         if (buttonId.startsWith('manual_group_button::')) {
             if (!hasPermission(interaction, this.config.authorizedRoles)) {
-                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie masz uprawnień do podania ID!', flags: MessageFlags.Ephemeral });
                 return;
             }
             await this.showManualGroupIdModal(interaction, buttonId);
@@ -246,7 +245,7 @@ class InteractionHandler {
         if (!hasPermission(interaction, this.config.authorizedRoles)) {
             await interaction.reply({
                 content: '❌ You do not have permission to use buttons!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -254,7 +253,7 @@ class InteractionHandler {
         if (!buttonId.includes('::')) {
             await interaction.reply({
                 content: '❌ Unknown button!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -264,7 +263,7 @@ class InteractionHandler {
         if (!paginationId || !this.paginationData.has(paginationId)) {
             await interaction.reply({ 
                 content: '❌ Pagination data expired or invalid. Please use the command again.', 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
             return;
         }
@@ -283,7 +282,7 @@ class InteractionHandler {
         } else {
             await interaction.reply({ 
                 content: '❌ Invalid pagination operation!', 
-                ephemeral: true 
+                flags: MessageFlags.Ephemeral 
             });
             return;
         }
@@ -527,12 +526,12 @@ class InteractionHandler {
 
                 // Validate inputs
                 if (isNaN(guild1) || isNaN(guild2) || isNaN(guild3) || isNaN(guild4)) {
-                    await interaction.reply({ content: '❌ All guild IDs must be valid numbers!', ephemeral: true });
+                    await interaction.reply({ content: '❌ All guild IDs must be valid numbers!', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
                 if ([guild1, guild2, guild3, guild4].some(id => id < 1 || id > 999999)) {
-                    await interaction.reply({ content: '❌ All guild IDs must be between 1 and 999999!', ephemeral: true });
+                    await interaction.reply({ content: '❌ All guild IDs must be between 1 and 999999!', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -544,7 +543,7 @@ class InteractionHandler {
                 const guildId = parseInt(interaction.fields.getTextInputValue('guildid'));
 
                 if (isNaN(guildId) || guildId < 1 || guildId > 999999) {
-                    await interaction.reply({ content: '❌ Guild ID must be a valid number between 1 and 999999!', ephemeral: true });
+                    await interaction.reply({ content: '❌ Guild ID must be a valid number between 1 and 999999!', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -574,7 +573,7 @@ class InteractionHandler {
                 const clanId = parseInt(interaction.fields.getTextInputValue('clanid'));
 
                 if (isNaN(clanId) || clanId < 1 || clanId > 999999) {
-                    await interaction.reply({ content: '❌ Clan ID must be a valid number between 1 and 999999!', ephemeral: true });
+                    await interaction.reply({ content: '❌ Clan ID must be a valid number between 1 and 999999!', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -591,7 +590,7 @@ class InteractionHandler {
         } catch (error) {
             this.logger.error('❌ Error handling modal submit:', error);
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: '❌ An error occurred processing your request.', ephemeral: true });
+                await interaction.reply({ content: '❌ An error occurred processing your request.', flags: MessageFlags.Ephemeral });
             }
         }
     }
@@ -705,13 +704,13 @@ class InteractionHandler {
         const paginationId = buttonId.substring(sepIdx + 2);
 
         if (!paginationId || !this.paginationData.has(paginationId)) {
-            await interaction.reply({ content: '❌ Dane paginacji wygasły. Użyj komendy ponownie.', ephemeral: true });
+            await interaction.reply({ content: '❌ Dane paginacji wygasły. Użyj komendy ponownie.', flags: MessageFlags.Ephemeral });
             return;
         }
 
         const pageData = this.paginationData.get(paginationId);
         if (pageData.type !== 'lme_members') {
-            await interaction.reply({ content: '❌ Nieprawidłowy typ paginacji!', ephemeral: true });
+            await interaction.reply({ content: '❌ Nieprawidłowy typ paginacji!', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -899,7 +898,7 @@ class InteractionHandler {
      * (cotygodniowy cron), jak i bezpośrednio z komendy `/lme-snapshot`.
      */
     async processLmeManualSnapshot(interaction, rawId) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const groupId = this.extractGroupIdFromInput(rawId);
         if (!groupId) {
@@ -1042,7 +1041,7 @@ class InteractionHandler {
             .setLabel('🔑 Podaj ID')
             .setStyle(ButtonStyle.Primary);
 
-        await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)], ephemeral: true });
+        await interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(button)], flags: MessageFlags.Ephemeral });
     }
 
     async showManualGroupIdModal(interaction, buttonId) {
@@ -1071,7 +1070,7 @@ class InteractionHandler {
      * po czym renderuje wynik tak jak dawniej robiły to processLunarMineCommand/processAnalyseCommand.
      */
     async processManualGroupIdSubmit(interaction, modalId, rawId) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const groupId = this.extractGroupIdFromInput(rawId);
         if (!groupId) {
@@ -1390,12 +1389,12 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             await interaction.reply({
                 content: '❌ This command requires administrator permissions!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const proxyList = this.garrytoolsService.proxyService.proxyList;
@@ -1504,7 +1503,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             await interaction.reply({
                 content: '❌ This command requires administrator permissions!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -1582,7 +1581,7 @@ class InteractionHandler {
             embed.setDescription('⚠️ No proxies configured. Add proxy URLs to `GARRY_PROXY_LIST` environment variable.');
         }
 
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 
     async handleProxyRefreshCommand(interaction) {
@@ -1590,12 +1589,12 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             await interaction.reply({
                 content: '❌ This command requires administrator permissions!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const oldCount = this.garrytoolsService.proxyService.proxyList.length;
@@ -1645,7 +1644,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
             await interaction.reply({
                 content: '❌ This command requires administrator permissions!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2123,8 +2122,7 @@ class InteractionHandler {
                     content: `❌ **Global search is not available**\n\n` +
                              `The garrytools.com search requires JavaScript execution that cannot be simulated by the bot. ` +
                              `This is a technical limitation of web scraping.\n\n` +
-                             `**Alternative**: Use \`searching: TOP500\` to search through cached guild ranking data (top 500 guilds).`,
-                    ephemeral: false
+                             `**Alternative**: Use \`searching: TOP500\` to search through cached guild ranking data (top 500 guilds).`
                 });
                 return;
             }

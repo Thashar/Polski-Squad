@@ -1,5 +1,5 @@
 const sharp = require('sharp');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const { launchBrowser } = require('./puppeteerLauncher');
 const ProxyService = require('./proxyService');
 
@@ -172,7 +172,7 @@ class CaptchaSolverService {
     // Wysyła wiadomość jako ephemeral followUp gdy dostępna jest interaction, w przeciwnym razie zwykłą wiadomość na kanale
     async sendMessage(context, payload) {
         if (context.interaction) {
-            return context.interaction.followUp({ ...payload, ephemeral: true });
+            return context.interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral });
         }
         return context.channel.send(payload);
     }

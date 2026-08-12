@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, MessageFlags } = require('discord.js');
 const cron = require('node-cron');
 const config = require('./config/config');
 const GarrytoolsService = require('./services/garrytoolsService');
@@ -57,7 +57,7 @@ client.on('interactionCreate', async (interaction) => {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ 
                     content: '❌ An error occurred while processing the command.', 
-                    ephemeral: true 
+                    flags: MessageFlags.Ephemeral 
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({ 
