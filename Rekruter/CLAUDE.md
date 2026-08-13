@@ -95,3 +95,4 @@ ROBOT2_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot
 - **OCR debug:** `/ocr-debug true` włącza szczegółowe logowanie
 - **Walidacja danych:** Sprawdzaj formaty przed zapisem
 - **Persistencja:** Zapisuj dane do JSON po każdej zmianie
+- **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy pierwszej odpowiedzi. Dotyczy to `updateUserEphemeralReply()` w `utils/helpers.js`, które edytuje zapamiętaną interakcję z `state.userEphemeralReplies` — ephemeralność pochodzi z pierwotnego `reply()`. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`

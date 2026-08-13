@@ -8,7 +8,7 @@
 
 const path = require('path');
 const fs = require('fs');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const { delay, updateUserEphemeralReply } = require('../utils/helpers');
 const { safeAddRole } = require('../services/roleService');
 const {
@@ -33,7 +33,7 @@ async function handleInteraction(interaction, state, config, client) {
         await handlePowiadomieniaCommand(interaction, state);
         return;
       default:
-        await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
+        await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
         return;
     }
   }
@@ -178,7 +178,7 @@ async function handleNotPolish(interaction, config) {
 
   try { await interaction.user.send(config.messages.notPolishDM); } catch {/* DM wyłączone */}
 
-  await interaction.reply({ content: 'Rolę nadano.', ephemeral: true });
+  await interaction.reply({ content: 'Rolę nadano.', flags: MessageFlags.Ephemeral });
 }
 
 /* --------------------------- przycisk „Jestem Polakiem” ------------------ */
@@ -210,7 +210,7 @@ async function handleYesPolish(interaction, state, config) {
   await interaction.reply({
     content:    config.messages.purposeQuestion,
     components: [row],
-    ephemeral:  true
+    flags:      MessageFlags.Ephemeral
   });
 
   state.userEphemeralReplies.set(interaction.user.id, interaction);
@@ -256,7 +256,7 @@ async function handleNickCommand(interaction) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -321,7 +321,7 @@ async function handleNickChangeModal(interaction) {
     const member = interaction.member;
     const oldNick = member.displayName;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Zmień nick użytkownikowi który wypełnił formularz
@@ -357,7 +357,7 @@ async function handleOcrDebugCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -369,7 +369,7 @@ async function handleOcrDebugCommand(interaction, config) {
         const currentState = config.ocr.detailedLogging.enabled;
         await interaction.reply({
             content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -386,7 +386,7 @@ async function handleOcrDebugCommand(interaction, config) {
     
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -396,7 +396,7 @@ async function handleOcrDebugCommand(interaction, config) {
 async function handlePowiadomieniaCommand(interaction, state) {
     const prefs = state.notificationPreferencesService;
     if (!prefs) {
-        await interaction.reply({ content: '❌ Serwis preferencji niedostępny.', ephemeral: true });
+        await interaction.reply({ content: '❌ Serwis preferencji niedostępny.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -407,7 +407,7 @@ async function handlePowiadomieniaCommand(interaction, state) {
     if (targetUser) {
         // Toggle dla konkretnego użytkownika - wymaga admina
         if (!isAdmin) {
-            await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać powiadomienia dla innych użytkowników.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać powiadomienia dla innych użytkowników.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -416,13 +416,13 @@ async function handlePowiadomieniaCommand(interaction, state) {
             await prefs.optIn(targetId);
             await interaction.reply({
                 content: `🔔 Powiadomienia dla ${targetUser} zostały **włączone**.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         } else {
             await prefs.optOut(targetId);
             await interaction.reply({
                 content: `🔕 Powiadomienia dla ${targetUser} zostały **wyłączone**. Nie będzie pingowany przy zmianie klanu.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
         return;
@@ -430,7 +430,7 @@ async function handlePowiadomieniaCommand(interaction, state) {
 
     // Bez parametru: globalny toggle (wymaga admina)
     if (!isAdmin) {
-        await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać globalne ustawienia powiadomień.', ephemeral: true });
+        await interaction.reply({ content: '❌ Tylko administratorzy mogą zmieniać globalne ustawienia powiadomień.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -438,12 +438,12 @@ async function handlePowiadomieniaCommand(interaction, state) {
     if (nowEnabled) {
         await interaction.reply({
             content: '🔔 Powiadomienia o zmianach klanów zostały **włączone** dla wszystkich.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else {
         await interaction.reply({
             content: '🔕 Powiadomienia o zmianach klanów zostały **wyłączone** dla wszystkich. Nikt nie będzie pingowany przy zmianie klanu.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }

@@ -23,11 +23,11 @@ async function updateUserEphemeralReply(userId, content, components = [], userEp
     }
 
     try {
+        // Widoczność ustalono przy pierwszej odpowiedzi - editReply flagi nie przyjmuje
         await userReply.editReply({
             content: content,
             components: components,
-            files: files,
-            ephemeral: true
+            files: files
         });
         logger.info(`[BOT] ✅ Zaktualizowano ephemeral reply dla użytkownika ${userId}`);
     } catch (error) {

@@ -208,10 +208,10 @@ client.on(Events.InteractionCreate, async interaction => {
         try {
             const user = await client.users.fetch(userId);
             await user.send('System przekazywania wiadomości aktywny!');
-            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, ephemeral: true });
+            await interaction.reply({ content: `✅ Aktywowano system dla **${user.displayName || user.username}**`, flags: MessageFlags.Ephemeral });
             logger.info(`[ROBOT2] Aktywowano system dla ${user.username}`);
         } catch (error) {
-            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Błąd aktywacji: ${error.message}`, flags: MessageFlags.Ephemeral });
             logger.error(`[ROBOT2] Błąd aktywacji: ${error.message}`);
         }
         return;
