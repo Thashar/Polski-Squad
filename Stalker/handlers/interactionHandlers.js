@@ -247,7 +247,7 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
         // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (isOCRActive) {
             await interaction.editReply({
@@ -314,7 +314,7 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
         // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (isOCRActive) {
             await interaction.editReply({
@@ -415,7 +415,7 @@ async function handleRemindCxCommand(interaction, config, ocrService, reminderSe
         const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
         // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (isOCRActive) {
             await interaction.editReply({
@@ -2732,7 +2732,7 @@ async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
         });
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const existed = await giftcodeService.addUid(interaction.user.id, uid, interaction.member.displayName);
     logger.info(`[GIFTCODE] ${interaction.member.displayName} ${existed ? 'zaktualizował' : 'zapisał'} UID: ${uid}`);
@@ -4008,7 +4008,7 @@ async function handlePhase1Command(interaction, sharedState) {
     const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
     // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (isOCRActive) {
         await interaction.editReply({
@@ -4791,7 +4791,7 @@ async function handlePhase2Command(interaction, sharedState) {
     const isOCRActive = ocrService.isOCRActive(guildId, userId);
 
     // Ephemeral - widoczne tylko dla wywołującego, żeby nie zaśmiecać głównego kanału
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     if (isOCRActive) {
         await interaction.editReply({
@@ -10974,10 +10974,10 @@ async function handleWynikiCommand(interaction, sharedState) {
             .setColor('#0099FF')
             .setTimestamp();
 
+        // Widoczność ustalił deferReply - editReply flagi nie przyjmuje
         await interaction.editReply({
             embeds: [embed],
-            components: [row],
-            flags: MessageFlags.Ephemeral
+            components: [row]
         });
 
     } catch (error) {
@@ -12877,7 +12877,7 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
     }
 
     // Defer reply przed operacjami async (Discord wymaga odpowiedzi w 3 sekundy)
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const runSession = async (inter) => {
         await ocrService.startOCRSession(guildId, userId, commandName);

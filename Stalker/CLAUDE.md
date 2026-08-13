@@ -352,3 +352,4 @@ STALKER_LME_NEWS_CHANNEL_ID=channel_id
 - **Throttling:** safeFetchMembers() z 30s cooldownem
 - **Cache:** playerIndexCache dla szybkiego autocomplete
 - **Persistencja:** Fazy zapisywane w data/phases/
+- **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji. Import `MessageFlags` jest w `index.js`, `handlers/interactionHandlers.js`, `services/phaseService.js` i `services/vacationService.js`
