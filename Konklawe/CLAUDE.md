@@ -65,3 +65,7 @@ KONKLAWE_GROK_MODEL=grok-3-mini
 - **Mana:** Gabriel max 150, Lucyfer max 100
 - **Regeneracja:** Gabriel 1pkt/10min, Lucyfer 10-30min/pkt
 - **Persistencja:** Wszystkie dane w data/ (game_state.json, virtuttiData.json, etc.)
+- **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15) i **nie** `flags: 64` (magiczna liczba — ta sama wartość, ale nieczytelna). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje
+  - **Publiczne odpowiedzi nie mają flagi** — dawne `ephemeral: false` (klątwy, błogosławieństwa, virtue check) zostało usunięte, bo brak flagi to domyślnie wiadomość widoczna dla wszystkich
+  - Import `MessageFlags` jest modułowy w `index.js`, `handlers/interactionHandlers.js` i `services/judgmentService.js`
+- **⚠️ Do zrobienia osobno:** trzy wywołania używają `fetchReply: true` (`interactionHandlers.js` — blessing, virtue-check, odbicie klątwy). Ta opcja też jest w v14 przestarzała, ale jej następca zwraca inny typ obiektu, więc podmiana wymaga przejrzenia kodu korzystającego z wyniku — nie jest to zamiana jeden do jednego jak przy `ephemeral`

@@ -329,7 +329,7 @@ class InteractionHandler {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({
                         content: 'Ta komenda może być używana tylko na odpowiednim kanale!',
-                        flags: 64
+                        flags: MessageFlags.Ephemeral
                     });
                 }
                 return;
@@ -347,7 +347,7 @@ class InteractionHandler {
                 if (!interaction.replied && !interaction.deferred) {
                     await interaction.reply({
                         content: 'Wystąpił błąd podczas wykonywania komendy.',
-                        flags: 64
+                        flags: MessageFlags.Ephemeral
                     });
                 } else if (interaction.deferred) {
                     await interaction.editReply('Wystąpił błąd podczas wykonywania komendy.');
@@ -365,17 +365,17 @@ class InteractionHandler {
      */
     async handleBombaCommand(interaction) {
         if (!interaction.member.permissions.has(0x8n)) { // Administrator
-            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: 64 });
+            await interaction.reply({ content: '❌ Tylko administratorzy mogą używać tej komendy.', flags: MessageFlags.Ephemeral });
             return;
         }
         if (!this.bombChaosService) {
-            await interaction.reply({ content: '❌ Serwis bomby niedostępny.', flags: 64 });
+            await interaction.reply({ content: '❌ Serwis bomby niedostępny.', flags: MessageFlags.Ephemeral });
             return;
         }
         this.bombChaosService.activate();
 
         // Animacja wybuchu (ephemeral dla admina)
-        await interaction.reply({ content: '3️⃣', flags: 64 });
+        await interaction.reply({ content: '3️⃣', flags: MessageFlags.Ephemeral });
         await new Promise(r => setTimeout(r, 1000));
         await interaction.editReply({ content: '2️⃣' });
         await new Promise(r => setTimeout(r, 1000));
@@ -906,8 +906,7 @@ class InteractionHandler {
                 }
 
                 return await interaction.reply({
-                    content: '☁️ Takie błogosławieństwa nie działają na demona! Ciemność odrzuca światło...',
-                    ephemeral: false
+                    content: '☁️ Takie błogosławieństwa nie działają na demona! Ciemność odrzuca światło...'
                 });
             }
         }
@@ -982,8 +981,7 @@ class InteractionHandler {
                     content: `⚡💀 **PUŁAPKA ZEMSTY!** 💀⚡\n\n` +
                         `Lucyfer zastawił zemstę na ${targetUser.toString()}!\n\n` +
                         `☁️ **${interaction.user.toString()} zostałeś "Upadły"!**\n` +
-                        `⚔️ Blessing zablokowany na **1 godzinę**!`,
-                    ephemeral: false
+                        `⚔️ Blessing zablokowany na **1 godzinę**!`
                 });
             }
         }
@@ -1071,7 +1069,6 @@ class InteractionHandler {
 
             const blessingReply = await interaction.reply({
                 content: blessingMessage,
-                ephemeral: false,
                 fetchReply: true
             });
 
@@ -1196,7 +1193,7 @@ class InteractionHandler {
         });
 
         try {
-            const virtueCheckReply = await interaction.reply({ embeds: [embed], ephemeral: false, fetchReply: true });
+            const virtueCheckReply = await interaction.reply({ embeds: [embed], fetchReply: true });
 
             // Zaplanuj automatyczne usunięcie wiadomości po 10 min
             if (this.messageCleanupService && virtueCheckReply) {
@@ -1349,14 +1346,12 @@ class InteractionHandler {
                 this.virtuttiService.resetLucyferReflectionChance(targetUser.id);
 
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Gabriel używając klątwy przypadkiem wzmocnił Lucyfera!**`,
-                    ephemeral: false
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Gabriel używając klątwy przypadkiem wzmocnił Lucyfera!**`
                 });
             } else if (randomChance >= 33 && randomChance < 66) {
                 // 33% - Nic się nie stanie (odporność)
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...`,
-                    ephemeral: false
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n🔥 **Lucyfer okazał się odporny na tę klątwę!** Ciemność chroni go przed światłem...`
                 });
             } else if (randomChance >= 66 && randomChance < 99) {
                 // 33% - Normalna klątwa 5 min
@@ -1366,7 +1361,7 @@ class InteractionHandler {
                 try {
                     // Defer reply
                     if (!interaction.replied && !interaction.deferred) {
-                        await interaction.deferReply({ ephemeral: false });
+                        await interaction.deferReply();
                     }
 
                     // Aplikuj klątwę na Lucyfera
@@ -1427,7 +1422,7 @@ class InteractionHandler {
                 if (this.hasActiveCurse(targetUser.id, randomCurse)) {
                     return await interaction.reply({
                         content: `⚠️ Lucyfer już ma aktywną klątwę tego typu! Nie można nałożyć kolejnej.`,
-                        ephemeral: true
+                        flags: MessageFlags.Ephemeral
                     });
                 }
 
@@ -1436,8 +1431,7 @@ class InteractionHandler {
                 await this.applyCurse(targetMember, randomCurse, interaction.guild, debuffData.initialCurseEndTime);
 
                 return await interaction.reply({
-                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡💥 **ULTRA POTĘŻNA KLĄTWA NAŁOŻONA!** Lucyfer został osłabiony! 💥⚡`,
-                    ephemeral: false
+                    content: `☁️ Gabriel rzucił klątwę na Lucyfera!\n\n⚡💥 **ULTRA POTĘŻNA KLĄTWA NAŁOŻONA!** Lucyfer został osłabiony! 💥⚡`
                 });
             }
         }
@@ -1455,7 +1449,7 @@ class InteractionHandler {
             try {
                 // Defer reply
                 if (!interaction.replied && !interaction.deferred) {
-                    await interaction.deferReply({ ephemeral: false });
+                    await interaction.deferReply();
                 }
 
                 // Aplikuj klątwę na Lucyfera (sam siebie)
@@ -1662,7 +1656,6 @@ class InteractionHandler {
                 // Wyślij komunikat o odbiciu i blokadzie
                 const reflectionReply = await interaction.reply({
                     content: `🔥 **O nie! Klątwa została odbita!**\n\n⚠️ **Lucyfer został uśpiony!**\n\n*Siły ciemności nie zagrażają serwerowi...*`,
-                    ephemeral: false,
                     fetchReply: true
                 });
 
@@ -1741,8 +1734,7 @@ class InteractionHandler {
             }
 
             return await interaction.reply({
-                content: randomFailMessage,
-                ephemeral: false
+                content: randomFailMessage
             });
         }
 
@@ -1771,7 +1763,7 @@ class InteractionHandler {
         try {
             // Defer reply
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.deferReply({ ephemeral: false });
+                await interaction.deferReply();
             }
 
             // === SPRAWDŹ REVENGE_GABRIEL (PUŁAPKA! - tylko dla Lucyfera) ===
@@ -1806,8 +1798,7 @@ class InteractionHandler {
                     return await interaction.editReply({
                         content: `✨🛡️ **BŁOGOSŁAWIEŃSTWO OCHRONIŁO!** 🛡️✨\n\n` +
                             `${targetUser.toString()} ma ochronę błogosławieństwa!\n\n` +
-                            `🔥 **Klątwa Lucyfera została zablokowana!**`,
-                        ephemeral: false
+                            `🔥 **Klątwa Lucyfera została zablokowana!**`
                     });
                 } else {
                     logger.info(`🛡️ Ochrona błogosławieństwa NIE zadziałała dla ${targetUser.tag} (${(chance * 100).toFixed(1)}% >= 50%)`);
