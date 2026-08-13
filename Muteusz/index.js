@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } = require('discord.js');
+const { Client, GatewayIntentBits, Events, Partials, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const path = require('path');
 
 const config = require('./config/config');
@@ -271,7 +271,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '⏳ Bot jeszcze się inicjalizuje, spróbuj za chwilę...',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         } catch (error) {
@@ -289,7 +289,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: '❌ Wystąpił błąd podczas przetwarzania komendy.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             } else if (interaction.deferred) {
                 await interaction.editReply({

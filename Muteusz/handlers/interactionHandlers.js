@@ -529,7 +529,7 @@ class InteractionHandler {
             const specialRoles = await this.specialRolesService.readSpecialRoles();
             
             if (specialRoles.length === 0) {
-                await interaction.reply({ content: this.config.messages.specialRolesNone, ephemeral: true });
+                await interaction.reply({ content: this.config.messages.specialRolesNone, flags: MessageFlags.Ephemeral });
                 return;
             }
             
@@ -555,7 +555,7 @@ class InteractionHandler {
             await this.displaySpecialRolesPage(interaction, roleChunks, targetPage);
             
         } catch (error) {
-            await interaction.reply({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Wystąpił błąd podczas nawigacji: ${error.message}`, flags: MessageFlags.Ephemeral });
             await this.logService.logMessage('error', `Błąd podczas nawigacji przycisków: ${error.message}`, interaction);
         }
     }
@@ -570,7 +570,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.roles.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.noPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy bez uprawnień`, interaction);
             return;
@@ -581,7 +581,7 @@ class InteractionHandler {
         if (!roleToRemove) {
             await interaction.reply({
                 content: this.config.messages.roleNotFound,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -589,12 +589,12 @@ class InteractionHandler {
         if (roleToRemove.position >= interaction.guild.members.me.roles.highest.position) {
             await interaction.reply({
                 content: this.config.messages.hierarchyError,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
             const members = await interaction.guild.members.fetch();
@@ -676,7 +676,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.roles.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.noPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy bez uprawnień`, interaction);
             return;
@@ -687,12 +687,12 @@ class InteractionHandler {
         if (!roleToAdd) {
             await interaction.reply({
                 content: this.config.messages.roleNotFound,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
             const result = await this.specialRolesService.addSpecialRole(roleToAdd.id);
@@ -745,7 +745,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.roles.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.noPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy bez uprawnień`, interaction);
             return;
@@ -756,12 +756,12 @@ class InteractionHandler {
         if (!roleToRemove) {
             await interaction.reply({
                 content: this.config.messages.roleNotFound,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
             const result = await this.specialRolesService.removeSpecialRole(roleToRemove.id);
@@ -814,13 +814,13 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.roles.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.noPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy bez uprawnień`, interaction);
             return;
         }
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
             const roleInfo = await this.specialRolesService.getSpecialRolesInfo(interaction.guild);
@@ -898,7 +898,7 @@ class InteractionHandler {
     async handleSpecialRolesCommand(interaction) {
         await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /special-roles`, interaction);
         
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
         try {
             const specialRoles = await this.specialRolesService.readSpecialRoles();
@@ -1023,7 +1023,7 @@ class InteractionHandler {
         if (interaction.replied || interaction.deferred) {
             await interaction.editReply(messagePayload);
         } else {
-            await interaction.reply({ ...messagePayload, ephemeral: true });
+            await interaction.reply({ ...messagePayload, flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -1037,7 +1037,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.clean.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.cleanNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /clean bez uprawnień`, interaction);
             return;
@@ -1054,7 +1054,7 @@ class InteractionHandler {
             if (parsedTime.error) {
                 await interaction.reply({
                     content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 2h30m (2 godziny, 30 minut)`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -1064,13 +1064,13 @@ class InteractionHandler {
             if (minutes > 1000) {
                 await interaction.reply({
                     content: `❌ Maksymalny czas to 16h 40m (1000 minut)`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             let deletedCount = 0;
@@ -1100,7 +1100,7 @@ class InteractionHandler {
                 await interaction.editReply({ content: successMessage });
                 
                 // Publiczne powiadomienie o sukcesie
-                await interaction.followUp({ content: successMessage, ephemeral: false });
+                await interaction.followUp({ content: successMessage });
                 
                 const timeInfo = timeString ? ` (${this.parseTimeFormat(timeString).formatted} wstecz)` : '';
                 await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}${timeInfo}`, interaction);
@@ -1244,7 +1244,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.mute.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.muteNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /mute bez uprawnień`, interaction);
             return;
@@ -1261,7 +1261,7 @@ class InteractionHandler {
             if (parsedTime.error) {
                 await interaction.reply({
                     content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 1d4h30m (1 dzień, 4 godziny, 30 minut)`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
@@ -1271,12 +1271,12 @@ class InteractionHandler {
         if (!targetUser) {
             await interaction.reply({
                 content: "❌ Nie podano użytkownika do uciszenia!",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
@@ -1354,13 +1354,13 @@ class InteractionHandler {
             await interaction.editReply({ content: successMessage });
             
             // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
+            await interaction.followUp({ content: successMessage });
             
             // Dodatkowa informacja o automatycznym odciszeniu
             if (timeInMinutes) {
                 const parsedTime = this.parseTimeFormat(timeString);
                 const unmuteScheduledMessage = `🔄 Automatyczne odciszenie za ${parsedTime.formatted}`;
-                await interaction.followUp({ content: unmuteScheduledMessage, ephemeral: true });
+                await interaction.followUp({ content: unmuteScheduledMessage, flags: MessageFlags.Ephemeral });
             }
 
             const parsedTime = timeInMinutes ? this.parseTimeFormat(timeString) : null;
@@ -1385,7 +1385,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.mute.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.unmuteNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /unmute bez uprawnień`, interaction);
             return;
@@ -1397,12 +1397,12 @@ class InteractionHandler {
         if (!targetUser) {
             await interaction.reply({
                 content: "❌ Nie podano użytkownika do odciszenia!",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
@@ -1451,7 +1451,7 @@ class InteractionHandler {
             await interaction.editReply({ content: successMessage });
             
             // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
+            await interaction.followUp({ content: successMessage });
             
             await this.logService.logMessage('success', `Odciszono użytkownika ${targetUser.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
 
@@ -1474,7 +1474,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.kick.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.kickNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /kick bez uprawnień`, interaction);
             return;
@@ -1486,12 +1486,12 @@ class InteractionHandler {
         if (!targetUser) {
             await interaction.reply({
                 content: "❌ Nie podano użytkownika do wyrzucenia!",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
@@ -1545,7 +1545,7 @@ class InteractionHandler {
             await interaction.editReply({ content: successMessage });
             
             // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
+            await interaction.followUp({ content: successMessage });
             
             await this.logService.logMessage('success', `Wyrzucono użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
 
@@ -1568,7 +1568,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.ban.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.banNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /ban bez uprawnień`, interaction);
             return;
@@ -1581,12 +1581,12 @@ class InteractionHandler {
         if (!targetUser) {
             await interaction.reply({
                 content: "❌ Nie podano użytkownika do zbanowania!",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Sprawdź czy użytkownik jest na serwerze
@@ -1644,7 +1644,7 @@ class InteractionHandler {
             await interaction.editReply({ content: successMessage });
             
             // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
+            await interaction.followUp({ content: successMessage });
             
             await this.logService.logMessage('success', `Zbanowano użytkownika ${targetUser.tag} z powodem: ${reason}`, interaction);
 
@@ -1667,7 +1667,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.unban.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.unbanNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /unban bez uprawnień`, interaction);
             return;
@@ -1679,7 +1679,7 @@ class InteractionHandler {
         if (!userId) {
             await interaction.reply({
                 content: "❌ Nie podano ID użytkownika do odbanowania!",
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -1688,12 +1688,12 @@ class InteractionHandler {
         if (!/^\d{17,19}$/.test(userId)) {
             await interaction.reply({
                 content: this.config.messages.unbanInvalidId,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Sprawdź czy użytkownik jest zbanowany
@@ -1720,7 +1720,7 @@ class InteractionHandler {
             await interaction.editReply({ content: successMessage });
             
             // Publiczne powiadomienie o sukcesie
-            await interaction.followUp({ content: successMessage, ephemeral: false });
+            await interaction.followUp({ content: successMessage });
             
             await this.logService.logMessage('success', `Odbanowano użytkownika ${banInfo.user.tag}${reason ? ` z powodem: ${reason}` : ''}`, interaction);
 
@@ -1747,7 +1747,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.warnNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /warn bez uprawnień`, interaction);
             return;
@@ -1758,16 +1758,14 @@ class InteractionHandler {
 
         if (!targetUser) {
             await interaction.reply({
-                content: "❌ Nie podano użytkownika do ostrzeżenia!",
-                ephemeral: false
+                content: "❌ Nie podano użytkownika do ostrzeżenia!"
             });
             return;
         }
 
         if (targetUser.id === interaction.user.id) {
             await interaction.reply({
-                content: this.config.messages.warnSelfError,
-                ephemeral: false
+                content: this.config.messages.warnSelfError
             });
             return;
         }
@@ -1777,8 +1775,7 @@ class InteractionHandler {
             const targetMember = await interaction.guild.members.fetch(targetUser.id);
             if (targetMember && this.isAdminOrModerator(targetMember)) {
                 await interaction.reply({
-                    content: "❌ Nie można ostrzegać administratorów ani moderatorów!",
-                    ephemeral: false
+                    content: "❌ Nie można ostrzegać administratorów ani moderatorów!"
                 });
                 return;
             }
@@ -1786,7 +1783,7 @@ class InteractionHandler {
             // Użytkownik nie jest na serwerze, ale można go ostrzec
         }
 
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply();
 
         try {
             const result = this.warningService.addWarning(
@@ -1820,7 +1817,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.warnNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /violations bez uprawnień`, interaction);
             return;
@@ -1828,7 +1825,7 @@ class InteractionHandler {
 
         const targetUser = interaction.options.getUser('użytkownik');
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             if (!targetUser) {
@@ -2033,7 +2030,7 @@ class InteractionHandler {
         if (interaction.replied || interaction.deferred) {
             await interaction.editReply(messagePayload);
         } else {
-            await interaction.reply({ ...messagePayload, ephemeral: true });
+            await interaction.reply({ ...messagePayload, flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -2170,7 +2167,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has(this.config.moderation.warn.requiredPermission)) {
             await interaction.reply({
                 content: this.config.messages.warnNoPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2372,7 +2369,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tylko administratorzy mogą używać tej komendy testowej.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2380,7 +2377,7 @@ class InteractionHandler {
         if (!this.roleKickingService) {
             await interaction.reply({
                 content: '❌ Serwis kickowania nie jest dostępny.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2388,7 +2385,7 @@ class InteractionHandler {
         const productionMode = interaction.options.getBoolean('produkcyjny') || false;
         const dryRun = !productionMode;
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const modeText = productionMode ? '⚠️ TRYB PRODUKCYJNY - BĘDZIE RZECZYWISTE KICKOWANIE!' : '🧪 TRYB TESTOWY - TYLKO SYMULACJA';
@@ -2425,7 +2422,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tylko administratorzy mogą używać tej komendy!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /block-ss bez uprawnień administratora`, interaction);
             return;
@@ -2437,7 +2434,7 @@ class InteractionHandler {
         if (!channel || !channel.isTextBased()) {
             await interaction.reply({
                 content: '❌ Podany kanał musi być kanałem tekstowym!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2447,12 +2444,12 @@ class InteractionHandler {
         if (parsedTime.error) {
             await interaction.reply({
                 content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23:59 31.12.2024`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Użyj serwisu z messageHandler (współdzielony)
@@ -2578,7 +2575,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tylko administratorzy mogą używać tej komendy!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /block-word bez uprawnień administratora`, interaction);
             return;
@@ -2594,7 +2591,7 @@ class InteractionHandler {
         if (shouldTimeout && !timeoutDuration) {
             await interaction.reply({
                 content: '❌ Gdy timeout jest ustawione na true, musisz podać parametr "na_ile"!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2604,7 +2601,7 @@ class InteractionHandler {
         if (parsedTime.error) {
             await interaction.reply({
                 content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 23:59 31.12.2024`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2616,13 +2613,13 @@ class InteractionHandler {
             if (parsedTimeoutDuration.error) {
                 await interaction.reply({
                     content: `❌ Nieprawidłowy format czasu timeout: ${parsedTimeoutDuration.error}\nPrzykład poprawnego formatu: 1h30m (1 godzina, 30 minut)`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
                 return;
             }
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Użyj serwisu z messageHandler (współdzielony)
@@ -2744,7 +2741,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tylko administratorzy mogą używać tej komendy!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /add-roles bez uprawnień`, interaction);
             return;
@@ -2756,7 +2753,7 @@ class InteractionHandler {
         if (!roleToAdd) {
             await interaction.reply({
                 content: '❌ Nie znaleziono roli do nadania!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2765,12 +2762,12 @@ class InteractionHandler {
         if (roleToAdd.position >= interaction.guild.members.me.roles.highest.position) {
             await interaction.reply({
                 content: `❌ Nie mogę nadać roli **${roleToAdd.name}**, ponieważ jest ona wyżej lub na tym samym poziomie co moja najwyższa rola w hierarchii!`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Pobierz wszystkich członków serwera
@@ -2902,7 +2899,7 @@ class InteractionHandler {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Tylko administratorzy mogą używać tej komendy!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             await this.logService.logMessage('warn', `Użytkownik ${interaction.user.tag} próbował użyć komendy /chaos-mode bez uprawnień`, interaction);
             return;
@@ -2912,12 +2909,12 @@ class InteractionHandler {
         if (!this.chaosService) {
             await interaction.reply({
                 content: '❌ Chaos Service nie jest zainicjalizowany!',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Zbierz wszystkie role
@@ -2971,7 +2968,6 @@ class InteractionHandler {
 
         try {
             const fs = require('fs');
-            const { MessageFlags } = require('discord.js');
             const commandsDataPath = './Muteusz/config/all_commands.json';
 
             if (!fs.existsSync(commandsDataPath)) {
@@ -3217,7 +3213,6 @@ class InteractionHandler {
         } catch (error) {
             await this.logService.logMessage('error', `Błąd podczas obsługi komendy /komendy: ${error.message}`, interaction);
 
-            const { MessageFlags } = require('discord.js');
             const replyOptions = {
                 content: `❌ Wystąpił błąd podczas generowania listy komend: ${error.message}`,
                 flags: MessageFlags.Ephemeral
@@ -3236,7 +3231,6 @@ class InteractionHandler {
      * @param {ChatInputCommandInteraction} interaction - Interakcja Discord
      */
     async handleDataArchiveCommand(interaction) {
-        const { MessageFlags } = require('discord.js');
 
         // Sprawdź uprawnienia administratora
         if (!this.isAdminOrModerator(interaction.member) && !interaction.member.permissions.has('Administrator')) {
@@ -3288,9 +3282,9 @@ class InteractionHandler {
             responseMessage += '\n📁 **Lokalizacja:** Google Drive → `Polski_Squad_Manual_Backups`';
             responseMessage += '\n⚠️ Te backupy NIE są automatycznie usuwane.';
 
+            // Widoczność ustalił deferReply - editReply flagi nie przyjmuje
             await interaction.editReply({
-                content: responseMessage,
-                flags: MessageFlags.Ephemeral
+                content: responseMessage
             });
 
             await this.logService.logMessage('success',
@@ -3429,7 +3423,7 @@ class InteractionHandler {
         const messageId = parts[4];
         const powod = interaction.fields.getTextInputValue('report_reason') || 'Brak podanego powodu';
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const targetChannel = await interaction.client.channels.fetch(channelId);
@@ -3449,7 +3443,7 @@ class InteractionHandler {
      */
     async handleMuteUserContextMenu(interaction) {
         if (!this.isAdminOrModerator(interaction.member)) {
-            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wyciszać użytkowników.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wyciszać użytkowników.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3491,7 +3485,7 @@ class InteractionHandler {
         if (!parsed) {
             await interaction.reply({
                 content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -3499,7 +3493,7 @@ class InteractionHandler {
         try {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -3507,7 +3501,7 @@ class InteractionHandler {
 
             await interaction.reply({
                 content: `✅ Użytkownik <@${userId}> został wyciszony na **${parsed.label}**.\n> Powód: ${reason}`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
             await this.logService.logMessage('info',
@@ -3516,7 +3510,7 @@ class InteractionHandler {
             );
         } catch (error) {
             logger.error('❌ Błąd podczas wyciszania użytkownika (context menu):', error);
-            await interaction.reply({ content: `❌ Nie udało się wyciszyć: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Nie udało się wyciszyć: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -3526,7 +3520,7 @@ class InteractionHandler {
      */
     async handleWarnUserContextMenu(interaction) {
         if (!this.isAdminOrModerator(interaction.member)) {
-            await interaction.reply({ content: '❌ Tylko moderatorzy mogą ostrzegać użytkowników.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą ostrzegać użytkowników.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3557,7 +3551,7 @@ class InteractionHandler {
         try {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -3566,7 +3560,7 @@ class InteractionHandler {
 
             await interaction.reply({
                 content: `✅ Użytkownik <@${userId}> otrzymał ostrzeżenie.\n> Powód: ${reason}\nŁącznie ostrzeżeń: **${allWarnings.length}**`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
 
             await this.logService.logMessage('info',
@@ -3575,7 +3569,7 @@ class InteractionHandler {
             );
         } catch (error) {
             logger.error('❌ Błąd podczas ostrzegania użytkownika (context menu):', error);
-            await interaction.reply({ content: `❌ Nie udało się ostrzec użytkownika: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Nie udało się ostrzec użytkownika: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -3664,7 +3658,7 @@ class InteractionHandler {
             const guild = interaction.guild;
             const member = await guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -3719,7 +3713,7 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('❌ Błąd podczas dodawania ostrzeżenia przez zgłoszenie:', error);
-            await interaction.reply({ content: '❌ Wystąpił błąd podczas dodawania ostrzeżenia.', ephemeral: true });
+            await interaction.reply({ content: '❌ Wystąpił błąd podczas dodawania ostrzeżenia.', flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -3728,7 +3722,7 @@ class InteractionHandler {
      */
     async handleReportFollowupMuteButton(interaction) {
         if (!this.isAdminOrModerator(interaction.member)) {
-            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3767,7 +3761,7 @@ class InteractionHandler {
         const parsed = this.parseMuteDuration(durationRaw);
 
         if (!parsed) {
-            await interaction.reply({ content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.', ephemeral: true });
+            await interaction.reply({ content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3775,7 +3769,7 @@ class InteractionHandler {
             const guild = interaction.guild;
             const member = await guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -3794,7 +3788,7 @@ class InteractionHandler {
 
         } catch (error) {
             logger.error('❌ Błąd podczas wyciszania użytkownika (follow-up):', error);
-            await interaction.reply({ content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`, flags: MessageFlags.Ephemeral });
         }
     }
 
@@ -3803,7 +3797,7 @@ class InteractionHandler {
      */
     async handleReportFollowupDeleteButton(interaction) {
         if (!this.isAdminOrModerator(interaction.member)) {
-            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3817,7 +3811,7 @@ class InteractionHandler {
             const targetMessage = await targetChannel.messages.fetch(messageId);
             await targetMessage.delete();
         } catch {
-            await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+            await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -3843,7 +3837,7 @@ class InteractionHandler {
         if (!parsed) {
             await interaction.reply({
                 content: '❌ Nieprawidłowy format czasu. Użyj np. `10m`, `2h`, `1d`. Maksymalnie 28 dni.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -3852,7 +3846,7 @@ class InteractionHandler {
             const guild = interaction.guild;
             const member = await guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika na serwerze.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -3899,7 +3893,7 @@ class InteractionHandler {
             logger.error('❌ Błąd podczas wyciszania użytkownika:', error);
             await interaction.reply({
                 content: `❌ Nie udało się wyciszyć użytkownika: ${error.message}`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -3971,7 +3965,7 @@ class InteractionHandler {
         try {
             // Jeśli wywołano z context menu (po deferReply), nie robimy deferReply ponownie
             if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply({ ephemeral: true });
+                await interaction.deferReply({ flags: MessageFlags.Ephemeral });
             }
 
             let targetChannel;
@@ -4131,7 +4125,7 @@ class InteractionHandler {
         if (!this.isAdminOrModerator(interaction.member)) {
             await interaction.reply({
                 content: '❌ Tylko moderatorzy mogą wykonywać akcje na zgłoszeniach.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -4142,7 +4136,7 @@ class InteractionHandler {
         if (isModReport && !interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Zgłoszenia moderatorów mogą obsługiwać tylko administratorzy.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -4235,7 +4229,7 @@ class InteractionHandler {
                     const targetMessage = await targetChannel.messages.fetch(messageId);
                     await targetMessage.delete();
                 } catch {
-                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -4266,7 +4260,7 @@ class InteractionHandler {
         } catch (error) {
             logger.error('❌ Błąd podczas wykonywania akcji na zgłoszeniu:', error);
             try {
-                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', flags: MessageFlags.Ephemeral });
             } catch {}
         }
     }
@@ -4277,7 +4271,7 @@ class InteractionHandler {
      */
     async handleAutoModButton(interaction) {
         if (!this.isAdminOrModerator(interaction.member)) {
-            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać te akcje.', ephemeral: true });
+            await interaction.reply({ content: '❌ Tylko moderatorzy mogą wykonywać te akcje.', flags: MessageFlags.Ephemeral });
             return;
         }
 
@@ -4296,7 +4290,7 @@ class InteractionHandler {
                     const targetMessage = await targetChannel.messages.fetch(messageId);
                     await targetMessage.delete();
                 } catch {
-                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', ephemeral: true });
+                    await interaction.reply({ content: '❌ Nie można usunąć wiadomości (może już nie istnieje).', flags: MessageFlags.Ephemeral });
                     return;
                 }
 
@@ -4305,7 +4299,7 @@ class InteractionHandler {
                     .setFooter({ text: `Wiadomość usunięta przez ${interaction.user.tag}` });
 
                 await interaction.update({ embeds: [embed], components: [] });
-                await interaction.followUp({ content: `🗑️ <@${interaction.user.id}> usunął wiadomość.`, ephemeral: false });
+                await interaction.followUp({ content: `🗑️ <@${interaction.user.id}> usunął wiadomość.` });
                 return;
             }
 
@@ -4328,7 +4322,7 @@ class InteractionHandler {
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi przycisku auto-moderacji:', error);
             try {
-                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', flags: MessageFlags.Ephemeral });
             } catch {}
         }
     }
@@ -4346,7 +4340,7 @@ class InteractionHandler {
         try {
             const member = await interaction.guild.members.fetch(userId).catch(() => null);
             if (!member) {
-                await interaction.reply({ content: '❌ Nie znaleziono użytkownika.', ephemeral: true });
+                await interaction.reply({ content: '❌ Nie znaleziono użytkownika.', flags: MessageFlags.Ephemeral });
                 return;
             }
 
@@ -4364,11 +4358,11 @@ class InteractionHandler {
                 .setFooter({ text: `Upomniany przez ${interaction.user.tag}` });
 
             await interaction.update({ embeds: [embed], components: [] });
-            await interaction.followUp({ content: `⚠️ <@${interaction.user.id}> upomniał <@${userId}>.\n**Powód:** ${reason}`, ephemeral: false });
+            await interaction.followUp({ content: `⚠️ <@${interaction.user.id}> upomniał <@${userId}>.\n**Powód:** ${reason}` });
         } catch (error) {
             logger.error('❌ Błąd podczas obsługi modala upomnienia auto-mod:', error);
             try {
-                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', ephemeral: true });
+                await interaction.reply({ content: '❌ Wystąpił błąd podczas wykonywania akcji.', flags: MessageFlags.Ephemeral });
             } catch {}
         }
     }

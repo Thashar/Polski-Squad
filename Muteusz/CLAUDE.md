@@ -86,3 +86,6 @@ MUTEUSZ_REPORT_CHANNEL_ID=channel_id  # opcjonalne - kanał dla zgłoszeń (fall
 - **Cache mediów:** 100MB/plik, 2GB total, 24h retencja
 - **Role:** Ekskluzywne grupy w special_roles.json
 - **Guard Checky:** isFullyInitialized flag chroni przed błędami startu
+- **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15 — ephemeralne panele moderacyjne stałyby się publiczne). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji
+  - **Publiczne odpowiedzi nie mają flagi** — dawne `ephemeral: false` (ogłoszenia o ostrzeżeniu, usunięciu wiadomości, wyniku moderacji) zostało usunięte, bo brak flagi to domyślnie wiadomość widoczna dla wszystkich
+  - Import `MessageFlags` jest modułowy w `index.js`, `handlers/interactionHandlers.js` i `handlers/restoreBackupHandler.js` — nie dodawaj lokalnych `require` w ciele funkcji
