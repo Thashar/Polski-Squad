@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { reminderStorage } = require('../services/threadService');
 const { delay } = require('../utils/helpers');
@@ -31,7 +32,7 @@ async function handleInteraction(interaction, state, config) {
         if (channel.name !== memberName) {
             await interaction.reply({
                 content: config.messages.ownerOnly,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
