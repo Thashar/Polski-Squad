@@ -1,4 +1,4 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -295,7 +295,7 @@ class VotingService {
         if (!voteData) {
             await interaction.reply({
                 content: '❌ To głosowanie już się skończyło.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return true;
         }
@@ -306,7 +306,7 @@ class VotingService {
         if (voteData.votes.yes.has(userId) || voteData.votes.no.has(userId)) {
             await interaction.reply({
                 content: '❌ Już zagłosowałeś w tym głosowaniu.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return true;
         }
@@ -322,7 +322,7 @@ class VotingService {
 
         await interaction.reply({
             content: `✅ Twój głos "${vote === 'yes' ? 'Tak' : 'Nie'}" został zapisany.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
 
         return true;

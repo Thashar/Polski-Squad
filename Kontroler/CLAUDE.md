@@ -115,3 +115,4 @@ KONTROLER_GLORY_EXCLUDED_ROLES_EXCEPTIONS=user_id1,user_id2
 - **Loteria:** DST auto, multi-klan, cykle 0-365 dni
 - **Loteria Glory:** piątek 22:00 (czas polski), progres Fazy 1 ze Stalkera, 3 zwycięzców/klan, licznik gwiazdek w `glory_winners.json`
 - **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json, glory_history.json
+- **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15 — ephemeralne panele `/lottery`, `/oligopoly` i `/glory-*` stałyby się publiczne). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji. Import `MessageFlags` jest w `index.js`, `handlers/interactionHandlers.js` i `services/votingService.js`

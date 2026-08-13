@@ -1,7 +1,8 @@
 const {
     SlashCommandBuilder, REST, Routes, PermissionFlagsBits,
     EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder,
-    StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle
+    StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+    MessageFlags
 } = require('discord.js');
 const fs = require('fs').promises;
 const OligopolyService = require('../services/oligopolyService');
@@ -65,7 +66,7 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     await handleGloryTestCommand(interaction, config);
                     break;
                 default:
-                    await interaction.reply({ content: 'Nieznana komenda!', ephemeral: true });
+                    await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
             }
         } else if (interaction.isStringSelectMenu()) {
             // Obsługa Select Menu
@@ -80,14 +81,14 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                     await handleRerollLotterySelect(interaction, config, lotteryService);
                     break;
                 default:
-                    await interaction.reply({ content: 'Nieznane menu wyboru!', ephemeral: true });
+                    await interaction.reply({ content: 'Nieznane menu wyboru!', flags: MessageFlags.Ephemeral });
             }
         } else if (interaction.isModalSubmit()) {
             // Obsługa Modal Submit
             if (interaction.customId.startsWith('kawka_modal_')) {
                 await handleKawkaModalSubmit(interaction, config);
             } else {
-                await interaction.reply({ content: 'Nieznany modal!', ephemeral: true });
+                await interaction.reply({ content: 'Nieznany modal!', flags: MessageFlags.Ephemeral });
             }
         } else if (interaction.isButton()) {
             // Obsługa Button
@@ -99,10 +100,10 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 if (votingService) {
                     const handled = await votingService.handleVoteButton(interaction);
                     if (!handled) {
-                        await interaction.reply({ content: 'Nieznany przycisk głosowania!', ephemeral: true });
+                        await interaction.reply({ content: 'Nieznany przycisk głosowania!', flags: MessageFlags.Ephemeral });
                     }
                 } else {
-                    await interaction.reply({ content: 'Serwis głosowania niedostępny!', ephemeral: true });
+                    await interaction.reply({ content: 'Serwis głosowania niedostępny!', flags: MessageFlags.Ephemeral });
                 }
             } else {
                 switch (interaction.customId) {
@@ -119,7 +120,7 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                         await handleLotteryHistoryCommand(interaction, config, lotteryService, true);
                         break;
                     default:
-                        await interaction.reply({ content: 'Nieznany przycisk!', ephemeral: true });
+                        await interaction.reply({ content: 'Nieznany przycisk!', flags: MessageFlags.Ephemeral });
                 }
             }
         }
@@ -137,9 +138,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
             const errorMessage = '❌ Wystąpił błąd podczas wykonywania komendy.';
 
             if (interaction.replied || interaction.deferred) {
-                await interaction.followUp({ content: errorMessage, ephemeral: true });
+                await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
             } else {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         }
     }
@@ -153,7 +154,7 @@ async function handleOcrDebugCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -165,7 +166,7 @@ async function handleOcrDebugCommand(interaction, config) {
         const currentState = config.ocr.detailedLogging.enabled;
         await interaction.reply({
             content: `🔍 **Szczegółowe logowanie OCR:** ${currentState ? '✅ Włączone' : '❌ Wyłączone'}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -180,7 +181,7 @@ async function handleOcrDebugCommand(interaction, config) {
     
     await interaction.reply({
         content: `${emoji} **Szczegółowe logowanie OCR:** ${statusText}`,
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -192,7 +193,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -200,7 +201,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -221,7 +222,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
         
         await interaction.reply({
             content: `❌ Nieprawidłowy klan. Dostępne klany: ${availableClans}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -231,7 +232,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (!dateMatch) {
         await interaction.reply({
             content: '❌ Nieprawidłowy format daty. Użyj formatu dd.mm.rrrr (np. 15.03.2025)',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -245,7 +246,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (drawDate.getDate() !== day || drawDate.getMonth() !== month - 1 || drawDate.getFullYear() !== year) {
         await interaction.reply({
             content: '❌ Nieprawidłowa data. Sprawdź czy podana data istnieje.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -258,7 +259,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (drawDay < today) {
         await interaction.reply({
             content: '❌ Data następnego losowania nie może być w przeszłości.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -270,7 +271,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (drawDay > maxDate) {
         await interaction.reply({
             content: '❌ Data następnego losowania nie może być dalej niż 365 dni w przyszłości.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -280,7 +281,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (!timeMatch) {
         await interaction.reply({
             content: '❌ Nieprawidłowy format godziny. Użyj formatu HH:MM (np. 19:00)',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -291,7 +292,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
         await interaction.reply({
             content: '❌ Nieprawidłowa godzina. Godzina musi być 0-23, minuty 0-59.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -299,7 +300,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (frequency < 0 || frequency > 365) {
         await interaction.reply({
             content: '❌ Częstotliwość musi być między 0 a 365 dni. (0 = jednorazowa loteria)',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -307,7 +308,7 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (winnersCount < 1 || winnersCount > 20) {
         await interaction.reply({
             content: '❌ Liczba zwycięzców musi być między 1 a 20.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -317,12 +318,12 @@ async function handleLotteryCommand(interaction, config, lotteryService) {
     if (!channel) {
         await interaction.reply({
             content: '❌ Podany kanał nie istnieje.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const result = await lotteryService.createLottery(interaction, {
@@ -373,7 +374,7 @@ async function handleLotteryRerollCommand(interaction, config, lotteryService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -381,12 +382,12 @@ async function handleLotteryRerollCommand(interaction, config, lotteryService) {
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Pobierz historię loterii
@@ -459,7 +460,7 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -467,7 +468,7 @@ async function handleLotteryRemoveCommand(interaction, config, lotteryService) {
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -490,7 +491,7 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     if (activeLotteries.length === 0) {
         await interaction.reply({
             content: '📋 **Brak zaplanowanych loterii do usunięcia.**\n\n💡 Użyj `/lottery` aby utworzyć nową loterię.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -534,7 +535,7 @@ async function handlePlannedLotteryRemove(interaction, config, lotteryService) {
     await interaction.reply({
         embeds: [embed],
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -547,7 +548,7 @@ async function handleHistoricalLotteryRemove(interaction, config, lotteryService
     if (history.length === 0) {
         await interaction.reply({
             content: '📋 **Brak historycznych loterii do usunięcia.**\n\n💡 Przeprowadź najpierw jakąś loterię używając `/lottery` lub `/lottery-test`.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -591,7 +592,7 @@ async function handleHistoricalLotteryRemove(interaction, config, lotteryService
     await interaction.reply({
         embeds: [embed],
         components: [row],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
     });
 }
 
@@ -603,7 +604,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -611,7 +612,7 @@ async function handleLotteryRemovePlannedSelect(interaction, config, lotteryServ
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -789,7 +790,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -797,7 +798,7 @@ async function handleLotteryRemovePlannedConfirm(interaction, config, lotterySer
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -966,7 +967,7 @@ async function handleLotteryRemoveHistoricalSelect(interaction, config, lotteryS
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1065,7 +1066,7 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej opcji. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1073,7 +1074,7 @@ async function handleRerollLotterySelect(interaction, config, lotteryService) {
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1145,7 +1146,7 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1153,12 +1154,12 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
     if (!lotteryService) {
         await interaction.reply({
             content: '❌ Serwis loterii nie jest dostępny.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const activeLotteries = lotteryService.getActiveLotteries();
@@ -1421,7 +1422,7 @@ async function handleMvpCommand(interaction, config) {
         if (interaction.deferred || interaction.replied) {
             await interaction.editReply({ content: msg });
         } else {
-            await interaction.reply({ content: msg, ephemeral: true });
+            await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
         }
     }
 }
@@ -1433,14 +1434,14 @@ async function handleGloryRerollCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
     const gloryService = interaction.client.gloryService;
     if (!gloryService) {
-        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', ephemeral: true });
+        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', flags: MessageFlags.Ephemeral });
         return;
     }
 
@@ -1448,7 +1449,7 @@ async function handleGloryRerollCommand(interaction, config) {
     const clanCfg = config.glory.clans[clanKey];
     const clanName = clanCfg ? clanCfg.displayName : clanKey;
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const result = await gloryService.reroll(clanKey);
@@ -1480,18 +1481,18 @@ async function handleGloryTestCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
     const gloryService = interaction.client.gloryService;
     if (!gloryService) {
-        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', ephemeral: true });
+        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', flags: MessageFlags.Ephemeral });
         return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const outcome = await gloryService.runTestDraw();
@@ -1530,7 +1531,7 @@ async function handleGloryTestCommand(interaction, config) {
  */
 async function handleLotteryHistoryCommand(interaction, config, lotteryService, isUpdate = false) {
     if (!isUpdate) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -1857,7 +1858,7 @@ async function handleOligopolyCommand(interaction, config) {
     if (!/^\d+$/.test(id)) {
         await interaction.reply({
             content: '❌ ID musi być liczbą (zawierać tylko cyfry).',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1880,7 +1881,7 @@ async function handleOligopolyCommand(interaction, config) {
             content: `❌ **Brak uprawnień do używania tej komendy!**\n\n` +
                     `Musisz posiadać jedną z ról klanowych:\n${availableClans.map(name => `• ${name}`).join('\n')}\n\n` +
                     `💡 Skontaktuj się z administratorem jeśli uważasz, że to błąd.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1900,7 +1901,7 @@ async function handleOligopolyCommand(interaction, config) {
     if (!detectedClan) {
         await interaction.reply({
             content: '❌ Wystąpił błąd podczas wykrywania klanu. Skontaktuj się z administratorem.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1924,18 +1925,18 @@ async function handleOligopolyCommand(interaction, config) {
     if (result.success) {
         await interaction.reply({
             content: `✅ **Dodano wpis oligopoly**\n🏰 **Wykryty klan:** ${detectedClan}\n🆔 **ID:** ${id}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else {
         if (result.error === 'ID_EXISTS') {
             await interaction.reply({
                 content: `❌ **ID już istnieje w systemie!**\n\n🆔 **ID:** ${id}\n👤 **Używane przez:** ${result.existingUser}\n🏰 **Klan:** ${result.existingKlan}\n\n💡 Każde ID może być używane tylko przez jedną osobę.`,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         } else {
             await interaction.reply({
                 content: '❌ Wystąpił błąd podczas dodawania wpisu oligopoly.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     }
@@ -1959,7 +1960,7 @@ async function handleOligopolyReviewCommand(interaction, config) {
     if (!hasClanRole && !isAdmin) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do tej komendy. Wymagana jest rola klanowa.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1974,7 +1975,7 @@ async function handleOligopolyReviewCommand(interaction, config) {
     if (!availableClans.includes(klan)) {
         await interaction.reply({
             content: `❌ Nieprawidłowy klan. Dostępne klany:\n${availableClans.map(name => `• ${name}`).join('\n')}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -1989,7 +1990,7 @@ async function handleOligopolyReviewCommand(interaction, config) {
     if (entries.length === 0) {
         await interaction.reply({
             content: `📋 **Brak wpisów oligopoly dla klanu:** ${klan}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2004,12 +2005,12 @@ async function handleOligopolyReviewCommand(interaction, config) {
     if (response.length > 1900) {
         await interaction.reply({
             content: `📋 **Lista oligopoly - ${klan}** (${entries.length} wpisów)\n\n⚠️ Lista jest za długa do wyświetlenia. Skontaktuj się z administratorem w celu otrzymania pełnej listy.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else {
         await interaction.reply({
             content: response,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -2036,7 +2037,7 @@ async function handleOligopolyListCommand(interaction, config) {
             content: `❌ **Brak uprawnień do używania tej komendy!**\n\n` +
                     `Musisz posiadać jedną z ról klanowych:\n${availableClans.map(name => `• ${name}`).join('\n')}\n\n` +
                     `💡 Skontaktuj się z administratorem jeśli uważasz, że to błąd.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2056,13 +2057,13 @@ async function handleOligopolyListCommand(interaction, config) {
     if (!detectedClan) {
         await interaction.reply({
             content: '❌ Nie udało się wykryć Twojego klanu. Skontaktuj się z administratorem.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
 
     // Defer reply - pobieranie członków może trochę potrwać
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         // Pobierz wszystkich członków serwera
@@ -2109,7 +2110,7 @@ async function handleOligopolyListCommand(interaction, config) {
         for (let i = 0; i < chunks.length; i++) {
             await interaction.followUp({
                 content: chunks[i],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
     } catch (error) {
@@ -2128,7 +2129,7 @@ async function handleOligopolyClearCommand(interaction, config) {
     if (!interaction.member.permissions.has('Administrator')) {
         await interaction.reply({
             content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2143,7 +2144,7 @@ async function handleOligopolyClearCommand(interaction, config) {
     if (entriesCount === 0) {
         await interaction.reply({
             content: '📋 **Brak wpisów oligopoly do usunięcia.**',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
         return;
     }
@@ -2153,12 +2154,12 @@ async function handleOligopolyClearCommand(interaction, config) {
     if (success) {
         await interaction.reply({
             content: `✅ **Usunięto wszystkie wpisy oligopoly**\n📊 Usuniętych wpisów: ${entriesCount}`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     } else {
         await interaction.reply({
             content: '❌ Wystąpił błąd podczas usuwania wpisów oligopoly.',
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 }
@@ -2238,7 +2239,7 @@ async function handleKawkaCommand(interaction, config) {
         if (!interaction.member.permissions.has('Administrator')) {
             await interaction.reply({
                 content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }
@@ -2289,9 +2290,9 @@ async function handleKawkaCommand(interaction, config) {
         const errorMessage = `❌ Wystąpił błąd podczas otwierania formularza: ${error.message}`;
 
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp({ content: errorMessage, ephemeral: true });
+            await interaction.followUp({ content: errorMessage, flags: MessageFlags.Ephemeral });
         } else {
-            await interaction.reply({ content: errorMessage, ephemeral: true });
+            await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
         }
     }
 }
@@ -2302,7 +2303,7 @@ async function handleKawkaCommand(interaction, config) {
 async function handleKawkaModalSubmit(interaction, config) {
     try {
         // WAŻNE: Defer reply zanim zaczniemy długie operacje (Discord wymaga odpowiedzi w 3 sekundy)
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         // Pobierz nick z customId modala (zdekoduj base64)
         const customId = interaction.customId;
@@ -2406,7 +2407,7 @@ async function handleKawkaModalSubmit(interaction, config) {
             if (interaction.deferred) {
                 await interaction.editReply({ content: errorMessage });
             } else if (!interaction.replied) {
-                await interaction.reply({ content: errorMessage, ephemeral: true });
+                await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
         } catch (replyError) {
             logger.error('❌ Nie można wysłać komunikatu o błędzie:', replyError);
