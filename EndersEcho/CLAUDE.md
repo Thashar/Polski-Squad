@@ -897,6 +897,9 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 
 ## Najlepsze Praktyki
 
+- **Odpowiedzi ephemeralne — notacja tablicowa:** ten bot używa `flags: ['Ephemeral']` (BitFieldResolvable po nazwie flagi), a nie `MessageFlags.Ephemeral` jak pozostałe boty. **Obie formy są poprawne i żadna nie jest przestarzała** — dlatego przy migracji z `ephemeral: true` EndersEcho nie wymagał zmian. Nie mieszaj notacji w obrębie pliku i **nigdy nie wprowadzaj `ephemeral: true`** (przestarzałe w discord.js v14, przestanie działać w v15)
+  - Flaga dotyczy tylko pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` jej nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji
+  - `flags: 4` w `services/guildLogger.js` to co innego — `SuppressEmbeds` w surowym payloadzie webhooka (obok `avatar_url`), nie ma związku z ephemeralnością
 - **Alerty uprawnień:** `_dmPermissionAlert(client, guildId, { channelId, missingPerms, context })` — wysyła DM do `configuredBy` + właściciela serwera gdy bot nie może zapisać do kanału (50001/50013). `_sendChannelErrorDm({ guildObj, ... })` — analogicznie dla /info. Oba fire-and-forget, nie przerywają głównego flow.
 - **Logger (ogólny):** `createBotLogger('EndersEcho')` — tylko konsola + plik; jeśli ustawiony `ENDERSECHO_LOGS_WEBHOOK_URL`, EndersEcho jest **pomijany** w głównym webhooku botów
 - **Logger (per-serwer):** `logService._gl(guildId).info(msg)` lub przez metody `logService.logCommandUsage/logScoreUpdate/logOCRError/logRankingError(... , guildId)` — trafia do dedykowanego webhooka z avatarem serwera i separatorem
