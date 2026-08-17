@@ -49,3 +49,7 @@ tests/
 #TrainedData
 pol.TrainedData
 eng.TrainedData
+
+# Eksport rankingu EndersEcho — generowany przy starcie bota i po każdym /update.
+# NIE commitować: pusty plik z repo nadpisałby produkcyjne dane przy AUTO_GIT_FIX (git reset --hard).
+shared_data/endersecho_ranking.json
