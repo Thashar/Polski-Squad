@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 const logger = createBotLogger('Stalker');
 
 const HISTORY_PATH = path.join(__dirname, '../data/equipment_history.json');
@@ -8,7 +9,7 @@ const MAX_DAYS = 365;
 
 async function loadHistory() {
     try {
-        return JSON.parse(await fs.readFile(HISTORY_PATH, 'utf8'));
+        return await store.getOrLoad(HISTORY_PATH, () => ({}));
     } catch {
         return {};
     }
@@ -16,7 +17,7 @@ async function loadHistory() {
 
 async function saveHistory(data) {
     await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
-    await fs.writeFile(HISTORY_PATH, JSON.stringify(data, null, 2));
+    await store.set(HISTORY_PATH, data);
 }
 
 function todayUTC() {

@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType, ActionRowB
 const cron = require('node-cron');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../utils/jsonStore');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
@@ -33,8 +34,7 @@ let calculatorCooldowns = new Map();
 
 async function loadCalculatorCooldowns() {
     try {
-        const data = await fs.readFile(calculatorCooldownsFile, 'utf8');
-        calculatorCooldowns = new Map(Object.entries(JSON.parse(data)));
+        calculatorCooldowns = new Map(Object.entries(await store.getOrLoad(calculatorCooldownsFile, () => ({}))));
     } catch {
         calculatorCooldowns = new Map();
     }
@@ -43,7 +43,7 @@ async function loadCalculatorCooldowns() {
 async function saveCalculatorCooldowns() {
     try {
         await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
-        await fs.writeFile(calculatorCooldownsFile, JSON.stringify(Object.fromEntries(calculatorCooldowns), null, 2));
+        await store.set(calculatorCooldownsFile, Object.fromEntries(calculatorCooldowns));
     } catch (error) {
         logger.error(`[KALKULATOR] ❌ Błąd zapisu cooldownów: ${error.message}`);
     }
@@ -55,8 +55,7 @@ let boroxoningCooldowns = new Map(); // channelId -> dateString (YYYY-MM-DD)
 
 async function loadBorixoningCooldowns() {
     try {
-        const data = await fs.readFile(boroxoningCooldownsFile, 'utf8');
-        boroxoningCooldowns = new Map(Object.entries(JSON.parse(data)));
+        boroxoningCooldowns = new Map(Object.entries(await store.getOrLoad(boroxoningCooldownsFile, () => ({}))));
     } catch {
         boroxoningCooldowns = new Map();
     }
@@ -65,7 +64,7 @@ async function loadBorixoningCooldowns() {
 async function saveBorixoningCooldowns() {
     try {
         await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
-        await fs.writeFile(boroxoningCooldownsFile, JSON.stringify(Object.fromEntries(boroxoningCooldowns), null, 2));
+        await store.set(boroxoningCooldownsFile, Object.fromEntries(boroxoningCooldowns));
     } catch (error) {
         logger.error(`[BOROXONING] ❌ Błąd zapisu cooldownów: ${error.message}`);
     }
@@ -118,14 +117,13 @@ const giftcodeButtonFile = path.join(__dirname, 'data', 'giftcode_button.json');
 
 async function loadGiftcodeButtonMessageId() {
     try {
-        const raw = await fs.readFile(giftcodeButtonFile, 'utf8');
-        return JSON.parse(raw).messageId ?? null;
+        return (await store.getOrLoad(giftcodeButtonFile, () => ({}))).messageId ?? null;
     } catch { return null; }
 }
 
 async function saveGiftcodeButtonMessageId(messageId) {
     await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
-    await fs.writeFile(giftcodeButtonFile, JSON.stringify({ messageId }));
+    await store.set(giftcodeButtonFile, { messageId });
 }
 
 function buildGiftcodeButtonMessage() {

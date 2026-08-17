@@ -5,6 +5,7 @@ const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { exportClanThresholds } = require('../services/clanThresholdsExportService');
 const { exportGloryProgress } = require('../services/gloryProgressExportService');
 const fs = require('fs').promises;
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 
@@ -6296,8 +6297,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
 
                 let imageUrls = {};
                 try {
-                    const data = await fs.readFile(urlsFilePath, 'utf-8');
-                    imageUrls = JSON.parse(data);
+                    imageUrls = await store.getOrLoad(urlsFilePath, () => ({}));
                 } catch (error) {
                     // Plik nie istnieje - zaczynamy od pustego obiektu
                 }
@@ -6311,7 +6311,7 @@ async function handleImgWeekSelect(interaction, sharedState) {
                     addedAt: new Date().toISOString()
                 };
 
-                await fs.writeFile(urlsFilePath, JSON.stringify(imageUrls, null, 2));
+                await store.set(urlsFilePath, imageUrls);
 
                 logger.info(`[IMG] ✅ Zdjęcie repostowane na kanał archiwum i URL zapisany: ${key}`);
 
@@ -8089,8 +8089,7 @@ async function showPhase2Results(interaction, weekData, clan, weekNumber, year, 
     const imageKey = `${interaction.guild.id}_${year}_${weekNumber}_${clan}`;
 
     try {
-        const data = await fs.readFile(urlsFilePath, 'utf-8');
-        const imageUrls = JSON.parse(data);
+        const imageUrls = await store.getOrLoad(urlsFilePath, () => ({}));
         if (imageUrls[imageKey]?.url) {
             embed.setImage(imageUrls[imageKey].url);
         }
@@ -8581,8 +8580,7 @@ async function showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, 
     const imageKey = `${interaction.guild.id}_${year}_${weekNumber}_${clan}`;
 
     try {
-        const data = await fs.readFile(urlsFilePath, 'utf-8');
-        const imageUrls = JSON.parse(data);
+        const imageUrls = await store.getOrLoad(urlsFilePath, () => ({}));
         if (imageUrls[imageKey]?.url) {
             embed.setImage(imageUrls[imageKey].url);
         }
@@ -9486,8 +9484,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         let gloryCount1 = 0, gloryCount2 = 0;
         try {
             const gloryWinnersPath = require('path').join(__dirname, '../../shared_data/glory_winners.json');
-            const gloryRaw = await fs.readFile(gloryWinnersPath, 'utf8');
-            const gloryWinners = JSON.parse(gloryRaw);
+            const gloryWinners = await store.getOrLoad(gloryWinnersPath, () => ({}));
             if (typeof gloryWinners[userInfo1.userId]?.count === 'number') gloryCount1 = gloryWinners[userInfo1.userId].count;
             if (typeof gloryWinners[userInfo2.userId]?.count === 'number') gloryCount2 = gloryWinners[userInfo2.userId].count;
         } catch (e) { /* brak pliku - ok */ }
@@ -9497,8 +9494,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         let eeRank2 = null, eeScore2 = null;
         try {
             const eePath = require('path').join(__dirname, '../../shared_data/endersecho_ranking.json');
-            const eeRaw = await fs.readFile(eePath, 'utf8');
-            const eeData = JSON.parse(eeRaw);
+            const eeData = await store.getOrLoad(eePath, () => ({}));
             if (eeData && Array.isArray(eeData.players)) {
                 eeTotal = eeData.players.length;
                 const e1 = eeData.players.find(p => p.userId === userInfo1.userId);
@@ -9513,8 +9509,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         let coreRankings1 = {}, coreRankings2 = {};
         try {
             const equipPath = require('path').join(__dirname, '../data/equipment_data.json');
-            const equipRaw = await fs.readFile(equipPath, 'utf8');
-            const equipData = JSON.parse(equipRaw);
+            const equipData = await store.getOrLoad(equipPath, () => ({}));
             if (equipData[userInfo1.userId]?.items) coreStock1 = equipData[userInfo1.userId].items;
             if (equipData[userInfo2.userId]?.items) coreStock2 = equipData[userInfo2.userId].items;
             // Oblicz pozycje rankingowe dla każdego cora
@@ -9986,8 +9981,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let gloryCount = 0;
         try {
             const gloryWinnersPath = require('path').join(__dirname, '../../shared_data/glory_winners.json');
-            const gloryWinnersRaw = await fs.readFile(gloryWinnersPath, 'utf8');
-            const gloryWinners = JSON.parse(gloryWinnersRaw);
+            const gloryWinners = await store.getOrLoad(gloryWinnersPath, () => ({}));
             const userData = gloryWinners[userId];
             if (userData && typeof userData.count === 'number') {
                 gloryCount = userData.count;
@@ -10002,8 +9996,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         let endersEchoScore = null;   // rekord (np. "1.5Q")
         try {
             const endersEchoPath = require('path').join(__dirname, '../../shared_data/endersecho_ranking.json');
-            const endersEchoRaw = await fs.readFile(endersEchoPath, 'utf8');
-            const endersEchoData = JSON.parse(endersEchoRaw);
+            const endersEchoData = await store.getOrLoad(endersEchoPath, () => ({}));
             if (endersEchoData && Array.isArray(endersEchoData.players)) {
                 endersEchoTotal = endersEchoData.players.length;
                 const playerEntry = endersEchoData.players.find(p => p.userId === userId);
@@ -10702,8 +10695,7 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         // Sekcja Core Stock (między STATYSTYKI a WSPÓŁCZYNNIKI)
         try {
             const equipDataPath = require('path').join(__dirname, '../data/equipment_data.json');
-            const equipRaw = await fs.readFile(equipDataPath, 'utf8');
-            const equipData = JSON.parse(equipRaw);
+            const equipData = await store.getOrLoad(equipDataPath, () => ({}));
             const userEquip = equipData[userId];
             if (userEquip && userEquip.items && Object.keys(userEquip.items).length > 0) {
                 // Oblicz pozycje w rankingu dla każdego typu cora
@@ -11600,8 +11592,7 @@ async function showClanProgress(interaction, selectedClan, sharedState) {
             const weekFiles = dirEntries.filter(f => f.startsWith('week_') && f.endsWith('.json')).sort();
             if (weekFiles.length > 0) {
                 const latestFile = path.join(guildsDir, weekFiles[weekFiles.length - 1]);
-                const raw = await fs.readFile(latestFile, 'utf8');
-                const snapshot = JSON.parse(raw);
+                const snapshot = await store.getOrLoad(latestFile, () => ({}));
                 const weekLabel = `${String(snapshot.weekNumber).padStart(2, '0')}/${snapshot.year}`;
 
                 // Szukaj klanu pasującego do selectedClan przez garyGuildId (env var)
@@ -12073,8 +12064,7 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 // Helper: Wczytaj potwierdzenia z JSON
 async function loadConfirmations(config) {
     try {
-        const data = await fs.readFile(config.database.reminderConfirmations, 'utf8');
-        return JSON.parse(data);
+        return await store.getOrLoad(config.database.reminderConfirmations, () => ({}));
     } catch (error) {
         // Jeśli plik nie istnieje lub jest pusty, zwróć pustą strukturę
         return { sessions: {}, userStats: {} };
@@ -12083,7 +12073,7 @@ async function loadConfirmations(config) {
 
 // Helper: Zapisz potwierdzenia do JSON
 async function saveConfirmations(config, data) {
-    await fs.writeFile(config.database.reminderConfirmations, JSON.stringify(data, null, 2), 'utf8');
+    await store.set(config.database.reminderConfirmations, data);
 }
 
 // Helper: Utwórz klucz sesji (zaokrąglony do 30 minut, żeby grupować potwierdzenia z tego samego przypomnienia)
@@ -12708,7 +12698,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
 
         let equipData = {};
         try {
-            equipData = JSON.parse(await fs.readFile(dataPath, 'utf8'));
+            equipData = await store.getOrLoad(dataPath, () => ({}));
         } catch {
             await interaction.editReply({ content: '❌ Brak danych ekwipunku. Nikt jeszcze nie przesłał zdjęcia Core Stock.', components: [], embeds: [] });
             return;
@@ -12717,7 +12707,7 @@ async function handleCoreRankingButton(interaction, sharedState) {
         const { generateCoreComparisonChart } = require('../services/coreHistoryService');
         let historyData = {};
         try {
-            historyData = JSON.parse(await fs.readFile(path.join(__dirname, '../data/equipment_history.json'), 'utf8'));
+            historyData = await store.getOrLoad(path.join(__dirname, '../data/equipment_history.json'), () => ({}));
         } catch {}
 
         // Suma korzysta z tego samego liczenia wzrostu co pojedynczy cor — różni się
@@ -13060,8 +13050,7 @@ async function handleEquipmentSave(interaction, sharedState) {
 
         let data = {};
         try {
-            const raw = await fs.readFile(dataPath, 'utf8');
-            data = JSON.parse(raw);
+            data = await store.getOrLoad(dataPath, () => ({}));
         } catch {}
 
         const scannedAt = new Date().toISOString();
@@ -13087,7 +13076,7 @@ async function handleEquipmentSave(interaction, sharedState) {
         };
 
         await fs.mkdir(path.join(__dirname, '../data'), { recursive: true });
-        await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
+        await store.set(dataPath, data);
 
         // Zapisz dzienny snapshot do historii (fire-and-forget)
         const { saveDailySnapshot } = require('../services/coreHistoryService');

@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 
@@ -50,8 +51,7 @@ class AIChatService {
         try {
             // Cooldowns
             try {
-                const cooldownData = await fs.readFile(this.cooldownsFile, 'utf8');
-                const parsed = JSON.parse(cooldownData);
+                const parsed = await store.getOrLoad(this.cooldownsFile, () => ({}));
                 this.cooldowns = new Map(Object.entries(parsed));
             } catch (err) {
                 // Plik nie istnieje - OK
@@ -74,7 +74,7 @@ class AIChatService {
 
             // Cooldowns
             const cooldownObj = Object.fromEntries(this.cooldowns);
-            await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownObj, null, 2));
+            await store.set(this.cooldownsFile, cooldownObj);
         } catch (error) {
             logger.error(`Błąd zapisywania danych AI Chat: ${error.message}`);
         }
@@ -100,8 +100,7 @@ class AIChatService {
      */
     async loadConfirmations() {
         try {
-            const data = await fs.readFile(this.config.database.reminderConfirmations, 'utf8');
-            return JSON.parse(data);
+            return await store.getOrLoad(this.config.database.reminderConfirmations, () => ({}));
         } catch (error) {
             // Jeśli plik nie istnieje lub jest pusty, zwróć pustą strukturę
             return { sessions: {}, userStats: {} };

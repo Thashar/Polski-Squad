@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeParse } = require('../../utils/safeJSON');
+const store = require('../../utils/jsonStore');
 const logger = createBotLogger('Stalker');
 const path = require('path');
 
@@ -52,15 +53,10 @@ class DatabaseService {
      * Dzięki temu przerwany zapis nigdy nie zostawia uszkodzonego pliku docelowego
      */
     async atomicWriteJSON(filePath, data) {
-        const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
-
-        try {
-            await fs.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf8');
-            await fs.rename(tempPath, filePath);
-        } catch (error) {
-            await fs.unlink(tempPath).catch(() => {});
-            throw error;
-        }
+        // Atomowość (plik tymczasowy + rename) i kolejkę zapisów per plik zapewnia
+        // teraz `utils/jsonStore`, który przy okazji trzyma dane w pamięci — kolejne
+        // odczyty tego pliku nie schodzą już na dysk
+        await store.set(filePath, data);
     }
 
     /**
@@ -72,9 +68,8 @@ class DatabaseService {
         let isExisting = false;
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            weekData = safeParse(fileContent, null);
-            isExisting = true;
+            weekData = await store.getOrLoad(filePath, () => null);
+            isExisting = weekData !== null;
         } catch (error) {
             // Plik nie istnieje - utworzymy nową strukturę
         }
@@ -196,8 +191,7 @@ class DatabaseService {
 
         const indexPath = this.getPlayerIndexPath(guildId);
         try {
-            const data = await fs.readFile(indexPath, 'utf8');
-            const index = safeParse(data, {});
+            const index = await store.getOrLoad(indexPath, () => ({}));
             // Zapisz w cache
             this.playerIndexCache.set(guildId, index);
             return index;
@@ -210,8 +204,7 @@ class DatabaseService {
                 logger.info(`[INDEX] ✅ Indeks zbudowany automatycznie (${result.playerCount} graczy, ${result.filesScanned} plików)`);
                 // Wczytaj świeżo zbudowany indeks
                 try {
-                    const data = await fs.readFile(indexPath, 'utf8');
-                    const index = safeParse(data, {});
+                    const index = await store.getOrLoad(indexPath, () => ({}));
                     // Zapisz w cache
                     this.playerIndexCache.set(guildId, index);
                     return index;
@@ -236,7 +229,7 @@ class DatabaseService {
         // Upewnij się że katalog istnieje
         await fs.mkdir(indexDir, { recursive: true });
 
-        await fs.writeFile(indexPath, JSON.stringify(index, null, 2), 'utf8');
+        await store.set(indexPath, index);
         
         // Aktualizuj cache
         this.playerIndexCache.set(guildId, index);
@@ -361,8 +354,7 @@ class DatabaseService {
 
                     const weekNumber = parseInt(match[1]);
                     const filePath = path.join(yearPath, filename);
-                    const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = safeParse(fileContent, {});
+                    const weekData = await store.getOrLoad(filePath, () => ({}));
 
                     if (!weekData.players) continue;
 
@@ -438,8 +430,7 @@ class DatabaseService {
 
     async loadPunishments() {
         try {
-            const data = await fs.readFile(this.punishmentsFile, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.punishmentsFile, () => ({}));
         } catch (error) {
             logger.error('💥 Błąd wczytywania bazy kar:', error);
             return {};
@@ -448,7 +439,7 @@ class DatabaseService {
 
     async savePunishments(data) {
         try {
-            await fs.writeFile(this.punishmentsFile, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.punishmentsFile, data);
         } catch (error) {
             logger.error('💥 Błąd zapisywania bazy kar:', error);
         }
@@ -456,8 +447,7 @@ class DatabaseService {
 
     async loadWeeklyRemoval() {
         try {
-            const data = await fs.readFile(this.weeklyRemovalFile, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.weeklyRemovalFile, () => ({}));
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych tygodniowych:', error);
             return {};
@@ -466,7 +456,7 @@ class DatabaseService {
 
     async saveWeeklyRemoval(data) {
         try {
-            await fs.writeFile(this.weeklyRemovalFile, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.weeklyRemovalFile, data);
         } catch (error) {
             logger.error('💥 Błąd zapisywania danych tygodniowych:', error);
         }
@@ -687,8 +677,7 @@ class DatabaseService {
 
     async loadPhase1Data() {
         try {
-            const data = await fs.readFile(this.phase1File, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.phase1File, () => ({}));
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych Fazy 1:', error);
             return {};
@@ -697,7 +686,7 @@ class DatabaseService {
 
     async savePhase1Data(data) {
         try {
-            await fs.writeFile(this.phase1File, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.phase1File, data);
         } catch (error) {
             logger.error('💥 Błąd zapisywania danych Fazy 1:', error);
         }
@@ -711,8 +700,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const data = safeParse(fileContent, {});
+            const data = await store.getOrLoad(filePath, () => ({}));
             return {
                 exists: true,
                 data: data
@@ -853,8 +841,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const clanData = safeParse(fileContent, {});
+            const clanData = await store.getOrLoad(filePath, () => ({}));
             const players = clanData.players || [];
 
             const scores = players.map(p => p.score).sort((a, b) => b - a);
@@ -881,8 +868,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            return safeParse(fileContent, {});
+            return await store.getOrLoad(filePath, () => ({}));
         } catch (error) {
             // Plik nie istnieje
             return null;
@@ -929,8 +915,7 @@ class DatabaseService {
 
                     // Przeczytaj datę utworzenia z pliku
                     const filePath = path.join(yearPath, filename);
-                    const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = safeParse(fileContent, {});
+                    const weekData = await store.getOrLoad(filePath, () => ({}));
 
                     if (!weeksMap.has(weekKey)) {
                         weeksMap.set(weekKey, {
@@ -1017,8 +1002,7 @@ class DatabaseService {
 
                     // Przeczytaj plik i znajdź wynik gracza
                     const filePath = path.join(yearPath, filename);
-                    const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = safeParse(fileContent, {});
+                    const weekData = await store.getOrLoad(filePath, () => ({}));
 
                     if (!weekData.players) continue;
 
@@ -1044,8 +1028,7 @@ class DatabaseService {
 
     async loadPhase2Data() {
         try {
-            const data = await fs.readFile(this.phase2File, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.phase2File, () => ({}));
         } catch (error) {
             logger.error('💥 Błąd wczytywania danych Fazy 2:', error);
             return {};
@@ -1054,7 +1037,7 @@ class DatabaseService {
 
     async savePhase2Data(data) {
         try {
-            await fs.writeFile(this.phase2File, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.phase2File, data);
         } catch (error) {
             logger.error('💥 Błąd zapisywania danych Fazy 2:', error);
         }
@@ -1068,8 +1051,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const data = safeParse(fileContent, {});
+            const data = await store.getOrLoad(filePath, () => ({}));
             return {
                 exists: true,
                 data: data
@@ -1126,7 +1108,7 @@ class DatabaseService {
             updatedAt: new Date().toISOString()
         };
 
-        await fs.writeFile(filePath, JSON.stringify(weekData, null, 2), 'utf8');
+        await store.set(filePath, weekData);
         logger.info(`[PHASE2] 💾 Zapisano dane dla ${summaryPlayers.length} graczy (3 rundy + suma, klan: ${clan}, tydzień: ${weekNumber}/${year})`);
     }
 
@@ -1181,8 +1163,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            const clanData = safeParse(fileContent, {});
+            const clanData = await store.getOrLoad(filePath, () => ({}));
             const players = clanData.summary?.players || clanData.players || [];
 
             const scores = players.map(p => p.score).sort((a, b) => b - a);
@@ -1209,8 +1190,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            const fileContent = await fs.readFile(filePath, 'utf8');
-            return safeParse(fileContent, {});
+            return await store.getOrLoad(filePath, () => ({}));
         } catch (error) {
             // Plik nie istnieje
             return null;
@@ -1252,8 +1232,7 @@ class DatabaseService {
                     const weekKey = `${weekNumber}-${yearDir}`;
 
                     const filePath = path.join(yearPath, filename);
-                    const fileContent = await fs.readFile(filePath, 'utf8');
-                    const weekData = safeParse(fileContent, {});
+                    const weekData = await store.getOrLoad(filePath, () => ({}));
 
                     if (!weeksMap.has(weekKey)) {
                         weeksMap.set(weekKey, {
@@ -1319,7 +1298,7 @@ class DatabaseService {
 
                                 // Zapisz do nowego pliku
                                 const filePath = this.getPhaseFilePath(guildId, 1, parseInt(weekNumber), parseInt(year), clan);
-                                await fs.writeFile(filePath, JSON.stringify(clanData, null, 2), 'utf8');
+                                await store.set(filePath, clanData);
 
                                 phase1Count++;
                                 logger.info(`[MIGRATION] ✅ Phase1: ${guildId}/${weekKey}/${clan}`);
@@ -1354,7 +1333,7 @@ class DatabaseService {
                                 await this.ensurePhaseDirectories(guildId, 2, parseInt(year));
 
                                 const filePath = this.getPhaseFilePath(guildId, 2, parseInt(weekNumber), parseInt(year), clan);
-                                await fs.writeFile(filePath, JSON.stringify(clanData, null, 2), 'utf8');
+                                await store.set(filePath, clanData);
 
                                 phase2Count++;
                                 logger.info(`[MIGRATION] ✅ Phase2: ${guildId}/${weekKey}/${clan}`);

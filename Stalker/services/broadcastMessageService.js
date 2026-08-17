@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 /**
  * Serwis zarządzający przechowywaniem wiadomości broadcast wysłanych przez komendę /msg
@@ -27,8 +28,7 @@ class BroadcastMessageService {
      */
     async loadMessages() {
         try {
-            const data = await fs.readFile(this.dataFilePath, 'utf8');
-            this.messages = JSON.parse(data);
+            this.messages = await store.getOrLoad(this.dataFilePath, () => ({}));
             this.logger.info(`[BROADCAST] ✅ Załadowano ${this.messages.length} wiadomości broadcast`);
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -48,7 +48,7 @@ class BroadcastMessageService {
      */
     async saveMessages() {
         try {
-            await fs.writeFile(this.dataFilePath, JSON.stringify(this.messages, null, 2), 'utf8');
+            await store.set(this.dataFilePath, this.messages);
             this.logger.info(`[BROADCAST] 💾 Zapisano ${this.messages.length} wiadomości broadcast`);
         } catch (error) {
             this.logger.error('[BROADCAST] ❌ Błąd zapisu wiadomości:', error);

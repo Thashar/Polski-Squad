@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 
@@ -17,8 +18,7 @@ class ReminderUsageService {
      */
     async loadUsageData() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
-            this.usageData = JSON.parse(data);
+            this.usageData = await store.getOrLoad(this.dataPath, () => ({}));
 
             // Migracja danych ze starej struktury do nowej
             if (!this.usageData.senders || !this.usageData.receivers) {
@@ -69,7 +69,7 @@ class ReminderUsageService {
             const dir = path.dirname(this.dataPath);
             await fs.mkdir(dir, { recursive: true });
 
-            await fs.writeFile(this.dataPath, JSON.stringify(this.usageData, null, 2), 'utf8');
+            await store.set(this.dataPath, this.usageData);
             logger.info('💾 Zapisano dane przypomnień');
         } catch (error) {
             logger.error('❌ Błąd zapisu danych przypomnień:', error.message);

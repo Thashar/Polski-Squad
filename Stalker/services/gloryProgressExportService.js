@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 const SHARED_DATA_PATH = path.join(__dirname, '../../shared_data/glory_progress.json');
@@ -151,13 +152,12 @@ async function exportGloryProgress(guild, databaseService, config) {
         // Zachowaj dane innych gildii (jeśli plik istnieje)
         let existing = {};
         try {
-            const raw = await fs.readFile(SHARED_DATA_PATH, 'utf8');
-            existing = JSON.parse(raw);
+            existing = await store.getOrLoad(SHARED_DATA_PATH, () => ({}));
         } catch { /* plik nie istnieje — zaczynamy od zera */ }
 
         existing[guild.id] = { updatedAt: new Date().toISOString(), clans: exportClans };
 
-        await fs.writeFile(SHARED_DATA_PATH, JSON.stringify(existing, null, 2), 'utf8');
+        await store.set(SHARED_DATA_PATH, existing);
 
         const summary = clanKeys
             .map(c => `${c}:${exportClans[c]?.participants.length || 0}`)

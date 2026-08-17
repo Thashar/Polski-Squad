@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class MessageCleanupService {
     constructor(config, logger) {
@@ -21,8 +22,7 @@ class MessageCleanupService {
 
     async loadScheduledMessages() {
         try {
-            const data = await fs.readFile(this.messagesFile, 'utf-8');
-            this.scheduledMessages = JSON.parse(data);
+            this.scheduledMessages = await store.getOrLoad(this.messagesFile, () => ({}));
             this.logger.info(`[MESSAGE_CLEANUP] ✅ Załadowano ${this.scheduledMessages.length} zaplanowanych usunięć`);
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -37,7 +37,7 @@ class MessageCleanupService {
 
     async saveScheduledMessages() {
         try {
-            await fs.writeFile(this.messagesFile, JSON.stringify(this.scheduledMessages, null, 2), 'utf-8');
+            await store.set(this.messagesFile, this.scheduledMessages);
         } catch (error) {
             this.logger.error('[MESSAGE_CLEANUP] ❌ Błąd zapisu zaplanowanych usunięć:', error.message);
             throw error;

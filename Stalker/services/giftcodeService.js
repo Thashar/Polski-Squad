@@ -2,6 +2,7 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs').promises;
 const { delay } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 const HABBY_API_BASE = 'https://prod-mail.habbyservice.com/Survivor/api/v1';
 const DELAY_BETWEEN_UIDS_MS = 500;
@@ -29,7 +30,7 @@ class GiftcodeService {
 
     async loadData() {
         try {
-            return JSON.parse(await fs.readFile(this.uidsFile, 'utf8'));
+            return await store.getOrLoad(this.uidsFile, () => ({}));
         } catch {
             return { uids: {} };
         }
@@ -37,7 +38,7 @@ class GiftcodeService {
 
     async saveData(data) {
         await fs.mkdir(path.dirname(this.uidsFile), { recursive: true });
-        await fs.writeFile(this.uidsFile, JSON.stringify(data, null, 2));
+        await store.set(this.uidsFile, data);
     }
 
     async addUid(discordId, uid, displayName) {
@@ -71,7 +72,7 @@ class GiftcodeService {
 
     async _loadClaimed() {
         try {
-            return JSON.parse(await fs.readFile(this.claimedFile, 'utf8'));
+            return await store.getOrLoad(this.claimedFile, () => ({}));
         } catch {
             return {};
         }
@@ -79,7 +80,7 @@ class GiftcodeService {
 
     async _saveClaimed(data) {
         await fs.mkdir(path.dirname(this.claimedFile), { recursive: true });
-        await fs.writeFile(this.claimedFile, JSON.stringify(data, null, 2));
+        await store.set(this.claimedFile, data);
     }
 
     _normalizeEntry(entry) {

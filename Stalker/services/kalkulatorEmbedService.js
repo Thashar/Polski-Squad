@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const store = require('../../utils/jsonStore');
 
 const DATA_FILE = path.join(__dirname, '../data/kalkulator_embed.json');
 const HISTORY_FILE = path.join(__dirname, '../data/kalkulator_historia.json');
@@ -21,8 +22,7 @@ class KalkulatorEmbedService {
 
     async loadData() {
         try {
-            const raw = await fs.readFile(DATA_FILE, 'utf8');
-            const parsed = JSON.parse(raw);
+            const parsed = await store.getOrLoad(DATA_FILE, () => ({}));
             this.data.messageId = parsed.messageId || null;
             this.data.pingMessageId = parsed.pingMessageId || null;
             this.data.requests = Array.isArray(parsed.requests) ? parsed.requests : [];
@@ -34,7 +34,7 @@ class KalkulatorEmbedService {
 
     async saveData() {
         await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-        await fs.writeFile(DATA_FILE, JSON.stringify(this.data, null, 2), 'utf8');
+        await store.set(DATA_FILE, this.data);
     }
 
     /**
@@ -347,8 +347,7 @@ class KalkulatorEmbedService {
 
     async loadHistory() {
         try {
-            const raw = await fs.readFile(HISTORY_FILE, 'utf8');
-            return JSON.parse(raw);
+            return await store.getOrLoad(HISTORY_FILE, () => ({}));
         } catch {
             return [];
         }
@@ -356,7 +355,7 @@ class KalkulatorEmbedService {
 
     async saveHistory(history) {
         await fs.mkdir(path.dirname(HISTORY_FILE), { recursive: true });
-        await fs.writeFile(HISTORY_FILE, JSON.stringify(history, null, 2), 'utf8');
+        await store.set(HISTORY_FILE, history);
     }
 
     async addHistoryEntry(entry) {

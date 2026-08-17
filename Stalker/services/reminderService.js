@@ -7,6 +7,7 @@ const { assignNicksToClan } = require('../utils/nickMatcher');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const store = require('../../utils/jsonStore');
 const logger = createBotLogger('Stalker');
 class ReminderService {
     constructor(config) {
@@ -1401,8 +1402,7 @@ class ReminderService {
      */
     async loadActiveReminderDMs() {
         try {
-            const data = await fs.readFile(this.config.database.activeReminderDMs, 'utf8');
-            const sessions = JSON.parse(data || '{}');
+            const sessions = await store.getOrLoad(this.config.database.activeReminderDMs, () => ({}));
 
             // Sprawdź czy deadline nie minął - jeśli tak, wyczyść wszystkie sesje
             if (this.isDeadlinePassed()) {
@@ -1441,11 +1441,7 @@ class ReminderService {
                 sessions[userId] = sessionData;
             }
 
-            await fs.writeFile(
-                this.config.database.activeReminderDMs,
-                JSON.stringify(sessions, null, 2),
-                'utf8'
-            );
+            await store.set(this.config.database.activeReminderDMs, sessions);
         } catch (error) {
             logger.error('[REMINDER-DM] ❌ Błąd zapisywania aktywnych sesji DM:', error);
         }

@@ -3,6 +3,7 @@ const fsSync = require('fs');
 const https = require('https');
 const { URL } = require('url');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 const ALLOWED_DISCORD_HOSTS = new Set([
     'cdn.discordapp.com',
@@ -219,8 +220,7 @@ async function ensureDirectoryExists(dirPath) {
 async function safeReadJSON(filePath, defaultValue = {}) {
     try {
         if (await fileExists(filePath)) {
-            const data = await fs.readFile(filePath, 'utf8');
-            return JSON.parse(data);
+            return await store.getOrLoad(filePath, () => ({}));
         }
         return defaultValue;
     } catch (error) {
@@ -235,7 +235,7 @@ async function safeReadJSON(filePath, defaultValue = {}) {
 async function safeWriteJSON(filePath, data) {
     try {
         await ensureDirectoryExists(path.dirname(filePath));
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+        await store.set(filePath, data);
         return true;
     } catch (error) {
         logger.error(`Błąd zapisu pliku JSON ${filePath}:`, error);

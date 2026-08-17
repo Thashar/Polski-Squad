@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 /**
  * Serwis zarządzający automatycznym usuwaniem raportów WDUPIE
@@ -31,8 +32,7 @@ class RaportCleanupService {
      */
     async loadData() {
         try {
-            const data = await fs.readFile(this.dataFilePath, 'utf8');
-            this.pendingDeletions = JSON.parse(data);
+            this.pendingDeletions = await store.getOrLoad(this.dataFilePath, () => ({}));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje - utwórz pusty
@@ -50,7 +50,7 @@ class RaportCleanupService {
      */
     async saveData() {
         try {
-            await fs.writeFile(this.dataFilePath, JSON.stringify(this.pendingDeletions, null, 2), 'utf8');
+            await store.set(this.dataFilePath, this.pendingDeletions);
         } catch (error) {
             this.logger.error('[RAPORT-CLEANUP] ❌ Błąd zapisu danych:', error);
         }

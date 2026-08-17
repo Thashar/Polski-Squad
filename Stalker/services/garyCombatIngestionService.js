@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
+const store = require('../../utils/jsonStore');
 const WEEKLY_DIR      = path.join(__dirname, '../../shared_data/lme_weekly');
 const LOCAL_COMBAT_FILE = path.join(__dirname, '../data/player_combat_discord.json');
 
@@ -159,8 +160,8 @@ class GaryCombatIngestionService {
             // Wczytaj wszystkie pliki weekly równolegle
             const weeklyResults = await Promise.allSettled(
                 weekFiles.map(file =>
-                    fs.readFile(path.join(WEEKLY_DIR, file), 'utf8')
-                        .then(raw => ({ file, data: JSON.parse(raw) }))
+                    store.getOrLoad(path.join(WEEKLY_DIR, file), () => ({}))
+                        .then(data => ({ file, data }))
                 )
             );
 
@@ -206,8 +207,7 @@ class GaryCombatIngestionService {
             // Wczytaj istniejące dane lokalne lub zacznij od zera
             let localData = { players: {}, lastUpdated: '' };
             try {
-                const raw = await fs.readFile(LOCAL_COMBAT_FILE, 'utf8');
-                localData = JSON.parse(raw);
+                localData = await store.getOrLoad(LOCAL_COMBAT_FILE, () => ({}));
                 if (!localData.players) localData.players = {};
             } catch (_) {
                 localData = { players: {}, lastUpdated: '' };
@@ -315,7 +315,7 @@ class GaryCombatIngestionService {
             localData.lastUpdated = new Date().toISOString();
 
             await fs.mkdir(path.dirname(LOCAL_COMBAT_FILE), { recursive: true });
-            await fs.writeFile(LOCAL_COMBAT_FILE, JSON.stringify(localData, null, 2), 'utf8');
+            await store.set(LOCAL_COMBAT_FILE, localData);
 
 
             // Klanowcy którzy NIE otrzymali danych w tej ingestion

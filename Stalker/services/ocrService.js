@@ -9,6 +9,7 @@ const { saveProcessedImage, cleanupOrphanedTempFiles } = require('../../utils/oc
 const { EmbedBuilder } = require('discord.js');
 const { stopGhostPing } = require('../handlers/interactionHandlers');
 const AIOCRService = require('./aiOcrService');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 
@@ -839,7 +840,7 @@ class OCRService {
             const dir = path.dirname(snapshotPath);
             await fs.mkdir(dir, { recursive: true });
 
-            await fs.writeFile(snapshotPath, JSON.stringify(snapshotData, null, 2), 'utf8');
+            await store.set(snapshotPath, snapshotData);
             logger.info(`✅ Zapisano snapshot ${roleNicks.length} członków do pliku`);
 
             return true;
@@ -856,8 +857,7 @@ class OCRService {
      */
     async loadRoleNicksSnapshot(snapshotPath) {
         try {
-            const fileContent = await fs.readFile(snapshotPath, 'utf8');
-            const snapshotData = JSON.parse(fileContent);
+            const snapshotData = await store.getOrLoad(snapshotPath, () => ({}));
 
             logger.info(`📂 Załadowano snapshot ${snapshotData.count} członków z pliku (utworzony: ${new Date(snapshotData.timestamp).toLocaleString('pl-PL')})`);
 

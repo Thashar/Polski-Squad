@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 const SHARED_DATA_PATH = path.join(__dirname, '../../shared_data/clan_thresholds.json');
@@ -60,13 +61,12 @@ async function exportClanThresholds(guild, databaseService, config) {
         // Zachowaj dane innych gildii (jeśli plik istnieje)
         let existing = {};
         try {
-            const raw = await fs.readFile(SHARED_DATA_PATH, 'utf8');
-            existing = JSON.parse(raw);
+            existing = await store.getOrLoad(SHARED_DATA_PATH, () => ({}));
         } catch { /* plik nie istnieje — zaczynamy od zera */ }
 
         existing[guild.id] = { ...thresholds, updatedAt: new Date().toISOString() };
 
-        await fs.writeFile(SHARED_DATA_PATH, JSON.stringify(existing, null, 2), 'utf8');
+        await store.set(SHARED_DATA_PATH, existing);
         logger.info(`[THRESHOLDS] ✅ Progi klanowe zaktualizowane: ${JSON.stringify(thresholds)}`);
 
     } catch (err) {

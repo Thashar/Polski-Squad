@@ -1,6 +1,7 @@
 const { EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Stalker');
 
@@ -18,8 +19,7 @@ class ReminderStatusTrackingService {
      */
     async loadTrackingData() {
         try {
-            const data = await fs.readFile(this.config.database.reminderStatusTracking, 'utf8');
-            this.trackingData = JSON.parse(data);
+            this.trackingData = await store.getOrLoad(this.config.database.reminderStatusTracking, () => ({}));
             logger.info('[REMINDER-TRACKING] 📂 Załadowano dane trackingu');
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -37,11 +37,7 @@ class ReminderStatusTrackingService {
      */
     async saveTrackingData() {
         try {
-            await fs.writeFile(
-                this.config.database.reminderStatusTracking,
-                JSON.stringify(this.trackingData, null, 2),
-                'utf8'
-            );
+            await store.set(this.config.database.reminderStatusTracking, this.trackingData);
         } catch (error) {
             logger.error('[REMINDER-TRACKING] ❌ Błąd zapisywania trackingu:', error);
         }
