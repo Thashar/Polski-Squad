@@ -14,6 +14,15 @@ const { formatProfileDisplayName, getProfileIndex } = require('../utils/helpers'
 const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 h
 
 /**
+ * Limit pojedynczego POST-a. Undici samo ogranicza wyłącznie fazę łączenia (~10 s,
+ * `UND_ERR_CONNECT_TIMEOUT`) — gdy serwer połączenie PRZYJMIE i zamilknie, oczekiwanie
+ * na odpowiedź nie ma żadnego limitu i request wisi w nieskończoność, trzymając otwarty
+ * uchwyt. Wysyłka jest fire-and-forget, nikt na nią nie czeka, więc lepiej odpuścić
+ * i spróbować przy następnej zmianie rankingu albo najbliższym pełnym snapshocie.
+ */
+const POST_TIMEOUT_MS = 15 * 1000;
+
+/**
  * Wysyłka rankingów TOP 10 na stronę (endersecho.thashar.dev).
  *
  * Kierunek jest jeden: bot → strona. Strona nigdy nie odpytuje bota, więc serwer
@@ -203,6 +212,20 @@ class WebRankingSyncService {
         return crypto.createHash('sha1').update(material).digest('hex');
     }
 
+    /**
+     * Czytelny opis błędu wysyłki. Wbudowany `fetch` rzuca `TypeError: fetch failed`
+     * dla KAŻDEGO problemu z połączeniem (DNS, TCP, TLS, zerwana sesja), a realną
+     * przyczynę chowa w `err.cause` — bez rozpakowania log nie mówi nic ponad
+     * „fetch failed" i nie da się odróżnić padniętego DNS-u od zerwanego połączenia.
+     */
+    _errText(err) {
+        if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+            return `przekroczono limit ${POST_TIMEOUT_MS / 1000}s`;
+        }
+        const detail = err?.cause?.code || err?.cause?.message;
+        return detail ? `${err.message} (${detail})` : (err?.message || String(err));
+    }
+
     async _post(body) {
         const res = await fetch(this.url, {
             method: 'POST',
@@ -211,6 +234,7 @@ class WebRankingSyncService {
                 'Authorization': `Bearer ${this.token}`,
             },
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(POST_TIMEOUT_MS),
         });
         if (!res.ok) {
             const text = await res.text().catch(() => '');
@@ -249,7 +273,7 @@ class WebRankingSyncService {
             await this._saveState();
             this.logger.info(`🌐 Wysłano rankingi na stronę: ${guilds.length} serwer(ów)`);
         } catch (err) {
-            this.logger.warn(`⚠️ Błąd wysyłki rankingów na stronę: ${err.message}`);
+            this.logger.warn(`⚠️ Błąd wysyłki rankingów na stronę: ${this._errText(err)}`);
         }
     }
 
@@ -292,7 +316,7 @@ class WebRankingSyncService {
             this.logger.info(`🌐 Zaktualizowano ranking serwera "${payload.name}" na stronie`);
             return true;
         } catch (err) {
-            this.logger.warn(`⚠️ Błąd wysyłki rankingu serwera na stronę: ${err.message}`);
+            this.logger.warn(`⚠️ Błąd wysyłki rankingu serwera na stronę: ${this._errText(err)}`);
             return false;
         }
     }
