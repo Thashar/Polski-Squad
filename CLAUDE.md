@@ -836,6 +836,13 @@ AUTO_GIT_FIX=false
 AUTO_NPM_FIX=false
 AUTO_NPM_FIX_FORCE=false
 
+# ===== DIAGNOSTYKA SYSTEMU PLIKÓW (OPCJONALNE, DOMYŚLNIE WYŁĄCZONA) =====
+# Wypisuje przy starcie zajętość dysku, inody, top 5 katalogów wg rozmiaru i liczby plików
+# UWAGA: to najcięższa operacja I/O w projekcie — `du -s` po node_modules (18k+ plików) i .git (117 MB)
+# plus zagnieżdżony `find` po całym kontenerze. Przy pętli restartów generuje ciągły, ciężki odczyt
+# widoczny w statystykach hostingu (zgłoszenie ~34 MB/s / 3 TB dziennie). Włączaj TYLKO na czas diagnozy.
+FS_DIAGNOSTICS=false
+
 # ===== DISCORD WEBHOOK (OPCJONALNE) =====
 DISCORD_LOG_WEBHOOK_URL=webhook_url_here
 ```

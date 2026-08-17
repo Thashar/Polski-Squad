@@ -204,6 +204,10 @@ function setupShutdownHandlers() {
 }
 
 // Diagnostyka systemu plików przy starcie
+// UWAGA: to najcięższa operacja I/O w całym projekcie — `du -s` po node_modules (18k+ plików)
+// i .git, plus zagnieżdżony `find` po całym kontenerze. Przy jednym starcie nieszkodliwe, ale
+// przy pętli restartów generuje ciągły, ciężki odczyt widoczny w statystykach hostingu.
+// Dlatego domyślnie WYŁĄCZONA — włącz tylko na czas diagnozy: FS_DIAGNOSTICS=true w .env
 async function runFsDiagnostics() {
     const { execSync } = require('child_process');
     const run = (cmd) => { try { return execSync(cmd, { encoding: 'utf8', shell: '/bin/bash' }).trim(); } catch { return null; } };
@@ -294,7 +298,9 @@ function checkDiskOnStartup() {
 
 // Główna funkcja uruchamiająca
 async function main() {
-    await runFsDiagnostics();
+    if (process.env.FS_DIAGNOSTICS === 'true') {
+        await runFsDiagnostics();
+    }
 
     // Git auto-fix (jeśli włączony w .env)
     if (process.env.AUTO_GIT_FIX === 'true') {

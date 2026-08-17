@@ -1,7 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const ProxyService = require('./proxyService');
-const BrowserFetchService = require('./browserFetchService');
 
 const CLAN_RANKING_URL = 'https://garrytools.com/rank/clans';
 
@@ -13,8 +12,6 @@ class ClanAjaxService {
         this.lastFetchTime = null;
         // ClanAjaxService uses proxy as fallback when receiving 403 errors
         this.proxyService = new ProxyService(config, logger);
-        // Headless browser fallback for when Cloudflare blocks plain HTTP requests
-        this.browserFetchService = new BrowserFetchService(config, logger);
 
         // Create axios instance for AJAX requests
         this.axios = axios.create({
@@ -91,13 +88,6 @@ class ClanAjaxService {
         return [];
     }
 
-    async fetchClansViaBrowser() {
-        const html = await this.browserFetchService.fetchRenderedHtml(CLAN_RANKING_URL, {
-            waitForSelector: 'table tbody tr'
-        });
-        return this.parseClansFromHtml(html);
-    }
-
     async fetchClanData() {
         try {
             this.logger.info('📊 Fetching clan ranking data from AJAX API...');
@@ -106,12 +96,7 @@ class ClanAjaxService {
             try {
                 clans = await this.fetchClansViaHttp();
             } catch (httpError) {
-                this.logger.warn(`⚠️ HTTP fetch failed (${httpError.message}) - falling back to headless browser rendering...`);
-            }
-
-            if (clans.length === 0) {
-                this.logger.warn('⚠️ No clan data found via HTTP - table is likely rendered with JavaScript, retrying with headless browser...');
-                clans = await this.fetchClansViaBrowser();
+                this.logger.warn(`⚠️ HTTP fetch failed (${httpError.message})`);
             }
 
             if (clans.length > 0) {
@@ -121,8 +106,10 @@ class ClanAjaxService {
                 return this.clanData;
             }
 
-            // Headless browser also found nothing - surface the same error type
-            // callers already know how to display (see interactionHandlers.js isJavaScriptError)
+            // Brak wierszy tabeli - strona renderuje ranking JavaScriptem albo Cloudflare zwrócił
+            // stronę wyzwania. Nie ma już fallbacku na headless browser (usunięty razem z Chromium
+            // - rozpakowywał ~150MB przy każdym uruchomieniu), więc zgłaszamy błąd, który wywołujący
+            // już umieją wyświetlić (see interactionHandlers.js isJavaScriptError)
             const jsError = new Error('Clan ranking data is loaded dynamically and requires JavaScript execution. This feature is temporarily unavailable.');
             jsError.isJavaScriptError = true;
             throw jsError;

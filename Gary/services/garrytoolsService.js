@@ -1,7 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const ProxyService = require('./proxyService');
-const CaptchaSolverService = require('./captchaSolverService');
 
 class GarrytoolsService {
     constructor(config, logger) {
@@ -9,7 +8,6 @@ class GarrytoolsService {
         this.logger = logger;
         this.baseUrl = 'https://garrytools.com/lunar/';
         this.proxyService = new ProxyService(config, logger);
-        this.captchaSolverService = new CaptchaSolverService(config, logger);
         // GarrytoolsService ALWAYS uses proxy for lunar mine operations
         this.useProxy = true;
         
@@ -80,27 +78,10 @@ class GarrytoolsService {
         }
     }
 
-    // Formularz "Lunar Details" jest chroniony przez Google reCAPTCHA, więc Group ID
-    // pobieramy przez prawdziwą przeglądarkę (Puppeteer), a wyzwanie obrazkowe jest
-    // przekazywane do rozwiązania administratorowi na Discordzie.
-    // context: { interaction, channel, invokerId } - z interaction wyzwanie jest ephemeral (widoczne tylko dla invokera)
-    async getGroupId(guildIds, context) {
-        if (!Array.isArray(guildIds) || guildIds.length !== 4) {
-            throw new Error('Exactly 4 Guild IDs are required');
-        }
-        if (!context || (!context.interaction && !context.channel)) {
-            throw new Error('interaction or channel is required to relay the reCAPTCHA challenge for solving');
-        }
-
-        this.logger.info(`🔍 Processing Guild IDs: ${guildIds.join(', ')}`);
-
-        try {
-            return await this.captchaSolverService.solveLunarDetailsGroupId(guildIds, context);
-        } catch (error) {
-            throw new Error(`Error retrieving Group ID: ${error.message}`);
-        }
-    }
-
+    // Formularz "Lunar Details" jest chroniony przez Google reCAPTCHA. Automatyczne rozwiązywanie
+    // (Puppeteer + relay wyzwania na Discorda) zostało USUNIĘTE razem z Chromium - Group ID podaje
+    // ręcznie admin przez modal, a jego poprawność weryfikuje fetchGroupDetails() (endpoint
+    // /detail/{id} captchy nie ma). Patrz "Ręczne podawanie Group ID" w Gary/CLAUDE.md
     async fetchGroupDetails(groupId) {
         const baseUrl = `${this.baseUrl}detail/${groupId}`;
         const coreUrl = `${baseUrl}?type=core`;
