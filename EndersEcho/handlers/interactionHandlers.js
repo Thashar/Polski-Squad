@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder } = require('discord.js');
+const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, ComponentType } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileButtonEmoji } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
@@ -5020,6 +5020,38 @@ class InteractionHandler {
                 }
             } catch { /* embed mógł zostać usunięty */ }
         }
+
+        // 3) Raport odrzuconego screena z panelu „Analizuj"
+        await this._disableAnalyzeRevertFor(client, session.publicMsgId, skipMessageId).catch(() => {});
+    }
+
+    /**
+     * Wygasza przycisk `ee_analyze_revert_*` pod raportem odrzuconego screena, gdy ten sam
+     * rekord cofnięto INNĄ drogą (przycisk gracza pod ogłoszeniem albo przycisk admina
+     * w kanale logów OCR).
+     *
+     * Analiza z panelu tworzy dla jednego rekordu DWA niezależne przyciski cofnięcia,
+     * oparte na osobnych mechanizmach sesji: `ocr_revert_*`/`rec_undo_*` (persystentny
+     * `recordRevertService`) i `ee_analyze_revert_*` (`_analyzeRevertSessions` w RAM).
+     * Bez tego kroku cofnięcie jedną drogą zostawiało drugi przycisk aktywnym, a jego
+     * kliknięcie próbowało cofnąć już cofnięty wynik.
+     *
+     * Sesje analizy kluczowane są ID raportu, więc szukamy po `publicMsgId`.
+     */
+    async _disableAnalyzeRevertFor(client, publicMsgId, skipMessageId = null) {
+        if (!publicMsgId || !client || !this.config.rejectedChannelId) return;
+        for (const [globalMsgId, s] of [...this._analyzeRevertSessions]) {
+            if (s?.publicMsgId !== publicMsgId) continue;
+            // Sesja przestaje być ważna niezależnie od tego, czy uda się odświeżyć wiadomość
+            this._analyzeRevertSessions.delete(globalMsgId);
+            if (globalMsgId === skipMessageId) continue;
+            try {
+                const chan = client.channels.cache.get(this.config.rejectedChannelId)
+                    || await client.channels.fetch(this.config.rejectedChannelId).catch(() => null);
+                const msg = chan ? await chan.messages.fetch(globalMsgId).catch(() => null) : null;
+                await this._disableButtonsByPrefix(msg, 'ee_analyze_revert_');
+            } catch { /* raport mógł zostać usunięty */ }
+        }
     }
 
     /**
@@ -7688,6 +7720,13 @@ class InteractionHandler {
 
             if (customId.startsWith('ee_analyze_no_')) {
                 await this._handleAnalyzeCancelled(interaction, customId);
+                return;
+            }
+
+            // MUSI stać przed ogólnym `ee_analyze_` — inaczej blokada trafiłaby
+            // do handlera samej analizy (ten sam prefiks)
+            if (customId.startsWith('ee_analyze_block_')) {
+                await this._handleAnalyzeBlock(interaction, customId);
                 return;
             }
 
@@ -11458,6 +11497,93 @@ class InteractionHandler {
         }
     }
 
+    /**
+     * Przebudowuje komponenty wiadomości, wyłączając przyciski o podanym prefiksie customId.
+     * Pozostałe przyciski zostają nietknięte — także ich etykiety i style, bo raport bywa
+     * współdzielony przez kilka niezależnych akcji (Zatwierdź, Zablokuj, Analizuj, Cofnij).
+     * @returns {boolean} czy cokolwiek wyłączono
+     */
+    async _disableButtonsByPrefix(msg, prefixes) {
+        if (!msg) return false;
+        const wanted = Array.isArray(prefixes) ? prefixes : [prefixes];
+        const rows = [];
+        let hit = false;
+        for (const row of msg.components || []) {
+            const rebuilt = new ActionRowBuilder();
+            for (const comp of row.components || []) {
+                // Raporty mają wyłącznie przyciski; select menu przepuszczone przez
+                // ButtonBuilder.from() rzuciłoby wyjątkiem, więc lepiej nie ruszać wiadomości
+                if (comp.type !== ComponentType.Button) return false;
+                const btn = ButtonBuilder.from(comp);
+                if (wanted.some(p => comp.customId?.startsWith(p)) && !comp.disabled) {
+                    btn.setDisabled(true);
+                    hit = true;
+                }
+                rebuilt.addComponents(btn);
+            }
+            if (rebuilt.components.length > 0) rows.push(rebuilt);
+        }
+        if (!hit) return false;
+        await msg.edit({ components: rows }).catch(() => {});
+        return true;
+    }
+
+    /**
+     * Head admin blokuje adminowi serwera „Analizuj" dla konkretnego zgłoszenia.
+     * Wyłącza przycisk na kopii serwerowej raportu (etykieta zostaje bez zmian — zmienia się
+     * wyłącznie aktywność) i wygasza własny przycisk blokady na kopii globalnej, żeby stan
+     * był widoczny. Stan trzyma sama wiadomość Discorda, więc przeżywa restart bota.
+     */
+    async _handleAnalyzeBlock(interaction, customId) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const footerInfo = this._parseReportFooter(interaction.message.embeds[0]?.footer?.text);
+        const sourceGuildId = footerInfo.guildId || customId.split('_')[4] || interaction.guildId;
+        const targetMsgs = this.config.getMessages(sourceGuildId);
+        const adminName = interaction.member?.displayName || interaction.user.username;
+
+        if (!footerInfo.perGuildChannelId || !footerInfo.perGuildMsgId) {
+            await interaction.reply({ content: targetMsgs.reportAnalyzeBlockedNoTarget, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+
+        try {
+            const chan = interaction.client.channels.cache.get(footerInfo.perGuildChannelId)
+                || await interaction.client.channels.fetch(footerInfo.perGuildChannelId).catch(() => null);
+            const perGuildMsg = chan ? await chan.messages.fetch(footerInfo.perGuildMsgId).catch(() => null) : null;
+            await this._disableButtonsByPrefix(perGuildMsg, 'ee_analyze_');
+        } catch (err) {
+            this.logService._gl(sourceGuildId).warn(`⚠️ Nie można zablokować analizy na kopii serwerowej: ${err.message}`);
+        }
+
+        // Kopia globalna: notka w embedzie + wygaszony przycisk blokady (head admin nadal
+        // może analizować sam — blokada dotyczy admina serwera, nie jego)
+        const updatedEmbeds = interaction.message.embeds.map(e => EmbedBuilder.from(e).addFields({
+            name: targetMsgs.reportAnalyzeBlockedField,
+            value: formatMessage(targetMsgs.reportAnalyzeBlockedBy, { adminName }),
+            inline: false,
+        }));
+        const rows = [];
+        for (const row of interaction.message.components || []) {
+            const rebuilt = new ActionRowBuilder();
+            for (const comp of row.components || []) {
+                const btn = ButtonBuilder.from(comp);
+                if (comp.customId?.startsWith('ee_analyze_block_')) btn.setDisabled(true);
+                rebuilt.addComponents(btn);
+            }
+            if (rebuilt.components.length > 0) rows.push(rebuilt);
+        }
+        await interaction.editReply({ embeds: updatedEmbeds, components: rows }).catch(() => {});
+
+        this._ccAudit(interaction, `🚫 Zablokowano analizę admina: <@${footerInfo.userId || 'nieznany'}>`);
+        await interaction.followUp({ content: targetMsgs.reportAnalyzeBlockedDone, flags: ['Ephemeral'] }).catch(() => {});
+    }
+
     /** Parsuje footer embeda raportu — zwraca { globalMsgId, userId, guildId } */
     _parseReportFooter(footerText) {
         const result = {};
@@ -12435,7 +12561,10 @@ class InteractionHandler {
                 return embed;
             };
 
-            const buildButtons = () => {
+            // isGlobal = kopia na kanale head admina. Tylko tam dokładamy „Zablokuj analizę
+            // admina" — to narzędzie head admina PRZECIWKO analizie z panelu serwerowego,
+            // więc na kopii serwerowej byłoby wyłącznikiem samego siebie.
+            const buildButtons = (isGlobal = false) => {
                 const blockBtn = new ButtonBuilder()
                     .setCustomId(`ee_block_${interaction.user.id}_${interaction.guildId}`)
                     .setLabel(msgs.reportBtnBlock)
@@ -12447,7 +12576,17 @@ class InteractionHandler {
                         .setLabel(msgs.reportBtnAnalyze)
                         .setEmoji('🔍')
                         .setStyle(ButtonStyle.Primary);
-                    return new ActionRowBuilder().addComponents(analyzeBtn, blockBtn);
+                    const row = new ActionRowBuilder().addComponents(analyzeBtn, blockBtn);
+                    // Blokować da się tylko „Analizuj", więc przycisk ma sens wyłącznie
+                    // przy NOT_SIMILAR — pozostałe powody raportu nie mają czego blokować
+                    if (isGlobal) {
+                        row.addComponents(new ButtonBuilder()
+                            .setCustomId(`ee_analyze_block_${interaction.user.id}_${interaction.guildId}`)
+                            .setLabel(msgs.reportBtnBlockAnalyze)
+                            .setEmoji('🚫')
+                            .setStyle(ButtonStyle.Secondary));
+                    }
+                    return row;
                 }
                 const approveBtn = new ButtonBuilder()
                     .setCustomId(`ee_approve_${interaction.user.id}`)
@@ -12461,14 +12600,14 @@ class InteractionHandler {
             // Krok 1: wyślij sam plik → Discord nadaje CDN URL.
             // Krok 2: edytuj wiadomość — ustaw embed z CDN URL i usuń załącznik (attachments: []).
             // Dzięki temu zdjęcie widoczne jest tylko wewnątrz embeda, nie jako osobny podgląd.
-            const sendReport = async (channel, footerText, addPing = false) => {
+            const sendReport = async (channel, footerText, addPing = false, isGlobal = false) => {
                 const att = new AttachmentBuilder(imagePath, { name: fileName });
                 const msg = await channel.send({ content: addPing ? '<@398983446812295168>' : undefined, files: [att] });
                 const imgUrl = msg.attachments.first()?.url;
                 const embed = buildEmbed(footerText, imgUrl || null);
                 const edited = await msg.edit({
                     embeds: [embed],
-                    components: [buildButtons()],
+                    components: [buildButtons(isGlobal)],
                 });
                 return { msg: edited, imgUrl };
             };
@@ -12480,7 +12619,7 @@ class InteractionHandler {
                 try {
                     const globalChannel = await interaction.client.channels.fetch(this.config.rejectedChannelId);
                     if (globalChannel) {
-                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}${_reportProfileRef}`, true);
+                        const { msg: _gMsg, imgUrl: _gImgUrl } = await sendReport(globalChannel, `uid:${interaction.user.id}|gid:${interaction.guildId}${_reportProfileRef}`, true, true);
                         sentGlobalMsg = _gMsg;
                         reportImgUrl = _gImgUrl;
                         globalMsgId = sentGlobalMsg.id;
