@@ -3,6 +3,7 @@ const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Kontroler');
 
@@ -54,8 +55,7 @@ class GloryLotteryService {
 
     async loadHistory() {
         try {
-            const raw = await fs.readFile(this.historyFile, 'utf8');
-            this.history = JSON.parse(raw) || {};
+            this.history = await store.getOrLoad(this.historyFile, () => ({}));
         } catch {
             this.history = {};
         }
@@ -64,7 +64,7 @@ class GloryLotteryService {
     async saveHistory() {
         try {
             await fs.mkdir(path.dirname(this.historyFile), { recursive: true });
-            await fs.writeFile(this.historyFile, JSON.stringify(this.history, null, 2), 'utf8');
+            await store.set(this.historyFile, this.history);
         } catch (e) {
             logger.error(`❌ Glory: błąd zapisu historii: ${e.message}`);
         }
@@ -106,8 +106,7 @@ class GloryLotteryService {
 
     async readProgress() {
         try {
-            const raw = await fs.readFile(SHARED_GLORY_PROGRESS, 'utf8');
-            const all = JSON.parse(raw);
+            const all = await store.getOrLoad(SHARED_GLORY_PROGRESS, () => ({}));
             return all[this.config.guildId] || null;
         } catch (e) {
             logger.warn(`⚠️ Glory: brak danych progresu (${SHARED_GLORY_PROGRESS}): ${e.message}`);
@@ -261,11 +260,8 @@ class GloryLotteryService {
     async recordGloryWins(winners, clanKey, lastWeek) {
         if (!winners || winners.length === 0) return;
         try {
-            let all = {};
-            try {
-                const raw = await fs.readFile(SHARED_GLORY_WINNERS, 'utf8');
-                all = JSON.parse(raw) || {};
-            } catch { /* plik nie istnieje */ }
+            // Plik dzielony ze Stalkerem (/player-status czyta z niego liczbę Glory)
+            const all = await store.getOrLoad(SHARED_GLORY_WINNERS, () => ({}));
 
             const wonAt = new Date().toISOString();
             for (const w of winners) {
@@ -280,7 +276,7 @@ class GloryLotteryService {
             }
 
             await fs.mkdir(path.dirname(SHARED_GLORY_WINNERS), { recursive: true });
-            await fs.writeFile(SHARED_GLORY_WINNERS, JSON.stringify(all, null, 2), 'utf8');
+            await store.set(SHARED_GLORY_WINNERS, all);
         } catch (e) {
             logger.error(`❌ Glory: błąd zapisu licznika zwycięstw: ${e.message}`);
         }

@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class OligopolyService {
     constructor(config, logger) {
@@ -21,8 +22,7 @@ class OligopolyService {
 
     async loadOligopolyData() {
         try {
-            const data = await fs.readFile(this.oligopolyFile, 'utf-8');
-            this.oligopolyData = JSON.parse(data);
+            this.oligopolyData = await store.getOrLoad(this.oligopolyFile, () => []);
             this.logger.info(`[OLIGOPOLY] ✅ Załadowano ${this.oligopolyData.length} wpisów oligopoly`);
         } catch (error) {
             if (error.code === 'ENOENT') {
@@ -38,7 +38,7 @@ class OligopolyService {
 
     async saveOligopolyData() {
         try {
-            await fs.writeFile(this.oligopolyFile, JSON.stringify(this.oligopolyData, null, 2), 'utf-8');
+            await store.set(this.oligopolyFile, this.oligopolyData);
         } catch (error) {
             this.logger.error('[OLIGOPOLY] ❌ Błąd zapisu danych oligopoly:', error.message);
             throw error;

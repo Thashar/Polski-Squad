@@ -114,5 +114,9 @@ KONTROLER_GLORY_EXCLUDED_ROLES_EXCEPTIONS=user_id1,user_id2
 - **OCR:** AI (Google Gemini Vision), tylko kanał Daily, bez fallbacku na Tesseract
 - **Loteria:** DST auto, multi-klan, cykle 0-365 dni
 - **Loteria Glory:** piątek 22:00 (czas polski), progres Fazy 1 ze Stalkera, 3 zwycięzców/klan, licznik gwiazdek w `glory_winners.json`
-- **Persistencja:** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json, glory_history.json
+- **Persistencja przez `utils/jsonStore` (cache-first):** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json, glory_history.json, lottery (dataFile + message_ids), oligopoly.json oraz relay Robot1. Odczyt z dysku raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename) jednocześnie do pliku i pamięci
+  - **`shared_data/glory_winners.json` czyta i pisze Kontroler, a czyta go też Stalker** (gwiazdki ⭐ w `/player-status`). Wszystkie boty dzielą jeden proces i jeden store, więc po zapisie zwycięzców Stalker widzi je natychmiast — bez czekania na ponowny odczyt pliku
+  - **Uwaga na kształt wartości domyślnej:** `oligopoly.json` i `active_votes.json` trzymają TABLICE (`() => []`), reszta obiekty (`() => ({})`). Podanie złego kształtu wywala się dopiero przy iteracji, gdy plik nie istnieje
+  - `saveRelay1()` używa `store.mutate()` zamiast pary odczyt-zapis przy każdej przekazanej wiadomości DM
+- **Persistencja (pliki):** active_votes.json, vote_history.json, saboteur_roles.json, mvp_state.json, mvp_winners.json, mvp_approvals.json, glory_history.json
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15 — ephemeralne panele `/lottery`, `/oligopoly` i `/glory-*` stałyby się publiczne). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji. Import `MessageFlags` jest w `index.js`, `handlers/interactionHandlers.js` i `services/votingService.js`

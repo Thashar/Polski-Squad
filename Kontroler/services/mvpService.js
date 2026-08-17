@@ -4,6 +4,7 @@ const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
+const store = require('../../utils/jsonStore');
 
 /**
  * System MVP tygodnia — nagradza autora najzabawniejszego tekstu (najwięcej reakcji KEKW).
@@ -90,8 +91,7 @@ class MvpService {
 
     async loadState() {
         try {
-            const data = await fs.readFile(this.stateFile, 'utf8');
-            this.state = { ...this.emptyState(), ...JSON.parse(data) };
+            this.state = { ...this.emptyState(), ...(await store.getOrLoad(this.stateFile, () => ({}))) };
         } catch (error) {
             if (error.code !== 'ENOENT') {
                 this.logger.error(`❌ MVP: błąd ładowania stanu: ${error.message}`);
@@ -102,7 +102,7 @@ class MvpService {
 
     async saveState() {
         try {
-            await fs.writeFile(this.stateFile, JSON.stringify(this.state, null, 2));
+            await store.set(this.stateFile, this.state);
         } catch (error) {
             this.logger.error(`❌ MVP: błąd zapisu stanu: ${error.message}`);
         }
@@ -110,8 +110,7 @@ class MvpService {
 
     async loadWinners() {
         try {
-            const data = await fs.readFile(this.winnersFile, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(this.winnersFile, () => ({}));
             this.winners = parsed.winners || {};
             this.currentWinnerId = parsed.currentWinnerId || null;
         } catch (error) {
@@ -125,10 +124,10 @@ class MvpService {
 
     async saveWinners() {
         try {
-            await fs.writeFile(this.winnersFile, JSON.stringify({
+            await store.set(this.winnersFile, {
                 winners: this.winners,
                 currentWinnerId: this.currentWinnerId
-            }, null, 2));
+            });
         } catch (error) {
             this.logger.error(`❌ MVP: błąd zapisu zwycięzców: ${error.message}`);
         }
@@ -136,8 +135,7 @@ class MvpService {
 
     async loadApprovals() {
         try {
-            const data = await fs.readFile(this.approvalsFile, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(this.approvalsFile, () => ({}));
             this.approvals = { messages: parsed.messages || {}, wildcards: parsed.wildcards || [] };
         } catch (error) {
             if (error.code !== 'ENOENT') {
@@ -149,7 +147,7 @@ class MvpService {
 
     async saveApprovals() {
         try {
-            await fs.writeFile(this.approvalsFile, JSON.stringify(this.approvals, null, 2));
+            await store.set(this.approvalsFile, this.approvals);
         } catch (error) {
             this.logger.error(`❌ MVP: błąd zapisu aprobat: ${error.message}`);
         }

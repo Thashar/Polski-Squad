@@ -2,6 +2,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 class VotingService {
     constructor(config) {
@@ -79,8 +80,7 @@ class VotingService {
      */
     async loadVoteHistory() {
         try {
-            const data = await fs.readFile(this.voteHistoryFile, 'utf8');
-            this.voteHistory = JSON.parse(data);
+            this.voteHistory = await store.getOrLoad(this.voteHistoryFile, () => ({}));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 this.voteHistory = {};
@@ -96,8 +96,7 @@ class VotingService {
      */
     async loadSaboteurRoles() {
         try {
-            const data = await fs.readFile(this.saboteurRolesFile, 'utf8');
-            this.saboteurRoles = JSON.parse(data);
+            this.saboteurRoles = await store.getOrLoad(this.saboteurRolesFile, () => ({}));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 this.saboteurRoles = {};
@@ -113,8 +112,7 @@ class VotingService {
      */
     async loadActiveVotes() {
         try {
-            const data = await fs.readFile(this.activeVotesFile, 'utf8');
-            const votesArray = JSON.parse(data);
+            const votesArray = await store.getOrLoad(this.activeVotesFile, () => []);
 
             // Konwersja z tablicy do Map z przywróceniem Set
             for (const vote of votesArray) {
@@ -137,7 +135,7 @@ class VotingService {
      */
     async saveVoteHistory() {
         try {
-            await fs.writeFile(this.voteHistoryFile, JSON.stringify(this.voteHistory, null, 2));
+            await store.set(this.voteHistoryFile, this.voteHistory);
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania historii głosowań:', error);
         }
@@ -148,7 +146,7 @@ class VotingService {
      */
     async saveSaboteurRoles() {
         try {
-            await fs.writeFile(this.saboteurRolesFile, JSON.stringify(this.saboteurRoles, null, 2));
+            await store.set(this.saboteurRolesFile, this.saboteurRoles);
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania ról Dywersanta:', error);
         }
@@ -168,7 +166,7 @@ class VotingService {
                 }
             }));
 
-            await fs.writeFile(this.activeVotesFile, JSON.stringify(votesArray, null, 2));
+            await store.set(this.activeVotesFile, votesArray);
         } catch (error) {
             this.logger.error('❌ Błąd zapisywania aktywnych głosowań:', error);
         }

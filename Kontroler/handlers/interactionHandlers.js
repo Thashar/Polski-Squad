@@ -8,6 +8,7 @@ const fs = require('fs').promises;
 const OligopolyService = require('../services/oligopolyService');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { getPolandParts } = require('../utils/timezone');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Kontroler');
 
@@ -1190,8 +1191,7 @@ async function handleLotteryDebugCommand(interaction, config, lotteryService) {
         
         // Sprawdź plik danych
         try {
-            const fileData = await fs.readFile(config.lottery.dataFile, 'utf8');
-            const parsed = JSON.parse(fileData);
+            const parsed = await store.getOrLoad(config.lottery.dataFile, () => ({}));
             debugInfo += `📄 **Plik danych:**\n`;
             debugInfo += `• Aktywne w pliku: ${Object.keys(parsed.activeLotteries || {}).length}\n`;
             debugInfo += `• Historia: ${parsed.results ? parsed.results.length : 0}\n`;

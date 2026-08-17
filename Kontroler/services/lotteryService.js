@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Kontroler');
 
@@ -55,14 +56,8 @@ class LotteryService {
      */
     async loadLotteries() {
         try {
-            const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
-
-            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
-            if (!data || data.trim() === '') {
-                return;
-            }
-
-            const lotteryData = JSON.parse(data);
+            // Brak pliku i pusty plik (np. po ENOSPC) obsługuje store — oddaje pusty obiekt
+            const lotteryData = await store.getOrLoad(this.config.lottery.dataFile, () => ({}));
             
             if (lotteryData.activeLotteries) {
                 // Przywróć aktywne loterie
@@ -104,8 +99,7 @@ class LotteryService {
             let existingData = {};
             
             try {
-                const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
-                existingData = JSON.parse(data);
+                existingData = await store.getOrLoad(this.config.lottery.dataFile, () => ({}));
             } catch (error) {
                 // Plik nie istnieje lub jest uszkodzony - użyj pustej struktury
                 logger.warn('⚠️ Nie można wczytać istniejących danych loterii, tworzę nowe');
@@ -117,7 +111,7 @@ class LotteryService {
                 lastUpdated: new Date().toISOString()
             };
             
-            await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(dataToSave, null, 2));
+            await store.set(this.config.lottery.dataFile, dataToSave);
         } catch (error) {
             logger.error('❌ Błąd zapisu danych loterii:', error);
             throw error;
@@ -951,8 +945,7 @@ class LotteryService {
             // Wczytaj istniejące dane
             let data = {};
             try {
-                const fileContent = await fs.readFile(this.config.lottery.dataFile, 'utf8');
-                data = JSON.parse(fileContent);
+                data = await store.getOrLoad(this.config.lottery.dataFile, () => ({}));
             } catch (error) {
                 // Plik nie istnieje lub jest uszkodzony
             }
@@ -970,7 +963,7 @@ class LotteryService {
             data.activeLotteries = Object.fromEntries(this.activeLotteries);
             data.lastUpdated = new Date().toISOString();
 
-            await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(data, null, 2));
+            await store.set(this.config.lottery.dataFile, data);
             
             
         } catch (error) {
@@ -1029,8 +1022,7 @@ class LotteryService {
      */
     async getLotteryHistory() {
         try {
-            const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(this.config.lottery.dataFile, () => ({}));
             
             // Połącz oryginalne wyniki z rerolls i posortuj po dacie
             const results = parsed.results || [];
@@ -1164,7 +1156,7 @@ class LotteryService {
             const data = await this.loadLotteryData();
             if (!data.rerolls) data.rerolls = [];
             data.rerolls.push(rerollResult);
-            await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(data, null, 2));
+            await store.set(this.config.lottery.dataFile, data);
 
             return {
                 success: true,
@@ -1184,8 +1176,7 @@ class LotteryService {
      */
     async loadLotteryData() {
         try {
-            const data = await fs.readFile(this.config.lottery.dataFile, 'utf8');
-            return JSON.parse(data);
+            return await store.getOrLoad(this.config.lottery.dataFile, () => ({}));
         } catch (error) {
             return {};
         }
@@ -1590,7 +1581,7 @@ class LotteryService {
 
             // Zapisz zmiany
             data.lastUpdated = new Date().toISOString();
-            await fs.writeFile(this.config.lottery.dataFile, JSON.stringify(data, null, 2));
+            await store.set(this.config.lottery.dataFile, data);
             
             logger.info(`✅ Pomyślnie usunięto loterię historyczną: ${lotteryToRemove.lotteryName}`);
             return {

@@ -5,6 +5,7 @@ const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Kontroler');
 
@@ -493,8 +494,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
      */
     async loadLotteryMessageIds() {
         try {
-            const data = await fs.readFile(this.lotteryMessageIdsFile, 'utf8');
-            const idsData = JSON.parse(data);
+            const idsData = await store.getOrLoad(this.lotteryMessageIdsFile, () => ({}));
             
             this.lotteryMessageIds.clear();
             for (const [channelId, messageId] of Object.entries(idsData)) {
@@ -525,7 +525,7 @@ ${this.getLotteryInfoForEmbed(channelConfig.requiredRoleId)}`)
                 idsData[channelId] = messageId;
             }
             
-            await fs.writeFile(this.lotteryMessageIdsFile, JSON.stringify(idsData, null, 2));
+            await store.set(this.lotteryMessageIdsFile, idsData);
             logger.info(`💾 Zapisano ${Object.keys(idsData).length} ID wiadomości o loterii do pliku`);
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania ID wiadomości o loterii:', error);
