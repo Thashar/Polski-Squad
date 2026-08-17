@@ -1,5 +1,6 @@
-const fs = require('fs');
 const path = require('path');
+
+const store = require('../../utils/jsonStore');
 
 // Shared data directory (accessible by all bots in the project)
 const SHARED_DATA_DIR = path.join(__dirname, '../../shared_data');
@@ -19,42 +20,59 @@ const GUILDS_DIR  = path.join(SHARED_DATA_DIR, 'lme_guilds');
  *
  * Both arrays grow indefinitely (no trimming) so history is never lost.
  * Data survives bot restarts via Gary/data/clan_history.json.
+ *
+ * Wszystkie dane trzymane są w pamięci przez `utils/jsonStore` — z dysku czytane
+ * RAZ, przy starcie (`initialize()`), a zapis idzie jednocześnie do pliku i cache.
+ * Pliki tygodniowe w `shared_data/` czyta Stalker, a że wszystkie boty dzielą jeden
+ * proces i jeden store, widzi je natychmiast po zapisie.
  */
 class ClanHistoryService {
     constructor(logger) {
         this.logger = logger;
         this.dataFile = path.join(__dirname, '../data/clan_history.json');
-        this.history = { snapshots: [], guildSnapshots: [] };
-        this._load();
+
+        store.register(this.dataFile, {
+            defaultValue: () => ({ snapshots: [], guildSnapshots: [] }),
+            label: 'Gary/clan_history'
+        });
     }
 
-    _load() {
+    /**
+     * Wypisuje stan po wczytaniu — wołane raz przy starcie bota (Gary/index.js).
+     */
+    initialize() {
+        const history = this.history;
+        this.logger.info(
+            `📊 ClanHistory: załadowano ${history.snapshots.length} snapshots TOP500, ` +
+            `${history.guildSnapshots.length} snapshots gildii`
+        );
+    }
+
+    /**
+     * Stan historii z pamięci (z dysku czytany tylko przy pierwszym sięgnięciu).
+     * Mutujesz wynik → wołasz `_save()`.
+     */
+    get history() {
+        return store.getSync(this.dataFile, () => ({ snapshots: [], guildSnapshots: [] }));
+    }
+
+    async _save() {
         try {
-            if (fs.existsSync(this.dataFile)) {
-                const raw = fs.readFileSync(this.dataFile, 'utf8');
-                const parsed = JSON.parse(raw);
-                this.history = {
-                    snapshots: parsed.snapshots || [],
-                    guildSnapshots: parsed.guildSnapshots || []
-                };
-                this.logger.info(
-                    `📊 ClanHistory: załadowano ${this.history.snapshots.length} snapshots TOP500, ` +
-                    `${this.history.guildSnapshots.length} snapshots gildii`
-                );
-            }
+            await store.set(this.dataFile, this.history);
         } catch (err) {
-            this.logger.error('ClanHistory: błąd wczytywania:', err.message);
-            this.history = { snapshots: [], guildSnapshots: [] };
+            this.logger.error('ClanHistory: błąd zapisu:', err.message);
         }
     }
 
-    _save() {
+    /**
+     * Zapis pliku tygodniowego do shared_data (TOP500 / gildie / gracze).
+     */
+    async _saveWeeklyFile(dir, fileName, data, description) {
         try {
-            const dir = path.dirname(this.dataFile);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(this.dataFile, JSON.stringify(this.history, null, 2), 'utf8');
+            await store.set(path.join(dir, fileName), data);
+            this.logger.info(`📊 ${description}: zapisano plik → ${fileName}`);
         } catch (err) {
-            this.logger.error('ClanHistory: błąd zapisu:', err.message);
+            this.logger.error(`ClanHistory: błąd zapisu pliku ${description}:`, err.message);
         }
     }
 
@@ -75,7 +93,7 @@ class ClanHistoryService {
      * Save a snapshot of TOP500 clans from the ranking API.
      * @param {Array} clans - clan objects from clanAjaxService
      */
-    saveSnapshot(clans) {
+    async saveSnapshot(clans) {
         const now = new Date();
         const weekNumber = this._getWeekNumber(now);
         const year = now.getFullYear();
@@ -111,18 +129,11 @@ class ClanHistoryService {
             a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
         );
 
-        this._save();
+        await this._save();
 
         // Dodatkowo zapisz do osobnego pliku tygodniowego (shared_data/lme_top500/week_YYYY_WW.json)
-        try {
-            if (!fs.existsSync(TOP500_DIR)) fs.mkdirSync(TOP500_DIR, { recursive: true });
-            const weekStr = String(weekNumber).padStart(2, '0');
-            const fileName = `week_${year}_${weekStr}.json`;
-            fs.writeFileSync(path.join(TOP500_DIR, fileName), JSON.stringify(snapshot, null, 2), 'utf8');
-            this.logger.info(`📊 TOP500 snapshot: zapisano plik → ${fileName}`);
-        } catch (err) {
-            this.logger.error('ClanHistory: błąd zapisu pliku tygodniowego TOP500:', err.message);
-        }
+        const weekStr = String(weekNumber).padStart(2, '0');
+        await this._saveWeeklyFile(TOP500_DIR, `week_${year}_${weekStr}.json`, snapshot, 'TOP500 snapshot');
     }
 
     /**
@@ -162,7 +173,7 @@ class ClanHistoryService {
      * @param {Array} guilds - guild objects from garrytoolsService.fetchGroupDetails()
      *   Each guild: { guildId, title, rank, totalRelicCores, totalPower, ... }
      */
-    saveGuildSnapshot(guilds, scoreMap = null) {
+    async saveGuildSnapshot(guilds, scoreMap = null) {
         const now = new Date();
         const weekNumber = this._getWeekNumber(now);
         const year = now.getFullYear();
@@ -205,18 +216,11 @@ class ClanHistoryService {
             a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber
         );
 
-        this._save();
+        await this._save();
 
         // Dodatkowo zapisz do shared_data/lme_guilds/week_YYYY_WW.json (dostępne dla innych botów)
-        try {
-            if (!fs.existsSync(GUILDS_DIR)) fs.mkdirSync(GUILDS_DIR, { recursive: true });
-            const weekStr = String(weekNumber).padStart(2, '0');
-            const fileName = `week_${year}_${weekStr}.json`;
-            fs.writeFileSync(path.join(GUILDS_DIR, fileName), JSON.stringify(snapshot, null, 2), 'utf8');
-            this.logger.info(`📊 Guild snapshot: zapisano plik → ${fileName}`);
-        } catch (err) {
-            this.logger.error('ClanHistory: błąd zapisu pliku guild snapshot:', err.message);
-        }
+        const weekStr = String(weekNumber).padStart(2, '0');
+        await this._saveWeeklyFile(GUILDS_DIR, `week_${year}_${weekStr}.json`, snapshot, 'Guild snapshot');
     }
 
     /**
@@ -270,7 +274,7 @@ class ClanHistoryService {
      * @param {Array} guilds - guild objects from garrytoolsService.fetchGroupDetails()
      *   Each guild has: { guildId, title, members: [{name, attack, relicCores}] }
      */
-    savePlayerSnapshot(guilds) {
+    async savePlayerSnapshot(guilds) {
         const now = new Date();
         const weekNumber = this._getWeekNumber(now);
         const year = now.getFullYear();
@@ -297,14 +301,9 @@ class ClanHistoryService {
             // Zapisz do dedykowanego pliku tygodnia: week_YYYY_WW.json
             const weekStr = String(weekNumber).padStart(2, '0');
             const fileName = `week_${year}_${weekStr}.json`;
-            const weekFile = path.join(WEEKLY_DIR, fileName);
-
             const weekData = { weekNumber, year, savedAt: now.toISOString(), players };
 
-            if (!fs.existsSync(WEEKLY_DIR)) {
-                fs.mkdirSync(WEEKLY_DIR, { recursive: true });
-            }
-            fs.writeFileSync(weekFile, JSON.stringify(weekData, null, 2), 'utf8');
+            await store.set(path.join(WEEKLY_DIR, fileName), weekData);
             this.logger.info(`📊 Player combat snapshot: zapisano ${saved} wpisów → ${fileName}`);
         } catch (err) {
             this.logger.error('ClanHistory: błąd zapisu player combat snapshot:', err.message);

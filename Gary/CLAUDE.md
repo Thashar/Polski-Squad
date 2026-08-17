@@ -52,8 +52,13 @@ GARY_WEBSHARE_URL=https://proxy.webshare.io/api/v2/proxy/list/
 
 ## Najlepsze Praktyki
 
-- **Logger:** createBotLogger('Gary') 
-- **Cache:** Persistent JSON, refresh 24h
+- **Logger:** createBotLogger('Gary')
+- **Pliki JSON przez `utils/jsonStore`** (cache-first) — Gary był pilotem tej migracji. Objęte: `data/clan_history.json`, `data/proxy_status.json`, `data/lme_pagination.json` oraz pliki tygodniowe w `shared_data/lme_top500`, `lme_guilds`, `lme_weekly`. Z dysku czytane raz (`getSync` przy pierwszym sięgnięciu), zapis idzie jednocześnie do pliku i pamięci, atomowo
+  - `clanHistoryService.history` to **getter** czytający z cache — mutujesz go (`push`, `sort`) i wołasz `_save()`; nie przypisuj do niego (nie ma settera)
+  - `saveSnapshot`, `saveGuildSnapshot`, `savePlayerSnapshot` są teraz **async** — wołający muszą używać `await`
+  - `saveProxyStatuses()` zostało synchroniczne w sygnaturze, ale zapisuje fire-and-forget (jest wołane z obsługi błędów proxy 403/407, gdzie blokujący zapis wstrzymywał cały proces)
+  - Wyjątek: `proxy.txt` czytany jest nadal zwykłym `fs` — to plik tekstowy, nie JSON, wczytywany przy starcie i przy `/proxy-refresh`
+- **Cache danych klanów:** Persistent JSON, refresh 24h
 - **Proxy:** Webshare API, health monitoring
 - **Cron:** Środa 18:45 auto /lunarmine; 18:46 zapisuje snapshot TOP500 do `data/clan_history.json`
 - **Historia klanów:** `ClanHistoryService` — snapshot zapisuje rank+score+level+grade dla każdego klanu; przetrwa restart; max 25 snapshotów (starsze odcinane)

@@ -102,7 +102,7 @@ cron.schedule('50 18 * * 3', async () => {
         await clanService.fetchClanData();
         const clans = clanService.getClanData();
         if (clans.length > 0) {
-            clanHistoryService.saveSnapshot(clans);
+            await clanHistoryService.saveSnapshot(clans);
             logger.info(`📸 ✅ Clan history snapshot saved: ${clans.length} clans`);
             await logService.logInfo(`📸 Weekly clan history snapshot saved (${clans.length} clans, ${clanHistoryService.getSnapshotCount()} total)`);
         } else {
@@ -204,6 +204,7 @@ async function startBot() {
 
         try {
             clanHistoryService = new ClanHistoryService(logger);
+            clanHistoryService.initialize();
         } catch (error) {
             logger.error('❌ ClanHistoryService failed to initialize:', error.message);
             throw error;

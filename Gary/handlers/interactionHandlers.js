@@ -1,7 +1,7 @@
 const { EmbedBuilder, SlashCommandBuilder, REST, Routes, ButtonBuilder, ButtonStyle, ActionRowBuilder, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder, MessageFlags } = require('discord.js');
 const axios = require('axios');
-const fs = require('fs');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { hasPermission, formatNumber, generatePaginationId, isAllowedChannel } = require('../utils/helpers');
 
 class InteractionHandler {
@@ -984,7 +984,7 @@ class InteractionHandler {
         // Zapisz też snapshot historii TOP500 (normalnie robi to osobny cron o 18:50, ale zapis jest idempotentny per tydzień)
         let snapshotCount = 0;
         if (top500Clans.length > 0) {
-            this.clanHistoryService.saveSnapshot(top500Clans);
+            await this.clanHistoryService.saveSnapshot(top500Clans);
             snapshotCount = top500Clans.length;
         }
 
@@ -1198,8 +1198,8 @@ class InteractionHandler {
                         }
                     }
 
-                    this.clanHistoryService.saveGuildSnapshot(sortedClans, scoreMap);
-                    this.clanHistoryService.savePlayerSnapshot(sortedClans);
+                    await this.clanHistoryService.saveGuildSnapshot(sortedClans, scoreMap);
+                    await this.clanHistoryService.savePlayerSnapshot(sortedClans);
 
                     const guildIds = sortedClans.map(g => g.guildId);
                     const allHistory = this.clanHistoryService.getAllGuildsHistory(guildIds);
@@ -1325,9 +1325,8 @@ class InteractionHandler {
 
     _loadLmePagination() {
         try {
-            if (!fs.existsSync(this.LME_PAGINATION_FILE)) return;
-            const raw = fs.readFileSync(this.LME_PAGINATION_FILE, 'utf8');
-            const stored = JSON.parse(raw);
+            // Odczyt z dysku tylko przy pierwszym sięgnięciu (start bota) — dalej z pamięci
+            const stored = store.getSync(this.LME_PAGINATION_FILE, () => ({}));
             const now = Date.now();
             let loaded = 0;
             for (const [id, data] of Object.entries(stored)) {
@@ -1344,13 +1343,11 @@ class InteractionHandler {
 
     async _saveLmePagination() {
         try {
-            const dataDir = path.dirname(this.LME_PAGINATION_FILE);
-            if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
             const toSave = {};
             for (const [id, data] of this.paginationData.entries()) {
                 if (data.type === 'lme_members') toSave[id] = data;
             }
-            await fs.promises.writeFile(this.LME_PAGINATION_FILE, JSON.stringify(toSave, null, 2), 'utf8');
+            await store.set(this.LME_PAGINATION_FILE, toSave);
         } catch (err) {
             this.logger.warn('Nie udało się zapisać lme_pagination.json:', err.message);
         }

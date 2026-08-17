@@ -3,6 +3,8 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const fs = require('fs');
 const path = require('path');
 
+const store = require('../../utils/jsonStore');
+
 class ProxyService {
     constructor(config, logger) {
         // Singleton pattern - zwróć istniejącą instancję jeśli już istnieje
@@ -92,41 +94,39 @@ class ProxyService {
      */
     loadProxyStatuses() {
         try {
-            if (fs.existsSync(this.proxyStatusFile)) {
-                const raw = fs.readFileSync(this.proxyStatusFile, 'utf8');
-                const data = JSON.parse(raw || '{}');
-                const now = Date.now();
+            // Odczyt z dysku tylko przy pierwszym sięgnięciu (start bota) — dalej z pamięci
+            const data = store.getSync(this.proxyStatusFile, () => ({}));
+            const now = Date.now();
 
-                // Wczytaj statusy z pliku
-                Object.entries(data.proxyErrors || {}).forEach(([proxyMask, error]) => {
-                    const disabledAt = new Date(error.disabledAt).getTime();
+            // Wczytaj statusy z pliku
+            Object.entries(data.proxyErrors || {}).forEach(([proxyMask, error]) => {
+                const disabledAt = new Date(error.disabledAt).getTime();
 
-                    // Status 407 = trwale wyłączone
-                    if (error.status === 407) {
-                        this.disabledProxies.add(proxyMask);
-                        this.proxyErrors.set(proxyMask, error);
-                        this.logger.warn(`💾 WCZYTANO TRWALE WYŁĄCZONE PROXY: ${proxyMask} | Status 407 - WYMIEŃ DANE!`);
-                    }
-                    // Status 403 = sprawdź czy minęło 24h
-                    else if (error.status === 403) {
-                        const hours24 = 24 * 60 * 60 * 1000; // 24 godziny w ms
-                        if (now - disabledAt < hours24) {
-                            // Jeszcze zablokowane
-                            this.proxyErrors.set(proxyMask, error);
-                            const remainingHours = Math.ceil((hours24 - (now - disabledAt)) / (60 * 60 * 1000));
-                            this.logger.warn(`⏰ WCZYTANO TYMCZASOWO ZABLOKOWANE PROXY: ${proxyMask} | Pozostało ${remainingHours}h`);
-                        } else {
-                            // 24h minęło - usuń blokadę
-                            this.logger.info(`✅ PROXY ODBLOKOWANE PO 24H: ${proxyMask} | Status 403 cleared`);
-                        }
-                    }
-                });
-
-                // Wczytaj listę proxy jeśli istnieje w pliku
-                if (data.proxyList && Array.isArray(data.proxyList)) {
-                    this.proxyList = data.proxyList;
-                    this.logger.info(`💾 Wczytano ${this.proxyList.length} proxy z pliku`);
+                // Status 407 = trwale wyłączone
+                if (error.status === 407) {
+                    this.disabledProxies.add(proxyMask);
+                    this.proxyErrors.set(proxyMask, error);
+                    this.logger.warn(`💾 WCZYTANO TRWALE WYŁĄCZONE PROXY: ${proxyMask} | Status 407 - WYMIEŃ DANE!`);
                 }
+                // Status 403 = sprawdź czy minęło 24h
+                else if (error.status === 403) {
+                    const hours24 = 24 * 60 * 60 * 1000; // 24 godziny w ms
+                    if (now - disabledAt < hours24) {
+                        // Jeszcze zablokowane
+                        this.proxyErrors.set(proxyMask, error);
+                        const remainingHours = Math.ceil((hours24 - (now - disabledAt)) / (60 * 60 * 1000));
+                        this.logger.warn(`⏰ WCZYTANO TYMCZASOWO ZABLOKOWANE PROXY: ${proxyMask} | Pozostało ${remainingHours}h`);
+                    } else {
+                        // 24h minęło - usuń blokadę
+                        this.logger.info(`✅ PROXY ODBLOKOWANE PO 24H: ${proxyMask} | Status 403 cleared`);
+                    }
+                }
+            });
+
+            // Wczytaj listę proxy jeśli istnieje w pliku
+            if (data.proxyList && Array.isArray(data.proxyList)) {
+                this.proxyList = data.proxyList;
+                this.logger.info(`💾 Wczytano ${this.proxyList.length} proxy z pliku`);
             }
         } catch (error) {
             this.logger.error('❌ Błąd wczytywania statusów proxy:', error.message);
@@ -137,17 +137,18 @@ class ProxyService {
      * Zapisuje statusy proxy do pliku
      */
     saveProxyStatuses() {
-        try {
-            const data = {
-                proxyList: this.proxyList,
-                proxyErrors: Object.fromEntries(this.proxyErrors),
-                lastUpdated: new Date().toISOString()
-            };
+        const data = {
+            proxyList: this.proxyList,
+            proxyErrors: Object.fromEntries(this.proxyErrors),
+            lastUpdated: new Date().toISOString()
+        };
 
-            fs.writeFileSync(this.proxyStatusFile, JSON.stringify(data, null, 2), 'utf8');
-        } catch (error) {
+        // Fire-and-forget: metoda jest wołana z ścieżek synchronicznych (obsługa
+        // błędów proxy 403/407), a zapis blokujący wstrzymywał CAŁY proces, czyli
+        // wszystkie 9 botów. Cache jest aktualizowany od razu, plik chwilę później.
+        store.set(this.proxyStatusFile, data).catch(error => {
             this.logger.error('❌ Błąd zapisywania statusów proxy:', error.message);
-        }
+        });
     }
 
     /**
