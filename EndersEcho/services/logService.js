@@ -5,7 +5,9 @@ const { formatProfileDisplayName } = require('../utils/helpers');
 // Konfiguracja typów embedów OCR — kolor, emoji, etykieta
 const OCR_EMBED_TYPES = {
     new_record:              { color: 0x57F287, emoji: '🏆', label: 'NOWY REKORD' },
-    new_player:              { color: 0x57F287, emoji: '🆕', label: 'NOWY GRACZ' },
+    // Fuksja — pierwszy wynik gracza ma się wyróżniać na tle zwykłych rekordów.
+    // Wcześniej dzielił zieleń z `new_record` i oba typy były nie do odróżnienia po kolorze.
+    new_player:              { color: 0xEB459E, emoji: '🆕', label: 'NOWY GRACZ' },
     boss_record:             { color: 0x1ABC9C, emoji: '👾', label: 'POBITO REKORD BOSSA' },
     role_error:              { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY REKORD — błąd uprawnień ról' },
     role_error_new_player:   { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY GRACZ — błąd uprawnień ról' },

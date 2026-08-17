@@ -11809,31 +11809,12 @@ class InteractionHandler {
                 }
             }
 
-            // Embed do webhooka (dodatkowe, nie zastępuje logowania tekstowego)
-            try {
-                this.logService.sendOcrAnalysisEmbed(targetGuildId, {
-                    type: _analyzeRoleErr ? 'analyze_panel_role_error' : 'analyze_panel',
-                    userName,
-                    userId: targetUserId,
-                    playerKey: targetPlayerKey,
-                    profileIndex: targetProfileIndex,
-                    profileLabel: targetProfileLabel,
-                    userAvatar: interaction.user.displayAvatarURL(),
-                    score: aiResult.score,
-                    bossName: aiResult.bossName,
-                    previousScore: currentScore?.score,
-                    commandName: 'analyze',
-                    adminName,
-                    roleError: _analyzeRoleErr,
-                }, interaction.client.guilds.cache.get(targetGuildId) ?? null);
-            } catch {}
-
-
             // Ogłoszenie publiczne — gdy nowy rekord globalny lub nowy rekord bossa
             let analyzePublicMsg = null;
+            const analyzeChangedData = isNewRecord || isNewBossRecord;
             const guildCfgAnnounce = this.config.getGuildConfig(targetGuildId);
             const announcementChannelId = guildCfgAnnounce?.allowedChannelId;
-            if ((isNewRecord || isNewBossRecord) && announcementChannelId) {
+            if (analyzeChangedData && announcementChannelId) {
                 try {
                     const announcementChannel = await interaction.client.channels.fetch(announcementChannelId).catch(() => null);
                     if (announcementChannel) {
@@ -12067,6 +12048,40 @@ class InteractionHandler {
                 }
             }
 
+            // Embed do kanału logów OCR (dodatkowe, nie zastępuje logowania tekstowego).
+            //
+            // Wysyłany PO ogłoszeniu publicznym, bo dokładamy pod nim przycisk „↩️ Cofnij wynik",
+            // a jego kluczem jest ID tego ogłoszenia — dzięki temu przycisk admina i przycisk
+            // gracza dotyczą DOKŁADNIE tego samego rekordu (sesja z `_registerRecordAnnouncement`).
+            //
+            // ⚠️ Przycisk dokładamy WYŁĄCZNIE gdy ogłoszenie faktycznie poszło. Bez jego ID
+            // `_buildAdminRevertRow` schodzi na starą postać `{playerKey}_{guildId}`, która cofa
+            // OSTATNI rekord profilu — a tu nie ma pewności, że to akurat ten z analizy. Gdy
+            // analiza niczego nie pobiła, ogłoszenia nie ma i nie ma też czego cofać.
+            try {
+                const analyzeRevertRow = analyzePublicMsg?.id
+                    ? this._buildAdminRevertRow(analyzePublicMsg.id, targetPlayerKey, targetGuildId)
+                    : null;
+                this.logService.sendOcrAnalysisEmbed(targetGuildId, {
+                    type: _analyzeRoleErr ? 'analyze_panel_role_error' : 'analyze_panel',
+                    userName,
+                    userId: targetUserId,
+                    playerKey: targetPlayerKey,
+                    profileIndex: targetProfileIndex,
+                    profileLabel: targetProfileLabel,
+                    userAvatar: interaction.user.displayAvatarURL(),
+                    score: aiResult.score,
+                    bossName: aiResult.bossName,
+                    previousScore: currentScore?.score,
+                    commandName: 'analyze',
+                    adminName,
+                    roleError: _analyzeRoleErr,
+                    // Referencja do embeda admina — po cofnięciu przez właściciela wygaszamy
+                    // przycisk również po tej stronie
+                    onSent: this._adminMsgTracker(analyzePublicMsg?.id),
+                }, interaction.client.guilds.cache.get(targetGuildId) ?? null, analyzeRevertRow, interaction.client);
+            } catch {}
+
             const extraInfo = formatMessage(targetMsgs.analyzeResultSuccess, {
                 adminName,
                 bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
@@ -12083,7 +12098,7 @@ class InteractionHandler {
             // i jego kliknięcie unieważniało (przez `getLatest`) cofnięcie CZYJEGOŚ INNEGO,
             // poprawnego rekordu tego gracza. Realny incydent: analiza „No record broken"
             // ostemplowała legalny rekord bossa sprzed kilku godzin jako „cofnięty przez admina".
-            const analyzeChangedData = isNewRecord || isNewBossRecord;
+            // (`analyzeChangedData` policzone wyżej — steruje też wysyłką ogłoszenia publicznego.)
             const globalMsgId = footerInfo.globalMsgId || origMsgId;
             if (this.config.rejectedChannelId && globalMsgId && analyzeChangedData) {
                 this._analyzeRevertSessions.set(globalMsgId, {
