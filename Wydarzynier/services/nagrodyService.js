@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -21,28 +21,16 @@ class NagrodyService {
      */
     async loadRewards() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
-
-            if (!data || data.trim() === '') {
-                this.users = {};
-                this.claims = {};
-                return;
-            }
-
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(this.dataPath, () => ({ users: {}, claims: {} }));
             this.users = parsed.users || {};
             this.claims = parsed.claims || {};
 
             logger.info(`🎁 Wczytano statystyki nagród dla ${Object.keys(this.users).length} użytkowników`);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                this.users = {};
-                this.claims = {};
-            } else {
-                logger.error('❌ Błąd podczas wczytywania nagród:', error);
-                this.users = {};
-                this.claims = {};
-            }
+            // Brak pliku obsługuje store, więc tu trafiają realne błędy odczytu
+            logger.error('❌ Błąd podczas wczytywania nagród:', error);
+            this.users = {};
+            this.claims = {};
         }
     }
 
@@ -51,8 +39,7 @@ class NagrodyService {
      */
     async saveRewards() {
         try {
-            await fs.mkdir(path.dirname(this.dataPath), { recursive: true });
-            await fs.writeFile(this.dataPath, JSON.stringify({ users: this.users, claims: this.claims }, null, 2));
+            await store.set(this.dataPath, { users: this.users, claims: this.claims });
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania nagród:', error);
         }

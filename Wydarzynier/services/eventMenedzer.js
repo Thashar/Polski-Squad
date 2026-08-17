@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 const WARSAW_TZ = 'Europe/Warsaw';
 
@@ -46,8 +46,14 @@ class EventMenedzer {
 
     async loadData() {
         try {
-            const fileContent = await fs.readFile(this.dataPath, 'utf8');
-            this.data = JSON.parse(fileContent);
+            this.data = await store.getOrLoad(this.dataPath, () => ({
+                events: [],
+                listChannelId: null,
+                listMessageId: null,
+                controlPanelMessageId: null,
+                manualPanelMessageId: null,
+                nextId: 1
+            }));
 
             // Migracja danych - uzupełnij puste nazwy eventów (łamały walidację select menu)
             let fixedNames = 0;
@@ -63,30 +69,15 @@ class EventMenedzer {
                 this.logger.info(`Migracja danych: uzupełniono nazwy ${fixedNames} eventów bez nazwy`);
             }
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Plik nie istnieje, utwórz domyślną strukturę
-                this.data = {
-                    events: [],
-                    listChannelId: null,
-                    listMessageId: null,
-                    controlPanelMessageId: null,
-                    manualPanelMessageId: null,
-                    nextId: 1
-                };
-                await this.saveData();
-            } else {
-                throw error;
-            }
+            // Store oddaje strukturę domyślną przy braku pliku, więc tu trafiają
+            // wyłącznie realne błędy (np. nieudany zapis migracji nazw)
+            throw error;
         }
     }
 
     async saveData() {
         try {
-            await fs.writeFile(
-                this.dataPath,
-                JSON.stringify(this.data, null, 2),
-                'utf8'
-            );
+            await store.set(this.dataPath, this.data);
         } catch (error) {
             this.logger.error('Nie udało się zapisać danych eventów:', error);
             throw error;

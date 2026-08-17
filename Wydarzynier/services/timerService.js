@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { runThreadCountdown, isGoneError } = require('../utils/helpers');
 
@@ -318,7 +319,7 @@ class TimerService {
                 };
             }
 
-            await fs.writeFile(this.dataPath, JSON.stringify(timersForSave, null, 2));
+            await store.set(this.dataPath, timersForSave);
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania timerów do pliku:', error);
         }
@@ -329,26 +330,17 @@ class TimerService {
      */
     async loadTimersFromFile() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
+            const timersData = await store.getOrLoad(this.dataPath, () => ({}));
 
-            // Obsługa pustych plików
-            if (!data || data.trim() === '') {
-                return;
-            }
-
-            const timersData = JSON.parse(data);
-            
             this.activeTimers.clear();
-            
+
             for (const [lobbyId, timerData] of Object.entries(timersData)) {
                 this.activeTimers.set(lobbyId, timerData);
             }
-            
+
         } catch (error) {
-            if (error.code === 'ENOENT') {
-            } else {
-                logger.error('❌ Błąd podczas wczytywania timerów:', error);
-            }
+            // Brak pliku obsługuje store (oddaje pusty obiekt), więc tu trafiają realne błędy
+            logger.error('❌ Błąd podczas wczytywania timerów:', error);
         }
     }
 

@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -34,9 +34,8 @@ class BazarService {
      */
     async loadFromFile() {
         try {
-            const data = await fs.readFile(this.bazarDataFile, 'utf8');
-            const bazarData = JSON.parse(data);
-            
+            const bazarData = await store.getOrLoad(this.bazarDataFile, () => ({}));
+
             this.isActive = bazarData.isActive || false;
             this.startHour = bazarData.startHour || null;
             this.categoryId = bazarData.categoryId || null;
@@ -63,7 +62,7 @@ class BazarService {
                 channelIds: this.channelIds
             };
 
-            await fs.writeFile(this.bazarDataFile, JSON.stringify(bazarData, null, 2));
+            await store.set(this.bazarDataFile, bazarData);
             logger.info('Zapisano dane bazaru do pliku');
         } catch (error) {
             logger.error('Błąd zapisu danych bazaru:', error.message);

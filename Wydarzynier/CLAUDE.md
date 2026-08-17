@@ -178,6 +178,12 @@ ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywa
 - **Wątki:** Prywatne, auto-usuwanie po zamknięciu
 - **Repozytorium:** 5min interval repost
 
+**Persistencja przez `utils/jsonStore` (cache-first):**
+- Wszystkie pliki JSON bota — `lobbies.json`, `timers.json`, `nagrody.json`, `przypomnienia.json`, `eventy.json`, `bazar.json`, `message_relay.json` oraz plik ID wiadomości aktywacji Robot3 — idą przez centralny store: odczyt z dysku raz (przy pierwszym sięgnięciu), zapis atomowy (plik tymczasowy + rename) jednocześnie do pliku i pamięci
+- **Obsługa `ENOENT` zniknęła z serwisów** — store sam oddaje strukturę domyślną przy braku pliku. `eventMenedzer` i `przypomnieniaMenedzer` podają ją teraz jako `defaultValue` w `getOrLoad`, zamiast budować w `catch`
+- **`saveRelay3()` używa `store.mutate()`** — wcześniej robiło `loadRelay3()` (odczyt pliku) przy KAŻDEJ przekazanej wiadomości DM, a potem zapis; teraz odczyt i zapis idą pod jednym zamkiem, więc dwie wiadomości przychodzące równocześnie nie nadpiszą sobie wpisów
+- **`tryRegisterClaim()` pozostaje synchroniczne** — to ono chroni przed doliczeniem dwóch nagród z jednego losowania; store obsługuje wyłącznie utrwalanie, nie rezerwację
+
 **System Przypomnień:**
 - **Persistencja:** Wszystkie dane w JSON (przypomnienia.json z messagesToDelete[], eventy.json, strefy_czasowe.json)
 - **Harmonogram:** Sprawdzanie co 30s, wyzwalanie zaplanowanych przypomnień

@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Wydarzynier');
@@ -257,7 +258,7 @@ class LobbyService {
                 };
             }
 
-            await fs.writeFile(this.dataPath, JSON.stringify(lobbiesForSave, null, 2));
+            await store.set(this.dataPath, lobbiesForSave);
         } catch (error) {
             logger.error('❌ Błąd podczas zapisywania lobby do pliku:', error);
         }
@@ -268,14 +269,7 @@ class LobbyService {
      */
     async loadLobbies() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
-
-            // Obsługa pustych plików
-            if (!data || data.trim() === '') {
-                return;
-            }
-
-            const lobbiesData = JSON.parse(data);
+            const lobbiesData = await store.getOrLoad(this.dataPath, () => ({}));
 
             this.activeLobbyies.clear();
 
@@ -300,9 +294,8 @@ class LobbyService {
             }
 
         } catch (error) {
-            if (error.code !== 'ENOENT') {
-                logger.error('❌ Błąd podczas wczytywania lobby:', error);
-            }
+            // Brak pliku obsługuje store (oddaje pusty obiekt), więc tu trafiają realne błędy
+            logger.error('❌ Błąd podczas wczytywania lobby:', error);
         }
     }
 
