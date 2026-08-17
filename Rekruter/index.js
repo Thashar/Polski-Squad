@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, Partials, ChannelType, Events } = require('discord.js');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../utils/jsonStore');
 
 const config = require('./config/config');
 const { delay } = require('./utils/helpers');
@@ -58,16 +59,17 @@ const RELAY_FILE_2 = path.join(__dirname, 'data', 'message_relay.json');
 const MAX_RELAY_ENTRIES_2 = 200;
 
 async function loadRelay2() {
-    try { return JSON.parse(await fs.readFile(RELAY_FILE_2, 'utf8')); } catch { return {}; }
+    return store.getOrLoad(RELAY_FILE_2, () => ({}));
 }
 
 async function saveRelay2(dmMessageId, channelId, messageId) {
-    const relay = await loadRelay2();
-    relay[dmMessageId] = { channelId, messageId };
-    const keys = Object.keys(relay);
-    if (keys.length > MAX_RELAY_ENTRIES_2) keys.slice(0, keys.length - MAX_RELAY_ENTRIES_2).forEach(k => delete relay[k]);
-    await fs.mkdir(path.dirname(RELAY_FILE_2), { recursive: true });
-    await fs.writeFile(RELAY_FILE_2, JSON.stringify(relay, null, 2));
+    // mutate() trzyma odczyt i zapis pod jednym zamkiem — dwie wiadomości DM
+    // przychodzące jednocześnie nie nadpiszą sobie wpisów w relayu
+    await store.mutate(RELAY_FILE_2, relay => {
+        relay[dmMessageId] = { channelId, messageId };
+        const keys = Object.keys(relay);
+        if (keys.length > MAX_RELAY_ENTRIES_2) keys.slice(0, keys.length - MAX_RELAY_ENTRIES_2).forEach(k => delete relay[k]);
+    });
 }
 
 async function updateActivationMessage(client, robotUsers, botLabel, customIdPrefix, msgFile) {
@@ -97,8 +99,7 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
 
         let storedId = null;
         try {
-            const data = JSON.parse(await fs.readFile(msgFile, 'utf8'));
-            storedId = data.messageId;
+            storedId = (await store.getOrLoad(msgFile, () => ({}))).messageId;
         } catch {}
 
         if (storedId) {
@@ -121,8 +122,7 @@ async function updateActivationMessage(client, robotUsers, botLabel, customIdPre
         }
 
         const newMsg = await activationChannel.send({ content, components: [row] });
-        await fs.mkdir(path.dirname(msgFile), { recursive: true });
-        await fs.writeFile(msgFile, JSON.stringify({ messageId: newMsg.id }, null, 2));
+        await store.set(msgFile, { messageId: newMsg.id });
         logger.info('[ROBOT2] Wysłano nową wiadomość aktywacji');
     } catch (error) {
         logger.error(`[ROBOT2] Błąd aktualizacji wiadomości aktywacji: ${error.message}`);

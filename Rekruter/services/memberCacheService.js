@@ -1,4 +1,5 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -155,15 +156,8 @@ class MemberCacheService {
      */
     async loadCacheFromFile() {
         try {
-            const data = await fs.readFile(this.cacheFilePath, 'utf8');
-
-            if (!data.trim()) {
-                this.logger.info('📁 Plik cache boost jest pusty - inicjalizuję nowy');
-                this.memberBoostCache = new Map();
-                return;
-            }
-
-            const cacheData = JSON.parse(data);
+            // Brak pliku i pusty plik obsługuje store — oddaje wtedy pusty obiekt
+            const cacheData = await store.getOrLoad(this.cacheFilePath, () => ({}));
 
             // Waliduj dane
             this.validateCacheData(cacheData);
@@ -315,10 +309,8 @@ class MemberCacheService {
                 this.logger.warn(`⚠️ Zapis cache: ${validEntries} poprawnych, ${invalidEntries} niepoprawnych wpisów`);
             }
 
-            // Zapisz z atomowością (tmp file → rename)
-            const tmpPath = this.cacheFilePath + '.tmp';
-            await fs.writeFile(tmpPath, JSON.stringify(cacheObject, null, 2));
-            await fs.rename(tmpPath, this.cacheFilePath);
+            // Zapis atomowy (plik tymczasowy → rename) obsługuje store
+            await store.set(this.cacheFilePath, cacheObject);
 
         } catch (error) {
             this.logger.error('❌ Błąd podczas zapisywania cache boost:', error.message);

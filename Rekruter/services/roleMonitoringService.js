@@ -1,6 +1,6 @@
-const fs = require('fs').promises;
 const path = require('path');
 const cron = require('node-cron');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
@@ -32,22 +32,10 @@ class RoleMonitoringService {
      */
     async loadMonitoringData() {
         try {
-            // Utwórz katalog jeśli nie istnieje
-            await fs.mkdir(path.dirname(this.dataPath), { recursive: true });
-
-            const data = await fs.readFile(this.dataPath, 'utf8');
-
-            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
-            if (!data || data.trim() === '') {
-                this.monitoringData = {};
-                return;
-            }
-
-            this.monitoringData = JSON.parse(data);
+            // Brak pliku i pusty plik (np. po ENOSPC) obsługuje store — oddaje pusty obiekt
+            this.monitoringData = await store.getOrLoad(this.dataPath, () => ({}));
         } catch (error) {
-            if (error.code !== 'ENOENT') {
-                logger.error(`Błąd ładowania danych monitorowania: ${error.message}`);
-            }
+            logger.error(`Błąd ładowania danych monitorowania: ${error.message}`);
             this.monitoringData = {};
         }
     }
@@ -57,7 +45,7 @@ class RoleMonitoringService {
      */
     async saveMonitoringData() {
         try {
-            await fs.writeFile(this.dataPath, JSON.stringify(this.monitoringData, null, 2));
+            await store.set(this.dataPath, this.monitoringData);
         } catch (error) {
             logger.error(`Błąd zapisu danych monitorowania: ${error.message}`);
         }

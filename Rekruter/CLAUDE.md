@@ -94,5 +94,9 @@ ROBOT2_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot
 - **Zawsze używaj createBotLogger('Rekruter')** zamiast console.log
 - **OCR debug:** `/ocr-debug true` włącza szczegółowe logowanie
 - **Walidacja danych:** Sprawdzaj formaty przed zapisem
+- **Persistencja przez `utils/jsonStore` (cache-first):** `data/notification_preferences.json`, dane monitorowania ról, cache boostów (`memberCacheService`) oraz plik relay Robot2 i ID wiadomości aktywacji. Odczyt z dysku raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename) jednocześnie do pliku i pamięci
+  - `memberCacheService` miał własny zapis atomowy (`.tmp` + `rename`) — teraz robi to store, więc kod serwisu jest krótszy o tę obsługę
+  - `saveRelay2()` używa `store.mutate()` zamiast pary odczyt-zapis — wcześniej czytał plik przy KAŻDEJ przekazanej wiadomości DM
+  - **`stalkerThresholdsService` nadal odświeża się co 5 min** (`store.reload`), bo plik `shared_data/clan_thresholds.json` pisze Stalker, który jeszcze nie przeszedł na store. Po migracji Stalkera oba boty będą dzielić ten sam wpis w cache (jeden proces, klucz = ścieżka pliku) i to wymuszone odświeżanie będzie można usunąć — progi będą aktualne natychmiast po zapisie
 - **Persistencja:** Zapisuj dane do JSON po każdej zmianie
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy pierwszej odpowiedzi. Dotyczy to `updateUserEphemeralReply()` w `utils/helpers.js`, które edytuje zapamiętaną interakcję z `state.userEphemeralReplies` — ephemeralność pochodzi z pierwotnego `reply()`. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`

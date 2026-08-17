@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Rekruter');
@@ -13,15 +13,13 @@ class NotificationPreferencesService {
 
     async load() {
         try {
-            const raw = await fs.readFile(DATA_FILE, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(DATA_FILE, () => ({ globalEnabled: true, optedOut: [] }));
             this.globalEnabled = data.globalEnabled !== false; // domyślnie true
             this.optedOut = new Set(data.optedOut || []);
             logger.info(`[NOTIF_PREFS] Wczytano preferencje - globalne: ${this.globalEnabled ? 'włączone' : 'wyłączone'}, ${this.optedOut.size} użytkowników z wyłączonymi powiadomieniami`);
         } catch (err) {
-            if (err.code !== 'ENOENT') {
-                logger.error(`[NOTIF_PREFS] Błąd wczytywania preferencji: ${err.message}`);
-            }
+            // Brak pliku obsługuje store, więc tu trafiają realne błędy odczytu
+            logger.error(`[NOTIF_PREFS] Błąd wczytywania preferencji: ${err.message}`);
             this.globalEnabled = true;
             this.optedOut = new Set();
         }
@@ -29,11 +27,10 @@ class NotificationPreferencesService {
 
     async save() {
         try {
-            await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
-            await fs.writeFile(DATA_FILE, JSON.stringify({
+            await store.set(DATA_FILE, {
                 globalEnabled: this.globalEnabled,
                 optedOut: [...this.optedOut]
-            }, null, 2));
+            });
         } catch (err) {
             logger.error(`[NOTIF_PREFS] Błąd zapisywania preferencji: ${err.message}`);
         }
