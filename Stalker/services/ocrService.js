@@ -1895,6 +1895,21 @@ class OCRService {
     }
 
     /**
+     * Nick serwerowy do logów. Surowe ID nic nie mówi przy czytaniu logów — trzeba je
+     * dopiero gdzieś wkleić, żeby dowiedzieć się, kogo dotyczy wpis.
+     * Zapas na ID zostaje, gdy członka nie da się pobrać (wyszedł z serwera, brak cache).
+     */
+    async resolveMemberName(guildId, userId) {
+        try {
+            const guild = this.client.guilds.cache.get(guildId) || await this.client.guilds.fetch(guildId);
+            const member = guild.members.cache.get(userId) || await guild.members.fetch(userId);
+            return member.displayName;
+        } catch {
+            return `ID:${userId}`;
+        }
+    }
+
+    /**
      * Rozpoczyna sesję OCR dla użytkownika (równolegle z sesjami innych użytkowników)
      */
     async startOCRSession(guildId, userId, commandName) {
@@ -1909,13 +1924,13 @@ class OCRService {
 
         // Ustaw timeout który wywoła wygaśnięcie sesji
         const timeout = setTimeout(async () => {
-            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${commandName})`);
+            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla "${await this.resolveMemberName(guildId, userId)}" (${commandName})`);
             await this.expireOCRSession(guildId, userId);
         }, timeoutDuration);
 
         guildSessions.set(userId, { commandName, expiresAt, timeout });
         const minutes = timeoutDuration / (60 * 1000);
-        logger.info(`[OCR] 🔒 Użytkownik ${userId} rozpoczął ${commandName} (timeout: ${minutes} min, aktywnych sesji: ${guildSessions.size})`);
+        logger.info(`[OCR] 🔒 Użytkownik "${await this.resolveMemberName(guildId, userId)}" rozpoczął ${commandName} (timeout: ${minutes} min, aktywnych sesji: ${guildSessions.size})`);
 
         // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
@@ -1942,7 +1957,7 @@ class OCRService {
 
         // Ustaw nowy timeout
         const timeout = setTimeout(async () => {
-            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla "${await this.resolveMemberName(guildId, userId)}" (${active.commandName})`);
             await this.expireOCRSession(guildId, userId);
         }, timeoutDuration);
 
@@ -1952,7 +1967,7 @@ class OCRService {
         guildSessions.set(userId, active);
 
         const minutes = timeoutDuration / (60 * 1000);
-        logger.info(`[OCR] 🔄 Odświeżono timeout dla ${userId} (${active.commandName}, +${minutes} min)`);
+        logger.info(`[OCR] 🔄 Odświeżono timeout dla "${await this.resolveMemberName(guildId, userId)}" (${active.commandName}, +${minutes} min)`);
 
         // Aktualizuj wyświetlanie aktywnych sesji (odświeża timestamp w embedzie)
         await this.updateQueueDisplay(guildId);
@@ -1978,7 +1993,7 @@ class OCRService {
         if (guildSessions.size === 0) {
             this.activeProcessing.delete(guildId);
         }
-        logger.info(`[OCR] 🔓 Użytkownik ${userId} zakończył OCR`);
+        logger.info(`[OCR] 🔓 Użytkownik "${await this.resolveMemberName(guildId, userId)}" zakończył OCR`);
 
         // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć finalną wiadomość)
         this.deleteSessionThread(active.threadId, active.systemMessageId, immediate ? 5000 : 10000);
@@ -2001,12 +2016,16 @@ class OCRService {
             return; // Sesja już zakończona
         }
 
+        // Nick ustalany raz — ta metoda loguje go w kilku miejscach, a każde wywołanie
+        // helpera może kosztować zapytanie do Discorda
+        const memberName = await this.resolveMemberName(guildId, userId);
+
         // Usuń z aktywnego przetwarzania
         guildSessions.delete(userId);
         if (guildSessions.size === 0) {
             this.activeProcessing.delete(guildId);
         }
-        logger.info(`[OCR] ⏰ Sesja OCR wygasła i została usunięta dla ${userId}`);
+        logger.info(`[OCR] ⏰ Sesja OCR wygasła i została usunięta dla "${memberName}"`);
 
         // Usuń wątek sesji (z opóźnieniem, żeby użytkownik zdążył zobaczyć wiadomość o wygaśnięciu)
         this.deleteSessionThread(active.threadId, active.systemMessageId, 8000);
@@ -2021,7 +2040,7 @@ class OCRService {
             if (reminderSession) {
                 stopGhostPing(reminderSession);
                 await this.reminderService.cleanupSession(reminderSession.sessionId);
-                logger.info(`[OCR] 🧹 Wyczyszczono sesję /remind dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję /remind dla "${memberName}" (timeout)`);
             }
         }
 
@@ -2031,7 +2050,7 @@ class OCRService {
             if (punishSession) {
                 stopGhostPing(punishSession);
                 await this.punishmentService.cleanupSession(punishSession.sessionId);
-                logger.info(`[OCR] 🧹 Wyczyszczono sesję /punish dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję /punish dla "${memberName}" (timeout)`);
             }
         }
 
@@ -2041,11 +2060,11 @@ class OCRService {
             if (phaseSession) {
                 stopGhostPing(phaseSession);
                 await this.phaseService.cleanupSession(phaseSession.sessionId);
-                logger.info(`[OCR] 🧹 Wyczyszczono sesję phase dla ${userId} (timeout)`);
+                logger.info(`[OCR] 🧹 Wyczyszczono sesję phase dla "${memberName}" (timeout)`);
             }
         }
 
-        logger.info(`[OCR] ⏰ Sesja OCR wygasła dla ${userId} (${active.commandName})`);
+        logger.info(`[OCR] ⏰ Sesja OCR wygasła dla "${memberName}" (${active.commandName})`);
 
         // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
