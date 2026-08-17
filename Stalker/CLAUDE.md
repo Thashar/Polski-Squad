@@ -282,7 +282,7 @@
 - **10 graczy na stronę** (`PER_PAGE`) — tyle serii mieści jeszcze czytelnie wykres progresu
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
 - **Wspólny builder przycisków:** `buildCoreRankingRows(activeName)` — jedno miejsce dla widoku rankingu, ekranu startowego, braku danych i obsługi błędu (wcześniej ten sam zestaw budowany był w czterech miejscach osobno)
-- Pod rankingiem: **wykres progresu wszystkich graczy z bieżącej strony** (`generateCoreComparisonChart`, SVG → PNG przez sharp) — jedna linia na gracza, kolory serii w kolejności rankingu, legenda z nickami, wartość przy ostatnim punkcie każdej serii. Gracz z jednym pomiarem pokazywany jest jako sama kropka; gdy nikt ze strony nie ma historii → brak wykresu
+- Pod rankingiem: **wykres progresu wszystkich graczy z bieżącej strony** (`generateCoreComparisonChart`, SVG → PNG przez sharp) — jedna linia na gracza, kolory serii w kolejności rankingu, legenda z nickami, wartość przy ostatnim punkcie każdej serii. Gracz z jednym pomiarem pokazywany jest jako sama kropka; gdy nikt ze strony nie ma historii → brak wykresu. **Wymiary:** szerokość 900 px, pole danych 4× wyższe niż pierwotne (`HEIGHT_SCALE = 4` → `cH = 592`), całość ok. 730 px przy 2 rzędach legendy — przy 10 seriach linie nie nachodziły na siebie
 - Dane historyczne: `data/equipment_history.json` — dzienne snapshoty per userId
 
 **Historia Core Stock** - `services/coreHistoryService.js`:

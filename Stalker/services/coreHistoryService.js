@@ -360,9 +360,11 @@ async function generateCoreComparisonChart(players, coreName, valueFn = null) {
         const legendRows = Math.ceil(series.length / LEGEND_PER_ROW);
         const W = 900;
         const M = { top: 52, right: 46, bottom: 50 + legendRows * 18, left: 80 };
-        const H = 250 + legendRows * 18;
+        // Pole danych 4x wyższe — przy kilkunastu graczach linie leżały na sobie
+        const HEIGHT_SCALE = 4;
+        const cH = 148 * HEIGHT_SCALE;
+        const H = M.top + cH + M.bottom;
         const cW = W - M.left - M.right;
-        const cH = H - M.top - M.bottom;
         const baseY = M.top + cH;
 
         const allValues = series.flatMap(s => s.entries.map(e => e.qty));
