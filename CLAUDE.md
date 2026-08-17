@@ -662,12 +662,13 @@ store.getStats();                         // diskReads / cacheHits / hitRate
 3. **Po podmianie plików spod spodu MUSI lecieć `reload()`** — dotyczy `/restore-backup` w Muteuszu i `backupManager.restoreFilesFromTemp`. Bez tego pierwszy zapis po przywróceniu nadpisze odzyskane dane starą zawartością pamięci
 4. **`getSync()` tylko w konstruktorach i kodzie synchronicznym** — blokuje, ale jednorazowo, gdy proces nie obsługuje jeszcze ruchu. W kodzie async używaj `get()`/`getOrLoad()`
 
-#### Stan migracji
+#### Stan migracji: ✅ wszystkie 9 botów
 
-| Bot | Status |
-|---|---|
-| Gary | ✅ `clan_history`, statusy proxy, paginacja LME, pliki tygodniowe `shared_data/` |
-| Szkolenia, Wydarzynier, Konklawe, Rekruter, Kontroler, Muteusz, Stalker, EndersEcho | ⏳ do migracji |
+Każdy bot ma osobny commit i test funkcjonalny. Poza store'em zostały wyłącznie: `config.js` czytające `.env` przy starcie, `proxy.txt` w Garym (plik tekstowy), obrazy bossów i screeny OCR (dane binarne).
+
+#### ⚠️ Najczęstszy błąd przy dodawaniu nowego magazynu
+
+**Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji.
 
 ---
 

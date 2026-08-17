@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 const DATA_PATH = path.join(__dirname, '../data/boss_aliases.json');
 
@@ -30,8 +31,7 @@ class BossAliasService {
     _load() {
         try {
             if (fs.existsSync(DATA_PATH)) {
-                const raw = fs.readFileSync(DATA_PATH, 'utf8');
-                const parsed = JSON.parse(raw);
+                const parsed = store.getSync(DATA_PATH, () => ({}));
                 this._data.englishNames = Array.isArray(parsed.englishNames) ? parsed.englishNames : [];
                 this._data.aliases = parsed.aliases && typeof parsed.aliases === 'object' ? parsed.aliases : {};
                 this._data.images = parsed.images && typeof parsed.images === 'object' ? parsed.images : {};

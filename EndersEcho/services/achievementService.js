@@ -6,6 +6,7 @@ const { ACHIEVEMENTS, RARITY, CATEGORY_INFO } = require('../config/achievements'
 const { EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { getOwnerId, getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -40,8 +41,7 @@ class AchievementService {
 
     async loadData(guildId) {
         try {
-            const raw = await fs.readFile(this._getDataFile(guildId), 'utf8');
-            return JSON.parse(raw);
+            return await store.getOrLoad(this._getDataFile(guildId), () => ({}));
         } catch {
             return {};
         }
@@ -50,7 +50,7 @@ class AchievementService {
     async saveData(guildId, data) {
         const file = this._getDataFile(guildId);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+        await store.set(file, data);
     }
 
     _ensureUser(data, playerKey) {

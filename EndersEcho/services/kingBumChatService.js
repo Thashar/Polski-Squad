@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 let Anthropic;
 try {
@@ -88,8 +89,7 @@ class KingBumChatService {
     async loadData() {
         try {
             try {
-                const raw = await fs.readFile(this.cooldownsFile, 'utf8');
-                this.cooldowns = new Map(Object.entries(JSON.parse(raw)));
+                this.cooldowns = new Map(Object.entries(await store.getOrLoad(this.cooldownsFile, () => ({}))));
             } catch {
                 this.cooldowns = new Map();
             }
@@ -102,7 +102,7 @@ class KingBumChatService {
     async saveData() {
         try {
             await fs.mkdir(this.dataDir, { recursive: true });
-            await fs.writeFile(this.cooldownsFile, JSON.stringify(Object.fromEntries(this.cooldowns), null, 2));
+            await store.set(this.cooldownsFile, Object.fromEntries(this.cooldowns));
         } catch (err) {
             logger.error(`Błąd zapisu cooldownów King BUM: ${err.message}`);
         }

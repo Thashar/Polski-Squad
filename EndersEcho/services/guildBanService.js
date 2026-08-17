@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -12,7 +13,7 @@ class GuildBanService {
 
     async load() {
         try {
-            const data = JSON.parse(await fs.readFile(this.filePath, 'utf8'));
+            const data = await store.getOrLoad(this.filePath, () => ({}));
             this._banned = data || {};
             const count = Object.keys(this._banned).length;
             if (count > 0) logger.info(`🚫 GuildBanService: załadowano ${count} zbanowanych serwer(ów)`);
@@ -22,7 +23,7 @@ class GuildBanService {
     }
 
     async _save() {
-        await fs.writeFile(this.filePath, JSON.stringify(this._banned, null, 2), 'utf8');
+        await store.set(this.filePath, this._banned);
     }
 
     isBanned(guildId) {

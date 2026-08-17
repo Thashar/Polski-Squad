@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -25,7 +26,7 @@ class GuildDataRetentionService {
 
     async load() {
         try {
-            this._pending = JSON.parse(await fs.readFile(this.filePath, 'utf8')) || {};
+            this._pending = await store.getOrLoad(this.filePath, () => ({})) || {};
             const count = Object.keys(this._pending).length;
             if (count > 0) logger.info(`🗓️ GuildDataRetention: ${count} serwer(ów) oczekuje na usunięcie danych`);
         } catch {
@@ -34,7 +35,7 @@ class GuildDataRetentionService {
     }
 
     async _save() {
-        await fs.writeFile(this.filePath, JSON.stringify(this._pending, null, 2), 'utf8');
+        await store.set(this.filePath, this._pending);
     }
 
     /** Wołane z guildDelete — startuje 30-dniowy zegar dla danych serwera. */

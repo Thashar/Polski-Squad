@@ -2,6 +2,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 /**
  * Zbiorcze liczniki reakcji pod embedami rozsyłanymi na WSZYSTKIE serwery
@@ -71,8 +72,7 @@ class BroadcastReactionService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.stateFile, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this.stateFile, () => ({}));
             this._broadcasts = data?.broadcasts || {};
         } catch {
             this._broadcasts = {};
@@ -101,7 +101,7 @@ class BroadcastReactionService {
         this._queue = this._queue.then(async () => {
             try {
                 await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-                await fs.writeFile(this.stateFile, JSON.stringify({ broadcasts: this._broadcasts }, null, 2), 'utf8');
+                await store.set(this.stateFile, { broadcasts: this._broadcasts });
             } catch (err) {
                 this.logger.warn(`⚠️ Nie udało się zapisać stanu reakcji rozgłoszeń: ${err.message}`);
             }

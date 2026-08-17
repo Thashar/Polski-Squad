@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -40,15 +41,14 @@ class TokenUsageService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.dataFile, 'utf8');
-            this.data = JSON.parse(raw);
+            this.data = await store.getOrLoad(this.dataFile, () => ({}));
         } catch {
             this.data = { guilds: {} };
         }
     }
 
     async save() {
-        await fs.writeFile(this.dataFile, JSON.stringify(this.data, null, 2), 'utf8');
+        await store.set(this.dataFile, this.data);
     }
 
     async record(guildId, promptTokens, outputTokens, userId = null) {

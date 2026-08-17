@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -21,8 +22,7 @@ class AlertService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this._dataFile, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this._dataFile, () => ({}));
             if (data.thresholds) {
                 this._thresholds = { ...this._thresholds, ...data.thresholds };
             }
@@ -37,10 +37,10 @@ class AlertService {
 
     async _persist() {
         await fs.mkdir(path.dirname(this._dataFile), { recursive: true });
-        await fs.writeFile(this._dataFile, JSON.stringify({
+        await store.set(this._dataFile, {
             thresholds: this._thresholds,
             active: this._active,
-        }, null, 2), 'utf8');
+        });
     }
 
     getThresholds() {

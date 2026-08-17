@@ -347,7 +347,7 @@ class KalkulatorEmbedService {
 
     async loadHistory() {
         try {
-            return await store.getOrLoad(HISTORY_FILE, () => ({}));
+            return await store.getOrLoad(HISTORY_FILE, () => ([]));
         } catch {
             return [];
         }

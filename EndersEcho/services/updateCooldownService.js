@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000; // 5 minut
 
@@ -12,8 +13,7 @@ class UpdateCooldownService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.filePath, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this.filePath, () => ({}));
             const now = Date.now();
             if (typeof data.cooldownDurationMs === 'number') {
                 this._cooldownDurationMs = data.cooldownDurationMs;
@@ -56,10 +56,10 @@ class UpdateCooldownService {
             if (entry.expiresAt > now) cooldowns[userId] = entry;
         }
         await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-        await fs.writeFile(this.filePath, JSON.stringify({
+        await store.set(this.filePath, {
             cooldownDurationMs: this._cooldownDurationMs,
             cooldowns
-        }, null, 2), 'utf8');
+        });
     }
 
     // Zwraca pozostały czas w ms, lub null jeśli brak cooldownu

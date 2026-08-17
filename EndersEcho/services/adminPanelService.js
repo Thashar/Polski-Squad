@@ -3,6 +3,7 @@ const path = require('path');
 const { formatProfileDisplayName, getOwnerId } = require('../utils/helpers');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -94,8 +95,7 @@ class AdminPanelService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this._dataFile, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this._dataFile, () => ({}));
             // Nowy format: messageIds (obiekt)
             if (data.messageIds && typeof data.messageIds === 'object') {
                 this._messageIds = data.messageIds;
@@ -119,14 +119,14 @@ class AdminPanelService {
 
     async _persist() {
         await fs.mkdir(path.dirname(this._dataFile), { recursive: true });
-        await fs.writeFile(this._dataFile, JSON.stringify({
+        await store.set(this._dataFile, {
             messageIds: this._messageIds,
             channelId: this._channelId,
             lastRecords: this._lastRecords,
             auditLog: this._auditLog,
             costAlert: this._costAlert,
             globalOcrBlocked: this._globalOcrBlocked,
-        }, null, 2), 'utf8');
+        });
     }
 
     // Dodaje rekord do feedu ostatnich rekordów (max 5, najnowszy pierwszy)

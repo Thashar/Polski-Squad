@@ -6,6 +6,7 @@ const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
 const { formatMessage } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -53,7 +54,7 @@ class GlobalTop10Service {
 
     _load() {
         try {
-            this._cfg = JSON.parse(fs.readFileSync(this._configFile, 'utf8'));
+            this._cfg = store.getSync(this._configFile, () => ({}));
         } catch {
             this._cfg = {
                 enabled:      false,
@@ -66,7 +67,7 @@ class GlobalTop10Service {
     }
 
     _save() {
-        fs.writeFileSync(this._configFile, JSON.stringify(this._cfg, null, 2), 'utf8');
+        store.setSync(this._configFile, this._cfg);
     }
 
     getConfig() {
@@ -352,7 +353,7 @@ class GlobalTop10Service {
                 for (const file of fs.readdirSync(wDir)) {
                     if (!file.endsWith('.json')) continue;
                     try {
-                        const entries = JSON.parse(fs.readFileSync(path.join(wDir, file), 'utf8'));
+                        const entries = store.getSync(path.join(wDir, file), () => ([]));
                         if (Array.isArray(entries)) allEntries.push(...entries);
                     } catch { /* skip */ }
                 }
@@ -365,7 +366,7 @@ class GlobalTop10Service {
             for (const file of fs.readdirSync(oldWDir)) {
                 if (!file.endsWith('.json')) continue;
                 try {
-                    const entries = JSON.parse(fs.readFileSync(path.join(oldWDir, file), 'utf8'));
+                    const entries = store.getSync(path.join(oldWDir, file), () => ([]));
                     if (Array.isArray(entries)) allEntries.push(...entries);
                 } catch { /* skip */ }
             }

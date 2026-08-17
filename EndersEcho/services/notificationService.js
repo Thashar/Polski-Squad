@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { getOwnerId } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -23,8 +24,7 @@ class NotificationService {
 
     async load() {
         try {
-            const data = await fs.readFile(this.dataFile, 'utf8');
-            return JSON.parse(data);
+            return await store.getOrLoad(this.dataFile, () => ({}));
         } catch {
             return {};
         }
@@ -32,7 +32,7 @@ class NotificationService {
 
     async save(data) {
         await fs.mkdir(this.config.ranking.dataDir, { recursive: true });
-        await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2), 'utf8');
+        await store.set(this.dataFile, data);
     }
 
     /** Klucz profilu subskrypcji — obsługuje stare wpisy bez targetPlayerKey. */

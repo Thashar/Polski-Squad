@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -90,7 +91,7 @@ async function _migrateScoreHistory(src, wynikiDir, guildId) {
         const dst = path.join(wynikiDir, `${userId}.json`);
         try { await fs.access(dst); continue; } catch { /* nie istnieje — pisz */ }
         const entries = Array.isArray(data[userId]) ? data[userId] : [];
-        await fs.writeFile(dst, JSON.stringify(entries, null, 2), 'utf8');
+        await store.set(dst, entries);
         migrated++;
     }
 

@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -13,8 +14,7 @@ class UsageLimitService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.filePath, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this.filePath, () => ({}));
             this._limit = data.limit ?? null;
             this._dailyUsage = data.dailyUsage || {};
         } catch {
@@ -29,10 +29,10 @@ class UsageLimitService {
         for (const key of Object.keys(this._dailyUsage)) {
             if (!key.endsWith(`_${today}`)) delete this._dailyUsage[key];
         }
-        await fs.writeFile(this.filePath, JSON.stringify({
+        await store.set(this.filePath, {
             limit: this._limit,
             dailyUsage: this._dailyUsage
-        }, null, 2), 'utf8');
+        });
     }
 
     getLimit() {

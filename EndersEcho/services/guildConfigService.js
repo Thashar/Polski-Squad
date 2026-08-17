@@ -2,6 +2,7 @@ const fs = require('fs');
 const fsAsync = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -43,8 +44,7 @@ class GuildConfigService {
         // Migracja globalnego ocr_blocked.json
         let legacyBlockedCommands = [];
         try {
-            const legacyData = fs.readFileSync(this._legacyOcrBlockPath, 'utf8');
-            const legacyParsed = JSON.parse(legacyData);
+            const legacyParsed = store.getSync(this._legacyOcrBlockPath, () => ({}));
             if ('blocked' in legacyParsed && !('blockedCommands' in legacyParsed)) {
                 legacyBlockedCommands = legacyParsed.blocked ? ['update', 'test'] : [];
             } else {

@@ -3,6 +3,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { compareByScoreThenTimestamp, getOwnerId, getProfileIndex } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 class BossRecordService {
     constructor(dataDir) {
@@ -16,8 +17,7 @@ class BossRecordService {
 
     async _load(guildId) {
         try {
-            const raw = await fs.readFile(this._file(guildId), 'utf8');
-            return JSON.parse(raw);
+            return await store.getOrLoad(this._file(guildId), () => ({}));
         } catch {
             return {};
         }
@@ -26,7 +26,7 @@ class BossRecordService {
     async _save(guildId, data) {
         const file = this._file(guildId);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+        await store.set(file, data);
     }
 
     _enqueue(guildId, fn) {

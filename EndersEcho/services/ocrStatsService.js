@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class OcrStatsService {
     constructor(dataDir, logger) {
@@ -24,8 +25,7 @@ class OcrStatsService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.dataPath, 'utf8');
-            const parsed = JSON.parse(raw);
+            const parsed = await store.getOrLoad(this.dataPath, () => ({}));
             // Migracja starej struktury per-guild → globalna
             if (parsed.guilds && !parsed.allTime) {
                 this._data = this._defaultData();
@@ -156,7 +156,7 @@ class OcrStatsService {
         if (this._saving) { this._pendingSave = true; return; }
         this._saving = true;
         try {
-            await fs.writeFile(this.dataPath, JSON.stringify(this._data, null, 2), 'utf8');
+            await store.set(this.dataPath, this._data);
         } catch (err) {
             this.logger?.warn?.(`OcrStatsService: błąd zapisu: ${err.message}`);
         } finally {

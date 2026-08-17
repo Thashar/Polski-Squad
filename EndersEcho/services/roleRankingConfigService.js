@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -20,8 +21,7 @@ class RoleRankingConfigService {
 
     async loadRoleRankings(guildId) {
         try {
-            const raw = await fs.readFile(this._filePath(guildId), 'utf8');
-            return JSON.parse(raw);
+            return await store.getOrLoad(this._filePath(guildId), () => ([]));
         } catch {
             return [];
         }
@@ -30,7 +30,7 @@ class RoleRankingConfigService {
     async saveRoleRankings(guildId, list) {
         const file = this._filePath(guildId);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, JSON.stringify(list, null, 2), 'utf8');
+        await store.set(file, list);
     }
 
     async addRoleRanking(guildId, roleId, roleName) {

@@ -28,7 +28,7 @@ class BroadcastMessageService {
      */
     async loadMessages() {
         try {
-            this.messages = await store.getOrLoad(this.dataFilePath, () => ({}));
+            this.messages = await store.getOrLoad(this.dataFilePath, () => ([]));
             this.logger.info(`[BROADCAST] ✅ Załadowano ${this.messages.length} wiadomości broadcast`);
         } catch (error) {
             if (error.code === 'ENOENT') {

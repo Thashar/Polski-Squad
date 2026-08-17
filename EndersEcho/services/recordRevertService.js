@@ -3,6 +3,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -48,8 +49,7 @@ class RecordRevertService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this._filePath, 'utf8');
-            const parsed = JSON.parse(raw);
+            const parsed = await store.getOrLoad(this._filePath, () => ({}));
             this._sessions = parsed.sessions || {};
             this._latest = parsed.latest || {};
             const removed = this._cleanup();
@@ -82,11 +82,7 @@ class RecordRevertService {
     async _save() {
         const run = async () => {
             await fs.mkdir(path.dirname(this._filePath), { recursive: true });
-            await fs.writeFile(
-                this._filePath,
-                JSON.stringify({ sessions: this._sessions, latest: this._latest }, null, 2),
-                'utf8'
-            );
+            await store.set(this._filePath, { sessions: this._sessions, latest: this._latest });
         };
         this._queue = this._queue.then(run, run);
         return this._queue;

@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const crypto = require('crypto');
 const { formatProfileDisplayName, getProfileIndex } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 /**
  * Odstęp cyklicznego pełnego snapshotu. Siatka bezpieczeństwa: gdyby kiedyś doszła
@@ -82,8 +83,7 @@ class WebRankingSyncService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this.stateFile, 'utf8');
-            const data = JSON.parse(raw);
+            const data = await store.getOrLoad(this.stateFile, () => ({}));
             this._hashes = data?.hashes || {};
             this._totals = data?.totals || null;
             this._lastSync = data?.lastSync || null;
@@ -98,7 +98,7 @@ class WebRankingSyncService {
         this._queue = this._queue.then(async () => {
             try {
                 await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-                await fs.writeFile(this.stateFile, JSON.stringify({ hashes: this._hashes, totals: this._totals, lastSync: this._lastSync }, null, 2), 'utf8');
+                await store.set(this.stateFile, { hashes: this._hashes, totals: this._totals, lastSync: this._lastSync });
             } catch (err) {
                 this.logger.warn(`⚠️ Nie udało się zapisać stanu wysyłki rankingów: ${err.message}`);
             }

@@ -4,6 +4,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { makePlayerKey, getOwnerId, getProfileIndex } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -56,8 +57,7 @@ class ProfileRegistryService {
 
     async load() {
         try {
-            const raw = await fs.readFile(this._filePath, 'utf8');
-            const parsed = JSON.parse(raw);
+            const parsed = await store.getOrLoad(this._filePath, () => ({}));
             this._data = (parsed && typeof parsed === 'object') ? parsed : {};
             const withAlts = Object.values(this._data).filter(u => (u.profiles || []).length > 1).length;
             if (withAlts > 0) logger.info(`👥 ProfileRegistry: ${withAlts} graczy z profilami dodatkowymi`);
@@ -72,7 +72,7 @@ class ProfileRegistryService {
         // Kolejka zapisu — eliminuje race condition przy równoczesnych operacjach na profilach
         const run = async () => {
             await fs.mkdir(path.dirname(this._filePath), { recursive: true });
-            await fs.writeFile(this._filePath, JSON.stringify(this._data, null, 2), 'utf8');
+            await store.set(this._filePath, this._data);
         };
         this._queue = this._queue.then(run, run);
         return this._queue;

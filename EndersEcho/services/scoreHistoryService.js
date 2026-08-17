@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const { getOwnerId } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 /**
  * Historia wyników. Plik na PROFIL: wyniki/{playerKey}.json
@@ -21,8 +22,7 @@ class ScoreHistoryService {
 
     async _load(guildId, playerKey) {
         try {
-            const raw = await fs.readFile(this._file(guildId, playerKey), 'utf8');
-            return JSON.parse(raw);
+            return await store.getOrLoad(this._file(guildId, playerKey), () => ([]));
         } catch {
             return [];
         }
@@ -31,7 +31,7 @@ class ScoreHistoryService {
     async _save(guildId, playerKey, entries) {
         const file = this._file(guildId, playerKey);
         await fs.mkdir(path.dirname(file), { recursive: true });
-        await fs.writeFile(file, JSON.stringify(entries, null, 2), 'utf8');
+        await store.set(file, entries);
     }
 
     /**
@@ -134,8 +134,7 @@ class ScoreHistoryService {
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
                 try {
-                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
-                    const entries = JSON.parse(raw);
+                    const entries = await store.getOrLoad(path.join(dir, file), () => ([]));
                     if (!Array.isArray(entries) || entries.length === 0) continue;
                     const ts = Math.min(...entries.map(e => new Date(e.timestamp).getTime()));
                     if (!isNaN(ts) && (earliest === null || ts < earliest)) earliest = ts;
@@ -171,8 +170,7 @@ class ScoreHistoryService {
             for (const file of files) {
                 if (!file.endsWith('.json')) continue;
                 try {
-                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
-                    const entries = JSON.parse(raw);
+                    const entries = await store.getOrLoad(path.join(dir, file), () => ([]));
                     if (Array.isArray(entries)) total += entries.length;
                 } catch { /* pomiń */ }
             }
@@ -201,8 +199,7 @@ class ScoreHistoryService {
                 const userId = getOwnerId(file.slice(0, -5));
                 if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
-                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
-                    const entries = JSON.parse(raw);
+                    const entries = await store.getOrLoad(path.join(dir, file), () => ([]));
                     if (!Array.isArray(entries) || entries.length === 0) continue;
                     const earliest = Math.min(...entries.map(e => new Date(e.timestamp).getTime()));
                     if (isNaN(earliest)) continue;
@@ -249,8 +246,7 @@ class ScoreHistoryService {
                 const userId = getOwnerId(file.slice(0, -5));
                 if (allowedUserIds && !allowedUserIds.has(userId)) continue;
                 try {
-                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
-                    const entries = JSON.parse(raw);
+                    const entries = await store.getOrLoad(path.join(dir, file), () => ([]));
                     if (!Array.isArray(entries) || entries.length === 0) continue;
 
                     let agg = merged.get(userId);
@@ -332,8 +328,7 @@ class ScoreHistoryService {
                 const ownerId = getOwnerId(file.slice(0, -5));
                 if (allowedUserIds && !allowedUserIds.has(ownerId)) continue;
                 try {
-                    const raw = await fs.readFile(path.join(dir, file), 'utf8');
-                    const userEntries = JSON.parse(raw);
+                    const userEntries = await store.getOrLoad(path.join(dir, file), () => ([]));
                     if (!Array.isArray(userEntries) || userEntries.length === 0) continue;
                     const earliest = Math.min(...userEntries.map(e => new Date(e.timestamp).getTime()));
                     if (isNaN(earliest)) continue;

@@ -5,6 +5,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const logger = createBotLogger('EndersEcho');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { formatMessage, compareByScoreThenTimestamp, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileMarker } = require('../utils/helpers');
+const store = require('../../utils/jsonStore');
 
 class RankingService {
     constructor(config, scoreHistoryService = null) {
@@ -55,8 +56,7 @@ class RankingService {
         if (cached) return cached;
         const file = this.getRankingFile(guildId);
         try {
-            const data = await fs.readFile(file, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(file, () => ({}));
             // Normalizuj wpisy: brakujący scoreValue + pola tożsamości profilu.
             // Klucz mapy to playerKey ("userId" dla profilu głównego, "userId#N" dla dodatkowego) —
             // rozkładamy go tu raz, żeby KAŻDA ścieżka odczytu miała playerKey/userId/profileIndex.
@@ -84,7 +84,7 @@ class RankingService {
         try {
             const file = this.getRankingFile(guildId);
             await fs.mkdir(path.dirname(file), { recursive: true });
-            await fs.writeFile(file, JSON.stringify(ranking, null, 2), 'utf8');
+            await store.set(file, ranking);
             this._rankingCache.set(guildId, ranking);
             this._sortedCache.delete(guildId);
             this._globalCache = null;
@@ -351,7 +351,7 @@ class RankingService {
 
             const sharedData = { updatedAt: new Date().toISOString(), players, profiles };
             const sharedPath = path.join(sharedDir, 'endersecho_ranking.json');
-            await fs.writeFile(sharedPath, JSON.stringify(sharedData, null, 2), 'utf8');
+            await store.set(sharedPath, sharedData);
 
         } catch (error) {
             logger.error('Błąd eksportu rankingu do shared_data:', error);

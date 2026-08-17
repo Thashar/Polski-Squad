@@ -1,6 +1,7 @@
 'use strict';
 const fs   = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class CommandUsageService {
     constructor(dataDir) {
@@ -10,7 +11,7 @@ class CommandUsageService {
 
     async _load() {
         try {
-            return JSON.parse(await fs.readFile(this.dataFile, 'utf8'));
+            return await store.getOrLoad(this.dataFile, () => ({}));
         } catch {
             return {};
         }
@@ -18,7 +19,7 @@ class CommandUsageService {
 
     async _save(data) {
         await fs.mkdir(path.dirname(this.dataFile), { recursive: true });
-        await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2), 'utf8');
+        await store.set(this.dataFile, data);
     }
 
     /**

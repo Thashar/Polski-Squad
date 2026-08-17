@@ -2,6 +2,7 @@ const fs = require('fs');
 const fsAsync = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -14,8 +15,7 @@ class TesterService {
 
     _loadSync() {
         try {
-            const data = fs.readFileSync(this.filePath, 'utf8');
-            this._testers = JSON.parse(data);
+            this._testers = store.getSync(this.filePath, () => ([]));
             if (this._testers.length > 0) {
                 logger.info(`🧪 Załadowano ${this._testers.length} testerów OCR`);
             }

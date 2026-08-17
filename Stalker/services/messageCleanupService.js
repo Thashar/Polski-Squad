@@ -22,7 +22,7 @@ class MessageCleanupService {
 
     async loadScheduledMessages() {
         try {
-            this.scheduledMessages = await store.getOrLoad(this.messagesFile, () => ({}));
+            this.scheduledMessages = await store.getOrLoad(this.messagesFile, () => ([]));
             this.logger.info(`[MESSAGE_CLEANUP] ✅ Załadowano ${this.scheduledMessages.length} zaplanowanych usunięć`);
         } catch (error) {
             if (error.code === 'ENOENT') {

@@ -32,7 +32,7 @@ class RaportCleanupService {
      */
     async loadData() {
         try {
-            this.pendingDeletions = await store.getOrLoad(this.dataFilePath, () => ({}));
+            this.pendingDeletions = await store.getOrLoad(this.dataFilePath, () => ([]));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 // Plik nie istnieje - utwórz pusty
