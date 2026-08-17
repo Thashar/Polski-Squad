@@ -81,6 +81,6 @@ SZKOLENIA_PERPLEXITY_MODEL=sonar-pro
 - **Logger:** Używaj createBotLogger('Szkolenia')
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
 - **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
-- **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON
+- **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON — oba przez `utils/jsonStore` (cache-first): `data/reminders.json` i `data/ai_chat_cooldowns.json` czytane z dysku raz, przy pierwszym sięgnięciu, zapis idzie jednocześnie do pliku i pamięci, atomowo (plik tymczasowy + rename). Obsługa `ENOENT` zniknęła z serwisów — store sam oddaje wartość domyślną przy braku pliku. Zapisywanie promptów AI do `data/prompts/` zostało na zwykłym `fs` (pliki tekstowe, nie JSON)
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`
 - **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 1440 min (24h) (admini bez limitu).

@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Szkolenia');
@@ -7,17 +7,17 @@ const logger = createBotLogger('Szkolenia');
 class ReminderStorageService {
     constructor() {
         this.dataPath = path.join(__dirname, '../data/reminders.json');
+        store.register(this.dataPath, { defaultValue: () => ({}), label: 'Szkolenia/reminders' });
     }
 
     /**
-     * Ładuje dane przypomień z pliku
+     * Ładuje dane przypomień (z dysku tylko przy pierwszym sięgnięciu — dalej z pamięci)
      * @returns {Promise<Map>} - Mapa z danymi przypomień
      */
     async loadReminders() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
-            const reminderData = JSON.parse(data);
-            
+            const reminderData = await store.getOrLoad(this.dataPath, () => ({}));
+
             // Konwertuj obiekt z powrotem na Map
             const reminderMap = new Map();
             for (const [threadId, threadData] of Object.entries(reminderData)) {
@@ -39,10 +39,6 @@ class ReminderStorageService {
             
             return reminderMap;
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                return new Map();
-            }
-            
             logger.error('❌ Błąd ładowania danych przypomień:', error.message);
             return new Map();
         }
@@ -54,17 +50,13 @@ class ReminderStorageService {
      */
     async saveReminders(reminderMap) {
         try {
-            // Upewnij się, że katalog istnieje
-            const dir = path.dirname(this.dataPath);
-            await fs.mkdir(dir, { recursive: true });
-            
             // Konwertuj Map na obiekt do serializacji JSON
             const reminderData = {};
             for (const [threadId, threadData] of reminderMap.entries()) {
                 reminderData[threadId] = threadData;
             }
-            
-            await fs.writeFile(this.dataPath, JSON.stringify(reminderData, null, 2), 'utf8');
+
+            await store.set(this.dataPath, reminderData);
         } catch (error) {
             logger.error('❌ Błąd zapisu danych przypomień:', error.message);
         }

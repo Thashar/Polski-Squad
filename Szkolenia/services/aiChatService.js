@@ -1,5 +1,6 @@
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 let Anthropic;
@@ -71,24 +72,18 @@ class AIChatService {
 
     async loadData() {
         try {
-            try {
-                const cooldownData = await fs.readFile(this.cooldownsFile, 'utf8');
-                const parsed = JSON.parse(cooldownData);
-                this.cooldowns = new Map(Object.entries(parsed));
-            } catch (err) {
-                this.cooldowns = new Map();
-            }
+            const parsed = await store.getOrLoad(this.cooldownsFile, () => ({}));
+            this.cooldowns = new Map(Object.entries(parsed));
             this.cleanupOldData();
         } catch (error) {
+            this.cooldowns = new Map();
             logger.error(`Błąd wczytywania danych AI Chat: ${error.message}`);
         }
     }
 
     async saveData() {
         try {
-            await fs.mkdir(this.dataDir, { recursive: true });
-            const cooldownObj = Object.fromEntries(this.cooldowns);
-            await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownObj, null, 2));
+            await store.set(this.cooldownsFile, Object.fromEntries(this.cooldowns));
         } catch (error) {
             logger.error(`Błąd zapisywania danych AI Chat: ${error.message}`);
         }
