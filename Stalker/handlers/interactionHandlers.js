@@ -12606,6 +12606,69 @@ function fmtEquipmentLine(name, qty) {
 
 // ============ CORE RANKING ============
 
+/**
+ * Sentinel „wszystkie cory razem" wstawiany w miejsce nazwy cora w customId — dzięki temu
+ * suma przechodzi tą samą ścieżką co pojedynczy ranking (paginacja `core_ranking_nav|…`,
+ * podświetlenie aktywnego przycisku) bez osobnego handlera. Podwójne podkreślenia sprawiają,
+ * że nie zderzy się z prawdziwą nazwą cora z `EQUIPMENT_ICONS`.
+ */
+const SUM_CORE_KEY = '__SUMA__';
+const SUM_CORE_LABEL = 'Suma Core';
+const SUM_CORE_EMOJI = '🧮';
+
+/** Nazwa wyświetlana w tytule embeda i w nagłówku wykresu. */
+function coreDisplayName(coreName) {
+    return coreName === SUM_CORE_KEY ? SUM_CORE_LABEL : coreName;
+}
+
+/**
+ * Suma WSZYSTKICH corów gracza. Liczona wyłącznie po typach z `EQUIPMENT_ICONS` — OCR
+ * potrafi wrzucić do `items` pozycję spoza tej listy (nowy przedmiot w grze, błędny odczyt),
+ * a taka wartość zawyżałaby sumę i psuła ranking.
+ * @returns {number|undefined} `undefined` gdy gracz nie ma żadnego znanego cora
+ */
+function sumAllCores(items) {
+    if (!items) return undefined;
+    let total = 0;
+    let found = false;
+    for (const name of Object.keys(EQUIPMENT_ICONS)) {
+        const qty = items[name];
+        if (typeof qty === 'number') { total += qty; found = true; }
+    }
+    return found ? total : undefined;
+}
+
+function parseCoreEmoji(str) {
+    const m = str.match(/^<:(\w+):(\d+)>$/);
+    return m ? { name: m[1], id: m[2] } : str;
+}
+
+/**
+ * Dwa wiersze przycisków wyboru rankingu: 6 typów corów + „Suma Core".
+ * Aktywny wyróżniony kolorem Primary. Jedno miejsce budowania — widok rankingu, ekran
+ * startowy, brak danych i obsługa błędu muszą pokazywać ten sam zestaw.
+ */
+function buildCoreRankingRows(activeName = null) {
+    const buttons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
+        new ButtonBuilder()
+            .setCustomId(`core_ranking|${name}|0`)
+            .setLabel(name)
+            .setEmoji(parseCoreEmoji(icon))
+            .setStyle(name === activeName ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+    buttons.push(
+        new ButtonBuilder()
+            .setCustomId(`core_ranking|${SUM_CORE_KEY}|0`)
+            .setLabel(SUM_CORE_LABEL)
+            .setEmoji(SUM_CORE_EMOJI)
+            .setStyle(activeName === SUM_CORE_KEY ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+    return [
+        new ActionRowBuilder().addComponents(buttons.slice(0, 3)),
+        new ActionRowBuilder().addComponents(buttons.slice(3)),
+    ];
+}
+
 async function handleCoreRankingCommand(interaction, sharedState) {
     const { config } = sharedState;
 
@@ -12621,26 +12684,8 @@ async function handleCoreRankingCommand(interaction, sharedState) {
         return;
     }
 
-    const { ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
-
-    const parseEmoji = (str) => {
-        const m = str.match(/^<:(\w+):(\d+)>$/);
-        return m ? { name: m[1], id: m[2] } : str;
-    };
-
-    const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
-        new BB()
-            .setCustomId(`core_ranking|${name}|0`)
-            .setLabel(name)
-            .setEmoji(parseEmoji(icon))
-            .setStyle(BS.Secondary)
-    );
-
-    const row1 = new ARB().addComponents(coreButtons.slice(0, 3));
-    const row2 = new ARB().addComponents(coreButtons.slice(3, 6));
-
     await interaction.reply({
-        components: [row1, row2],
+        components: buildCoreRankingRows(),
         flags: MessageFlags.Ephemeral
     });
 }
@@ -12650,7 +12695,9 @@ async function handleCoreRankingButton(interaction, sharedState) {
     const parts = interaction.customId.split('|');
     const coreName = parts[1];
     const page = parseInt(parts[2]) || 0;
-    const PER_PAGE = 25;
+    // 10 na stronę — tyle serii mieści wykres progresu pod rankingiem, żeby dało się
+    // je jeszcze rozróżnić kolorami i legendą
+    const PER_PAGE = 10;
 
     await interaction.deferUpdate();
 
@@ -12667,17 +12714,22 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return;
         }
 
-        const { generateCoreHistoryChart } = require('../services/coreHistoryService');
+        const { generateCoreComparisonChart } = require('../services/coreHistoryService');
         let historyData = {};
         try {
             historyData = JSON.parse(await fs.readFile(path.join(__dirname, '../data/equipment_history.json'), 'utf8'));
         } catch {}
 
-        function calcMonthlyGrowthPct(userId, coreName) {
+        // Suma korzysta z tego samego liczenia wzrostu co pojedynczy cor — różni się
+        // wyłącznie sposobem odczytu wartości ze snapshotu
+        const isSum = coreName === SUM_CORE_KEY;
+        const readQty = isSum ? sumAllCores : (items => items[coreName]);
+
+        function calcMonthlyGrowthPct(userId) {
             const userHist = historyData[userId];
             if (!userHist || userHist.length < 2) return null;
             const sorted = [...userHist]
-                .filter(e => e.items[coreName] !== undefined)
+                .filter(e => readQty(e.items) !== undefined)
                 .sort((a, b) => a.date.localeCompare(b.date));
             if (sorted.length < 2) return null;
 
@@ -12691,8 +12743,8 @@ async function handleCoreRankingButton(interaction, sharedState) {
             const latest = sorted[sorted.length - 1];
             if (baseline === latest) return null;
 
-            const baseQty = baseline.items[coreName];
-            const latestQty = latest.items[coreName];
+            const baseQty = readQty(baseline.items);
+            const latestQty = readQty(latest.items);
             if (!baseQty) return null;
 
             const daysDiff = Math.max(1,
@@ -12703,29 +12755,45 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return (scaledDiff / baseQty) * 100;
         }
 
+        // Członkowie potrzebni PRZED zbudowaniem listy — decydują, kto w ogóle wchodzi
+        // do rankingu (patrz filtr klanu niżej)
+        const members = await safeFetchMembers(interaction.guild);
+
+        /** Ikona klanu gracza albo null, gdy nie ma żadnej roli klanowej (dawna czaszka 💀). */
+        function clanIconFor(userId) {
+            const member = members.get(userId);
+            if (!member) return null;
+            for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
+                if (member.roles.cache.has(roleId)) {
+                    const clanName = config.roleDisplayNames[clanKey] || '';
+                    return Array.from(clanName)[0] || null;
+                }
+            }
+            return null;
+        }
+
         const entries = [];
         for (const [userId, userData] of Object.entries(equipData)) {
-            if (!userData.items || userData.items[coreName] === undefined) continue;
-            const qty = userData.items[coreName];
-            const firstAchievedAt = userData.coreFirstAchievedAt?.[coreName]
+            if (!userData.items) continue;
+            const qty = readQty(userData.items);
+            if (qty === undefined) continue;
+            // Ranking wyłącznie dla członków klanu — kto wypadł z serwera albo stracił rolę
+            // klanową (dawniej wiersz z 💀), nie zajmuje miejsca w zestawieniu
+            const clanIcon = clanIconFor(userId);
+            if (!clanIcon) continue;
+            const firstAchievedAt = (isSum ? null : userData.coreFirstAchievedAt?.[coreName])
                 || userData.updatedAt
                 || userData.createdAt
                 || '9999';
-            entries.push({ userId, qty, firstAchievedAt, monthlyPct: calcMonthlyGrowthPct(userId, coreName) });
+            entries.push({ userId, qty, firstAchievedAt, clanIcon, monthlyPct: calcMonthlyGrowthPct(userId) });
         }
 
+        const displayName = coreDisplayName(coreName);
+
         if (entries.length === 0) {
-            const peEmpty = (str) => { const m = str.match(/^<:(\w+):(\d+)>$/); return m ? { name: m[1], id: m[2] } : str; };
-            const emptyButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
-                new ButtonBuilder()
-                    .setCustomId(`core_ranking|${name}|0`)
-                    .setLabel(name)
-                    .setEmoji(peEmpty(icon))
-                    .setStyle(name === coreName ? ButtonStyle.Primary : ButtonStyle.Secondary)
-            );
             await interaction.editReply({
-                content: `❌ Brak danych dla **${coreName}**.`,
-                components: [new ActionRowBuilder().addComponents(emptyButtons.slice(0, 3)), new ActionRowBuilder().addComponents(emptyButtons.slice(3, 6))],
+                content: `❌ Brak danych dla **${displayName}**.`,
+                components: buildCoreRankingRows(coreName),
                 embeds: []
             });
             return;
@@ -12736,27 +12804,9 @@ async function handleCoreRankingButton(interaction, sharedState) {
             return a.firstAchievedAt.localeCompare(b.firstAchievedAt);
         });
 
-        const members = await safeFetchMembers(interaction.guild);
-
-        const parseEmoji = (str) => {
-            const m = str.match(/^<:(\w+):(\d+)>$/);
-            return m ? { name: m[1], id: m[2] } : str;
-        };
-
         const lines = entries.map((entry, i) => {
             const member = members.get(entry.userId);
             const nick = member ? member.displayName : `<@${entry.userId}>`;
-
-            let clanIcon = '💀';
-            if (member) {
-                for (const [clanKey, roleId] of Object.entries(config.targetRoles)) {
-                    if (member.roles.cache.has(roleId)) {
-                        const clanName = config.roleDisplayNames[clanKey] || '';
-                        clanIcon = Array.from(clanName)[0] || '💀';
-                        break;
-                    }
-                }
-            }
 
             let growthStr = '';
             if (entry.monthlyPct !== null) {
@@ -12764,22 +12814,23 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 growthStr = ` ${arrow} ${Math.abs(entry.monthlyPct).toFixed(1)}%`;
             }
 
-            return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}**${growthStr} ${clanIcon}`;
+            return `**${i + 1}.** ${nick} - **${entry.qty.toLocaleString('pl-PL')}**${growthStr} ${entry.clanIcon}`;
         });
 
         const totalPages = Math.max(1, Math.ceil(lines.length / PER_PAGE));
         const safePage = Math.min(Math.max(0, page), totalPages - 1);
         const pageLines = lines.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+        const pageEntries = entries.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
 
-        const coreIcon = EQUIPMENT_ICONS[coreName] || '🔹';
+        const coreIcon = isSum ? SUM_CORE_EMOJI : (EQUIPMENT_ICONS[coreName] || '🔹');
         const { EmbedBuilder: EBLocal, ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
 
         const embed = new EBLocal()
-            .setTitle(`${coreIcon} Ranking — ${coreName}`)
-            .setColor('#00BFFF')
+            .setTitle(`${coreIcon} Ranking — ${displayName}`)
+            .setColor(isSum ? '#F1C40F' : '#00BFFF')
             .setFooter({ text: `Strona ${safePage + 1}/${totalPages} | Łącznie graczy: ${entries.length}` })
             .setTimestamp()
-            .addFields({ name: `${coreIcon} ${coreName}`, value: pageLines.join('\n'), inline: false });
+            .addFields({ name: `${coreIcon} ${displayName}`, value: pageLines.join('\n'), inline: false });
 
         // Wiersz 1: paginacja
         const rowPagination = new ARB().addComponents(
@@ -12800,25 +12851,23 @@ async function handleCoreRankingButton(interaction, sharedState) {
                 .setDisabled(safePage === totalPages - 1)
         );
 
-        // Wiersze 2-3: przyciski typów corów (aktywny wyróżniony kolorem Primary)
-        const coreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
-            new BB()
-                .setCustomId(`core_ranking|${name}|0`)
-                .setLabel(name)
-                .setEmoji(parseEmoji(icon))
-                .setStyle(name === coreName ? BS.Primary : BS.Secondary)
-        );
-        const rowCores1 = new ARB().addComponents(coreButtons.slice(0, 3));
-        const rowCores2 = new ARB().addComponents(coreButtons.slice(3, 6));
+        // Wiersze 2-3: przyciski typów corów + „Suma Core" (aktywny wyróżniony kolorem Primary)
+        const coreRows = buildCoreRankingRows(coreName);
 
-        // Wykres historii dla wywołującego
-        const viewerName = interaction.member?.displayName || interaction.user.username;
-        const chartBuffer = await generateCoreHistoryChart(interaction.user.id, coreName, viewerName);
+        // Wykres progresu wszystkich graczy z BIEŻĄCEJ strony (kolejność = kolejność rankingu,
+        // więc kolory serii pokrywają się z pozycjami na liście)
+        const chartPlayers = pageEntries.map(entry => ({
+            userId: entry.userId,
+            name: members.get(entry.userId)?.displayName || entry.userId,
+        }));
+        const chartBuffer = await generateCoreComparisonChart(
+            chartPlayers, displayName, isSum ? sumAllCores : null
+        );
 
         const replyPayload = {
             content: null,
             embeds: [embed],
-            components: [rowPagination, rowCores1, rowCores2],
+            components: [rowPagination, ...coreRows],
             files: []
         };
 
@@ -12830,17 +12879,9 @@ async function handleCoreRankingButton(interaction, sharedState) {
         await interaction.editReply(replyPayload);
     } catch (error) {
         logger.error('[CORE-RANKING] ❌ Błąd:', error);
-        const parseEmojiErr = (str) => { const m = str.match(/^<:(\w+):(\d+)>$/); return m ? { name: m[1], id: m[2] } : str; };
-        const errCoreButtons = Object.entries(EQUIPMENT_ICONS).map(([name, icon]) =>
-            new ButtonBuilder()
-                .setCustomId(`core_ranking|${name}|0`)
-                .setLabel(name)
-                .setEmoji(parseEmojiErr(icon))
-                .setStyle(ButtonStyle.Secondary)
-        );
         await interaction.editReply({
             content: '❌ Błąd podczas generowania rankingu.',
-            components: [new ActionRowBuilder().addComponents(errCoreButtons.slice(0, 3)), new ActionRowBuilder().addComponents(errCoreButtons.slice(3, 6))],
+            components: buildCoreRankingRows(),
             embeds: []
         });
     }

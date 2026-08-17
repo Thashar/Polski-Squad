@@ -74,23 +74,60 @@ function escapeXml(str) {
         .replace(/"/g, '&quot;');
 }
 
-function buildCatmullRomPath(points) {
-    if (points.length === 0) return '';
-    if (points.length === 1) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-    let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+/**
+ * Punkty kontrolne krzywej Catmull-Rom dla każdego odcinka — wspólne dla linii i dla
+ * wypełnienia pod nią, żeby oba rysunki szły dokładnie tą samą trasą.
+ *
+ * Odstępstwo od czystego Catmull-Roma: styczna liczona z SĄSIADÓW sprawia, że **poziomy
+ * odcinek zaczyna się unosić jeszcze zanim faktycznie wzrośnie** — a przy ilościach corów
+ * plateau jest normą (gracz przez tydzień nie zbiera, potem skacze). Gdy sąsiedni odcinek
+ * jest poziomy, styczna liczona jest z NASZEGO odcinka, więc płaski fragment zostaje
+ * idealnie płaski, a przejście w górę jest ostre. Zaokrąglenie zostaje wszędzie tam,
+ * gdzie plateau nie ma.
+ */
+function catmullRomControlPoints(points) {
+    const segments = [];
     for (let i = 0; i < points.length - 1; i++) {
         const p0 = i > 0 ? points[i - 1] : points[i];
         const p1 = points[i];
         const p2 = points[i + 1];
         const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-        const xMin = p1.x, xMax = p2.x;
-        const cp1x = Math.max(xMin, Math.min(xMax, p1.x + (p2.x - p0.x) / 6)).toFixed(1);
-        const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
-        const cp2x = Math.max(xMin, Math.min(xMax, p2.x - (p3.x - p1.x) / 6)).toFixed(1);
-        const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
-        d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+
+        // selfFlat ma pierwszeństwo: odcinek bez zmiany ilości musi być idealnie poziomy
+        // na CAŁEJ długości. Bez tego ostatni odcinek plateau wyginał się w dół tuż przed
+        // wzrostem (styczna w p2 liczona z p3, czyli już z rosnącego fragmentu).
+        const selfFlat = p1.y === p2.y;
+        const prevFlat = i > 0 && p0.y === p1.y;
+        const nextFlat = i < points.length - 2 && p2.y === p3.y;
+
+        const cp1y = selfFlat ? p1.y : (prevFlat ? p1.y + (p2.y - p1.y) / 3 : p1.y + (p2.y - p0.y) / 6);
+        const cp2y = selfFlat ? p2.y : (nextFlat ? p2.y - (p2.y - p1.y) / 3 : p2.y - (p3.y - p1.y) / 6);
+
+        // Punkty kontrolne w poziomie trzymamy wewnątrz odcinka — inaczej krzywa potrafi
+        // się cofnąć i zrobić pętelkę przy nierównych odstępach między pomiarami
+        const clampX = (x) => Math.max(p1.x, Math.min(p2.x, x));
+        segments.push({
+            cp1x: clampX(prevFlat ? p1.x + (p2.x - p1.x) / 3 : p1.x + (p2.x - p0.x) / 6),
+            cp1y,
+            cp2x: clampX(nextFlat ? p2.x - (p2.x - p1.x) / 3 : p2.x - (p3.x - p1.x) / 6),
+            cp2y,
+            x: p2.x,
+            y: p2.y,
+        });
     }
-    return d;
+    return segments;
+}
+
+function segmentsToCurve(segments) {
+    return segments
+        .map(s => ` C ${s.cp1x.toFixed(1)},${s.cp1y.toFixed(1)} ${s.cp2x.toFixed(1)},${s.cp2y.toFixed(1)} ${s.x.toFixed(1)},${s.y.toFixed(1)}`)
+        .join('');
+}
+
+function buildCatmullRomPath(points) {
+    if (points.length === 0) return '';
+    if (points.length === 1) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+    return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}${segmentsToCurve(catmullRomControlPoints(points))}`;
 }
 
 function buildAreaPath(points, baseY) {
@@ -98,20 +135,9 @@ function buildAreaPath(points, baseY) {
     if (points.length === 1) {
         return `M ${points[0].x.toFixed(1)},${baseY} L ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} L ${(points[0].x + 2).toFixed(1)},${baseY} Z`;
     }
-    let d = `M ${points[0].x.toFixed(1)},${baseY} L ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-    for (let i = 0; i < points.length - 1; i++) {
-        const p0 = i > 0 ? points[i - 1] : points[i];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-        const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1);
-        const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
-        const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1);
-        const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
-        d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-    }
-    d += ` L ${points[points.length - 1].x.toFixed(1)},${baseY} Z`;
-    return d;
+    const d = `M ${points[0].x.toFixed(1)},${baseY} L ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`
+        + segmentsToCurve(catmullRomControlPoints(points));
+    return `${d} L ${points[points.length - 1].x.toFixed(1)},${baseY} Z`;
 }
 
 const MONTH_SHORT = ['sty', 'lut', 'mar', 'kwi', 'maj', 'cze', 'lip', 'sie', 'wrz', 'paź', 'lis', 'gru'];
@@ -136,25 +162,30 @@ function buildMonthAxisSvg(tMin, tMax, toX, baseY) {
 /**
  * Generuje wykres historii danego typu cora dla gracza.
  * @param {string} userId
- * @param {string} coreName
+ * @param {string} coreName  - nazwa w nagłówku wykresu (dla sumy: etykieta zbiorcza)
  * @param {string} username  - nick do wyświetlenia w nagłówku
+ * @param {Function|null} valueFn - własne wyliczenie wartości z `items` snapshotu; `undefined`
+ *   oznacza brak danych tego dnia (punkt pomijany). Domyślnie ilość pojedynczego cora —
+ *   dzięki temu ranking „Suma Core" rysuje wykres tym samym kodem, podając sumę corów
  * @returns {Promise<Buffer|null>}
  */
-async function generateCoreHistoryChart(userId, coreName, username) {
+async function generateCoreHistoryChart(userId, coreName, username, valueFn = null) {
     try {
         const sharp = require('sharp');
         const history = await loadHistory();
         const userHistory = history[userId] || [];
+
+        const readQty = typeof valueFn === 'function' ? valueFn : (items => items[coreName]);
 
         const cutoff = new Date();
         cutoff.setUTCDate(cutoff.getUTCDate() - 365);
         const cutoffStr = `${cutoff.getUTCFullYear()}-${String(cutoff.getUTCMonth() + 1).padStart(2, '0')}-${String(cutoff.getUTCDate()).padStart(2, '0')}`;
 
         const entries = userHistory
-            .filter(e => e.date >= cutoffStr && e.items[coreName] !== undefined)
+            .filter(e => e.date >= cutoffStr && readQty(e.items) !== undefined)
             .map(e => ({
                 date: e.date,
-                qty: e.items[coreName],
+                qty: readQty(e.items),
                 ts: Date.UTC(...e.date.split('-').map((v, i) => i === 1 ? Number(v) - 1 : Number(v)))
             }))
             .sort((a, b) => a.ts - b.ts);
@@ -275,4 +306,169 @@ async function generateCoreHistoryChart(userId, coreName, username) {
     }
 }
 
-module.exports = { saveDailySnapshot, generateCoreHistoryChart };
+/**
+ * Paleta serii — kolory dobrane tak, żeby dało się je rozróżnić na ciemnym tle Discorda
+ * i żeby sąsiednie pozycje rankingu nie dostawały zbliżonych odcieni.
+ */
+const SERIES_COLORS = [
+    '#5865F2', '#57F287', '#FEE75C', '#EB459E', '#00B4D8',
+    '#E67E22', '#9B59B6', '#1ABC9C', '#ED4245', '#95A5A6',
+];
+
+/**
+ * Wykres porównawczy: jedna linia progresu na gracza (strona rankingu corów).
+ *
+ * W odróżnieniu od `generateCoreHistoryChart` NIE rysuje wypełnienia pod krzywą ani
+ * etykiet przy każdym punkcie — przy dziesięciu seriach naraz jedno i drugie zlewa się
+ * w nieczytelną plamę. Zamiast tego: cienkie linie, małe kropki, wartość tylko przy
+ * ostatnim punkcie serii i legenda z kolorem, nickiem oraz aktualną ilością.
+ *
+ * @param {Array<{userId: string, name: string}>} players - gracze w kolejności rankingu
+ * @param {string} coreName - nazwa w nagłówku
+ * @param {Function|null} valueFn - jak w `generateCoreHistoryChart`
+ * @returns {Promise<Buffer|null>} null, gdy nikt z podanych graczy nie ma historii
+ */
+async function generateCoreComparisonChart(players, coreName, valueFn = null) {
+    try {
+        const sharp = require('sharp');
+        const history = await loadHistory();
+        const readQty = typeof valueFn === 'function' ? valueFn : (items => items[coreName]);
+
+        const cutoff = new Date();
+        cutoff.setUTCDate(cutoff.getUTCDate() - 365);
+        const cutoffStr = `${cutoff.getUTCFullYear()}-${String(cutoff.getUTCMonth() + 1).padStart(2, '0')}-${String(cutoff.getUTCDate()).padStart(2, '0')}`;
+
+        const series = [];
+        for (const [i, player] of (players || []).entries()) {
+            const entries = (history[player.userId] || [])
+                .filter(e => e.date >= cutoffStr && readQty(e.items) !== undefined)
+                .map(e => ({
+                    date: e.date,
+                    qty: readQty(e.items),
+                    ts: Date.UTC(...e.date.split('-').map((v, idx) => idx === 1 ? Number(v) - 1 : Number(v))),
+                }))
+                .sort((a, b) => a.ts - b.ts);
+            // Gracz z jednym pomiarem nie ma progresu, ale jego punkt nadal niesie informację
+            if (entries.length === 0) continue;
+            series.push({ ...player, entries, color: SERIES_COLORS[i % SERIES_COLORS.length] });
+        }
+
+        if (series.length === 0) return null;
+
+        const LEGEND_PER_ROW = 5;
+        const legendRows = Math.ceil(series.length / LEGEND_PER_ROW);
+        const W = 900;
+        const M = { top: 52, right: 46, bottom: 50 + legendRows * 18, left: 80 };
+        const H = 250 + legendRows * 18;
+        const cW = W - M.left - M.right;
+        const cH = H - M.top - M.bottom;
+        const baseY = M.top + cH;
+
+        const allValues = series.flatMap(s => s.entries.map(e => e.qty));
+        const minVal = Math.min(...allValues);
+        const maxVal = Math.max(...allValues);
+        const valRange = maxVal - minVal || 1;
+        const yMin = Math.max(0, minVal - valRange * 0.15);
+        const yMax = maxVal + valRange * 0.20;
+
+        const allTs = series.flatMap(s => s.entries.map(e => e.ts));
+        const tMin = Math.min(...allTs);
+        const tMax = Math.max(...allTs);
+        const tRange = tMax - tMin || 1;
+
+        const toX = (t) => M.left + (0.05 + 0.90 * (t - tMin) / tRange) * cW;
+        const toY = (v) => M.top + cH - ((v - yMin) / (yMax - yMin)) * cH;
+
+        const gridLines = Array.from({ length: 5 }, (_, i) => {
+            const v = yMin + (yMax - yMin) * (i / 4);
+            const y = toY(v);
+            const lbl = Math.round(v).toLocaleString('pl-PL');
+            return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${M.left - 10}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(lbl)}</text>`;
+        }).join('\n    ');
+
+        // Etykiety ostatnich punktów rozsuwane w pionie — przy zbliżonych ilościach
+        // nachodziłyby na siebie i nie dałoby się odczytać żadnej
+        const endLabels = series
+            .map(s => {
+                const last = s.entries[s.entries.length - 1];
+                return { y: toY(last.qty), x: toX(last.ts), qty: last.qty, color: s.color };
+            })
+            .sort((a, b) => a.y - b.y);
+        for (let i = 1; i < endLabels.length; i++) {
+            if (endLabels[i].y - endLabels[i - 1].y < 11) endLabels[i].y = endLabels[i - 1].y + 11;
+        }
+
+        const seriesSvg = series.map(s => {
+            const pts = s.entries.map(e => ({ x: toX(e.ts), y: toY(e.qty) }));
+            const linePath = buildCatmullRomPath(pts);
+            const dots = pts.map(p =>
+                `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#1E1F22" stroke="${s.color}" stroke-width="1.5"/>`
+            ).join('\n    ');
+            const line = pts.length > 1
+                ? `<path d="${escapeXml(linePath)}" stroke="${s.color}" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`
+                : '';
+            return `${line}\n    ${dots}`;
+        }).join('\n    ');
+
+        const endLabelsSvg = endLabels.map(l =>
+            `<text x="${(l.x + 6).toFixed(1)}" y="${(l.y + 3).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${l.color}" text-anchor="start">${escapeXml(l.qty.toLocaleString('pl-PL'))}</text>`
+        ).join('\n    ');
+
+        const colW = cW / LEGEND_PER_ROW;
+        const legendSvg = series.map((s, i) => {
+            const row = Math.floor(i / LEGEND_PER_ROW);
+            const col = i % LEGEND_PER_ROW;
+            const x = M.left + col * colW;
+            const y = baseY + 34 + row * 18;
+            const nick = s.name.length > 16 ? `${s.name.slice(0, 15)}…` : s.name;
+            return `<rect x="${x.toFixed(1)}" y="${(y - 7).toFixed(1)}" width="9" height="9" rx="2" fill="${s.color}"/>
+    <text x="${(x + 14).toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#B5BAC1">${escapeXml(nick)}</text>`;
+        }).join('\n    ');
+
+        const fmtDate = (dateStr) => {
+            const [y, m, d] = dateStr.split('-');
+            return `${d}.${m}.${y}`;
+        };
+        const firstDate = series.map(s => s.entries[0].date).sort()[0];
+        const lastDate = series.map(s => s.entries[s.entries.length - 1].date).sort().pop();
+
+        const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <clipPath id="cmpClip">
+      <rect x="${M.left}" y="${M.top}" width="${cW}" height="${cH}"/>
+    </clipPath>
+  </defs>
+
+  <rect width="${W}" height="${H}" rx="10" fill="#1E1F22"/>
+
+  <line x1="${M.left}" y1="${M.top - 10}" x2="${W - M.right}" y2="${M.top - 10}" stroke="#2B2D31" stroke-width="1"/>
+
+  <text x="${M.left}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#E3E5E8" font-weight="bold">${escapeXml(`${series.length} graczy`)}</text>
+  <text x="${W / 2}" y="32" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">Progres — ${escapeXml(coreName)}</text>
+  <text x="${W - M.right}" y="32" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="end">${escapeXml(`${fmtDate(firstDate)} – ${fmtDate(lastDate)}`)}</text>
+
+  ${gridLines}
+
+  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+  <line x1="${M.left}" y1="${baseY}" x2="${W - M.right}" y2="${baseY}" stroke="#2B2D31" stroke-width="1"/>
+
+  <g clip-path="url(#cmpClip)">
+    ${seriesSvg}
+  </g>
+
+  ${endLabelsSvg}
+
+  ${buildMonthAxisSvg(tMin, tMax, toX, baseY)}
+
+  ${legendSvg}
+</svg>`;
+
+        return await sharp(Buffer.from(svg)).png().toBuffer();
+    } catch (error) {
+        logger.error('[CORE-HISTORY] ❌ Błąd generowania wykresu porównawczego:', error);
+        return null;
+    }
+}
+
+module.exports = { saveDailySnapshot, generateCoreHistoryChart, generateCoreComparisonChart };

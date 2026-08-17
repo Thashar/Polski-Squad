@@ -269,15 +269,19 @@
 **`/glory-test`** (admin, ukryta dla nie-adminów): ręcznie wypycha dane progresu Fazy 1 do `shared_data/glory_progress.json` (wywołuje `exportGloryProgress()`) — do testów loterii Glory w Kontrolerze, bez czekania na kolejne `/faza1`. Odpowiedź ephemeral pokazuje uczestników i pulę losów per klan. Uwaga: eksport i tak dzieje się automatycznie po każdym `/faza1` i przy starcie bota.
 
 **Core Ranking** - `/core-ranking` (publiczna dla członków klanu):
-- Ephemeral z 6 przyciskami (jeden per typ cora, każdy z ikoną custom emoji)
+- Ephemeral z 7 przyciskami: 6 typów corów (ikona custom emoji) + **🧮 Suma Core**
 - Po kliknięciu: ranking graczy według ilości wybranego cora (malejąco)
-- Format linii: `**1.** Nick - **125** — +8.5%/mies. 🔥` (pozycja, nick, ilość, % wzrostu/mies., ikona klanu)
+- **🧮 Suma Core** — ranking po sumie WSZYSTKICH corów gracza (`sumAllCores`). Suma liczona wyłącznie po typach z `EQUIPMENT_ICONS`; pozycja spoza tej listy (nowy przedmiot w grze, błędny odczyt OCR) jest **pomijana**, bo zawyżałaby wynik. Gracz bez żadnego znanego cora nie wchodzi do rankingu. Embed w innym kolorze (`#F1C40F` vs `#00BFFF`)
+  - Realizowane sentinelem `SUM_CORE_KEY = '__SUMA__'` wstawianym w miejsce nazwy cora w `customId` — suma idzie tą samą ścieżką co pojedynczy ranking (paginacja `core_ranking_nav|…`, podświetlenie aktywnego przycisku), bez osobnego handlera
+  - Tie-break dla sumy nie ma `coreFirstAchievedAt` (pole jest per typ cora) → schodzi na `updatedAt`/`createdAt`
+- Format linii: `**1.** Nick - **125** ▲ 8.5% 🔥` (pozycja, nick, ilość, wzrost/mies., ikona klanu)
 - **Tie-breaking:** przy tej samej ilości wyżej jest gracz, który jako pierwszy osiągnął tę ilość (pole `coreFirstAchievedAt` w equipment_data.json)
 - **Wzrost miesięczny:** obliczany z historii — delta ilości od baseline ~30 dni temu, skalowana do 30 dni / wartość bazowa × 100%
-- Brak klanu → ikona 💀
+- **Tylko członkowie klanu** — gracz bez roli klanowej albo nieobecny na serwerze (dawniej wiersz z ikoną 💀) jest **pomijany**, nie zajmuje pozycji w rankingu ani miejsca na wykresie. Ikona klanu liczona raz, przy budowaniu listy (`clanIconFor`), więc `safeFetchMembers` musi być wywołane PRZED filtrowaniem
+- **10 graczy na stronę** (`PER_PAGE`) — tyle serii mieści jeszcze czytelnie wykres progresu
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
-- Pod rankingiem: wykres historii danego cora dla osoby wywołującej komendę (SVG → PNG przez sharp)
-- Wykres widoczny tylko gdy wywołujący ma ≥2 punkty danych w historii
+- **Wspólny builder przycisków:** `buildCoreRankingRows(activeName)` — jedno miejsce dla widoku rankingu, ekranu startowego, braku danych i obsługi błędu (wcześniej ten sam zestaw budowany był w czterech miejscach osobno)
+- Pod rankingiem: **wykres progresu wszystkich graczy z bieżącej strony** (`generateCoreComparisonChart`, SVG → PNG przez sharp) — jedna linia na gracza, kolory serii w kolejności rankingu, legenda z nickami, wartość przy ostatnim punkcie każdej serii. Gracz z jednym pomiarem pokazywany jest jako sama kropka; gdy nikt ze strony nie ma historii → brak wykresu
 - Dane historyczne: `data/equipment_history.json` — dzienne snapshoty per userId
 
 **Historia Core Stock** - `services/coreHistoryService.js`:
@@ -285,8 +289,10 @@
 - Jeden wpis per dzień: jeśli gracz skanuje dwukrotnie tego samego dnia, zachowywana jest **max ilość** per typ cora
 - Retencja: max 365 dni (starsze wpisy automatycznie usuwane przy każdym nowym zapisie)
 - Format: `{ userId: [ { date: 'YYYY-MM-DD', items: {...}, savedAt: ISO_string }, ... ] }`
-- `generateCoreHistoryChart(userId, coreName, username)` → Buffer PNG (900×280px) lub null gdy <2 punktów
-- Wykres: Discord dark theme (#1E1F22), krzywa Catmull-Rom, blurple (#5865F2), oś miesięczna (pl), detekcja kolizji etykiet
+- `generateCoreHistoryChart(userId, coreName, username, valueFn?)` → Buffer PNG (900×280px) lub null gdy <2 punktów. `valueFn` pozwala policzyć wartość ze snapshotu inaczej niż „ilość jednego cora" (używane przez **Suma Core**); `undefined` z tej funkcji = brak danych tego dnia, punkt pomijany
+- `generateCoreComparisonChart(players, coreName, valueFn?)` → Buffer PNG lub null. Wykres zbiorczy dla strony rankingu: jedna linia na gracza, paleta `SERIES_COLORS` (10 kolorów), legenda pod osią (5 na wiersz, nick ucinany do 16 znaków), wartość przy ostatnim punkcie serii z rozsuwaniem pionowym przy kolizji. **Bez wypełnienia pod krzywą i bez etykiet przy każdym punkcie** — przy dziesięciu seriach jedno i drugie zlewa się w plamę. Wysokość rośnie z liczbą wierszy legendy
+- Wykres: Discord dark theme (#1E1F22), krzywa Catmull-Rom, oś miesięczna (pl), detekcja kolizji etykiet
+- **Krzywa a plateau** (`catmullRomControlPoints`, wspólne dla linii i wypełnienia): czysty Catmull-Rom liczy styczną z sąsiadów, więc **poziomy odcinek zaczynał się unosić jeszcze przed faktycznym wzrostem** — a przy corach plateau to norma (gracz przez tydzień nie zbiera, potem skacze). Reguły: (1) `selfFlat` — odcinek bez zmiany ilości jest idealnie poziomy na całej długości (ma **pierwszeństwo**; bez tego ostatni odcinek plateau wyginał się w dół tuż przed wzrostem, bo styczna w jego końcu liczona była już z rosnącego fragmentu), (2) `prevFlat`/`nextFlat` — gdy sąsiedni odcinek jest poziomy, styczna liczona jest z własnego odcinka, więc przejście plateau → wzrost jest **ostre**. Zaokrąglenie zostaje wszędzie tam, gdzie plateau nie ma
 
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
