@@ -1,5 +1,5 @@
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { safeParse } = require('../../utils/safeJSON');
+const store = require('../../utils/jsonStore');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -973,8 +973,7 @@ class VirtuttiService {
 
             // Wczytaj cooldowny
             try {
-                const cooldownsData = await fs.readFile(this.cooldownsFile, 'utf8');
-                const parsedCooldowns = safeParse(cooldownsData, {});
+                const parsedCooldowns = await store.getOrLoad(this.cooldownsFile, () => ({}));
                 this.cooldowns = new Map(Object.entries(parsedCooldowns));
                 logger.info(`📂 Wczytano ${this.cooldowns.size} cooldownów z pliku`);
             } catch (error) {
@@ -985,8 +984,7 @@ class VirtuttiService {
 
             // Wczytaj dzienne użycia
             try {
-                const dailyUsageData = await fs.readFile(this.dailyUsageFile, 'utf8');
-                const parsedDailyUsage = safeParse(dailyUsageData, {});
+                const parsedDailyUsage = await store.getOrLoad(this.dailyUsageFile, () => ({}));
                 this.dailyUsage = new Map(Object.entries(parsedDailyUsage));
                 logger.info(`📂 Wczytano ${this.dailyUsage.size} dziennych użyć z pliku`);
             } catch (error) {
@@ -997,8 +995,7 @@ class VirtuttiService {
 
             // Wczytaj dane Lucyfera - główne dane (NOWY PLIK)
             try {
-                const lucyferDataFile = await fs.readFile(this.lucyferDataFile, 'utf8');
-                const parsedLucyferData = safeParse(lucyferDataFile, {});
+                const parsedLucyferData = await store.getOrLoad(this.lucyferDataFile, () => ({}));
                 this.lucyferData = new Map(Object.entries(parsedLucyferData));
                 logger.info(`📂 Wczytano ${this.lucyferData.size} głównych danych Lucyfera`);
             } catch (error) {
@@ -1009,8 +1006,7 @@ class VirtuttiService {
 
             // Wczytaj dane Lucyfera - klątwy
             try {
-                const lucyferCursesData = await fs.readFile(this.lucyferCursesFile, 'utf8');
-                const parsedLucyferCurses = safeParse(lucyferCursesData, {});
+                const parsedLucyferCurses = await store.getOrLoad(this.lucyferCursesFile, () => ({}));
                 this.lucyferCurses = new Map(Object.entries(parsedLucyferCurses));
                 logger.info(`📂 Wczytano ${this.lucyferCurses.size} danych klątw Lucyfera`);
             } catch (error) {
@@ -1021,8 +1017,7 @@ class VirtuttiService {
 
             // Wczytaj dane Lucyfera - target cooldowny
             try {
-                const lucyferTargetCooldownsData = await fs.readFile(this.lucyferTargetCooldownsFile, 'utf8');
-                const parsedTargetCooldowns = safeParse(lucyferTargetCooldownsData, {});
+                const parsedTargetCooldowns = await store.getOrLoad(this.lucyferTargetCooldownsFile, () => ({}));
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.lucyferTargetCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedTargetCooldowns)) {
@@ -1037,8 +1032,7 @@ class VirtuttiService {
 
             // Wczytaj Gabriel debuff na Lucyfera
             try {
-                const lucyferGabrielDebuffData = await fs.readFile(this.lucyferGabrielDebuffFile, 'utf8');
-                const parsedDebuff = safeParse(lucyferGabrielDebuffData, {});
+                const parsedDebuff = await store.getOrLoad(this.lucyferGabrielDebuffFile, () => ({}));
                 this.lucyferGabrielDebuff = new Map(Object.entries(parsedDebuff));
                 logger.info(`📂 Wczytano ${this.lucyferGabrielDebuff.size} Gabriel debuff na Lucyfera`);
             } catch (error) {
@@ -1049,8 +1043,7 @@ class VirtuttiService {
 
             // Wczytaj Gabriel blessing cooldowns
             try {
-                const gabrielBlessingCooldownsData = await fs.readFile(this.gabrielBlessingCooldownsFile, 'utf8');
-                const parsedBlessingCooldowns = safeParse(gabrielBlessingCooldownsData, {});
+                const parsedBlessingCooldowns = await store.getOrLoad(this.gabrielBlessingCooldownsFile, () => ({}));
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.gabrielBlessingCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedBlessingCooldowns)) {
@@ -1065,8 +1058,7 @@ class VirtuttiService {
 
             // Wczytaj system many
             try {
-                const energySystemData = await fs.readFile(this.energySystemFile, 'utf8');
-                const parsedEnergySystem = safeParse(energySystemData, {});
+                const parsedEnergySystem = await store.getOrLoad(this.energySystemFile, () => ({}));
                 this.energySystem = new Map(Object.entries(parsedEnergySystem));
 
                 // WALIDACJA: Ogranicz energię do maksymalnego limitu przy wczytywaniu
@@ -1113,8 +1105,7 @@ class VirtuttiService {
 
             // Wczytaj blokady Lucyfera
             try {
-                const lucyferCurseBlockedData = await fs.readFile(this.lucyferCurseBlockedFile, 'utf8');
-                const parsedLucyferBlocked = safeParse(lucyferCurseBlockedData, {});
+                const parsedLucyferBlocked = await store.getOrLoad(this.lucyferCurseBlockedFile, () => ({}));
                 this.lucyferCurseBlocked = new Map(Object.entries(parsedLucyferBlocked));
                 logger.info(`📂 Wczytano ${this.lucyferCurseBlocked.size} blokad Lucyfera`);
             } catch (error) {
@@ -1125,8 +1116,7 @@ class VirtuttiService {
 
             // Wczytaj efekty revenge
             try {
-                const revengeEffectsData = await fs.readFile(this.revengeEffectsFile, 'utf8');
-                const parsedRevengeEffects = safeParse(revengeEffectsData, {});
+                const parsedRevengeEffects = await store.getOrLoad(this.revengeEffectsFile, () => ({}));
                 this.revengeEffects = new Map(Object.entries(parsedRevengeEffects));
                 logger.info(`📂 Wczytano ${this.revengeEffects.size} efektów revenge`);
             } catch (error) {
@@ -1137,8 +1127,7 @@ class VirtuttiService {
 
             // Wczytaj revenge cooldowny
             try {
-                const revengeCooldownsData = await fs.readFile(this.revengeCooldownsFile, 'utf8');
-                const parsedRevengeCooldowns = safeParse(revengeCooldownsData, {});
+                const parsedRevengeCooldowns = await store.getOrLoad(this.revengeCooldownsFile, () => ({}));
                 // Konwertuj zagnieżdżone obiekty na Maps
                 this.revengeCooldowns = new Map();
                 for (const [userId, targets] of Object.entries(parsedRevengeCooldowns)) {
@@ -1153,8 +1142,7 @@ class VirtuttiService {
 
             // Wczytaj ochronę błogosławieństw
             try {
-                const blessingProtectionData = await fs.readFile(this.blessingProtectionFile, 'utf8');
-                const parsedBlessingProtection = safeParse(blessingProtectionData, {});
+                const parsedBlessingProtection = await store.getOrLoad(this.blessingProtectionFile, () => ({}));
                 this.blessingProtection = new Map(Object.entries(parsedBlessingProtection));
                 logger.info(`📂 Wczytano ${this.blessingProtection.size} ochrony błogosławieństw`);
             } catch (error) {
@@ -1165,8 +1153,7 @@ class VirtuttiService {
 
             // Wczytaj blokady blessing Gabriela
             try {
-                const gabrielBlessingBlockedData = await fs.readFile(this.gabrielBlessingBlockedFile, 'utf8');
-                const parsedGabrielBlocked = safeParse(gabrielBlessingBlockedData, {});
+                const parsedGabrielBlocked = await store.getOrLoad(this.gabrielBlessingBlockedFile, () => ({}));
                 this.gabrielBlessingBlocked = new Map(Object.entries(parsedGabrielBlocked));
                 logger.info(`📂 Wczytano ${this.gabrielBlessingBlocked.size} blokad blessing Gabriela`);
             } catch (error) {
@@ -1177,8 +1164,7 @@ class VirtuttiService {
 
             // Wczytaj aktywne infernal bargains
             try {
-                const infernalBargainActiveData = await fs.readFile(this.infernalBargainActiveFile, 'utf8');
-                const parsedInfernalActive = safeParse(infernalBargainActiveData, {});
+                const parsedInfernalActive = await store.getOrLoad(this.infernalBargainActiveFile, () => ({}));
                 this.infernalBargainActive = new Map(Object.entries(parsedInfernalActive));
                 logger.info(`📂 Wczytano ${this.infernalBargainActive.size} aktywnych infernal bargains`);
             } catch (error) {
@@ -1189,8 +1175,7 @@ class VirtuttiService {
 
             // Wczytaj cooldowny infernal bargain
             try {
-                const infernalBargainCooldownsData = await fs.readFile(this.infernalBargainCooldownsFile, 'utf8');
-                const parsedInfernalCooldowns = safeParse(infernalBargainCooldownsData, {});
+                const parsedInfernalCooldowns = await store.getOrLoad(this.infernalBargainCooldownsFile, () => ({}));
                 this.infernalBargainCooldowns = new Map(Object.entries(parsedInfernalCooldowns));
                 logger.info(`📂 Wczytano ${this.infernalBargainCooldowns.size} cooldownów infernal bargain`);
             } catch (error) {
@@ -1201,8 +1186,7 @@ class VirtuttiService {
 
             // Wczytaj cooldowny chaos blessing
             try {
-                const chaosBlessingCooldownsData = await fs.readFile(this.chaosBlessingCooldownsFile, 'utf8');
-                const parsedChaosCooldowns = safeParse(chaosBlessingCooldownsData, {});
+                const parsedChaosCooldowns = await store.getOrLoad(this.chaosBlessingCooldownsFile, () => ({}));
                 this.chaosBlessingCooldowns = new Map(Object.entries(parsedChaosCooldowns));
                 logger.info(`📂 Wczytano ${this.chaosBlessingCooldowns.size} cooldownów chaos blessing`);
             } catch (error) {
@@ -1213,8 +1197,7 @@ class VirtuttiService {
 
             // Wczytaj debuffs chaos blessing
             try {
-                const chaosBlessingDebuffsData = await fs.readFile(this.chaosBlessingDebuffsFile, 'utf8');
-                const parsedChaosDebuffs = safeParse(chaosBlessingDebuffsData, {});
+                const parsedChaosDebuffs = await store.getOrLoad(this.chaosBlessingDebuffsFile, () => ({}));
                 this.chaosBlessingDebuffs = new Map(Object.entries(parsedChaosDebuffs));
                 logger.info(`📂 Wczytano ${this.chaosBlessingDebuffs.size} debuffs chaos blessing`);
             } catch (error) {
@@ -1254,22 +1237,22 @@ class VirtuttiService {
             }
 
             // Zapisz cooldowny
-            await fs.writeFile(this.cooldownsFile, JSON.stringify(cooldownsObj, null, 2));
+            await store.set(this.cooldownsFile, cooldownsObj);
 
             // Zapisz dzienne użycia
-            await fs.writeFile(this.dailyUsageFile, JSON.stringify(dailyUsageObj, null, 2));
+            await store.set(this.dailyUsageFile, dailyUsageObj);
 
             // Zapisz dane Lucyfera - główne dane
             const lucyferDataObj = Object.fromEntries(this.lucyferData);
-            await fs.writeFile(this.lucyferDataFile, JSON.stringify(lucyferDataObj, null, 2));
+            await store.set(this.lucyferDataFile, lucyferDataObj);
 
             // Zapisz dane Lucyfera - klątwy
-            await fs.writeFile(this.lucyferCursesFile, JSON.stringify(lucyferCursesObj, null, 2));
-            await fs.writeFile(this.lucyferTargetCooldownsFile, JSON.stringify(lucyferTargetCooldownsObj, null, 2));
-            await fs.writeFile(this.lucyferGabrielDebuffFile, JSON.stringify(lucyferGabrielDebuffObj, null, 2));
+            await store.set(this.lucyferCursesFile, lucyferCursesObj);
+            await store.set(this.lucyferTargetCooldownsFile, lucyferTargetCooldownsObj);
+            await store.set(this.lucyferGabrielDebuffFile, lucyferGabrielDebuffObj);
 
             // Zapisz dane Gabriela
-            await fs.writeFile(this.gabrielBlessingCooldownsFile, JSON.stringify(gabrielBlessingCooldownsObj, null, 2));
+            await store.set(this.gabrielBlessingCooldownsFile, gabrielBlessingCooldownsObj);
 
             // WALIDACJA: Sprawdź limity many przed zapisem
             for (const [userId, userData] of this.energySystem.entries()) {
@@ -1282,46 +1265,46 @@ class VirtuttiService {
 
             // Zapisz system many
             const energySystemObj = Object.fromEntries(this.energySystem);
-            await fs.writeFile(this.energySystemFile, JSON.stringify(energySystemObj, null, 2));
+            await store.set(this.energySystemFile, energySystemObj);
 
             // Zapisz blokady Lucyfera
             const lucyferCurseBlockedObj = Object.fromEntries(this.lucyferCurseBlocked);
-            await fs.writeFile(this.lucyferCurseBlockedFile, JSON.stringify(lucyferCurseBlockedObj, null, 2));
+            await store.set(this.lucyferCurseBlockedFile, lucyferCurseBlockedObj);
 
             // Zapisz efekty revenge
             const revengeEffectsObj = Object.fromEntries(this.revengeEffects);
-            await fs.writeFile(this.revengeEffectsFile, JSON.stringify(revengeEffectsObj, null, 2));
+            await store.set(this.revengeEffectsFile, revengeEffectsObj);
 
             // Zapisz revenge cooldowny (zagnieżdżone Maps)
             const revengeCooldownsObj = {};
             for (const [userId, targets] of this.revengeCooldowns.entries()) {
                 revengeCooldownsObj[userId] = Object.fromEntries(targets);
             }
-            await fs.writeFile(this.revengeCooldownsFile, JSON.stringify(revengeCooldownsObj, null, 2));
+            await store.set(this.revengeCooldownsFile, revengeCooldownsObj);
 
             // Zapisz ochronę błogosławieństw
             const blessingProtectionObj = Object.fromEntries(this.blessingProtection);
-            await fs.writeFile(this.blessingProtectionFile, JSON.stringify(blessingProtectionObj, null, 2));
+            await store.set(this.blessingProtectionFile, blessingProtectionObj);
 
             // Zapisz blokady blessing Gabriela
             const gabrielBlessingBlockedObj = Object.fromEntries(this.gabrielBlessingBlocked);
-            await fs.writeFile(this.gabrielBlessingBlockedFile, JSON.stringify(gabrielBlessingBlockedObj, null, 2));
+            await store.set(this.gabrielBlessingBlockedFile, gabrielBlessingBlockedObj);
 
             // Zapisz aktywne infernal bargains
             const infernalBargainActiveObj = Object.fromEntries(this.infernalBargainActive);
-            await fs.writeFile(this.infernalBargainActiveFile, JSON.stringify(infernalBargainActiveObj, null, 2));
+            await store.set(this.infernalBargainActiveFile, infernalBargainActiveObj);
 
             // Zapisz cooldowny infernal bargain
             const infernalBargainCooldownsObj = Object.fromEntries(this.infernalBargainCooldowns);
-            await fs.writeFile(this.infernalBargainCooldownsFile, JSON.stringify(infernalBargainCooldownsObj, null, 2));
+            await store.set(this.infernalBargainCooldownsFile, infernalBargainCooldownsObj);
 
             // Zapisz cooldowny chaos blessing
             const chaosBlessingCooldownsObj = Object.fromEntries(this.chaosBlessingCooldowns);
-            await fs.writeFile(this.chaosBlessingCooldownsFile, JSON.stringify(chaosBlessingCooldownsObj, null, 2));
+            await store.set(this.chaosBlessingCooldownsFile, chaosBlessingCooldownsObj);
 
             // Zapisz debuffs chaos blessing
             const chaosBlessingDebuffsObj = Object.fromEntries(this.chaosBlessingDebuffs);
-            await fs.writeFile(this.chaosBlessingDebuffsFile, JSON.stringify(chaosBlessingDebuffsObj, null, 2));
+            await store.set(this.chaosBlessingDebuffsFile, chaosBlessingDebuffsObj);
 
         } catch (error) {
             logger.error(`❌ Błąd zapisywania danych VirtuttiService: ${error.message}`);

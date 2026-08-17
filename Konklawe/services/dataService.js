@@ -1,9 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
+
+/**
+ * Cały serwis chodzi przez `utils/jsonStore` (cache-first): z dysku czytamy raz,
+ * przy pierwszym sięgnięciu po dany plik, a każdy zapis aktualizuje pamięć
+ * natychmiast i utrwala plik atomowo w tle.
+ *
+ * API pozostaje SYNCHRONICZNE (wywołujący nie awaitują), dlatego zapisy idą przez
+ * `store.setSync()`. Wcześniej każdy `saveX()` robił blokujący `writeFileSync`,
+ * który zatrzymywał cały proces — a w nim wszystkie 9 botów.
+ */
 class DataService {
     constructor() {
         this.dataPath = path.join(__dirname, '..', 'data');
@@ -20,17 +31,18 @@ class DataService {
     }
 
     /**
-     * Bezpieczny odczyt JSON — zwraca fallback gdy plik pusty lub uszkodzony (np. po ENOSPC)
+     * Odczyt z pamięci (z dysku tylko przy pierwszym sięgnięciu). Uszkodzony lub
+     * pusty plik — np. po ENOSPC — daje wartość domyślną, tak jak dotąd.
      */
     _safeReadJSON(filePath, fallback) {
-        try {
-            const raw = fs.readFileSync(filePath, 'utf8');
-            if (!raw.trim()) return fallback;
-            return JSON.parse(raw);
-        } catch {
-            logger.warn(`⚠️ Uszkodzony plik JSON (pusty lub błędny): ${path.basename(filePath)} — używam wartości domyślnej`);
-            return fallback;
-        }
+        return store.getSync(filePath, () => fallback);
+    }
+
+    /**
+     * Zapis: pamięć od razu, plik atomowo w tle.
+     */
+    _write(fileName, data) {
+        store.setSync(path.join(this.dataPath, fileName), data);
     }
 
     /**
@@ -43,7 +55,7 @@ class DataService {
             hints: hints,
             lastHintTimestamp: lastHintTimestamp ? lastHintTimestamp.toISOString() : null
         };
-        fs.writeFileSync(path.join(this.dataPath, 'hints.json'), JSON.stringify(hintsData, null, 2));
+        this._write('hints.json', hintsData);
     }
 
     /**
@@ -52,14 +64,11 @@ class DataService {
      */
     loadHints() {
         const hintsPath = path.join(this.dataPath, 'hints.json');
-        if (fs.existsSync(hintsPath)) {
-            const hintsData = this._safeReadJSON(hintsPath, {});
-            return {
-                hints: hintsData.hints || [],
-                lastHintTimestamp: hintsData.lastHintTimestamp ? new Date(hintsData.lastHintTimestamp) : null
-            };
-        }
-        return { hints: [], lastHintTimestamp: null };
+        const hintsData = this._safeReadJSON(hintsPath, {});
+        return {
+            hints: hintsData.hints || [],
+            lastHintTimestamp: hintsData.lastHintTimestamp ? new Date(hintsData.lastHintTimestamp) : null
+        };
     }
 
     /**
@@ -67,7 +76,7 @@ class DataService {
      * @param {Object} scoreboard - Obiekt z rankingiem
      */
     saveScoreboard(scoreboard) {
-        fs.writeFileSync(path.join(this.dataPath, 'scoreboard.json'), JSON.stringify(scoreboard, null, 2));
+        this._write('scoreboard.json', scoreboard);
     }
 
     /**
@@ -76,10 +85,7 @@ class DataService {
      */
     loadScoreboard() {
         const scoreboardPath = path.join(this.dataPath, 'scoreboard.json');
-        if (fs.existsSync(scoreboardPath)) {
-            return this._safeReadJSON(scoreboardPath, {});
-        }
-        return {};
+        return this._safeReadJSON(scoreboardPath, {});
     }
 
     /**
@@ -87,7 +93,7 @@ class DataService {
      * @param {Object} virtuttiMedals - Obiekt z medalami
      */
     saveVirtuttiMedals(virtuttiMedals) {
-        fs.writeFileSync(path.join(this.dataPath, 'virtuttiMedals.json'), JSON.stringify(virtuttiMedals, null, 2));
+        this._write('virtuttiMedals.json', virtuttiMedals);
     }
 
     /**
@@ -96,10 +102,7 @@ class DataService {
      */
     loadVirtuttiMedals() {
         const virtuttiMedalsPath = path.join(this.dataPath, 'virtuttiMedals.json');
-        if (fs.existsSync(virtuttiMedalsPath)) {
-            return this._safeReadJSON(virtuttiMedalsPath, {});
-        }
-        return {};
+        return this._safeReadJSON(virtuttiMedalsPath, {});
     }
 
     /**
@@ -107,7 +110,7 @@ class DataService {
      * @param {Object} attempts - Obiekt z próbami
      */
     saveAttempts(attempts) {
-        fs.writeFileSync(path.join(this.dataPath, 'attempts.json'), JSON.stringify(attempts, null, 2));
+        this._write('attempts.json', attempts);
     }
 
     /**
@@ -116,10 +119,7 @@ class DataService {
      */
     loadAttempts() {
         const attemptsPath = path.join(this.dataPath, 'attempts.json');
-        if (fs.existsSync(attemptsPath)) {
-            return this._safeReadJSON(attemptsPath, {});
-        }
-        return {};
+        return this._safeReadJSON(attemptsPath, {});
     }
 
     /**
@@ -127,7 +127,7 @@ class DataService {
      * @param {Object} triggerState - Stan trigger
      */
     saveTriggerState(triggerState) {
-        fs.writeFileSync(path.join(this.dataPath, 'trigger.json'), JSON.stringify(triggerState, null, 2));
+        this._write('trigger.json', triggerState);
         const triggerDisplay = triggerState.trigger || 'brak';
         const activeTimers = Object.values(triggerState.timerStates || {}).filter(Boolean).length;
         logger.info(`💾 Zapisano stan triggera: "${triggerDisplay}" (${activeTimers} aktywnych timerów)`);
@@ -139,30 +139,30 @@ class DataService {
      */
     loadTriggerState() {
         const triggerPath = path.join(this.dataPath, 'trigger.json');
-        if (fs.existsSync(triggerPath)) {
-            const raw = fs.readFileSync(triggerPath, 'utf8');
-            if (!raw.trim()) return { trigger: null, triggerSetTimestamp: null, triggerClearedTimestamp: null, triggerSetBy: null, timerStates: {} };
-            const data = JSON.parse(raw);
-            logger.info('📂 Wczytano stan triggera:', {
-                trigger: data.trigger,
-                triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
-                clearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,
-                timerStates: data.timerStates || {}
-            });
-            return {
-                trigger: data.trigger,
-                triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
-                triggerClearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,
-                triggerSetBy: data.triggerSetBy || null,
-                timerStates: data.timerStates || {}
-            };
-        }
-        return {
+        const empty = {
             trigger: null,
             triggerSetTimestamp: null,
             triggerClearedTimestamp: null,
             triggerSetBy: null,
             timerStates: {}
+        };
+
+        const data = this._safeReadJSON(triggerPath, {});
+        if (!data || data.trigger === undefined) return empty;
+
+        logger.info('📂 Wczytano stan triggera:', {
+            trigger: data.trigger,
+            triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
+            clearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,
+            timerStates: data.timerStates || {}
+        });
+
+        return {
+            trigger: data.trigger,
+            triggerSetTimestamp: data.timestamp ? new Date(data.timestamp) : null,
+            triggerClearedTimestamp: data.clearedTimestamp ? new Date(data.clearedTimestamp) : null,
+            triggerSetBy: data.triggerSetBy || null,
+            timerStates: data.timerStates || {}
         };
     }
 
@@ -171,7 +171,7 @@ class DataService {
      * @param {Object} gameHistory - Historia gier
      */
     saveGameHistory(gameHistory) {
-        fs.writeFileSync(path.join(this.dataPath, 'gameHistory.json'), JSON.stringify(gameHistory, null, 2));
+        this._write('gameHistory.json', gameHistory);
     }
 
     /**
@@ -181,10 +181,7 @@ class DataService {
     loadGameHistory() {
         const historyPath = path.join(this.dataPath, 'gameHistory.json');
         const fallback = { completedGames: [], totalGames: 0, totalAttempts: 0, averageAttempts: 0, averageTime: 0 };
-        if (fs.existsSync(historyPath)) {
-            return this._safeReadJSON(historyPath, fallback);
-        }
-        return fallback;
+        return this._safeReadJSON(historyPath, fallback);
     }
 
     /**
@@ -230,7 +227,7 @@ class DataService {
      * @param {Object} playerAttempts - Szczegóły prób z timestampami
      */
     savePlayerAttempts(playerAttempts) {
-        fs.writeFileSync(path.join(this.dataPath, 'playerAttempts.json'), JSON.stringify(playerAttempts, null, 2));
+        this._write('playerAttempts.json', playerAttempts);
     }
 
     /**
@@ -239,10 +236,7 @@ class DataService {
      */
     loadPlayerAttempts() {
         const attemptsPath = path.join(this.dataPath, 'playerAttempts.json');
-        if (fs.existsSync(attemptsPath)) {
-            return this._safeReadJSON(attemptsPath, {});
-        }
-        return {};
+        return this._safeReadJSON(attemptsPath, {});
     }
 
     /**
@@ -250,10 +244,7 @@ class DataService {
      * @param {Object} state - Stan do zapisania
      */
     savePasswordSelectionState(state) {
-        fs.writeFileSync(
-            path.join(this.dataPath, 'password_selection_state.json'),
-            JSON.stringify(state, null, 2)
-        );
+        this._write('password_selection_state.json', state);
     }
 
     /**
@@ -262,9 +253,6 @@ class DataService {
      */
     loadPasswordSelectionState() {
         const filePath = path.join(this.dataPath, 'password_selection_state.json');
-        if (!fs.existsSync(filePath)) {
-            return { activeSelectionMessageId: null };
-        }
         return this._safeReadJSON(filePath, { activeSelectionMessageId: null });
     }
 
@@ -273,10 +261,7 @@ class DataService {
      * @param {Object} state - Stan do zapisania
      */
     saveHintSelectionState(state) {
-        fs.writeFileSync(
-            path.join(this.dataPath, 'hint_selection_state.json'),
-            JSON.stringify(state, null, 2)
-        );
+        this._write('hint_selection_state.json', state);
     }
 
     /**
@@ -285,9 +270,6 @@ class DataService {
      */
     loadHintSelectionState() {
         const filePath = path.join(this.dataPath, 'hint_selection_state.json');
-        if (!fs.existsSync(filePath)) {
-            return { activeSelectionMessageId: null };
-        }
         return this._safeReadJSON(filePath, { activeSelectionMessageId: null });
     }
 
@@ -296,10 +278,7 @@ class DataService {
      * @param {Object} usage - Dane o użyciu AI
      */
     saveAIUsage(usage) {
-        fs.writeFileSync(
-            path.join(this.dataPath, 'ai_usage.json'),
-            JSON.stringify(usage, null, 2)
-        );
+        this._write('ai_usage.json', usage);
     }
 
     /**
@@ -308,9 +287,6 @@ class DataService {
      */
     loadAIUsage() {
         const filePath = path.join(this.dataPath, 'ai_usage.json');
-        if (!fs.existsSync(filePath)) {
-            return {};
-        }
         return this._safeReadJSON(filePath, {});
     }
 }

@@ -64,7 +64,11 @@ KONKLAWE_GROK_MODEL=grok-3-mini
 - **Logger:** createBotLogger('Konklawe')
 - **Mana:** Gabriel max 150, Lucyfer max 100
 - **Regeneracja:** Gabriel 1pkt/10min, Lucyfer 10-30min/pkt
-- **Persistencja:** Wszystkie dane w data/ (game_state.json, virtuttiData.json, etc.)
+- **Persistencja przez `utils/jsonStore` (cache-first):** wszystkie pliki w `data/` — scoreboard, trigger, hints, attempts, gameHistory, medale Virtutti, 17 plików stanu Lucyfera/Gabriela (`virtuttiService`), aktywne klątwy, chaos bomby, zaplanowane podpowiedzi i usunięcia wiadomości. Z dysku czytane raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename)
+  - **`dataService` zachował synchroniczne API** (`loadX()`/`saveX()` bez `await` u wywołujących), więc zapisy idą przez **`store.setSync()`**: cache aktualizuje się NATYCHMIAST, a plik zapisywany jest w tle. To celowe — wzorzec `saveScoreboard(s)` → zaraz potem `loadScoreboard()` jest w tym bocie wszechobecny i musi zobaczyć świeżą wartość. Zwykłe `set()` (cache dopiero po zapisie) zwróciłoby jeszcze starą
+  - **Zniknęło 14 blokujących `writeFileSync`** — każdy z nich zatrzymywał cały proces Node, czyli wszystkie 9 botów naraz
+  - `_safeReadJSON()` jest teraz cienką nakładką na `store.getSync()`; zachowanie przy uszkodzonym/pustym pliku (wartość domyślna zamiast wyjątku) pozostało bez zmian
+  - **Guardy `fs.existsSync()` usunięte z metod `loadX()`** — przy zapisie trwającym jeszcze w tle plik mógł nie istnieć, mimo że cache miał już aktualne dane, i metoda zwracała wartość domyślną zamiast prawdziwej
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15) i **nie** `flags: 64` (magiczna liczba — ta sama wartość, ale nieczytelna). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje
   - **Publiczne odpowiedzi nie mają flagi** — dawne `ephemeral: false` (klątwy, błogosławieństwa, virtue check) zostało usunięte, bo brak flagi to domyślnie wiadomość widoczna dla wszystkich
   - Import `MessageFlags` jest modułowy w `index.js`, `handlers/interactionHandlers.js` i `services/judgmentService.js`

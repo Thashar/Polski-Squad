@@ -1,6 +1,6 @@
-const fs = require('fs').promises;
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -34,20 +34,13 @@ class ScheduledHintsService {
      */
     async loadScheduledHints() {
         try {
-            const data = await fs.readFile(this.dataFile, 'utf8');
-            const parsed = JSON.parse(data);
+            const parsed = await store.getOrLoad(this.dataFile, () => ({ scheduledHints: [] }));
             this.scheduledHints = parsed.scheduledHints || [];
             logger.info(`📂 Wczytano ${this.scheduledHints.length} zaplanowanych podpowiedzi`);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Plik nie istnieje - utwórz pusty
-                this.scheduledHints = [];
-                await this.saveScheduledHints();
-                logger.info('📂 Utworzono nowy plik scheduled_hints.json');
-            } else {
-                logger.error(`❌ Błąd wczytywania zaplanowanych podpowiedzi: ${error.message}`);
-                this.scheduledHints = [];
-            }
+            // Brak pliku obsługuje store, więc tu trafiają realne błędy odczytu
+            logger.error(`❌ Błąd wczytywania zaplanowanych podpowiedzi: ${error.message}`);
+            this.scheduledHints = [];
         }
     }
 
@@ -56,14 +49,7 @@ class ScheduledHintsService {
      */
     async saveScheduledHints() {
         try {
-            // Upewnij się że folder data/ istnieje
-            const dataDir = path.dirname(this.dataFile);
-            await fs.mkdir(dataDir, { recursive: true });
-
-            const data = {
-                scheduledHints: this.scheduledHints
-            };
-            await fs.writeFile(this.dataFile, JSON.stringify(data, null, 2));
+            await store.set(this.dataFile, { scheduledHints: this.scheduledHints });
         } catch (error) {
             logger.error(`❌ Błąd zapisywania zaplanowanych podpowiedzi: ${error.message}`);
         }

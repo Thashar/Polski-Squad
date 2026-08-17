@@ -3,7 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const VirtuttiService = require('../services/virtuttiService');
 const JudgmentService = require('../services/judgmentService');
-const fs = require('fs').promises;
+const store = require('../../utils/jsonStore');
 const path = require('path');
 
 const logger = createBotLogger('Konklawe');
@@ -2658,9 +2658,9 @@ class InteractionHandler {
      */
     async loadActiveCurses() {
         try {
-            const cursesData = await fs.readFile(this.cursesFile, 'utf8');
-            const parsedCurses = JSON.parse(cursesData);
-            
+            const parsedCurses = await store.getOrLoad(this.cursesFile, () => ({}));
+
+
             // Odtwórz klątwy z pliku, ale tylko te które jeszcze są aktywne
             const now = Date.now();
             for (const [userId, curse] of Object.entries(parsedCurses)) {
@@ -2677,9 +2677,8 @@ class InteractionHandler {
             
             logger.info(`📂 Wczytano ${this.activeCurses.size} aktywnych klątw z pliku`);
         } catch (error) {
-            if (error.code !== 'ENOENT') {
-                logger.warn(`⚠️ Błąd wczytywania aktywnych klątw: ${error.message}`);
-            }
+            // Brak pliku obsługuje store (oddaje pusty obiekt), więc tu trafiają realne błędy
+            logger.warn(`⚠️ Błąd wczytywania aktywnych klątw: ${error.message}`);
         }
     }
 
@@ -2696,7 +2695,7 @@ class InteractionHandler {
                 }
             }
 
-            await fs.writeFile(this.cursesFile, JSON.stringify(cursesToSave, null, 2));
+            await store.set(this.cursesFile, cursesToSave);
         } catch (error) {
             logger.error(`❌ Błąd zapisywania aktywnych klątw: ${error.message}`);
         }

@@ -289,6 +289,36 @@ class JsonStore {
     }
 
     /**
+     * Zapis dla SYNCHRONICZNYCH API serwisów (np. `dataService.saveScoreboard()`
+     * w Konklawe), których wywołujący nie mogą czekać na obietnicę.
+     *
+     * Różnica wobec `set()`: cache jest aktualizowany NATYCHMIAST, a plik zapisywany
+     * w tle. To celowe — inaczej kod robiący `save(x)` i zaraz potem `load()`
+     * (bardzo częsty wzorzec w Konklawe) odczytałby z cache jeszcze starą wartość,
+     * dopóki zapis by się nie dokończył.
+     *
+     * Kosztem jest to, że przy nieudanym zapisie pamięć wyprzedza plik — błąd
+     * trafia do logu, a rozjazd znika przy restarcie. Alternatywą był blokujący
+     * `writeFileSync`, który zatrzymywał cały proces (czyli wszystkie 9 botów).
+     *
+     * @returns {Promise} obietnica zapisu — można ją zignorować albo poczekać
+     */
+    setSync(filePath, data) {
+        const key = this._key(filePath);
+        this._cache.set(key, { data, loaded: true });
+
+        return this._enqueue(key, async () => {
+            try {
+                await this._writeAtomic(key, data);
+                this._stats.writes++;
+            } catch (error) {
+                this._stats.writeErrors++;
+                logger.error(`❌ Błąd zapisu ${path.basename(key)}: ${error.message}`);
+            }
+        });
+    }
+
+    /**
      * Odczyt-modyfikacja-zapis pod jednym zamkiem. Bezpieczniejsze niż para
      * `get()` + `set()`, bo między nimi nie wejdzie inny zapis tego pliku.
      *

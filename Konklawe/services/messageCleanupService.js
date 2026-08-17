@@ -1,5 +1,5 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 /**
  * Serwis do automatycznego usuwania wiadomości po określonym czasie
@@ -34,17 +34,11 @@ class MessageCleanupService {
      */
     async loadScheduledDeletions() {
         try {
-            const data = await fs.readFile(this.dataPath, 'utf8');
-            this.scheduledDeletions = JSON.parse(data || '[]');
+            this.scheduledDeletions = await store.getOrLoad(this.dataPath, () => []);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Plik nie istnieje - pierwszy start
-                this.scheduledDeletions = [];
-                await this.saveScheduledDeletions();
-            } else {
-                this.logger.error(`❌ Błąd ładowania scheduled deletions: ${error.message}`);
-                this.scheduledDeletions = [];
-            }
+            // Brak pliku obsługuje store (oddaje pustą listę), więc tu trafiają realne błędy
+            this.logger.error(`❌ Błąd ładowania scheduled deletions: ${error.message}`);
+            this.scheduledDeletions = [];
         }
     }
 
@@ -53,7 +47,7 @@ class MessageCleanupService {
      */
     async saveScheduledDeletions() {
         try {
-            await fs.writeFile(this.dataPath, JSON.stringify(this.scheduledDeletions, null, 2));
+            await store.set(this.dataPath, this.scheduledDeletions);
         } catch (error) {
             this.logger.error(`❌ Błąd zapisywania scheduled deletions: ${error.message}`);
         }

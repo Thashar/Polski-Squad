@@ -1,5 +1,5 @@
-const fs = require('fs');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('Konklawe');
@@ -22,8 +22,7 @@ class BombChaosService {
 
     _loadState() {
         try {
-            const raw = fs.readFileSync(CHAOS_FILE, 'utf8');
-            const saved = JSON.parse(raw);
+            const saved = store.getSync(CHAOS_FILE, () => ({}));
             if (saved.active && saved.expiresAt) {
                 this.expiresAt = saved.expiresAt;
                 const remaining = Math.max(0, saved.expiresAt - Date.now());
@@ -42,11 +41,7 @@ class BombChaosService {
 
     activate() {
         this.expiresAt = Date.now() + CHAOS_DURATION_MS;
-        try {
-            fs.writeFileSync(CHAOS_FILE, JSON.stringify({ active: true, expiresAt: this.expiresAt }));
-        } catch (err) {
-            logger.error('❌ BombChaos: błąd zapisu stanu:', err.message);
-        }
+        store.setSync(CHAOS_FILE, { active: true, expiresAt: this.expiresAt });
         logger.info('💣 BombChaos: chaos bomby aktywowany na 1 godzinę');
     }
 
