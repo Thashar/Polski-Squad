@@ -4,6 +4,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const WarningService = require('../services/warningService');
 const ReportStatsService = require('../services/reportStatsService');
 const RestoreBackupHandler = require('./restoreBackupHandler');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -2978,7 +2979,7 @@ class InteractionHandler {
                 return;
             }
 
-            const commandsData = JSON.parse(fs.readFileSync(commandsDataPath, 'utf8'));
+            const commandsData = store.getSync(commandsDataPath, () => ({}));
 
             // Sprawdź uprawnienia użytkownika
             const member = interaction.member;

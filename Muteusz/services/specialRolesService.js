@@ -1,6 +1,7 @@
 const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -16,8 +17,7 @@ class SpecialRolesService {
      */
     async readSpecialRoles() {
         try {
-            const data = await fs.readFile(this.specialRolesFile, 'utf8');
-            const parsed = safeParse(data, {});
+            const parsed = await store.getOrLoad(this.specialRolesFile, () => ({}));
             return parsed.roles || [];
         } catch (error) {
             // Jeśli plik nie istnieje, zwróć pustą listę
@@ -46,7 +46,7 @@ class SpecialRolesService {
                 version: "1.0"
             };
             
-            await fs.writeFile(this.specialRolesFile, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.specialRolesFile, data);
             logger.info('Lista ról specjalnych została zapisana');
         } catch (error) {
             logger.error(`Błąd podczas zapisu pliku ról specjalnych: ${error.message}`);

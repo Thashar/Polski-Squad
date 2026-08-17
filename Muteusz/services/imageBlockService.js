@@ -2,6 +2,7 @@ const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -38,12 +39,11 @@ class ImageBlockService {
             } catch (error) {
                 // Plik nie istnieje, stwórz pusty
                 await this.ensureDataDirectory();
-                await fs.writeFile(this.dataFile, JSON.stringify({}, null, 2));
+                await store.set(this.dataFile, {});
                 return;
             }
 
-            const data = await fs.readFile(this.dataFile, 'utf8');
-            const blocksData = safeParse(data, {});
+            const blocksData = await store.getOrLoad(this.dataFile, () => ({}));
             
             // Konwertuj na Map z datami i filtruj wygasłe
             this.blocks.clear();
@@ -98,7 +98,7 @@ class ImageBlockService {
                 };
             }
 
-            await fs.writeFile(this.dataFile, JSON.stringify(blocksData, null, 2));
+            await store.set(this.dataFile, blocksData);
             logger.info(`💾 Zapisano ${this.blocks.size} blokad obrazów`);
         } catch (error) {
             logger.error(`❌ Błąd zapisywania blokad: ${error.message}`);

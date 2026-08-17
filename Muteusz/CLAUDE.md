@@ -83,6 +83,10 @@ MUTEUSZ_REPORT_CHANNEL_ID=channel_id  # opcjonalne - kanał dla zgłoszeń (fall
 ## Najlepsze Praktyki
 
 - **Logger:** createBotLogger('Muteusz')
+- **Persistencja przez `utils/jsonStore` (cache-first):** wszystkie pliki `data/` — ostrzeżenia, wyzwiska, aktywne wyciszenia, liczniki naruszeń, blokady słów i obrazów, chaos mode, role specjalne, konflikty ról, cache członków, statystyki zgłoszeń, timery reakcji-ról oraz dane Rekrutera czytane przez `roleKickingService`. Odczyt z dysku raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename)
+  - **Zniknęło 12 blokujących `writeFileSync`** — zatrzymywały cały proces, czyli wszystkie 9 botów naraz. Serwisy z synchronicznym API (`warningService`, `autoModerationService`) używają `store.setSync()`: cache aktualizuje się natychmiast, plik zapisywany jest w tle
+  - **⚠️ `/restore-backup` MUSI kończyć się `store.reload()`** (`restoreBackupHandler._applyRestore`) — przywracanie podmienia pliki **pod** cachem, więc bez przeładowania pierwszy zapis dowolnego serwisu nadpisałby odzyskane dane starą zawartością pamięci i po cichu cofnął całe przywracanie. Liczba przeładowanych plików trafia do podsumowania operacji. To samo dotyczy każdej nowej ścieżki podmieniającej pliki spod spodu (`backupManager.restoreFilesFromTemp`)
+  - `safeParse` zostało wyparte przez store — obsługę uszkodzonego i pustego pliku (wartość domyślna zamiast wyjątku) zapewnia teraz `getSync`/`getOrLoad`
 - **Cache mediów:** 100MB/plik, 2GB total, 24h retencja
 - **Role:** Ekskluzywne grupy w special_roles.json
 - **Guard Checky:** isFullyInitialized flag chroni przed błędami startu

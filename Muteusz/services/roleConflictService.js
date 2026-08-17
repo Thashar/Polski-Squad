@@ -2,6 +2,7 @@ const { safeParse } = require('../../utils/safeJSON');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class RoleConflictService {
     constructor(config) {
@@ -47,8 +48,7 @@ class RoleConflictService {
      */
     async restoreTimersFromFile() {
         try {
-            const data = await fs.readFile(this.timersFilePath, 'utf8');
-            const timersData = safeParse(data, []);
+            const timersData = await store.getOrLoad(this.timersFilePath, () => ([]));
 
             let restoredCount = 0;
             let expiredCount = 0;
@@ -284,7 +284,7 @@ class RoleConflictService {
      */
     async saveTimersToFile() {
         try {
-            await fs.writeFile(this.timersFilePath, JSON.stringify(this.persistentTimers, null, 2));
+            await store.set(this.timersFilePath, this.persistentTimers);
         } catch (error) {
             this.logger.error('❌ Błąd podczas zapisywania timerów konfliktów:', error);
         }

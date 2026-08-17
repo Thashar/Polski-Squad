@@ -5,6 +5,7 @@ const {
     StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags
 } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -101,7 +102,7 @@ class RestoreBackupHandler {
     loadGuildConfigMap() {
         try {
             const p = path.join(__dirname, '..', '..', 'EndersEcho', 'data', 'guild_configs.json');
-            return JSON.parse(fs.readFileSync(p, 'utf8')) || {};
+            return store.getSync(p, () => ({})) || {};
         } catch {
             return {};
         }
@@ -659,8 +660,21 @@ class RestoreBackupHandler {
             const bm = session.bm;
             this.cleanupSession(session.userId);
 
+            // ⚠️ KRYTYCZNE: pliki zostały podmienione POD cachem (utils/jsonStore trzyma
+            // dane w pamięci i czyta z dysku tylko raz). Bez przeładowania pierwszy zapis
+            // dowolnego serwisu nadpisałby świeżo przywrócony plik starą zawartością RAM-u,
+            // czyli cichcem cofnął całe przywracanie.
+            let reloaded = 0;
+            try {
+                reloaded = await store.reload();
+                logger.info(`🔄 Przeładowano ${reloaded} plików do cache po przywróceniu backupu`);
+            } catch (reloadError) {
+                logger.error('❌ Błąd przeładowania cache po przywróceniu backupu:', reloadError);
+            }
+
             let msg = `🔄 **Przywracanie zakończone**\n\n`;
             msg += `**${restored.length} przywrócono, ${failed.length} błędów**\n`;
+            if (reloaded > 0) msg += `🔄 Przeładowano ${reloaded} plików do pamięci bota\n`;
             if (session.applyType !== 'broken') msg += `💾 Kopia bezpieczeństwa: \`_restore_safety/${ts}/\`\n`;
             msg += '\n';
             if (restored.length > 0) {

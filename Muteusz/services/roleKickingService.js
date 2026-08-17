@@ -3,6 +3,7 @@ const path = require('path');
 const cron = require('node-cron');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeParse } = require('../../utils/safeJSON');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -99,15 +100,8 @@ class RoleKickingService {
     async loadRekruterData() {
         try {
             logger.info(`Próba ładowania danych Rekrutera z: ${this.rekruterDataPath}`);
-            const data = await fs.readFile(this.rekruterDataPath, 'utf8');
-
-            // Obsługa pustych plików (np. gdy brakło miejsca na dysku podczas zapisu)
-            if (!data || data.trim() === '') {
-                logger.warn('Plik danych Rekrutera jest pusty');
-                return null;
-            }
-
-            const parsedData = safeParse(data, {});
+            // Plik pisze Rekruter; brak pliku i pusty plik obsługuje store
+            const parsedData = await store.getOrLoad(this.rekruterDataPath, () => ({}));
             logger.info(`Załadowano dane Rekrutera - znaleziono ${Object.keys(parsedData).length} użytkowników do monitorowania`);
             return parsedData;
         } catch (error) {
@@ -132,7 +126,7 @@ class RoleKickingService {
                 delete rekruterData[user.userId];
             }
 
-            await fs.writeFile(this.rekruterDataPath, JSON.stringify(rekruterData, null, 2));
+            await store.set(this.rekruterDataPath, rekruterData);
             logger.info(`Zaktualizowano dane Rekrutera - usunięto ${kickedUsers.length} użytkowników`);
         } catch (error) {
             logger.error(`Błąd aktualizacji danych Rekrutera: ${error.message}`);
@@ -296,7 +290,7 @@ Bot Muteusz`;
             const rekruterData = await this.loadRekruterData();
             if (rekruterData && rekruterData[userId]) {
                 delete rekruterData[userId];
-                await fs.writeFile(this.rekruterDataPath, JSON.stringify(rekruterData, null, 2));
+                await store.set(this.rekruterDataPath, rekruterData);
                 logger.info(`🗑️ Usunięto użytkownika ${userId} z monitorowania Rekrutera`);
             }
         } catch (error) {
@@ -457,8 +451,7 @@ Bot Muteusz`;
      */
     async loadRoleTimestamps() {
         try {
-            const data = await fs.readFile(this.roleTimestampPath, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.roleTimestampPath, () => ({}));
         } catch (error) {
             if (error.code === 'ENOENT') {
                 return {};
@@ -484,7 +477,7 @@ Bot Muteusz`;
 
             data[userId][roleId] = timestamp;
 
-            await fs.writeFile(this.roleTimestampPath, JSON.stringify(data, null, 2));
+            await store.set(this.roleTimestampPath, data);
         } catch (error) {
             logger.error(`Błąd zapisywania timestampu roli: ${error.message}`);
         }
@@ -508,7 +501,7 @@ Bot Muteusz`;
                 }
             }
 
-            await fs.writeFile(this.roleTimestampPath, JSON.stringify(data, null, 2));
+            await store.set(this.roleTimestampPath, data);
         } catch (error) {
             logger.error(`Błąd usuwania timestampu roli: ${error.message}`);
         }

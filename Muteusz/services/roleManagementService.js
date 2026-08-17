@@ -1,6 +1,7 @@
 const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -17,8 +18,7 @@ class RoleManagementService {
      */
     async readRemovedRoles() {
         try {
-            const data = await fs.readFile(this.removedRolesFile, 'utf8');
-            return safeParse(data, {});
+            return await store.getOrLoad(this.removedRolesFile, () => ({}));
         } catch (error) {
             // Jeśli plik nie istnieje, zwróć pusty obiekt
             if (error.code === 'ENOENT') {
@@ -40,7 +40,7 @@ class RoleManagementService {
             const dir = path.dirname(this.removedRolesFile);
             await fs.mkdir(dir, { recursive: true });
             
-            await fs.writeFile(this.removedRolesFile, JSON.stringify(data, null, 2), 'utf8');
+            await store.set(this.removedRolesFile, data);
             logger.info('Dane o usuniętych rolach zostały zapisane');
         } catch (error) {
             logger.error(`Błąd podczas zapisu pliku ról: ${error.message}`);

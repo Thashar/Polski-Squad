@@ -2,6 +2,7 @@ const { safeParse } = require('../../utils/safeJSON');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class MemberCacheService {
     constructor(config) {
@@ -39,8 +40,7 @@ class MemberCacheService {
      */
     async loadCacheFromFile() {
         try {
-            const data = await fs.readFile(this.cacheFilePath, 'utf8');
-            const cacheData = safeParse(data, {});
+            const cacheData = await store.getOrLoad(this.cacheFilePath, () => ({}));
             
             // Konwertuj obiekt na Map
             for (const [userId, roleIds] of Object.entries(cacheData)) {
@@ -70,7 +70,7 @@ class MemberCacheService {
                 cacheObject[userId] = roleIds;
             }
             
-            await fs.writeFile(this.cacheFilePath, JSON.stringify(cacheObject, null, 2));
+            await store.set(this.cacheFilePath, cacheObject);
             
         } catch (error) {
             this.logger.error('❌ Błąd podczas zapisywania cache ról:', error);

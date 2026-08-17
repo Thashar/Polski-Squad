@@ -1,6 +1,7 @@
 const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class AutoModerationService {
     constructor(config, logger, warningService) {
@@ -34,7 +35,7 @@ class AutoModerationService {
         // Utwórz plik z wyzwiskami jeśli nie istnieje
         if (!fs.existsSync(this.badWordsFile)) {
             const defaultBadWords = this.getDefaultBadWords();
-            fs.writeFileSync(this.badWordsFile, JSON.stringify(defaultBadWords, null, 2));
+            store.setSync(this.badWordsFile, defaultBadWords);
         }
     }
 
@@ -389,7 +390,7 @@ class AutoModerationService {
     loadViolationCounts() {
         try {
             if (!fs.existsSync(this.violationCountsFile)) return;
-            const data = safeParse(fs.readFileSync(this.violationCountsFile, 'utf8'), {});
+            const data = store.getSync(this.violationCountsFile, () => ({}));
             const now = Date.now();
             const windowMs = this.config.autoModeration.violationWindow * 60 * 1000;
             for (const [userId, entry] of Object.entries(data)) {
@@ -416,7 +417,7 @@ class AutoModerationService {
             for (const [userId, entry] of this.violationCounts.entries()) {
                 data[userId] = entry;
             }
-            fs.writeFileSync(this.violationCountsFile, JSON.stringify(data, null, 2));
+            store.setSync(this.violationCountsFile, data);
         } catch (error) {
             this.logger.error(`Błąd podczas zapisywania liczników naruszeń: ${error.message}`);
         }
@@ -428,7 +429,7 @@ class AutoModerationService {
     loadActiveMutes() {
         try {
             if (!fs.existsSync(this.activeMutesFile)) return [];
-            return safeParse(fs.readFileSync(this.activeMutesFile, 'utf8'), []);
+            return store.getSync(this.activeMutesFile, () => ([]));
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania aktywnych mute'ów: ${error.message}`);
             return [];
@@ -440,7 +441,7 @@ class AutoModerationService {
      */
     saveActiveMutes(mutes) {
         try {
-            fs.writeFileSync(this.activeMutesFile, JSON.stringify(mutes, null, 2));
+            store.setSync(this.activeMutesFile, mutes);
         } catch (error) {
             this.logger.error(`Błąd podczas zapisywania aktywnych mute'ów: ${error.message}`);
         }
@@ -521,8 +522,7 @@ class AutoModerationService {
      */
     loadBadWords() {
         try {
-            const data = fs.readFileSync(this.badWordsFile, 'utf8');
-            this.badWords = safeParse(data, {});
+            this.badWords = store.getSync(this.badWordsFile, () => ({}));
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania listy wyzwisk: ${error.message}`);
             this.badWords = this.getDefaultBadWords();
@@ -906,7 +906,7 @@ class AutoModerationService {
      */
     saveBadWords() {
         try {
-            fs.writeFileSync(this.badWordsFile, JSON.stringify(this.badWords, null, 2));
+            store.setSync(this.badWordsFile, this.badWords);
         } catch (error) {
             this.logger.error(`Błąd podczas zapisywania listy wyzwisk: ${error.message}`);
         }

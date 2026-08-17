@@ -2,6 +2,7 @@ const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs').promises;
 const path = require('path');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -89,8 +90,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
                 return;
             }
 
-            const data = await fs.readFile(this.dataFile, 'utf8');
-            const chaosData = safeParse(data, {});
+            const chaosData = await store.getOrLoad(this.dataFile, () => ({}));
 
             this.enabled = chaosData.enabled || false;
             // Kompatybilność wsteczna - obsługa starego formatu z pojedynczą rolą
@@ -139,7 +139,7 @@ Biją w tarabany". <a:Z_animated_polish_flag:1418123566687453235>`
                 activeUsers: activeUsersArray
             };
 
-            await fs.writeFile(this.dataFile, JSON.stringify(chaosData, null, 2));
+            await store.set(this.dataFile, chaosData);
         } catch (error) {
             logger.error(`❌ Błąd zapisywania chaos mode: ${error.message}`);
             throw error;

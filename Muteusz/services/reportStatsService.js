@@ -2,6 +2,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { safeParse } = require('../../utils/safeJSON');
 const { createBotLogger } = require('../../utils/consoleLogger');
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('Muteusz');
 
@@ -18,8 +19,7 @@ class ReportStatsService {
         try {
             await fs.mkdir(path.dirname(this.dataFile), { recursive: true });
             try {
-                const data = await fs.readFile(this.dataFile, 'utf8');
-                this.stats = safeParse(data, {});
+                this.stats = await store.getOrLoad(this.dataFile, () => ({}));
             } catch {
                 this.stats = {};
             }
@@ -30,7 +30,7 @@ class ReportStatsService {
 
     async save() {
         try {
-            await fs.writeFile(this.dataFile, JSON.stringify(this.stats, null, 2));
+            await store.set(this.dataFile, this.stats);
         } catch (error) {
             logger.error(`❌ Błąd zapisu statystyk zgłoszeń: ${error.message}`);
         }

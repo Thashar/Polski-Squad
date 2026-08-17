@@ -3,6 +3,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const fs = require('fs').promises;
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class ReactionRoleService {
     constructor(config, nicknameManager) {
@@ -85,8 +86,7 @@ class ReactionRoleService {
      */
     async restoreTimersFromFile() {
         try {
-            const data = await fs.readFile(this.timersFilePath, 'utf8');
-            const timersData = safeParse(data, []);
+            const timersData = await store.getOrLoad(this.timersFilePath, () => ([]));
 
             let restoredCount = 0;
             let expiredCount = 0;
@@ -188,7 +188,7 @@ class ReactionRoleService {
      */
     async saveTimersToFile() {
         try {
-            await fs.writeFile(this.timersFilePath, JSON.stringify(this.persistentTimers, null, 2));
+            await store.set(this.timersFilePath, this.persistentTimers);
         } catch (error) {
             this.logger.error('❌ Błąd podczas zapisywania timerów:', error);
         }

@@ -1,6 +1,7 @@
 const { safeParse } = require('../../utils/safeJSON');
 const fs = require('fs');
 const path = require('path');
+const store = require('../../utils/jsonStore');
 
 class WarningService {
     constructor(config, logger) {
@@ -21,7 +22,7 @@ class WarningService {
         
         // Utwórz plik jeśli nie istnieje
         if (!fs.existsSync(this.warningsFile)) {
-            fs.writeFileSync(this.warningsFile, JSON.stringify({}));
+            store.setSync(this.warningsFile, {});
         }
     }
 
@@ -31,8 +32,7 @@ class WarningService {
      */
     loadWarnings() {
         try {
-            const data = fs.readFileSync(this.warningsFile, 'utf8');
-            return safeParse(data, {});
+            return store.getSync(this.warningsFile, () => ({}));
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania ostrzeżeń: ${error.message}`);
             return {};
@@ -45,7 +45,7 @@ class WarningService {
      */
     saveWarnings(warnings) {
         try {
-            fs.writeFileSync(this.warningsFile, JSON.stringify(warnings, null, 2));
+            store.setSync(this.warningsFile, warnings);
         } catch (error) {
             this.logger.error(`Błąd podczas zapisywania ostrzeżeń: ${error.message}`);
         }
