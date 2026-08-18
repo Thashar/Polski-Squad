@@ -87,7 +87,7 @@
    - **Śledzenie per kod:** `data/giftcode_claimed.json` — format `{ "KOD": { "firstUsed": ISO_date, "claimed": ["discordId1", ...] } }`. Kod pomijany dla graczy już sklasyfikowanych jako claimed. `firstUsed` ustawiany przy pierwszym użyciu kodu.
    - **Abort:** Przycisk "⏹️ Przerwij" podczas aktywacji. Stan w `client._giftcodeAbort` Map (per sesja).
    - Persistencja: `data/habby_uids.json` i `data/giftcode_claimed.json` — dane przeżywają restart bota.
-11. **Historia Walk Gary** - `garyCombatIngestionService.js`: Co środę o 18:55 (9 min po snapshocie Gary) agreguje pliki z `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień), dopasowuje fuzzy nicki graczy do Discord userId (threshold 0.82, ALL 4 role klanowe), zapisuje do `data/player_combat_discord.json`. Przy starcie bota: automatyczna próba ingestion (po 15s). Komendy `/player-status` i `/player-compare` czytają historię RC+TC i ataku po userId (2 dodatkowe wykresy + dane tekstowe ostatniego tygodnia w sekcji STATYSTYKI i Best — atak wyświetlany jako dokładna liczba z separatorem polskim, nie K/M). Ręcznie: `/lme-snapshot` (admin) — uruchamia ingestion natychmiast i wyświetla **szczegółowy raport**:
+11. **Historia Walk Gary** - `garyCombatIngestionService.js`: Co środę o 18:55 (9 min po snapshocie Gary) agreguje pliki z `shared_data/lme_weekly/week_YYYY_WW.json` (jeden plik per tydzień), dopasowuje fuzzy nicki graczy do Discord userId (threshold 0.82, ALL 4 role klanowe), zapisuje do `data/player_combat_discord.json`. Przy starcie bota: automatyczna próba ingestion (po 15s). Komenda `/player-compare` czyta historię RC+TC i ataku po userId (2 wykresy porównawcze + dane tekstowe ostatniego tygodnia w polach graczy — atak jako dokładna liczba z separatorem polskim, nie K/M). **`/player-status` NIE pokazuje danych z Garego** — ani linii RC+TC/Atak w STATYSTYKI, ani wykresów RC+TC i Atak (usunięte na życzenie). Ręcznie: `/lme-snapshot` (admin) — uruchamia ingestion natychmiast i wyświetla **szczegółowy raport**:
     - ✅ Dopasowanych / 📊 Łącznie w Gary / ⚠️ Nieprzypisane (Gary)
     - 🔍 Wpisy Gary z za niskim podobieństwem nicku (< 0.82) → pokazuje najbliższy Discord nick z procentem
     - 📭 Wpisy Gary bez danych tygodniowych (brak wpisów week)
@@ -212,7 +212,7 @@
 
 **Integracja Enders Echo w `/player-status` i `/player-compare`** - Dane z EndersEcho Bot (shared_data/endersecho_ranking.json):
 - **Wczytywanie:** Bot odczytuje `shared_data/endersecho_ranking.json` szukając `userId` gracza
-- **Wyświetlanie w `/player-status`:** Linia `🏹 **Enders Echo:** #X / Y — rekord: **score**` w sekcji STATYSTYKI, tuż pod linią `⚔️ Atak`
+- **Wyświetlanie w `/player-status`:** Linia `🏹 **Enders Echo:** #X / Y — rekord: **score**` w sekcji STATYSTYKI (ostatnia linia sekcji)
 - **Wyświetlanie w `/player-compare`:** Linia `🏹 **EE:** #X/Y — score` w polu gracza (`fmtPlayerField`)
 - **Brak danych:** Sekcja/linia jest pomijana gdy gracz nie ma wpisu w rankingu EE
 - **Źródło danych:** EndersEcho Bot eksportuje po każdym `/update` i przy starcie do `shared_data/endersecho_ranking.json` (posortowana lista z rank, userId, username, score, scoreValue)

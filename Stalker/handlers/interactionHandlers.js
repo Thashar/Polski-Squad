@@ -10645,14 +10645,8 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
         }
         description += `🌍 **Pozycja w strukturach:** ${globalPosition > 0 ? `${globalPosition}/${totalPlayers}` : 'Brak danych'}\n\n`;
 
-        // Wczytaj dane bojowe z Gary (RC+<:II_TransmuteCore:1458440558602092647>TC, Atak) - potrzebne do sekcji STATYSTYKI
-        const _statCombatHistory = await loadCombatHistory(userId);
-        const _statLastCombat = _statCombatHistory.length > 0
-            ? _statCombatHistory[_statCombatHistory.length - 1]
-            : null;
-
-        // Sekcja 2: Statystyki (jeśli są dane z gry lub dane Gary)
-        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null || _statLastCombat !== null) {
+        // Sekcja 2: Statystyki (jeśli są dane z gry)
+        if (monthlyProgress !== null || quarterlyProgress !== null || biggestProgress !== null || biggestRegress !== null) {
             description += `### 📊 STATYSTYKI\n`;
 
             if (monthlyProgress !== null) {
@@ -10711,17 +10705,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
                 description += `**↘️ Największy regres:** ${absRegress} (tydzień ${biggestRegressWeek})\n`;
             } else if (biggestRegress !== null || monthlyProgress !== null || quarterlyProgress !== null) {
                 description += `**↘️ Największy regres:** brak\n`;
-            }
-
-            // RC+TC i Atak z Gary (historia tygodniowa)
-            if (_statLastCombat) {
-                const _rcFmt = (_statLastCombat.relicCores ?? 0).toLocaleString('pl-PL');
-                const _atkFmt = fmtAttack(_statLastCombat.attack ?? 0);
-                description += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rcFmt}\n`;
-                description += `**⚔️ Atak:** ${_atkFmt}\n`;
-            } else {
-                description += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** Brak danych. Aktualizacja niebawem...\n`;
-                description += `**⚔️ Atak:** Brak danych. Aktualizacja niebawem...\n`;
             }
             if (endersEchoRank !== null) {
                 description += `🏹 **Enders Echo:** #${endersEchoRank} / ${endersEchoTotal} — rekord: **${endersEchoScore}**\n`;
@@ -10908,23 +10891,6 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             if (rankBuf) {
                 chartFiles.push(new AttachmentBuilder(rankBuf, { name: 'ranking.png' }));
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#FFD700').setImage('attachment://ranking.png'));
-            }
-
-            // Wykresy RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z historii Gary (lokalna baza Stalkera — zaindeksowana po userId)
-            const combatHistory = await loadCombatHistory(userId);
-            if (combatHistory.length >= 2) {
-                const [rcBuf, atkBuf] = await Promise.all([
-                    generateCombatChart(combatHistory, latestNick, 'relicCores', 'RC+TC', '#43B581', v => String(v)),
-                    generateCombatChart(combatHistory, latestNick, 'attack', 'Atak', '#F04747', fmtAttack)
-                ]);
-                if (rcBuf) {
-                    chartFiles.push(new AttachmentBuilder(rcBuf, { name: 'combat_rc.png' }));
-                    replyPayload.embeds.push(new EmbedBuilder().setColor('#43B581').setImage('attachment://combat_rc.png'));
-                }
-                if (atkBuf) {
-                    chartFiles.push(new AttachmentBuilder(atkBuf, { name: 'combat_atk.png' }));
-                    replyPayload.embeds.push(new EmbedBuilder().setColor('#F04747').setImage('attachment://combat_atk.png'));
-                }
             }
 
             if (chartFiles.length > 0) replyPayload.files = chartFiles;
