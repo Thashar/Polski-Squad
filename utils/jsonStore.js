@@ -517,19 +517,7 @@ class JsonStore {
             const r = this.collectReport();
             if (!r) return;
 
-            const trafienia = r.cacheHits + r.readOps > 0
-                ? ((r.cacheHits / (r.cacheHits + r.readOps)) * 100).toFixed(1)
-                : '100.0';
-
-            logger.info(
-                `💾 Dysk (${r.seconds}s): ` +
-                `ODCZYT ${r.readOps} op / ${this._fmtBytes(r.readBytes)} z ${r.readFiles} plik(ów) · ` +
-                `ZAPIS ${r.writeOps} op / ${this._fmtBytes(r.writeBytes)} do ${r.writeFiles} plik(ów) · ` +
-                `z pamięci ${r.cacheHits} odczytów (trafienia ${trafienia}%)`
-            );
-
-            if (r.topReads.length > 0) logger.info(`   📖 Czytane z dysku: ${r.topReads.join(' | ')}`);
-            if (r.topWrites.length > 0) logger.info(`   ✏️ Zapisane: ${r.topWrites.join(' | ')}`);
+            logger.info(`💾 Dysk (${r.seconds}s): odczyt ${r.readOps}, zapis ${r.writeOps}`);
         }, intervalMs);
 
         // Raport nie może trzymać procesu przy życiu przy zamykaniu bota

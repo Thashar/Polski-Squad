@@ -653,18 +653,16 @@ store.startReporting(60000);              // cykliczny raport ruchu dyskowego do
 
 #### Raport ruchu dyskowego (co minutę, w logu)
 
-Uruchamiany w głównym `index.js` po starcie botów. Pokazuje, co realnie puka do dysku:
+Uruchamiany w głównym `index.js` po starcie botów. Jedna zbiorcza linia:
 
 ```
-💾 Dysk (60s): ODCZYT 3 op / 12.4 KB z 3 plik(ów) · ZAPIS 8 op / 45.1 KB do 5 plik(ów) · z pamięci 214 odczytów (trafienia 98.6%)
-   📖 Czytane z dysku: EndersEcho/data/guilds/123/wyniki/456.json ×1 (8.2 KB) | …
-   ✏️ Zapisane: Stalker/data/punishments.json ×3 (21.0 KB) | …
+💾 Dysk (60s): odczyt 3, zapis 8
 ```
 
 - **Minuty bez żadnego I/O są pomijane** — log nie puchnie w nocy
-- Lista pokazuje 5 plików o największym wolumenie, z liczbą operacji i bajtami
-- „trafienia" to procent odczytów obsłużonych z pamięci zamiast z dysku — po migracji powinien być bliski 100%
+- Po migracji odczyt powinien być bliski zeru (dane idą z pamięci); rosnący odczyt oznacza, że gdzieś doszła ścieżka omijająca cache
 - Interwał: `DISK_REPORT_INTERVAL` w `.env` (sekundy, domyślnie 60; `0` wyłącza)
+- Szczegóły (bajty, nazwy plików, trafienia cache) zbiera `collectReport()` — gdyby kiedyś były potrzebne do diagnozy
 
 #### Co daje poza mniejszym I/O
 
