@@ -177,8 +177,9 @@ async function onReady() {
                             try {
                                 const member = await guild.members.fetch(userId);
                                 if (member && member.nickname && member.nickname.startsWith('Piekielny ')) {
-                                    await nicknameManager.removeEffect(userId, 'infernal');
-                                    logger.info(`🔥 Infernal Bargain: Usunięto nick "Piekielny" dla ${userId} (pełna mana)`);
+                                    // Patrz komentarz w interactionHandlers — `removeEffect()` nie przywraca nicku
+                                    await nicknameManager.removeAllUserEffects(userId, guild);
+                                    logger.info(`🔥 Infernal Bargain: Przywrócono nick po "Piekielny" dla ${userId} (pełna mana)`);
                                 }
                             } catch (error) {
                                 logger.error(`❌ Błąd usuwania nicku Infernal Bargain: ${error.message}`);

@@ -390,7 +390,12 @@ class NicknameManagerService {
     }
     
     /**
-     * Usuwa efekt użytkownika (np. gdy admin ręcznie usuwa flagę)
+     * Usuwa WPIS o efekcie z ewidencji — bez dotykania nicku na Discordzie.
+     *
+     * ⚠️ To NIE przywraca nicku. Co więcej, kasuje zapamiętany `originalNickname`,
+     * więc po tym wywołaniu nie ma już z czego przywracać — użytkownik zostaje
+     * z prefiksem efektu na stałe. Do zdejmowania efektu używaj
+     * `removeAllUserEffects(userId, guild)` albo `restoreOriginalNickname()`.
      */
     async removeEffect(userId) {
         if (this.activeEffects.has(userId)) {

@@ -285,7 +285,9 @@ async function processWebhookQueue() {
 }
 
 // Funkcja do wysyłania pojedynczego webhook'a
-function sendWebhookRequest(webhookData, webhookUrl) {
+const WEBHOOK_MAX_RETRIES = 3; // po tylu próbach 429 odpuszczamy — plik logu i tak ma komplet
+
+function sendWebhookRequest(webhookData, webhookUrl, proba = 0) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify({ content: webhookData.content, flags: 4 });
         const url = new URL(webhookUrl);
@@ -301,13 +303,26 @@ function sendWebhookRequest(webhookData, webhookUrl) {
         };
 
         const req = https.request(options, (res) => {
+            // ⚠️ Treść odpowiedzi MUSI zostać skonsumowana. Bez tego Node nie zwalnia
+            // gniazda do puli agenta, a bufor odpowiedzi zostaje w pamięci — przy jednym
+            // żądaniu na sekundę przez całą dobę to dziesiątki tysięcy wiszyących gniazd.
+            res.resume();
+
             if (res.statusCode >= 200 && res.statusCode < 300) {
                 resolve();
             } else if (res.statusCode === 429) {
-                // Rate limit - spróbuj ponownie po dłuższym czasie
+                if (proba >= WEBHOOK_MAX_RETRIES) {
+                    reject(new Error('Webhook rate limit — wyczerpano próby'));
+                    return;
+                }
+                // Rate limit — czekamy tyle, ile każe Discord (albo 5 s, gdy nie podał)
+                const retryAfter = Number(res.headers['retry-after']);
+                const czekaj = Number.isFinite(retryAfter) && retryAfter > 0
+                    ? Math.min(retryAfter * 1000, 30000)
+                    : 5000;
                 setTimeout(() => {
-                    sendWebhookRequest(webhookData, webhookUrl).then(resolve).catch(reject);
-                }, 5000);
+                    sendWebhookRequest(webhookData, webhookUrl, proba + 1).then(resolve).catch(reject);
+                }, czekaj);
             } else {
                 reject(new Error(`Webhook error status: ${res.statusCode}`));
             }

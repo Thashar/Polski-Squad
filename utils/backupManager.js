@@ -233,6 +233,19 @@ class BackupManager {
                 const output = fs.createWriteStream(archivePath);
                 const archive = archiver('zip', { zlib: { level: 9 } });
 
+                // ⚠️ Bez tej obsługi błąd zapisu (np. ENOSPC — brak miejsca na dysku)
+                // leci jako nieobsłużone zdarzenie 'error' strumienia i ubija CAŁY proces,
+                // czyli wszystkie dziewięć botów naraz.
+                output.on('error', (err) => {
+                    logger.error(`❌ Błąd zapisu archiwum ${botName}: ${err.message}`);
+                    logger.error(`   Kod błędu: ${err.code || 'brak'}`);
+                    if (err.code === 'ENOSPC') {
+                        logger.error('   Przyczyna: Brak miejsca na dysku');
+                    }
+                    try { archive.abort(); } catch { /* archiwum mogło już padł */ }
+                    reject(err);
+                });
+
                 output.on('close', () => {
                     const sizeMB = (archive.pointer() / 1024 / 1024).toFixed(2);
                     logger.info(`✅ Utworzono archiwum: ${archiveName} (${sizeMB} MB)`);

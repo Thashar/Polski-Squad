@@ -3693,8 +3693,11 @@ class InteractionHandler {
             try {
                 const member = await interaction.guild.members.fetch(userId);
                 if (member && member.nickname && member.nickname.startsWith('Piekielny ')) {
-                    await this.nicknameManager.removeEffect(userId, 'infernal');
-                    logger.info(`🔥 Infernal Bargain: Usunięto nick "Piekielny" dla ${userId}`);
+                    // ⚠️ `removeEffect()` kasuje TYLKO wpis w mapie — nick zostaje z prefiksem,
+                    // a razem z wpisem znika zapamiętany oryginał, więc nie ma z czego przywrócić.
+                    // Nick przywraca dopiero `removeAllUserEffects()`.
+                    await this.nicknameManager.removeAllUserEffects(userId, interaction.guild);
+                    logger.info(`🔥 Infernal Bargain: Przywrócono nick po "Piekielny" dla ${userId}`);
                 }
             } catch (error) {
                 logger.error(`❌ Błąd usuwania nicku Infernal Bargain: ${error.message}`);

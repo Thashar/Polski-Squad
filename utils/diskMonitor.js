@@ -37,6 +37,11 @@ const KATEGORIE = [
     { nazwa: 'inne',           test: () => true }
 ];
 
+// Limit mapy per-plik — patrz `_przytnij()`
+const MAX_PLIKOW = 5000;
+const ZOSTAW_PLIKOW = 2000;
+const ETYKIETA_ZBIORCZA = '(pozostałe pliki — zwinięte)';
+
 class DiskMonitor {
     constructor() {
         this._root = path.resolve(__dirname, '..');
@@ -96,9 +101,40 @@ class DiskMonitor {
                 owner: this._owner(label)
             };
             this._perFile.set(label, f);
+            if (this._perFile.size > MAX_PLIKOW) this._przytnij();
         }
         if (kind === 'read') { f.reads++; f.readBytes += bytes; }
         else { f.writes++; f.writeBytes += bytes; }
+    }
+
+    /**
+     * Ogranicza rozmiar mapy per-plik.
+     *
+     * ⚠️ Każdy screen OCR, plik cache mediów i plik tymczasowy ma UNIKALNĄ nazwę,
+     * więc bez przycinania mapa rosłaby przez cały uptime — kolejny cichy wyciek pamięci.
+     * Zostawiamy najcięższe pozycje (te są istotne w raporcie), a resztę zwijamy w jeden
+     * wpis zbiorczy, żeby sumy per bot i per kategoria dalej się zgadzały z całością.
+     */
+    _przytnij() {
+        const wpisy = [...this._perFile.entries()]
+            .sort((a, b) => (b[1].readBytes + b[1].writeBytes) - (a[1].readBytes + a[1].writeBytes));
+
+        const zostaje = wpisy.slice(0, ZOSTAW_PLIKOW);
+        const zwijane = wpisy.slice(ZOSTAW_PLIKOW);
+        if (zwijane.length === 0) return;
+
+        const zbiorczy = this._perFile.get(ETYKIETA_ZBIORCZA) || {
+            reads: 0, readBytes: 0, writes: 0, writeBytes: 0,
+            kategoria: 'inne', owner: '(zwinięte)'
+        };
+        for (const [, f] of zwijane) {
+            if (f === zbiorczy) continue;
+            zbiorczy.reads += f.reads; zbiorczy.readBytes += f.readBytes;
+            zbiorczy.writes += f.writes; zbiorczy.writeBytes += f.writeBytes;
+        }
+
+        this._perFile = new Map(zostaje.filter(([label]) => label !== ETYKIETA_ZBIORCZA));
+        this._perFile.set(ETYKIETA_ZBIORCZA, zbiorczy);
     }
 
     /**

@@ -106,7 +106,10 @@ class JsonStore {
      * bota — od tego momentu odczyty idą wyłącznie z pamięci.
      */
     async loadAll() {
-        const keys = [...this._registry.keys()].filter(k => !this._cache.has(k));
+        // Filtrujemy po `loaded`, nie po samej obecności w cache: `get()` wywołane przed
+        // `loadAll()` zostawia wpis z `loaded: false` (wartość domyślna). Pominięcie takiego
+        // pliku oznaczałoby, że nigdy nie trafi na niego odczyt z dysku.
+        const keys = [...this._registry.keys()].filter(k => !this._cache.get(k)?.loaded);
         await Promise.all(keys.map(key => this._loadFromDisk(key)));
         return keys.length;
     }
@@ -346,7 +349,12 @@ class JsonStore {
 
         return this._enqueue(key, async () => {
             const cached = this._cache.get(key);
-            const current = cached ? cached.data : (this._registry.get(key)?.defaultFactory() ?? {});
+            // ⚠️ Gdy pliku nie ma jeszcze w pamięci, MUSIMY go wczytać z dysku. Start od
+            // wartości domyślnej skasowałby istniejącą zawartość pliku przy pierwszym zapisie
+            // po restarcie — `mutate()` bywa pierwszym sięgnięciem po dany plik.
+            const current = (cached && cached.loaded)
+                ? cached.data
+                : await this._loadFromDisk(key);
             const draft = structuredClone(current);
 
             const result = await fn(draft);
