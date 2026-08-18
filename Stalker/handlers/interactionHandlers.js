@@ -257,6 +257,16 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
             return;
         }
 
+        // Limit GLOBALNY — sesje trzymają screeny w pamięci przez cały swój czas życia,
+        // więc kilka dużych batchów naraz mogłoby wyczerpać RAM procesu
+        const limitSesji = ocrService.canStartOCRSession();
+        if (!limitSesji.ok) {
+            await interaction.editReply({
+                content: `⏳ Trwa już ${limitSesji.aktywne} sesji OCR (limit: ${limitSesji.limit}). Spróbuj ponownie za chwilę.`
+            });
+            return;
+        }
+
         const runSession = async (inter) => {
             await ocrService.startOCRSession(guildId, userId, commandName);
             logger.info(`[OCR] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
@@ -320,6 +330,16 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         if (isOCRActive) {
             await interaction.editReply({
                 content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.'
+            });
+            return;
+        }
+
+        // Limit GLOBALNY — sesje trzymają screeny w pamięci przez cały swój czas życia,
+        // więc kilka dużych batchów naraz mogłoby wyczerpać RAM procesu
+        const limitSesji = ocrService.canStartOCRSession();
+        if (!limitSesji.ok) {
+            await interaction.editReply({
+                content: `⏳ Trwa już ${limitSesji.aktywne} sesji OCR (limit: ${limitSesji.limit}). Spróbuj ponownie za chwilę.`
             });
             return;
         }
@@ -421,6 +441,16 @@ async function handleRemindCxCommand(interaction, config, ocrService, reminderSe
         if (isOCRActive) {
             await interaction.editReply({
                 content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.'
+            });
+            return;
+        }
+
+        // Limit GLOBALNY — sesje trzymają screeny w pamięci przez cały swój czas życia,
+        // więc kilka dużych batchów naraz mogłoby wyczerpać RAM procesu
+        const limitSesji = ocrService.canStartOCRSession();
+        if (!limitSesji.ok) {
+            await interaction.editReply({
+                content: `⏳ Trwa już ${limitSesji.aktywne} sesji OCR (limit: ${limitSesji.limit}). Spróbuj ponownie za chwilę.`
             });
             return;
         }
@@ -4018,6 +4048,16 @@ async function handlePhase1Command(interaction, sharedState) {
         return;
     }
 
+    // Limit GLOBALNY — sesje trzymają screeny w pamięci przez cały swój czas życia,
+    // więc kilka dużych batchów naraz mogłoby wyczerpać RAM procesu
+    const limitSesji = ocrService.canStartOCRSession();
+    if (!limitSesji.ok) {
+        await interaction.editReply({
+            content: `⏳ Trwa już ${limitSesji.aktywne} sesji OCR (limit: ${limitSesji.limit}). Spróbuj ponownie za chwilę.`
+        });
+        return;
+    }
+
     try {
         // Wykryj klan użytkownika
         const targetRoleIds = Object.entries(config.targetRoles);
@@ -4797,6 +4837,16 @@ async function handlePhase2Command(interaction, sharedState) {
     if (isOCRActive) {
         await interaction.editReply({
             content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.'
+        });
+        return;
+    }
+
+    // Limit GLOBALNY — sesje trzymają screeny w pamięci przez cały swój czas życia,
+    // więc kilka dużych batchów naraz mogłoby wyczerpać RAM procesu
+    const limitSesji = ocrService.canStartOCRSession();
+    if (!limitSesji.ok) {
+        await interaction.editReply({
+            content: `⏳ Trwa już ${limitSesji.aktywne} sesji OCR (limit: ${limitSesji.limit}). Spróbuj ponownie za chwilę.`
         });
         return;
     }

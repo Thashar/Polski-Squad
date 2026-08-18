@@ -144,6 +144,9 @@ module.exports = {
         },
         
         // Konfiguracja zapisywania przetworzonych obrazów
+        // Ochrona pamięci: screeny trzymane są w RAM przez czas trwania sesji
+        maxConcurrentSessions: 5,   // ile sesji OCR może trwać naraz (globalnie)
+        maxImagesPerSession: 25,    // ile zdjęć przyjmiemy w jednej sesji
         saveProcessedImages: false,
         processedDir: path.join(__dirname, '../../processed_ocr'),
         maxProcessedFiles: 400,

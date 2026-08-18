@@ -635,7 +635,15 @@ client.on(Events.MessageCreate, async (message) => {
                 session.isProcessing = true;
                 logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
-                const attachmentsArray = Array.from(imageAttachments.values());
+                // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
+                // więc bez ograniczenia jeden batch mógłby zająć setki MB
+                const limitZdjec = config.ocr.maxImagesPerSession || 25;
+                let attachmentsArray = Array.from(imageAttachments.values());
+                if (attachmentsArray.length > limitZdjec) {
+                    logger.warn(`[OCR] ⚠️ Otrzymano ${attachmentsArray.length} zdjęć — przetwarzam pierwsze ${limitZdjec} (limit sesji)`);
+                    await message.reply(`⚠️ Przyjmuję pierwsze **${limitZdjec}** zdjęć z ${attachmentsArray.length} (limit jednej sesji). Resztę wyślij w kolejnej turze przyciskiem „Dodaj więcej".`).catch(() => {});
+                    attachmentsArray = attachmentsArray.slice(0, limitZdjec);
+                }
 
                 // KROK 1: Zapisz wszystkie zdjęcia na dysk
                 logger.info('[PHASE1] 💾 Zapisywanie zdjęć na dysk...');
@@ -751,7 +759,15 @@ client.on(Events.MessageCreate, async (message) => {
                 session.isProcessing = true;
                 logger.info(`[REMIND] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
-                const attachmentsArray = Array.from(imageAttachments.values());
+                // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
+                // więc bez ograniczenia jeden batch mógłby zająć setki MB
+                const limitZdjec = config.ocr.maxImagesPerSession || 25;
+                let attachmentsArray = Array.from(imageAttachments.values());
+                if (attachmentsArray.length > limitZdjec) {
+                    logger.warn(`[OCR] ⚠️ Otrzymano ${attachmentsArray.length} zdjęć — przetwarzam pierwsze ${limitZdjec} (limit sesji)`);
+                    await message.reply(`⚠️ Przyjmuję pierwsze **${limitZdjec}** zdjęć z ${attachmentsArray.length} (limit jednej sesji). Resztę wyślij w kolejnej turze przyciskiem „Dodaj więcej".`).catch(() => {});
+                    attachmentsArray = attachmentsArray.slice(0, limitZdjec);
+                }
 
                 // KROK 1: Zapisz wszystkie zdjęcia na dysk
                 logger.info('[REMIND] 💾 Zapisywanie zdjęć na dysk...');
@@ -869,7 +885,15 @@ client.on(Events.MessageCreate, async (message) => {
                 session.isProcessing = true;
                 logger.info(`[PUNISH] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
 
-                const attachmentsArray = Array.from(imageAttachments.values());
+                // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
+                // więc bez ograniczenia jeden batch mógłby zająć setki MB
+                const limitZdjec = config.ocr.maxImagesPerSession || 25;
+                let attachmentsArray = Array.from(imageAttachments.values());
+                if (attachmentsArray.length > limitZdjec) {
+                    logger.warn(`[OCR] ⚠️ Otrzymano ${attachmentsArray.length} zdjęć — przetwarzam pierwsze ${limitZdjec} (limit sesji)`);
+                    await message.reply(`⚠️ Przyjmuję pierwsze **${limitZdjec}** zdjęć z ${attachmentsArray.length} (limit jednej sesji). Resztę wyślij w kolejnej turze przyciskiem „Dodaj więcej".`).catch(() => {});
+                    attachmentsArray = attachmentsArray.slice(0, limitZdjec);
+                }
 
                 // KROK 1: Zapisz wszystkie zdjęcia na dysk
                 logger.info('[PUNISH] 💾 Zapisywanie zdjęć na dysk...');

@@ -1914,6 +1914,30 @@ class OCRService {
     /**
      * Rozpoczyna sesję OCR dla użytkownika (równolegle z sesjami innych użytkowników)
      */
+    /**
+     * Ile sesji OCR trwa RÓWNOCZEŚNIE na wszystkich serwerach.
+     *
+     * Sesje trzymają w pamięci bufory screenów (po zmianie na pobieranie bez dysku),
+     * więc kilku moderatorów z dużymi batchami naraz to setki MB przez kilkanaście minut.
+     */
+    countActiveSessions() {
+        let suma = 0;
+        for (const sesjeSerwera of this.activeProcessing.values()) {
+            suma += sesjeSerwera.size;
+        }
+        return suma;
+    }
+
+    /**
+     * Czy można otworzyć kolejną sesję OCR (limit globalny, nie per użytkownik).
+     * Zwraca `{ ok, aktywne, limit }` — wywołujący pokazuje komunikat i przerywa.
+     */
+    canStartOCRSession() {
+        const limit = this.config.ocr.maxConcurrentSessions || 5;
+        const aktywne = this.countActiveSessions();
+        return { ok: aktywne < limit, aktywne, limit };
+    }
+
     async startOCRSession(guildId, userId, commandName) {
         if (!this.activeProcessing.has(guildId)) {
             this.activeProcessing.set(guildId, new Map());

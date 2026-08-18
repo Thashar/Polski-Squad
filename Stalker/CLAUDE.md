@@ -379,6 +379,10 @@ STALKER_LME_NEWS_CHANNEL_ID=channel_id
   - **`databaseService.atomicWriteJSON()` deleguje do `store.set()`** — store daje ten sam zapis atomowy (plik tymczasowy + rename) ORAZ kolejkę per plik, więc dawna własna implementacja stała się zbędna. `withFileLock()` zostaje: obejmuje cały cykl odczyt-modyfikacja-zapis, a kolejka store'a chroni tylko sam zapis
   - **`readPhase1WeekFile()` czyta z pamięci** — plik tygodnia trafia na dysk tylko przy pierwszym sięgnięciu. Zachowanie przy uszkodzonej strukturze (odtworzenie od zera) bez zmian
   - **Pliki `shared_data/` są wspólne z innymi botami** — wszystkie 9 działa w jednym procesie i dzieli jeden cache (klucz = ścieżka pliku), więc dane Gary'ego (`lme_weekly/`) i EndersEcho (`endersecho_ranking.json`) widać natychmiast po zapisie, bez ponownego odczytu z dysku. Analogicznie `clan_thresholds.json` i `glory_progress.json` pisane przez Stalkera są od razu widoczne dla Rekrutera i Kontrolera
+- **⚠️ Limity chroniące pamięć (bo screeny siedzą w RAM):**
+  - **`maxConcurrentSessions: 5`** — globalny limit RÓWNOCZESNYCH sesji OCR, liczony przez `ocrService.countActiveSessions()` po wszystkich serwerach. Sprawdzany przez `canStartOCRSession()` w pięciu miejscach startu sesji; szósta osoba dostaje `⏳ Trwa już N sesji OCR (limit: 5)`. Limit per użytkownik (jedna sesja) działa jak dotąd — ten jest dodatkowy, globalny
+  - **`maxImagesPerSession: 25`** — ile zdjęć przyjmie jedna tura. Nadmiar jest odcinany z komunikatem, a użytkownik dosyła resztę przyciskiem „Dodaj więcej"
+  - **Po co:** sesja żyje do 15 minut i trzyma bufory screenów; pięciu moderatorów z batchami po 20 zdjęć po 5 MB to 500 MB przez kwadrans
 - **Screeny OCR trzymane w PAMIĘCI, nie na dysku:** `downloadImage()` w `phaseService`, `reminderService`
   i `punishmentService` zwraca **`Buffer`** (`downloadDiscordImageBuffer`), a nie ścieżkę do pliku w `temp/`
   - **Dlaczego:** dawniej screen lądował na dysku, po czym `sharp()` czytało go z powrotem przy analizie —
