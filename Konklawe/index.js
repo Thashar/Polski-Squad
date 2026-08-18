@@ -23,10 +23,12 @@ const MessageHandler = require('./handlers/messageHandlers');
 const BombChaosService = require('./services/bombChaosService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const NicknameManager = require('../utils/nicknameManagerService');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Konklawe');
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

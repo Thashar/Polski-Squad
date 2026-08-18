@@ -129,6 +129,8 @@ class MessageHandler {
                 timestamp: Date.now(),
                 hasMedia: false
             });
+            // Trzymaj rozmiar mapy w ryzach — to najliczniejsza ścieżka wpisów
+            this.mediaService._przytnijMessageLinks();
         }
 
         // Auto-moderacja

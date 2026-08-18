@@ -53,6 +53,8 @@
 14. **Kompleksowe przywracanie danych** - `handlers/restoreBackupHandler.js` (`/restore-backup`): Kreator przywracania danych z Google Drive (tylko administrator). Stan sesji per-użytkownik w `RestoreBackupHandler.sessions` Map (TTL 15 min, auto-cleanup usuwa pobrane foldery tymczasowe). Patrz sekcja **[Komenda /restore-backup](#komenda-restore-backup)** poniżej.
 
 **Komendy:** `/io`, `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+**Limit śledzonych wiadomości:** `messageLinks` (mapa do logów usuniętych wiadomości) dostaje wpis przy KAŻDEJ wiadomości tekstowej, a czyszczenie po dacie (`linkRetentionDays: 30`) chodzi raz na dobę. Doszedł twardy limit `maxTrackedMessages: 20000` — po przekroczeniu usuwane są najstarsze wpisy (`_przytnijMessageLinks()` wołane po każdym zapisie). Bez tego mapa rosła między dobowymi przebiegami do dziesiątek tysięcy wpisów.
+
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---

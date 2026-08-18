@@ -19,10 +19,12 @@ const MvpService = require('./services/mvpService');
 const MessageHandler = require('./handlers/messageHandlers');
 const { handleInteraction, registerSlashCommands } = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Kontroler');
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

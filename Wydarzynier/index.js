@@ -18,10 +18,12 @@ const ListaEventowMenedzer = require('./services/listaEventowMenedzer');
 const StrefaCzasowaManager = require('./services/strefaCzasowaManager');
 const { delay, isNetworkError } = require('./utils/helpers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Wydarzynier');
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

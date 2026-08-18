@@ -44,6 +44,28 @@ class MediaService {
         this._bajtyWPamieci += rozmiar;
     }
 
+    /**
+     * Przycina `messageLinks` do limitu wpisów, usuwając NAJSTARSZE.
+     *
+     * Mapa dostaje wpis przy każdej wiadomości tekstowej, a czyszczenie po dacie
+     * (`linkRetentionDays`) chodzi raz na dobę — na ruchliwym serwerze między
+     * przebiegami rosła do dziesiątek tysięcy wpisów. Ten limit działa natychmiast
+     * i jest niezależny od retencji dniowej.
+     */
+    _przytnijMessageLinks() {
+        const limit = this.config.deletedMessageLogs?.maxTrackedMessages || 20000;
+        const nadmiar = this.messageLinks.size - limit;
+        if (nadmiar <= 0) return;
+
+        // Map zachowuje kolejność wstawiania, więc pierwsze klucze to najstarsze wpisy
+        let usuniete = 0;
+        for (const klucz of this.messageLinks.keys()) {
+            this.messageLinks.delete(klucz);
+            if (++usuniete >= nadmiar) break;
+        }
+        logger.info(`🧹 messageLinks: usunięto ${usuniete} najstarszych wpisów (limit ${limit})`);
+    }
+
     _zwolnijSlot(rozmiar) {
         this._pobieraniaWToku--;
         this._bajtyWPamieci = Math.max(0, this._bajtyWPamieci - rozmiar);
@@ -378,6 +400,7 @@ class MediaService {
                             timestamp: Date.now(),
                             hasMedia: true
                         });
+                        this._przytnijMessageLinks();
                     }
                     
                 } catch (error) {

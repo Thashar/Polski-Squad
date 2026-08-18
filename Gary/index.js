@@ -9,10 +9,12 @@ const LogService = require('./services/logService');
 const ClanHistoryService = require('./services/clanHistoryService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Gary');
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

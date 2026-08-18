@@ -21,8 +21,10 @@ const ChaosService = require('./services/chaosService');
 const InteractionHandler = require('./handlers/interactionHandlers');
 const MessageHandler = require('./handlers/messageHandlers');
 const MemberHandler = require('./handlers/memberHandlers');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

@@ -28,6 +28,7 @@ const InteractionHandler = require('./handlers/interactionHandlers');
 const AchievementService = require('./services/achievementService');
 const CommunityVerificationService = require('./services/communityVerificationService');
 const GuildBanService = require('./services/guildBanService');
+const { getCacheOptions } = require('../utils/discordCache');
 const GuildDataRetentionService = require('./services/guildDataRetentionService');
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
@@ -89,6 +90,7 @@ const llmAdapter = createLlmAdapter({ botSlug: 'endersecho', tracerName: 'enders
 const guildConfigService = new GuildConfigService(config.ranking.dataDir);
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

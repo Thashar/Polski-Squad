@@ -700,6 +700,16 @@ Każdy bot ma osobny commit i test funkcjonalny. Poza store'em zostały wyłącz
 
 ---
 
+### 8. Konfiguracja Cache Discord.js
+
+**Plik:** `utils/discordCache.js` — wspólna dla wszystkich 9 klientów (`...getCacheOptions()` w każdym `index.js`).
+
+Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i reakcje. Przy **dziewięciu klientach w jednym procesie**, każdym z własnym kompletem cache'u, przy długim uptime rosło to w nieskończoność.
+
+**Co jest sprzątane:** wiadomości starsze niż 15 minut (co 30 min), reakcje i presence (co 15 min), a `PresenceManager`, `GuildInviteManager`, `GuildScheduledEventManager` i `AutoModerationRuleManager` mają limit 0.
+
+**⚠️ Czego NIE wolno ograniczać:** `GuildMemberManager` i `UserManager`. Kod w wielu miejscach polega na `role.members` i `guild.members.cache` (rankingi ról TOP, progi klanowe, listy klanowiczów w OCR). Przycięcie tych kolekcji dałoby **ciche błędy** — brakujących graczy w rankingach, bez żadnego wyjątku w logu.
+
 ## Szczegóły Botów
 
 > ### ⚠️ OCR W CAŁYM PROJEKCIE DZIAŁA NA AI, NIE NA TESSERACT

@@ -14,6 +14,7 @@ const ClanRoleChangeService = require('./services/clanRoleChangeService');
 const NotificationPreferencesService = require('./services/notificationPreferencesService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Rekruter');
 
@@ -24,6 +25,7 @@ const notificationPreferencesService = new NotificationPreferencesService();
 const clanRoleChangeService = new ClanRoleChangeService(config, notificationPreferencesService);
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

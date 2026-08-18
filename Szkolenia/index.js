@@ -7,6 +7,7 @@ const { handleReactionAdd } = require('./handlers/reactionHandlers');
 const { checkThreads, reminderStorage } = require('./services/threadService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const AIChatService = require('./services/aiChatService');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Szkolenia');
 
@@ -43,6 +44,7 @@ function containsHelpRequest(text) {
 }
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

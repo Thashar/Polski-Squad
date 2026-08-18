@@ -24,6 +24,7 @@ const { exportGloryProgress } = require('./services/gloryProgressExportService')
 const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 const { createLlmAdapter } = require('../utils/llmAdapter');
+const { getCacheOptions } = require('../utils/discordCache');
 
 const logger = createBotLogger('Stalker');
 const llmAdapter = createLlmAdapter({ botSlug: 'stalker', tracerName: 'stalker-bot', apiKey: config.ocr.googleAiApiKey });
@@ -71,6 +72,7 @@ async function saveBorixoningCooldowns() {
 }
 
 const client = new Client({
+    ...getCacheOptions(),
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,

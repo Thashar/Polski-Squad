@@ -116,7 +116,10 @@ module.exports = {
         enabled: true,
         logChannelId: '1406623452550529155',
         trackMessageLinks: true,
-        linkRetentionDays: 30
+        linkRetentionDays: 30,
+        // Twardy limit wpisów w pamięci — czyszczenie po dacie chodzi raz na dobę,
+        // a mapa dostaje wpis przy KAŻDEJ wiadomości tekstowej
+        maxTrackedMessages: 20000
     },
     
     // Konfiguracja kickowania użytkowników bez ról (współpraca z Rekruterem)
