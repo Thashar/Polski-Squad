@@ -578,7 +578,7 @@
 - **Logika akceptacji OCR (3 przypadki):**
   - **Boss rozpoznany + pobito rekord bossa** (bez globalnego) → zielony embed `0x00b894` z polem `bossRecordUpdated`; rekord per-boss zapisany
   - **Boss nierozpoznany + brak globalnego** → `rankingService.createNoRecordEmbeds` (kolor `0xFEE75C`) z komunikatem `unknownBossAccepted` w Embedzie 2; wynik zapamiętany pod surową nazwą do weryfikacji admina
-  - **Boss rozpoznany + brak globalnego + brak rekordu bossa** → standardowy odrzut (`rankingService.createNoRecordEmbeds`, kolor orange)
+  - **Boss rozpoznany + brak globalnego + brak rekordu bossa** → standardowy odrzut (`rankingService.createNoRecordEmbeds`, kolor orange) — w Szczegółach wyniku, obok `resultNotBeaten` (to rekord **globalny**, często z zupełnie innego bossa), leci też linia o rekordzie **tego** bossa z `previousBossRecord`: `resultBossRecordSame` gdy wrzucony wynik jest identyczny z zapisanym rekordem bossa, w przeciwnym razie `resultBossRecordCurrent` (wynik + data). Bez tego wrzucenie po raz drugi tego samego wyniku z bossa wyglądało, jakby nic dla tego bossa nie było zapisane. Linia pomijana, gdy `previousBossRecord` jest puste (błąd `bossRecordService`)
   - Warunek odrzucenia: `!isNewRecord && !wasUnknownBoss && !isNewBossRecord`
 - **Embed rekordu:** Pole `🎯 Rekord na bossie` (msgs.bossRecordField) pokazywane gdy `isNewBossRecord = true`, PRZED polem osiągnięć. Dla pobitego rekordu bossa bez globalnego — pole `🎯 Nowy rekord na bossie` (msgs.bossRecordUpdated) w zielonym embedzie.
 - **Struktura danych:** `data/guilds/{guildId}/boss_records.json` = `{ userId: { bossName: { score, scoreValue, timestamp, username } } }`. Write queue per-guild (`_enqueue`).

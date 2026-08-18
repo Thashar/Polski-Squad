@@ -161,6 +161,9 @@ const pol = {
     resultScore: 'Wynik z obrazu',
     resultNotBeaten: '❌ Nie pobito rekordu (obecny: {currentScore})',
     resultDifference: '**Różnica:** {diff}',
+    // Rekord tego bossa — bez tej linii widać tylko rekord ogólny i nie wiadomo, czy wynik z bossa jest już zapisany
+    resultBossRecordSame: '👾 Ten sam wynik masz już zapisany jako rekord tego bossa (**{score}**, {date})',
+    resultBossRecordCurrent: '👾 Twój rekord tego bossa: **{score}** ({date})',
     resultDetailsField: 'Szczegóły wyniku',
 
     // Embed — nowy rekord
@@ -658,6 +661,8 @@ const eng = {
     resultScore: 'Score from image',
     resultNotBeaten: '❌ Record not beaten (current: {currentScore})',
     resultDifference: '**Difference:** {diff}',
+    resultBossRecordSame: '👾 You already have this exact score saved as your record for this boss (**{score}**, {date})',
+    resultBossRecordCurrent: '👾 Your record for this boss: **{score}** ({date})',
     resultDetailsField: 'Score details',
 
     // Embed — new record

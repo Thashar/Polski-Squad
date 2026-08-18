@@ -6627,6 +6627,18 @@ class InteractionHandler {
                     const noRecordReasonLines = [];
                     if (bossName) noRecordReasonLines.push(`\`${bossName}\``);
                     noRecordReasonLines.push(formatMessage(msgs.resultNotBeaten, { currentScore: currentScore.score }));
+                    // Rekord tego bossa. Linia wyżej pokazuje rekord OGÓLNY gracza (może być
+                    // z zupełnie innego bossa), więc bez tego wrzucenie tego samego wyniku
+                    // wygląda, jakby dla tego bossa nic nie było jeszcze zapisane.
+                    if (bossName && previousBossRecord) {
+                        const bossRecordScore = previousBossRecord.score
+                            || this.rankingService.formatScore(previousBossRecord.scoreValue);
+                        const sameAsBossRecord = previousBossRecord.scoreValue === newScoreValueForDiff;
+                        noRecordReasonLines.push(formatMessage(
+                            sameAsBossRecord ? msgs.resultBossRecordSame : msgs.resultBossRecordCurrent,
+                            { score: bossRecordScore, date: this._discordTs(previousBossRecord.timestamp, 'D') }
+                        ));
+                    }
                     noRecordReasonLines.push(formatMessage(msgs.resultDifference, { diff: diffText }));
 
                     const resultEmbeds = this.rankingService.createNoRecordEmbeds({
