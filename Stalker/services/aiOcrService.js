@@ -11,8 +11,8 @@ const SAFETY_SETTINGS_OFF = [
 ];
 
 const PROMPT_VERSIONS = {
-    'extract-results':       'v1',
-    'extract-results-batch': 'v5',
+    'extract-results':       'v2',
+    'extract-results-batch': 'v6',
     'extract-nicks-batch':   'v3',
     'extract-equipment':     'v1',
 };
@@ -192,6 +192,7 @@ class AIOCRService {
             const prompt = `Przeanalizuj zdjęcie z wynikami poszczególnych graczy oraz zwróć kompletne nicki oraz wyniki w następującym formacie:
 <nick nr 1> - <wynik>
 <nick nr 2> - <wynik> itd.
+Wynik 0 jest pełnoprawnym wynikiem - gracza z zerem wypisz tak samo jak każdego innego, nigdy go nie pomijaj.
 Jeśli nie możesz odczytać wyników lub zdjęcie nie zawiera wyników graczy, odpowiedz: "Nie wykryto wyników graczy".`;
 
             const res = await this._generateContent([
@@ -256,7 +257,8 @@ Jeśli żaden nick z listy nie pasuje, użyj nicku odczytanego bezpośrednio ze 
 
 REGUŁY KRYTYCZNE:
 - Wypisz WYŁĄCZNIE graczy faktycznie widocznych na zdjęciach. Zdjęcie zawiera tylko kilka nicków i wyników - lista w odpowiedzi ma być TAK SAMO krótka.
-- NIE wypisuj graczy z listy Discord, których NIE MA na zdjęciach. Osoby bez dopasowania na zdjęciu POMIŃ całkowicie - NIE podawaj dla nich wyniku 0 ani żadnego innego.
+- NIE wypisuj graczy z listy Discord, których NIE MA na zdjęciach. Osoby bez dopasowania na zdjęciu POMIŃ całkowicie - nie dopisuj ich do listy z żadnym wynikiem.
+- WYNIK 0 JEST PEŁNOPRAWNYM WYNIKIEM. Gracz widoczny na zdjęciu z wynikiem 0 MUSI trafić na listę z wynikiem 0 - dokładnie tak samo jak gracz z wynikiem 12345. Nigdy nie pomijaj gracza dlatego, że ma zero, i nigdy nie zamieniaj jego zera na inną wartość.
 - Przepisz nick z listy Discord ZNAK PO ZNAKU, bez żadnych zmian. NIE dodawaj prefiksów (np. "PL | "), sufiksów ani ozdobników, których nie ma na liście.
 - Wynik przepisz dokładnie tak, jak widnieje na zdjęciu - nie zaokrąglaj i nie przeliczaj.
 
@@ -264,7 +266,7 @@ FORMAT ODPOWIEDZI (bezwzględnie obowiązkowy):
 - Odpowiedź ma zawierać WYŁĄCZNIE linie w formacie: <nick na discordzie> - <wynik>
 - ŻADNYCH zdań wprowadzających, komentarzy, wyjaśnień, podsumowań ani formatowania markdown.
 - NIGDY nie proś o inne, wyraźniejsze czy pełniejsze zdjęcia - pracujesz na tym, co dostałeś.
-- Częściowa nieczytelność NIE jest powodem do odmowy: wypisz wszystkich graczy, których odczytałeś, a pojedynczego gracza z nieczytelnym wynikiem po prostu pomiń w liście.
+- Częściowa nieczytelność NIE jest powodem do odmowy: wypisz wszystkich graczy, których odczytałeś, a pojedynczego gracza z NIECZYTELNYM wynikiem (rozmazane, ucięte, zasłonięte cyfry) po prostu pomiń w liście. Czytelne zero NIE jest wynikiem nieczytelnym.
 
 Wyjątek - JEDYNY przypadek innej odpowiedzi: gdy na zdjęciach nie ma w ogóle tabeli wyników z gry
 (np. zupełnie inny ekran, zrzut spoza gry). Odpowiedz wtedy dokładnie: "Nie wykryto wyników graczy".`;
