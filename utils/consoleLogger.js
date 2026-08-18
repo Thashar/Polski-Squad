@@ -137,7 +137,12 @@ const BOTS_WITH_OWN_WEBHOOK = new Set(
 // Kolejka webhook'ów i rate limiting
 const webhookQueue = [];
 let isProcessingQueue = false;
-const WEBHOOK_DELAY = 1000; // 1 sekunda między webhook'ami
+const WEBHOOK_DELAY = 1000; // 1 sekunda między żądaniami (rate limit Discorda)
+const WEBHOOK_MAX_CHARS = 1900;  // limit treści wiadomości Discorda to 2000 — zostawiamy zapas
+const WEBHOOK_MAX_QUEUE = 500;   // powyżej tego porzucamy najstarsze wpisy zamiast rosnąć bez końca
+
+let pominieteLogi = 0;
+let ostatnieOstrzezenie = 0;
 
 // Upewnij się, że katalog logs istnieje.
 // Sprawdzenie robimy RAZ — dawniej `existsSync` leciało przy każdej linii logu,
@@ -225,18 +230,51 @@ function writeToLogFile(botName, message, level = 'info') {
     }
 }
 
-// Funkcja do przetwarzania kolejki webhook'ów
+/**
+ * Przetwarza kolejkę webhooków, ŁĄCZĄC wpisy w paczki.
+ *
+ * ⚠️ Wcześniej każdy log szedł osobnym żądaniem z sekundową przerwą, czyli sztywne
+ * 60 wpisów/minutę. Dziewięć botów potrafi generować więcej — a kolejka nie miała
+ * limitu, więc zaległość rosła bez końca i zjadała pamięć aż do crashu.
+ *
+ * Teraz jedno żądanie zabiera tyle linii, ile zmieści się w limicie 2000 znaków
+ * Discorda, co podnosi realną przepustowość kilkunastokrotnie przy tej samej
+ * liczbie żądań (rate limit Discorda dotyczy żądań, nie treści).
+ */
 async function processWebhookQueue() {
     if (isProcessingQueue || webhookQueue.length === 0) return;
 
     isProcessingQueue = true;
 
     while (webhookQueue.length > 0) {
-        const { data, webhookUrl } = webhookQueue.shift();
+        // Zbierz kolejne wpisy tego samego webhooka, aż do limitu znaków
+        const { webhookUrl } = webhookQueue[0];
+        const linie = [];
+        let dlugosc = 0;
+
+        while (webhookQueue.length > 0 && webhookQueue[0].webhookUrl === webhookUrl) {
+            const tresc = webhookQueue[0].data.content;
+            // +1 na znak nowej linii; pojedynczy wpis dłuższy niż limit i tak musi przejść sam
+            if (linie.length > 0 && dlugosc + tresc.length + 1 > WEBHOOK_MAX_CHARS) break;
+            webhookQueue.shift();
+            linie.push(tresc);
+            dlugosc += tresc.length + 1;
+        }
+
+        // Dołóż informację o porzuconych wpisach — trafia do najbliższej paczki,
+        // więc dociera nawet gdy kolejka jest wciąż przepełniona
+        const teraz = Date.now();
+        if (pominieteLogi > 0 && teraz - ostatnieOstrzezenie > 60000) {
+            ostatnieOstrzezenie = teraz;
+            // Na POCZĄTEK paczki — treść jest przycinana do WEBHOOK_MAX_CHARS,
+            // więc linia dołożona na końcu zostałaby obcięta razem z nadmiarem
+            linie.unshift(`⚠️ Kolejka webhooka przepełniona — pominięto ${pominieteLogi} wpisów (plik logu jest kompletny)`);
+            pominieteLogi = 0;
+        }
 
         try {
-            await sendWebhookRequest(data, webhookUrl);
-            // Czekaj między webhook'ami aby uniknąć rate limiting
+            await sendWebhookRequest({ content: linie.join(String.fromCharCode(10)).slice(0, WEBHOOK_MAX_CHARS) }, webhookUrl);
+            // Odstęp między żądaniami — chroni przed rate limitem Discorda
             await new Promise(resolve => setTimeout(resolve, WEBHOOK_DELAY));
         } catch (error) {
             // Kontynuuj mimo błędów
@@ -367,6 +405,20 @@ function sendToDiscordWebhook(botName, message, level = 'info') {
 
         // Dodaj do kolejki zamiast wysyłać od razu (razem z webhookUrl)
         webhookQueue.push({ data: webhookData, webhookUrl });
+
+        // Twardy limit kolejki — gdy logi napływają szybciej, niż webhook je wysyła,
+        // porzucamy NAJSTARSZE wpisy zamiast puchnąć w nieskończoność. Bez tego
+        // zaległość rosła trwale i kończyła się wyczerpaniem pamięci.
+        if (webhookQueue.length > WEBHOOK_MAX_QUEUE) {
+            const porzucone = webhookQueue.length - WEBHOOK_MAX_QUEUE;
+            webhookQueue.splice(0, porzucone);
+            pominieteLogi += porzucone;
+
+            // Samego ostrzeżenia NIE wkładamy do kolejki — kolejne przepełnienie
+            // usuwa wpisy z jej początku, więc zostałoby porzucone razem z resztą.
+            // Zamiast tego licznik `pominieteLogi` jest doklejany do najbliższej
+            // wysyłanej paczki (patrz processWebhookQueue).
+        }
 
         // Uruchom przetwarzanie kolejki
         setImmediate(processWebhookQueue);

@@ -283,6 +283,9 @@ const serwis = new JakiśSerwis(config, logger);
     - `existsSync` na katalogu `logs/` wykonywane jest raz, nie przy każdej linii
     - `closeLogStream()` (eksportowana, podpięta pod `process.once('exit')`) domyka plik, żeby nie zgubić ostatnich wpisów
   - Discord webhook (opcjonalne, rate-limited 1s delay)
+- 🛡️ **Kolejka webhooka odporna na przeciążenie** — logi są **łączone w paczki** (do 1900 znaków na żądanie zamiast jednej linii), a sama kolejka ma twardy limit 500 wpisów. Po przekroczeniu porzucane są NAJSTARSZE wpisy, a do najbliższej paczki dopisywana jest linia `⚠️ Kolejka webhooka przepełniona — pominięto N wpisów`
+  - **Dlaczego:** wcześniej każdy log szedł osobnym żądaniem z sekundową przerwą, czyli sztywne 60 wpisów/minutę przy dziewięciu botach. Kolejka nie miała limitu, więc zaległość rosła trwale i kończyła się wyczerpaniem pamięci. Batching podnosi przepustowość ok. 20× przy tej samej liczbie żądań (rate limit Discorda dotyczy żądań, nie treści)
+  - **Plik logu zawsze pozostaje kompletny** — limit dotyczy wyłącznie wysyłki na Discorda
 - 🚀 **Zoptymalizowany start** - Jednoliniowe komunikaty statusu: `✅ [NazwaBota] gotowy - [funkcje]`
 - 🔍 **Inteligentne separatory** - Wizualne separatory tylko przy przełączaniu między różnymi botami
 
