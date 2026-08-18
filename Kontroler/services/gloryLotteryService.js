@@ -43,7 +43,11 @@ class GloryLotteryService {
     async initialize(client) {
         this.client = client;
         await this.loadHistory();
-        this.scheduleNextDraw();
+
+        // Gdy nadrabiamy pominięte losowanie, `runDraw()` samo zaplanuje kolejne
+        const nadrobiono = await this.catchUpMissedDraw();
+        if (!nadrobiono) this.scheduleNextDraw();
+
         logger.info('✅ Glory: serwis loterii Glory zainicjalizowany');
     }
 
@@ -92,6 +96,44 @@ class GloryLotteryService {
             scheduled = buildFor(7);
         }
         return scheduled;
+    }
+
+    /**
+     * Poprzedni termin losowania — harmonogram jest ściśle tygodniowy,
+     * więc to po prostu najbliższy termin minus 7 dni.
+     */
+    getPreviousScheduledTime() {
+        return new Date(this.getNextScheduledTime().getTime() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    /**
+     * Nadrabia losowanie pominięte, gdy bot był wyłączony o zaplanowanej godzinie.
+     *
+     * ⚠️ Losowanie odpalał WYŁĄCZNIE `setTimeout` ustawiany przy starcie. Restart hostingu
+     * albo pętla crashy o piątkowej 22:00 oznaczały, że `scheduleNextDraw()` planowało
+     * dopiero KOLEJNY piątek — tydzień przepadał po cichu, bez wpisu w logu i bez ogłoszenia
+     * na kanałach klanów.
+     *
+     * Nie losujemy wstecz przy pierwszym w życiu uruchomieniu (brak historii) — inaczej
+     * świeża instalacja od razu ogłaszałaby zwycięzców za nieistniejący tydzień.
+     */
+    async catchUpMissedDraw() {
+        const poprzedni = this.getPreviousScheduledTime().getTime();
+
+        const czasyLosowan = Object.values(this.history || {})
+            .map(wpis => (wpis && wpis.drawnAt) ? new Date(wpis.drawnAt).getTime() : 0)
+            .filter(t => t > 0);
+
+        if (czasyLosowan.length === 0) {
+            logger.info('ℹ️ Glory: brak historii losowań — nie nadrabiam wstecz');
+            return false;
+        }
+
+        if (Math.max(...czasyLosowan) >= poprzedni) return false;
+
+        logger.warn(`⚠️ Glory: losowanie z ${formatPolandDateTime(new Date(poprzedni))} zostało pominięte (bot nie działał) — nadrabiam teraz`);
+        await this.runDraw();
+        return true;
     }
 
     scheduleNextDraw() {
