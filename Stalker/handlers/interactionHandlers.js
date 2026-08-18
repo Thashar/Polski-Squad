@@ -2383,6 +2383,8 @@ async function handleButton(interaction, sharedState) {
         await handleWynikiPhase2ViewButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('wyniki_view|')) {
         await handleWynikiViewButton(interaction, sharedState);
+    } else if (interaction.customId.startsWith('wyniki_show|')) {
+        await handleWynikiShowButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_overwrite_')) {
         await handlePhase2OverwriteButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase2_complete_') || interaction.customId.startsWith('phase2_resolve_') || interaction.customId === 'phase2_cancel_session') {
@@ -4700,7 +4702,10 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    await warningChannel.send(`## Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
+                    await warningChannel.send({
+                        content: `## Faza 1 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`,
+                        components: [buildWynikiShowRow(session.clan, weekInfo.weekNumber, weekInfo.year, 'phase1')]
+                    });
                     logger.info(`[PHASE1] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
@@ -5268,7 +5273,10 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
             if (warningChannelId) {
                 const warningChannel = await interaction.client.channels.fetch(warningChannelId);
                 if (warningChannel) {
-                    await warningChannel.send(`## Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`);
+                    await warningChannel.send({
+                        content: `## Faza 2 | Tydzień ${weekInfo.weekNumber}/${weekInfo.year}\n## Dane zostały zaktualizowane <a:PepeCoding:1278014173321625819>`,
+                        components: [buildWynikiShowRow(session.clan, weekInfo.weekNumber, weekInfo.year, 'summary')]
+                    });
                     logger.info(`[PHASE2] 📢 Wysłano powiadomienie na kanał ostrzeżeń ${warningChannelId}`);
                 }
             }
@@ -7994,6 +8002,56 @@ async function handleWynikiViewButton(interaction, sharedState) {
             components: []
         });
     }
+}
+
+/**
+ * Przycisk „Pokaż wyniki" z powiadomienia o aktualizacji danych (Faza 1 / Faza 2).
+ * Format customId: wyniki_show|clanKey|weekNumber-year|view
+ *
+ * Odpowiada publicznie, tak samo jak /wyniki — dzięki temu działa nawigacja
+ * `wyniki_view|...` (ta robi interaction.update()) i auto-usuwanie po 15 minutach.
+ */
+async function handleWynikiShowButton(interaction, sharedState) {
+    const { databaseService, config } = sharedState;
+
+    try {
+        const [, clan, weekKey, view] = interaction.customId.split('|');
+        const [weekNumber, year] = weekKey.split('-').map(Number);
+
+        await interaction.deferReply();
+
+        const weekDataPhase1 = await databaseService.getPhase1Results(interaction.guild.id, weekNumber, year, clan);
+        const weekDataPhase2 = await databaseService.getPhase2Results(interaction.guild.id, weekNumber, year, clan);
+
+        if (!weekDataPhase1 && !weekDataPhase2) {
+            await interaction.editReply({ content: `❌ Brak danych dla tygodnia ${weekNumber}/${year}.` });
+            return;
+        }
+
+        await showCombinedResults(interaction, weekDataPhase1, weekDataPhase2, clan, weekNumber, year, view, config);
+
+    } catch (error) {
+        logger.error('[WYNIKI] ❌ Błąd przycisku „Pokaż wyniki":', error);
+        const tresc = { content: '❌ Wystąpił błąd podczas wyświetlania wyników.' };
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(tresc).catch(() => {});
+        } else {
+            await interaction.reply({ ...tresc, flags: MessageFlags.Ephemeral }).catch(() => {});
+        }
+    }
+}
+
+/**
+ * Wiersz z przyciskiem „Pokaż wyniki" dołączany do powiadomienia o aktualizacji danych.
+ */
+function buildWynikiShowRow(clan, weekNumber, year, view) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`wyniki_show|${clan}|${weekNumber}-${year}|${view}`)
+            .setLabel('Pokaż wyniki')
+            .setEmoji('📊')
+            .setStyle(ButtonStyle.Primary)
+    );
 }
 
 async function handleWynikiPhase2ViewButton(interaction, sharedState) {
