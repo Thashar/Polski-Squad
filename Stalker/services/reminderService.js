@@ -2,7 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBu
 const messages = require('../config/messages');
 const fs = require('fs').promises;
 const path = require('path');
-const { downloadDiscordImage } = require('../utils/helpers');
+const { downloadDiscordImage, downloadDiscordImageBuffer } = require('../utils/helpers');
 const { assignNicksToClan } = require('../utils/nickMatcher');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -779,13 +779,20 @@ class ReminderService {
     /**
      * Pobiera zdjęcie z URL i zapisuje lokalnie
      */
+    /**
+     * Pobiera screen do PAMIĘCI i zwraca Buffer — bez zapisu na dysk.
+     *
+     * Dawniej zdjęcie lądowało w `temp/`, po czym `sharp()` czytało je z powrotem przy
+     * analizie AI — zapis + odczyt 1–5 MB na każdy screen, przy batchu razy liczba zdjęć.
+     * `sharp()` przyjmuje Buffer tak samo jak ścieżkę, więc plik pośredni był zbędny.
+     *
+     * Bufory żyją w sesji OCR (`session.downloadedFiles`) do czasu jej zakończenia
+     * lub wygaśnięcia — tak samo jak wcześniej ścieżki.
+     */
     async downloadImage(url, sessionId, index) {
-        await this.initTempDir();
-        const filename = `${sessionId}_${index}_${Date.now()}.png`;
-        const filepath = path.join(this.tempDir, filename);
-        await downloadDiscordImage(url, filepath);
-        logger.info(`[REMIND] 💾 Zapisano zdjęcie: ${filename}`);
-        return filepath;
+        const buffer = await downloadDiscordImageBuffer(url);
+        logger.info(`[REMIND] 📥 Pobrano zdjęcie do pamięci: ${(buffer.length / 1024).toFixed(0)} KB`);
+        return buffer;
     }
 
     /**

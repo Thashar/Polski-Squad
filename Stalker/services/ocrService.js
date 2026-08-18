@@ -158,9 +158,11 @@ class OCRService {
             // === KROK 2: Tradycyjny Tesseract OCR (domyślny lub fallback) ===
             logger.info('[OCR] 🔄 Używam tradycyjnego OCR (Tesseract)...');
 
-            // Wczytaj plik z dysku
+            // Źródłem może być Buffer (screeny pobierane prosto do pamięci) albo ścieżka
+            // do pliku — obsługujemy oba, żeby ta ścieżka zapasowa nie zależała od tego,
+            // skąd przyszedł obraz
             const fs = require('fs').promises;
-            imageBuffer = await fs.readFile(filepath);
+            imageBuffer = Buffer.isBuffer(filepath) ? filepath : await fs.readFile(filepath);
 
             processedBuffer = await this.processImageWithSharp(imageBuffer);
 

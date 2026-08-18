@@ -58,69 +58,16 @@ class JsonStore {
         // readBytes/writeBytes rosną od startu procesu — dają obraz łącznego obciążenia dysku
         this._stats = { diskReads: 0, cacheHits: 0, writes: 0, writeErrors: 0, parseErrors: 0, readBytes: 0, writeBytes: 0 };
 
-        // Okno raportowania — zbiera ruch dyskowy od ostatniego raportu (patrz startReporting)
-        this._window = this._emptyWindow();
-        this._reportTimer = null;
-
-        // Statystyki narastające per plik, od startu procesu — źródło danych dla komendy /io
-        // etykieta pliku -> { reads, readBytes, writes, writeBytes, lastRead, lastWrite }
-        this._perFile = new Map();
-        this._startedAt = Date.now();
-    }
-
-    _emptyWindow() {
-        return {
-            reads: new Map(),   // etykieta pliku -> { count, bytes }
-            writes: new Map(),  // etykieta pliku -> { count, bytes }
-            cacheHits: 0,
-            since: Date.now()
-        };
     }
 
     /**
-     * Odnotowuje operację dyskową w oknie raportowania.
+     * Liczniki wolumenu — narastające od startu procesu.
+     * Szczegółowy podział (per plik, per bot, per kategoria) prowadzi `utils/diskMonitor`,
+     * który widzi CAŁY ruch dyskowy, nie tylko pliki JSON.
      */
     _track(kind, key, bytes) {
-        // suma narastająca od startu procesu
         if (kind === 'reads') this._stats.readBytes += bytes;
         else this._stats.writeBytes += bytes;
-
-        const label = this._label(key);
-
-        const bucket = this._window[kind];
-        const entry = bucket.get(label) || { count: 0, bytes: 0 };
-        entry.count++;
-        entry.bytes += bytes;
-        bucket.set(label, entry);
-
-        // statystyka narastająca per plik (dla /io)
-        let f = this._perFile.get(label);
-        if (!f) {
-            f = { reads: 0, readBytes: 0, writes: 0, writeBytes: 0, lastRead: null, lastWrite: null };
-            this._perFile.set(label, f);
-        }
-        if (kind === 'reads') {
-            f.reads++; f.readBytes += bytes; f.lastRead = Date.now();
-        } else {
-            f.writes++; f.writeBytes += bytes; f.lastWrite = Date.now();
-        }
-    }
-
-    /**
-     * Wyciąga nazwę bota/obszaru ze ścieżki: "EndersEcho/data/guilds/1/ranking.json" → "EndersEcho".
-     * Pliki spoza katalogów botów lądują jako "shared_data", "logs" itd.
-     */
-    _owner(label) {
-        return label.split('/')[0] || 'inne';
-    }
-
-    /**
-     * Skraca ścieżkę do czytelnej etykiety: "EndersEcho/guilds/123/ranking.json"
-     * zamiast pełnej ścieżki bezwzględnej.
-     */
-    _label(key) {
-        const root = path.resolve(__dirname, '..');
-        return key.startsWith(root) ? key.slice(root.length + 1).replace(/\\/g, '/') : path.basename(key);
     }
 
     _key(filePath) {
@@ -213,7 +160,6 @@ class JsonStore {
 
         if (cached) {
             this._stats.cacheHits++;
-            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -240,7 +186,6 @@ class JsonStore {
 
         if (cached && cached.loaded) {
             this._stats.cacheHits++;
-            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -282,7 +227,6 @@ class JsonStore {
 
         if (cached && cached.loaded) {
             this._stats.cacheHits++;
-            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -500,134 +444,9 @@ class JsonStore {
         await Promise.all([...this._queues.values()]);
     }
 
-    _fmtBytes(bytes) {
-        if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(2)} MB`;
-        if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-        return `${bytes} B`;
-    }
-
-    /**
-     * Buduje raport z okna i zeruje je. Zwraca `null`, gdy w oknie nie było
-     * ŻADNEGO ruchu dyskowego — wtedy nie ma po co zaśmiecać logu.
-     */
-    collectReport() {
-        const w = this._window;
-        const readOps = [...w.reads.values()].reduce((s, e) => s + e.count, 0);
-        const writeOps = [...w.writes.values()].reduce((s, e) => s + e.count, 0);
-        this._window = this._emptyWindow();
-
-        if (readOps === 0 && writeOps === 0) return null;
-
-        const readBytes = [...w.reads.values()].reduce((s, e) => s + e.bytes, 0);
-        const writeBytes = [...w.writes.values()].reduce((s, e) => s + e.bytes, 0);
-
-        // Najbardziej obciążające pliki — po nich widać, co realnie puka do dysku
-        const top = (bucket) => [...bucket.entries()]
-            .sort((a, b) => b[1].bytes - a[1].bytes)
-            .slice(0, 5)
-            .map(([label, e]) => `${label} ×${e.count} (${this._fmtBytes(e.bytes)})`);
-
-        return {
-            seconds: Math.round((Date.now() - w.since) / 1000),
-            readOps, readBytes, readFiles: w.reads.size, topReads: top(w.reads),
-            writeOps, writeBytes, writeFiles: w.writes.size, topWrites: top(w.writes),
-            cacheHits: w.cacheHits
-        };
-    }
-
-    /**
-     * Uruchamia cykliczny raport ruchu dyskowego do logu (konsola + plik + webhook).
-     * Minuty bez żadnego I/O są pomijane, żeby log nie puchł w nocy.
-     *
-     * @param {number} [intervalMs=60000] - co ile raportować
-     */
-    startReporting(intervalMs = 60000) {
-        if (this._reportTimer) return;
-
-        this._reportTimer = setInterval(() => {
-            const r = this.collectReport();
-            if (!r) return;
-
-            logger.info(
-                `💾 Dysk (${r.seconds}s): ` +
-                `odczyt ${r.readOps} (${this._fmtBytes(r.readBytes)}), ` +
-                `zapis ${r.writeOps} (${this._fmtBytes(r.writeBytes)}) ` +
-                `— od startu: odczyt ${this._fmtBytes(this._stats.readBytes)}, zapis ${this._fmtBytes(this._stats.writeBytes)}`
-            );
-        }, intervalMs);
-
-        // Raport nie może trzymać procesu przy życiu przy zamykaniu bota
-        if (this._reportTimer.unref) this._reportTimer.unref();
-        logger.info(`📊 Raport ruchu dyskowego włączony (co ${Math.round(intervalMs / 1000)}s, minuty bez I/O pomijane)`);
-    }
-
-    stopReporting() {
-        if (this._reportTimer) {
-            clearInterval(this._reportTimer);
-            this._reportTimer = null;
-        }
-    }
-
-    /**
-     * Pełny raport I/O od startu procesu — dane dla komendy `/io` w Muteuszu.
-     *
-     * @param {number} [limit=10] ile pozycji w każdym zestawieniu
-     */
-    getIOReport(limit = 10) {
-        const pliki = [...this._perFile.entries()].map(([label, f]) => ({
-            label,
-            owner: this._owner(label),
-            ...f,
-            ops: f.reads + f.writes,
-            bytes: f.readBytes + f.writeBytes
-        }));
-
-        // agregacja per bot/obszar
-        const wgWlasciciela = new Map();
-        for (const p of pliki) {
-            const a = wgWlasciciela.get(p.owner) || { owner: p.owner, reads: 0, readBytes: 0, writes: 0, writeBytes: 0, files: 0 };
-            a.reads += p.reads; a.readBytes += p.readBytes;
-            a.writes += p.writes; a.writeBytes += p.writeBytes;
-            a.files++;
-            wgWlasciciela.set(p.owner, a);
-        }
-
-        const sort = (arr, key) => [...arr].sort((a, b) => b[key] - a[key]);
-        const czytane = pliki.filter(p => p.reads > 0);
-        const zapisywane = pliki.filter(p => p.writes > 0);
-
-        return {
-            uptimeMs: Date.now() - this._startedAt,
-            odczyty: this._stats.diskReads,
-            odczytBajty: this._stats.readBytes,
-            zapisy: this._stats.writes,
-            zapisBajty: this._stats.writeBytes,
-            zPamieci: this._stats.cacheHits,
-            bledyZapisu: this._stats.writeErrors,
-            bledyOdczytu: this._stats.parseErrors,
-            plikowWCache: this._cache.size,
-            plikowZRuchem: pliki.length,
-
-            // zestawienia
-            topWaga: sort(pliki, 'bytes').slice(0, limit),              // najcięższe łącznie
-            topOdczytIlosc: sort(czytane, 'reads').slice(0, limit),     // najczęściej ładowane
-            topOdczytWaga: sort(czytane, 'readBytes').slice(0, limit),  // najcięższe w odczycie
-            topZapisIlosc: sort(zapisywane, 'writes').slice(0, limit),  // najczęściej zapisywane
-            topZapisWaga: sort(zapisywane, 'writeBytes').slice(0, limit),
-            wgBota: sort([...wgWlasciciela.values()], 'writeBytes')
-                .map(a => ({ ...a, bytes: a.readBytes + a.writeBytes, ops: a.reads + a.writes }))
-                .sort((a, b) => b.bytes - a.bytes)
-        };
-    }
-
-    /** Formatuje bajty do postaci czytelnej dla człowieka (publiczne — używa /io). */
-    formatBytes(bytes) {
-        return this._fmtBytes(bytes);
-    }
-
     /**
      * Statystyki do diagnostyki: ile odczytów faktycznie poszło na dysk, a ile
-     * obsłużyła pamięć.
+     * obsłużyła pamięć. Zasilają pole „obsłużone z pamięci" w komendzie /io.
      */
     getStats() {
         const total = this._stats.cacheHits + this._stats.diskReads;

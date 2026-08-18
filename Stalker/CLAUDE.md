@@ -379,5 +379,16 @@ STALKER_LME_NEWS_CHANNEL_ID=channel_id
   - **`databaseService.atomicWriteJSON()` deleguje do `store.set()`** — store daje ten sam zapis atomowy (plik tymczasowy + rename) ORAZ kolejkę per plik, więc dawna własna implementacja stała się zbędna. `withFileLock()` zostaje: obejmuje cały cykl odczyt-modyfikacja-zapis, a kolejka store'a chroni tylko sam zapis
   - **`readPhase1WeekFile()` czyta z pamięci** — plik tygodnia trafia na dysk tylko przy pierwszym sięgnięciu. Zachowanie przy uszkodzonej strukturze (odtworzenie od zera) bez zmian
   - **Pliki `shared_data/` są wspólne z innymi botami** — wszystkie 9 działa w jednym procesie i dzieli jeden cache (klucz = ścieżka pliku), więc dane Gary'ego (`lme_weekly/`) i EndersEcho (`endersecho_ranking.json`) widać natychmiast po zapisie, bez ponownego odczytu z dysku. Analogicznie `clan_thresholds.json` i `glory_progress.json` pisane przez Stalkera są od razu widoczne dla Rekrutera i Kontrolera
+- **Screeny OCR trzymane w PAMIĘCI, nie na dysku:** `downloadImage()` w `phaseService`, `reminderService`
+  i `punishmentService` zwraca **`Buffer`** (`downloadDiscordImageBuffer`), a nie ścieżkę do pliku w `temp/`
+  - **Dlaczego:** dawniej screen lądował na dysku, po czym `sharp()` czytało go z powrotem przy analizie —
+    zapis + odczyt 1–5 MB na każde zdjęcie, przy batchu razy liczba screenów. `sharp()` przyjmuje `Buffer`
+    tak samo jak ścieżkę, więc plik pośredni był zbędny. `aiOcrService` nie wymagał ŻADNYCH zmian
+  - **Walidacja bez zmian:** `downloadDiscordImageBuffer` używa tej samej `validateDiscordUrl` co wariant
+    zapisujący na dysk — wymuszony HTTPS, whitelist hostów Discord CDN, limit 25 MB, timeout 30 s
+  - **Zgodność wsteczna:** `ocrService` (ścieżka zapasowa Tesseract) przyjmuje teraz i `Buffer`, i ścieżkę —
+    `Buffer.isBuffer(filepath) ? filepath : await fs.readFile(filepath)`
+  - Bufory żyją w `session.downloadedFiles` do zakończenia lub wygaśnięcia sesji, tak jak wcześniej ścieżki.
+    Przy batchu 10 zdjęć to ~50 MB na sesję
 - **Persistencja:** Fazy zapisywane w data/phases/
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy potwierdzeniu interakcji. Import `MessageFlags` jest w `index.js`, `handlers/interactionHandlers.js`, `services/phaseService.js` i `services/vacationService.js`

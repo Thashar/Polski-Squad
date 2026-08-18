@@ -651,7 +651,6 @@ await store.remove(sciezka);              // usunięcie pliku ORAZ wpisu w cache
 store.forget(sciezkaLubKatalog);          // usunięcie tylko z pamięci (plik już skasowany inną drogą)
 await store.flush();                      // dokończenie zapisów przed zamknięciem procesu
 store.getStats();                         // diskReads / cacheHits / hitRate
-store.startReporting(60000);              // cykliczny raport ruchu dyskowego do logu
 ```
 
 ### 7. Monitor Ruchu Dyskowego (cały proces)
@@ -668,37 +667,15 @@ Patchowane: `readFileSync`, `writeFileSync`, `promises.readFile/writeFile/append
 
 **Kategoryzacja plików:** obrazy OCR · cache mediów · OCR traineddata · obrazy · archiwa · logi · dane JSON · node_modules · inne. Dzięki temu widać proporcje — pliki JSON to zwykle ułamek procenta wolumenu, ciężar leżą screeny OCR i media.
 
-**Podgląd:** komenda `/io` w Muteuszu (administrator) — patrz `Muteusz/CLAUDE.md`.
+**Podgląd:** wyłącznie komenda `/io` w Muteuszu (administrator) — patrz `Muteusz/CLAUDE.md`. Brak logowania cyklicznego (celowo).
 
-#### Raport ruchu dyskowego (co minutę, w logu)
+#### Podgląd ruchu dyskowego
 
-Uruchamiany w głównym `index.js` po starcie botów. Jedna zbiorcza linia:
+Statystyki są dostępne **na żądanie, komendą `/io` w Muteuszu** (administrator) — świadomie NIE
+logujemy ich cyklicznie, żeby nie zaśmiecać logów wpisami co minutę.
 
-```
-💾 Dysk (60s): odczyt 3 (12.4 KB), zapis 8 (45.1 KB) — od startu: odczyt 1.24 MB, zapis 5.40 MB
-```
-
-- Każda operacja ma liczbę i wolumen; sumy `od startu` rosną przez cały czas życia procesu
-- Bajty zapisu liczone są z faktycznego payloadu trafiającego na dysk (po `JSON.stringify`), nie szacowane
-
-- **Minuty bez żadnego I/O są pomijane** — log nie puchnie w nocy
-- Po migracji odczyt powinien być bliski zeru (dane idą z pamięci); rosnący odczyt oznacza, że gdzieś doszła ścieżka omijająca cache
-- Interwał: `DISK_REPORT_INTERVAL` w `.env` (sekundy, domyślnie 60; `0` wyłącza)
-- Szczegóły (bajty, nazwy plików, trafienia cache) zbiera `collectReport()` — gdyby kiedyś były potrzebne do diagnozy
-
-#### Co daje poza mniejszym I/O
-
-- **Zapis atomowy** (`.tmp` → `rename`) — przerwany zapis (ENOSPC) nie zostawia już pliku 0 B. To realny problem produkcyjny, który doczekał się obejść (`_safeReadJSON` w Konklawe, `findEmptyFilesSync` w backupManagerze)
-- **Kolejka per plik** — równoległe zapisy tego samego pliku nie przeplatają się; zastępuje lokalne `_enqueue` w `rankingService`/`achievementService`
-- **Koniec z blokującym `writeFileSync`** — blokował CAŁY proces, czyli wszystkie 9 botów naraz
-
-#### ⚠️ Pułapki
-
-1. **`get()`/`getSync()` zwracają REFERENCJĘ do obiektu w cache** (bez kopiowania — szybciej). Mutujesz wynik → **musisz** wywołać `set()`, albo od razu użyć `mutate()`
-2. **Jeden cache na cały proces.** Wszystkie 9 botów działa w jednym procesie Node, a pliki w `shared_data/` są współdzielone (`endersecho_ranking.json`: EndersEcho → Stalker; `active_nickname_effects.json`: Konklawe + Muteusz; `lme_weekly/`: Gary → Stalker). Cache jest kluczowany **absolutną ścieżką**, więc dwa boty sięgające po ten sam plik trafiają w ten sam wpis — osobne cache per bot rozjechałyby te dane
-3. **Po podmianie plików spod spodu MUSI lecieć `reload()`** — dotyczy `/restore-backup` w Muteuszu i `backupManager.restoreFilesFromTemp`. Bez tego pierwszy zapis po przywróceniu nadpisze odzyskane dane starą zawartością pamięci
-4. **Kasując plik, usuń też wpis z cache.** Użyj `store.remove(plik)` zamiast `fs.unlink`, a po `fs.rm(katalog, {recursive:true})` wywołaj `store.forget(katalog)`. Inaczej **usunięte dane wracają**: cache dalej je oddaje przy odczycie, a pierwszy zapis odtwarza plik ze starą zawartością. Dotyczy m.in. `🗑️ Usuń dane serwera` i przenumerowania profili w EndersEcho oraz nadpisywania tygodnia Fazy 1/2 w Stalkerze
-4. **`getSync()` tylko w konstruktorach i kodzie synchronicznym** — blokuje, ale jednorazowo, gdy proces nie obsługuje jeszcze ruchu. W kodzie async używaj `get()`/`getOrLoad()`
+Dane zbiera `utils/diskMonitor` (cały ruch procesu). Procent odczytów obsłużonych z pamięci
+pochodzi z `store.getStats()` i dotyczy wyłącznie plików JSON.
 
 #### Stan migracji: ✅ wszystkie 9 botów
 
@@ -941,11 +918,6 @@ AUTO_GIT_FIX=false
 # AUTO_NPM_FIX_FORCE=true wymusza aktualizacje (npm audit fix --force) - może złamać kompatybilność!
 AUTO_NPM_FIX=false
 AUTO_NPM_FIX_FORCE=false
-
-# ===== RAPORT RUCHU DYSKOWEGO (co minutę w logu) =====
-# Pokazuje ile operacji i bajtów poszło na odczyt/zapis oraz które pliki obciążają dysk.
-# Minuty bez I/O są pomijane. Wartość w sekundach; 0 = wyłącz raport.
-DISK_REPORT_INTERVAL=60
 
 # ===== DIAGNOSTYKA SYSTEMU PLIKÓW (OPCJONALNE, DOMYŚLNIE WYŁĄCZONA) =====
 # Wypisuje przy starcie zajętość dysku, inody, top 5 katalogów wg rozmiaru i liczby plików

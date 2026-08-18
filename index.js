@@ -322,23 +322,9 @@ async function main() {
     checkDiskOnStartup();
     await startAllBots();
 
-    // Cykliczny raport CAŁEGO ruchu dyskowego procesu (nie tylko plików JSON).
-    // Interwał w sekundach: DISK_REPORT_INTERVAL (domyślnie 60), 0 = wyłączony.
-    const raportSek = Number(process.env.DISK_REPORT_INTERVAL ?? 60);
-    if (raportSek > 0) {
-        const raportLogger = createBotLogger('Dysk');
-        setInterval(() => {
-            const w = diskMonitor.collectWindow();
-            if (!w) return;
-            const t = diskMonitor.getReport(1);
-            raportLogger.info(
-                `💾 (${w.seconds}s): odczyt ${w.reads} (${diskMonitor.formatBytes(w.readBytes)}), ` +
-                `zapis ${w.writes} (${diskMonitor.formatBytes(w.writeBytes)}) ` +
-                `— od startu: odczyt ${diskMonitor.formatBytes(t.readBytes)}, zapis ${diskMonitor.formatBytes(t.writeBytes)}`
-            );
-        }, raportSek * 1000).unref();
-        logger.info(`📊 Raport ruchu dyskowego włączony (co ${raportSek}s, minuty bez I/O pomijane)`);
-    }
+    // Statystyki ruchu dyskowego zbiera `diskMonitor` (podpięty na górze pliku).
+    // Świadomie NIE logujemy ich cyklicznie — podgląd jest na żądanie, komendą /io
+    // w Muteuszu, żeby nie zaśmiecać logów wpisami co minutę.
 
     // Uruchom scheduler backupów (tylko w produkcji)
     if (!process.argv.includes('--local')) {
