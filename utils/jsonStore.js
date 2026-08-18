@@ -117,9 +117,15 @@ class JsonStore {
     /**
      * Faktyczny odczyt z dysku. Jedyne miejsce w module, które czyta plik.
      */
-    async _loadFromDisk(key) {
+    async _loadFromDisk(key, overrideDefault) {
         const entry = this._registry.get(key);
-        const defaultFactory = entry ? entry.defaultFactory : () => ({});
+        // Wartosc domyslna z TEGO wywolania wygrywa z zapamietana przy pierwszej rejestracji.
+        // Ten sam plik bywa czytany raz z `() => null`, raz z `() => ({})` (np. tydzien fazy:
+        // zapis chce `null`, eksport progow `{}`); bez tego o ksztalcie decydowalo to, kto
+        // siegnal po plik pierwszy, i wywolujacy dostawal typ, o ktory nie prosil.
+        const defaultFactory = overrideDefault !== undefined
+            ? () => this._makeDefault(overrideDefault)
+            : (entry ? entry.defaultFactory : () => ({}));
         const label = entry ? entry.label : path.basename(key);
 
         try {
@@ -183,7 +189,7 @@ class JsonStore {
      * Blokada dotyczy więc wyłącznie startu bota, gdy proces i tak nie obsługuje
      * jeszcze ruchu — a nie, jak dotąd, każdego odczytu w trakcie działania.
      */
-    getSync(filePath, defaultValue = () => ({})) {
+    getSync(filePath, defaultValue) {
         const key = this._key(filePath);
         const cached = this._cache.get(key);
 
@@ -196,6 +202,10 @@ class JsonStore {
             this.register(key, { defaultValue });
         }
         const entry = this._registry.get(key);
+        // jak w `_loadFromDisk`: jawnie podana wartosc domyslna bije te z rejestru
+        const defaultFactory = defaultValue !== undefined
+            ? () => this._makeDefault(defaultValue)
+            : entry.defaultFactory;
 
         try {
             const raw = fsSync.readFileSync(key, 'utf8');
@@ -204,7 +214,7 @@ class JsonStore {
 
             if (!raw.trim()) {
                 logger.warn(`⚠️ Pusty plik JSON: ${entry.label} — używam wartości domyślnej`);
-                this._cache.set(key, { data: entry.defaultFactory(), loaded: true });
+                this._cache.set(key, { data: defaultFactory(), loaded: true });
             } else {
                 this._cache.set(key, { data: JSON.parse(raw), loaded: true });
             }
@@ -213,7 +223,7 @@ class JsonStore {
                 this._stats.parseErrors++;
                 logger.error(`❌ Nie udało się wczytać ${entry.label}: ${error.message} — używam wartości domyślnej`);
             }
-            this._cache.set(key, { data: entry.defaultFactory(), loaded: true });
+            this._cache.set(key, { data: defaultFactory(), loaded: true });
         }
 
         return this._cache.get(key).data;
@@ -224,7 +234,7 @@ class JsonStore {
      * (pliki per serwer/per gracz, np. `guilds/{id}/ranking.json`). Pierwszy raz
      * czyta z dysku, każdy kolejny — z pamięci.
      */
-    async getOrLoad(filePath, defaultValue = () => ({})) {
+    async getOrLoad(filePath, defaultValue) {
         const key = this._key(filePath);
         const cached = this._cache.get(key);
 
@@ -236,7 +246,7 @@ class JsonStore {
         if (!this._registry.has(key)) {
             this.register(key, { defaultValue });
         }
-        return this._loadFromDisk(key);
+        return this._loadFromDisk(key, defaultValue);
     }
 
     /**

@@ -750,7 +750,7 @@ podobną funkcję potrafi wyzerować poprawne dane. Realny przykład: pliki Fazy
 `getPhase2Results` zwracało `null` dla każdego istniejącego tygodnia, a `/faza2`
 przestało ostrzegać przed nadpisaniem. Kształt pliku sprawdź w funkcji ZAPISUJĄCEJ.
 
-**2. Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji.
+**2. Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji. **Wartość domyślna podana w wywołaniu wygrywa z zapamiętaną przy rejestracji** (`getOrLoad`/`getSync` przekazują ją do `_loadFromDisk`) — ten sam plik bywa czytany raz z `() => null`, raz z `() => ({})` (tydzień fazy: zapis chce `null`, eksport progów `{}`), a wcześniej o kształcie decydowało to, kto sięgnął po plik jako pierwszy w procesie. Wywołanie BEZ jawnej wartości nadal dostaje tę z `register()`, więc zarejestrowane `() => []` nie zamienia się w `{}`.
 
 ---
 

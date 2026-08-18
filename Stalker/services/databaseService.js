@@ -69,7 +69,11 @@ class DatabaseService {
 
         try {
             weekData = await store.getOrLoad(filePath, () => null);
-            isExisting = weekData !== null;
+            // O istnieniu decyduje ZAWARTOŚĆ, nie samo `!== null`. Skasowany plik potrafi
+            // wrócić z cache jako pusty obiekt (inne miejsca czytają ten sam plik z domyślnym
+            // `{}`), a wtedy ostrzeżenie poniżej straszyło o uszkodzeniu przy każdym
+            // nadpisaniu tygodnia — mimo że plik po prostu przed chwilą został usunięty.
+            isExisting = !!weekData && typeof weekData === 'object' && Object.keys(weekData).length > 0;
         } catch (error) {
             // Plik nie istnieje - utworzymy nową strukturę
         }
