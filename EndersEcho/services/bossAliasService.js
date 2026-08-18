@@ -1,6 +1,5 @@
 'use strict';
 
-const fs = require('fs');
 const path = require('path');
 const store = require('../../utils/jsonStore');
 
@@ -30,17 +29,26 @@ class BossAliasService {
 
     _load() {
         try {
-            if (fs.existsSync(DATA_PATH)) {
-                const parsed = store.getSync(DATA_PATH, () => ({}));
-                this._data.englishNames = Array.isArray(parsed.englishNames) ? parsed.englishNames : [];
-                this._data.aliases = parsed.aliases && typeof parsed.aliases === 'object' ? parsed.aliases : {};
-                this._data.images = parsed.images && typeof parsed.images === 'object' ? parsed.images : {};
-            }
+            // Bez `existsSync` — `store.getSync` sam oddaje wartość domyślną przy braku pliku
+            const parsed = store.getSync(DATA_PATH, () => ({}));
+            this._data.englishNames = Array.isArray(parsed.englishNames) ? parsed.englishNames : [];
+            this._data.aliases = parsed.aliases && typeof parsed.aliases === 'object' ? parsed.aliases : {};
+            this._data.images = parsed.images && typeof parsed.images === 'object' ? parsed.images : {};
         } catch { /* zostaw domyślne */ }
     }
 
+    /**
+     * ⚠️ Zapis MUSI iść przez store, skoro odczyt idzie przez store.
+     *
+     * Wcześniej `_save()` pisało wprost `fs.promises.writeFile`, przez co:
+     *  1. cache store'a dla tego pliku zostawał ze STARĄ zawartością — każdy inny
+     *     odczyt przez store (także po `reload()` innego pliku) widział dane sprzed zapisu,
+     *  2. zapis nie był atomowy, więc przerwanie w jego trakcie (np. ENOSPC) zostawiało
+     *     plik 0 B — dokładnie ta awaria, dla której powstały `findEmptyFilesSync`
+     *     i cała maszyneria przywracania z backupu.
+     */
     async _save() {
-        await fs.promises.writeFile(DATA_PATH, JSON.stringify(this._data, null, 2), 'utf8');
+        await store.set(DATA_PATH, this._data);
     }
 
     getData() { return this._data; }
