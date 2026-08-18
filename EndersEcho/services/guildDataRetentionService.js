@@ -97,7 +97,7 @@ class GuildDataRetentionService {
        i statystycznych (sekcja 7 polityki prywatności). */
     async _deleteGuildData(guildId, info) {
         const roleRankingsFile = path.join(this.dataDir, 'guilds', guildId, 'role_rankings.json');
-        await fs.rm(roleRankingsFile, { force: true }).catch(err => {
+        await store.remove(roleRankingsFile).catch(err => {
             if (err.code !== 'ENOENT') throw err;
         });
         await this.guildConfigService.deleteConfig(guildId);

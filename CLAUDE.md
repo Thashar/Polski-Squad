@@ -644,7 +644,8 @@ await store.getOrLoad(sciezka, def);      // ścieżki dynamiczne (per serwer/gr
 await store.set(sciezka, dane);           // zapis: plik + cache jednocześnie
 await store.mutate(sciezka, obj => {...}); // odczyt-modyfikacja-zapis pod jednym zamkiem
 await store.reload(sciezkaLubKatalog);    // wymuszony odczyt z dysku
-await store.remove(sciezka);              // usunięcie pliku i wpisu w cache
+await store.remove(sciezka);              // usunięcie pliku ORAZ wpisu w cache
+store.forget(sciezkaLubKatalog);          // usunięcie tylko z pamięci (plik już skasowany inną drogą)
 await store.flush();                      // dokończenie zapisów przed zamknięciem procesu
 store.getStats();                         // diskReads / cacheHits / hitRate
 ```
@@ -660,6 +661,7 @@ store.getStats();                         // diskReads / cacheHits / hitRate
 1. **`get()`/`getSync()` zwracają REFERENCJĘ do obiektu w cache** (bez kopiowania — szybciej). Mutujesz wynik → **musisz** wywołać `set()`, albo od razu użyć `mutate()`
 2. **Jeden cache na cały proces.** Wszystkie 9 botów działa w jednym procesie Node, a pliki w `shared_data/` są współdzielone (`endersecho_ranking.json`: EndersEcho → Stalker; `active_nickname_effects.json`: Konklawe + Muteusz; `lme_weekly/`: Gary → Stalker). Cache jest kluczowany **absolutną ścieżką**, więc dwa boty sięgające po ten sam plik trafiają w ten sam wpis — osobne cache per bot rozjechałyby te dane
 3. **Po podmianie plików spod spodu MUSI lecieć `reload()`** — dotyczy `/restore-backup` w Muteuszu i `backupManager.restoreFilesFromTemp`. Bez tego pierwszy zapis po przywróceniu nadpisze odzyskane dane starą zawartością pamięci
+4. **Kasując plik, usuń też wpis z cache.** Użyj `store.remove(plik)` zamiast `fs.unlink`, a po `fs.rm(katalog, {recursive:true})` wywołaj `store.forget(katalog)`. Inaczej **usunięte dane wracają**: cache dalej je oddaje przy odczycie, a pierwszy zapis odtwarza plik ze starą zawartością. Dotyczy m.in. `🗑️ Usuń dane serwera` i przenumerowania profili w EndersEcho oraz nadpisywania tygodnia Fazy 1/2 w Stalkerze
 4. **`getSync()` tylko w konstruktorach i kodzie synchronicznym** — blokuje, ale jednorazowo, gdy proces nie obsługuje jeszcze ruchu. W kodzie async używaj `get()`/`getOrLoad()`
 
 #### Stan migracji: ✅ wszystkie 9 botów

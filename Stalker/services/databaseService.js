@@ -720,7 +720,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            await fs.unlink(filePath);
+            await store.remove(filePath);
             logger.info(`[PHASE1] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
             return true;
         } catch (error) {
@@ -1071,7 +1071,7 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            await fs.unlink(filePath);
+            await store.remove(filePath);
             logger.info(`[PHASE2] ✅ Usunięto dane dla tygodnia ${weekNumber}/${year}, klan: ${clan}`);
             return true;
         } catch (error) {

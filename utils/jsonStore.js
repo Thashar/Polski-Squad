@@ -382,6 +382,32 @@ class JsonStore {
     }
 
     /**
+     * Usuwa wpisy z PAMIĘCI, nie dotykając dysku — dla przypadków, gdy plik (albo
+     * całe drzewo katalogów) został już skasowany inną drogą, np. `fs.rm(dir, {recursive})`.
+     *
+     * ⚠️ Bez tego skasowane dane wracają: cache nadal je oddaje przy odczycie, a pierwszy
+     * zapis odtwarza plik ze starą zawartością pamięci. Dotyczy m.in. usuwania danych
+     * serwera i przenumerowania profili w EndersEcho.
+     *
+     * @param {string} target - plik albo katalog (czyści całe drzewo pod nim)
+     * @returns {number} liczba zapomnianych wpisów
+     */
+    forget(target) {
+        const resolved = this._key(target);
+        const prefix = resolved + path.sep;
+        let removed = 0;
+
+        for (const key of [...this._cache.keys()]) {
+            if (key === resolved || key.startsWith(prefix)) {
+                this._cache.delete(key);
+                this._registry.delete(key);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    /**
      * Usuwa plik z dysku i z cache (np. kasowanie danych serwera lub profilu).
      */
     async remove(filePath) {

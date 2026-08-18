@@ -14266,6 +14266,10 @@ class InteractionHandler {
                 if (err.code !== 'ENOENT') throw err;
             });
 
+            // Wyrzuć skasowane pliki z pamięci — inaczej cache nadal by je oddawał,
+            // a pierwszy zapis odtworzyłby je na dysku ze starą zawartością
+            store.forget(guildDataDir);
+
             await this.guildConfigService.deleteConfig(guildIdToDelete);
 
             const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;

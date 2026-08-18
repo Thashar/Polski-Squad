@@ -49,7 +49,7 @@ class ScoreHistoryService {
             (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
         await this._save(guildId, newKey, merged);
-        await fs.unlink(this._file(guildId, oldKey)).catch(() => {});
+        await store.remove(this._file(guildId, oldKey)).catch(() => {});
         return true;
     }
 
