@@ -667,12 +667,22 @@ Patchowane: `readFileSync`, `writeFileSync`, `promises.readFile/writeFile/append
 
 **Kategoryzacja plików:** obrazy OCR · cache mediów · OCR traineddata · obrazy · archiwa · logi · dane JSON · node_modules · inne. Dzięki temu widać proporcje — pliki JSON to zwykle ułamek procenta wolumenu, ciężar leżą screeny OCR i media.
 
-**Podgląd:** wyłącznie komenda `/io` w Muteuszu (administrator) — patrz `Muteusz/CLAUDE.md`. Brak logowania cyklicznego (celowo).
+**Podgląd:** skrócona linia w logu co godzinę (`DISK_REPORT_INTERVAL`) oraz komenda `/io` w Muteuszu (administrator) — patrz `Muteusz/CLAUDE.md`.
 
 #### Podgląd ruchu dyskowego
 
-Statystyki są dostępne **na żądanie, komendą `/io` w Muteuszu** (administrator) — świadomie NIE
-logujemy ich cyklicznie, żeby nie zaśmiecać logów wpisami co minutę.
+**1. Skrócony raport w logu — jedna linia na godzinę** (główny `index.js`):
+
+```
+💾 (60 min): odczyt 12 (4.20 MB), zapis 340 (18.7 MB) — od startu: odczyt 51.3 MB, zapis 220 MB
+```
+
+- Godziny bez żadnego I/O są pomijane — log nie puchnie w nocy
+- Interwał: `DISK_REPORT_INTERVAL` w `.env` (sekundy, domyślnie `3600`; `0` wyłącza)
+- Sam wpis też jest zapisem do pliku logu, więc kolejny raport pokazuje ~130 B „własnego" ruchu — to normalne
+
+**2. Pełny podgląd na żądanie — komenda `/io` w Muteuszu** (administrator): rozbicie per bot,
+per rodzaj pliku i lista najbardziej obciążających pozycji.
 
 Dane zbiera `utils/diskMonitor` (cały ruch procesu). Procent odczytów obsłużonych z pamięci
 pochodzi z `store.getStats()` i dotyczy wyłącznie plików JSON.
@@ -918,6 +928,12 @@ AUTO_GIT_FIX=false
 # AUTO_NPM_FIX_FORCE=true wymusza aktualizacje (npm audit fix --force) - może złamać kompatybilność!
 AUTO_NPM_FIX=false
 AUTO_NPM_FIX_FORCE=false
+
+# ===== RAPORT RUCHU DYSKOWEGO (skrócona linia w logu) =====
+# Jedna zbiorcza linia co godzinę: ile operacji i bajtów poszło na odczyt/zapis.
+# Godziny bez I/O są pomijane. Wartość w sekundach; 0 = wyłącz raport.
+# Pełne statystyki (per bot, per rodzaj pliku) daje komenda /io w Muteuszu.
+DISK_REPORT_INTERVAL=3600
 
 # ===== DIAGNOSTYKA SYSTEMU PLIKÓW (OPCJONALNE, DOMYŚLNIE WYŁĄCZONA) =====
 # Wypisuje przy starcie zajętość dysku, inody, top 5 katalogów wg rozmiaru i liczby plików

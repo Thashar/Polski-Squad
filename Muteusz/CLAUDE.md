@@ -41,7 +41,7 @@
    - **Do czego służy:** pokazuje realne proporcje obciążenia. Pliki JSON to ułamek procenta — ciężar leży w screenach OCR i cache mediów. Rosnąca liczba odczytów JSON oznaczałaby ścieżkę omijającą cache
    - **Źródło danych: `utils/diskMonitor`** — podmienia metody `fs` (`readFileSync`, `writeFileSync`, `promises.readFile/writeFile/appendFile/copyFile`, `createReadStream`, `createWriteStream`), więc liczy też operacje wykonywane wewnątrz bibliotek: sharp, tesseract.js, archiver, discord.js przy wysyłce załącznika
    - Procent trafień cache pochodzi osobno z `store.getStats()` (dotyczy wyłącznie plików JSON)
-   - **Brak logowania cyklicznego** — statystyki wyłącznie na żądanie, żeby nie zaśmiecać logów
+   - Ten sam licznik zasila skróconą linię w logu, wypisywaną raz na godzinę przez główny `index.js` (`DISK_REPORT_INTERVAL`)
 
 11. **Komenda /msg** - `interactionHandlers.js`: Wysyłanie wiadomości botem na dowolny kanał tekstowy. Tylko dla administratorów. Parametry: `kanał` (wymagany), `wiadomość` (wymagana), `ping` (opcjonalne - ID ról oddzielone przecinkami, "everyone" lub "here"). Pingi doklejane są przed treścią wiadomości.
 
