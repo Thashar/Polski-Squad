@@ -57,6 +57,120 @@ const sharedState = {
     config
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  SPRZĄTANIE PORZUCONYCH REKRUTACJI
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ⚠️ Siedem powyższych map jest kluczowanych po userId i NIC ich nie czyściło poza
+// pomyślnym zakończeniem rekrutacji. Kto zaczął i nie dokończył (a to najczęstszy
+// scenariusz), zostawał w pamięci na zawsze, a jego zdjęcie w `temp/` nigdy nie było
+// kasowane — plik po pliku, przez cały czas pracy bota.
+//
+// Retencja: 30 dni. Znacznik czasu bierze się z pierwszego przebiegu sprzątacza, który
+// zobaczył danego użytkownika — dzięki temu nie trzeba dotykać sześciu miejsc
+// ustawiających `userStates`. Konsekwencja: licznik startuje od nowa po restarcie bota,
+// ale mapy i tak żyją wyłącznie w pamięci, więc restart czyści je w całości.
+//
+// Pliki w `temp/` przeżywają restart, dlatego osobno sprzątane są też te osierocone
+// (patrz `sprzatajOsieroconeObrazy`).
+
+const RETENCJA_REKRUTACJI_MS = 30 * 24 * 60 * 60 * 1000;
+const INTERWAL_SPRZATANIA_MS = 6 * 60 * 60 * 1000;
+
+const mapyRekrutacji = [
+    userStates, userInfo, nicknameRequests, userEphemeralReplies,
+    pendingQualifications, userImages, pendingOtherPurposeFinish
+];
+
+// userId -> kiedy sprzątacz zobaczył go po raz pierwszy
+const pierwszeZauwazenie = new Map();
+
+async function sprzatajPorzuconeRekrutacje() {
+    const teraz = Date.now();
+
+    const aktywni = new Set();
+    for (const mapa of mapyRekrutacji) {
+        for (const userId of mapa.keys()) aktywni.add(userId);
+    }
+
+    // Nowi — zapamiętaj moment; zniknięci — zapomnij, żeby ta mapa też nie rosła
+    for (const userId of aktywni) {
+        if (!pierwszeZauwazenie.has(userId)) pierwszeZauwazenie.set(userId, teraz);
+    }
+    for (const userId of [...pierwszeZauwazenie.keys()]) {
+        if (!aktywni.has(userId)) pierwszeZauwazenie.delete(userId);
+    }
+
+    let usunieci = 0;
+    for (const [userId, od] of [...pierwszeZauwazenie.entries()]) {
+        if (teraz - od < RETENCJA_REKRUTACJI_MS) continue;
+
+        const sciezkaObrazu = userImages.get(userId);
+        if (sciezkaObrazu) {
+            await fs.unlink(sciezkaObrazu).catch(() => {});
+        }
+
+        for (const mapa of mapyRekrutacji) mapa.delete(userId);
+        pierwszeZauwazenie.delete(userId);
+        usunieci++;
+    }
+
+    if (usunieci > 0) {
+        logger.info(`🧹 Usunięto ${usunieci} porzuconych rekrutacji (starsze niż 30 dni)`);
+    }
+}
+
+/**
+ * Kasuje zdjęcia rekrutacyjne starsze niż 30 dni.
+ *
+ * Mapy w pamięci znikają przy restarcie, ale pliki w `temp/` zostają — bez tego
+ * przebiegu porzucone zdjęcia leżałyby na dysku bez końca, bo `state.userImages`
+ * po restarcie już o nich nie wie.
+ */
+async function sprzatajOsieroconeObrazy() {
+    const katalog = path.join(__dirname, 'temp');
+
+    try {
+        const pliki = await fs.readdir(katalog);
+        const teraz = Date.now();
+        let usuniete = 0;
+
+        for (const nazwa of pliki) {
+            if (!nazwa.startsWith('img_')) continue;
+
+            const pelna = path.join(katalog, nazwa);
+            try {
+                const stat = await fs.stat(pelna);
+                if (teraz - stat.mtimeMs < RETENCJA_REKRUTACJI_MS) continue;
+                await fs.unlink(pelna);
+                usuniete++;
+            } catch { /* plik mógł zniknąć w międzyczasie */ }
+        }
+
+        if (usuniete > 0) {
+            logger.info(`🧹 Usunięto ${usuniete} osieroconych zdjęć rekrutacyjnych z temp/ (starsze niż 30 dni)`);
+        }
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            logger.error(`❌ Błąd sprzątania katalogu temp: ${error.message}`);
+        }
+    }
+}
+
+function uruchomSprzatanieRekrutacji() {
+    const przebieg = async () => {
+        try {
+            await sprzatajPorzuconeRekrutacje();
+            await sprzatajOsieroconeObrazy();
+        } catch (error) {
+            logger.error(`❌ Błąd sprzątania porzuconych rekrutacji: ${error.message}`);
+        }
+    };
+
+    przebieg();
+    setInterval(przebieg, INTERWAL_SPRZATANIA_MS).unref();
+}
+
 const RELAY_FILE_2 = path.join(__dirname, 'data', 'message_relay.json');
 const MAX_RELAY_ENTRIES_2 = 200;
 
@@ -147,6 +261,9 @@ client.once(Events.ClientReady, async () => {
         try {
             await fs.mkdir(path.join(__dirname, 'temp'), { recursive: true });
         } catch {}
+
+        // Porzucone rekrutacje (mapy w pamięci + zdjęcia w temp/) kasowane po 30 dniach
+        uruchomSprzatanieRekrutacji();
 
         const channel = client.channels.cache.get(config.channels.recruitment);
         if (channel) {
