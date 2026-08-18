@@ -1,6 +1,6 @@
 module.exports = {
     // Błędy ogólne
-    fileTooBig: '❌ **Plik jest za duży!** Maksymalny rozmiar to 8MB.',
+    fileTooBig: '❌ **Plik jest za duży!** Maksymalny rozmiar to 5MB.',
     userInfoError: '❌ **Błąd podczas pobierania informacji o użytkowniku.**',
     analysisError: '❌ **Wystąpił błąd podczas analizy zdjęcia**',
     roleError: '⚠️ **Błąd podczas przyznawania roli**',

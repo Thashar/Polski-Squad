@@ -14,8 +14,8 @@ const { Options } = require('discord.js');
  *   - członkowie serwera zostają w cache (potrzebni do ról, nicków, uprawnień),
  *     usuwany jest tylko wpis samego bota po godzinie bezczynności — nie dotyczy
  *     to zwykłych członków
- *   - wiadomości starsze niż godzina są sprzątane, ale boty i tak pobierają
- *     starsze wiadomości przez `fetch()`, a nie z cache
+ *   - wiadomości starsze niż 15 minut są sprzątane (co 30 minut), ale boty i tak
+ *     pobierają starsze wiadomości przez `fetch()`, a nie z cache
  *   - reakcje i presence nie są nigdzie odczytywane z cache
  *
  * ⚠️ NIE ograniczamy `GuildMemberManager` ani `UserManager` limitem rozmiaru —
@@ -28,7 +28,7 @@ const { Options } = require('discord.js');
 const sweepers = {
     ...Options.DefaultSweeperSettings,
 
-    // Wiadomości starsze niż godzina; sprawdzanie co 30 minut
+    // Wiadomości starsze niż 15 minut (lifetime 900 s); sprawdzanie co 30 minut
     messages: {
         interval: 1800,
         lifetime: 900

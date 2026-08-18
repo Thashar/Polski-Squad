@@ -88,7 +88,9 @@ module.exports = {
     
     // Konfiguracja plików
     files: {
-        maxSize: 8 * 1024 * 1024, // 8MB
+        // Limit sprawdzany PRZED pobraniem (rozmiar z metadanych załącznika Discorda)
+        // oraz twardo w trakcie pobierania — patrz `downloadFile()` w `utils/helpers.js`
+        maxSize: 5 * 1024 * 1024, // 5MB
         supportedTypes: ['image/']
     },
     

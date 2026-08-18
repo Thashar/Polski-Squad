@@ -143,17 +143,20 @@ class RoleKickingService {
         const kick48h = 48 * 60 * 60 * 1000; // 48 godzin w ms
         const usersToKick = [];
 
-        logger.info(`🕐 Sprawdzanie użytkowników - obecny czas: ${new Date(now).toISOString()}`);
-        logger.info(`⏰ Próg kickowania: ${kick48h / (60 * 60 * 1000)}h = ${kick48h}ms`);
+        // ⚠️ Logujemy ZBIORCZO, jedną linią. Wcześniej każdy monitorowany dawał dwie linie
+        // przy KAŻDYM przebiegu crona — przy kilkudziesięciu oczekujących zapychało to
+        // kolejkę webhooka logów (twardy limit 500 wpisów, porzuca najstarsze), czyli
+        // wypychało z niej logi pozostałych ośmiu botów.
+        const podsumowanie = [];
 
         for (const [userId, userData] of Object.entries(rekruterData)) {
             const timeSinceJoin = now - userData.joinedAt;
             const hoursWaiting = (timeSinceJoin / (60 * 60 * 1000)).toFixed(1);
-            
-            logger.info(`👤 Użytkownik ${userId}: czeka ${hoursWaiting}h (${timeSinceJoin}ms od ${new Date(userData.joinedAt).toISOString()})`);
-            
-            if (timeSinceJoin >= kick48h) {
-                logger.info(`🎯 Użytkownik ${userId} kwalifikuje się do kicka`);
+            const kwalifikuje = timeSinceJoin >= kick48h;
+
+            podsumowanie.push(`${userId}:${hoursWaiting}h${kwalifikuje ? '🎯' : ''}`);
+
+            if (kwalifikuje) {
                 usersToKick.push({
                     userId,
                     guildId: userData.guildId,
@@ -162,6 +165,10 @@ class RoleKickingService {
                     warned24h: userData.warned24h
                 });
             }
+        }
+
+        if (podsumowanie.length > 0) {
+            logger.info(`🕐 Monitorowani (próg ${kick48h / (60 * 60 * 1000)}h, 🎯 = do kicka): ${podsumowanie.join(', ')}`);
         }
 
         return usersToKick;
@@ -189,11 +196,10 @@ class RoleKickingService {
             // Sprawdź czy nadal nie ma ról (ostatnia kontrola)
             const hasRoles = member.roles.cache.size > 1;
             const roleNames = member.roles.cache.map(role => role.name).filter(name => name !== '@everyone');
-            
-            logger.info(`🔍 Sprawdzanie ról użytkownika ${member.user.tag}:`);
-            logger.info(`📊 Liczba ról: ${member.roles.cache.size} (włączając @everyone)`);
-            logger.info(`📝 Role: ${roleNames.length > 0 ? roleNames.join(', ') : 'Brak ról poza @everyone'}`);
-            
+
+            // Jedna linia zamiast trzech — patrz komentarz w `getUsersForKick`
+            logger.info(`🔍 ${member.user.tag}: ${roleNames.length > 0 ? `role [${roleNames.join(', ')}]` : 'brak ról poza @everyone'}`);
+
             if (hasRoles) {
                 logger.info(`✅ Użytkownik ${member.user.tag} ma role - anulowanie kicka`);
                 // Usuń z monitorowania Rekrutera, skoro ma role

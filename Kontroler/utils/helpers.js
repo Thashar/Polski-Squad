@@ -26,18 +26,32 @@ function formatMessage(template, params = {}) {
  * @param {string} url - URL pliku
  * @param {string} filePath - Ścieżka docelowa
  */
-async function downloadFile(url, filePath) {
+async function downloadFile(url, filePath, maxBytes = 5 * 1024 * 1024) {
     logger.info(`Pobieranie pliku z: ${url}`);
-    
+
     try {
         const response = await fetch(url);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
+        // ⚠️ Twardy limit NA POBRANIU, niezależny od deklarowanego rozmiaru załącznika.
+        // Wywołujący sprawdza `attachment.size` z metadanych Discorda, ale to tylko
+        // deklaracja — cała treść i tak ląduje w pamięci przez `arrayBuffer()`.
+        // Ten strażnik odcina zarówno kłamiący nagłówek, jak i każdą inną ścieżkę
+        // wywołania, która zapomniałaby sprawdzić rozmiar przed pobraniem.
+        const deklarowany = Number(response.headers.get('content-length'));
+        if (Number.isFinite(deklarowany) && deklarowany > maxBytes) {
+            throw new Error(`Plik za duży: ${(deklarowany / 1024 / 1024).toFixed(2)} MB (limit ${(maxBytes / 1024 / 1024).toFixed(0)} MB)`);
+        }
+
         const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > maxBytes) {
+            throw new Error(`Plik za duży: ${(buffer.byteLength / 1024 / 1024).toFixed(2)} MB (limit ${(maxBytes / 1024 / 1024).toFixed(0)} MB)`);
+        }
+
         await fs.promises.writeFile(filePath, Buffer.from(buffer));
-        
+
         logger.info(`Plik zapisany: ${path.basename(filePath)}`);
         return filePath;
     } catch (error) {
@@ -130,11 +144,27 @@ function calculateSimilarity(str1, str2) {
  * @param {number} threshold - Próg podobieństwa (0-1)
  * @returns {boolean} - Czy nicki są podobne
  */
+/**
+ * Normalizacja nicku do porównań — IDENTYCZNA jak `analysisService.normalizeNick()`.
+ *
+ * ⚠️ Wcześniej było tu `[^a-z0-9]`, czyli polskie znaki wypadały CAŁKOWICIE:
+ * „Żółw" zwijało się do „w", a „Ćma" do „ma". Przy progu podobieństwa 0.4 groziło
+ * to dopasowaniem wyniku do niewłaściwego gracza. Faza 1 dopasowania
+ * (`analysisService`) od zawsze zachowywała `ąćęłńóśźż` — te dwie ścieżki po prostu
+ * się rozjeżdżały.
+ *
+ * To NIE ma związku z Tesseractem: normalizacja działa na tekście JUŻ odczytanym
+ * przez OCR (dziś AI), a nie na rozpoznawaniu znaków z obrazu.
+ */
+function normalizeNick(value) {
+    return (value || '').toLowerCase().replace(/[^a-z0-9ąćęłńóśźż]/g, '');
+}
+
 function isSimilarNick(nick1, nick2, threshold = 0.4) {
-    const normalized1 = nick1.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normalized2 = nick2.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalized1 = normalizeNick(nick1);
+    const normalized2 = normalizeNick(nick2);
     const similarity = calculateSimilarity(normalized1, normalized2);
-    
+
     logger.info(`Podobieństwo "${normalized1}" vs "${normalized2}": ${(similarity * 100).toFixed(1)}%`);
     return similarity >= threshold;
 }
@@ -145,5 +175,6 @@ module.exports = {
     cleanupFiles,
     safeEditMessage,
     calculateSimilarity,
+    normalizeNick,
     isSimilarNick
 };

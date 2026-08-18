@@ -284,7 +284,8 @@ class MessageHandler {
         
         await fs.mkdir(this.config.ocr.tempDir, { recursive: true });
         
-        return await downloadFile(attachment.url, filePath);
+        // Limit przekazywany jawnie — ten sam, który sprawdzany jest przed pobraniem
+        return await downloadFile(attachment.url, filePath, this.config.files.maxSize);
     }
 
     /**

@@ -381,7 +381,7 @@ const stats = nicknameManager.getStats();
 - 🏷️ **Standaryzowane nazewnictwo**:
   - Format ogólny: `[BOTNAME][ rrrr-mm-dd hh:mm:ss ][]`
   - Format Kontrolera: `[KONTROLER][ rrrr-mm-dd hh:mm:ss ][daily/cx]`
-- 🔄 **Automatyczna rotacja** - Max 400 plików z czyszczeniem (100 per typ bota)
+- 🔄 **Automatyczna rotacja** - Max 400 plików ŁĄCZNIE w `processed_ocr/`, nie per bot. Limit jest wspólny dla wszystkich botów OCR: przy przekroczeniu kasowane są najstarsze pliki niezależnie od tego, który bot je utworzył. Osobno sprzątane są osierocone pliki `temp_*` starsze niż 10 minut
 - 🐛 **Tryb debug** - Przełączanie przez komendę `/ocr-debug`
 - 🔧 **Wielojęzyczne wsparcie** - Polski + angielski dla Tesseract
 
