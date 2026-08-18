@@ -707,9 +707,14 @@ const istnieje = !!dane && Array.isArray(dane.players) && dane.players.length > 
 
 Realny przykład z produkcji: po migracji `checkPhase1DataExists` **zawsze** zwracało `exists: true`, więc `/faza1` pytał o nadpisanie danych, których nie było. To samo dotknęło `getPhase1Results` (pusty obiekt zamiast `null`).
 
-**2. Kształt wartości domyślnej musi pasować do użycia.**
+⚠️ **Sprawdzaj po polu, które NAPRAWDĘ jest w pliku.** Ten sam warunek skopiowany na
+podobną funkcję potrafi wyzerować poprawne dane. Realny przykład: pliki Fazy 1 mają
+`players` na najwyższym poziomie, a Fazy 2 — `summary.players` i `rounds`. Warunek
+`Array.isArray(dane.players)` przeniesiony żywcem z fazy 1 na fazy 2 spowodował, że
+`getPhase2Results` zwracało `null` dla każdego istniejącego tygodnia, a `/faza2`
+przestało ostrzegać przed nadpisaniem. Kształt pliku sprawdź w funkcji ZAPISUJĄCEJ.
 
-**Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji.
+**2. Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji.
 
 ---
 

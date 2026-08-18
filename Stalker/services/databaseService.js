@@ -1049,6 +1049,41 @@ class DatabaseService {
     }
 
     /**
+     * Wyciąga listę graczy z pliku tygodnia Fazy 2.
+     * ⚠️ Faza 2 ma INNY kształt pliku niż Faza 1: `savePhase2Results` zapisuje
+     * graczy w `summary.players`, a nie w `players` na najwyższym poziomie.
+     * Starsze wpisy trzymają `players` bezpośrednio — obsługujemy oba warianty.
+     */
+    getPhase2Players(weekData) {
+        if (!weekData || typeof weekData !== 'object') {
+            return [];
+        }
+
+        if (Array.isArray(weekData.summary?.players)) {
+            return weekData.summary.players;
+        }
+
+        if (Array.isArray(weekData.players)) {
+            return weekData.players;
+        }
+
+        return [];
+    }
+
+    /**
+     * Czy plik tygodnia Fazy 2 zawiera jakiekolwiek dane graczy
+     * (podsumowanie albo choć jedna runda)
+     */
+    hasPhase2Players(weekData) {
+        if (this.getPhase2Players(weekData).length > 0) {
+            return true;
+        }
+
+        return Array.isArray(weekData?.rounds)
+            && weekData.rounds.some(runda => Array.isArray(runda?.players) && runda.players.length > 0);
+    }
+
+    /**
      * Sprawdza czy dane Phase 2 istnieją
      * NOWA WERSJA - sprawdza czy plik istnieje
      */
@@ -1059,8 +1094,10 @@ class DatabaseService {
             // ⚠️ NIE polegamy na wyjątku — `store.getOrLoad` przy braku pliku zwraca
             // wartość domyślną zamiast rzucać ENOENT (inaczej niż dawne `fs.readFile`).
             // O istnieniu danych decyduje ZAWARTOŚĆ: plik bez graczy = brak danych.
+            // Faza 2 ma INNY kształt niż faza 1: gracze leżą w `summary.players`
+            // (`savePhase2Results`), a nie w `players` na najwyższym poziomie.
             const data = await store.getOrLoad(filePath, () => null);
-            const maDane = !!data && Array.isArray(data.players) && data.players.length > 0;
+            const maDane = !!data && this.hasPhase2Players(data);
 
             return maDane ? { exists: true, data } : { exists: false };
         } catch {
@@ -1171,7 +1208,7 @@ class DatabaseService {
 
         try {
             const clanData = await store.getOrLoad(filePath, () => ({}));
-            const players = clanData.summary?.players || clanData.players || [];
+            const players = this.getPhase2Players(clanData);
 
             const scores = players.map(p => p.score).sort((a, b) => b - a);
             const top30Sum = scores.slice(0, 30).reduce((sum, score) => sum + score, 0);
@@ -1198,9 +1235,11 @@ class DatabaseService {
 
         try {
             // Brak pliku daje `null` (jak dawniej wyjątek ENOENT), a nie pusty obiekt —
-            // wywołujący sprawdzają `if (!weekData)` i pusty obiekt przechodziłby dalej
+            // wywołujący sprawdzają `if (!weekData)` i pusty obiekt przechodziłby dalej.
+            // Struktura fazy 2 to `{ rounds, summary: { players } }` — sprawdzanie
+            // `dane.players` (jak w fazie 1) zerowałoby każdy prawidłowy plik
             const dane = await store.getOrLoad(filePath, () => null);
-            return (dane && Array.isArray(dane.players)) ? dane : null;
+            return this.hasPhase2Players(dane) ? dane : null;
         } catch (error) {
             // Plik nie istnieje
             return null;
