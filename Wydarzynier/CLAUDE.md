@@ -99,6 +99,7 @@
   - Panel kontrolny na dole z przyciskami zarządzania
 - **Przypomnienia jednorazowe NIE kasują szablonu** - po wyzwoleniu (lub wygaśnięciu wstrzymanego/wznowionego) usuwany jest tylko wpis `scheduled` i embed z tablicy, a szablon zostaje do ponownego użycia (`harmonogram.js` → `checkScheduled`, `przypomnieniaMenedzer.js` → `resumeScheduled`). Szablon kasuje wyłącznie ręczne potwierdzenie usunięcia (`handleConfirmDeleteTemplate`)
 - **Harmonogram:** Sprawdzanie co 30s i auto-wysyłanie przypomnień + czyszczenie starych wiadomości typu 1 (po 23h 50min)
+  - **Blokada ponownego wejścia (`sprawdzanieWToku`):** `setInterval` nie czeka na zakończenie poprzedniego przebiegu, a jeden przebieg robi sporo I/O i przy rate limicie Discorda potrafi przekroczyć 30 s. Bez blokady kolejny tick wchodził na niedokończony poprzedni — oba widziały `now >= nextTrigger` tego samego wpisu, zanim `updateNextTrigger()` zdążył go przesunąć, i przypomnienie (często z pingiem @everyone) szło DWA razy
 - **Strefa Czasowa:** Hardcoded `Europe/Warsaw` (brak możliwości zmiany przez UI)
 
 **Funkcjonalność Eventów:**
@@ -167,6 +168,7 @@ ROBOT3_ACTIVATION_CHANNEL=channel_id               # Kanał z przyciskiem aktywa
 - **Klasyfikacja błędów** w `utils/helpers.js`:
   - `isGoneError(error)` - zasób przepadł i nie ma czego ponawiać: `10003` Unknown Channel, `10008` Unknown Message, `10015` Unknown Webhook, `10062` Unknown interaction
   - `isNetworkError(error)` - zanik łączności (`EAI_AGAIN`, `ENOTFOUND`, `ECONNRESET`, `ETIMEDOUT`, …, także w `error.cause.code`)
+- **Przywracanie timerów po restarcie (`timerService.restoreLobbyTimer`)** uzbraja je na ZAPISANYCH terminach (`warningTime`/`deleteTime`) zamiast liczyć od nowa z `createdAt + config.lobby.maxDuration`. Skrócony timer pełnego lobby (`createFullLobbyTimer`, także po kliknięciu „Przedłuż o 15 min”) ma własną długość `fullLobbyDuration` i flagę `isFullLobby` — flaga była zapisywana i wczytywana, ale przy przywracaniu ignorowana. Dziś obie stałe to 15 minut, więc wynik wychodził przypadkiem taki sam; zmiana `maxDuration` cicho wydłużyłaby po restarcie każde pełne lobby
 - **Sprzątanie stanu lokalnego ZAWSZE w `finally`** - `deleteLobby` (w `interactionHandlers.js` **i** `timerService.js`) wykonuje `removeLobby()` + `removeTimer()` niezależnie od tego, czy kasowanie po stronie Discorda się powiodło. Bez tego przerwane w połowie usuwanie zostawiało lobby w pamięci i **żywy timer**, który kilka minut później strzelał ostrzeżeniem w nieistniejący wątek (`10003 Unknown Channel`)
 - **Callbacki timerów pobierają wątek na świeżo** - `sendLobbyWarning(lobbyId, sharedState)` (wspólne dla `/party`, pełnego lobby i timerów przywróconych po restarcie) czyta `threadId` z aktualnego stanu lobby zamiast trzymać obiekt wątku w domknięciu sprzed kilkunastu minut
 - **Osierocone lobby domykają się same** - gdy ostrzeżenie trafi na `isGoneError`, callback usuwa lobby i timer zamiast logować błąd w kółko

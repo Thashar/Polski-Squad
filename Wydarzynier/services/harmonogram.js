@@ -10,6 +10,7 @@ class Harmonogram {
         this.eventMenedzer = eventMenedzer;
         this.listaEventowMenedzer = listaEventowMenedzer;
         this.checkInterval = null;
+        this.sprawdzanieWToku = false;
     }
 
     initialize() {
@@ -31,16 +32,32 @@ class Harmonogram {
     }
 
     async checkNotifications() {
-        const now = new Date();
+        // ⚠️ `setInterval` nie czeka na zakończenie poprzedniego przebiegu. Jeden przebieg
+        // robi sporo I/O (fetch kanałów, wysyłka, kasowanie wiadomości) i przy rate limicie
+        // Discorda potrafi przekroczyć 30 s. Bez tej blokady kolejny tick wchodził na
+        // niedokończony poprzedni: oba widziały `now >= nextTrigger` tego samego wpisu,
+        // zanim `updateNextTrigger()` zdążył go przesunąć — i przypomnienie (często
+        // z pingiem @everyone) szło DWA razy.
+        if (this.sprawdzanieWToku) {
+            this.logger.warn('Poprzednie sprawdzanie powiadomień wciąż trwa - pomijam ten cykl');
+            return;
+        }
+        this.sprawdzanieWToku = true;
 
-        // Sprawdź zaplanowane przypomnienia
-        await this.checkScheduled(now);
+        try {
+            const now = new Date();
 
-        // Sprawdź eventy
-        await this.checkEvents(now);
+            // Sprawdź zaplanowane przypomnienia
+            await this.checkScheduled(now);
 
-        // Sprawdź wiadomości do usunięcia (typ 1 - ustandaryzowane, 23h 50min)
-        await this.checkMessagesToDelete();
+            // Sprawdź eventy
+            await this.checkEvents(now);
+
+            // Sprawdź wiadomości do usunięcia (typ 1 - ustandaryzowane, 23h 50min)
+            await this.checkMessagesToDelete();
+        } finally {
+            this.sprawdzanieWToku = false;
+        }
     }
 
     async checkScheduled(now) {

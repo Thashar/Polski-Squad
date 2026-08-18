@@ -251,9 +251,9 @@ class TimerService {
                     }
                 };
 
-                // Usuń stary timer z mapy i utwórz nowy
+                // Usuń stary timer z mapy i uzbrój nowy na ZAPISANYCH terminach
                 this.activeTimers.delete(lobbyId);
-                await this.createLobbyTimer(lobbyId, timerData.createdAt, warningCallback, deleteCallback);
+                await this.restoreLobbyTimer(timerData, warningCallback, deleteCallback);
             }
 
             await this.saveTimersToFile();
@@ -262,6 +262,62 @@ class TimerService {
         } catch (error) {
             logger.error('❌ Błąd podczas przywracania timerów:', error);
         }
+    }
+
+    /**
+     * Uzbraja timery lobby po restarcie na podstawie ZAPISANYCH terminów.
+     *
+     * ⚠️ Wcześniej przywracanie wołało `createLobbyTimer(lobbyId, timerData.createdAt, …)`,
+     * które liczy terminy od nowa jako `createdAt + config.lobby.maxDuration`. Skrócony timer
+     * pełnego lobby (`createFullLobbyTimer`, także po kliknięciu „Przedłuż o 15 min") ma własną
+     * długość `fullLobbyDuration` i zapisaną flagę `isFullLobby` — flaga była zapisywana
+     * i wczytywana, ale przy przywracaniu ignorowana.
+     *
+     * Dziś obie stałe wynoszą 15 minut, więc wynik wychodzi przypadkiem taki sam. Zmiana
+     * `maxDuration` w konfiguracji cicho wydłużyłaby po restarcie każde pełne lobby.
+     * Odtwarzanie z zapisanych `warningTime`/`deleteTime` jest odporne na taką zmianę.
+     *
+     * @param {Object} timerData - wpis z pliku (lobbyId, warningTime, deleteTime, …)
+     */
+    async restoreLobbyTimer(timerData, warningCallback, deleteCallback) {
+        const { lobbyId } = timerData;
+        const now = Date.now();
+
+        const deleteDelay = timerData.deleteTime - now;
+        if (deleteDelay <= 0) {
+            logger.info(`⏰ Timer lobby ${lobbyId} wygasł podczas przestoju - usuwanie od razu`);
+            if (deleteCallback) await deleteCallback();
+            return;
+        }
+
+        const przywrocony = {
+            lobbyId,
+            createdAt: timerData.createdAt,
+            warningTime: timerData.warningTime,
+            deleteTime: timerData.deleteTime,
+            warningExecuted: timerData.warningExecuted || false,
+            isFullLobby: timerData.isFullLobby || false
+        };
+
+        const warningDelay = timerData.warningTime - now;
+        if (warningDelay > 0 && !przywrocony.warningExecuted) {
+            przywrocony.warningTimer = setTimeout(async () => {
+                logger.info(`⚠️ Wysyłanie ostrzeżenia dla lobby ${lobbyId}`);
+                przywrocony.warningExecuted = true;
+                await this.saveTimersToFile();
+                if (warningCallback) await warningCallback(lobbyId);
+            }, warningDelay);
+        }
+
+        przywrocony.deleteTimer = setTimeout(async () => {
+            logger.info(`🗑️ Usuwanie lobby ${lobbyId} - czas minął`);
+            if (deleteCallback) await deleteCallback();
+            this.removeTimer(lobbyId);
+        }, deleteDelay);
+
+        this.activeTimers.set(lobbyId, przywrocony);
+
+        logger.info(`⏰ Przywrócono timer lobby ${lobbyId}${przywrocony.isFullLobby ? ' (pełne lobby)' : ''} - usunięcie za ${Math.round(deleteDelay / 60000)}min`);
     }
 
     /**
