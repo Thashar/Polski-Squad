@@ -389,7 +389,7 @@ class AutoModerationService {
      */
     loadViolationCounts() {
         try {
-            if (!fs.existsSync(this.violationCountsFile)) return;
+            // Jak wyżej — `existsSync` jest zbędny i szkodliwy (patrz `loadActiveMutes`)
             const data = store.getSync(this.violationCountsFile, () => ({}));
             const now = Date.now();
             const windowMs = this.config.autoModeration.violationWindow * 60 * 1000;
@@ -428,7 +428,13 @@ class AutoModerationService {
      */
     loadActiveMutes() {
         try {
-            if (!fs.existsSync(this.activeMutesFile)) return [];
+            // ⚠️ Bez `existsSync` — `store.getSync` sam oddaje pustą listę, gdy pliku nie ma.
+            // Ten strażnik nie tylko dublował odczyt z dysku, ale potrafił ZGUBIĆ dane:
+            // `store.setSync` zapisuje plik W TLE, atomowo (plik tymczasowy + rename), więc
+            // tuż po zapisie plik docelowy przez moment nie istnieje. Trafienie w to okno
+            // (np. w pętli `removeMute` w `initializePersistentMutes`) zwracało pustą listę,
+            // a następny `saveActiveMutes()` kasował WSZYSTKIE pozostałe wyciszenia —
+            // z ich zapisem o czasie odmute włącznie, czyli wyciszenie na stałe.
             return store.getSync(this.activeMutesFile, () => ([]));
         } catch (error) {
             this.logger.error(`Błąd podczas wczytywania aktywnych mute'ów: ${error.message}`);
