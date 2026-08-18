@@ -2,6 +2,13 @@
 process.env.DOTENV_NO_MESSAGE = 'true';
 process.noDeprecation = true;
 
+// Monitor ruchu dyskowego MUSI być pierwszy — podmienia metody `fs`, więc musi
+// zdążyć przed załadowaniem botów i bibliotek (sharp, tesseract, archiver).
+// Liczy KAŻDY odczyt i zapis w procesie: screeny OCR, media, traineddata, logi,
+// archiwa backupu, nie tylko pliki JSON. Dane zasilają komendę /io w Muteuszu.
+const diskMonitor = require('./utils/diskMonitor');
+diskMonitor.patch();
+
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 const { scheduler } = require('./backup-scheduler');
 const GitAutoFix = require('./utils/gitAutoFix');
@@ -315,12 +322,22 @@ async function main() {
     checkDiskOnStartup();
     await startAllBots();
 
-    // Cykliczny raport ruchu dyskowego — widać, co i ile realnie czyta/zapisuje
-    // na dysku po przejściu botów na cache (utils/jsonStore).
+    // Cykliczny raport CAŁEGO ruchu dyskowego procesu (nie tylko plików JSON).
     // Interwał w sekundach: DISK_REPORT_INTERVAL (domyślnie 60), 0 = wyłączony.
     const raportSek = Number(process.env.DISK_REPORT_INTERVAL ?? 60);
     if (raportSek > 0) {
-        jsonStore.startReporting(raportSek * 1000);
+        const raportLogger = createBotLogger('Dysk');
+        setInterval(() => {
+            const w = diskMonitor.collectWindow();
+            if (!w) return;
+            const t = diskMonitor.getReport(1);
+            raportLogger.info(
+                `💾 (${w.seconds}s): odczyt ${w.reads} (${diskMonitor.formatBytes(w.readBytes)}), ` +
+                `zapis ${w.writes} (${diskMonitor.formatBytes(w.writeBytes)}) ` +
+                `— od startu: odczyt ${diskMonitor.formatBytes(t.readBytes)}, zapis ${diskMonitor.formatBytes(t.writeBytes)}`
+            );
+        }, raportSek * 1000).unref();
+        logger.info(`📊 Raport ruchu dyskowego włączony (co ${raportSek}s, minuty bez I/O pomijane)`);
     }
 
     // Uruchom scheduler backupów (tylko w produkcji)

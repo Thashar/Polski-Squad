@@ -61,6 +61,11 @@ class JsonStore {
         // Okno raportowania — zbiera ruch dyskowy od ostatniego raportu (patrz startReporting)
         this._window = this._emptyWindow();
         this._reportTimer = null;
+
+        // Statystyki narastające per plik, od startu procesu — źródło danych dla komendy /io
+        // etykieta pliku -> { reads, readBytes, writes, writeBytes, lastRead, lastWrite }
+        this._perFile = new Map();
+        this._startedAt = Date.now();
     }
 
     _emptyWindow() {
@@ -80,12 +85,33 @@ class JsonStore {
         if (kind === 'reads') this._stats.readBytes += bytes;
         else this._stats.writeBytes += bytes;
 
-        const bucket = this._window[kind];
         const label = this._label(key);
+
+        const bucket = this._window[kind];
         const entry = bucket.get(label) || { count: 0, bytes: 0 };
         entry.count++;
         entry.bytes += bytes;
         bucket.set(label, entry);
+
+        // statystyka narastająca per plik (dla /io)
+        let f = this._perFile.get(label);
+        if (!f) {
+            f = { reads: 0, readBytes: 0, writes: 0, writeBytes: 0, lastRead: null, lastWrite: null };
+            this._perFile.set(label, f);
+        }
+        if (kind === 'reads') {
+            f.reads++; f.readBytes += bytes; f.lastRead = Date.now();
+        } else {
+            f.writes++; f.writeBytes += bytes; f.lastWrite = Date.now();
+        }
+    }
+
+    /**
+     * Wyciąga nazwę bota/obszaru ze ścieżki: "EndersEcho/data/guilds/1/ranking.json" → "EndersEcho".
+     * Pliki spoza katalogów botów lądują jako "shared_data", "logs" itd.
+     */
+    _owner(label) {
+        return label.split('/')[0] || 'inne';
     }
 
     /**
@@ -540,6 +566,63 @@ class JsonStore {
             clearInterval(this._reportTimer);
             this._reportTimer = null;
         }
+    }
+
+    /**
+     * Pełny raport I/O od startu procesu — dane dla komendy `/io` w Muteuszu.
+     *
+     * @param {number} [limit=10] ile pozycji w każdym zestawieniu
+     */
+    getIOReport(limit = 10) {
+        const pliki = [...this._perFile.entries()].map(([label, f]) => ({
+            label,
+            owner: this._owner(label),
+            ...f,
+            ops: f.reads + f.writes,
+            bytes: f.readBytes + f.writeBytes
+        }));
+
+        // agregacja per bot/obszar
+        const wgWlasciciela = new Map();
+        for (const p of pliki) {
+            const a = wgWlasciciela.get(p.owner) || { owner: p.owner, reads: 0, readBytes: 0, writes: 0, writeBytes: 0, files: 0 };
+            a.reads += p.reads; a.readBytes += p.readBytes;
+            a.writes += p.writes; a.writeBytes += p.writeBytes;
+            a.files++;
+            wgWlasciciela.set(p.owner, a);
+        }
+
+        const sort = (arr, key) => [...arr].sort((a, b) => b[key] - a[key]);
+        const czytane = pliki.filter(p => p.reads > 0);
+        const zapisywane = pliki.filter(p => p.writes > 0);
+
+        return {
+            uptimeMs: Date.now() - this._startedAt,
+            odczyty: this._stats.diskReads,
+            odczytBajty: this._stats.readBytes,
+            zapisy: this._stats.writes,
+            zapisBajty: this._stats.writeBytes,
+            zPamieci: this._stats.cacheHits,
+            bledyZapisu: this._stats.writeErrors,
+            bledyOdczytu: this._stats.parseErrors,
+            plikowWCache: this._cache.size,
+            plikowZRuchem: pliki.length,
+
+            // zestawienia
+            topWaga: sort(pliki, 'bytes').slice(0, limit),              // najcięższe łącznie
+            topOdczytIlosc: sort(czytane, 'reads').slice(0, limit),     // najczęściej ładowane
+            topOdczytWaga: sort(czytane, 'readBytes').slice(0, limit),  // najcięższe w odczycie
+            topZapisIlosc: sort(zapisywane, 'writes').slice(0, limit),  // najczęściej zapisywane
+            topZapisWaga: sort(zapisywane, 'writeBytes').slice(0, limit),
+            wgBota: sort([...wgWlasciciela.values()], 'writeBytes')
+                .map(a => ({ ...a, bytes: a.readBytes + a.writeBytes, ops: a.reads + a.writes }))
+                .sort((a, b) => b.bytes - a.bytes)
+        };
+    }
+
+    /** Formatuje bajty do postaci czytelnej dla człowieka (publiczne — używa /io). */
+    formatBytes(bytes) {
+        return this._fmtBytes(bytes);
     }
 
     /**

@@ -651,6 +651,22 @@ store.getStats();                         // diskReads / cacheHits / hitRate
 store.startReporting(60000);              // cykliczny raport ruchu dyskowego do logu
 ```
 
+### 7. Monitor Ruchu Dyskowego (cały proces)
+
+**Plik:** `utils/diskMonitor.js`
+
+Podmienia metody modułu `fs`, żeby policzyć **KAŻDY** odczyt i zapis w procesie — nie tylko pliki JSON obsługiwane przez store. Obejmuje też operacje wykonywane wewnątrz bibliotek (sharp, tesseract.js, archiver, discord.js przy wysyłce załącznika).
+
+**⚠️ Musi być załadowany JAKO PIERWSZY w głównym `index.js`** — przed botami i bibliotekami. Destrukturyzacja typu `const { readFile } = require('fs').promises` wykonana przed patchem ominęłaby licznik (obecnie nikt tak nie robi, ale to pułapka do zapamiętania).
+
+Patchowane: `readFileSync`, `writeFileSync`, `promises.readFile/writeFile/appendFile/copyFile`, `createReadStream`, `createWriteStream`.
+
+**`appendFileSync` NIE jest patchowany celowo** — Node implementuje go przez `writeFileSync`, więc opakowanie obu liczyłoby każdy dopisany log dwa razy. Wariant asynchroniczny zachowuje się odwrotnie (`promises.appendFile` nie przechodzi przez `writeFile`), dlatego tam patch jest potrzebny.
+
+**Kategoryzacja plików:** obrazy OCR · cache mediów · OCR traineddata · obrazy · archiwa · logi · dane JSON · node_modules · inne. Dzięki temu widać proporcje — pliki JSON to zwykle ułamek procenta wolumenu, ciężar leżą screeny OCR i media.
+
+**Podgląd:** komenda `/io` w Muteuszu (administrator) — patrz `Muteusz/CLAUDE.md`.
+
 #### Raport ruchu dyskowego (co minutę, w logu)
 
 Uruchamiany w głównym `index.js` po starcie botów. Jedna zbiorcza linia:

@@ -5,6 +5,7 @@ const WarningService = require('../services/warningService');
 const ReportStatsService = require('../services/reportStatsService');
 const RestoreBackupHandler = require('./restoreBackupHandler');
 const store = require('../../utils/jsonStore');
+const diskMonitor = require('../../utils/diskMonitor');
 
 const logger = createBotLogger('Muteusz');
 
@@ -342,6 +343,23 @@ class InteractionHandler {
                         .setRequired(false)
                 ),
 
+            new SlashCommandBuilder()
+                .setName('io')
+                .setDescription('Statystyki odczytu i zapisu na dysku — wszystkie pliki wszystkich botów')
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+                .addStringOption(option =>
+                    option.setName('widok')
+                        .setDescription('Co pokazać')
+                        .setRequired(false)
+                        .addChoices(
+                            { name: 'Podsumowanie (domyślnie)', value: 'summary' },
+                            { name: 'Boty i obszary', value: 'bots' },
+                            { name: 'Rodzaje plików', value: 'kinds' },
+                            { name: 'Pliki — odczyt', value: 'reads' },
+                            { name: 'Pliki — zapis', value: 'writes' }
+                        )
+                ),
+
             // Context menu: prawy klik na wiadomość → Aplikacje
             new ContextMenuCommandBuilder()
                 .setName('Zgłoś wiadomość')
@@ -449,6 +467,9 @@ class InteractionHandler {
                     break;
                 case 'zgłoś':
                     await this.handleZglosCommand(interaction);
+                    break;
+                case 'io':
+                    await this.handleIOCommand(interaction);
                     break;
             }
         } else if (interaction.isMessageContextMenuCommand()) {
@@ -2893,6 +2914,179 @@ class InteractionHandler {
      * Obsługuje komendę chaos mode
      * @param {CommandInteraction} interaction - Interakcja komendy
      */
+    /**
+     * /io — statystyki ruchu dyskowego zebrane przez utils/jsonStore.
+     *
+     * Store obsługuje pliki JSON WSZYSTKICH 9 botów (jeden proces = jeden cache),
+     * więc raport jest globalny, nie tylko o Muteuszu. Liczby narastają od startu
+     * procesu — po restarcie zaczynają się od zera.
+     */
+    async handleIOCommand(interaction) {
+        await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /io`, interaction);
+
+        if (!interaction.member.permissions.has('Administrator')) {
+            await interaction.reply({
+                content: '❌ Tylko administratorzy mogą używać tej komendy!',
+                flags: MessageFlags.Ephemeral
+            });
+            return;
+        }
+
+        const widok = interaction.options.getString('widok') || 'summary';
+        const r = diskMonitor.getReport(10);        // CAŁY ruch dyskowy procesu
+        const cache = store.getStats();              // skuteczność cache JSON
+        const b = (x) => diskMonitor.formatBytes(x);
+
+        const godziny = Math.floor(r.uptimeMs / 3600000);
+        const minuty = Math.floor((r.uptimeMs % 3600000) / 60000);
+        const czas = godziny > 0 ? `${godziny}h ${minuty}min` : `${minuty}min`;
+
+        // Ile odczytów obsłużyła pamięć zamiast dysku
+        const wszystkieOdczyty = cache.cacheHits + cache.diskReads;
+        const trafienia = wszystkieOdczyty > 0 ? ((cache.cacheHits / wszystkieOdczyty) * 100).toFixed(1) : '100.0';
+
+        // Średnie tempo — najlepiej pokazuje realne obciążenie dysku
+        const tempo = `${b(r.bajtyNaSekunde)}/s`;
+
+        const embed = new EmbedBuilder()
+            .setColor(r.reads > r.writes * 2 ? '#e67e22' : '#3498db')
+            .setTitle('💾 Ruch dyskowy — wszystkie pliki, wszystkie boty')
+            .setFooter({ text: `Cały ruch dyskowy procesu od startu (${czas}) • ${r.plikow} plików` })
+            .setTimestamp();
+
+        if (widok === 'summary') {
+            embed.addFields(
+                {
+                    name: '📖 Odczyt z dysku',
+                    value: `**${r.reads}** operacji\n**${b(r.readBytes)}** łącznie`,
+                    inline: true
+                },
+                {
+                    name: '✏️ Zapis na dysk',
+                    value: `**${r.writes}** operacji\n**${b(r.writeBytes)}** łącznie`,
+                    inline: true
+                },
+                {
+                    name: '⚡ Średnie tempo',
+                    value: `**${tempo}**\nodczyt+zapis`,
+                    inline: true
+                },
+                {
+                    name: '🧠 Obsłużone z pamięci',
+                    value: `**${cache.cacheHits}** odczytów JSON (**${trafienia}%**)\n` +
+                           `tyle razy bot NIE musiał sięgać na dysk`,
+                    inline: false
+                }
+            );
+
+            if (r.topWaga.length > 0) {
+                embed.addFields({
+                    name: '🏋️ Najbardziej obciążające pliki (odczyt + zapis)',
+                    value: r.topWaga.slice(0, 5).map((p, i) =>
+                        `\`${i + 1}.\` **${b(p.bytes)}** — ${p.label}\n` +
+                        `　　odczyt ×${p.reads}, zapis ×${p.writes}`
+                    ).join('\n'),
+                    inline: false
+                });
+            }
+
+            if (cache.writeErrors > 0 || cache.parseErrors > 0) {
+                embed.addFields({
+                    name: '⚠️ Błędy',
+                    value: `zapisu: **${cache.writeErrors}** · odczytu/parsowania: **${cache.parseErrors}**`,
+                    inline: false
+                });
+            }
+
+            embed.setDescription(
+                'Cały ruch dyskowy procesu: screeny OCR, media, dane JSON, logi, archiwa backupu.\n' +
+                'Pozostałe widoki: `Boty i obszary`, `Rodzaje plików`, `Pliki — odczyt`, `Pliki — zapis`'
+            );
+        }
+
+        if (widok === 'bots') {
+            if (r.wgBota.length === 0) {
+                embed.setDescription('Brak ruchu dyskowego od startu procesu.');
+            } else {
+                embed.setDescription('Obciążenie dysku w rozbiciu na boty i obszary danych.');
+                embed.addFields(r.wgBota.slice(0, 10).map((a, i) => ({
+                    name: `${i + 1}. ${a.klucz}`,
+                    value: `**${b(a.bytes)}** łącznie · ${a.files} plik(ów)\n` +
+                           `📖 ${a.reads}× (${b(a.readBytes)}) · ✏️ ${a.writes}× (${b(a.writeBytes)})`,
+                    inline: true
+                })));
+            }
+        }
+
+        if (widok === 'kinds') {
+            embed.setDescription('Obciążenie dysku w rozbiciu na rodzaje plików — pokazuje, co naprawdę waży.');
+
+            if (r.wgKategorii.length === 0) {
+                embed.addFields({ name: 'Brak danych', value: 'Od startu procesu nie było ruchu dyskowego.', inline: false });
+            } else {
+                const suma = r.readBytes + r.writeBytes || 1;
+                embed.addFields(r.wgKategorii.slice(0, 10).map((k, i) => ({
+                    name: `${i + 1}. ${k.klucz}`,
+                    value: `**${b(k.bytes)}** (${((k.bytes / suma) * 100).toFixed(1)}%) · ${k.files} plik(ów)\n` +
+                           `📖 ${k.reads}× (${b(k.readBytes)}) · ✏️ ${k.writes}× (${b(k.writeBytes)})`,
+                    inline: true
+                })));
+            }
+        }
+
+        if (widok === 'reads') {
+            embed.setDescription('Pliki najczęściej ładowane z dysku oraz najcięższe w odczycie.');
+
+            if (r.topOdczytIlosc.length === 0) {
+                embed.addFields({ name: '📖 Odczyt', value: 'Brak odczytów z dysku — wszystko obsłużyła pamięć.', inline: false });
+            } else {
+                embed.addFields(
+                    {
+                        name: '🔁 Najczęściej ładowane',
+                        value: r.topOdczytIlosc.slice(0, 10).map((p, i) =>
+                            `\`${i + 1}.\` **×${p.reads}** — ${p.label} (${b(p.readBytes)})`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '🏋️ Najcięższe w odczycie',
+                        value: r.topOdczytWaga.slice(0, 10).map((p, i) =>
+                            `\`${i + 1}.\` **${b(p.readBytes)}** — ${p.label} (×${p.reads})`
+                        ).join('\n'),
+                        inline: false
+                    }
+                );
+            }
+        }
+
+        if (widok === 'writes') {
+            embed.setDescription('Pliki najczęściej zapisywane oraz najcięższe w zapisie.');
+
+            if (r.topZapisIlosc.length === 0) {
+                embed.addFields({ name: '✏️ Zapis', value: 'Brak zapisów od startu procesu.', inline: false });
+            } else {
+                embed.addFields(
+                    {
+                        name: '🔁 Najczęściej zapisywane',
+                        value: r.topZapisIlosc.slice(0, 10).map((p, i) =>
+                            `\`${i + 1}.\` **×${p.writes}** — ${p.label} (${b(p.writeBytes)})`
+                        ).join('\n'),
+                        inline: false
+                    },
+                    {
+                        name: '🏋️ Najcięższe w zapisie',
+                        value: r.topZapisWaga.slice(0, 10).map((p, i) =>
+                            `\`${i + 1}.\` **${b(p.writeBytes)}** — ${p.label} (×${p.writes})`
+                        ).join('\n'),
+                        inline: false
+                    }
+                );
+            }
+        }
+
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    }
+
     async handleChaosModeCommand(interaction) {
         await this.logService.logMessage('info', `Użytkownik ${interaction.user.tag} użył komendy /chaos-mode`, interaction);
 

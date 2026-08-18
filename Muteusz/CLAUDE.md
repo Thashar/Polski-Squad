@@ -26,6 +26,19 @@
     - 1 skuteczne zgłoszenie (warn/mute/delete) → zeruje licznik "nie rób nic" w tygodniu
     - Blokada automatycznie wygasa po tygodniu przy następnej próbie zgłoszenia
 
+15. **Komenda /io — monitor ruchu dyskowego** - `interactionHandlers.js` → `handleIOCommand`: statystyki **CAŁEGO** odczytu i zapisu procesu, zbierane przez `utils/diskMonitor`. Tylko administrator, odpowiedź ephemeral.
+   - **Raport jest GLOBALNY, nie tylko o Muteuszu** — wszystkie 9 botów działa w jednym procesie i dzieli jeden store, więc widać ruch całego projektu. Liczby narastają od startu procesu (restart = zerowanie)
+   - **Widoki** (opcja `widok`):
+     - `Podsumowanie` (domyślnie) — liczba operacji i wolumen osobno dla odczytu i zapisu, średnie tempo w B/s, ile odczytów obsłużyła pamięć zamiast dysku (procent trafień), 5 najbardziej obciążających plików, licznik błędów zapisu i parsowania
+     - `Boty i obszary` — agregacja per bot (`Stalker`, `EndersEcho`, `shared_data`…), wyliczana z pierwszego segmentu ścieżki pliku
+     - `Rodzaje plików` — podział na kategorie: obrazy OCR, cache mediów, traineddata, obrazy, archiwa, logi, dane JSON, node_modules — z udziałem procentowym
+     - `Pliki — odczyt` — najczęściej ładowane z dysku oraz najcięższe wolumenowo
+     - `Pliki — zapis` — najczęściej zapisywane oraz najcięższe wolumenowo
+   - **Do czego służy:** pokazuje realne proporcje obciążenia. Pliki JSON to ułamek procenta — ciężar leży w screenach OCR i cache mediów. Rosnąca liczba odczytów JSON oznaczałaby ścieżkę omijającą cache
+   - **Źródło danych: `utils/diskMonitor`** — podmienia metody `fs` (`readFileSync`, `writeFileSync`, `promises.readFile/writeFile/appendFile/copyFile`, `createReadStream`, `createWriteStream`), więc liczy też operacje wykonywane wewnątrz bibliotek: sharp, tesseract.js, archiver, discord.js przy wysyłce załącznika
+   - Procent trafień cache pochodzi osobno z `store.getStats()` (dotyczy wyłącznie plików JSON)
+   - Ten sam licznik zasila minutowy log `💾 (60s): odczyt …, zapis … — od startu: …`
+
 11. **Komenda /msg** - `interactionHandlers.js`: Wysyłanie wiadomości botem na dowolny kanał tekstowy. Tylko dla administratorów. Parametry: `kanał` (wymagany), `wiadomość` (wymagana), `ping` (opcjonalne - ID ról oddzielone przecinkami, "everyone" lub "here"). Pingi doklejane są przed treścią wiadomości.
 
 13. **Zmiana nazwy kanału prefix** - `index.js`: Gdy administrator (lub osoba z rolą uprawnioną) wyśle wiadomość zawierającą WYŁĄCZNIE emoji statusu (🛑/🟢/🔥) lub wartość liczbową z wymaganym `k` na końcu (np. `23k`, `34,8k`; sama liczba bez `k` nie zadziała), bot usuwa dotychczasowy prefix z początku nazwy kanału i wstawia nowy. Wiadomość jest automatycznie usuwana. Obsługuje myślnik po prefixie (np. `🟢-general` → `🛑-general`, `23k-sklep` → `34,8k-sklep`). Uprawnienia (zahardkodowane w `index.js`): **administratorzy** oraz **role admin-równoważne** (`CHANNEL_RENAME_ADMIN_ROLE_IDS`: `1170332302715396106`) mogą używać na dowolnym kanale; **role kanałowe** (`CHANNEL_RENAME_ROLE_IDS`: `1196586785413795850`, `1196911721588199464`) tylko na kanałach z `CHANNEL_RENAME_ALLOWED_CHANNELS`: `1194298890069999756`, `1200051393843695699`, `1262792174475673610`.
@@ -34,7 +47,7 @@
 
 14. **Kompleksowe przywracanie danych** - `handlers/restoreBackupHandler.js` (`/restore-backup`): Kreator przywracania danych z Google Drive (tylko administrator). Stan sesji per-użytkownik w `RestoreBackupHandler.sessions` Map (TTL 15 min, auto-cleanup usuwa pobrane foldery tymczasowe). Patrz sekcja **[Komenda /restore-backup](#komenda-restore-backup)** poniżej.
 
-**Komendy:** `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
+**Komendy:** `/io`, `/remove-roles`, `/special-roles`, `/add-special-role`, `/remove-special-role`, `/list-special-roles`, `/violations`, `/unregister-command`, `/chaos-mode`, `/msg`, `/data-archive`, `/restore-backup`, `/zgłoś`, context: `Zgłoś wiadomość`, `Wycisz użytkownika`, `Ostrzeż użytkownika`
 **Env:** TOKEN, CLIENT_ID, GUILD_ID, TARGET_CHANNEL_ID, LOG_CHANNEL_ID, REPORT_CHANNEL_ID (opcjonalne, fallback na LOG_CHANNEL_ID)
 
 ---
