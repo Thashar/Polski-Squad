@@ -26,7 +26,7 @@
 5. Zdjęcie postaci (OCR) → `lunarPoints` porównane z progami klanów → kwalifikacja → embed powitalny
 
 **Kwalifikacja klanów (dynamiczna):**
-- `services/stalkerThresholdsService.js` - czyta `shared_data/clan_thresholds.json`, cache 5 min
+- `services/stalkerThresholdsService.js` - czyta `shared_data/clan_thresholds.json` z cache store'a (wspólnego ze Stalkerem, bez wymuszanego odświeżania)
 - Porównanie: `lunarPoints >= thresholds[clanKey]` od Main w dół → najwyższy pasujący klan
 - Progi: `thresholds['main']`, `thresholds['2']`, `thresholds['1']` (klucze jak w Stalker targetRoles)
 - Brak pliku lub brak wpisu dla guildId → Clan0 z ostrzeżeniem w logu
@@ -114,6 +114,7 @@ ROBOT2_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot
 - **Persistencja przez `utils/jsonStore` (cache-first):** `data/notification_preferences.json`, dane monitorowania ról, cache boostów (`memberCacheService`) oraz plik relay Robot2 i ID wiadomości aktywacji. Odczyt z dysku raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename) jednocześnie do pliku i pamięci
   - `memberCacheService` miał własny zapis atomowy (`.tmp` + `rename`) — teraz robi to store, więc kod serwisu jest krótszy o tę obsługę
   - `saveRelay2()` używa `store.mutate()` zamiast pary odczyt-zapis — wcześniej czytał plik przy KAŻDEJ przekazanej wiadomości DM
-  - **`stalkerThresholdsService` nadal odświeża się co 5 min** (`store.reload`), bo plik `shared_data/clan_thresholds.json` pisze Stalker, który jeszcze nie przeszedł na store. Po migracji Stalkera oba boty będą dzielić ten sam wpis w cache (jeden proces, klucz = ścieżka pliku) i to wymuszone odświeżanie będzie można usunąć — progi będą aktualne natychmiast po zapisie
+  - **`stalkerThresholdsService` czyta progi wprost z cache** — Stalker zapisuje `shared_data/clan_thresholds.json` przez store, więc oba boty dzielą ten sam wpis w cache jednego procesu i progi są aktualne natychmiast po zapisie. Wymuszane wcześniej co 5 min `store.reload()` zostało usunięte jako zbędny ruch dyskowy
+  - **`memberCacheService`**: kolejka zapisu z debounce — gdy zapis już trwa, kolejne zgłoszenie planuje następne podejście zamiast przepadać (wcześniej gołe `return` zostawiało nierozwiązane obietnice, na które czeka `buildInitialCache()` przy starcie)
 - **Persistencja:** Zapisuj dane do JSON po każdej zmianie
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje, bo widoczność ustala się przy pierwszej odpowiedzi. Dotyczy to `updateUserEphemeralReply()` w `utils/helpers.js`, które edytuje zapamiętaną interakcję z `state.userEphemeralReplies` — ephemeralność pochodzi z pierwotnego `reply()`. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`

@@ -247,11 +247,11 @@ class DiskMonitor {
     /**
      * Klucz kumulacji dla podsumowania.
      *
-     * Screeny OCR, pliki cache mediow i logi maja UNIKALNE nazwy (timestamp, id),
-     * wiec w zestawieniu per-plik kazdy z nich to osobna, mala pozycja i nie widac,
-     * ze razem to najciezszy ruch w calym procesie. Zwijamy je do wzorca
-     * `katalog/*.rozszerzenie`. Pliki JSON maja stale, znaczace nazwy
-     * (`Stalker/data/punishments.json`) — te zostaja rozbite pojedynczo.
+     * Screeny OCR, pliki cache mediów i logi mają UNIKALNE nazwy (timestamp, id),
+     * więc w zestawieniu per-plik każdy z nich to osobna, mała pozycja i nie widać,
+     * że razem to najcięższy ruch w całym procesie. Zwijamy je do wzorca
+     * `katalog/*.rozszerzenie`. Pliki JSON mają stałe, znaczące nazwy
+     * (`Stalker/data/punishments.json`) — te zostają rozbite pojedynczo.
      */
     _grupa(label) {
         if (label === ETYKIETA_ZBIORCZA) return label;
@@ -299,7 +299,7 @@ class DiskMonitor {
             plikow: pliki.length,
 
             topWaga: sort(pliki, 'bytes'),
-            // Skumulowane per wzorzec sciezki — do podsumowania ogolnego
+            // Skumulowane per wzorzec ścieżki — do podsumowania ogólnego
             topOdczytGrupy: grupuj(p => this._grupa(p.label)).filter(g => g.readBytes > 0)
                 .sort((a, b) => b.readBytes - a.readBytes).slice(0, limit),
             topZapisGrupy: grupuj(p => this._grupa(p.label)).filter(g => g.writeBytes > 0)
