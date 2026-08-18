@@ -176,16 +176,19 @@ class DiskMonitor {
             return strumien;
         };
 
+        // Zapis strumieniowy liczymy PRZYROSTOWO, przy każdym chunku — nie na `close`.
+        // Strumień pliku logu żyje przez cały czas pracy bota, więc zliczanie na zamknięciu
+        // oznaczałoby, że logi nigdy nie pojawią się w statystykach.
         const createWriteStream = fs.createWriteStream;
         fs.createWriteStream = function (p, ...reszta) {
             const strumien = createWriteStream.call(this, p, ...reszta);
             const write = strumien.write.bind(strumien);
-            let suma = 0;
             strumien.write = function (chunk, ...rest) {
-                if (chunk) suma += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk));
+                if (chunk) {
+                    self.zapisz('write', p, Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(String(chunk)));
+                }
                 return write(chunk, ...rest);
             };
-            strumien.on('close', () => self.zapisz('write', p, suma));
             return strumien;
         };
     }

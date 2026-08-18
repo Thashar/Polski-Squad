@@ -139,18 +139,64 @@ const webhookQueue = [];
 let isProcessingQueue = false;
 const WEBHOOK_DELAY = 1000; // 1 sekunda między webhook'ami
 
-// Upewnij się, że katalog logs istnieje
+// Upewnij się, że katalog logs istnieje.
+// Sprawdzenie robimy RAZ — dawniej `existsSync` leciało przy każdej linii logu,
+// czyli setki razy na minutę, mimo że katalog nie znika w trakcie pracy bota.
+let katalogGotowy = false;
 function ensureLogDirectory() {
+    if (katalogGotowy) return;
     if (!fs.existsSync(LOG_DIR)) {
         fs.mkdirSync(LOG_DIR, { recursive: true });
     }
+    katalogGotowy = true;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strumień pliku logu (zamiast appendFileSync przy każdej linii)
+//
+// `appendFileSync` jest SYNCHRONICZNY — blokował cały proces, czyli wszystkie 9 botów,
+// na każdy pojedynczy wpis. Strumień otwierany jest raz i buforuje zapisy w tle.
+// Trzymamy referencję do dnia, bo plik ma dzienną rotację (bots-YYYY-MM-DD.log).
+// ─────────────────────────────────────────────────────────────────────────────
+let logStream = null;
+let logStreamPath = null;
+
+function getLogStream() {
+    const sciezka = getLogFilePath();
+
+    if (logStream && logStreamPath === sciezka) return logStream;
+
+    // Zmienił się dzień (albo pierwszy zapis) — zamknij poprzedni plik i otwórz nowy
+    if (logStream) {
+        try { logStream.end(); } catch { /* nieistotne przy rotacji */ }
+    }
+
+    ensureLogDirectory();
+    logStream = fs.createWriteStream(sciezka, { flags: 'a' });
+    logStream.on('error', (err) => {
+        console.error('Błąd strumienia pliku log:', err.message);
+        logStream = null;
+        logStreamPath = null;
+    });
+    logStreamPath = sciezka;
+    return logStream;
+}
+
+/**
+ * Domyka plik logu przy zamykaniu procesu, żeby nie zgubić ostatnich linii.
+ */
+function closeLogStream() {
+    if (!logStream) return;
+    try { logStream.end(); } catch { /* zamykamy proces, błąd nieistotny */ }
+    logStream = null;
+    logStreamPath = null;
+}
+
+process.once('exit', closeLogStream);
 
 // Funkcja do zapisywania do pliku (bez kolorów)
 function writeToLogFile(botName, message, level = 'info') {
     try {
-        ensureLogDirectory();
-        
         const timestamp = getTimestamp();
         const emoji = botEmojis[botName] || '🤖';
         
@@ -172,7 +218,7 @@ function writeToLogFile(botName, message, level = 'info') {
         }
         
         const logEntry = `[${timestamp}] ${emoji} ${botName.toUpperCase()} ${levelEmoji} ${message}\n`;
-        fs.appendFileSync(getLogFilePath(), logEntry, 'utf8');
+        getLogStream().write(logEntry);
     } catch (error) {
         // Jeśli nie można zapisać do pliku, nie przerywamy aplikacji
         console.error('Błąd zapisu do pliku log:', error.message);
@@ -463,6 +509,7 @@ module.exports = {
     createBotLogger,
     setupGlobalLogging,
     resetLoggerState,
+    closeLogStream,
     colors,
     formatMessage
 };

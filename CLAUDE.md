@@ -279,6 +279,9 @@ const serwis = new JakiśSerwis(config, logger);
 - 📝 **Wiele miejsc docelowych**:
   - Konsola z kolorowaniem
   - Plik `logs/bots-YYYY-MM-DD.log` z timestampami (dzienna rotacja, auto-usuwanie po 30 dniach)
+    - **Zapis przez strumień** (`createWriteStream` z flagą `'a'`), otwierany raz i podmieniany przy zmianie dnia. Wcześniej każda linia szła przez `appendFileSync`, który jest SYNCHRONICZNY i blokował cały proces — czyli wszystkie 9 botów — przy każdym wpisie
+    - `existsSync` na katalogu `logs/` wykonywane jest raz, nie przy każdej linii
+    - `closeLogStream()` (eksportowana, podpięta pod `process.once('exit')`) domyka plik, żeby nie zgubić ostatnich wpisów
   - Discord webhook (opcjonalne, rate-limited 1s delay)
 - 🚀 **Zoptymalizowany start** - Jednoliniowe komunikaty statusu: `✅ [NazwaBota] gotowy - [funkcje]`
 - 🔍 **Inteligentne separatory** - Wizualne separatory tylko przy przełączaniu między różnymi botami

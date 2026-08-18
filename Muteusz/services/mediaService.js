@@ -58,7 +58,68 @@ class MediaService {
     }
 
     /**
-     * Pobiera plik do cache
+     * Pobiera plik do PAMIĘCI i zwraca Buffer — bez dotykania dysku.
+     *
+     * Dawniej plik lądował w `temp/media_cache`, po czym discord.js czytał go z powrotem
+     * przy wysyłce i na koniec był kasowany. Dawało to zapis + odczyt pełnego rozmiaru
+     * (do 100 MB) na każdy załącznik — największą pozycję w statystykach dysku (`/io`).
+     * discord.js przyjmuje Buffer tak samo jak ścieżkę, więc plik pośredni był zbędny.
+     *
+     * Limit to `config.media.maxFileSize` (100 MB — filmy z serwerów z Nitro muszą przejść).
+     * Pobieranie jest przerywane, gdy strumień przekroczy limit, żeby uszkodzony albo
+     * kłamiący nagłówek `size` nie wciągnął do pamięci czegoś ogromnego.
+     *
+     * @param {string} url - URL pliku
+     * @param {string} fileName - Nazwa pliku (do logów)
+     * @param {number} fileSize - Deklarowany rozmiar (do logów)
+     * @returns {Promise<Buffer>} Zawartość pliku
+     */
+    async downloadFileToBuffer(url, fileName, fileSize = 0) {
+        const limit = this.config.media.maxFileSize;
+
+        return new Promise((resolve, reject) => {
+            const protocol = url.startsWith('https:') ? https : http;
+
+            const request = protocol.get(url, (response) => {
+                if (response.statusCode !== 200) {
+                    response.resume();
+                    reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+                    return;
+                }
+
+                const kawalki = [];
+                let pobrane = 0;
+
+                response.on('data', (chunk) => {
+                    pobrane += chunk.length;
+                    if (pobrane > limit) {
+                        request.destroy();
+                        reject(new Error(`Plik przekracza limit ${(limit / 1024 / 1024).toFixed(0)} MB`));
+                        return;
+                    }
+                    kawalki.push(chunk);
+                });
+
+                response.on('end', () => resolve(Buffer.concat(kawalki)));
+                response.on('error', reject);
+            });
+
+            request.on('error', reject);
+
+            // Zwiększony timeout dla większych plików (5 minut)
+            request.setTimeout(300000, () => {
+                request.destroy();
+                reject(new Error('Timeout podczas pobierania pliku'));
+            });
+        });
+    }
+
+    /**
+     * Pobiera plik do cache na dysku.
+     *
+     * ⚠️ Ścieżka historyczna — repost mediów używa teraz `downloadFileToBuffer()`.
+     * Zostawiona dla ewentualnych przyszłych zastosowań wymagających pliku.
+     *
      * @param {string} url - URL pliku
      * @param {string} fileName - Nazwa pliku
      * @param {number} fileSize - Rozmiar pliku
@@ -214,8 +275,8 @@ class MediaService {
             const channel = message.channel;
 
             for (const [id, attachment] of mediaAttachments) {
-                let cachedFilePath = null;
-                
+                let mediaBuffer = null;
+
                 try {
                     // Sprawdź rozmiar pliku
                     if (attachment.size > this.config.media.maxFileSize) {
@@ -225,10 +286,12 @@ class MediaService {
                         }));
                         continue;
                     }
-                    
+
+                    // Plik idzie prosto do pamięci — bez zapisu i ponownego odczytu z dysku
+                    mediaBuffer = await this.downloadFileToBuffer(attachment.url, attachment.name, attachment.size);
+
                     const cacheFileName = this.getCacheFileName(attachment.url, attachment.name);
-                    cachedFilePath = await this.downloadFileToCache(attachment.url, cacheFileName, attachment.size);
-                    
+
                     const messageLink = `https://discord.com/channels/${guild.id}/${channel.id}/${message.id}`;
                     
                     const embed = new EmbedBuilder()
@@ -257,8 +320,8 @@ class MediaService {
 
                     const repostedMessage = await targetChannel.send({
                         embeds: [embed],
-                        files: [{ 
-                            attachment: cachedFilePath, 
+                        files: [{
+                            attachment: mediaBuffer,
                             name: attachment.name,
                             description: `Repost od ${author.tag}`
                         }]
@@ -277,23 +340,16 @@ class MediaService {
                         });
                     }
                     
-                    if (this.config.media.autoCleanup) {
-                        await fs.unlink(cachedFilePath);
-                        cachedFilePath = null;
-                    }
-
                 } catch (error) {
                     const errorMessage = error?.message || 'Nieznany błąd';
                     logger.error(formatMessage(this.config.messages.downloadError, {
                         fileName: attachment.name,
                         error: errorMessage
                     }));
-                    
-                    if (cachedFilePath) {
-                        try {
-                            await fs.unlink(cachedFilePath);
-                        } catch {}
-                    }
+                } finally {
+                    // Zwolnij referencję do bufora — przy filmach to nawet 100 MB,
+                    // które nie mają po co czekać na kolejny obieg pętli
+                    mediaBuffer = null;
                 }
             }
 

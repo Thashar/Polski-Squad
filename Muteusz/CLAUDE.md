@@ -2,7 +2,11 @@
 
 **11 Systemów:**
 1. **Auto-Moderacja** - `autoModerationService.js`: Spam (3 duplikaty/30min=7d timeout), wulgaryzmy (progresja kar), zaproszenia Discord
-2. **Cache Mediów** - `mediaService.js`: 100MB/plik, 2GB total, 24h retencja
+2. **Repost mediów PRZEZ PAMIĘĆ (bez dysku)** - `mediaService.js`: limit 100 MB/plik (filmy z serwerów z Nitro muszą przechodzić)
+   - **`downloadFileToBuffer()`** pobiera załącznik prosto do `Buffer` i podaje go do `targetChannel.send({ files: [{ attachment: buffer }] })`. discord.js przyjmuje `Buffer` tak samo jak ścieżkę
+   - **Dlaczego zmiana:** dawniej plik lądował w `temp/media_cache`, discord.js czytał go z powrotem przy wysyłce, po czym plik był kasowany — czyli **zapis + odczyt pełnego rozmiaru** (do 100 MB) na każdy załącznik. W statystykach `/io` była to największa pozycja ruchu dyskowego
+   - **Ochrona pamięci:** pobieranie jest przerywane, gdy strumień przekroczy `maxFileSize` — kłamiący nagłówek `size` nie wciągnie do RAM czegoś ogromnego. Bufor zwalniany w `finally` po każdym załączniku
+   - `downloadFileToCache()` (zapis na dysk) **została** w kodzie jako ścieżka historyczna, ale repost jej nie używa. `cleanupCache` co godzinę skanuje więc katalog, który pozostaje pusty
 3. **Zarządzanie Rolami** - `roleManagementService.js`: Ekskluzywne grupy (`special_roles.json`), auto-usuwanie konfliktów, 5s delay
 4. **Naruszenia** - `warningsService.js`: Persistent JSON z UUID, reason, moderator, timestamp
 5. **Koordynacja** - `roleKickingService.js`: Cron 2h, kick bez ról po 24h (integracja Rekruter)
