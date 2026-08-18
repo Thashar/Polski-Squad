@@ -44,7 +44,7 @@ const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerS
 const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
-const cron = require('node-cron');
+const { zarejestruj: zarejestrujZadanie } = require('../utils/cronCatchUp');
 const AdminPanelService = require('./services/adminPanelService');
 const WebRankingSyncService = require('./services/webRankingSyncService');
 const BroadcastReactionService = require('./services/broadcastReactionService');
@@ -251,9 +251,16 @@ async function initializeBot() {
         // Zbiorcze liczniki reakcji pod rozgłoszeniami — rejestr kopii wiadomości
         await broadcastReactionService.load();
 
-        // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC)
-        cron.schedule('0 10 * * *', async () => {
-            try {
+        // Dzienna wiadomość na nieskonfigurowanych serwerach (co dzień o 10:00 UTC).
+        // ⚠️ Przez `utils/cronCatchUp`, bo `node-cron` odpala zadanie wyłącznie gdy proces
+        // akurat działa — przestój o 10:00 oznaczał ciche pominięcie całego dnia.
+        await zarejestrujZadanie({
+            id: 'endersecho:przypomnienie-konfiguracji',
+            opis: 'Dzienne przypomnienie nieskonfigurowanym serwerom',
+            wyrazenie: '0 10 * * *',
+            strefa: 'UTC',
+            logger,
+            zadanie: async () => {
                 for (const [guildId, guild] of client.guilds.cache) {
                     if (config.adminGuildId && guildId === config.adminGuildId) continue;
                     if (guildConfigService.isConfigured(guildId)) continue;
@@ -276,10 +283,8 @@ async function initializeBot() {
                         '🌐 **Global ranking** — compare scores across all servers the bot is on'
                     ).catch(() => {});
                 }
-            } catch (err) {
-                logger.error('Błąd przy codziennym przypomnieniu nieskonfigurowanym serwerom:', err.message);
             }
-        }, { timezone: 'UTC' });
+        });
 
         // Rejestracja slash commands dla wszystkich serwerów
         await interactionHandler.registerSlashCommands(client);

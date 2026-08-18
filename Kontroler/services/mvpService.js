@@ -5,6 +5,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const NicknameManager = require('../../utils/nicknameManagerService');
 const { polandWallClockToUTC, getPolandParts, formatPolandDateTime } = require('../utils/timezone');
 const store = require('../../utils/jsonStore');
+const { poprzedniTermin, ostatnieWykonanie, oznaczWykonanie } = require('../../utils/cronCatchUp');
 
 /**
  * System MVP tygodnia — nagradza autora najzabawniejszego tekstu (najwięcej reakcji KEKW).
@@ -168,7 +169,54 @@ class MvpService {
                 this.resyncVotes().catch(() => {});
             }
         }
+
         this.scheduleNextScan();
+        await this.catchUpMissedScan();
+    }
+
+    /** Wyrażenie crona odpowiadające konfiguracji skanu — do liczenia poprzedniego terminu. */
+    _wyrazenieHarmonogramu() {
+        return `${this.cfg.scheduleMinute} ${this.cfg.scheduleHour} * * ${this.cfg.scheduleWeekday}`;
+    }
+
+    /**
+     * Nadrabia skan pominięty, gdy bot był wyłączony o zaplanowanej godzinie.
+     *
+     * ⚠️ Skan odpalał WYŁĄCZNIE `setTimeout` ustawiany przy starcie, więc przestój
+     * w czwartek o 22:05 oznaczał, że `scheduleNextScan()` planowało dopiero KOLEJNY
+     * czwartek — tydzień bez ankiety MVP, bez śladu w logu i bez możliwości odzyskania
+     * (nie ma komendy do ręcznego odpalenia skanu).
+     *
+     * ⚠️ KONSEKWENCJA nadrabiania: ankieta trafia na kanał z pingiem `@everyone` o porze
+     * startu bota, a nie o 22:05, i trwa 24 h od TEGO momentu. Przy nadrobieniu tuż przed
+     * kolejnym czwartkiem `runWeeklyScan()` zobaczy `phase === 'voting'` i pominie nowy skan
+     * — czyli jedna ankieta zamiast dwóch, ale przesunięta w czasie.
+     *
+     * Przy pierwszym uruchomieniu (brak znacznika) nic nie nadrabiamy — zapisujemy tylko
+     * punkt odniesienia, żeby mechanizm zadziałał od następnego terminu.
+     */
+    async catchUpMissedScan() {
+        const ID = 'kontroler:mvp-skan';
+
+        try {
+            if (this.state.phase === 'voting') return false;
+
+            const ostatni = await ostatnieWykonanie(ID);
+            if (ostatni === null) {
+                await oznaczWykonanie(ID);
+                return false;
+            }
+
+            const poprzedni = poprzedniTermin(this._wyrazenieHarmonogramu(), 'Europe/Warsaw');
+            if (ostatni >= poprzedni.getTime()) return false;
+
+            this.logger.warn(`⚠️ MVP: skan z ${formatPolandDateTime(poprzedni)} został pominięty (bot nie działał) — nadrabiam teraz`);
+            await this.runWeeklyScan();
+            return true;
+        } catch (error) {
+            this.logger.error(`❌ MVP: błąd nadrabiania pominiętego skanu: ${error.message}`);
+            return false;
+        }
     }
 
     // ===== Harmonogram =====
@@ -247,6 +295,9 @@ class MvpService {
         } catch (error) {
             this.logger.error(`❌ MVP: błąd cotygodniowego skanu: ${error.message}`);
         } finally {
+            // Znacznik zapisujemy TAKŻE po błędzie — inaczej nieudany skan nadrabiałby się
+            // w kółko przy każdym starcie bota
+            await oznaczWykonanie('kontroler:mvp-skan').catch(() => {});
             this.scheduleNextScan();
         }
     }

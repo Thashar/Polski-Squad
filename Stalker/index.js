@@ -1,5 +1,4 @@
 const { Client, GatewayIntentBits, Events, MessageFlags, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const cron = require('node-cron');
 const fs = require('fs').promises;
 const path = require('path');
 const store = require('../utils/jsonStore');
@@ -25,6 +24,7 @@ const { createBotLogger } = require('../utils/consoleLogger');
 const { safeFetchMembers } = require('../utils/guildMembersThrottle');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { getCacheOptions } = require('../utils/discordCache');
+const { zarejestruj: zarejestrujZadanie } = require('../utils/cronCatchUp');
 
 const logger = createBotLogger('Stalker');
 const llmAdapter = createLlmAdapter({ botSlug: 'stalker', tracerName: 'stalker-bot', apiKey: config.ocr.googleAiApiKey });
@@ -359,48 +359,69 @@ client.once(Events.ClientReady, async () => {
         logger.info(`✅ Deadline jeszcze nie minął (${config.bossDeadline.hour}:${String(config.bossDeadline.minute).padStart(2, '0')}) - przyciski pozostają aktywne`);
     }
 
-    // Cron: co środę o 18:55 — 9 minut po snapshocie Gary (18:46)
-    cron.schedule('55 18 * * 3', async () => {
-        logger.info('⏰ GaryCombatIngestion: uruchamiam ingestion danych z Gary...');
-        try {
+    // ⚠️ Wszystkie zadania cykliczne idą przez `utils/cronCatchUp` — `node-cron` odpala je
+    // wyłącznie wtedy, gdy proces akurat działa, więc przestój o zaplanowanej godzinie
+    // (restart hostingu, deploy, pętla crashy) oznaczał CICHE pominięcie całego cyklu.
+    // Teraz brakujące wykonanie jest nadrabiane od razu po starcie bota.
+
+    // Co środę o 18:55 — 9 minut po snapshocie Gary (18:46)
+    await zarejestrujZadanie({
+        id: 'stalker:gary-ingestion',
+        opis: 'Ingestion danych z Gary',
+        wyrazenie: '55 18 * * 3',
+        strefa: config.timezone,
+        logger,
+        zadanie: async () => {
+            logger.info('⏰ GaryCombatIngestion: uruchamiam ingestion danych z Gary...');
             await garyCombatIngestionService.ingest();
-        } catch (err) {
-            logger.error('GaryCombatIngestion: błąd cron:', err.message);
         }
-    }, {
-        timezone: config.timezone
     });
 
-    // Uruchomienie zadania cron dla czyszczenia punktów (poniedziałek o północy)
-    cron.schedule('0 0 * * 1', async () => {
-        logger.info('Rozpoczynam tygodniowe czyszczenie punktów karnych...');
-        
-        for (const guild of client.guilds.cache.values()) {
-            try {
-                await punishmentService.cleanupAllUsers(guild);
-                logger.info(`Wyczyszczono punkty dla serwera: ${guild.name}`);
-            } catch (error) {
-                logger.error(`Błąd czyszczenia punktów dla serwera ${guild.name}: ${error.message}`);
+    // Czyszczenie punktów karnych (poniedziałek o północy)
+    await zarejestrujZadanie({
+        id: 'stalker:czyszczenie-punktow',
+        opis: 'Tygodniowe czyszczenie punktów karnych',
+        wyrazenie: '0 0 * * 1',
+        strefa: config.timezone,
+        logger,
+        zadanie: async () => {
+            logger.info('Rozpoczynam tygodniowe czyszczenie punktów karnych...');
+
+            for (const guild of client.guilds.cache.values()) {
+                try {
+                    await punishmentService.cleanupAllUsers(guild);
+                    logger.info(`Wyczyszczono punkty dla serwera: ${guild.name}`);
+                } catch (error) {
+                    logger.error(`Błąd czyszczenia punktów dla serwera ${guild.name}: ${error.message}`);
+                }
             }
         }
-    }, {
-        timezone: config.timezone
     });
 
-    // Uruchomienie zadania cron dla czyszczenia starych danych przypomnień (codziennie o 03:00)
-    cron.schedule('0 3 * * *', async () => {
-        logger.info('Rozpoczynam czyszczenie starych danych przypomnień...');
-        await reminderUsageService.cleanupOldData();
-    }, {
-        timezone: config.timezone
+    // Czyszczenie starych danych przypomnień (codziennie o 03:00)
+    await zarejestrujZadanie({
+        id: 'stalker:czyszczenie-przypomnien',
+        opis: 'Czyszczenie starych danych przypomnień',
+        wyrazenie: '0 3 * * *',
+        strefa: config.timezone,
+        logger,
+        zadanie: async () => {
+            logger.info('Rozpoczynam czyszczenie starych danych przypomnień...');
+            await reminderUsageService.cleanupOldData();
+        }
     });
 
-    // Uruchomienie zadania cron dla wyłączania przycisków potwierdzenia po deadline (codziennie o 17:50)
-    cron.schedule('50 17 * * *', async () => {
-        logger.info('⏰ Deadline minął - wyłączam przyciski potwierdzenia...');
-        await reminderService.disableExpiredConfirmationButtons(client);
-    }, {
-        timezone: config.timezone
+    // Wyłączanie przycisków potwierdzenia po deadline (codziennie o 17:50)
+    await zarejestrujZadanie({
+        id: 'stalker:wylaczanie-przyciskow',
+        opis: 'Wyłączanie przycisków potwierdzenia po deadline',
+        wyrazenie: '50 17 * * *',
+        strefa: config.timezone,
+        logger,
+        zadanie: async () => {
+            logger.info('⏰ Deadline minął - wyłączam przyciski potwierdzenia...');
+            await reminderService.disableExpiredConfirmationButtons(client);
+        }
     });
 
     // Usunięto automatyczne odświeżanie cache'u członków - teraz odbywa się przed użyciem komend
