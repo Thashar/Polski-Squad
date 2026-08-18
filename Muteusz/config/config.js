@@ -42,7 +42,10 @@ module.exports = {
         autoCleanup: true,
         cacheLifetime: 86400000, // 24 godziny
         maxCacheSize: 2147483648, // 2GB
-        maxFileSize: 104857600, // 100MB
+        maxFileSize: 104857600, // 100MB — filmy z serwerów z Nitro muszą przechodzić
+        // Ochrona pamięci: załączniki idą przez RAM, więc ograniczamy ile naraz
+        maxConcurrentDownloads: 2,        // ile repostów pobiera się równocześnie
+        maxBufferedBytes: 209715200,      // 200MB — łączny rozmiar buforów w locie
         supportedExtensions: [
             '.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
             '.mp4', '.avi', '.mov', '.wmv', '.flv', '.webm', '.mkv', '.m4v'

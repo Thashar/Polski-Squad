@@ -14,6 +14,42 @@ class MediaService {
         this.config = config;
         this.cacheDir = config.media.cacheDir;
         this.messageLinks = new Map(); // originalMessageId -> repostedMessageData
+
+        // ─── Ochrona pamięci przy repostach ────────────────────────────────
+        // Załączniki idą przez RAM (Buffer), a `repostMedia` jest wołane wprost
+        // z handlera `messageCreate` — bez ograniczeń dziesięć osób wrzucających
+        // naraz filmy po 100 MB dałoby 1 GB w pamięci i przewróciło proces.
+        this._pobieraniaWToku = 0;
+        this._bajtyWPamieci = 0;
+        this._kolejkaOczekujacych = [];
+    }
+
+    /**
+     * Wpuszcza kolejne pobranie tylko wtedy, gdy mieści się w limitach:
+     * liczby równoczesnych pobrań ORAZ łącznego rozmiaru buforów w locie.
+     * Pozostałe czekają w kolejce — nic nie jest gubione, tylko szeregowane.
+     */
+    async _zajmijSlot(rozmiar) {
+        const maxRownoczesnie = this.config.media.maxConcurrentDownloads;
+        const maxBajtow = this.config.media.maxBufferedBytes;
+
+        while (
+            this._pobieraniaWToku >= maxRownoczesnie ||
+            (this._pobieraniaWToku > 0 && this._bajtyWPamieci + rozmiar > maxBajtow)
+        ) {
+            await new Promise(resolve => this._kolejkaOczekujacych.push(resolve));
+        }
+
+        this._pobieraniaWToku++;
+        this._bajtyWPamieci += rozmiar;
+    }
+
+    _zwolnijSlot(rozmiar) {
+        this._pobieraniaWToku--;
+        this._bajtyWPamieci = Math.max(0, this._bajtyWPamieci - rozmiar);
+
+        const nastepny = this._kolejkaOczekujacych.shift();
+        if (nastepny) nastepny();
     }
 
     /**
@@ -276,6 +312,7 @@ class MediaService {
 
             for (const [id, attachment] of mediaAttachments) {
                 let mediaBuffer = null;
+                let zajetyRozmiar = 0;
 
                 try {
                     // Sprawdź rozmiar pliku
@@ -287,7 +324,10 @@ class MediaService {
                         continue;
                     }
 
-                    // Plik idzie prosto do pamięci — bez zapisu i ponownego odczytu z dysku
+                    // Plik idzie prosto do pamięci — bez zapisu i ponownego odczytu z dysku.
+                    // Slot pilnuje, żeby równoczesne reposty nie wyczerpały pamięci procesu.
+                    await this._zajmijSlot(attachment.size);
+                    zajetyRozmiar = attachment.size;
                     mediaBuffer = await this.downloadFileToBuffer(attachment.url, attachment.name, attachment.size);
 
                     const cacheFileName = this.getCacheFileName(attachment.url, attachment.name);
@@ -350,6 +390,10 @@ class MediaService {
                     // Zwolnij referencję do bufora — przy filmach to nawet 100 MB,
                     // które nie mają po co czekać na kolejny obieg pętli
                     mediaBuffer = null;
+                    if (zajetyRozmiar > 0) {
+                        this._zwolnijSlot(zajetyRozmiar);
+                        zajetyRozmiar = 0;
+                    }
                 }
             }
 
