@@ -164,13 +164,25 @@ class GlobalTop10Service {
         const next = new Date(this._cfg.nextTrigger).getTime();
         if (now < next) return;
 
+        // ⚠️ `setInterval` nie czeka na zakończenie poprzedniego przebiegu, a `_sendReports()`
+        // wysyła embed na KAŻDY skonfigurowany serwer — przy większej liczbie serwerów
+        // i rate limicie Discorda potrafi przekroczyć minutę. Bez tej blokady kolejny tick
+        // widział wciąż nieprzesunięty `nextTrigger` i rozsyłał cały raport TOP10 po raz drugi.
+        if (this._wysylkaWToku) {
+            logger.warn('[GlobalTop10] Poprzednia wysyłka wciąż trwa - pomijam ten cykl');
+            return;
+        }
+        this._wysylkaWToku = true;
+
         logger.info('[GlobalTop10] Czas raportu TOP10 — generuję…');
         try {
             await this._sendReports();
         } catch (err) {
             logger.error(`[GlobalTop10] Błąd wysyłania raportu: ${err.message}`);
+        } finally {
+            this._advanceTrigger();
+            this._wysylkaWToku = false;
         }
-        this._advanceTrigger();
     }
 
     // ── report generation ─────────────────────────────────────────────────────
