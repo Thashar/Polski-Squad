@@ -818,7 +818,29 @@ class ReminderService {
     /**
      * Klasyczne przetwarzanie zdjęcie-po-zdjęciu (Tesseract) - fallback gdy AI OCR wyłączony.
      */
+    /**
+     * Siatka bezpieczeństwa wokół przetwarzania po jednym zdjęciu — taka sama jak
+     * w `phaseService`. `blinkTimer` (interwał co 1 s edytujący embed na Discordzie)
+     * i flaga `isProcessing` były zdejmowane wyłącznie na szczęśliwej ścieżce, więc
+     * wyjątek przed tym miejscem zostawiał interwał przy życiu aż do timeoutu sesji.
+     * Sprzątanie jest idempotentne, więc nie przeszkadza normalnemu przebiegowi.
+     */
     async processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
+        try {
+            return await this._processImagesPerImageBody(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService);
+        } finally {
+            const session = this.getSession(sessionId);
+            if (session) {
+                if (session.blinkTimer) {
+                    clearInterval(session.blinkTimer);
+                    session.blinkTimer = null;
+                }
+                session.isProcessing = false;
+            }
+        }
+    }
+
+    async _processImagesPerImageBody(sessionId, downloadedFiles, guild, member, publicInteraction, ocrService) {
         const session = this.getSession(sessionId);
         if (!session) {
             throw new Error('Sesja nie istnieje lub wygasła');

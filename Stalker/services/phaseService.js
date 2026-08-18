@@ -304,7 +304,36 @@ class PhaseService {
      * Klasyczne przetwarzanie zdjęcie-po-zdjęciu (Tesseract).
      * Używane jako fallback gdy AI OCR jest wyłączony.
      */
+    /**
+     * Siatka bezpieczeństwa wokół przetwarzania po jednym zdjęciu.
+     *
+     * ⚠️ `blinkTimer` (interwał co 1 s edytujący embed na Discordzie) i flaga
+     * `isProcessing` były zdejmowane WYŁĄCZNIE na szczęśliwej ścieżce, w środku funkcji.
+     * Wystarczył wyjątek przed tym miejscem — `safeFetchMembers`, `saveRoleNicksSnapshot`
+     * albo `aggregateResults` — żeby interwał został przy życiu i przez kolejne 15 minut
+     * (do timeoutu sesji) walił edycją wiadomości co sekundę, a użytkownik miał
+     * zablokowaną możliwość otwarcia nowej sesji OCR.
+     *
+     * Bliźniacza `processImagesBatch` ma taki `finally` od początku — tu go brakowało.
+     * Sprzątanie jest idempotentne, więc nie przeszkadza normalnemu przebiegowi.
+     */
     async processImagesPerImage(sessionId, downloadedFiles, guild, member, publicInteraction) {
+        try {
+            return await this._processImagesPerImageBody(sessionId, downloadedFiles, guild, member, publicInteraction);
+        } finally {
+            const session = this.getSession(sessionId);
+            if (session) {
+                if (session.blinkTimer) {
+                    clearInterval(session.blinkTimer);
+                    session.blinkTimer = null;
+                }
+                session.currentProcessingImage = null;
+                session.isProcessing = false;
+            }
+        }
+    }
+
+    async _processImagesPerImageBody(sessionId, downloadedFiles, guild, member, publicInteraction) {
         const session = this.getSession(sessionId);
         if (!session) {
             throw new Error('Sesja nie istnieje lub wygasła');
