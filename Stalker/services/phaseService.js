@@ -666,6 +666,8 @@ class PhaseService {
                     .map(m => m.displayName);
             }
             clanNicks = clanNicks.sort((a, b) => a.localeCompare(b));
+            // Zapamiętana lista służy potem do wskazania, kogo z roli AI NIE zwróciło
+            session.clanNicks = clanNicks;
             logger.info(`[PHASE${session.phase}] 👥 Lista nicków klanu do promptu AI: ${clanNicks.length}`);
 
             // ETAP: Wysyłanie do AI
@@ -1358,6 +1360,42 @@ class PhaseService {
     /**
      * Tworzy embed z potwierdzeniem przetworzonych zdjęć
      */
+    /**
+     * Nicki z roli klanowej, których NIE MA w odczycie AI. Kolejność = kolejność listy
+     * klanu (alfabetycznie), żeby czytało się od góry do dołu tak samo za każdym razem.
+     * @returns {string[]}
+     */
+    getMissingClanNicks(session) {
+        const clanNicks = Array.isArray(session.clanNicks) ? session.clanNicks : [];
+        if (clanNicks.length === 0) return [];
+        const odczytane = new Set(session.aggregatedResults.keys());
+        return clanNicks.filter(nick => !odczytane.has(nick));
+    }
+
+    /**
+     * Dopisuje wynik 0 wszystkim z roli, których AI nie zwróciło (przycisk
+     * „Analizuj i dodaj zera brakującym").
+     *
+     * Zera idą jako OSOBNY wpis w `processedImages`, nie prosto do `aggregatedResults` —
+     * agregacja czyści mapę i odtwarza ją z `processedImages`, więc wpis wstawiony z boku
+     * zniknąłby przy kolejnym przebiegu.
+     * @returns {string[]} nicki, którym dopisano zero
+     */
+    addZerosForMissingClanNicks(session) {
+        const brakujacy = this.getMissingClanNicks(session);
+        if (brakujacy.length === 0) return [];
+
+        session.processedImages.push({
+            imageName: `zera_brakujacych_${session.processedImages.length + 1}`,
+            imageCount: 0,
+            results: brakujacy.map(nick => ({ nick, score: 0 }))
+        });
+        this.aggregateResults(session);
+
+        logger.info(`[PHASE${session.phase}] 🥚 Dopisano zero dla ${brakujacy.length} osób z roli bez odczytu: ${brakujacy.join(', ')}`);
+        return brakujacy;
+    }
+
     createProcessedImagesEmbed(session) {
         // Oblicz statystyki (tak samo jak w updateProgress)
         const uniqueNicks = session.aggregatedResults.size;
@@ -1379,7 +1417,7 @@ class PhaseService {
             .length;
 
         // Realna liczba zdjęć: wpisy batch mają imageCount, wpisy per-zdjęcie liczone jako 1
-        const totalImages = session.processedImages.reduce((sum, img) => sum + (img.imageCount || 1), 0);
+        const totalImages = session.processedImages.reduce((sum, img) => sum + (img.imageCount ?? 1), 0);
         const progressBar = this.createProgressBar(totalImages, totalImages, 'completed', true);
 
         const phaseTitle = session.phase === 2 ? 'Faza 2' : 'Faza 1';
@@ -1399,6 +1437,24 @@ class PhaseService {
             .setTimestamp()
             .setFooter({ text: 'Czy chcesz analizować wyniki czy dodać więcej zdjęć?' });
 
+        // Kto ma rolę klanową, a nie wyszedł z odczytu AI — lista od góry do dołu.
+        // Bez tego brakujących trzeba było wyłapywać ręcznie, porównując ze składem klanu.
+        const brakujacy = this.getMissingClanNicks(session);
+        if (brakujacy.length > 0) {
+            const MAX_LINII = 25;   // limit pola embeda to 1024 znaki
+            const widoczne = brakujacy.slice(0, MAX_LINII)
+                .map((nick, i) => `${i + 1}. ${nick}`)
+                .join('\n');
+            const ogon = brakujacy.length > MAX_LINII
+                ? `\n… i ${brakujacy.length - MAX_LINII} więcej`
+                : '';
+            embed.addFields({
+                name: `🚫 Brak w odczycie AI (mają rolę): ${brakujacy.length}`,
+                value: `${widoczne}${ogon}`,
+                inline: false
+            });
+        }
+
         const phasePrefix = session.phase === 2 ? 'phase2' : 'phase1';
 
         const row = new ActionRowBuilder()
@@ -1407,6 +1463,11 @@ class PhaseService {
                     .setCustomId(`${phasePrefix}_complete_yes`)
                     .setLabel('✅ Tak, analizuj')
                     .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`${phasePrefix}_complete_zeros`)
+                    .setLabel('🥚 Analizuj i dodaj zera brakującym')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(brakujacy.length === 0),
                 new ButtonBuilder()
                     .setCustomId(`${phasePrefix}_complete_no`)
                     .setLabel('➕ Dodaj więcej')

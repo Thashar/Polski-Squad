@@ -2359,7 +2359,7 @@ async function handleButton(interaction, sharedState) {
     } else if (interaction.customId === 'phase1_overwrite_yes' || interaction.customId === 'phase1_overwrite_no') {
         // Obsługa przycisków nadpisywania danych Phase 1
         await handlePhase1OverwriteButton(interaction, sharedState);
-    } else if (interaction.customId === 'phase1_complete_yes' || interaction.customId === 'phase1_complete_no' || interaction.customId === 'phase1_cancel_session') {
+    } else if (interaction.customId === 'phase1_complete_yes' || interaction.customId === 'phase1_complete_zeros' || interaction.customId === 'phase1_complete_no' || interaction.customId === 'phase1_cancel_session') {
         // Obsługa przycisków potwierdzenia zakończenia dodawania zdjęć i anulowania
         await handlePhase1CompleteButton(interaction, sharedState);
     } else if (interaction.customId.startsWith('phase1_resolve_')) {
@@ -4305,6 +4305,12 @@ async function handlePhase1CompleteButton(interaction, sharedState) {
     }
     phase1BusySessions.add(session.sessionId);
 
+    // Wariant „🥚 Analizuj i dodaj zera brakującym" - osoby z rolą, których AI nie zwróciło,
+    // wchodzą do wyników z zerem. Musi się wydarzyć PRZED identyfikacją konfliktów.
+    if (interaction.customId === 'phase1_complete_zeros') {
+        phaseService.addZerosForMissingClanNicks(session);
+    }
+
     try {
         await interaction.update({
             content: '🔄 Analizuję wyniki...',
@@ -5126,6 +5132,13 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         embeds: [],
         components: []
     });
+
+    // Wariant „🥚 Analizuj i dodaj zera brakującym" - osoby z rolą, których AI nie zwróciło,
+    // wchodzą do rundy z zerem. Zera lecą jako wpis w processedImages, więc muszą być
+    // dopisane PRZED ponowną agregacją poniżej.
+    if (interaction.customId === 'phase2_complete_zeros') {
+        phaseService.addZerosForMissingClanNicks(session);
+    }
 
     try {
         const aggregated = phaseService.aggregateResults(session);
