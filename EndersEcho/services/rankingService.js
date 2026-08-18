@@ -76,6 +76,24 @@ class RankingService {
     }
 
     /**
+     * Wyrzuca z pamięci wszystkie cache danego serwera.
+     *
+     * ⚠️ OBOWIĄZKOWE po skasowaniu katalogu `data/guilds/{guildId}/` (panel admina:
+     * „Usuń dane serwera"). Sam `store.forget()` NIE wystarcza: `loadRanking()` sprawdza
+     * najpierw własny `_rankingCache` i zwraca z niego dane, w ogóle nie sięgając do
+     * store'a — a pierwszy `saveRanking()` zapisywał je z powrotem na dysk, wskrzeszając
+     * dane, które użytkownik kazał usunąć.
+     *
+     * @param {string} guildId
+     */
+    invalidateGuildCache(guildId) {
+        this._rankingCache.delete(guildId);
+        this._sortedCache.delete(guildId);
+        this._globalCache = null; // globalny ranking zawierał wpisy skasowanego serwera
+        // `activeRankings` jest kluczowane messageId (paginacja embedów), nie guildId — nie ruszamy
+    }
+
+    /**
      * Zapisuje ranking dla danego serwera
      * @param {string} guildId
      * @param {Object} ranking

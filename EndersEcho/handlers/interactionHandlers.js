@@ -14270,6 +14270,12 @@ class InteractionHandler {
             // a pierwszy zapis odtworzyłby je na dysku ze starą zawartością
             store.forget(guildDataDir);
 
+            // ⚠️ Sam `store.forget()` NIE wystarcza: rankingService ma WŁASNY cache
+            // (`_rankingCache`), który `loadRanking()` sprawdza PRZED sięgnięciem do store'a.
+            // Bez tego skasowany ranking dalej był oddawany z pamięci, a pierwszy zapis
+            // wskrzeszał go na dysku — czyli dane, które użytkownik kazał usunąć, wracały.
+            this.rankingService?.invalidateGuildCache(guildIdToDelete);
+
             await this.guildConfigService.deleteConfig(guildIdToDelete);
 
             const nick = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
