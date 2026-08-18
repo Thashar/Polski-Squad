@@ -1,5 +1,22 @@
 ### 🏆 EndersEcho Bot
 
+> ### ⚠️ SILNIK OCR NA PRODUKCJI: WYŁĄCZNIE AI — NIE TESSERACT
+>
+> **Na serwerze produkcyjnym cały OCR obsługuje AI (`Google Gemini`). Tesseract NIE jest używany.**
+>
+> Skąd bierze się pomyłka: kod Tesseract nadal istnieje w `services/ocrService.js` (jest tam
+> `require('tesseract.js')`) jako ścieżka zapasowa, a przełącznik `USE_ENDERSECHO_AI_OCR` domyślnie jest
+> **wyłączony** (`process.env.USE_ENDERSECHO_AI_OCR === 'true'`). Lokalny `.env` go nie ustawia, więc lokalnie
+> kod schodzi na Tesseract — na produkcji zmienna jest ustawiona na `true` i ta gałąź nigdy
+> nie jest wykonywana.
+>
+> **Konsekwencje przy diagnozie i optymalizacji:**
+> - Nie licz plików `pol.traineddata` / `eng.traineddata` (~5 MB każdy) jako obciążenia — nikt ich nie ładuje
+> - Nie analizuj wydajności workerów Tesseract ani preprocessingu pod jego kątem
+> - Ścieżka realna to: pobranie screena → `sharp` → base64 → zapytanie do AI
+> - Zmieniając cokolwiek w OCR, patrz na `services/aiOcrService.js`, nie na `ocrService.js`
+
+
 **⚠️ ZASADA DWUJĘZYCZNOŚCI (KRYTYCZNE) — DOTYCZY WSZYSTKICH ELEMENTÓW UI:**
 - Bot obsługuje dwa języki: `pol` i `eng` — konfigurowane per serwer przez `/configure`
 - **KAŻDY nowy element UI** (komendy slash, embedy, przyciski, select menu, modale, komunikaty) MUSI mieć obie wersje językowe

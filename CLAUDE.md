@@ -709,6 +709,19 @@ Każdy bot ma osobny commit i test funkcjonalny. Poza store'em zostały wyłącz
 
 ## Szczegóły Botów
 
+> ### ⚠️ OCR W CAŁYM PROJEKCIE DZIAŁA NA AI, NIE NA TESSERACT
+>
+> Cztery boty robią OCR (**Stalker**, **EndersEcho**, **Kontroler**, **Rekruter**) i **wszystkie
+> na produkcji używają wyłącznie modeli AI** (Gemini Vision / Claude Vision). Tesseract nie jest używany.
+>
+> **Dlaczego łatwo się pomylić:** w Stalkerze, EndersEcho i Rekruterze `services/ocrService.js` nadal
+> zawiera `require('tesseract.js')` jako ścieżkę zapasową, a przełączniki (`USE_STALKER_AI_OCR`,
+> `USE_ENDERSECHO_AI_OCR`, `USE_AI_OCR`) są domyślnie **wyłączone** i lokalny `.env` ich nie ustawia.
+> Lokalnie kod schodzi więc na Tesseract, na produkcji — nigdy. Kontroler nie ma nawet tego kodu.
+>
+> **Praktycznie:** analizując OCR patrz na `services/aiOcrService.js`. Pliki `pol.traineddata`
+> i `eng.traineddata` (~5 MB każdy) leżą w repo, ale nikt ich nie ładuje — nie licz ich jako obciążenia.
+
 **Każdy bot ma własną szczegółową dokumentację:**
 
 1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + AI), kwalifikacja klanów

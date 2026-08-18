@@ -1,5 +1,15 @@
 ### 🎯 Kontroler Bot
 
+> ### ⚠️ SILNIK OCR: WYŁĄCZNIE AI — TESSERACT USUNIĘTY
+>
+> **Kontroler nie ma nawet kodu Tesseract** — dawny `services/ocrService.js` został skasowany,
+> `require('tesseract.js')` nie występuje. Jedyny silnik to Google Gemini Vision
+> (`services/aiOcrService.js`), bez żadnego fallbacku: brak `KONTROLER_GOOGLE_AI_API_KEY`
+> oznacza, że OCR po prostu nie działa.
+>
+> Ścieżka realna: pobranie screena → binaryzacja `sharp` → base64 → zapytanie do AI.
+
+
 **6 Systemów:**
 1. **AI OCR (kanał Daily)** - `aiOcrService.js` (Google Gemini Vision) + `analysisService.js`: jedyny silnik OCR, **bez fallbacku na Tesseract** (stary `ocrService.js` usunięty). **Kanał CX został usunięty** — bot nie analizuje już screenów CX ani nie nadaje ról CX (zastąpione loterią Glory, system 6)
    - **Silnik:** `aiOcrService.analyzeResultsImage(imagePath)` wysyła zbinaryzowany obraz do Gemini Vision przez wspólny `utils/llmAdapter.js` (DI z `index.js`, `createLlmAdapter({ botSlug: 'kontroler' })`). Prompt prosi o listę `<nick> - <wynik>` całego rankingu. Parsowanie jak w Stalkerze (`parseAIResponse`), wykrywanie niepoprawnego screena po słowach kluczowych ("nie wykryto", "brak wyników" itd.)
