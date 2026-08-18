@@ -454,7 +454,16 @@ function restoreRewardPrompts(interactionHandler, sharedState) {
 }
 
 function startRepositionSystem(sharedState) {
+    // ⚠️ `setInterval` nie czeka na zakończenie poprzedniego przebiegu. Repozycjonowanie
+    // kasuje i wysyła ogłoszenie na nowo, a znacznik czasu aktualizowany jest dopiero PO
+    // wysłaniu — przy rate limicie Discorda dwa przebiegi mogły nałożyć się na to samo
+    // lobby i wystawić dwa ogłoszenia.
+    let przebiegWToku = false;
+
     setInterval(async () => {
+        if (przebiegWToku) return;
+        przebiegWToku = true;
+
         try {
             const lobbiesForRepositioning = sharedState.lobbyService.getLobbiesForRepositioning(
                 sharedState.config.lobby.repositionInterval
@@ -464,6 +473,8 @@ function startRepositionSystem(sharedState) {
             }
         } catch (error) {
             logger.error('❌ Błąd podczas repozycjonowania lobby:', error);
+        } finally {
+            przebiegWToku = false;
         }
     }, 60000);
 }
@@ -522,8 +533,14 @@ async function shutdown(signal) {
     process.exit(0);
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+// ⚠️ Handlery sygnałów rejestrujemy TYLKO przy uruchomieniu samodzielnym.
+// Pod głównym launcherem wszystkie dziewięć botów dzieli jeden proces — to launcher woła
+// `stop()` każdego bota (robi to samo sprzątanie), domyka zapisy w toku i dopiero wtedy
+// kończy proces. Wcześniej `process.exit()` stąd ścigało się z tym domykaniem.
+if (require.main === module) {
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
 
 module.exports = {
     client,

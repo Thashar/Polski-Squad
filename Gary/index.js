@@ -251,17 +251,20 @@ async function stopBot() {
     }
 }
 
-process.on('SIGINT', async () => {
-    logger.info('Received SIGINT signal, shutting down gracefully...');
-    await stopBot();
-    process.exit(0);
-});
+// ⚠️ Signal handlers are registered ONLY when running standalone. Under the main
+// launcher all nine bots share a single process — the launcher calls each bot's `stop()`,
+// flushes pending writes and only then exits. A `process.exit()` here used to race that
+// flush, and whichever won killed the process together with unsaved data.
+if (require.main === module) {
+    const shutdown = async (signal) => {
+        logger.info(`Received ${signal} signal, shutting down gracefully...`);
+        await stopBot();
+        process.exit(0);
+    };
 
-process.on('SIGTERM', async () => {
-    logger.info('Received SIGTERM signal, shutting down gracefully...');
-    await stopBot();
-    process.exit(0);
-});
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
 
 module.exports = {
     start: startBot,  // Alias for main launcher

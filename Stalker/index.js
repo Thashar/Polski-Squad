@@ -1100,31 +1100,27 @@ process.on('uncaughtException', error => {
     // Wyjście stąd ubijało proces zanim flush zdążył się wykonać.
 });
 
-process.on('SIGINT', async () => {
-    logger.info('Otrzymano sygnał SIGINT, zamykam bota...');
-    
-    try {
-        await client.destroy();
-        logger.info('Bot został pomyślnie zamknięty');
-        process.exit(0);
-    } catch (error) {
-        logger.error(`Błąd podczas zamykania bota: ${error.message}`);
-        process.exit(1);
-    }
-});
+// ⚠️ Handlery sygnałów rejestrujemy TYLKO przy uruchomieniu samodzielnym.
+// Pod głównym launcherem wszystkie dziewięć botów dzieli jeden proces — to launcher
+// zamyka je po kolei (`stop()`), domyka zapisy w toku (`jsonStore.flush()`) i dopiero
+// wtedy kończy proces. Wcześniej każdy bot miał własne `process.exit()`, które ścigało
+// się z tym domykaniem: kto pierwszy, ten ubijał proces razem z niezapisanymi danymi.
+if (require.main === module) {
+    const zamknij = async (sygnal) => {
+        logger.info(`Otrzymano sygnał ${sygnal}, zamykam bota...`);
+        try {
+            await client.destroy();
+            logger.info('Bot został pomyślnie zamknięty');
+            process.exit(0);
+        } catch (error) {
+            logger.error(`Błąd podczas zamykania bota: ${error.message}`);
+            process.exit(1);
+        }
+    };
 
-process.on('SIGTERM', async () => {
-    logger.info('Otrzymano sygnał SIGTERM, zamykam bota...');
-    
-    try {
-        await client.destroy();
-        logger.info('Bot został pomyślnie zamknięty');
-        process.exit(0);
-    } catch (error) {
-        logger.error(`Błąd podczas zamykania bota: ${error.message}`);
-        process.exit(1);
-    }
-});
+    process.on('SIGINT', () => zamknij('SIGINT'));
+    process.on('SIGTERM', () => zamknij('SIGTERM'));
+}
 
 async function refreshMemberCache() {
     try {

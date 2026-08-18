@@ -9,6 +9,7 @@ class MessageCleanupService {
         this.messagesFile = path.join(__dirname, '../data/scheduled_deletions.json');
         this.scheduledMessages = [];
         this.cleanupInterval = null;
+        this.przebiegWToku = false;
     }
 
     async init() {
@@ -73,6 +74,12 @@ class MessageCleanupService {
     }
 
     async processScheduledDeletions() {
+        // ⚠️ `setInterval` nie czeka na zakończenie poprzedniego przebiegu, a kasowanie
+        // wiadomości to ruch sieciowy — przy większej porcji albo rate limicie Discorda
+        // przebieg potrafi przekroczyć 2 minuty. Bez blokady kolejny tick brał tę samą
+        // porcję (lista czyszczona jest dopiero na końcu) i kasował wszystko po raz drugi.
+        if (this.przebiegWToku) return;
+
         const now = Date.now();
         const messagesToDelete = this.scheduledMessages.filter(msg => msg.deleteAt <= now);
 
@@ -80,17 +87,22 @@ class MessageCleanupService {
             return;
         }
 
+        this.przebiegWToku = true;
         this.logger.info(`[MESSAGE_CLEANUP] 🗑️ Przetwarzanie ${messagesToDelete.length} wiadomości do usunięcia`);
 
-        for (const messageData of messagesToDelete) {
-            await this.deleteMessage(messageData);
+        try {
+            for (const messageData of messagesToDelete) {
+                await this.deleteMessage(messageData);
+            }
+
+            // Usuń przetworzone wiadomości z listy (zarówno te pomyślnie usunięte jak i te z błędami)
+            this.scheduledMessages = this.scheduledMessages.filter(msg => msg.deleteAt > now);
+            await this.saveScheduledMessages();
+
+            this.logger.info(`[MESSAGE_CLEANUP] 🧹 Usunięto ${messagesToDelete.length} wpisów z pliku zaplanowanych usunięć`);
+        } finally {
+            this.przebiegWToku = false;
         }
-
-        // Usuń przetworzone wiadomości z listy (zarówno te pomyślnie usunięte jak i te z błędami)
-        this.scheduledMessages = this.scheduledMessages.filter(msg => msg.deleteAt > now);
-        await this.saveScheduledMessages();
-
-        this.logger.info(`[MESSAGE_CLEANUP] 🧹 Usunięto ${messagesToDelete.length} wpisów z pliku zaplanowanych usunięć`);
     }
 
     async deleteMessage(messageData) {

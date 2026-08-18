@@ -335,8 +335,14 @@ function setupEventHandlers() {
 
     process.on('unhandledRejection', onUnhandledRejection);
     process.on('uncaughtException', onUncaughtException);
-    process.on('SIGINT', () => onShutdown('SIGINT'));
-    process.on('SIGTERM', () => onShutdown('SIGTERM'));
+    // ⚠️ Handlery sygnałów tylko przy uruchomieniu samodzielnym. Pod głównym launcherem
+    // wszystkie dziewięć botów dzieli jeden proces — to launcher woła `stop()` każdego bota,
+    // domyka zapisy w toku i dopiero wtedy kończy proces. `process.exit()` stąd ścigało się
+    // z tym domykaniem — kto pierwszy, ten ubijał niezapisane dane.
+    if (require.main === module) {
+        process.on('SIGINT', () => onShutdown('SIGINT'));
+        process.on('SIGTERM', () => onShutdown('SIGTERM'));
+    }
 }
 
 /**

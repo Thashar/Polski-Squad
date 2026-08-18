@@ -59,12 +59,16 @@ async function _migrateFile(src, dst, guildId) {
         await fs.access(dst);
         // Plik docelowy już istnieje — usuń źródło (idempotentność)
         await fs.unlink(src);
+        store.forget(src);
         return;
     } catch { /* nie istnieje — kontynuuj */ }
 
     const content = await fs.readFile(src, 'utf8');
     await fs.writeFile(dst, content, 'utf8');
     await fs.unlink(src);
+    // ⚠️ Plik został skasowany poza store'em — bez `forget()` cache nadal by go oddał
+    // przy odczycie, a pierwszy zapis odtworzyłby go na dysku ze starą zawartością
+    store.forget(src);
     logger.info(`  ↳ ${path.basename(src)} → guilds/${guildId}/${path.basename(dst)}`);
 }
 
@@ -77,12 +81,14 @@ async function _migrateScoreHistory(src, wynikiDir, guildId) {
         data = JSON.parse(raw);
     } catch {
         await fs.unlink(src).catch(() => {});
+        store.forget(src);
         return;
     }
 
     const userIds = Object.keys(data);
     if (userIds.length === 0) {
         await fs.unlink(src);
+        store.forget(src);
         return;
     }
 
@@ -96,6 +102,7 @@ async function _migrateScoreHistory(src, wynikiDir, guildId) {
     }
 
     await fs.unlink(src);
+    store.forget(src);
     logger.info(`  ↳ score_history_${guildId}.json → guilds/${guildId}/wyniki/ (${migrated} graczy)`);
 }
 

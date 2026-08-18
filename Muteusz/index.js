@@ -395,6 +395,12 @@ process.on('uncaughtException', async (error) => {
 });
 
 process.on('SIGINT', async () => {
+    // ⚠️ Pod głównym launcherem NIE zamykamy procesu sami — wszystkie dziewięć botów
+    // dzieli jeden proces. Launcher woła `stop()` każdego bota (robi to samo sprzątanie),
+    // domyka zapisy w toku i dopiero wtedy kończy proces. Wcześniej `process.exit()` stąd
+    // ścigało się z tym domykaniem — kto pierwszy, ten ubijał niezapisane dane.
+    if (require.main !== module) return;
+
     if (logService && logService.logMessage) {
         await logService.logMessage('info', 'Zamykanie bota...');
     } else {
@@ -425,6 +431,12 @@ process.on('SIGINT', async () => {
 });
 
 process.on('SIGTERM', async () => {
+    // ⚠️ Pod głównym launcherem NIE zamykamy procesu sami — wszystkie dziewięć botów
+    // dzieli jeden proces. Launcher woła `stop()` każdego bota (robi to samo sprzątanie),
+    // domyka zapisy w toku i dopiero wtedy kończy proces. Wcześniej `process.exit()` stąd
+    // ścigało się z tym domykaniem — kto pierwszy, ten ubijał niezapisane dane.
+    if (require.main !== module) return;
+
     if (logService && logService.logMessage) {
         await logService.logMessage('info', 'Otrzymano sygnał SIGTERM, zamykam bota...');
     } else {

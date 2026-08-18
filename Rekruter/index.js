@@ -419,8 +419,14 @@ async function shutdown(signal) {
     }
 }
 
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));
+// ⚠️ Handlery sygnałów rejestrujemy TYLKO przy uruchomieniu samodzielnym.
+// Pod głównym launcherem wszystkie dziewięć botów dzieli jeden proces — to launcher woła
+// `stop()` każdego bota (robi to samo sprzątanie), domyka zapisy w toku i dopiero wtedy
+// kończy proces. Wcześniej `process.exit()` stąd ścigało się z tym domykaniem.
+if (require.main === module) {
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
 
 process.on('unhandledRejection', error => {
     logger.error(`Nieobsłużone odrzucenie Promise: ${error.message}`);

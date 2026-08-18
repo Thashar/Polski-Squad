@@ -116,17 +116,24 @@ const botConfigs = [
     }
 ];
 
+// Uruchomione boty — potrzebne przy zamykaniu, żeby zawołać ich `stop()`.
+// Boty NIE zamykają procesu same (ich handlery sygnałów są za `require.main === module`),
+// bo dziewięć `process.exit()` ścigałoby się z domykaniem zapisów.
+const uruchomioneBoty = [];
+
 /**
  * Uruchamia pojedynczy bot z obsługą błędów
  * @param {Object} config - Konfiguracja bota
  */
 async function startBot(config) {
     const { name, loggerName, emoji, path, hasSpecialHandling } = config;
-    
+
     try {
         // Dynamiczny import bota tylko gdy jest potrzebny
         const instance = require(path);
-        
+
+        uruchomioneBoty.push({ name, loggerName, instance });
+
         if (typeof instance.start === 'function') {
             // Bot ma metodę start()
             await instance.start();
@@ -140,6 +147,28 @@ async function startBot(config) {
     } catch (error) {
         const logger = createBotLogger(loggerName);
         logger.error(`Błąd uruchomienia ${name}: ${error.message}`);
+    }
+}
+
+/**
+ * Zatrzymuje wszystkie boty po kolei, każdy z własnym limitem czasu.
+ *
+ * Każdy `stop()` robi to samo sprzątanie, co dawny handler sygnału danego bota
+ * (zapis lobby i timerów, czyszczenie cache mediów, wyłączanie interwałów).
+ * Limit czasu pilnuje, żeby jeden zawieszony bot nie zablokował zamykania reszty.
+ */
+async function zatrzymajBoty(limitMs = 5000) {
+    for (const { name, loggerName, instance } of uruchomioneBoty) {
+        if (typeof instance.stop !== 'function') continue;
+
+        try {
+            await Promise.race([
+                instance.stop(),
+                new Promise(resolve => setTimeout(resolve, limitMs))
+            ]);
+        } catch (error) {
+            createBotLogger(loggerName).error(`Błąd zatrzymywania ${name}: ${error.message}`);
+        }
     }
 }
 
@@ -221,6 +250,7 @@ function setupShutdownHandlers() {
         zamykanie = true;
 
         logger.warn(`\n🛑 Otrzymano sygnał ${signal}. Zamykanie botów...`);
+        await zatrzymajBoty();
         await domknijZapisy();
         process.exit(kod);
     };
