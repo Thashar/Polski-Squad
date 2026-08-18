@@ -656,8 +656,11 @@ store.startReporting(60000);              // cykliczny raport ruchu dyskowego do
 Uruchamiany w głównym `index.js` po starcie botów. Jedna zbiorcza linia:
 
 ```
-💾 Dysk (60s): odczyt 3, zapis 8
+💾 Dysk (60s): odczyt 3 (12.4 KB), zapis 8 (45.1 KB) — od startu: odczyt 1.24 MB, zapis 5.40 MB
 ```
+
+- Każda operacja ma liczbę i wolumen; sumy `od startu` rosną przez cały czas życia procesu
+- Bajty zapisu liczone są z faktycznego payloadu trafiającego na dysk (po `JSON.stringify`), nie szacowane
 
 - **Minuty bez żadnego I/O są pomijane** — log nie puchnie w nocy
 - Po migracji odczyt powinien być bliski zeru (dane idą z pamięci); rosnący odczyt oznacza, że gdzieś doszła ścieżka omijająca cache

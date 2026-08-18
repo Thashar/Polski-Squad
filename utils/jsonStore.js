@@ -55,7 +55,8 @@ class JsonStore {
         // absolutna ścieżka -> Promise (kolejka zapisów per plik)
         this._queues = new Map();
 
-        this._stats = { diskReads: 0, cacheHits: 0, writes: 0, writeErrors: 0, parseErrors: 0 };
+        // readBytes/writeBytes rosną od startu procesu — dają obraz łącznego obciążenia dysku
+        this._stats = { diskReads: 0, cacheHits: 0, writes: 0, writeErrors: 0, parseErrors: 0, readBytes: 0, writeBytes: 0 };
 
         // Okno raportowania — zbiera ruch dyskowy od ostatniego raportu (patrz startReporting)
         this._window = this._emptyWindow();
@@ -75,6 +76,10 @@ class JsonStore {
      * Odnotowuje operację dyskową w oknie raportowania.
      */
     _track(kind, key, bytes) {
+        // suma narastająca od startu procesu
+        if (kind === 'reads') this._stats.readBytes += bytes;
+        else this._stats.writeBytes += bytes;
+
         const bucket = this._window[kind];
         const label = this._label(key);
         const entry = bucket.get(label) || { count: 0, bytes: 0 };
@@ -517,7 +522,12 @@ class JsonStore {
             const r = this.collectReport();
             if (!r) return;
 
-            logger.info(`💾 Dysk (${r.seconds}s): odczyt ${r.readOps}, zapis ${r.writeOps}`);
+            logger.info(
+                `💾 Dysk (${r.seconds}s): ` +
+                `odczyt ${r.readOps} (${this._fmtBytes(r.readBytes)}), ` +
+                `zapis ${r.writeOps} (${this._fmtBytes(r.writeBytes)}) ` +
+                `— od startu: odczyt ${this._fmtBytes(this._stats.readBytes)}, zapis ${this._fmtBytes(this._stats.writeBytes)}`
+            );
         }, intervalMs);
 
         // Raport nie może trzymać procesu przy życiu przy zamykaniu bota

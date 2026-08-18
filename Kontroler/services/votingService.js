@@ -114,10 +114,18 @@ class VotingService {
         try {
             const votesArray = await store.getOrLoad(this.activeVotesFile, () => []);
 
-            // Konwersja z tablicy do Map z przywróceniem Set
-            for (const vote of votesArray) {
-                vote.votes.yes = new Set(vote.votes.yes);
-                vote.votes.no = new Set(vote.votes.no);
+            // Konwersja z tablicy do Map z przywróceniem Set.
+            // ⚠️ Pracujemy na KOPII wpisu, nie mutujemy obiektu ze store'a: w cache mają
+            // zostać tablice (tak wygląda plik). Podmiana ich na Set sprawiłaby, że
+            // JSON.stringify zapisałby `{}` zamiast listy głosów — czyli utratę głosowania.
+            for (const raw of votesArray) {
+                const vote = {
+                    ...raw,
+                    votes: {
+                        yes: new Set(raw.votes?.yes || []),
+                        no: new Set(raw.votes?.no || [])
+                    }
+                };
                 this.activeVotes.set(vote.messageId, vote);
             }
         } catch (error) {
