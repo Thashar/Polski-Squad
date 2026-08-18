@@ -302,6 +302,7 @@
 - **10 graczy na stronę** (`PER_PAGE`) — tyle serii mieści jeszcze czytelnie wykres progresu
 - Dane z `data/equipment_data.json` (zapisywane przez "Skanuj ekwipunek")
 - **Wspólny builder przycisków:** `buildCoreRankingRows(activeName)` — jedno miejsce dla widoku rankingu, ekranu startowego, braku danych i obsługi błędu (wcześniej ten sam zestaw budowany był w czterech miejscach osobno)
+- **Embed rankingu:** tytuł `Ranking — {nazwa cora}` **bez emotki**, lista graczy w opisie (nie w polu), a ikona cora idzie jako **miniatura** embeda — `coreIconUrl()` wyciąga ID z `EQUIPMENT_ICONS` i buduje `https://cdn.discordapp.com/emojis/{id}.png?size=160`. Emotka w tekście renderuje się w rozmiarze czcionki, jako thumbnail jest duża i czytelna, więc nagłówek `👾 Xeno Pet Core` nad listą był już tylko powtórzeniem. „Suma Core" nie ma emotki w CDN (unicode 🧮) — zostaje w tytule, bez miniatury
 - Pod rankingiem: **wykres progresu wszystkich graczy z bieżącej strony** (`generateCoreComparisonChart`, SVG → PNG przez sharp) — jedna linia na gracza, kolory serii w kolejności rankingu, legenda z nickami, wartość przy ostatnim punkcie każdej serii. Gracz z jednym pomiarem pokazywany jest jako sama kropka; gdy nikt ze strony nie ma historii → brak wykresu. **Wymiary:** szerokość 900 px, pole danych 4× wyższe niż pierwotne (`HEIGHT_SCALE = 4` → `cH = 592`), całość ok. 730 px przy 2 rzędach legendy — przy 10 seriach linie nie nachodziły na siebie
 - Dane historyczne: `data/equipment_history.json` — dzienne snapshoty per userId
 

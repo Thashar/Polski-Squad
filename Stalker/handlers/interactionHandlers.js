@@ -12708,6 +12708,17 @@ function parseCoreEmoji(str) {
 }
 
 /**
+ * URL obrazka emotki cora z CDN Discorda — do miniatury embeda rankingu.
+ * Emotka w tytule/polu renderuje się w rozmiarze tekstu; ta sama grafika jako
+ * thumbnail jest duża i czytelna, więc ikona nie musi już być powtarzana w treści.
+ * @returns {string|null} null dla emotek unicode (np. suma corów)
+ */
+function coreIconUrl(coreName) {
+    const parsed = parseCoreEmoji(EQUIPMENT_ICONS[coreName] || '');
+    return parsed && parsed.id ? `https://cdn.discordapp.com/emojis/${parsed.id}.png?size=160` : null;
+}
+
+/**
  * Dwa wiersze przycisków wyboru rankingu: 6 typów corów + „Suma Core".
  * Aktywny wyróżniony kolorem Primary. Jedno miejsce budowania — widok rankingu, ekran
  * startowy, brak danych i obsługa błędu muszą pokazywać ten sam zestaw.
@@ -12886,15 +12897,20 @@ async function handleCoreRankingButton(interaction, sharedState) {
         const pageLines = lines.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
         const pageEntries = entries.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
 
-        const coreIcon = isSum ? SUM_CORE_EMOJI : (EQUIPMENT_ICONS[coreName] || '🔹');
+        const titlePrefix = isSum ? `${SUM_CORE_EMOJI} ` : '';
+        const iconUrl = isSum ? null : coreIconUrl(coreName);
         const { EmbedBuilder: EBLocal, ButtonBuilder: BB, ActionRowBuilder: ARB, ButtonStyle: BS } = require('discord.js');
 
+        // Ikona cora jako miniatura (duża), a nie mała emotka powtarzana w tytule i nagłówku pola.
+        // Dla sumy corów zostaje emotka unicode — ta nie ma odpowiednika w CDN.
         const embed = new EBLocal()
-            .setTitle(`${coreIcon} Ranking — ${displayName}`)
+            .setTitle(`${titlePrefix}Ranking — ${displayName}`)
             .setColor(isSum ? '#F1C40F' : '#00BFFF')
+            .setDescription(pageLines.join('\n'))
             .setFooter({ text: `Strona ${safePage + 1}/${totalPages} | Łącznie graczy: ${entries.length}` })
-            .setTimestamp()
-            .addFields({ name: `${coreIcon} ${displayName}`, value: pageLines.join('\n'), inline: false });
+            .setTimestamp();
+
+        if (iconUrl) embed.setThumbnail(iconUrl);
 
         // Wiersz 1: paginacja
         const rowPagination = new ARB().addComponents(
