@@ -2979,13 +2979,26 @@ class InteractionHandler {
                 }
             );
 
-            if (r.topWaga.length > 0) {
+            // Skumulowane per wzorzec ścieżki: pojedynczy screen OCR waży niewiele,
+            // ale wszystkie razem to zwykle najcięższa pozycja w całym procesie
+            const linie = (grupy, klucz, ile) => grupy.slice(0, 5).map((g, i) =>
+                `\`${i + 1}.\` **${b(g[klucz])}** — ${g.klucz}\n` +
+                `　　${ile} ×${g[ile === 'odczyt' ? 'reads' : 'writes']}` +
+                (g.files > 1 ? ` · ${g.files} plik(ów)` : '')
+            ).join('\n');
+
+            if (r.topOdczytGrupy.length > 0) {
                 embed.addFields({
-                    name: '🏋️ Najbardziej obciążające pliki (odczyt + zapis)',
-                    value: r.topWaga.slice(0, 5).map((p, i) =>
-                        `\`${i + 1}.\` **${b(p.bytes)}** — ${p.label}\n` +
-                        `　　odczyt ×${p.reads}, zapis ×${p.writes}`
-                    ).join('\n'),
+                    name: '📖 Najcięższe w odczycie (skumulowane)',
+                    value: linie(r.topOdczytGrupy, 'readBytes', 'odczyt'),
+                    inline: false
+                });
+            }
+
+            if (r.topZapisGrupy.length > 0) {
+                embed.addFields({
+                    name: '✏️ Najcięższe w zapisie (skumulowane)',
+                    value: linie(r.topZapisGrupy, 'writeBytes', 'zapis'),
                     inline: false
                 });
             }

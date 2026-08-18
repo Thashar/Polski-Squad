@@ -34,7 +34,7 @@
 15. **Komenda /io — monitor ruchu dyskowego** - `interactionHandlers.js` → `handleIOCommand`: statystyki **CAŁEGO** odczytu i zapisu procesu, zbierane przez `utils/diskMonitor`. Tylko administrator, odpowiedź ephemeral.
    - **Raport jest GLOBALNY, nie tylko o Muteuszu** — wszystkie 9 botów działa w jednym procesie i dzieli jeden store, więc widać ruch całego projektu. Liczby narastają od startu procesu (restart = zerowanie)
    - **Widoki** (opcja `widok`):
-     - `Podsumowanie` (domyślnie) — liczba operacji i wolumen osobno dla odczytu i zapisu, średnie tempo w B/s, ile odczytów obsłużyła pamięć zamiast dysku (procent trafień), 5 najbardziej obciążających plików, licznik błędów zapisu i parsowania
+     - `Podsumowanie` (domyślnie) — liczba operacji i wolumen osobno dla odczytu i zapisu, średnie tempo w B/s, ile odczytów obsłużyła pamięć zamiast dysku (procent trafień), dwa osobne zestawienia najcięższych pozycji — **📖 w odczycie** i **✏️ w zapisie** (po 5), ze **skumulowanymi** bajtami: pliki o unikalnych nazwach (screeny OCR, cache mediów, logi) zwijane są do wzorca `katalog/*.rozszerzenie` przez `diskMonitor._grupa()`, więc widać ich łączny ciężar zamiast pojedynczych, drobnych wpisów; pliki `.json` (stałe nazwy) pozostają rozbite osobno, licznik błędów zapisu i parsowania
      - `Boty i obszary` — agregacja per bot (`Stalker`, `EndersEcho`, `shared_data`…), wyliczana z pierwszego segmentu ścieżki pliku
      - `Rodzaje plików` — podział na kategorie: obrazy OCR, cache mediów, traineddata, obrazy, archiwa, logi, dane JSON, node_modules — z udziałem procentowym
      - `Pliki — odczyt` — najczęściej ładowane z dysku oraz najcięższe wolumenowo
