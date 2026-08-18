@@ -5,6 +5,7 @@ process.noDeprecation = true;
 const { createBotLogger, setupGlobalLogging } = require('./utils/consoleLogger');
 const { scheduler } = require('./backup-scheduler');
 const GitAutoFix = require('./utils/gitAutoFix');
+const jsonStore = require('./utils/jsonStore');
 
 const logger = createBotLogger('Launcher');
 
@@ -313,6 +314,14 @@ async function main() {
     setupShutdownHandlers();
     checkDiskOnStartup();
     await startAllBots();
+
+    // Cykliczny raport ruchu dyskowego — widać, co i ile realnie czyta/zapisuje
+    // na dysku po przejściu botów na cache (utils/jsonStore).
+    // Interwał w sekundach: DISK_REPORT_INTERVAL (domyślnie 60), 0 = wyłączony.
+    const raportSek = Number(process.env.DISK_REPORT_INTERVAL ?? 60);
+    if (raportSek > 0) {
+        jsonStore.startReporting(raportSek * 1000);
+    }
 
     // Uruchom scheduler backupów (tylko w produkcji)
     if (!process.argv.includes('--local')) {

@@ -648,7 +648,23 @@ await store.remove(sciezka);              // usunięcie pliku ORAZ wpisu w cache
 store.forget(sciezkaLubKatalog);          // usunięcie tylko z pamięci (plik już skasowany inną drogą)
 await store.flush();                      // dokończenie zapisów przed zamknięciem procesu
 store.getStats();                         // diskReads / cacheHits / hitRate
+store.startReporting(60000);              // cykliczny raport ruchu dyskowego do logu
 ```
+
+#### Raport ruchu dyskowego (co minutę, w logu)
+
+Uruchamiany w głównym `index.js` po starcie botów. Pokazuje, co realnie puka do dysku:
+
+```
+💾 Dysk (60s): ODCZYT 3 op / 12.4 KB z 3 plik(ów) · ZAPIS 8 op / 45.1 KB do 5 plik(ów) · z pamięci 214 odczytów (trafienia 98.6%)
+   📖 Czytane z dysku: EndersEcho/data/guilds/123/wyniki/456.json ×1 (8.2 KB) | …
+   ✏️ Zapisane: Stalker/data/punishments.json ×3 (21.0 KB) | …
+```
+
+- **Minuty bez żadnego I/O są pomijane** — log nie puchnie w nocy
+- Lista pokazuje 5 plików o największym wolumenie, z liczbą operacji i bajtami
+- „trafienia" to procent odczytów obsłużonych z pamięci zamiast z dysku — po migracji powinien być bliski 100%
+- Interwał: `DISK_REPORT_INTERVAL` w `.env` (sekundy, domyślnie 60; `0` wyłącza)
 
 #### Co daje poza mniejszym I/O
 
@@ -892,6 +908,11 @@ AUTO_GIT_FIX=false
 # AUTO_NPM_FIX_FORCE=true wymusza aktualizacje (npm audit fix --force) - może złamać kompatybilność!
 AUTO_NPM_FIX=false
 AUTO_NPM_FIX_FORCE=false
+
+# ===== RAPORT RUCHU DYSKOWEGO (co minutę w logu) =====
+# Pokazuje ile operacji i bajtów poszło na odczyt/zapis oraz które pliki obciążają dysk.
+# Minuty bez I/O są pomijane. Wartość w sekundach; 0 = wyłącz raport.
+DISK_REPORT_INTERVAL=60
 
 # ===== DIAGNOSTYKA SYSTEMU PLIKÓW (OPCJONALNE, DOMYŚLNIE WYŁĄCZONA) =====
 # Wypisuje przy starcie zajętość dysku, inody, top 5 katalogów wg rozmiaru i liczby plików

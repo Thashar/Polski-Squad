@@ -56,6 +56,40 @@ class JsonStore {
         this._queues = new Map();
 
         this._stats = { diskReads: 0, cacheHits: 0, writes: 0, writeErrors: 0, parseErrors: 0 };
+
+        // Okno raportowania — zbiera ruch dyskowy od ostatniego raportu (patrz startReporting)
+        this._window = this._emptyWindow();
+        this._reportTimer = null;
+    }
+
+    _emptyWindow() {
+        return {
+            reads: new Map(),   // etykieta pliku -> { count, bytes }
+            writes: new Map(),  // etykieta pliku -> { count, bytes }
+            cacheHits: 0,
+            since: Date.now()
+        };
+    }
+
+    /**
+     * Odnotowuje operację dyskową w oknie raportowania.
+     */
+    _track(kind, key, bytes) {
+        const bucket = this._window[kind];
+        const label = this._label(key);
+        const entry = bucket.get(label) || { count: 0, bytes: 0 };
+        entry.count++;
+        entry.bytes += bytes;
+        bucket.set(label, entry);
+    }
+
+    /**
+     * Skraca ścieżkę do czytelnej etykiety: "EndersEcho/guilds/123/ranking.json"
+     * zamiast pełnej ścieżki bezwzględnej.
+     */
+    _label(key) {
+        const root = path.resolve(__dirname, '..');
+        return key.startsWith(root) ? key.slice(root.length + 1).replace(/\\/g, '/') : path.basename(key);
     }
 
     _key(filePath) {
@@ -110,6 +144,7 @@ class JsonStore {
         try {
             const raw = await fs.readFile(key, 'utf8');
             this._stats.diskReads++;
+            this._track('reads', key, Buffer.byteLength(raw));
 
             if (!raw.trim()) {
                 // Pusty plik = ślad po przerwanym zapisie sprzed wprowadzenia
@@ -147,6 +182,7 @@ class JsonStore {
 
         if (cached) {
             this._stats.cacheHits++;
+            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -173,6 +209,7 @@ class JsonStore {
 
         if (cached && cached.loaded) {
             this._stats.cacheHits++;
+            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -184,6 +221,7 @@ class JsonStore {
         try {
             const raw = fsSync.readFileSync(key, 'utf8');
             this._stats.diskReads++;
+            this._track('reads', key, Buffer.byteLength(raw));
 
             if (!raw.trim()) {
                 logger.warn(`⚠️ Pusty plik JSON: ${entry.label} — używam wartości domyślnej`);
@@ -213,6 +251,7 @@ class JsonStore {
 
         if (cached && cached.loaded) {
             this._stats.cacheHits++;
+            this._window.cacheHits++;
             return cached.data;
         }
 
@@ -260,6 +299,7 @@ class JsonStore {
         try {
             await fs.writeFile(tmpPath, payload, 'utf8');
             await fs.rename(tmpPath, key);
+            this._track('writes', key, Buffer.byteLength(payload));
         } catch (error) {
             await fs.unlink(tmpPath).catch(() => {});
             throw error;
@@ -427,6 +467,81 @@ class JsonStore {
      */
     async flush() {
         await Promise.all([...this._queues.values()]);
+    }
+
+    _fmtBytes(bytes) {
+        if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(2)} MB`;
+        if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${bytes} B`;
+    }
+
+    /**
+     * Buduje raport z okna i zeruje je. Zwraca `null`, gdy w oknie nie było
+     * ŻADNEGO ruchu dyskowego — wtedy nie ma po co zaśmiecać logu.
+     */
+    collectReport() {
+        const w = this._window;
+        const readOps = [...w.reads.values()].reduce((s, e) => s + e.count, 0);
+        const writeOps = [...w.writes.values()].reduce((s, e) => s + e.count, 0);
+        this._window = this._emptyWindow();
+
+        if (readOps === 0 && writeOps === 0) return null;
+
+        const readBytes = [...w.reads.values()].reduce((s, e) => s + e.bytes, 0);
+        const writeBytes = [...w.writes.values()].reduce((s, e) => s + e.bytes, 0);
+
+        // Najbardziej obciążające pliki — po nich widać, co realnie puka do dysku
+        const top = (bucket) => [...bucket.entries()]
+            .sort((a, b) => b[1].bytes - a[1].bytes)
+            .slice(0, 5)
+            .map(([label, e]) => `${label} ×${e.count} (${this._fmtBytes(e.bytes)})`);
+
+        return {
+            seconds: Math.round((Date.now() - w.since) / 1000),
+            readOps, readBytes, readFiles: w.reads.size, topReads: top(w.reads),
+            writeOps, writeBytes, writeFiles: w.writes.size, topWrites: top(w.writes),
+            cacheHits: w.cacheHits
+        };
+    }
+
+    /**
+     * Uruchamia cykliczny raport ruchu dyskowego do logu (konsola + plik + webhook).
+     * Minuty bez żadnego I/O są pomijane, żeby log nie puchł w nocy.
+     *
+     * @param {number} [intervalMs=60000] - co ile raportować
+     */
+    startReporting(intervalMs = 60000) {
+        if (this._reportTimer) return;
+
+        this._reportTimer = setInterval(() => {
+            const r = this.collectReport();
+            if (!r) return;
+
+            const trafienia = r.cacheHits + r.readOps > 0
+                ? ((r.cacheHits / (r.cacheHits + r.readOps)) * 100).toFixed(1)
+                : '100.0';
+
+            logger.info(
+                `💾 Dysk (${r.seconds}s): ` +
+                `ODCZYT ${r.readOps} op / ${this._fmtBytes(r.readBytes)} z ${r.readFiles} plik(ów) · ` +
+                `ZAPIS ${r.writeOps} op / ${this._fmtBytes(r.writeBytes)} do ${r.writeFiles} plik(ów) · ` +
+                `z pamięci ${r.cacheHits} odczytów (trafienia ${trafienia}%)`
+            );
+
+            if (r.topReads.length > 0) logger.info(`   📖 Czytane z dysku: ${r.topReads.join(' | ')}`);
+            if (r.topWrites.length > 0) logger.info(`   ✏️ Zapisane: ${r.topWrites.join(' | ')}`);
+        }, intervalMs);
+
+        // Raport nie może trzymać procesu przy życiu przy zamykaniu bota
+        if (this._reportTimer.unref) this._reportTimer.unref();
+        logger.info(`📊 Raport ruchu dyskowego włączony (co ${Math.round(intervalMs / 1000)}s, minuty bez I/O pomijane)`);
+    }
+
+    stopReporting() {
+        if (this._reportTimer) {
+            clearInterval(this._reportTimer);
+            this._reportTimer = null;
+        }
     }
 
     /**
