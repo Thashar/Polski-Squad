@@ -1,4 +1,5 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
 class VacationService {
     constructor(config, logger) {
@@ -306,6 +307,45 @@ Pamiętaj, żeby podać dokładny termin kiedy będziesz niedostępny.
             clearTimeout(timeoutId);
             this.roleTimeouts.delete(userId);
             this.logger.info(`🚫 Anulowano automatyczne usunięcie roli urlopowej dla użytkownika ${userId}`);
+        }
+    }
+
+    /**
+     * Zdejmuje rolę urlopową zostawioną przez restart bota.
+     *
+     * ⚠️ Rolę usuwał WYŁĄCZNIE `setTimeout` trzymany w pamięci (`roleTimeouts`).
+     * Restart w ciągu tych 15 minut oznaczał, że nikt jej już nie zdejmie — użytkownik
+     * zostawał z rolą (czyli z prawem pisania na kanale urlopów) na stałe.
+     *
+     * Rola jest krótkotrwałym znacznikiem „możesz teraz napisać wniosek" (max 15 min,
+     * zdejmowana od razu po napisaniu wiadomości), więc każdy, kto trzyma ją po starcie
+     * bota, ma znacznik przeterminowany. Odtwarzamy stan z Discorda, zgodnie z zasadą
+     * z głównego CLAUDE.md — bez dokładania kolejnego pliku persistencji.
+     */
+    async cleanupStaleVacationRoles(guild) {
+        try {
+            const vacationRole = await guild.roles.fetch(this.config.vacations.vacationRequestRoleId).catch(() => null);
+            if (!vacationRole) return 0;
+
+            const members = await safeFetchMembers(guild, this.logger);
+            const zRola = members.filter(member => member.roles.cache.has(vacationRole.id));
+            if (zRola.size === 0) return 0;
+
+            let zdjete = 0;
+            for (const member of zRola.values()) {
+                try {
+                    await member.roles.remove(vacationRole, 'Restart bota - przeterminowany wniosek urlopowy');
+                    zdjete++;
+                } catch (error) {
+                    this.logger.warn(`⚠️ Nie udało się zdjąć przeterminowanej roli urlopowej z ${member.user.tag}: ${error.message}`);
+                }
+            }
+
+            this.logger.info(`🧹 Zdjęto ${zdjete} przeterminowanych ról urlopowych po restarcie`);
+            return zdjete;
+        } catch (error) {
+            this.logger.error(`❌ Błąd czyszczenia przeterminowanych ról urlopowych: ${error.message}`);
+            return 0;
         }
     }
 }

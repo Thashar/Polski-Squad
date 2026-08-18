@@ -335,6 +335,8 @@ client.once(Events.ClientReady, async () => {
     for (const guild of client.guilds.cache.values()) {
         try {
             await vacationService.ensureVacationMessageIsLast(guild);
+            // Rolę urlopową zdejmował tylko timer w pamięci — po restarcie zostawała na stałe
+            await vacationService.cleanupStaleVacationRoles(guild);
         } catch (error) {
             logger.error(`❌ Błąd sprawdzania wiadomości o urlopach dla serwera ${guild.name}: ${error.message}`);
         }
