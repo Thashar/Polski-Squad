@@ -245,6 +245,24 @@ class DiskMonitor {
     }
 
     /**
+     * Klucz kumulacji dla podsumowania.
+     *
+     * Screeny OCR, pliki cache mediow i logi maja UNIKALNE nazwy (timestamp, id),
+     * wiec w zestawieniu per-plik kazdy z nich to osobna, mala pozycja i nie widac,
+     * ze razem to najciezszy ruch w calym procesie. Zwijamy je do wzorca
+     * `katalog/*.rozszerzenie`. Pliki JSON maja stale, znaczace nazwy
+     * (`Stalker/data/punishments.json`) — te zostaja rozbite pojedynczo.
+     */
+    _grupa(label) {
+        if (label === ETYKIETA_ZBIORCZA) return label;
+        if (/\.json$/i.test(label)) return label;
+        const i = label.lastIndexOf('/');
+        const dir = i > 0 ? label.slice(0, i) : '.';
+        const ext = (label.match(/\.[A-Za-z0-9]+$/) || [''])[0].toLowerCase();
+        return ext ? `${dir}/*${ext}` : `${dir}/*`;
+    }
+
+    /**
      * Pełny raport dla komendy `/io`.
      */
     getReport(limit = 10) {
@@ -281,6 +299,11 @@ class DiskMonitor {
             plikow: pliki.length,
 
             topWaga: sort(pliki, 'bytes'),
+            // Skumulowane per wzorzec sciezki — do podsumowania ogolnego
+            topOdczytGrupy: grupuj(p => this._grupa(p.label)).filter(g => g.readBytes > 0)
+                .sort((a, b) => b.readBytes - a.readBytes).slice(0, limit),
+            topZapisGrupy: grupuj(p => this._grupa(p.label)).filter(g => g.writeBytes > 0)
+                .sort((a, b) => b.writeBytes - a.writeBytes).slice(0, limit),
             topOdczytIlosc: sort(czytane, 'reads'),
             topOdczytWaga: sort(czytane, 'readBytes'),
             topZapisIlosc: sort(zapisywane, 'writes'),

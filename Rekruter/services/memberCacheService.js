@@ -233,7 +233,17 @@ class MemberCacheService {
      * Przetwarza kolejkę zapisów
      */
     async processSaveQueue() {
-        if (this.isSaving || this.saveQueue.length === 0) {
+        if (this.saveQueue.length === 0) {
+            return;
+        }
+
+        // ⚠️ Zapis już trwa — MUSIMY zaplanować kolejne podejście. Wcześniej było tu
+        // gołe `return`, a że timer debounce zdążył się wyzerować, nikt nie wracał do
+        // kolejki: obietnice z `queueSaveToFile()` nigdy się nie rozwiązywały (czekał
+        // na nie m.in. `buildInitialCache()` podczas startu bota), a zmiany w cache
+        // leżały niezapisane aż do kolejnego zdarzenia boost.
+        if (this.isSaving) {
+            this.scheduleSave();
             return;
         }
 
@@ -256,6 +266,11 @@ class MemberCacheService {
             }
         } finally {
             this.isSaving = false;
+
+            // Zgłoszenia, które doszły w trakcie zapisu, obsługujemy kolejnym przebiegiem
+            if (this.saveQueue.length > 0) {
+                this.scheduleSave();
+            }
         }
     }
 
