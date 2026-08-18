@@ -1,6 +1,7 @@
 const { formatTimeDifference } = require('../utils/helpers');
 
 const { createBotLogger } = require('../../utils/consoleLogger');
+const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 
 const logger = createBotLogger('Konklawe');
 class TimerService {
@@ -9,6 +10,26 @@ class TimerService {
         this.gameService = gameService;
         this.client = null;
         this.passwordEmbedService = null;
+    }
+
+    /**
+     * Znajduje posiadacza roli papieskiej.
+     *
+     * ⚠️ Przypomnienia szukały go wprost w `guild.members.cache`, który po restarcie bota
+     * bywa prawie pusty (zapełnia się dopiero ze zdarzeń). Gdy nikogo nie znalazły, cały
+     * dalszy łańcuch był pomijany — bo `setSecondHintReminder()`,
+     * `setPapalRoleRemovalForNoHints()`, `setHintReminderTimer()` i `setHintTimeoutTimer()`
+     * stały WEWNĄTRZ `if (membersWithRole.size > 0)`. Efekt: brak drugiego przypomnienia,
+     * brak zdjęcia roli po 30 min i brak resetu po 24 h — papież trzymał rolę bez końca.
+     *
+     * Miejsca, które ROLĘ ZDEJMUJĄ, robiły wcześniej `guild.members.fetch()` — tu jest to
+     * samo, tyle że przez wspólny throttle (limit Discorda na opcode 8).
+     */
+    async findPapalMember(guild) {
+        if (!guild) return null;
+
+        const members = await safeFetchMembers(guild, logger);
+        return members.find(member => member.roles.cache.has(this.config.roles.papal)) || null;
     }
 
     /**
@@ -215,14 +236,16 @@ class TimerService {
                         const guild = this.client.guilds.cache.first();
                         const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                         if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                            const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                            if (membersWithRole.size > 0) {
-                                const papalMember = membersWithRole.first();
+                            const papalMember = await this.findPapalMember(guild);
+                            if (papalMember) {
                                 const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
                                 const timeText = formatTimeDifference(timeSincePassword);
                                 await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Przypomnienie: Minęło już **${timeText}** od ustawienia hasła. Dodaj podpowiedź dla graczy. 💡`);
-                                await this.setSecondHintReminder();
+                            } else {
+                                logger.warn('⚠️ Brak posiadacza roli papieskiej - przypomnienie pominięte, łańcuch timerów leci dalej');
                             }
+                            // Kolejne ogniwo łańcucha uzbrajamy ZAWSZE, także gdy nie ma kogo pingnąć
+                            await this.setSecondHintReminder();
                         }
                     } catch (error) {
                         logger.error('Błąd podczas wysyłania pierwszego przypomnienia o podpowiedzi:', error);
@@ -246,14 +269,18 @@ class TimerService {
                     const guild = this.client.guilds.cache.first();
                     const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                     if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                        if (membersWithRole.size > 0) {
-                            const papalMember = membersWithRole.first();
+                        // Bez `fetch` cache po restarcie bywa pusty — patrz `findPapalMember()`.
+                        // Tu skrócenie łańcucha jest w porządku: skoro nikt nie ma roli,
+                        // nie ma komu jej zdejmować ani kogo przypominać.
+                        const papalMember = await this.findPapalMember(guild);
+                        if (papalMember) {
                             const timeSincePassword = new Date() - this.gameService.triggerSetTimestamp;
                             const timeText = formatTimeDifference(timeSincePassword);
                             await triggerChannel.send(`<@${papalMember.user.id}> ⚠️ Drugie przypomnienie: Minęło już **${timeText}** od ustawienia hasła bez podpowiedzi. Za **30 minut** stracisz rolę papieską! 🚨`);
                             await this.setPapalRoleRemovalForNoHints(papalMember.user.id);
                             await this.setRecurringReminders(papalMember.user.id);
+                        } else {
+                            logger.warn('⚠️ Brak posiadacza roli papieskiej - drugie przypomnienie pominięte');
                         }
                     }
                 } catch (error) {
@@ -330,15 +357,19 @@ class TimerService {
                         const guild = this.client.guilds.cache.first();
                         const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                         if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                            const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                            if (membersWithRole.size > 0) {
-                                const papalMember = membersWithRole.first();
+                            const papalMember = await this.findPapalMember(guild);
+                            if (papalMember) {
                                 const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
                                 const timeText = formatTimeDifference(timeSinceLastHint);
                                 await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
-                                await this.setHintReminderTimer();
-                                await this.setHintTimeoutTimer(); // Ustaw 24h timer
+                            } else {
+                                logger.warn('⚠️ Brak posiadacza roli papieskiej - przypomnienie pominięte, łańcuch timerów leci dalej');
                             }
+                            // ⚠️ Oba timery uzbrajamy ZAWSZE. Wcześniej stały wewnątrz warunku,
+                            // więc jedno nietrafione wyszukanie papieża kasowało zarówno kolejne
+                            // przypomnienie, jak i 24-godzinny reset hasła
+                            await this.setHintReminderTimer();
+                            await this.setHintTimeoutTimer(); // Ustaw 24h timer
                         }
                     } catch (error) {
                         logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi:', error);
@@ -522,14 +553,18 @@ class TimerService {
                     const guild = this.client.guilds.cache.first();
                     const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                     if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                        const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                        if (membersWithRole.size > 0) {
-                            const papalMember = membersWithRole.first();
+                        // ⚠️ To jest ścieżka TUŻ PO restarcie — cache członków jest wtedy
+                        // praktycznie na pewno pusty, więc szukanie w nim gwarantowało
+                        // uśmiercenie łańcucha przypomnień
+                        const papalMember = await this.findPapalMember(guild);
+                        if (papalMember) {
                             const timeText = formatTimeDifference(timeSinceLastHint);
                             await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
-                            // Ustaw kolejny timer
-                            await this.setHintReminderTimer();
+                        } else {
+                            logger.warn('⚠️ Brak posiadacza roli papieskiej - przypomnienie po restarcie pominięte, łańcuch timerów leci dalej');
                         }
+                        // Kolejny timer uzbrajamy ZAWSZE
+                        await this.setHintReminderTimer();
                     }
                 } catch (error) {
                     logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi po restarcie:', error);
@@ -542,15 +577,16 @@ class TimerService {
                         const guild = this.client.guilds.cache.first();
                         const triggerChannel = await this.client.channels.fetch(this.config.channels.trigger);
                         if (guild && triggerChannel && triggerChannel.isTextBased()) {
-                            const membersWithRole = guild.members.cache.filter(member => member.roles.cache.has(this.config.roles.papal));
-                            if (membersWithRole.size > 0) {
-                                const papalMember = membersWithRole.first();
+                            const papalMember = await this.findPapalMember(guild);
+                            if (papalMember) {
                                 const timeSinceLastHint = new Date() - this.gameService.lastHintTimestamp;
                                 const timeText = formatTimeDifference(timeSinceLastHint);
                                 await triggerChannel.send(`<@${papalMember.user.id}> Przypomnienie: Minęło już **${timeText}** od ostatniej podpowiedzi! Dodaj nową podpowiedź dla graczy! Po 24h nieaktywności hasło automatycznie zostanie ustawione jako Konklawe, a Ty stracisz rolę papieską! 💡`);
-                                // Ustaw kolejny timer
-                                await this.setHintReminderTimer();
+                            } else {
+                                logger.warn('⚠️ Brak posiadacza roli papieskiej - przypomnienie pominięte, łańcuch timerów leci dalej');
                             }
+                            // Kolejny timer uzbrajamy ZAWSZE
+                            await this.setHintReminderTimer();
                         }
                     } catch (error) {
                         logger.error('Błąd podczas wysyłania przypomnienia o kolejnej podpowiedzi:', error);

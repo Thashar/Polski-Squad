@@ -4,6 +4,8 @@
 1. **Gra Hasłowa** - `gameService.js`: Hasło "Konklawe" (admin może zmienić), poprawna→rola papieska. Za odgadnięcie hasła domyślnego "Konklawe" NIE przyznawane są punkty (tylko rola papieska) - dotyczy każdego użycia, nie tylko pierwszego
 2. **Osiągnięcia** - Medal Virtutti Papajlari: 30+ odpowiedzi, reset rankingu, specjalne uprawnienia
 3. **Timery** - `timerService.js`: 15/30/60min przypomnienia, auto-reset, persistent (`game_state.json`), restore po restarcie
+   - **Papież szukany przez `findPapalMember()`** (wspólny `safeFetchMembers` z throttlem na opcode 8), NIE przez `guild.members.cache`. Cache członków po restarcie bywa prawie pusty, a przypomnienia szukały w nim wprost — gdy nikogo nie znalazły, cały dalszy łańcuch był pomijany, bo `setSecondHintReminder()`, `setPapalRoleRemovalForNoHints()`, `setHintReminderTimer()` i `setHintTimeoutTimer()` stały WEWNĄTRZ `if (membersWithRole.size > 0)`. Efekt: brak drugiego przypomnienia, brak zdjęcia roli po 30 min i brak resetu hasła po 24 h — papież trzymał rolę bez końca
+   - **Kolejne ogniwa łańcucha uzbrajane są ZAWSZE**, także gdy nie ma kogo pingnąć (wyjątek: drugie przypomnienie, które potrzebuje konkretnego `userId` do timera zdjęcia roli). Miejsca ZDEJMUJĄCE rolę od zawsze robiły `guild.members.fetch()` — teraz jest to spójne w całym pliku
 4. **AI Wspomaganie** - `aiService.js`: Generowanie haseł i podpowiedzi przez Anthropic lub Grok API
    - **Provider:** Przełączany przez `KONKLAWE_AI_PROVIDER` w .env (`anthropic` domyślny lub `grok`)
    - **Generowanie hasła:** Przycisk "Wygeneruj hasło przy pomocy AI" (🤖, czerwony) - pojawia się przy braku hasła lub hasło domyślne
