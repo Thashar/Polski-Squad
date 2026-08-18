@@ -700,11 +700,13 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            const data = await store.getOrLoad(filePath, () => ({}));
-            return {
-                exists: true,
-                data: data
-            };
+            // ⚠️ NIE polegamy na wyjątku — `store.getOrLoad` przy braku pliku zwraca
+            // wartość domyślną zamiast rzucać ENOENT (inaczej niż dawne `fs.readFile`).
+            // O istnieniu danych decyduje ZAWARTOŚĆ: plik bez graczy = brak danych.
+            const data = await store.getOrLoad(filePath, () => null);
+            const maDane = !!data && Array.isArray(data.players) && data.players.length > 0;
+
+            return maDane ? { exists: true, data } : { exists: false };
         } catch {
             return { exists: false };
         }
@@ -868,7 +870,10 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 1, weekNumber, year, clan);
 
         try {
-            return await store.getOrLoad(filePath, () => ({}));
+            // Brak pliku daje `null` (jak dawniej wyjątek ENOENT), a nie pusty obiekt —
+            // wywołujący sprawdzają `if (!weekData)` i pusty obiekt przechodziłby dalej
+            const dane = await store.getOrLoad(filePath, () => null);
+            return (dane && Array.isArray(dane.players)) ? dane : null;
         } catch (error) {
             // Plik nie istnieje
             return null;
@@ -1051,11 +1056,13 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            const data = await store.getOrLoad(filePath, () => ({}));
-            return {
-                exists: true,
-                data: data
-            };
+            // ⚠️ NIE polegamy na wyjątku — `store.getOrLoad` przy braku pliku zwraca
+            // wartość domyślną zamiast rzucać ENOENT (inaczej niż dawne `fs.readFile`).
+            // O istnieniu danych decyduje ZAWARTOŚĆ: plik bez graczy = brak danych.
+            const data = await store.getOrLoad(filePath, () => null);
+            const maDane = !!data && Array.isArray(data.players) && data.players.length > 0;
+
+            return maDane ? { exists: true, data } : { exists: false };
         } catch {
             return { exists: false };
         }
@@ -1190,7 +1197,10 @@ class DatabaseService {
         const filePath = this.getPhaseFilePath(guildId, 2, weekNumber, year, clan);
 
         try {
-            return await store.getOrLoad(filePath, () => ({}));
+            // Brak pliku daje `null` (jak dawniej wyjątek ENOENT), a nie pusty obiekt —
+            // wywołujący sprawdzają `if (!weekData)` i pusty obiekt przechodziłby dalej
+            const dane = await store.getOrLoad(filePath, () => null);
+            return (dane && Array.isArray(dane.players)) ? dane : null;
         } catch (error) {
             // Plik nie istnieje
             return null;

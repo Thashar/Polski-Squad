@@ -694,7 +694,20 @@ pochodzi z `store.getStats()` i dotyczy wyłącznie plików JSON.
 
 Każdy bot ma osobny commit i test funkcjonalny. Poza store'em zostały wyłącznie: `config.js` czytające `.env` przy starcie, `proxy.txt` w Garym (plik tekstowy), obrazy bossów i screeny OCR (dane binarne).
 
-#### ⚠️ Najczęstszy błąd przy dodawaniu nowego magazynu
+#### ⚠️ DWIE pułapki przy dodawaniu nowego magazynu
+
+**1. NIE polegaj na wyjątku przy braku pliku.** `fs.readFile` rzucał `ENOENT`, więc kod pisany pod niego wykrywał brak danych w `catch`. **`getOrLoad`/`getSync` przy braku pliku zwracają wartość domyślną i NIE rzucają** — taki `catch` nigdy się nie wykona.
+
+O istnieniu danych decyduj po ZAWARTOŚCI, a jako `defaultValue` podawaj `() => null`, gdy wywołujący rozróżnia „brak" od „puste":
+
+```javascript
+const dane = await store.getOrLoad(plik, () => null);
+const istnieje = !!dane && Array.isArray(dane.players) && dane.players.length > 0;
+```
+
+Realny przykład z produkcji: po migracji `checkPhase1DataExists` **zawsze** zwracało `exists: true`, więc `/faza1` pytał o nadpisanie danych, których nie było. To samo dotknęło `getPhase1Results` (pusty obiekt zamiast `null`).
+
+**2. Kształt wartości domyślnej musi pasować do użycia.**
 
 **Kształt wartości domyślnej musi pasować do użycia.** Migracja wykryła 5 miejsc, gdzie tablicowy plik dostał `() => ({})`. Taki błąd **nie ujawnia się na istniejących danych** — dopiero przy braku pliku (nowy serwer, pierwsze użycie funkcji) kod wywołuje `.length`, `.push()` lub `.map()` na pustym obiekcie i wywraca się `TypeError`. Zanim dodasz `getOrLoad`, sprawdź co zwraca `catch` obok albo jak wygląda plik na produkcji.
 
