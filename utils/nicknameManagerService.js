@@ -1,254 +1,364 @@
-const fs = require('fs').promises;
 const path = require('path');
+const store = require('./jsonStore');
 const { createBotLogger } = require('./consoleLogger');
 
 const logger = createBotLogger('NicknameManager');
 
+const MAX_DLUGOSC_NICKU = 32;
+
 /**
- * Centralny serwis zarządzania nickami użytkowników
- * Zapobiega konfliktom między efektami różnych botów (klątwy/flagi)
- * Zapewnia przywracanie oryginalnych nicków serwerowych
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  CENTRALNY MANAGER EFEKTÓW NA NICKACH
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Koordynuje efekty nakładane na nicki przez różne boty (klątwa z Konklawe, flaga
+ * z Muteusza, korona MVP z Kontrolera) tak, żeby się nie pobiły i żeby użytkownik
+ * zawsze wrócił do PRAWDZIWEGO nicku, a nie do pośredniego stanu.
+ *
+ * ─── DLACZEGO LISTA EFEKTÓW, A NIE JEDEN WPIS ─────────────────────────────
+ * Wcześniej na użytkownika przypadał JEDEN wpis, a każdy efekt dostawał własny
+ * `setTimeout`. Przy nakładaniu wychodziły z tego dwa błędy:
+ *
+ *   1. Klątwa 5 min + flaga nałożona minutę później: wpis klątwy był NADPISYWANY
+ *      przez flagę, ale timer klątwy dalej tykał. Po pięciu minutach przywracał
+ *      oryginalny nick i kasował wpis — flaga kończyła się minutę za wcześnie,
+ *      a jej własny timer trafiał już na pustkę.
+ *   2. Po restarcie bota efekty, którym zostało jeszcze trochę czasu, NIE dostawały
+ *      nowych timerów (`restoreExpiredEffects` zajmowało się wyłącznie wygasłymi),
+ *      więc ich nick nie wracał już nigdy.
+ *
+ * Teraz każdy użytkownik ma LISTĘ efektów, każdy z własnym `id` i czasem wygaśnięcia.
+ * Zdjęcie jednego efektu nie kończy pozostałych — nick jest PRZELICZANY na nowo
+ * z oryginału i tych efektów, które wciąż są aktywne.
+ *
+ * ─── KSZTAŁT DANYCH ───────────────────────────────────────────────────────
+ *   userId -> {
+ *     originalNickname,   // nick sprzed PIERWSZEGO efektu (null = używał nicku głównego)
+ *     wasUsingMainNick,
+ *     guildId, username,
+ *     effects: [ { id, effectType, prefix, replaceWith, appliedAt, expiresAt, appliedBy } ]
+ *   }
+ *
+ * `prefix` doklejany jest przed nick (klątwa, korona), `replaceWith` podmienia go
+ * w całości (flagi). Gdy aktywnych efektów jest kilka, prefiksy nakładają się
+ * w kolejności nałożenia, a ostatni `replaceWith` wygrywa z prefiksami.
  */
 class NicknameManagerService {
     constructor() {
-        // Singleton pattern - zapobiega wielokrotnym instancjom
+        // Singleton — kilka botów w jednym procesie musi dzielić ten sam stan
         if (NicknameManagerService.instance) {
             return NicknameManagerService.instance;
         }
-        
+
         this.dataPath = path.join(__dirname, '../shared_data');
         this.activeEffectsFile = path.join(this.dataPath, 'active_nickname_effects.json');
         this.configFile = path.join(this.dataPath, 'nickname_manager_config.json');
-        
-        // Mapa aktywnych efektów: userId -> effectData
+
+        // userId -> wpis użytkownika (patrz opis kształtu wyżej)
         this.activeEffects = new Map();
-        
-        // Konfiguracja domyślna
+
+        // `${userId}:${effectId}` -> timeout przywrócenia
+        this._timery = new Map();
+
         this.config = {
             buildInitialDatabase: false,
             enableSnapshotting: false,
             monitorNicknameChanges: false,
-            cleanupInterval: 24 * 60 * 60 * 1000, // 24h
-            maxEffectDuration: 30 * 24 * 60 * 60 * 1000 // 30 dni
+            cleanupInterval: 24 * 60 * 60 * 1000,
+            maxEffectDuration: 30 * 24 * 60 * 60 * 1000
         };
-        
-        // Ustaw singleton instance
+
         NicknameManagerService.instance = this;
     }
-    
-    // Stałe typów efektów
+
     static EFFECTS = {
         CURSE: 'curse',        // Klątwa z Konklawe
         FLAG: 'flag',          // Flaga z Muteusz
         WEAKENED: 'weakened',  // Osłabienie Lucyfera (trwałe)
         INFERNAL: 'infernal'   // Piekielny Układ (Infernal Bargain)
     };
-    
-    /**
-     * Pobiera singleton instancję
-     */
+
     static getInstance() {
         if (!NicknameManagerService.instance) {
             new NicknameManagerService();
         }
         return NicknameManagerService.instance;
     }
-    
-    /**
-     * Inicjalizuje serwis - tworzy katalogi i ładuje dane
-     */
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  INICJALIZACJA I PERSISTENCJA
+    // ═══════════════════════════════════════════════════════════════════════
+
     async initialize() {
+        if (this._zainicjalizowany) return;
+        this._zainicjalizowany = true;
+
         try {
-            // Utwórz katalog jeśli nie istnieje
-            await fs.mkdir(this.dataPath, { recursive: true });
-            
-            // Załaduj konfigurację
             await this.loadConfig();
-            
-            // Załaduj aktywne efekty
             await this.loadActiveEffects();
-            
-            // Uruchom automatyczne czyszczenie
             this.startCleanupInterval();
-            
             logger.info('✅ NicknameManager zainicjalizowany');
         } catch (error) {
+            this._zainicjalizowany = false;
             logger.error('❌ Błąd inicjalizacji NicknameManager:', error);
             throw error;
         }
     }
-    
-    /**
-     * Ładuje konfigurację z pliku
-     */
+
     async loadConfig() {
         try {
-            const configData = await fs.readFile(this.configFile, 'utf8');
-            this.config = { ...this.config, ...JSON.parse(configData) };
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Plik nie istnieje - utwórz domyślną konfigurację
+            const zapisana = await store.getOrLoad(this.configFile, () => null);
+            if (zapisana) {
+                this.config = { ...this.config, ...zapisana };
+            } else {
                 await this.saveConfig();
                 logger.info('📁 Utworzono domyślną konfigurację NicknameManager');
-            } else {
-                logger.error('❌ Błąd ładowania konfiguracji:', error);
             }
+        } catch (error) {
+            logger.error('❌ Błąd ładowania konfiguracji:', error);
         }
     }
-    
-    /**
-     * Zapisuje konfigurację do pliku
-     */
+
     async saveConfig() {
         try {
-            await fs.writeFile(this.configFile, JSON.stringify(this.config, null, 2));
+            await store.set(this.configFile, this.config);
         } catch (error) {
             logger.error('❌ Błąd zapisywania konfiguracji:', error);
         }
     }
-    
+
     /**
-     * Ładuje aktywne efekty z pliku
+     * Przerabia wpis ze starego kształtu (jeden efekt na użytkownika) na listę.
+     * Stare pliki mają `effectType` bezpośrednio na wpisie użytkownika.
      */
+    _zmigrujWpis(userId, dane) {
+        if (Array.isArray(dane?.effects)) return dane;
+
+        return {
+            originalNickname: dane.originalNickname ?? null,
+            wasUsingMainNick: dane.wasUsingMainNick ?? (dane.originalNickname == null),
+            guildId: dane.guildId ?? null,
+            username: dane.username ?? null,
+            effects: dane.effectType ? [{
+                id: `${userId}-migracja`,
+                effectType: dane.effectType,
+                prefix: dane.prefix ?? null,
+                replaceWith: dane.replaceWith ?? null,
+                appliedAt: dane.appliedAt ?? Date.now(),
+                expiresAt: dane.expiresAt ?? null,
+                appliedBy: dane.appliedBy ?? null
+            }] : []
+        };
+    }
+
     async loadActiveEffects() {
         try {
-            const data = await fs.readFile(this.activeEffectsFile, 'utf8');
-            const effectsData = JSON.parse(data);
-            
-            // Konwertuj obiekt z powrotem na Map
+            const zapisane = await store.getOrLoad(this.activeEffectsFile, () => ({}));
+
             this.activeEffects = new Map();
-            for (const [userId, effectData] of Object.entries(effectsData)) {
-                // Sprawdź czy efekt nie wygasł
-                if (effectData.expiresAt && effectData.expiresAt < Date.now()) {
-                    logger.info(`🧹 Usuwam wygasły efekt dla użytkownika ${userId}`);
-                    continue;
-                }
-                
-                this.activeEffects.set(userId, effectData);
+            for (const [userId, dane] of Object.entries(zapisane || {})) {
+                const wpis = this._zmigrujWpis(userId, dane);
+                if (wpis.effects.length > 0) this.activeEffects.set(userId, wpis);
             }
-            
-            logger.info(`📂 Załadowano ${this.activeEffects.size} aktywnych efektów`);
+
+            const efektow = [...this.activeEffects.values()].reduce((s, w) => s + w.effects.length, 0);
+            logger.info(`📂 Załadowano ${efektow} efektów dla ${this.activeEffects.size} użytkowników`);
         } catch (error) {
-            if (error.code === 'ENOENT') {
-                // Plik nie istnieje - zacznij z pustą mapą
-                this.activeEffects = new Map();
-                logger.info('📁 Rozpoczynam z pustą bazą efektów');
-            } else {
-                logger.error('❌ Błąd ładowania efektów:', error);
-                this.activeEffects = new Map();
-            }
+            logger.error('❌ Błąd ładowania efektów:', error);
+            this.activeEffects = new Map();
         }
     }
-    
-    /**
-     * Zapisuje aktywne efekty do pliku
-     */
+
     async persistActiveEffects() {
         try {
-            const effectsObject = {};
-            for (const [userId, effectData] of this.activeEffects.entries()) {
-                effectsObject[userId] = effectData;
-            }
-            
-            await fs.writeFile(this.activeEffectsFile, JSON.stringify(effectsObject, null, 2));
+            await store.set(this.activeEffectsFile, Object.fromEntries(this.activeEffects));
         } catch (error) {
             logger.error('❌ Błąd zapisywania efektów:', error);
         }
     }
-    
-    /**
-     * Pobiera aktualny nick serwerowy użytkownika
-     */
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  NICKI — ODCZYT I SKŁADANIE
+    // ═══════════════════════════════════════════════════════════════════════
+
     getCurrentServerNickname(member) {
         const nickname = member.nickname;
-
-        // Jeśli nick jest null (używa nick główny), zwróć null
         if (!nickname) return null;
 
-        // KRYTYCZNE: Wyczyść prefixy efektów przed zapisaniem jako oryginalny
-        // To zapobiega problemowi gdzie drugi efekt zapisuje zmieniony nick jako bazowy
+        // Czyścimy prefiksy, żeby drugi efekt nie zapisał jako "oryginalny" nicku
+        // zmienionego już przez pierwszy
         return this.getCleanNickname(nickname);
     }
-    
-    /**
-     * Sprawdza czy nick jest nickiem efektu (klątwy/flagi/osłabienia)
-     */
+
     isEffectNickname(nickname) {
         if (!nickname) return false;
 
-        // Wzorce nicków efektów
-        const cursePattern = /^Przeklęty /;
-        const weakenedPattern = /^Osłabiony /;
-        const sleepyPattern = /^Uśpiony /;
-        const stunnedPattern = /^Oszołomiony /;
-        const fallenPattern = /^Upadły /;
-        const infernalPattern = /^Piekielny /;
-        const flagNicknames = [
-            "Jebaty Ukrajinu!",
-            "POLSKA GUROM!",
-            "עם ישראל חי!",
-            "American Dream",
-            "Hände hoch!",
-            "Cyka blyat!"
+        const prefiksy = [/^Przeklęty /, /^Osłabiony /, /^Uśpiony /, /^Oszołomiony /, /^Upadły /, /^Piekielny /];
+        const flagi = [
+            "Jebaty Ukrajinu!", "POLSKA GUROM!", "עם ישראל חי!",
+            "American Dream", "Hände hoch!", "Cyka blyat!"
         ];
 
-        return cursePattern.test(nickname) || weakenedPattern.test(nickname) || sleepyPattern.test(nickname) || stunnedPattern.test(nickname) || fallenPattern.test(nickname) || infernalPattern.test(nickname) || flagNicknames.includes(nickname);
+        return prefiksy.some(p => p.test(nickname)) || flagi.includes(nickname);
     }
 
-    /**
-     * Usuwa prefixy efektów z nicku i zwraca "czysty" nick
-     * @param {string} nickname - Nick z prefixem
-     * @returns {string} - Nick bez prefixu
-     */
     getCleanNickname(nickname) {
         if (!nickname) return nickname;
 
-        // Usuń wszystkie known prefixy
-        let cleanNick = nickname
+        return nickname
             .replace(/^Przeklęty /, '')
             .replace(/^Osłabiony /, '')
             .replace(/^Uśpiony /, '')
             .replace(/^Oszołomiony /, '')
             .replace(/^Upadły /, '')
             .replace(/^Piekielny /, '');
-
-        return cleanNick;
     }
-    
+
+    /** Efekty użytkownika, które jeszcze nie wygasły (bez efektów bezterminowych odfiltrowanych). */
+    _aktywneEfekty(userId, teraz = Date.now()) {
+        const wpis = this.activeEffects.get(userId);
+        if (!wpis) return [];
+        return wpis.effects.filter(e => e.expiresAt === null || e.expiresAt > teraz);
+    }
+
     /**
-     * Sprawdza czy użytkownik ma aktywny efekt
+     * Składa docelowy nick z oryginału i aktywnych efektów.
+     * @returns {string|null} null = przywróć nick główny (brak nicku serwerowego)
      */
-    hasActiveEffect(userId) {
-        const effectData = this.activeEffects.get(userId);
-        if (!effectData) return false;
-        
-        // Sprawdź czy nie wygasł
-        if (effectData.expiresAt && effectData.expiresAt < Date.now()) {
-            // Efekt wygasł - usuń go
-            this.activeEffects.delete(userId);
-            this.persistActiveEffects();
+    _zlozNick(wpis, efekty) {
+        // Gdy użytkownik nie miał nicku serwerowego, bazą jest jego nazwa użytkownika —
+        // inaczej z prefiksu powstałby sam prefix ("Przeklęty" zamiast "Przeklęty Janusz")
+        const bazowy = wpis.originalNickname ?? wpis.username ?? '';
+
+        if (efekty.length === 0) {
+            return wpis.wasUsingMainNick ? null : (wpis.originalNickname ?? null);
+        }
+
+        // Podmiana całości (flagi) wygrywa — bierzemy NAJPÓŹNIEJ nałożoną
+        const podmiana = [...efekty].reverse().find(e => e.replaceWith);
+        if (podmiana) return String(podmiana.replaceWith).substring(0, MAX_DLUGOSC_NICKU);
+
+        const prefiksy = efekty.filter(e => e.prefix).map(e => String(e.prefix).trim());
+        if (prefiksy.length === 0) {
+            return wpis.wasUsingMainNick ? null : (wpis.originalNickname ?? null);
+        }
+
+        // Prefiksy w kolejności nałożenia: ostatni nałożony jest najbardziej z przodu
+        const zlozony = `${prefiksy.reverse().join(' ')} ${bazowy}`.trim();
+        return zlozony.substring(0, MAX_DLUGOSC_NICKU);
+    }
+
+    /**
+     * Ustawia nick wynikający z aktualnego zestawu efektów. Gdy efektów już nie ma —
+     * przywraca oryginał i kasuje wpis.
+     */
+    async _przeliczNick(userId, guild) {
+        const wpis = this.activeEffects.get(userId);
+        if (!wpis) return false;
+
+        const efekty = this._aktywneEfekty(userId);
+        const docelowy = this._zlozNick(wpis, efekty);
+
+        try {
+            const member = await guild.members.fetch(userId);
+
+            if (!member.manageable) {
+                logger.warn(`⚠️ Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel)`);
+                if (efekty.length === 0) {
+                    this.activeEffects.delete(userId);
+                    await this.persistActiveEffects();
+                }
+                return false;
+            }
+
+            await member.setNickname(docelowy);
+
+            if (efekty.length === 0) {
+                this._anulujTimeryUzytkownika(userId);
+                this.activeEffects.delete(userId);
+                logger.info(`🔄 Przywrócono nick ${member.user.tag}: ${docelowy === null ? '[nick główny]' : `"${docelowy}"`}`);
+            } else {
+                wpis.effects = efekty;
+                const typy = efekty.map(e => e.effectType).join(' + ');
+                logger.info(`🔁 Przeliczono nick ${member.user.tag} po zmianie efektów (${typy}): "${docelowy}"`);
+            }
+
+            await this.persistActiveEffects();
+            return true;
+        } catch (error) {
+            logger.error(`❌ Błąd przeliczania nicku dla ${userId}: ${error.message}`);
             return false;
         }
-        
-        return true;
     }
-    
-    /**
-     * Pobiera typ aktywnego efektu użytkownika
-     */
-    getActiveEffectType(userId) {
-        const effectData = this.activeEffects.get(userId);
-        return effectData ? effectData.effectType : null;
-    }
-    
-    /**
-     * Waliduje czy można aplikować efekt
-     * NOWA LOGIKA: Pozwala na nakładanie efektów, zachowując oryginalny nick
-     */
-    async validateEffectApplication(member, effectType) {
-        const userId = member.user.id;
 
-        // 0. Sprawdź czy bot może zarządzać tym użytkownikiem
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ODCZYT STANU
+    // ═══════════════════════════════════════════════════════════════════════
+
+    hasActiveEffect(userId) {
+        return this._aktywneEfekty(userId).length > 0;
+    }
+
+    hasEffectType(userId, effectType) {
+        return this._aktywneEfekty(userId).some(e => e.effectType === effectType);
+    }
+
+    /** Typ NAJPÓŹNIEJ nałożonego aktywnego efektu (zgodność ze starym API). */
+    getActiveEffectType(userId) {
+        const efekty = this._aktywneEfekty(userId);
+        return efekty.length > 0 ? efekty[efekty.length - 1].effectType : null;
+    }
+
+    getEffectInfo(userId) {
+        const wpis = this.activeEffects.get(userId);
+        const efekty = this._aktywneEfekty(userId);
+        if (!wpis || efekty.length === 0) return null;
+
+        const najnowszy = efekty[efekty.length - 1];
+        return {
+            effectType: najnowszy.effectType,
+            appliedAt: najnowszy.appliedAt,
+            expiresAt: najnowszy.expiresAt,
+            originalNickname: wpis.originalNickname,
+            wasUsingMainNick: wpis.wasUsingMainNick,
+            effects: efekty.map(e => ({ ...e }))
+        };
+    }
+
+    /**
+     * Użytkownicy mający aktywny efekt danego typu.
+     * @returns {Array<[string, Object]>} pary [userId, dane efektu + guildId]
+     */
+    getUsersWithEffectType(effectType) {
+        const wynik = [];
+        for (const [userId, wpis] of this.activeEffects.entries()) {
+            const efekt = this._aktywneEfekty(userId).find(e => e.effectType === effectType);
+            if (efekt) wynik.push([userId, { ...efekt, guildId: wpis.guildId, originalNickname: wpis.originalNickname }]);
+        }
+        return wynik;
+    }
+
+    getStats() {
+        const stats = { totalActiveEffects: 0, uzytkownikow: this.activeEffects.size, curses: 0, flags: 0, weakened: 0, infernal: 0 };
+
+        for (const userId of this.activeEffects.keys()) {
+            for (const efekt of this._aktywneEfekty(userId)) {
+                stats.totalActiveEffects++;
+                if (efekt.effectType === NicknameManagerService.EFFECTS.CURSE) stats.curses++;
+                else if (efekt.effectType === NicknameManagerService.EFFECTS.FLAG) stats.flags++;
+                else if (efekt.effectType === NicknameManagerService.EFFECTS.WEAKENED) stats.weakened++;
+                else if (efekt.effectType === NicknameManagerService.EFFECTS.INFERNAL) stats.infernal++;
+            }
+        }
+
+        return stats;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  NAKŁADANIE EFEKTÓW
+    // ═══════════════════════════════════════════════════════════════════════
+
+    async validateEffectApplication(member, effectType) {
         if (!member.manageable) {
             return {
                 canApply: false,
@@ -256,355 +366,312 @@ class NicknameManagerService {
             };
         }
 
-        // KRYTYCZNE: Przeładuj dane z pliku przed walidacją (synchronizacja między procesami)
-        await this.loadActiveEffects();
-
-        // 1. Sprawdź czy to nie jest próba podwójnego efektu tego samego typu
-        const currentNickname = member.displayName;
-        const existingEffect = this.activeEffects.get(userId);
-        
-        // Efekty tego samego typu mogą być odnawiane (nadpisanie istniejącego)
-        
-        // 2. Sprawdź specyficzne przypadki duplikacji
-        if (effectType === NicknameManagerService.EFFECTS.CURSE && currentNickname.startsWith('Przeklęty ')) {
-            return {
-                canApply: false,
-                reason: `Użytkownik ma już klątwę`
-            };
+        // ⚠️ ŚWIADOMIE bez ogólnej blokady "ten sam typ drugi raz". Konklawe używa typu
+        // CURSE dla kilku różnych efektów (klątwa „Przeklęty", uśpienie „Uśpiony”), więc
+        // taka reguła odcięłaby poprawne przypadki. Zachowujemy dokładnie starą semantykę:
+        // blokujemy wyłącznie ponowną klątwę rozpoznaną po samym nicku.
+        if (effectType === NicknameManagerService.EFFECTS.CURSE && member.displayName.startsWith('Przeklęty ')) {
+            return { canApply: false, reason: 'Użytkownik ma już klątwę' };
         }
-        
-        // 3. NOWE: Efekty różnych typów mogą się nakładać
-        // System zachowa oryginalny nick z pierwszego efektu
-        
+
         return { canApply: true };
     }
-    
+
     /**
-     * Zapisuje oryginalny nick przed aplikowaniem efektu
-     * NOWA LOGIKA: Przy nakładaniu efektów zachowuje oryginalny nick z pierwszego
+     * Dopisuje efekt do listy użytkownika (bez dotykania nicku na Discordzie).
+     *
+     * @param {string} userId
+     * @param {string} effectType
+     * @param {GuildMember} member
+     * @param {number} durationMs   `Infinity` albo `null` = efekt bezterminowy
+     * @param {Object} [opcje]      { prefix, replaceWith, appliedBy }
+     * @returns {Promise<Object>} dane dopisanego efektu
      */
-    async saveOriginalNickname(userId, effectType, member, durationMs) {
-        // Walidacja (już zawiera loadActiveEffects())
-        const validation = await this.validateEffectApplication(member, effectType);
-        if (!validation.canApply) {
-            throw new Error(validation.reason);
+    async saveOriginalNickname(userId, effectType, member, durationMs, opcje = {}) {
+        const walidacja = await this.validateEffectApplication(member, effectType);
+        if (!walidacja.canApply) {
+            throw new Error(walidacja.reason);
         }
-        
-        // Ponownie przeładuj dane na wypadek zmiany między walidacją a zapisem
-        await this.loadActiveEffects();
-        const existingEffect = this.activeEffects.get(userId);
-        let originalNickname, wasUsingMainNick;
-        
-        if (existingEffect) {
-            // NAKŁADANIE: Zachowaj oryginalny nick z pierwszego efektu
-            originalNickname = existingEffect.originalNickname;
-            wasUsingMainNick = existingEffect.wasUsingMainNick;
-            logger.info(`🔄 Nakładanie efektu ${effectType} na ${existingEffect.effectType} - zachowuję oryginalny nick: "${originalNickname || '[nick główny]'}"}`);
+
+        let wpis = this.activeEffects.get(userId);
+
+        if (!wpis) {
+            // PIERWSZY efekt — dopiero teraz zapamiętujemy prawdziwy nick
+            const originalNickname = this.getCurrentServerNickname(member);
+            wpis = {
+                originalNickname,
+                wasUsingMainNick: originalNickname === null,
+                guildId: member.guild.id,
+                username: member.user.username,
+                effects: []
+            };
+            this.activeEffects.set(userId, wpis);
+            logger.info(`💾 Zapamiętano oryginalny nick ${member.user.tag}: "${originalNickname || '[nick główny]'}"`);
         } else {
-            // PIERWSZY EFEKT: Zapisz aktualny nick jako oryginalny
-            originalNickname = this.getCurrentServerNickname(member);
-            wasUsingMainNick = originalNickname === null;
-            logger.info(`💾 Zapisano oryginalny nick dla ${member.user.tag}: "${originalNickname || '[nick główny]'}" (pierwszy efekt: ${effectType})`);
+            // Kolejny efekt NIE nadpisuje oryginału — nick bazowy zostaje ten z pierwszego
+            logger.info(`🔄 Nakładanie efektu ${effectType} na ${wpis.effects.length} już aktywnych (oryginał: "${wpis.originalNickname || '[nick główny]'}")`);
         }
-        
-        const effectData = {
+
+        const efekt = {
+            id: `${userId}-${effectType}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             effectType,
-            originalNickname,
-            wasUsingMainNick,
+            prefix: opcje.prefix ?? null,
+            replaceWith: opcje.replaceWith ?? null,
             appliedAt: Date.now(),
-            expiresAt: durationMs === Infinity ? null : Date.now() + durationMs,
-            guildId: member.guild.id,
-            username: member.user.username,
-            previousEffect: existingEffect ? existingEffect.effectType : null // Śledzenie historii
+            expiresAt: (durationMs === Infinity || durationMs === null || durationMs === undefined)
+                ? null
+                : Date.now() + durationMs,
+            appliedBy: opcje.appliedBy ?? null
         };
-        
-        this.activeEffects.set(userId, effectData);
+
+        wpis.effects.push(efekt);
         await this.persistActiveEffects();
-        
-        return effectData;
+
+        return efekt;
     }
-    
+
     /**
-     * Przywraca oryginalny nick użytkownika
+     * Nakłada efekt: dopisuje go do listy, przelicza nick i ustawia timer przywrócenia.
+     *
+     * @param {number|null} durationMs null = bezterminowy
+     * @param {string|null} prefix     np. 'Upadły', 'Piekielny', '👑'
+     */
+    async applyEffect(userId, effectType, durationMs, metadata = {}, member, prefix = null) {
+        const efektPrefix = prefix || metadata.prefix || null;
+        const czasTrwania = (durationMs === null || durationMs === undefined) ? Infinity : durationMs;
+
+        const efekt = await this.saveOriginalNickname(userId, effectType, member, czasTrwania, {
+            prefix: efektPrefix,
+            replaceWith: metadata.replaceWith ?? metadata.flagEmoji ?? null,
+            appliedBy: metadata.appliedBy ?? null
+        });
+
+        await this._przeliczNick(userId, member.guild);
+        logger.info(`✅ Nałożono efekt ${effectType} na ${member.user.tag}`);
+
+        if (efekt.expiresAt !== null) {
+            this._zaplanujPrzywrocenie(userId, efekt, member.guild);
+        }
+
+        return efekt;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  ZDEJMOWANIE EFEKTÓW
+    // ═══════════════════════════════════════════════════════════════════════
+
+    _kluczTimera(userId, effectId) {
+        return `${userId}:${effectId}`;
+    }
+
+    _zaplanujPrzywrocenie(userId, efekt, guild) {
+        const klucz = this._kluczTimera(userId, efekt.id);
+        this._anulujTimer(klucz);
+
+        const zostalo = Math.max(0, efekt.expiresAt - Date.now());
+        const timer = setTimeout(async () => {
+            this._timery.delete(klucz);
+            try {
+                await this.removeEffectById(userId, efekt.id, guild);
+            } catch (error) {
+                logger.error(`❌ Błąd automatycznego zdejmowania efektu ${efekt.effectType}: ${error.message}`);
+            }
+        }, zostalo);
+
+        this._timery.set(klucz, timer);
+    }
+
+    _anulujTimer(klucz) {
+        const timer = this._timery.get(klucz);
+        if (timer) {
+            clearTimeout(timer);
+            this._timery.delete(klucz);
+        }
+    }
+
+    _anulujTimeryUzytkownika(userId) {
+        for (const klucz of [...this._timery.keys()]) {
+            if (klucz.startsWith(`${userId}:`)) this._anulujTimer(klucz);
+        }
+    }
+
+    /**
+     * Zdejmuje JEDEN efekt i przelicza nick z tych, które zostały.
+     * To jest właściwa ścieżka wygaśnięcia pojedynczego efektu przy nakładaniu.
+     */
+    async removeEffectById(userId, effectId, guild) {
+        const wpis = this.activeEffects.get(userId);
+        if (!wpis) return false;
+
+        const przed = wpis.effects.length;
+        wpis.effects = wpis.effects.filter(e => e.id !== effectId);
+        if (wpis.effects.length === przed) return false;
+
+        this._anulujTimer(this._kluczTimera(userId, effectId));
+        await this.persistActiveEffects();
+
+        if (!guild) return true;
+        return this._przeliczNick(userId, guild);
+    }
+
+    /** Zdejmuje wszystkie efekty danego typu i przelicza nick. */
+    async removeEffectType(userId, effectType, guild) {
+        const wpis = this.activeEffects.get(userId);
+        if (!wpis) return false;
+
+        const doZdjecia = wpis.effects.filter(e => e.effectType === effectType);
+        if (doZdjecia.length === 0) return false;
+
+        for (const efekt of doZdjecia) this._anulujTimer(this._kluczTimera(userId, efekt.id));
+        wpis.effects = wpis.effects.filter(e => e.effectType !== effectType);
+        await this.persistActiveEffects();
+
+        if (!guild) return true;
+        return this._przeliczNick(userId, guild);
+    }
+
+    /**
+     * Zdejmuje WSZYSTKIE efekty użytkownika i przywraca oryginalny nick.
      */
     async restoreOriginalNickname(userId, guild) {
-        const effectData = this.activeEffects.get(userId);
-        if (!effectData) {
-            logger.warn(`⚠️ Brak danych efektu dla użytkownika ${userId}`);
+        const wpis = this.activeEffects.get(userId);
+        if (!wpis) {
+            logger.warn(`⚠️ Brak zapisanych efektów dla użytkownika ${userId}`);
             return false;
         }
-        
-        try {
-            const member = await guild.members.fetch(userId);
 
-            if (!member.manageable) {
-                logger.warn(`⚠️ Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel) - pomijam przywracanie`);
-                this.activeEffects.delete(userId);
-                await this.persistActiveEffects();
-                return false;
-            }
+        this._anulujTimeryUzytkownika(userId);
+        wpis.effects = [];
+        await this.persistActiveEffects();
 
-            // Przywróć dokładnie to co było
-            if (effectData.wasUsingMainNick) {
-                // Użytkownik miał nick główny - resetuj do null
-                await member.setNickname(null);
-                logger.info(`🔄 Przywrócono nick główny dla ${member.user.tag}`);
-            } else {
-                // Użytkownik miał nick serwerowy - przywróć go
-                await member.setNickname(effectData.originalNickname);
-                logger.info(`🔄 Przywrócono nick serwerowy "${effectData.originalNickname}" dla ${member.user.tag}`);
-            }
-
-            // Usuń z systemu
-            this.activeEffects.delete(userId);
-            await this.persistActiveEffects();
-            return true;
-
-        } catch (error) {
-            logger.error(`❌ Błąd przywracania nicku dla ${userId}:`, error);
-            return false;
-        }
+        return this._przeliczNick(userId, guild);
     }
-    
-    /**
-     * Pobiera informacje o aktywnym efekcie użytkownika
-     */
-    getEffectInfo(userId) {
-        const effectData = this.activeEffects.get(userId);
-        if (!effectData) return null;
-        
-        // Sprawdź czy nie wygasł
-        if (effectData.expiresAt && effectData.expiresAt < Date.now()) {
-            this.activeEffects.delete(userId);
-            this.persistActiveEffects();
-            return null;
-        }
-        
-        return {
-            effectType: effectData.effectType,
-            appliedAt: effectData.appliedAt,
-            expiresAt: effectData.expiresAt,
-            originalNickname: effectData.originalNickname,
-            wasUsingMainNick: effectData.wasUsingMainNick
-        };
+
+    async removeAllUserEffects(userId, guild) {
+        return this.restoreOriginalNickname(userId, guild);
     }
-    
+
     /**
-     * Usuwa WPIS o efekcie z ewidencji — bez dotykania nicku na Discordzie.
+     * Usuwa WPIS z ewidencji bez dotykania nicku na Discordzie.
      *
-     * ⚠️ To NIE przywraca nicku. Co więcej, kasuje zapamiętany `originalNickname`,
-     * więc po tym wywołaniu nie ma już z czego przywracać — użytkownik zostaje
-     * z prefiksem efektu na stałe. Do zdejmowania efektu używaj
-     * `removeAllUserEffects(userId, guild)` albo `restoreOriginalNickname()`.
+     * ⚠️ To NIE przywraca nicku i kasuje zapamiętany oryginał — po tym wywołaniu
+     * nie ma już z czego przywracać. Do zdejmowania efektu używaj
+     * `removeAllUserEffects(userId, guild)`, `removeEffectType()` albo `removeEffectById()`.
      */
     async removeEffect(userId) {
-        if (this.activeEffects.has(userId)) {
-            this.activeEffects.delete(userId);
-            await this.persistActiveEffects();
-            logger.info(`🗑️ Usunięto efekt dla użytkownika ${userId}`);
-            return true;
-        }
-        return false;
+        if (!this.activeEffects.has(userId)) return false;
+
+        this._anulujTimeryUzytkownika(userId);
+        this.activeEffects.delete(userId);
+        await this.persistActiveEffects();
+        logger.info(`🗑️ Usunięto wpis efektów użytkownika ${userId} (bez zmiany nicku)`);
+        return true;
     }
-    
-    /**
-     * Czyści wygasłe efekty
-     */
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  SPRZĄTANIE I ODTWARZANIE PO RESTARCIE
+    // ═══════════════════════════════════════════════════════════════════════
+
     async cleanupExpiredEffects() {
-        const now = Date.now();
-        let cleaned = 0;
+        const teraz = Date.now();
+        let usuniete = 0;
 
-        for (const [userId, effectData] of this.activeEffects.entries()) {
-            if (effectData.expiresAt && effectData.expiresAt < now) {
-                this.activeEffects.delete(userId);
-                cleaned++;
-            }
+        for (const [userId, wpis] of [...this.activeEffects.entries()]) {
+            const przed = wpis.effects.length;
+            wpis.effects = wpis.effects.filter(e => e.expiresAt === null || e.expiresAt > teraz);
+            usuniete += przed - wpis.effects.length;
+
+            if (wpis.effects.length === 0) this.activeEffects.delete(userId);
         }
 
-        if (cleaned > 0) {
+        if (usuniete > 0) {
             await this.persistActiveEffects();
-            logger.info(`🧹 Wyczyszczono ${cleaned} wygasłych efektów`);
+            logger.info(`🧹 Wyczyszczono ${usuniete} wygasłych efektów`);
         }
 
-        return cleaned;
+        return usuniete;
     }
 
     /**
-     * Przywraca nicki dla wygasłych efektów po restarcie bota
-     * @param {Client} client - Discord client do pobierania guild/member
+     * Po restarcie: zdejmuje efekty, które wygasły podczas przestoju, i UZBRAJA NA NOWO
+     * timery tych, które jeszcze trwają.
+     *
+     * ⚠️ Druga część jest równie ważna jak pierwsza. Timery żyją wyłącznie w pamięci,
+     * więc dawniej efekt, któremu przy restarcie zostało jeszcze trochę czasu, nie
+     * dostawał już nigdy nowego timera — jego nick nie wracał do końca świata.
      */
     async restoreExpiredEffects(client) {
         try {
-            // Wczytaj dane z pliku (bez filtrowania wygasłych)
-            const data = await fs.readFile(this.activeEffectsFile, 'utf8');
-            const effectsData = JSON.parse(data);
-
-            const now = Date.now();
-            let restored = 0;
-            let errors = 0;
-            const expiredEffects = [];
-
-            // Znajdź wygasłe efekty
-            for (const [userId, effectData] of Object.entries(effectsData)) {
-                if (effectData.expiresAt && effectData.expiresAt < now) {
-                    expiredEffects.push({ userId, effectData });
-                }
-            }
-
-            if (expiredEffects.length === 0) {
-                logger.info('✅ Brak wygasłych efektów do przywrócenia');
-                return { restored: 0, errors: 0 };
-            }
-
-            logger.info(`🔍 Znaleziono ${expiredEffects.length} wygasłych efektów - przywracam nicki...`);
-
-            // Przywróć nicki dla wygasłych efektów
-            for (const { userId, effectData } of expiredEffects) {
-                try {
-                    // Pobierz guild
-                    const guild = await client.guilds.fetch(effectData.guildId);
-                    if (!guild) {
-                        logger.warn(`⚠️ Nie znaleziono guild ${effectData.guildId} dla użytkownika ${userId}`);
-                        errors++;
-                        continue;
-                    }
-
-                    // Pobierz członka
-                    const member = await guild.members.fetch(userId);
-                    if (!member) {
-                        logger.warn(`⚠️ Nie znaleziono członka ${userId} w guild ${effectData.guildId}`);
-                        errors++;
-                        continue;
-                    }
-
-                    if (!member.manageable) {
-                        logger.warn(`⚠️ Brak uprawnień do zmiany nicku ${member.user.tag} (wyższa rola lub właściciel) - pomijam przywracanie`);
-                        errors++;
-                        continue;
-                    }
-
-                    // Przywróć nick
-                    if (effectData.wasUsingMainNick) {
-                        await member.setNickname(null);
-                        logger.info(`🔄 Przywrócono nick główny dla ${member.user.tag} (wygasły efekt: ${effectData.effectType})`);
-                    } else {
-                        await member.setNickname(effectData.originalNickname);
-                        logger.info(`🔄 Przywrócono nick "${effectData.originalNickname}" dla ${member.user.tag} (wygasły efekt: ${effectData.effectType})`);
-                    }
-
-                    restored++;
-
-                } catch (error) {
-                    logger.error(`❌ Błąd przywracania nicku dla ${userId}:`, error.message);
-                    errors++;
-                }
-            }
-
-            logger.info(`✅ Przywrócono ${restored} nicków, błędów: ${errors}`);
-
-            // Teraz standardowo wczytaj aktywne efekty (automatycznie pominie wygasłe)
             await this.loadActiveEffects();
 
-            return { restored, errors };
+            const teraz = Date.now();
+            let przywrocone = 0;
+            let uzbrojone = 0;
+            let bledy = 0;
 
-        } catch (error) {
-            if (error.code === 'ENOENT') {
-                logger.info('📁 Brak pliku efektów - nic do przywrócenia');
-                return { restored: 0, errors: 0 };
+            for (const [userId, wpis] of [...this.activeEffects.entries()]) {
+                const wygasle = wpis.effects.filter(e => e.expiresAt !== null && e.expiresAt <= teraz);
+                const trwajace = wpis.effects.filter(e => e.expiresAt === null || e.expiresAt > teraz);
+
+                if (wygasle.length === 0 && trwajace.length === 0) {
+                    this.activeEffects.delete(userId);
+                    continue;
+                }
+
+                const guildId = wpis.guildId;
+                let guild = null;
+                try {
+                    guild = guildId ? await client.guilds.fetch(guildId) : null;
+                } catch {
+                    guild = null;
+                }
+
+                if (!guild) {
+                    logger.warn(`⚠️ Nie znaleziono serwera ${guildId} dla użytkownika ${userId}`);
+                    bledy++;
+                    continue;
+                }
+
+                if (wygasle.length > 0) {
+                    wpis.effects = trwajace;
+                    const ok = await this._przeliczNick(userId, guild);
+                    if (ok) przywrocone += wygasle.length;
+                    else bledy++;
+                }
+
+                // Uzbrój timery dla tych, które wciąż trwają
+                for (const efekt of trwajace) {
+                    if (efekt.expiresAt === null) continue;
+                    this._zaplanujPrzywrocenie(userId, efekt, guild);
+                    uzbrojone++;
+                }
             }
 
-            logger.error('❌ Błąd przywracania wygasłych efektów:', error);
-            return { restored: 0, errors: 1 };
+            await this.persistActiveEffects();
+            logger.info(`✅ Efekty po restarcie: zdjęto ${przywrocone} wygasłych, uzbrojono ${uzbrojone} trwających, błędów: ${bledy}`);
+
+            return { restored: przywrocone, rearmed: uzbrojone, errors: bledy };
+        } catch (error) {
+            logger.error('❌ Błąd przywracania efektów po restarcie:', error);
+            return { restored: 0, rearmed: 0, errors: 1 };
         }
     }
-    
-    /**
-     * Uruchamia automatyczne czyszczenie w interwałach
-     */
+
     startCleanupInterval() {
-        // Idempotentne — singleton bywa inicjalizowany przez kilka botów w tym samym procesie,
-        // więc nie dublujemy timera czyszczenia przy ponownym initialize().
+        // Idempotentne — singleton bywa inicjalizowany przez kilka botów w tym samym procesie
         if (this._cleanupIntervalId) return;
 
         this._cleanupIntervalId = setInterval(async () => {
             await this.cleanupExpiredEffects();
         }, this.config.cleanupInterval);
+        this._cleanupIntervalId.unref?.();
 
         logger.info(`🔄 Uruchomiono automatyczne czyszczenie (co ${this.config.cleanupInterval / (60 * 1000)} minut)`);
     }
-    
-    /**
-     * Pobiera statystyki systemu
-     */
-    getStats() {
-        const stats = {
-            totalActiveEffects: this.activeEffects.size,
-            curses: 0,
-            flags: 0,
-            weakened: 0
-        };
 
-        for (const effectData of this.activeEffects.values()) {
-            if (effectData.effectType === NicknameManagerService.EFFECTS.CURSE) {
-                stats.curses++;
-            } else if (effectData.effectType === NicknameManagerService.EFFECTS.FLAG) {
-                stats.flags++;
-            } else if (effectData.effectType === NicknameManagerService.EFFECTS.WEAKENED) {
-                stats.weakened++;
-            }
-        }
-
-        return stats;
-    }
-    
-    /**
-     * Aplikuje efekt do użytkownika - wyższy poziom nad saveOriginalNickname.
-     * Zmienia nick i opcjonalnie ustawia timer przywrócenia.
-     * @param {string} userId
-     * @param {string} effectType
-     * @param {number|null} durationMs - null = trwały
-     * @param {Object} metadata - { guildId, appliedBy, ... }
-     * @param {GuildMember} member
-     * @param {string|null} prefix - np. 'Upadły', 'Piekielny'
-     */
-    async applyEffect(userId, effectType, durationMs, metadata = {}, member, prefix = null) {
-        const effectPrefix = prefix || metadata.prefix || '';
-        const effectDurationMs = (durationMs === null || durationMs === undefined) ? Infinity : durationMs;
-
-        await this.saveOriginalNickname(userId, effectType, member, effectDurationMs);
-
-        const cleanNick = this.getCleanNickname(member.displayName);
-        const newNickname = effectPrefix
-            ? `${effectPrefix.trim()} ${cleanNick}`.substring(0, 32)
-            : cleanNick.substring(0, 32);
-
-        await member.setNickname(newNickname);
-        logger.info(`✅ Aplikowano efekt ${effectType} na nick ${member.user.tag}: "${newNickname}"`);
-
-        if (typeof durationMs === 'number' && durationMs > 0) {
-            setTimeout(async () => {
-                try {
-                    await this.restoreOriginalNickname(userId, member.guild);
-                    logger.info(`✅ Automatycznie przywrócono nick po efekcie ${effectType} dla ${member.user.tag}`);
-                } catch (error) {
-                    logger.error(`❌ Błąd automatycznego przywracania nicku po ${effectType}: ${error.message}`);
-                }
-            }, durationMs);
-        }
-    }
-
-    /**
-     * Usuwa wszystkie efekty użytkownika i przywraca oryginalny nick
-     */
-    async removeAllUserEffects(userId, guild) {
-        return await this.restoreOriginalNickname(userId, guild);
-    }
-
-    /**
-     * Wyłącza serwis - zapisuje dane
-     */
     async shutdown() {
         try {
+            for (const klucz of [...this._timery.keys()]) this._anulujTimer(klucz);
             await this.persistActiveEffects();
             await this.saveConfig();
             logger.info('💾 NicknameManager - dane zapisane przed wyłączeniem');

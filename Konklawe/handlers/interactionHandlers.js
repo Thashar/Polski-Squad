@@ -1605,11 +1605,15 @@ class InteractionHandler {
 
                     // Zapisz oryginalny nick w nickname managerze
                     if (this.nicknameManager) {
+                        // Prefix podajemy managerowi — przy nakładaniu kolejnych efektów
+                        // nick jest PRZELICZANY z oryginału i prefiksów aktywnych efektów,
+                        // więc efekt bez zapisanego prefiksu wypadłby z tego rachunku
                         const effectData = await this.nicknameManager.saveOriginalNickname(
                             userId,
                             'CURSE',
                             lucyferMember,
-                            durationMs
+                            durationMs,
+                            { prefix: 'Uśpiony' }
                         );
 
                         // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
@@ -3010,15 +3014,6 @@ class InteractionHandler {
         try {
             logger.info(`🎯 Rozpoczynam aplikację klątwy na nick dla ${targetMember.user.tag} (${userId})`);
 
-            // Zapisz oryginalny nick w centralnym systemie
-            await this.nicknameManager.saveOriginalNickname(
-                userId,
-                NicknameManager.EFFECTS.CURSE,
-                targetMember,
-                durationMs
-            );
-            logger.info(`💾 Zapisano oryginalny nick w systemie`);
-
             // Sprawdź czy to Lucyfer
             const hasLucyferRole = targetMember.roles.cache.has(this.config.roles.lucyfer);
 
@@ -3038,6 +3033,18 @@ class InteractionHandler {
             else {
                 cursePrefix = this.config.virtuttiPapajlari.forcedNickname; // Domyślnie "Przeklęty"
             }
+
+            // Zapis w centralnym systemie robimy DOPIERO TU, bo dopiero teraz znamy prefix.
+            // Manager przelicza nick z oryginału i prefiksów aktywnych efektów, więc efekt
+            // bez zapisanego prefiksu wypadłby z tego rachunku przy nakładaniu kolejnych
+            await this.nicknameManager.saveOriginalNickname(
+                userId,
+                NicknameManager.EFFECTS.CURSE,
+                targetMember,
+                durationMs,
+                { prefix: cursePrefix }
+            );
+            logger.info(`💾 Zapisano oryginalny nick w systemie`);
 
             // KRYTYCZNE: Użyj czystego nicku (bez istniejących prefixów)
             const cleanNick = this.nicknameManager.getCleanNickname(targetMember.displayName);
@@ -3410,12 +3417,14 @@ class InteractionHandler {
                 const cleanNick = this.nicknameManager.getCleanNickname(targetMember.displayName);
                 const newNick = `${forcedPrefix} ${cleanNick}`.substring(0, 32);
 
-                // Zapisz oryginalny nick w nickname managerze
+                // Zapisz oryginalny nick w nickname managerze (z prefiksem — manager
+                // przelicza nick z oryginału i prefiksów aktywnych efektów)
                 const effectData = await this.nicknameManager.saveOriginalNickname(
                     userId,
                     'CURSE',
                     targetMember,
-                    endTime - now
+                    endTime - now,
+                    { prefix: forcedPrefix }
                 );
 
                 // Zmień nick ręcznie

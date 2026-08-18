@@ -297,77 +297,113 @@ const serwis = new JakiśSerwis(config, logger);
 
 #### Główne Funkcje
 
-- 🔄 **Koordynacja cross-bot** - Zapobiega konfliktom między Konklawe (klątwa) i Muteusz (flaga)
-- 💾 **Zachowanie oryginalnych nicków** - Zawsze przywraca prawdziwy nick, nie pośrednie efekty
-- 📚 **Nakładanie efektów** - Obsługuje overlapping effects (curse + flag)
-- 🧹 **Automatyczne czyszczenie** - Usuwa wygasłe efekty
+- 🔄 **Koordynacja cross-bot** - Zapobiega konfliktom między Konklawe (klątwa), Muteusz (flaga) i Kontroler (korona MVP)
+- 💾 **Zachowanie oryginalnych nicków** - Zawsze przywraca prawdziwy nick, nie pośredni efekt
+- 📚 **LISTA efektów na użytkownika** - każdy efekt ma własne `id` i czas wygaśnięcia
+- 🧹 **Automatyczne czyszczenie** - usuwa wygasłe efekty, uzbraja timery po restarcie
 - 📊 **Śledzenie statystyk** według typu efektu
+
+#### ⚠️ Model danych: LISTA efektów, nie jeden wpis
+
+Wcześniej na użytkownika przypadał JEDEN wpis, a każdy efekt dostawał własny `setTimeout`.
+Dawało to dwa błędy:
+
+1. **Efekt kończył się za wcześnie.** Klątwa 5 min + flaga nałożona minutę później: wpis klątwy
+   był NADPISYWANY przez flagę, ale timer klątwy dalej tykał. Po pięciu minutach przywracał
+   oryginał i kasował wpis — flaga kończyła się minutę za wcześnie, a jej timer trafiał na pustkę.
+2. **Efekt nie kończył się nigdy.** Timery żyją wyłącznie w pamięci, a `restoreExpiredEffects`
+   zajmowało się tylko efektami JUŻ wygasłymi. Efekt, któremu przy restarcie zostało jeszcze
+   trochę czasu, nie dostawał nowego timera — jego nick nie wracał już nigdy.
+
+Kształt wpisu w `shared_data/active_nickname_effects.json`:
+
+```javascript
+userId -> {
+  originalNickname,   // nick sprzed PIERWSZEGO efektu (null = używał nicku głównego)
+  wasUsingMainNick,
+  guildId, username,
+  effects: [ { id, effectType, prefix, replaceWith, appliedAt, expiresAt, appliedBy } ]
+}
+```
+
+- `prefix` dokleja się przed nick (klątwa `Przeklęty`, korona `👑`)
+- `replaceWith` podmienia nick w CAŁOŚCI (flagi Muteusza)
+- Przy kilku aktywnych efektach prefiksy nakładają się w kolejności nałożenia, a `replaceWith`
+  wygrywa z prefiksami. Zdjęcie jednego efektu **przelicza** nick z oryginału i tych, które zostały
+- **Stary kształt pliku jest migrowany w locie** (`_zmigrujWpis`), więc wdrożenie nie gubi danych
 
 #### Typy Efektów
 
-**CURSE (Konklawe Bot):**
+**Prefix (Konklawe, Kontroler):**
 ```javascript
 await nicknameManager.applyEffect(
-    userId,
-    'CURSE',
-    5 * 60 * 1000, // 5 minut
-    {
-        guildId: guild.id,
-        appliedBy: 'Vatican Council'
-    }
+    userId, 'curse', 5 * 60 * 1000,
+    { appliedBy: 'Vatican Council' },
+    member, 'Przeklęty'
 );
-// Dodaje prefix "Przeklęty " do nicku
+// Nick: "Przeklęty Janusz"
 ```
 
-**FLAG (Muteusz Bot):**
+**Podmiana całości (Muteusz — flagi):**
 ```javascript
-await nicknameManager.applyEffect(
-    userId,
-    'FLAG',
-    5 * 60 * 1000, // 5 minut
-    {
-        guildId: guild.id,
-        flagEmoji: '🇺🇦', // Ukraińska flaga
-        appliedBy: 'Auto-moderation'
-    }
+await nicknameManager.saveOriginalNickname(
+    userId, NicknameManager.EFFECTS.FLAG, member, Infinity,
+    { replaceWith: 'POLSKA GUROM!' }
 );
-// Zmienia nick na flagę
+// Nick: "POLSKA GUROM!" — oryginał zachowany do przywrócenia
 ```
 
-#### Przykład Nakładania Efektów
+#### Nakładanie efektów — co się dzieje
 
 ```javascript
-// Użytkownik "Janusz" dostaje klątwę
-await nicknameManager.applyEffect(userId, 'CURSE', duration);
-// Nick: "Przeklęty Janusz" (oryginał: "Janusz" zapisany)
+// "Janusz" dostaje klątwę na 5 min
+await applyEffect(userId, 'curse', 5*60*1000, {}, member, 'Przeklęty');
+// Nick: "Przeklęty Janusz"   (oryginał "Janusz" zapamiętany)
 
-// Potem dostaje flagę
-await nicknameManager.applyEffect(userId, 'FLAG', duration, { flagEmoji: '🇺🇦' });
-// Nick: "🇺🇦" (oryginał: "Janusz" nadal zachowany)
+// Minutę później korona MVP na godzinę
+await applyEffect(userId, 'mvp_crown', 60*60*1000, {}, member, '👑');
+// Nick: "👑 Przeklęty Janusz"
 
-// Flaga wygasa
-await nicknameManager.removeEffect(userId, flagEffectId);
-// Nick: "Janusz" (przywrócony oryginał, NIE "Przeklęty Janusz")
+// Klątwa wygasa po 5 min — korona ZOSTAJE
+// Nick: "👑 Janusz"
+
+// Korona wygasa po godzinie
+// Nick: "Janusz"
 ```
 
 #### API Nickname Manager
 
 ```javascript
-// Zastosuj efekt
-await nicknameManager.applyEffect(userId, effectType, duration, metadata);
+// Nałożenie efektu (dopisuje + ustawia nick + planuje wygaśnięcie)
+await nicknameManager.applyEffect(userId, typ, durationMs, metadata, member, prefix);
 
-// Usuń efekt
-await nicknameManager.removeEffect(userId, effectId);
+// Sam zapis efektu, gdy wywołujący ustawia nick samodzielnie
+await nicknameManager.saveOriginalNickname(userId, typ, member, durationMs, { prefix, replaceWith });
 
-// Usuń wszystkie efekty użytkownika
-await nicknameManager.removeAllUserEffects(userId);
+// Zdjęcie JEDNEGO efektu — nick przeliczany z pozostałych
+await nicknameManager.removeEffectById(userId, effectId, guild);
+await nicknameManager.removeEffectType(userId, typ, guild);
 
-// Pobierz aktywne efekty
-const effects = nicknameManager.getActiveEffects(userId);
+// Zdjęcie WSZYSTKICH i powrót do oryginału
+await nicknameManager.removeAllUserEffects(userId, guild);
 
-// Pobierz statystyki
-const stats = nicknameManager.getStats();
+// ⚠️ Kasuje wpis BEZ przywracania nicku — rzadko to, czego chcesz
+await nicknameManager.removeEffect(userId);
+
+// Odczyt stanu
+nicknameManager.hasActiveEffect(userId);
+nicknameManager.hasEffectType(userId, typ);        // sprawdza CAŁĄ listę
+nicknameManager.getActiveEffectType(userId);       // tylko NAJNOWSZY efekt
+nicknameManager.getEffectInfo(userId);             // + tablica `effects`
+nicknameManager.getUsersWithEffectType(typ);       // pary [userId, efekt]
+nicknameManager.getStats();
+
+// Po restarcie: zdejmuje wygasłe I uzbraja timery trwających
+await nicknameManager.restoreExpiredEffects(client);
 ```
+
+⚠️ **Nie sięgaj po `activeEffects` bezpośrednio** — wpis nie ma już `effectType` na wierzchu.
+Do przeglądania używaj `getUsersWithEffectType()`.
 
 ---
 

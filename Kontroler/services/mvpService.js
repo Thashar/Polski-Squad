@@ -899,10 +899,12 @@ class MvpService {
         try {
             if (!this.nicknameManager) return false;
 
-            // Brak stackowania — jeśli autor ma już aktywną koronę MVP, pomiń ponowne nadanie
-            // (inaczej prefix 👑 nakładałby się: "👑 👑 Nick"). Standalone 'crown' → fallback na textreply.
-            if (this.nicknameManager.hasActiveEffect(ctx.author.id) &&
-                this.nicknameManager.getActiveEffectType(ctx.author.id) === 'mvp_crown') {
+            // Brak stackowania KORONY — jeśli autor ma już aktywną koronę MVP, pomiń ponowne
+            // nadanie (inaczej prefix 👑 nakładałby się: "👑 👑 Nick").
+            // ⚠️ `hasEffectType` zamiast `getActiveEffectType`: po przebudowie managera
+            // użytkownik może mieć kilka efektów naraz, a `getActiveEffectType` zwraca tylko
+            // NAJNOWSZY — korona pod klątwą byłaby przeoczona i nałożona po raz drugi.
+            if (this.nicknameManager.hasEffectType(ctx.author.id, 'mvp_crown')) {
                 this.logger.info(`👑 MVP: ${ctx.author.tag} ma już aktywną koronę — pomijam (brak stackowania)`);
                 return false;
             }

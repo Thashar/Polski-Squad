@@ -247,7 +247,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: ukrainianNick }
             );
 
             // Zmień nick na ukraiński
@@ -283,7 +284,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: polishNick }
             );
 
             await member.setNickname(polishNick);
@@ -320,7 +322,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: israeliNick }
             );
 
             // Zmień nick na izraelski
@@ -358,7 +361,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: americanNick }
             );
 
             // Zmień nick na amerykański
@@ -396,7 +400,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: germanNick }
             );
 
             // Zmień nick na niemiecki
@@ -434,7 +439,8 @@ class ReactionRoleService {
                 userId,
                 NicknameManager.EFFECTS.FLAG,
                 member,
-                Infinity
+                Infinity,
+                { replaceWith: russianNick }
             );
 
             // Zmień nick na rosyjski
@@ -780,12 +786,11 @@ class ReactionRoleService {
             let restored = 0;
             let errors = 0;
 
-            // Sprawdź każdy aktywny efekt FLAG
-            for (const [userId, effectData] of this.nicknameManager.activeEffects.entries()) {
-                if (effectData.effectType !== NicknameManager.EFFECTS.FLAG) {
-                    continue; // Pomijamy efekty niebędące flagami
-                }
-
+            // Sprawdź każdy aktywny efekt FLAG.
+            // ⚠️ Czytamy przez publiczne API, nie przez `activeEffects` — od przebudowy
+            // managera na LISTĘ efektów per użytkownik wpis nie ma już `effectType`
+            // na wierzchu (jeden użytkownik może mieć naraz flagę i klątwę).
+            for (const [userId, effectData] of this.nicknameManager.getUsersWithEffectType(NicknameManager.EFFECTS.FLAG)) {
                 // Sprawdź czy istnieje aktywny timer dla tego użytkownika
                 const userHasTimer = this.persistentTimers.some(timer => timer.userId === userId);
 
