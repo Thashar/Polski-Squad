@@ -389,7 +389,9 @@ process.on('uncaughtException', async (error) => {
     } else {
         logger.error(`Nieobsłużony wyjątek: ${error.message}`);
     }
-    process.exit(1);
+    // ⚠️ Bez `process.exit()` — wszystkie dziewięć botów dzieli JEDEN proces, a launcher
+    // ma własny handler, który przed wyjściem domyka zapisy w toku (`jsonStore.flush()`).
+    // Wyjście stąd ubijało proces zanim flush zdążył się wykonać.
 });
 
 process.on('SIGINT', async () => {

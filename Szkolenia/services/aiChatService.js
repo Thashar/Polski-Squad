@@ -141,10 +141,50 @@ ZASADY:
         try {
             await fs.mkdir(this.promptsDir, { recursive: true });
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const filename = `${askerName}_${timestamp}.txt`;
+
+            // ⚠️ Nick z Discorda trafia wprost do nazwy pliku — bez czyszczenia
+            // `../` albo ukośnik w nicku zapisałby plik poza katalogiem promptów.
+            const bezpiecznyNick = String(askerName)
+                .replace(/[^\p{L}\p{N}_-]/gu, '_')
+                .slice(0, 40) || 'nieznany';
+
+            const filename = `${bezpiecznyNick}_${timestamp}.txt`;
             await fs.writeFile(path.join(this.promptsDir, filename), prompt);
+            await this.cleanupPrompts();
         } catch (err) {
             // ignore
+        }
+    }
+
+    /**
+     * Zostawia tylko najnowsze pliki promptów.
+     *
+     * ⚠️ Bez tego katalog rósł bez końca — jeden plik na każde pytanie, a całe
+     * `data/` idzie codziennie do backupu na Google Drive.
+     */
+    async cleanupPrompts(maksymalnie = 200) {
+        try {
+            const pliki = (await fs.readdir(this.promptsDir)).filter(f => f.endsWith('.txt'));
+            if (pliki.length <= maksymalnie) return;
+
+            // Nazwa zaczyna się od nicku, więc sortujemy po czasie modyfikacji
+            const zeStatami = await Promise.all(pliki.map(async nazwa => {
+                const pelna = path.join(this.promptsDir, nazwa);
+                try {
+                    return { pelna, mtime: (await fs.stat(pelna)).mtimeMs };
+                } catch {
+                    return null;
+                }
+            }));
+
+            const posortowane = zeStatami.filter(Boolean).sort((a, b) => a.mtime - b.mtime);
+            const doUsuniecia = posortowane.slice(0, posortowane.length - maksymalnie);
+
+            for (const { pelna } of doUsuniecia) {
+                await fs.unlink(pelna).catch(() => {});
+            }
+        } catch {
+            // katalog mógł jeszcze nie istnieć — nieistotne
         }
     }
 

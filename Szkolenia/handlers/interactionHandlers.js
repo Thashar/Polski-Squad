@@ -18,7 +18,9 @@ async function handleInteraction(interaction, state, config) {
         // Obsługa przycisków
         if (!interaction.isButton()) return;
 
-        await delay(1000);
+        // ⚠️ Żadnego `delay()` przed odpowiedzią — Discord unieważnia interakcję
+        // po 3 sekundach. Sekunda uśpienia plus `members.fetch()` zjadały połowę
+        // budżetu i przy wolniejszej odpowiedzi API leciał błąd "Unknown interaction".
 
         const { customId, user, channel } = interaction;
 
@@ -29,7 +31,15 @@ async function handleInteraction(interaction, state, config) {
         const member = await guild.members.fetch(user.id);
         const memberName = member.displayName || user.username;
 
-        if (channel.name !== memberName) {
+        // Właściciela rozpoznajemy po zapisanym ID, a nazwa wątku jest tylko zapasem
+        // dla wpisów sprzed wprowadzenia `ownerId`. Samo porównanie z nazwą wątku
+        // odcinało właściciela od jego własnych przycisków po każdej zmianie nicku.
+        const zapisanyWlasciciel = state.lastReminderMap.get(channel.id)?.ownerId || null;
+        const jestWlascicielem = zapisanyWlasciciel
+            ? zapisanyWlasciciel === user.id
+            : channel.name === memberName;
+
+        if (!jestWlascicielem) {
             await interaction.reply({
                 content: config.messages.ownerOnly,
                 flags: MessageFlags.Ephemeral

@@ -22,7 +22,15 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
         const archivedThreads = await channel.threads.fetchArchived();
         const allThreads = new Map([...activeThreads.threads, ...archivedThreads.threads]);
 
-        await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, allThreads);
+        // ⚠️ `fetchArchived()` zwraca tylko JEDNĄ stronę wyników — przy `hasMore` część
+        // zarchiwizowanych wątków jest poza listą. Czyszczenie "osieroconych" wpisów
+        // skasowałoby wtedy stan wątków, które nadal istnieją (m.in. flagę `reminderSent`),
+        // przez co przypomnienie poszłoby drugi raz zamiast zamknięcia wątku.
+        if (archivedThreads.hasMore) {
+            logger.info('ℹ️ Lista zarchiwizowanych wątków niekompletna — pomijam czyszczenie przypomnień');
+        } else {
+            await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, allThreads);
+        }
 
         for (const [id, thread] of allThreads) {
             try {
@@ -79,9 +87,7 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
 
     if (isInitialCheck) return;
 
-    const threadOwner = guild.members.cache.find(member =>
-        (member.displayName === thread.name) || (member.user.username === thread.name)
-    );
+    const threadOwner = await resolveThreadOwner(thread, guild, threadData);
     if (!threadOwner) return;
 
     const reminderAlreadySent = threadData && threadData.reminderSent;
@@ -94,6 +100,30 @@ async function processThread(thread, guild, state, config, now, thresholds, isIn
             await sendInactivityReminder(thread, threadOwner, state, config, now);
         }
     }
+}
+
+/**
+ * Ustala właściciela wątku.
+ *
+ * ⚠️ Samo szukanie po nazwie w `guild.members.cache` bywa zawodne: cache członków
+ * zapełnia się dopiero ze zdarzeń, więc po restarcie bota potrafi być prawie pusty
+ * — a wtedy przypomnienie nie szło wcale, bez śladu w logu. ID właściciela jest
+ * zapisywane przy zakładaniu wątku (`setReminder(..., targetUser.id)`), więc korzystamy
+ * z niego w pierwszej kolejności, a szukanie po nazwie zostaje jako zapas dla
+ * starych wpisów bez `ownerId`.
+ */
+async function resolveThreadOwner(thread, guild, threadData) {
+    if (threadData?.ownerId) {
+        try {
+            return await guild.members.fetch(threadData.ownerId);
+        } catch {
+            // Użytkownik mógł opuścić serwer — spróbujemy jeszcze po nazwie
+        }
+    }
+
+    return guild.members.cache.find(member =>
+        (member.displayName === thread.name) || (member.user.username === thread.name)
+    ) || null;
 }
 
 async function sendInactivityReminder(thread, threadOwner, state, config, now) {

@@ -17,6 +17,25 @@ const logger = createBotLogger('Szkolenia');
  * @param {Object} state - Stan współdzielony aplikacji
  * @param {Object} config - Konfiguracja aplikacji
  */
+/**
+ * Szuka zarchiwizowanego wątku o danej nazwie, przechodząc przez kolejne strony wyników.
+ * Limit stron chroni przed długim odpytywaniem API na kanale z setkami wątków.
+ */
+async function findArchivedThreadByName(channel, threadName, maxStron = 5) {
+    let before;
+
+    for (let strona = 0; strona < maxStron; strona++) {
+        const wynik = await channel.threads.fetchArchived(before ? { before } : {});
+        const znaleziony = wynik.threads.find(thread => thread.name === threadName);
+        if (znaleziony) return znaleziony;
+
+        if (!wynik.hasMore || wynik.threads.size === 0) return null;
+        before = wynik.threads.last();
+    }
+
+    return null;
+}
+
 async function handleReactionAdd(reaction, user, state, config) {
     try {
         if (reaction.partial) await reaction.fetch();
@@ -54,12 +73,11 @@ async function handleReactionAdd(reaction, user, state, config) {
             thread.name === threadName
         );
         
-        // Jeśli nie znaleziono w aktywnych, sprawdź zarchiwizowane
+        // Jeśli nie znaleziono w aktywnych, sprawdź zarchiwizowane.
+        // ⚠️ `fetchArchived()` zwraca tylko jedną stronę — bez stronicowania starszy
+        // wątek użytkownika bywał niewidoczny i bot zakładał DRUGI wątek o tej samej nazwie.
         if (!existingThread) {
-            const archivedThreads = await channel.threads.fetchArchived();
-            existingThread = archivedThreads.threads.find(thread => 
-                thread.name === threadName
-            );
+            existingThread = await findArchivedThreadByName(channel, threadName);
         }
 
         if (existingThread) {

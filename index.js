@@ -192,18 +192,45 @@ async function startAllBots() {
 /**
  * Obsługa zamykania aplikacji
  */
+/**
+ * Domyka zapisy w toku przed zamknięciem procesu.
+ *
+ * ⚠️ `store.setSync()` (używany m.in. przez ostrzeżenia i wyciszenia Muteusza,
+ * scoreboard Konklawe, konfigurację EndersEcho) aktualizuje cache od razu, a plik
+ * zapisuje W TLE. Gołe `process.exit()` porzucało te zapisy — restart hostingu
+ * (SIGTERM) potrafił cofnąć ostatnie zmiany bez żadnego śladu w logu.
+ *
+ * Limit czasu jest po to, żeby zablokowany zapis nie zawiesił zamykania na zawsze.
+ */
+async function domknijZapisy(limitMs = 5000) {
+    try {
+        await Promise.race([
+            jsonStore.flush(),
+            new Promise(resolve => setTimeout(resolve, limitMs))
+        ]);
+    } catch (error) {
+        logger.error(`❌ Błąd domykania zapisów: ${error.message}`);
+    }
+}
+
 function setupShutdownHandlers() {
-    const shutdown = (signal) => {
+    let zamykanie = false;
+
+    const shutdown = async (signal, kod = 0) => {
+        if (zamykanie) return;
+        zamykanie = true;
+
         logger.warn(`\n🛑 Otrzymano sygnał ${signal}. Zamykanie botów...`);
-        process.exit(0);
+        await domknijZapisy();
+        process.exit(kod);
     };
-    
+
     process.on('SIGINT', () => shutdown('SIGINT'));
     process.on('SIGTERM', () => shutdown('SIGTERM'));
-    
+
     process.on('uncaughtException', (error) => {
         logger.error('❌ Nieobsłużony wyjątek:', error);
-        process.exit(1);
+        shutdown('uncaughtException', 1);
     });
     
     process.on('unhandledRejection', (error) => {
