@@ -7838,9 +7838,65 @@ class InteractionHandler {
     }
 
     /**
-     * Klik w licznik reakcji pod rozgłoszeniem → ephemeral z listą osób, które zareagowały,
-     * pogrupowaną po serwerze. Przycisk „ostatnia reakcja" pozostaje bezczynny — cała jego
-     * treść jest już na etykiecie.
+     * Klik w licznik emotki = reakcja przyciskiem. Pierwszy klik dodaje głos, kolejny cofa;
+     * gracz, który zostawił pod embedem prawdziwą reakcję tą emotką, cofa nią właśnie ją
+     * (bot zdejmuje reakcję zamiast dokładać drugi głos tej samej osoby).
+     */
+    async _handleBroadcastReactionVote(interaction, broadcastId, emojiKey) {
+        const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
+        const svc = this.broadcastReactionService;
+        if (!svc) { await interaction.deferUpdate().catch(() => {}); return; }
+
+        // Przebudowa liczników na WSZYSTKICH kopiach to kilka-kilkanaście zapytań do Discorda,
+        // czyli grubo ponad 3 s, które Discord daje na potwierdzenie interakcji
+        await interaction.deferUpdate().catch(() => {});
+
+        try {
+            const result = await svc.toggleVote({
+                broadcastId,
+                emojiKey,
+                user: interaction.user,
+                guildId: interaction.guildId,
+                message: interaction.message,
+                client: interaction.client,
+            });
+
+            if (result.state === 'reaction') {
+                await interaction.followUp({
+                    content: isPol
+                        ? '⚠️ Masz już własną reakcję tą emotką pod tą wiadomością — zdejmij ją, żeby cofnąć głos. (Bot nie ma uprawnienia „Zarządzanie wiadomościami", więc nie może zrobić tego za Ciebie.)'
+                        : '⚠️ You already reacted with this emoji on this message — remove that reaction to take your vote back. (The bot lacks the "Manage Messages" permission, so it cannot do it for you.)',
+                    flags: ['Ephemeral'],
+                }).catch(() => {});
+                return;
+            }
+
+            // Rząd „ostatnia reakcja" traktuje klik tak samo jak zostawienie emotki;
+            // cofnięcie głosu go nie rusza — poprzedniego autora i tak nie dałoby się odtworzyć
+            if (result.state === 'added') {
+                const userName = interaction.member?.displayName || interaction.user.username;
+                await svc.recordLastFromVote({
+                    broadcastId,
+                    userName,
+                    guildId: interaction.guildId,
+                    emojiKey,
+                    client: interaction.client,
+                }).catch(() => {});
+            }
+
+            await svc.refreshAfterVote(broadcastId, interaction.client);
+        } catch (err) {
+            logger.warn(`Błąd głosu pod rozgłoszeniem: ${err.message}`);
+        }
+    }
+
+    /**
+     * Przyciski pod rozgłoszeniem globalnym:
+     *   • licznik emotki (`_e_{klucz}`) — DZIAŁA JAK REAKCJA: pierwszy klik +1, kolejny -1;
+     *     zmiana wchodzi od razu na kopie embeda na wszystkich serwerach,
+     *   • zbiorczy `➕` (`_other`) — aktywny, ale bezczynny (klik trzeba potwierdzić,
+     *     inaczej Discord pokaże „This interaction failed"),
+     *   • „ostatnia reakcja" (`_last`) — pełna lista reagujących ze wszystkich serwerów.
      *
      * CustomID: `bcr_{broadcastId}_e_{kluczEmotki}` | `bcr_{broadcastId}_other` | `bcr_{broadcastId}_last`
      */
@@ -7852,13 +7908,16 @@ class InteractionHandler {
         const broadcastId = rest.slice(0, sep);
         const suffix = rest.slice(sep + 1);
 
-        // Rząd „ostatnia reakcja" — nic nie pokazuje, ale klik trzeba potwierdzić,
-        // inaczej Discord wyświetli „This interaction failed"
-        if (suffix === 'last') { await interaction.deferUpdate().catch(() => {}); return; }
+        // Zbiorczy `➕` — zostaje aktywny, ale niczego nie otwiera (listę pokazuje rząd 5)
+        if (suffix === 'other') { await interaction.deferUpdate().catch(() => {}); return; }
 
-        const target = suffix === 'other'
-            ? { type: 'other' }
-            : { type: 'emoji', key: suffix.startsWith('e_') ? suffix.slice(2) : suffix };
+        if (suffix.startsWith('e_')) {
+            await this._handleBroadcastReactionVote(interaction, broadcastId, suffix.slice(2));
+            return;
+        }
+
+        // `_last` → lista WSZYSTKICH reagujących (dawne zachowanie zbiorczego `➕`)
+        const target = { type: 'all' };
 
         const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
         // Zebranie listy to odczyt N wiadomości + użytkownicy reakcji — grubo ponad 3 s,
@@ -7869,8 +7928,8 @@ class InteractionHandler {
             const data = await this.broadcastReactionService?.collectReactors(broadcastId, target, interaction.client);
             if (!data || !data.total) {
                 await interaction.editReply(isPol
-                    ? '🔍 Nikt jeszcze nie zareagował tą emotką.'
-                    : '🔍 Nobody has reacted with this emoji yet.');
+                    ? '🔍 Nikt jeszcze nie zareagował pod tym ogłoszeniem.'
+                    : '🔍 Nobody has reacted to this announcement yet.');
                 return;
             }
 
@@ -7894,9 +7953,7 @@ class InteractionHandler {
 
                 // Pierwszy embed niesie podsumowanie całości
                 if (idx === 0) {
-                    embed.setTitle(suffix === 'other'
-                        ? (isPol ? '➕ Pozostałe reakcje' : '➕ Other reactions')
-                        : (isPol ? 'Kto zareagował' : 'Who reacted'));
+                    embed.setTitle(isPol ? 'Kto zareagował' : 'Who reacted');
                     embed.setDescription(isPol
                         ? `Łącznie: **${data.total}** ze wszystkich serwerów`
                         : `Total: **${data.total}** across all servers`);

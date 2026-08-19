@@ -12,10 +12,18 @@ const store = require('../../utils/jsonStore');
  * reakcji ze wszystkich serwerów. Dzięki temu gracz na serwerze A widzi, że embed
  * zebrał 40 👍, nawet jeśli u niego kliknęły go 3 osoby.
  *
- * Klik w licznik pokazuje ephemeral z listą osób, które zareagowały, pogrupowaną po
- * serwerze (`collectReactors`). Przycisk „ostatnia reakcja" pozostaje bezczynny — jego
- * treść jest już w etykiecie — ale klik i tak MUSI zostać potwierdzony (`deferUpdate`),
- * bo inaczej Discord pokazuje „This interaction failed".
+ * Klik w licznik DZIAŁA JAK REAKCJA: pierwszy dodaje głos (+1), kolejny go cofa (-1), a zmiana
+ * natychmiast wchodzi na wszystkie kopie embeda. Bot nie może dodać reakcji „w imieniu" gracza,
+ * więc kliknięcia trzymamy jako osobny rejestr głosów (`bc.votes`) i doliczamy do sum.
+ *
+ * ⚠️ JEDNA OSOBA = JEDEN GŁOS NA EMOTKĘ. Gracz, który zostawił prawdziwą reakcję i kliknął
+ * jeszcze przycisk, NIE liczy się dwa razy — sumy dedupikują po ID (`_countUnique`), a klik
+ * przy istniejącej własnej reakcji próbuje ją po prostu zdjąć (toggle jak na Discordzie).
+ *
+ * Klik w przycisk „ostatnia reakcja" (rząd 5) pokazuje ephemeral z pełną listą reagujących,
+ * pogrupowaną po serwerze (`collectReactors`). Zbiorczy `➕` zostaje aktywny, ale jest bezczynny
+ * — klik i tak MUSI zostać potwierdzony (`deferUpdate`), bo inaczej Discord pokazuje
+ * „This interaction failed".
  *
  * Kolejność liczników: malejąco po sumie, a przy remisie STARSZA reakcja wyżej.
  *
@@ -31,11 +39,11 @@ const store = require('../../utils/jsonStore');
  */
 
 /**
- * Ile reakcji dostaje własny przycisk z ikoną — 4 najczęstsze. Piąty slot zostaje dla
- * zbiorczego `➕`, więc całość mieści się w JEDNYM rzędzie (Discord: 5 przycisków/rząd)
- * i embed nie puchnie niezależnie od tego, ile różnych emotek się pojawi.
+ * Ile reakcji dostaje własny przycisk z ikoną — 19 najczęstszych. Dwudziesty slot zostaje
+ * dla zbiorczego `➕`, więc liczniki wypełniają dokładnie CZTERY rzędy (Discord: 5 przycisków
+ * na rząd, 5 rzędów na wiadomość), a piąty rząd zostaje dla „ostatniej reakcji".
  */
-const TOP_BUTTONS = 4;
+const TOP_BUTTONS = 19;
 /** Po tylu dniach przestajemy pilnować rozgłoszenia (i edytować stare wiadomości). */
 const RETENTION_DAYS = 30;
 
@@ -180,6 +188,90 @@ class BroadcastReactionService {
         await this._saveState();
     }
 
+    /**
+     * Przełącza głos oddany PRZYCISKIEM (nie prawdziwą reakcją).
+     *
+     * Zwraca `state`:
+     *   'added'    — głos dodany (+1),
+     *   'removed'  — głos cofnięty (-1),
+     *   'reaction' — gracz ma pod tą wiadomością własną PRAWDZIWĄ reakcję tą emotką i nie
+     *                udało się jej zdjąć (brak uprawnienia „Zarządzanie wiadomościami").
+     *                Głosu nie dodajemy — jedna osoba ma liczyć się raz.
+     *   'unreacted'— gracz miał prawdziwą reakcję i została zdjęta (efekt: -1, jak toggle).
+     *
+     * @param {Object} opts.message - wiadomość, pod którą kliknięto (kopia z serwera gracza)
+     */
+    async toggleVote({ broadcastId, emojiKey, user, guildId, message, client }) {
+        const bc = this._broadcasts[broadcastId];
+        if (!bc || !user?.id) return { state: 'noop' };
+
+        bc.votes = bc.votes || {};
+        bc.voteEmojis = bc.voteEmojis || {};
+        const voters = bc.votes[emojiKey] || {};
+
+        if (voters[user.id]) {
+            delete voters[user.id];
+            if (Object.keys(voters).length === 0) delete bc.votes[emojiKey];
+            else bc.votes[emojiKey] = voters;
+            await this._saveState();
+            return { state: 'removed' };
+        }
+
+        // Prawdziwa reakcja tego gracza = ten sam głos. Zdejmujemy ją, zamiast dokładać drugi.
+        const own = [...(message?.reactions?.cache?.values() || [])]
+            .find(r => (r.emoji.id || r.emoji.name) === emojiKey);
+        if (own) {
+            const users = await own.users.fetch().catch(() => null);
+            if (users?.has(user.id)) {
+                const removed = await own.users.remove(user.id).then(() => true).catch(() => false);
+                return { state: removed ? 'unreacted' : 'reaction' };
+            }
+        }
+
+        // Emotkę zapamiętujemy przy głosie — gdy wszystkie prawdziwe reakcje znikną,
+        // nie mielibyśmy z czego odtworzyć ikony przycisku
+        const emojiSrc = own?.emoji || this._findEmojiDescriptor(bc, emojiKey);
+        if (emojiSrc) {
+            bc.voteEmojis[emojiKey] = {
+                id: emojiSrc.id || null,
+                name: emojiSrc.name || null,
+                animated: !!emojiSrc.animated,
+            };
+        }
+        voters[user.id] = { guildId: guildId || null, at: new Date().toISOString() };
+        bc.votes[emojiKey] = voters;
+        await this._saveState();
+        return { state: 'added' };
+    }
+
+    /** Opis emotki znany z wcześniejszych głosów — dla kluczy bez żywej reakcji */
+    _findEmojiDescriptor(bc, emojiKey) {
+        const stored = bc.voteEmojis?.[emojiKey];
+        if (stored) return stored;
+        if (bc.lastReaction?.emoji && (bc.lastReaction.emoji.id || bc.lastReaction.emoji.name) === emojiKey) {
+            return bc.lastReaction.emoji;
+        }
+        return null;
+    }
+
+    /** Zapamiętuje autora ostatniej reakcji na podstawie KLIKNIĘCIA przycisku */
+    async recordLastFromVote({ broadcastId, userName, guildId, emojiKey, client }) {
+        const bc = this._broadcasts[broadcastId];
+        if (!bc) return;
+        const guildCfg = this.config.getAllGuilds().find(g => g.id === guildId) || null;
+        const emoji = this._findEmojiDescriptor(bc, emojiKey) || { id: null, name: emojiKey, animated: false };
+
+        bc.lastReaction = {
+            userName,
+            guildName: client?.guilds?.cache?.get(guildId)?.name || guildCfg?.tag || '?',
+            guildTag: guildCfg?.tag || null,
+            emoji: { id: emoji.id || null, name: emoji.name || null, animated: !!emoji.animated },
+            at: new Date().toISOString(),
+        };
+        bc.styleIndex = ((bc.styleIndex ?? -1) + 1) % LAST_REACTION_STYLES.length;
+        await this._saveState();
+    }
+
     /** Nick serwerowy autora reakcji; przy braku dostępu do membera schodzi do nazwy globalnej. */
     async _resolveMemberName(client, guildId, user) {
         const fallback = user?.displayName || user?.username || 'Unknown';
@@ -209,6 +301,20 @@ class BroadcastReactionService {
                 this.logger.warn(`⚠️ Błąd przeliczania reakcji rozgłoszenia: ${err.message}`)
             );
         }, DEBOUNCE_MS));
+    }
+
+    /**
+     * Przebudowa NATYCHMIAST po kliknięciu przycisku — gracz ma zobaczyć zmianę licznika od
+     * razu, a nie po oknie debounce'u przeznaczonym dla serii prawdziwych reakcji.
+     * Zaplanowane odświeżenie kasujemy, bo ta przebudowa i tak policzy wszystko od nowa.
+     */
+    async refreshAfterVote(broadcastId, client) {
+        const timer = this._timers.get(broadcastId);
+        if (timer) {
+            clearTimeout(timer);
+            this._timers.delete(broadcastId);
+        }
+        return this.refresh(broadcastId, client);
     }
 
     /**
@@ -247,6 +353,36 @@ class BroadcastReactionService {
                     order: Math.min(prev?.order ?? Number.MAX_SAFE_INTEGER, position),
                 });
             }
+        }
+
+        // Głosy oddane przyciskami. Dla emotki, którą ktoś kliknął, licznik NIE MOŻE być
+        // prostą sumą `reaction.count` + liczba głosów: ta sama osoba mogła i zareagować,
+        // i kliknąć. Dla takich emotek (zwykle garstka) dociągamy listy reagujących i liczymy
+        // UNIKALNE osoby; pozostałe emotki zostają przy tanim `reaction.count`.
+        const votes = bc.votes || {};
+        for (const [key, voters] of Object.entries(votes)) {
+            const voterIds = Object.keys(voters);
+            if (voterIds.length === 0) continue;
+
+            const unique = new Set(voterIds);
+            let emoji = totals.get(key)?.emoji || this._findEmojiDescriptor(bc, key);
+            for (const { msg } of live) {
+                const reaction = [...msg.reactions.cache.values()]
+                    .find(r => (r.emoji.id || r.emoji.name) === key);
+                if (!reaction) continue;
+                emoji = emoji || reaction.emoji;
+                const users = await reaction.users.fetch().catch(() => null);
+                if (!users) continue;
+                for (const u of users.values()) if (!u.bot) unique.add(u.id);
+            }
+            if (!emoji) continue;
+
+            const prev = totals.get(key);
+            totals.set(key, {
+                count: unique.size,
+                emoji,
+                order: prev?.order ?? Number.MAX_SAFE_INTEGER,
+            });
         }
 
         // Kiedy emotka pojawiła się pierwszy raz — Discord nie daje znacznika czasu na
@@ -397,18 +533,19 @@ class BroadcastReactionService {
     }
 
     /**
-     * Buduje rząd przycisków z posortowanych sum: 4 najczęstsze reakcje z ikoną,
-     * a na końcu zbiorczy `➕ N`.
+     * Buduje rzędy przycisków z posortowanych sum: 19 najczęstszych reakcji z ikoną,
+     * a na 20. slocie zbiorczy `➕ N`.
      *
      * Do zbiorczego wpada wszystko, co nie dostało własnego przycisku:
-     *   • reakcje poza pierwszą czwórką,
+     *   • reakcje poza pierwszą dziewiętnastką,
      *   • emotki customowe z serwerów, na których NIE MA bota — Discord odrzuciłby
      *     taki komponent, więc nie da się ich pokazać z ikoną.
      * Dzięki temu suma wszystkich przycisków zawsze równa się sumie wszystkich reakcji.
      *
-     * Rząd 1 — liczniki, ZAWSZE szare (Secondary).
-     * Rząd 2 — „ostatnia reakcja": kto, z jakiego serwera i jaką emotką; kolor rotuje
-     * przy każdej nowej reakcji, żeby odcinał się od szarych liczników.
+     * Rzędy 1-4 — liczniki (19 emotek + zbiorczy `➕`), ZAWSZE szare (Secondary).
+     * Rząd 5 — „ostatnia reakcja": kto, z jakiego serwera i jaką emotką; kolor rotuje
+     * przy każdej nowej reakcji, żeby odcinał się od szarych liczników. Klik w ten rząd
+     * otwiera listę WSZYSTKICH reagujących.
      *
      * @param {Map<string, {count: number, emoji: Object}>} totals
      * @param {string} lang - 'pol' | 'eng' — dotyczy wyłącznie rzędu 2 (liczniki są bez tekstu)
@@ -435,13 +572,14 @@ class BroadcastReactionService {
             return btn;
         });
 
-        if (hiddenTotal > 0) {
-            buttons.push(new ButtonBuilder()
-                .setCustomId(`bcr_${broadcastId}_other`)
-                .setLabel(String(hiddenTotal))
-                .setEmoji('➕')
-                .setStyle(ButtonStyle.Secondary));
-        }
+        // `➕` stoi ZAWSZE na 20. slocie, także z zerem: układ przycisków ma być stały,
+        // żeby liczniki nie przeskakiwały pod palcem między odświeżeniami. Przycisk jest
+        // aktywny, ale bezczynny — listę reagujących otwiera teraz rząd „ostatnia reakcja".
+        buttons.push(new ButtonBuilder()
+            .setCustomId(`bcr_${broadcastId}_other`)
+            .setLabel(String(hiddenTotal))
+            .setEmoji('➕')
+            .setStyle(ButtonStyle.Secondary));
 
         const rows = [];
         for (let i = 0; i < buttons.length; i += 5) {
@@ -532,7 +670,10 @@ class BroadcastReactionService {
         // kluczy bierzemy z tego samego podziału, którego użyto do zbudowania przycisków
         let keys;
         let label = null;
-        if (target.type === 'other') {
+        if (target.type === 'all') {
+            // Rząd „ostatnia reakcja" — pełna lista, wszystkie emotki rozgłoszenia
+            keys = new Set([...totals.keys(), ...Object.keys(bc.votes || {})]);
+        } else if (target.type === 'other') {
             const { hidden } = this._splitShownHidden(totals, client, firstSeen);
             keys = new Set(hidden.map(([key]) => key));
         } else {
@@ -545,6 +686,10 @@ class BroadcastReactionService {
         const langByGuild = new Map((this.config.getAllGuilds() || []).map(g => [g.id, g]));
         const groups = [];
         let total = 0;
+        // Kto już wystąpił z PRAWDZIWĄ reakcją — głosu przyciskiem tej samej osoby nie
+        // dopisujemy drugi raz (można kliknąć przycisk, a potem dorzucić emotkę ręcznie).
+        // Bez tego lista pokazywałaby więcej osób, niż mówi licznik, który dedupikuje.
+        const seenByKey = new Map();
 
         for (const { ref, msg } of live) {
             const matching = [...msg.reactions.cache.values()]
@@ -575,13 +720,55 @@ class BroadcastReactionService {
             }
 
             const entries = collected.map(({ user, emoji }) => ({
+                userId: user.id,
                 name: members?.get(user.id)?.displayName || user.displayName || user.username,
                 emojiKey: emoji.id || emoji.name,
                 emoji: this._emojiDisplay(emoji),
             }));
+            for (const e of entries) {
+                if (!seenByKey.has(e.emojiKey)) seenByKey.set(e.emojiKey, new Set());
+                seenByKey.get(e.emojiKey).add(e.userId);
+            }
 
             total += entries.length;
             groups.push({ guildName, entries });
+        }
+
+        // Głosy oddane przyciskami. Osoby, które kliknęły, nie mają reakcji na wiadomości,
+        // więc trzeba je dołożyć osobno — inaczej lista pokazywałaby mniej ludzi, niż mówi licznik.
+        for (const [key, voters] of Object.entries(bc.votes || {})) {
+            if (!keys.has(key)) continue;
+            const emoji = this._findEmojiDescriptor(bc, key) || totals.get(key)?.emoji || { name: key };
+            const byGuild = new Map();
+            const seen = seenByKey.get(key);
+            for (const [userId, vote] of Object.entries(voters)) {
+                if (seen?.has(userId)) continue;
+                if (!byGuild.has(vote.guildId)) byGuild.set(vote.guildId, []);
+                byGuild.get(vote.guildId).push(userId);
+            }
+
+            for (const [guildId, userIds] of byGuild) {
+                const guild = client.guilds?.cache?.get(guildId) || null;
+                const guildName = guild?.name || langByGuild.get(guildId)?.tag || guildId || '?';
+                const members = guild
+                    ? await guild.members.fetch({ user: userIds }).catch(() => null)
+                    : null;
+
+                if (userIds.length === 0) continue;
+                const entries = userIds.map(userId => ({
+                    userId,
+                    name: members?.get(userId)?.displayName
+                        || client.users?.cache?.get(userId)?.username
+                        || userId,
+                    emojiKey: key,
+                    emoji: this._emojiDisplay(emoji),
+                }));
+
+                total += entries.length;
+                const existing = groups.find(g => g.guildName === guildName);
+                if (existing) existing.entries.push(...entries);
+                else groups.push({ guildName, entries });
+            }
         }
 
         // Grupowanie PER EMOTKA — potrzebne, żeby każda dostała własną ikonę.
