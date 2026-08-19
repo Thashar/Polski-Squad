@@ -40,8 +40,9 @@ const store = require('../../utils/jsonStore');
 
 /**
  * Ile reakcji dostaje własny przycisk z ikoną — 19 najczęstszych. Dwudziesty slot zostaje
- * dla zbiorczego `➕`, więc liczniki wypełniają dokładnie CZTERY rzędy (Discord: 5 przycisków
- * na rząd, 5 rzędów na wiadomość), a piąty rząd zostaje dla „ostatniej reakcji".
+ * dla zbiorczego `➕`, ale ten dokłada się DOPIERO gdy jest co w nim schować (20. emotka
+ * w górę). Liczniki wypełniają więc maksymalnie CZTERY rzędy (Discord: 5 przycisków na rząd,
+ * 5 rzędów na wiadomość), a piąty rząd zostaje dla „ostatniej reakcji".
  */
 const TOP_BUTTONS = 19;
 /**
@@ -612,14 +613,17 @@ class BroadcastReactionService {
             return btn;
         });
 
-        // `➕` stoi ZAWSZE na 20. slocie, także z zerem: układ przycisków ma być stały,
-        // żeby liczniki nie przeskakiwały pod palcem między odświeżeniami. Przycisk jest
-        // aktywny, ale bezczynny — listę reagujących otwiera teraz rząd „ostatnia reakcja".
-        buttons.push(new ButtonBuilder()
-            .setCustomId(`bcr_${broadcastId}_other`)
-            .setLabel(String(hiddenTotal))
-            .setEmoji('➕')
-            .setStyle(ButtonStyle.Secondary));
+        // `➕` pojawia się DOPIERO gdy jest co w nim schować — czyli od 20. różnej emotki
+        // w górę (albo gdy któraś nie da się wstawić na przycisk). Przycisk z zerem niósłby
+        // zero informacji i tylko zjadał slot. Jest aktywny, ale bezczynny — listę
+        // reagujących otwiera rząd „ostatnia reakcja".
+        if (hiddenTotal > 0) {
+            buttons.push(new ButtonBuilder()
+                .setCustomId(`bcr_${broadcastId}_other`)
+                .setLabel(String(hiddenTotal))
+                .setEmoji('➕')
+                .setStyle(ButtonStyle.Secondary));
+        }
 
         const rows = [];
         for (let i = 0; i < buttons.length; i += 5) {
