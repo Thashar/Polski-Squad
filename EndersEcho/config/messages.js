@@ -401,6 +401,9 @@ const pol = {
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Komendy **{commands}** wyłączone na serwerze **{serverName}**.',
     ocrBlockPerGuildDisabled: '🔓 Komendy **{commands}** włączone na serwerze **{serverName}**.',
+    // Limit klikania reakcji pod ogłoszeniami globalnymi — jedno kliknięcie przebudowuje
+    // przyciski na kopiach embeda na WSZYSTKICH serwerach, więc spam realnie obciąża bota
+    broadcastVoteCooldown: '⏳ Za dużo kliknięć reakcji w krótkim czasie. Nałożono **15 minut** przerwy — możesz klikać ponownie {when}.',
     ocrGuildNotFound: '❌ Serwer nie znaleziony lub nie skonfigurowany.',
 
     // /configure — wspólne
@@ -900,6 +903,7 @@ const eng = {
     // /ocr-on-off per-guild
     ocrBlockPerGuildEnabled: '🔒 Commands **{commands}** disabled on server **{serverName}**.',
     ocrBlockPerGuildDisabled: '🔓 Commands **{commands}** enabled on server **{serverName}**.',
+    broadcastVoteCooldown: '⏳ Too many reaction clicks in a short time. A **15 minute** break has been applied — you can click again {when}.',
     ocrGuildNotFound: '❌ Server not found or not configured.',
 
     // /configure — common

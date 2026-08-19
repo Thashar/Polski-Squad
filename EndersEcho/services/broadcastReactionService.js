@@ -93,6 +93,8 @@ class BroadcastReactionService {
         this._messageIndex = new Map(); // messageId → broadcastId (szybkie trafienie w zdarzeniu)
         this._timers = new Map();    // broadcastId → timeout debounce'u
         this._reactorCache = new Map(); // `${broadcastId}|${typ}|${klucz}` → { at, data }
+        this._refreshing = new Map();   // broadcastId → trwająca przebudowa (blokada współbieżności)
+        this._refreshQueued = new Set();// broadcastId → zamówiona JEDNA domykająca przebudowa
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
     }
 
@@ -516,9 +518,49 @@ class BroadcastReactionService {
 
     /**
      * Przelicza sumy ze wszystkich kopii i przebudowuje przyciski na każdej z nich.
+     *
+     * ⚠️ JEDNA PRZEBUDOWA NA RAZ per rozgłoszenie. Jedno przeliczenie to odczyt i edycja
+     * kopii na KAŻDYM serwerze — kilkadziesiąt zapytań. Bez tej blokady każdy klik i każda
+     * reakcja startowały własną przebudowę: przy tłumie pod świeżym ogłoszeniem kilka
+     * przebiegów leciało równolegle, mnożąc pracę zamiast się zlewać, i zapychało wspólną
+     * kolejkę REST (czyli spowalniało bota także w rzeczach niezwiązanych z reakcjami).
+     *
+     * Żądanie zgłoszone w trakcie trwającej przebudowy nie startuje drugiej — zamawia
+     * JEDNĄ domykającą, która wejdzie po zakończeniu bieżącej i policzy wszystko od nowa.
+     * Dzięki temu zmiany z czasu trwania przebiegu nie giną, a liczba przebudów jest
+     * ograniczona tempem samego Discorda, nie tempem klikania.
+     *
      * @returns {Promise<boolean>} czy cokolwiek zaktualizowano
      */
     async refresh(broadcastId, client) {
+        const trwajaca = this._refreshing.get(broadcastId);
+        if (trwajaca) {
+            this._refreshQueued.add(broadcastId);
+            return trwajaca;
+        }
+
+        const bieg = (async () => {
+            try {
+                return await this._refreshOnce(broadcastId, client);
+            } finally {
+                this._refreshing.delete(broadcastId);
+                if (this._refreshQueued.delete(broadcastId)) {
+                    // domykająca — detached, bo wołający czekał na przebieg, który już się skończył
+                    this.refresh(broadcastId, client).catch(err =>
+                        this.logger.warn(`⚠️ Błąd domykającej przebudowy rozgłoszenia: ${err.message}`)
+                    );
+                }
+            }
+        })();
+
+        this._refreshing.set(broadcastId, bieg);
+        return bieg;
+    }
+
+    /**
+     * Właściwa przebudowa — zawsze przez `refresh()`, nigdy bezpośrednio.
+     */
+    async _refreshOnce(broadcastId, client) {
         const bc = this._broadcasts[broadcastId];
         if (!bc) return false;
 

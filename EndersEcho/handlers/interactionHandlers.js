@@ -7,6 +7,13 @@ const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
 const logger = createBotLogger('EndersEcho');
+
+// Limit klikania liczników reakcji pod rozgłoszeniami: 5 kliknięć w 5 s → 15 minut przerwy.
+// Jedno kliknięcie przebudowuje przyciski na kopiach embeda na wszystkich serwerach, więc
+// spam jednej osoby zapycha wspólną kolejkę REST i spowalnia bota także w innych rzeczach.
+const BCR_WINDOW_MS = 5000;
+const BCR_MAX_CLICKS = 5;
+const BCR_PENALTY_MS = 15 * 60 * 1000;
 const path = require('path');
 
 const OPERATIONS_TYPE = 'ocr.analyze';
@@ -194,6 +201,8 @@ class InteractionHandler {
         // Panel „Usuń osiągnięcia" (userId -> { playerKey, guildId, query, selected, ts }) — filtr nazwy
         // i zaznaczenie wielu osiągnięć nie zmieszczą się w customId (limit 100 znaków)
         this._achDelSessions = new Map();
+        // Limit klikania reakcji pod rozgłoszeniami: userId → { klikniecia: number[], doKiedy: number }
+        this._bcrClicks = new Map();
     }
 
     /**
@@ -7882,6 +7891,44 @@ class InteractionHandler {
     }
 
     /**
+     * Limit klikania liczników reakcji.
+     *
+     * Jedno kliknięcie to przebudowa przycisków na kopiach embeda na WSZYSTKICH serwerach —
+     * kilkadziesiąt zapytań do Discorda. Blokada współbieżności w serwisie chroni przed
+     * tłumem, a to jest zabezpieczenie przed jedną osobą walącą w przycisk: `BCR_MAX_CLICKS`
+     * kliknięć w oknie `BCR_WINDOW_MS` włącza przerwę na `BCR_PENALTY_MS`.
+     *
+     * @returns {{blocked: boolean, until: number, justBlocked: boolean}}
+     */
+    _bcrRateLimit(userId) {
+        const now = Date.now();
+        const wpis = this._bcrClicks.get(userId) || { klikniecia: [], doKiedy: 0 };
+
+        if (wpis.doKiedy > now) return { blocked: true, until: wpis.doKiedy, justBlocked: false };
+
+        wpis.klikniecia = wpis.klikniecia.filter(t => now - t < BCR_WINDOW_MS);
+        wpis.klikniecia.push(now);
+
+        let justBlocked = false;
+        if (wpis.klikniecia.length >= BCR_MAX_CLICKS) {
+            wpis.doKiedy = now + BCR_PENALTY_MS;
+            wpis.klikniecia = [];
+            justBlocked = true;
+        }
+        this._bcrClicks.set(userId, wpis);
+
+        // Mapa rośnie z każdym klikającym — sprzątamy wygasłe wpisy, gdy się rozrośnie
+        if (this._bcrClicks.size > 500) {
+            for (const [id, w] of this._bcrClicks) {
+                const swieze = w.doKiedy > now || w.klikniecia.some(t => now - t < BCR_WINDOW_MS);
+                if (!swieze) this._bcrClicks.delete(id);
+            }
+        }
+
+        return { blocked: justBlocked, until: wpis.doKiedy, justBlocked };
+    }
+
+    /**
      * Klik w licznik emotki = reakcja przyciskiem. Pierwszy klik dodaje głos, kolejny cofa;
      * gracz, który zostawił pod embedem prawdziwą reakcję tą emotką, cofa nią właśnie ją
      * (bot zdejmuje reakcję zamiast dokładać drugi głos tej samej osoby).
@@ -7890,6 +7937,20 @@ class InteractionHandler {
         const isPol = (this.config.getGuildConfig(interaction.guildId)?.lang || 'pol') === 'pol';
         const svc = this.broadcastReactionService;
         if (!svc) { await interaction.deferUpdate().catch(() => {}); return; }
+
+        const limit = this._bcrRateLimit(interaction.user.id);
+        if (limit.blocked) {
+            // Komunikat leci przy KAŻDYM kliknięciu w trakcie przerwy — inaczej klikający
+            // widziałby martwy przycisk i nie wiedział, dlaczego nic się nie dzieje
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.reply({
+                content: formatMessage(msgs.broadcastVoteCooldown, {
+                    when: `<t:${Math.floor(limit.until / 1000)}:R>`,
+                }),
+                flags: ['Ephemeral'],
+            }).catch(() => {});
+            return;
+        }
 
         // Przebudowa liczników na WSZYSTKICH kopiach to kilka-kilkanaście zapytań do Discorda,
         // czyli grubo ponad 3 s, które Discord daje na potwierdzenie interakcji
