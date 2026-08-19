@@ -7940,8 +7940,13 @@ class InteractionHandler {
 
         const limit = this._bcrRateLimit(interaction.user.id);
         if (limit.blocked) {
-            // Komunikat leci przy KAŻDYM kliknięciu w trakcie przerwy — inaczej klikający
-            // widziałby martwy przycisk i nie wiedział, dlaczego nic się nie dzieje
+            // Wyjaśnienie leci DOKŁADNIE RAZ — przy nałożeniu przerwy. Każde kolejne
+            // kliknięcie do końca kary kończy się TU, bez ani jednego zapytania do API
+            // (nawet bez `deferUpdate`) — inaczej spam nadal generowałby ruch, tyle że
+            // tańszy. Kosztem jest „This interaction failed" u klikającego, co w trakcie
+            // kary jest raczej cechą niż wadą.
+            if (!limit.justBlocked) return;
+
             const msgs = this.msgs(interaction.guildId);
             await interaction.reply({
                 content: formatMessage(msgs.broadcastVoteCooldown, {
