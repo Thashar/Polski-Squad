@@ -515,6 +515,17 @@ class AdminPanelService {
         return '█'.repeat(filled) + '░'.repeat(length - filled);
     }
 
+    /**
+     * Zamienia pingi `<@id>` na goły nick. Wpisy zapisane przed poprawką mogą jeszcze
+     * zawierać wzmianki — w embedzie panelu renderowałyby się jako klikalne pingi.
+     */
+    _auditNoPings(action) {
+        return String(action || '').replace(/<@!?(\d+)>/g, (_, id) => {
+            const user = this._client?.users?.cache?.get(id);
+            return user?.username || id;
+        });
+    }
+
     // ─── EMBED 1: Przegląd Systemu ───────────────────────────────────────────
     _buildSystemEmbed(configuredServers, lastUpdated, guildIds) {
         const uptime = fmtUptime(Date.now() - this._startTime);
@@ -556,7 +567,7 @@ class AdminPanelService {
 
         // Dziennik ostatnich akcji admina (max 10 w embedzie — tyle samo co w pliku)
         const auditValue = this._auditLog.length > 0
-            ? this._auditLog.slice(0, 10).map(a => `• ${a.action} — **${a.adminName}** · ${fmtTs(a.timestamp)}`).join('\n')
+            ? this._auditLog.slice(0, 10).map(a => `• ${this._auditNoPings(a.action)} — **${a.adminName}** · ${fmtTs(a.timestamp)}`).join('\n')
             : '—';
 
         return new EmbedBuilder()

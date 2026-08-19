@@ -2494,7 +2494,17 @@ class InteractionHandler {
                 // Dedykowany kanał logów serwerowych
                 if (this.config.serverLogChannelId) {
                     const serverLogChannel = await interaction.client.channels.fetch(this.config.serverLogChannelId).catch(() => null);
-                    if (serverLogChannel) await serverLogChannel.send({ content: '<@398983446812295168>', embeds: [configEmbed] });
+                    if (serverLogChannel) {
+                        // Przycisk włączenia OCR `/update` dla TEGO serwera — nowy serwer startuje
+                        // z zablokowanym OCR, więc head admin włącza go jednym kliknięciem prosto
+                        // pod powiadomieniem, bez wchodzenia w panel i szukania serwera na liście.
+                        const ocrRow = this._buildCfgOcrRow(interaction.guildId);
+                        await serverLogChannel.send({
+                            content: '<@398983446812295168>',
+                            embeds: [configEmbed],
+                            components: ocrRow ? [ocrRow] : [],
+                        });
+                    }
                 }
             } catch (err) {
                 logger.error(`Błąd wysyłania powiadomienia cfg_accept (serwer "${interaction.guild?.name || interaction.guildId}"):`, err.message);
@@ -2996,27 +3006,45 @@ class InteractionHandler {
         await interaction.showModal(modal);
     }
 
-    async _handleCcActionRoles(interaction) {
+    async _handleCcActionRoles(interaction, page = 0) {
         const isAdmin = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ?? false;
         if (!this._isHeadAdmin(interaction.user.id) && !isAdmin) {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
             return;
         }
-        await interaction.reply({
+        // Head admin przelicza role na DOWOLNYM serwerze bota (panel stoi na jednym serwerze,
+        // a role trzeba naprawiać tam, gdzie się rozjechały). Zwykły admin — tylko u siebie.
+        const servers = this._isHeadAdmin(interaction.user.id)
+            ? this._ccConfiguredServers(interaction)
+            : this._ccConfiguredServers(interaction).filter(s => s.id === interaction.guildId);
+
+        if (servers.length === 0) {
+            await interaction.reply({ content: '❌ Brak skonfigurowanych serwerów z botem.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        const payload = {
             embeds: [new EmbedBuilder()
                 .setColor(0xFF6B35)
                 .setTitle('🔁 Przetwórz role TOP')
                 .setDescription(
-                    `Spowoduje pełne przeliczenie ról TOP dla serwera **${interaction.guild?.name ?? interaction.guildId}**.\n\n` +
+                    'Wybierz serwer, na którym przeliczyć role TOP.\n\n' +
                     'Akcja jest bezpieczna — usuwa stare role i przyznaje nowe wg aktualnego rankingu.'
                 )
             ],
-            components: [new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('panel_process_roles').setEmoji('🔁').setLabel('Przetwórz role').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('panel_back').setEmoji('❌').setLabel('Anuluj').setStyle(ButtonStyle.Secondary),
-            )],
-            flags: ['Ephemeral'],
-        });
+            components: this._buildServerPickerRows({
+                servers,
+                page,
+                selectId: 'cc_roles_sel',
+                pagePrefix: 'cc_roles_pg',
+                placeholder: 'Wybierz serwer do przeliczenia ról',
+            }),
+        };
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+        } else {
+            await interaction.reply({ ...payload, flags: ['Ephemeral'] });
+        }
     }
 
     async _handleCcActionTester(interaction) {
@@ -3045,6 +3073,115 @@ class InteractionHandler {
             new ButtonBuilder().setCustomId('panel_tester_remove').setEmoji('➖').setLabel(t('Usuń', 'Remove')).setStyle(ButtonStyle.Danger).setDisabled(testers.length === 0),
         );
         await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
+    }
+
+    /**
+     * Nick do wpisu w dzienniku akcji. Dziennik czytają ludzie, więc ma zawierać NICKI —
+     * ani surowych ID (nieczytelne), ani pingów `<@id>` (renderują się w embedzie panelu
+     * jako klikalna wzmianka i potrafią pingnąć gracza przy każdym odświeżeniu panelu).
+     *
+     * Przyjmuje `userId` albo `playerKey` (`123#2`) — znacznik profilu zostaje w nazwie.
+     * @returns {Promise<string>} nick, a gdy nie da się go ustalić — samo ID
+     */
+    async _ccName(interaction, idOrKey) {
+        const raw = String(idOrKey ?? '').trim();
+        if (!raw) return 'nieznany';
+        const ownerId = getOwnerId(raw);
+        if (!/^\d{5,}$/.test(String(ownerId))) return raw;   // to już nie jest ID — zostaw jak jest
+
+        let nick = null;
+        try {
+            const member = interaction.guild?.members?.cache?.get(ownerId)
+                || await interaction.guild?.members?.fetch(ownerId).catch(() => null);
+            nick = member?.displayName || null;
+        } catch { /* brak na tym serwerze — próbujemy dalej */ }
+
+        if (!nick) {
+            try {
+                // Gracz może być z innego serwera bota — ranking trzyma jego nick
+                const configuredIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+                const activeGuildIds = new Set(configuredIds.filter(gid => interaction.client.guilds.cache.has(gid)));
+                const globalRanking = await this.rankingService.getGlobalRanking(activeGuildIds);
+                nick = globalRanking.find(p => (p.playerKey || p.userId) === raw)?.username
+                    || globalRanking.find(p => getOwnerId(p.playerKey || p.userId) === ownerId)?.username
+                    || null;
+            } catch { /* zostanie fallback na ID */ }
+        }
+
+        if (!nick) {
+            const user = interaction.client.users.cache.get(ownerId);
+            nick = user?.username || null;
+        }
+
+        return nick ? formatProfileDisplayName(nick, raw) : raw;
+    }
+
+    /**
+     * Wiersz z przyciskiem „Włącz OCR /update" pod powiadomieniem o konfiguracji serwera
+     * (kanał logów serwerowych head admina).
+     *
+     * `null`, gdy OCR `/update` jest już na tym serwerze odblokowany — wtedy przycisk
+     * niczego by nie zmieniał.
+     */
+    _buildCfgOcrRow(guildId) {
+        if (!guildId) return null;
+        if (!this.ocrBlockService?.isBlocked(guildId, 'update')) return null;
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`cfg_ocr_en_${guildId}`)
+                .setEmoji('🔓')
+                .setLabel('Włącz OCR /update')
+                .setStyle(ButtonStyle.Success)
+        );
+    }
+
+    /**
+     * Przycisk „Włącz OCR /update" spod powiadomienia o konfiguracji serwera.
+     * Robi to samo co panel (`ocrBlockService.unblock` + info na kanał bota tego serwera),
+     * ale ZOSTAWIA embed powiadomienia — podmienia tylko przycisk na wyszarzone potwierdzenie.
+     */
+    async _handleCfgOcrEnable(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const targetGuildId = interaction.customId.replace('cfg_ocr_en_', '');
+        const guildConfig = this.config.getGuildConfig(targetGuildId);
+        const serverName = this.guildConfigService?.getConfig(targetGuildId)?.guildName
+            || interaction.client.guilds.cache.get(targetGuildId)?.name
+            || targetGuildId;
+
+        if (!guildConfig) {
+            await interaction.reply({ content: `❌ Serwer **${serverName}** nie jest skonfigurowany.`, flags: ['Ephemeral'] });
+            return;
+        }
+
+        await interaction.deferUpdate();
+        await this.ocrBlockService.unblock(targetGuildId, ['update']);
+        logger.info(`🔓 OCR odblokowany dla \`/update\` na serwerze ${serverName} (przycisk pod powiadomieniem o konfiguracji)`);
+
+        // Ta sama informacja dla serwera co przy odblokowaniu z panelu
+        if (guildConfig.allowedChannelId) {
+            const ch = await interaction.client.channels.fetch(guildConfig.allowedChannelId).catch(() => null);
+            if (ch) {
+                const guildMsgs = this.config.getMessages(targetGuildId);
+                await ch.send({ content: formatMessage(guildMsgs.ocrBlockPerGuildDisabled, { commands: '`/update`', serverName }) }).catch(() => {});
+            }
+        }
+
+        await interaction.editReply({
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('cfg_ocr_done')
+                    .setEmoji('✅')
+                    .setLabel(`OCR /update włączony — ${interaction.member?.displayName || interaction.user.username}`.slice(0, 80))
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            )],
+        });
+
+        this._ccAudit(interaction, `🔓 Włączono OCR /update — ${serverName}`);
+        this.adminPanelService?.refresh();
     }
 
     /** Dopisuje wpis do dziennika akcji admina w Centrum Dowodzenia */
@@ -3261,56 +3398,216 @@ class InteractionHandler {
     }
 
     // ── CC: Nieskonfigurowane serwery (wersja ephemeral, nie rusza wiadomości panelu) ──
+    /** Serwery, na których bot jest, ale nie przeszły /configure */
+    _ccUnconfiguredServers(interaction) {
+        const servers = [];
+        for (const [guildId, guild] of interaction.client.guilds.cache) {
+            if (this.config.adminGuildId && guildId === this.config.adminGuildId) continue;
+            if (!this.guildConfigService.isConfigured(guildId)) {
+                servers.push({ id: guildId, name: guild.name, memberCount: guild.memberCount, hint: `${guild.memberCount} członków` });
+            }
+        }
+        return servers.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     async _handleCcUnconfigured(interaction) {
         if (!this._isHeadAdmin(interaction.user.id)) {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
             return;
         }
         const t = this._panelT(interaction.guildId);
-        const unconfigured = [];
-        for (const [guildId, guild] of interaction.client.guilds.cache) {
-            if (this.config.adminGuildId && guildId === this.config.adminGuildId) continue;
-            if (!this.guildConfigService.isConfigured(guildId)) {
-                unconfigured.push({ id: guildId, name: guild.name, memberCount: guild.memberCount });
-            }
-        }
+        const unconfigured = this._ccUnconfiguredServers(interaction);
         const description = unconfigured.length === 0
             ? t('✅ Wszystkie serwery z botem są skonfigurowane.', '✅ All servers with the bot are configured.')
             : unconfigured.map(g => `• **${g.name}** (\`${g.id}\`) — ${g.memberCount} członków`).join('\n');
+
+        // Serwer, który nigdy nie przeszedł /configure, zwykle po prostu trzyma bota bez pożytku —
+        // stąd kickowanie dostępne od razu pod listą, zamiast szukania serwera po ID gdzie indziej.
+        const components = unconfigured.length > 0
+            ? [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_unconf_kick').setEmoji('👢')
+                    .setLabel(t('Kicknij bota z serwera', 'Kick bot from server')).setStyle(ButtonStyle.Danger)
+            )]
+            : [];
+
         await interaction.reply({
             embeds: [new EmbedBuilder()
                 .setColor(unconfigured.length > 0 ? 0xFEE75C : 0x57F287)
                 .setTitle(t('⚠️ Nieskonfigurowane serwery', '⚠️ Unconfigured Servers'))
                 .setDescription(description)],
+            components,
             flags: ['Ephemeral'],
         });
     }
 
-    // ── CC: Diagnostyka wybranego serwera ────────────────────────────────────
-    async _handleCcDiagServer(interaction) {
+    /** Lista nieskonfigurowanych serwerów do wyboru — krok 1 kickowania */
+    async _handleCcUnconfKick(interaction, page = 0) {
         if (!this._isHeadAdmin(interaction.user.id)) {
             await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
             return;
         }
+        const servers = this._ccUnconfiguredServers(interaction);
+        if (servers.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle('✅ Nieskonfigurowane serwery')
+                    .setDescription('Nie ma już nieskonfigurowanych serwerów.')],
+                components: [],
+            });
+            return;
+        }
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF4444)
+                .setTitle('👢 Kicknij bota z serwera')
+                .setDescription('Wybierz serwer, z którego bot ma wyjść. Przed usunięciem zapytam o potwierdzenie.')],
+            components: this._buildServerPickerRows({
+                servers,
+                page,
+                selectId: 'cc_kick_sel',
+                pagePrefix: 'cc_kick_pg',
+                placeholder: 'Wybierz serwer do opuszczenia',
+            }),
+        });
+    }
+
+    /** Potwierdzenie przed wyjściem bota — krok 2 kickowania */
+    async _handleCcKickSelect(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const guildId = interaction.values[0];
+        const guild = interaction.client.guilds.cache.get(guildId);
+        if (!guild) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF4444).setTitle('❌ Serwer niedostępny')
+                    .setDescription('Bota już nie ma na tym serwerze albo nie ma go w cache.')],
+                components: [],
+            });
+            return;
+        }
+        await interaction.update({
+            embeds: [new EmbedBuilder().setColor(0xFF4444)
+                .setTitle('⚠️ Na pewno usunąć bota z serwera?')
+                .setDescription(
+                    `Bot opuści serwer **${guild.name}** (\`${guild.id}\`, ${guild.memberCount} członków).\n\n` +
+                    'Aby wrócić, serwer musi ponownie zaprosić bota. Dane serwera zostają nietknięte.'
+                )],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`cc_kick_ok_${guild.id}`).setEmoji('✅').setLabel('Tak, usuń bota').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('cc_kick_no').setEmoji('❌').setLabel('Nie, anuluj').setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    /** Wyjście bota z serwera — krok 3 kickowania */
+    async _handleCcKickConfirm(interaction, guildId) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const guild = interaction.client.guilds.cache.get(guildId);
+        const guildName = guild?.name || guildId;
+        await interaction.deferUpdate();
+
+        try {
+            await guild.leave();
+            logger.warn(`👢 Bot opuścił serwer "${guildName}" (${guildId}) — decyzja head admina z Centrum Dowodzenia`);
+            this._ccAudit(interaction, `👢 Usunięto bota z serwera: ${guildName}`);
+            this.adminPanelService?.refresh();
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle('✅ Bot usunięty z serwera')
+                    .setDescription(`Bot opuścił serwer **${guildName}**.`)],
+                components: [],
+            });
+        } catch (err) {
+            logger.error(`❌ Nie udało się opuścić serwera "${guildName}" (${guildId}): ${err.message}`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle('❌ Nie udało się usunąć bota')
+                    .setDescription(`Serwer **${guildName}** — \`${err.message}\``)],
+                components: [],
+            });
+        }
+    }
+
+    // ── CC: Diagnostyka wybranego serwera ────────────────────────────────────
+    /**
+     * Wspólny, stronicowany wybór serwera dla akcji Centrum Dowodzenia.
+     *
+     * Select menu Discorda przyjmuje MAX 25 opcji — przy większej liczbie serwerów
+     * reszta po prostu znikała z listy. Stąd paginacja: strona jest zaszyta w customId
+     * przycisków, więc nie trzeba trzymać stanu sesji per admin.
+     *
+     * @param {{id: string, name: string, hint?: string}[]} servers
+     * @returns {ActionRowBuilder[]}
+     */
+    _buildServerPickerRows({ servers, page = 0, selectId, pagePrefix, placeholder }) {
+        const PER_PAGE = 25;
+        const totalPages = Math.max(1, Math.ceil(servers.length / PER_PAGE));
+        const safePage = Math.min(Math.max(0, page), totalPages - 1);
+        const slice = servers.slice(safePage * PER_PAGE, (safePage + 1) * PER_PAGE);
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId(selectId)
+            .setPlaceholder(totalPages > 1 ? `${placeholder} (${safePage + 1}/${totalPages})` : placeholder)
+            .addOptions(slice.map(g => {
+                const option = { label: g.name.slice(0, 100), value: g.id };
+                if (g.hint) option.description = String(g.hint).slice(0, 100);
+                return option;
+            }));
+
+        const rows = [new ActionRowBuilder().addComponents(select)];
+        if (totalPages > 1) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`${pagePrefix}_${safePage - 1}`).setEmoji('◀️')
+                    .setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId('cc_pg_label').setLabel(`${safePage + 1} / ${totalPages}`)
+                    .setStyle(ButtonStyle.Secondary).setDisabled(true),
+                new ButtonBuilder().setCustomId(`${pagePrefix}_${safePage + 1}`).setEmoji('▶️')
+                    .setStyle(ButtonStyle.Secondary).setDisabled(safePage === totalPages - 1),
+            ));
+        }
+        return rows;
+    }
+
+    /** Skonfigurowane serwery, na których bot faktycznie jest — do wyboru w akcjach CC */
+    _ccConfiguredServers(interaction) {
         const cfgSvc = this.guildConfigService;
-        const guilds = [];
+        const servers = [];
         for (const guildId of cfgSvc.getAllConfiguredGuildIds()) {
             const g = interaction.client.guilds.cache.get(guildId);
-            if (g) guilds.push({ id: guildId, name: cfgSvc.getConfig(guildId)?.guildName || g.name });
+            if (g) servers.push({ id: guildId, name: cfgSvc.getConfig(guildId)?.guildName || g.name, hint: `${g.memberCount} członków` });
         }
-        if (guilds.length === 0) {
+        return servers.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    async _handleCcDiagServer(interaction, page = 0) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const servers = this._ccConfiguredServers(interaction);
+        if (servers.length === 0) {
             await interaction.reply({ content: '❌ Brak skonfigurowanych serwerów z botem.', flags: ['Ephemeral'] });
             return;
         }
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('cc_diag_sel')
-            .setPlaceholder('Wybierz serwer do diagnostyki')
-            .addOptions(guilds.slice(0, 25).map(g => ({ label: g.name.slice(0, 100), value: g.id })));
-        await interaction.reply({
+        const payload = {
             content: '🔍 Diagnostyka uprawnień — wybierz serwer:',
-            components: [new ActionRowBuilder().addComponents(select)],
-            flags: ['Ephemeral'],
-        });
+            components: this._buildServerPickerRows({
+                servers,
+                page,
+                selectId: 'cc_diag_sel',
+                pagePrefix: 'cc_diag_pg',
+                placeholder: 'Wybierz serwer do diagnostyki',
+            }),
+        };
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+        } else {
+            await interaction.reply({ ...payload, flags: ['Ephemeral'] });
+        }
     }
 
     async _handleCcDiagSelect(interaction) {
@@ -4169,9 +4466,26 @@ class InteractionHandler {
         });
     }
 
-    async _handlePanelProcessRoles(interaction) {
+    async _handlePanelProcessRoles(interaction, targetGuildId = interaction.guildId) {
         const t = this._panelT(interaction.guildId);
-        const guildId = interaction.guildId;
+        const guildId = targetGuildId;
+        // Panel stoi na jednym serwerze, a role przelicza się na wybranym — wszystkie
+        // operacje muszą iść na obiekt WYBRANEGO serwera, nie tego, z którego kliknięto.
+        const targetGuild = guildId === interaction.guildId
+            ? interaction.guild
+            : interaction.client.guilds.cache.get(guildId);
+
+        if (!targetGuild) {
+            const payload = {
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle(t('❌ Serwer niedostępny', '❌ Server unavailable'))
+                    .setDescription(t('Bota nie ma już na tym serwerze albo nie ma go w cache.', 'The bot is no longer on that server, or it is not cached.'))],
+                components: [],
+            };
+            if (interaction.deferred || interaction.replied) await interaction.editReply(payload);
+            else await interaction.update(payload);
+            return;
+        }
         const guildConfig = this.config.getGuildConfig(guildId);
         const topRoles = guildConfig?.topRoles || null;
 
@@ -4195,12 +4509,12 @@ class InteractionHandler {
         await interaction.deferUpdate();
         const gl = this.logService._gl(guildId);
         const nick = interaction.member?.displayName || interaction.user.username;
-        gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${interaction.guild.name}"`);
+        gl.info(`🔁 ${this.logService.nickLink(nick, interaction.user.id)} uruchamia "Przetwórz role TOP" na serwerze "${targetGuild.name}"`);
 
         try {
-            const result = await this.roleService.updateTopRoles(interaction.guild, null, topRoles, { fullFetch: true });
+            const result = await this.roleService.updateTopRoles(targetGuild, null, topRoles, { fullFetch: true });
             const stats = (result && typeof result === 'object') ? result : { added: [], removed: [] };
-            gl.success(`✅ Przetworzono role TOP na "${interaction.guild.name}": +${stats.added.length} / -${stats.removed.length}`);
+            gl.success(`✅ Przetworzono role TOP na "${targetGuild.name}": +${stats.added.length} / -${stats.removed.length}`);
 
             const MAX_LINES = 20;
             const formatLines = (entries) => {
@@ -5222,7 +5536,7 @@ class InteractionHandler {
                 gl.info(`↩️ ${this.logService.nickLink(actorName, interaction.user.id)} samodzielnie cofnął swój ostatni rekord${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
             } else {
                 gl.info(`↩️ Administrator ${this.logService.nickLink(actorName, interaction.user.id)} cofnął rekord gracza ${session.playerKey}${session.bossName ? ` (boss: "${session.bossName}")` : ''}`);
-                this._ccAudit(interaction, `↩️ Cofnięto rekord gracza ${session.playerKey} (przycisk pod ogłoszeniem)`);
+                this._ccAudit(interaction, `↩️ Cofnięto rekord gracza ${await this._ccName(interaction, session.playerKey)} (przycisk pod ogłoszeniem)`);
             }
         } catch (err) {
             gl.error(`❌ Błąd cofania rekordu (${isOwner ? 'właściciel' : 'admin'}): ${err.message}`);
@@ -7462,6 +7776,13 @@ class InteractionHandler {
         if (customId === 'cc_pending_cv') return 'CC: Oczekujące CV';
         if (customId === 'cc_unconfigured') return 'CC: Nieskonfigurowane serwery';
         if (customId === 'cc_diag_server') return 'CC: Diagnostyka serwera';
+        if (customId === 'cc_unconf_kick') return 'CC: Kicknij bota — lista serwerów';
+        if (customId.startsWith('cc_kick_ok_')) return 'CC: Kicknij bota — potwierdzenie';
+        if (customId === 'cc_kick_no') return 'CC: Kicknij bota — anulowano';
+        if (customId.startsWith('cc_kick_pg_')) return 'CC: Kicknij bota — paginacja';
+        if (customId.startsWith('cc_diag_pg_')) return 'CC: Diagnostyka — paginacja';
+        if (customId.startsWith('cc_roles_pg_')) return 'CC: Przetwórz role — paginacja';
+        if (customId.startsWith('cfg_ocr_en_')) return 'Włącz OCR /update (powiadomienie o konfiguracji)';
         if (customId === 'cc_top10_preview') return 'CC: Podgląd TOP10';
         if (customId === 'cc_action_boss_cfg') return 'CC: Konfiguracja bossów';
         if (customId === 'cc_cost_alert') return 'CC: Alert kosztowy';
@@ -7800,7 +8121,7 @@ class InteractionHandler {
                     }
                 } catch {}
                 const adminName = interaction.member?.displayName || interaction.user.username;
-                this._ccAudit(interaction, `↩️ Cofnięto wynik: <@${targetUserId}>`);
+                this._ccAudit(interaction, `↩️ Cofnięto wynik: ${await this._ccName(interaction, targetUserId)}`);
                 this.adminPanelService?.refresh();
                 const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
                     .addFields({ name: '↩️ Cofnięto', value: `przez **${adminName}**`, inline: false });
@@ -8055,6 +8376,45 @@ class InteractionHandler {
             }
             if (customId === 'cc_pending_cv') {
                 await this._handleCcPendingCv(interaction);
+                return;
+            }
+            if (customId === 'cc_unconf_kick') {
+                await this._handleCcUnconfKick(interaction);
+                return;
+            }
+            if (customId.startsWith('cc_kick_pg_')) {
+                await this._handleCcUnconfKick(interaction, parseInt(customId.replace('cc_kick_pg_', ''), 10) || 0);
+                return;
+            }
+            if (customId.startsWith('cc_kick_ok_')) {
+                await this._handleCcKickConfirm(interaction, customId.replace('cc_kick_ok_', ''));
+                return;
+            }
+            if (customId === 'cc_kick_no') {
+                await interaction.update({
+                    embeds: [new EmbedBuilder().setColor(0x99AAB5)
+                        .setTitle('❌ Anulowano')
+                        .setDescription('Bot zostaje na serwerze.')],
+                    components: [],
+                });
+                return;
+            }
+            if (customId.startsWith('cc_diag_pg_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await interaction.deferUpdate();
+                await this._handleCcDiagServer(interaction, parseInt(customId.replace('cc_diag_pg_', ''), 10) || 0);
+                return;
+            }
+            if (customId.startsWith('cc_roles_pg_')) {
+                await interaction.deferUpdate();
+                await this._handleCcActionRoles(interaction, parseInt(customId.replace('cc_roles_pg_', ''), 10) || 0);
+                return;
+            }
+            if (customId === 'cc_pg_label') {
+                await interaction.deferUpdate();
                 return;
             }
             if (customId === 'cc_unconfigured') {
@@ -8486,6 +8846,16 @@ class InteractionHandler {
                 }
                 const guildIdToBan = customId.replace('panel_ban_guild_ok_', '');
                 await this._handlePanelBanGuildConfirm(interaction, guildIdToBan);
+                return;
+            }
+
+            // Przycisk „Włącz OCR /update" spod powiadomienia o konfiguracji serwera
+            if (customId.startsWith('cfg_ocr_en_')) {
+                await this._handleCfgOcrEnable(interaction);
+                return;
+            }
+            if (customId === 'cfg_ocr_done') {
+                await interaction.deferUpdate();
                 return;
             }
 
@@ -8948,7 +9318,7 @@ class InteractionHandler {
                 msgs.cvAdminBlocked.replace('{adminName}', adminName), []);
         }
         const cvActionLabel = action === 'approve' ? '✅ CV: zatwierdzono wynik' : action === 'remove' ? '🗑️ CV: usunięto rekord' : '🔒 CV: zablokowano gracza';
-        this._ccAudit(interaction, `${cvActionLabel}: <@${session.userId}>`);
+        this._ccAudit(interaction, `${cvActionLabel}: ${await this._ccName(interaction, session.userId)}`);
         this.adminPanelService?.refresh();
     }
 
@@ -10351,6 +10721,19 @@ class InteractionHandler {
                 await this._handleCcClearCooldownSelect(interaction);
                 return;
             }
+            if (customId === 'cc_kick_sel') {
+                await this._handleCcKickSelect(interaction);
+                return;
+            }
+            if (customId === 'cc_roles_sel') {
+                const isAdminSel = interaction.member?.permissions?.has(PermissionFlagsBits.Administrator) ?? false;
+                if (!this._isHeadAdmin(interaction.user.id) && !isAdminSel) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelProcessRoles(interaction, interaction.values[0]);
+                return;
+            }
             if (customId === 'cc_diag_sel') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -11592,7 +11975,7 @@ class InteractionHandler {
         }
         await interaction.editReply({ embeds: updatedEmbeds, components: rows }).catch(() => {});
 
-        this._ccAudit(interaction, `🚫 Zablokowano analizę admina: <@${footerInfo.userId || 'nieznany'}>`);
+        this._ccAudit(interaction, `🚫 Zablokowano analizę admina: ${await this._ccName(interaction, footerInfo.userId)}`);
         await interaction.followUp({ content: targetMsgs.reportAnalyzeBlockedDone, flags: ['Ephemeral'] }).catch(() => {});
     }
 
@@ -13586,7 +13969,7 @@ class InteractionHandler {
             const serverNote = guildName ? ` (${guildName})` : '';
 
             await this.logService.logMessage('success', `Usunięto ${removed.length} osiągnięć gracza ${targetPlayerKey} (serwer ${guildName || targetGuildId}) przez panel admina`, interaction);
-            this._ccAudit(interaction, `🏆 Usunięto ${removed.length} osiągnięć gracza ${targetPlayerKey}`);
+            this._ccAudit(interaction, `🏆 Usunięto ${removed.length} osiągnięć gracza ${await this._ccName(interaction, targetPlayerKey)}`);
             this.adminPanelService?.refresh();
 
             session.selected = [];
