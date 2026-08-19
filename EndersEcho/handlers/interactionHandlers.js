@@ -7987,10 +7987,12 @@ class InteractionHandler {
             for (const [idx, item] of emojiList.entries()) {
                 const embed = new EmbedBuilder().setColor(0x5865F2);
 
-                // Unicode renderuje się w tekście bez problemu, customowa dostaje ikonę
+                // Customowa ma już swój obrazek jako ikonę autora, więc jej NAZWA nic nie wnosi
+                // (a bywa nieczytelna: zalgo, znaki spoza alfabetu). Zostaje sam licznik.
+                // Unicode nie ma ikony z CDN, więc tam glif emotki musi zostać w tekście.
                 const headline = item.isCustom
-                    ? `${item.name} — ${item.total}`
-                    : `${item.display} — ${item.total}`;
+                    ? `– ${item.total}`
+                    : `${item.display} – ${item.total}`;
                 embed.setAuthor(item.iconUrl
                     ? { name: headline, iconURL: item.iconUrl }
                     : { name: headline });

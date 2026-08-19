@@ -65,6 +65,17 @@ const LAST_REACTION_STYLES = ['Success', 'Primary', 'Danger'];
 const MAX_LABEL = 80;
 /** Zlepia serię reakcji w jedną przebudowę — inaczej każda reakcja = N edycji wiadomości. */
 const DEBOUNCE_MS = 5000;
+/**
+ * Jak długo trzymamy gotową listę reagujących.
+ *
+ * Zebranie jej to odczyt KAŻDEJ kopii wiadomości + użytkownicy każdej reakcji + nicki
+ * serwerowe — kilkadziesiąt zapytań do Discorda i kilka sekund. Pod świeżym ogłoszeniem
+ * przycisk klika wiele osób naraz i każde kliknięcie powtarzało całą tę pracę.
+ *
+ * Stan pliku NIE jest tu problemem — z dysku czytamy raz, przy starcie (`store.getOrLoad`).
+ * Cache dotyczy wyłącznie odpowiedzi Discorda.
+ */
+const REACTORS_CACHE_MS = 60000;
 
 class BroadcastReactionService {
     /**
@@ -81,6 +92,7 @@ class BroadcastReactionService {
         this._broadcasts = {};       // broadcastId → { createdAt, type, messages: [...] }
         this._messageIndex = new Map(); // messageId → broadcastId (szybkie trafienie w zdarzeniu)
         this._timers = new Map();    // broadcastId → timeout debounce'u
+        this._reactorCache = new Map(); // `${broadcastId}|${typ}|${klucz}` → { at, data }
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
     }
 
@@ -144,6 +156,19 @@ class BroadcastReactionService {
         for (const m of clean) this._messageIndex.set(m.messageId, broadcastId);
         await this._saveState();
         return broadcastId;
+    }
+
+    /**
+     * Kasuje zapamiętane listy reagujących danego rozgłoszenia. Wołane przy KAŻDEJ zmianie
+     * stanu (reakcja, głos z przycisku) — dzięki temu cache nigdy nie przeżywa zmiany,
+     * której dotyczy, i nie trzeba go strzec krótkim TTL-em.
+     */
+    _invalidateReactors(broadcastId) {
+        if (!broadcastId) return;
+        const prefix = `${broadcastId}|`;
+        for (const key of this._reactorCache.keys()) {
+            if (key.startsWith(prefix)) this._reactorCache.delete(key);
+        }
     }
 
     /** @returns {string|null} do którego rozgłoszenia należy ta wiadomość */
@@ -210,6 +235,7 @@ class BroadcastReactionService {
     async toggleVote({ broadcastId, emojiKey, user, guildId, message, client }) {
         const bc = this._broadcasts[broadcastId];
         if (!bc || !user?.id) return { state: 'noop' };
+        this._invalidateReactors(broadcastId);
 
         bc.votes = bc.votes || {};
         bc.voteEmojis = bc.voteEmojis || {};
@@ -299,6 +325,7 @@ class BroadcastReactionService {
     onReactionEvent(messageId, client) {
         const broadcastId = this.findBroadcastId(messageId);
         if (!broadcastId) return;
+        this._invalidateReactors(broadcastId);
         if (this._timers.has(broadcastId)) return;
 
         this._timers.set(broadcastId, setTimeout(() => {
@@ -707,6 +734,12 @@ class BroadcastReactionService {
         const bc = this._broadcasts[broadcastId];
         if (!bc) return null;
 
+        // Gotowa lista sprzed chwili wystarczy: każda zmiana (reakcja, głos) natychmiast
+        // kasuje wpis, więc z cache'u nie da się dostać stanu sprzed zmiany.
+        const cacheKey = `${broadcastId}|${target.type}|${target.key || ''}`;
+        const cached = this._reactorCache.get(cacheKey);
+        if (cached && Date.now() - cached.at < REACTORS_CACHE_MS) return cached.data;
+
         const { live, totals, firstSeen } = await this._collect(bc, client);
         if (!live.length) return null;
 
@@ -725,7 +758,11 @@ class BroadcastReactionService {
             const entry = totals.get(target.key);
             label = entry ? this._emojiDisplay(entry.emoji) : null;
         }
-        if (!keys.size) return { groups: [], total: 0, label };
+        if (!keys.size) {
+            const empty = { groups: [], emojis: [], total: 0, label };
+            this._reactorCache.set(cacheKey, { at: Date.now(), data: empty });
+            return empty;
+        }
 
         const langByGuild = new Map((this.config.getAllGuilds() || []).map(g => [g.id, g]));
         const groups = [];
@@ -848,7 +885,9 @@ class BroadcastReactionService {
                 b.total - a.total
                 || (firstSeen[a.key] ?? 0) - (firstSeen[b.key] ?? 0));
 
-        return { groups, emojis, total, label };
+        const result = { groups, emojis, total, label };
+        this._reactorCache.set(cacheKey, { at: Date.now(), data: result });
+        return result;
     }
 
     /**
@@ -875,6 +914,7 @@ class BroadcastReactionService {
     stop() {
         for (const timer of this._timers.values()) clearTimeout(timer);
         this._timers.clear();
+        this._reactorCache.clear();
     }
 }
 
