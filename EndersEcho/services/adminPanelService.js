@@ -1161,6 +1161,9 @@ class AdminPanelService {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_action_tester').setEmoji('🧪').setLabel('Testerzy').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel('Interwał TOP10').setStyle(ButtonStyle.Secondary),
+            // Przyciski pod ogłoszeniami globalnymi zmieniają się dopiero przy przebudowie
+            // wiadomości — ten przycisk wymusza ją na wszystkich naraz po zmianie zasad
+            new ButtonBuilder().setCustomId('cc_bcr_refresh').setEmoji('🔁').setLabel('Odśwież ogłoszenia').setStyle(ButtonStyle.Secondary),
             ocrBtn,
         );
     }

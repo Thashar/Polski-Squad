@@ -44,8 +44,13 @@ const store = require('../../utils/jsonStore');
  * na rząd, 5 rzędów na wiadomość), a piąty rząd zostaje dla „ostatniej reakcji".
  */
 const TOP_BUTTONS = 19;
-/** Po tylu dniach przestajemy pilnować rozgłoszenia (i edytować stare wiadomości). */
-const RETENTION_DAYS = 30;
+/**
+ * Po tylu dniach przestajemy pilnować rozgłoszenia (i edytować stare wiadomości).
+ * Po wypadnięciu z rejestru przyciski zostają na wiadomości, ale bot nie wie już, do
+ * którego rozgłoszenia należą — klik nic nie robi. Stąd 90 dni, nie 30: ogłoszenia
+ * wiszą na kanałach miesiącami i mają pozostać klikalne.
+ */
+const RETENTION_DAYS = 90;
 
 /**
  * Rotacja kolorów przycisku „ostatnia reakcja". Discord NIE animuje przycisków — paleta to
@@ -301,6 +306,41 @@ class BroadcastReactionService {
                 this.logger.warn(`⚠️ Błąd przeliczania reakcji rozgłoszenia: ${err.message}`)
             );
         }, DEBOUNCE_MS));
+    }
+
+    /**
+     * Przebudowa WSZYSTKICH żyjących rozgłoszeń — przycisk `🔁 Odśwież ogłoszenia`
+     * w Centrum Dowodzenia.
+     *
+     * Po co: układ przycisków siedzi w wiadomości i zmienia go wyłącznie `msg.edit()`.
+     * Zmiana zasad w kodzie (np. liczba liczników) wchodzi na starą wiadomość dopiero przy
+     * najbliższej reakcji albo kliknięciu, więc bez tego trzeba czekać, aż ktoś kliknie.
+     *
+     * Rozgłoszenia lecą PO KOLEI, z przerwą między nimi: jedno przeliczenie to odczyt i
+     * edycja kopii na każdym serwerze, a kilkanaście rozgłoszeń naraz to prosta droga do
+     * rate limitu.
+     *
+     * @returns {Promise<{total: number, updated: number, skipped: number}>}
+     */
+    async refreshAll(client, { delayMs = 1500 } = {}) {
+        const ids = Object.keys(this._broadcasts);
+        let updated = 0;
+        let skipped = 0;
+
+        for (const [i, id] of ids.entries()) {
+            try {
+                const ok = await this.refresh(id, client);
+                if (ok) updated++; else skipped++;
+            } catch (err) {
+                skipped++;
+                this.logger.warn(`⚠️ Nie udało się odświeżyć rozgłoszenia ${id}: ${err.message}`);
+            }
+            if (i < ids.length - 1 && delayMs > 0) {
+                await new Promise(r => setTimeout(r, delayMs));
+            }
+        }
+
+        return { total: ids.length, updated, skipped };
     }
 
     /**

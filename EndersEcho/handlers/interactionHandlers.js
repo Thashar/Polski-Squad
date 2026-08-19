@@ -7787,6 +7787,7 @@ class InteractionHandler {
         if (customId === 'cc_action_boss_cfg') return 'CC: Konfiguracja bossów';
         if (customId === 'cc_cost_alert') return 'CC: Alert kosztowy';
         if (customId === 'cc_global_ocr') return 'CC: Globalny OCR (przełącznik)';
+        if (customId === 'cc_bcr_refresh') return 'CC: Odśwież przyciski ogłoszeń';
         if (customId.startsWith('cc_global_ocr_ok_')) return 'CC: Globalny OCR (potwierdzenie)';
         if (customId === 'cc_srv_pg_prev' || customId === 'cc_srv_pg_next') return 'CC: Paginacja serwerów';
         return `panel: ${customId}`;
@@ -7835,6 +7836,49 @@ class InteractionHandler {
      */
     setBroadcastReactionService(service) {
         this.broadcastReactionService = service;
+    }
+
+    /**
+     * `🔁 Odśwież ogłoszenia` (Centrum Dowodzenia) — przebudowa przycisków pod WSZYSTKIMI
+     * żyjącymi rozgłoszeniami globalnymi. Potrzebne po zmianie zasad w kodzie: układ
+     * przycisków siedzi w wiadomości, więc bez tego stare ogłoszenie czeka na pierwszą
+     * reakcję albo kliknięcie.
+     */
+    async _handleCcBroadcastRefresh(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const svc = this.broadcastReactionService;
+        if (!svc) {
+            await interaction.reply({ content: '❌ Serwis reakcji pod rozgłoszeniami jest niedostępny.', flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Rozgłoszenia lecą po kolei, z przerwą — to grubo ponad 3 s limitu Discorda
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
+        try {
+            const { total, updated, skipped } = await svc.refreshAll(interaction.client);
+            const opis = total === 0
+                ? 'Brak ogłoszeń w rejestrze — nie ma czego odświeżać.'
+                : `Odświeżono **${updated}** z **${total}** ogłoszeń.${skipped > 0 ? `\nPominięto **${skipped}** (skasowane wiadomości albo brak dostępu).` : ''}`;
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(updated > 0 ? 0x57F287 : 0xFEE75C)
+                    .setTitle('🔁 Ogłoszenia globalne')
+                    .setDescription(opis)],
+            });
+            this._ccAudit(interaction, `🔁 Odświeżono przyciski ogłoszeń: ${updated}/${total}`);
+        } catch (err) {
+            logger.warn(`Błąd odświeżania ogłoszeń: ${err.message}`);
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFF4444)
+                    .setTitle('❌ Nie udało się odświeżyć ogłoszeń')
+                    .setDescription(`\`${err.message}\``)],
+            }).catch(() => {});
+        }
     }
 
     /**
@@ -8484,6 +8528,10 @@ class InteractionHandler {
             }
             if (customId === 'cc_top10_preview') {
                 await this._handleCcTop10Preview(interaction);
+                return;
+            }
+            if (customId === 'cc_bcr_refresh') {
+                await this._handleCcBroadcastRefresh(interaction);
                 return;
             }
             if (customId === 'cc_action_boss_cfg') {
