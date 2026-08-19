@@ -9735,7 +9735,7 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         }
 
         // Formatuj pole statystyk gracza (pełne inline field)
-        function fmtPlayerField(m, coeff, mvp, gloryCount, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, lastCombat, eeRank, eeScore, eeTotal, coreStock, coreRankings) {
+        function fmtPlayerField(m, coeff, mvp, gloryCount, lifePts, latestScore, wLabel, clanDisplay, position, totalPos, eeRank, eeScore, eeTotal, coreStock, coreRankings) {
             const gloryStars = gloryCount > 0
                 ? '⭐'.repeat(Math.min(gloryCount, 15)) + (gloryCount > 15 ? ` (${gloryCount}×)` : '')
                 : 'brak';
@@ -9749,10 +9749,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `📈 **Miesiąc:** ${fmtProgress(m.monthlyProgress, m.monthlyPercent)}\n`;
             f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
-            const _rc = lastCombat ? (lastCombat.relicCores ?? 0).toLocaleString('pl-PL') : 'Brak';
-            const _atk = lastCombat ? fmtAttack(lastCombat.attack ?? 0) : 'Brak';
-            f += `**<:II_RC:1385139885924421653> RC+<:II_TransmuteCore:1458440558602092647>TC:** ${_rc}\n`;
-            f += `**⚔️ Atak:** ${_atk}\n`;
             f += `\n`;
             f += `📈 **Trend:** ${m.trendDescription ? `${m.trendIcon || ''} ${m.trendDescription}` : 'Brak'}\n`;
             f += `\n`;
@@ -9838,19 +9834,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
         // Kary (mniej = lepiej)
         addResult(lifePts2, lifePts1); // odwrócone: mniej kar = lepiej
 
-        // Wczytaj ostatnie dane bojowe z Gary dla obu graczy (do wyświetlenia w polach i porównania)
-        const [_cmpCombat1, _cmpCombat2] = await Promise.all([
-            loadCombatHistory(userInfo1.userId),
-            loadCombatHistory(userInfo2.userId),
-        ]);
-        const _cmpLast1 = _cmpCombat1.length > 0 ? _cmpCombat1[_cmpCombat1.length - 1] : null;
-        const _cmpLast2 = _cmpCombat2.length > 0 ? _cmpCombat2[_cmpCombat2.length - 1] : null;
-
-        // RC+<:II_TransmuteCore:1458440558602092647>TC z Gary (więcej = lepiej)
-        if (_cmpLast1?.relicCores != null && _cmpLast2?.relicCores != null) addResult(_cmpLast1.relicCores, _cmpLast2.relicCores);
-        // Atak z Gary (więcej = lepiej)
-        if (_cmpLast1?.attack != null && _cmpLast2?.attack != null) addResult(_cmpLast1.attack, _cmpLast2.attack);
-
         // Wynik — wyświetlaj jako liczby całkowite lub z .5
         const fmt = (n) => Number.isInteger(n) ? n.toString() : n.toFixed(1);
         let winnerField = '';
@@ -9879,8 +9862,8 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             .setTimestamp()
             .setFooter({ text: 'Ostatnie 12 tygodni | Wygasa: za 5 min' })
             .addFields(
-                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, gloryCount1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, _cmpLast1, eeRank1, eeScore1, eeTotal, coreStock1, coreRankings1), inline: true },
-                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, gloryCount2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, _cmpLast2, eeRank2, eeScore2, eeTotal, coreStock2, coreRankings2), inline: true },
+                { name: `👤 ${name1}`, value: fmtPlayerField(m1, coeff1, mvp1, gloryCount1, lifePts1, latestWeek1.score, wLabel1, clanDisplay1, pos1, totalPlayers, eeRank1, eeScore1, eeTotal, coreStock1, coreRankings1), inline: true },
+                { name: `👤 ${name2}`, value: fmtPlayerField(m2, coeff2, mvp2, gloryCount2, lifePts2, latestWeek2.score, wLabel2, clanDisplay2, pos2, totalPlayers, eeRank2, eeScore2, eeTotal, coreStock2, coreRankings2), inline: true },
                 { name: '\u200b', value: '\u200b', inline: false },
                 { name: '🏆 WYNIK PORÓWNANIA', value: winnerField || '⚖️ Brak wystarczających danych', inline: true },
                 { name: '🎒PORÓWNANIE CORE STOCK', value: coreWinnerField, inline: true }
@@ -9938,24 +9921,6 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             if (rankBuf) {
                 files.push(new AttachmentBuilder(rankBuf, { name: 'compare_ranking.png' }));
                 replyPayload.embeds.push(new EmbedBuilder().setColor('#9B59B6').setImage('attachment://compare_ranking.png'));
-            }
-
-            // Wykresy RC+<:II_TransmuteCore:1458440558602092647>TC i Atak z historii Gary (używamy już załadowanych danych _cmpCombat1/_cmpCombat2)
-            const ch1 = _cmpCombat1;
-            const ch2 = _cmpCombat2;
-            if (ch1.length >= 2 || ch2.length >= 2) {
-                const [rcCmpBuf, atkCmpBuf] = await Promise.all([
-                    generateCompareCombatChart(ch1, ch2, name1, name2, 'relicCores', 'RC+TC', v => String(v)),
-                    generateCompareCombatChart(ch1, ch2, name1, name2, 'attack', 'Atak', fmtAttack)
-                ]);
-                if (rcCmpBuf) {
-                    files.push(new AttachmentBuilder(rcCmpBuf, { name: 'compare_rc.png' }));
-                    replyPayload.embeds.push(new EmbedBuilder().setColor('#43B581').setImage('attachment://compare_rc.png'));
-                }
-                if (atkCmpBuf) {
-                    files.push(new AttachmentBuilder(atkCmpBuf, { name: 'compare_atk.png' }));
-                    replyPayload.embeds.push(new EmbedBuilder().setColor('#F04747').setImage('attachment://compare_atk.png'));
-                }
             }
 
             if (files.length > 0) replyPayload.files = files;
@@ -14652,29 +14617,6 @@ async function generateCompareClanRankingChart(rankData1, rankData2, name1, name
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Czyta tygodniową historię walk gracza z lokalnej bazy Stalkera
- * (Stalker/data/player_combat_discord.json), zaindeksowanej po Discord userId.
- * Dane są wstępnie przetworzone przez GaryCombatIngestionService (co środę 18:55).
- *
- * @param {string} userId - Discord user ID gracza
- * @returns {Array<{weekNumber, year, attack, relicCores}>}
- */
-async function loadCombatHistory(userId) {
-    const fsAsync = require('fs').promises;
-    const path = require('path');
-    try {
-        const filePath = path.join(__dirname, '../data/player_combat_discord.json');
-        const raw = await fsAsync.readFile(filePath, 'utf8');
-        const data = JSON.parse(raw);
-        const entry = data?.players?.[userId];
-        if (entry?.weeks?.length) return entry.weeks.slice(-20);
-        return [];
-    } catch (_) {
-        return [];
-    }
-}
-
-/**
  * Wczytuje historię klanu z Gary snapshots (rank, RC+TC, atak)
  * @param {string} clanKey - Klucz klanu ('main', '0', '1', '2')
  * @param {Object} config - Konfiguracja z garyGuildIds
@@ -14832,137 +14774,6 @@ async function generateCombatChart(historyData, playerNick, metricKey, title, li
   <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
   <path d="${linePath}" stroke="${lineColor}" stroke-width="2.5" fill="none"/>
   ${dotsSvg}
-  ${xLabels}
-</svg>`;
-    return sharp(Buffer.from(svg)).png().toBuffer();
-}
-
-/**
- * Two-player comparison chart for RC+<:II_TransmuteCore:1458440558602092647>TC or Attack.
- * Mirrors generateCompareProgressChart style.
- *
- * @param {Array} h1 / h2  - weekly history arrays from loadCombatHistory()
- * @param {string} name1 / name2
- * @param {string} metricKey   'relicCores' | 'attack'
- * @param {string} title
- * @param {Function} fmtLabel
- * @returns {Buffer|null}
- */
-async function generateCompareCombatChart(h1, h2, name1, name2, metricKey, title, fmtLabel) {
-    const sharp = require('sharp');
-    const color1 = '#5865F2', color2 = '#EB459E';
-
-    // Build unified X axis (last 20 weeks)
-    const weekSet = new Map();
-    for (const d of [...h1, ...h2]) {
-        const key = `${d.year}-${String(d.weekNumber).padStart(2, '0')}`;
-        if (!weekSet.has(key)) weekSet.set(key, { weekNumber: d.weekNumber, year: d.year });
-    }
-    const allWeeks = [...weekSet.values()]
-        .sort((a, b) => a.year !== b.year ? a.year - b.year : a.weekNumber - b.weekNumber)
-        .slice(-20);
-
-    if (allWeeks.length < 2) return null;
-
-    const W = 800, H = 390;
-    const M = { top: 54, right: 28, bottom: 44, left: 72 };
-    const cW = W - M.left - M.right;
-    const cH = H - M.top - M.bottom;
-
-    const allVals = [...h1, ...h2].map(d => d[metricKey]).filter(v => v > 0);
-    if (allVals.length < 2) return null;
-
-    const minVal = Math.min(...allVals);
-    const maxVal = Math.max(...allVals);
-    const range = maxVal - minVal || 1;
-    const yMin = Math.max(0, minVal - range * 0.1);
-    const yMax = maxVal + range * 0.25;
-
-    const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
-    const toY = (v) => M.top + cH - ((v - yMin) / (yMax - yMin)) * cH;
-
-    function buildCatmullRom(points) {
-        if (points.length < 2) return '';
-        let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
-        for (let i = 0; i < points.length - 1; i++) {
-            const p0 = i > 0 ? points[i - 1] : points[i];
-            const p1 = points[i], p2 = points[i + 1];
-            const p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
-            d += ` C ${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
-        }
-        return d;
-    }
-
-    function buildPts(history) {
-        return allWeeks.map((w, wi) => {
-            const d = history.find(e => e.weekNumber === w.weekNumber && e.year === w.year);
-            if (!d || !d[metricKey]) return null;
-            return { x: toX(wi), y: toY(d[metricKey]), v: d[metricKey] };
-        }).filter(Boolean);
-    }
-
-    const pts1 = buildPts(h1);
-    const pts2 = buildPts(h2);
-
-    const gridLines = Array.from({ length: 5 }, (_, i) => {
-        const v = yMin + (yMax - yMin) * (i / 4);
-        const y = toY(v);
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="#393C43" stroke-width="1"/>
-    <text x="${M.left - 6}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#72767D" text-anchor="end">${fmtLabel(Math.round(v))}</text>`;
-    }).join('\n    ');
-
-    const xLabels = allWeeks.map((w, i) =>
-        `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="#72767D" text-anchor="middle">${String(w.weekNumber).padStart(2, '0')}/${String(w.year).slice(-2)}</text>`
-    ).join('\n    ');
-
-    function buildDots(pts, color) {
-        // Collision-aware offsets
-        const offsets = pts.map(() => 8);
-        for (let i = 1; i < pts.length; i++) {
-            const prevLY = pts[i - 1].y - offsets[i - 1];
-            const wantLY = pts[i].y - 8;
-            if (Math.abs(wantLY - prevLY) < 11) {
-                const newLY = Math.max(M.top - 10, Math.min(prevLY - 11, wantLY));
-                offsets[i] = pts[i].y - newLY;
-            }
-        }
-        return pts.map((p, pi) =>
-            `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#2B2D31" stroke="${color}" stroke-width="1.2"/>
-    <text x="${p.x.toFixed(1)}" y="${(p.y - offsets[pi]).toFixed(1)}" font-family="Arial,sans-serif" font-size="8" fill="${color}" text-anchor="middle" opacity="0.9">${fmtLabel(p.v)}</text>`
-        ).join('\n    ');
-    }
-
-    // Legend
-    const safe1 = name1.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const safe2 = name2.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    const leg2CX = M.left + safe1.length * 6.5 + 30;
-
-    const safeTitle = title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-    const svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="gc1" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-    <filter id="gc2" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2.5" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <rect width="${W}" height="${H}" rx="8" fill="#2B2D31"/>
-  <text x="${W / 2}" y="18" font-family="Arial,sans-serif" font-size="13" fill="#FFFFFF" text-anchor="middle" font-weight="bold">${safeTitle}</text>
-  <circle cx="${M.left}" cy="33" r="5" fill="${color1}"/>
-  <text x="${M.left + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color1}">${safe1}</text>
-  <circle cx="${leg2CX}" cy="33" r="5" fill="${color2}"/>
-  <text x="${leg2CX + 10}" y="37" font-family="Arial,sans-serif" font-size="11" font-weight="bold" fill="${color2}">${safe2}</text>
-  ${gridLines}
-  <line x1="${M.left}" y1="${M.top}" x2="${M.left}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  <line x1="${M.left}" y1="${M.top + cH}" x2="${W - M.right}" y2="${M.top + cH}" stroke="#393C43" stroke-width="1"/>
-  ${pts1.length >= 2 ? `<path d="${buildCatmullRom(pts1)}" stroke="${color1}" stroke-width="2.5" fill="none" filter="url(#gc1)"/>` : ''}
-  ${pts2.length >= 2 ? `<path d="${buildCatmullRom(pts2)}" stroke="${color2}" stroke-width="2.2" fill="none" stroke-dasharray="6,3" filter="url(#gc2)"/>` : ''}
-  ${buildDots(pts1, color1)}
-  ${buildDots(pts2, color2)}
   ${xLabels}
 </svg>`;
     return sharp(Buffer.from(svg)).png().toBuffer();
