@@ -66,16 +66,13 @@ const MAX_LABEL = 80;
 /** Zlepia serię reakcji w jedną przebudowę — inaczej każda reakcja = N edycji wiadomości. */
 const DEBOUNCE_MS = 5000;
 /**
- * Jak długo trzymamy gotową listę reagujących.
- *
- * Zebranie jej to odczyt KAŻDEJ kopii wiadomości + użytkownicy każdej reakcji + nicki
- * serwerowe — kilkadziesiąt zapytań do Discorda i kilka sekund. Pod świeżym ogłoszeniem
- * przycisk klika wiele osób naraz i każde kliknięcie powtarzało całą tę pracę.
- *
- * Stan pliku NIE jest tu problemem — z dysku czytamy raz, przy starcie (`store.getOrLoad`).
- * Cache dotyczy wyłącznie odpowiedzi Discorda.
+ * Okno debounce'u rośnie z liczbą kopii: jedna przebudowa to edycja wiadomości na KAŻDYM
+ * serwerze, więc przy stu kopiach nie ma sensu robić jej co pięć sekund. Przy 100 serwerach
+ * daje to 10 s, przy kilkunastu zostaje przy minimum.
  */
-const REACTORS_CACHE_MS = 60000;
+const DEBOUNCE_PER_COPY_MS = 100;
+/** Górna granica okna — nawet ogromne rozgłoszenie ma się odświeżyć w rozsądnym czasie. */
+const DEBOUNCE_MAX_MS = 60000;
 
 class BroadcastReactionService {
     /**
@@ -92,7 +89,7 @@ class BroadcastReactionService {
         this._broadcasts = {};       // broadcastId → { createdAt, type, messages: [...] }
         this._messageIndex = new Map(); // messageId → broadcastId (szybkie trafienie w zdarzeniu)
         this._timers = new Map();    // broadcastId → timeout debounce'u
-        this._reactorCache = new Map(); // `${broadcastId}|${typ}|${klucz}` → { at, data }
+        this._dirtyCopies = new Map();  // broadcastId → Set(messageId) kopii do dosynchronizowania
         this._refreshing = new Map();   // broadcastId → trwająca przebudowa (blokada współbieżności)
         this._refreshQueued = new Set();// broadcastId → zamówiona JEDNA domykająca przebudowa
         this._queue = Promise.resolve(); // serializacja zapisów pliku stanu
@@ -104,6 +101,12 @@ class BroadcastReactionService {
             this._broadcasts = data?.broadcasts || {};
         } catch {
             this._broadcasts = {};
+        }
+        // W czasie przestoju bota zdarzenia reakcji NIE przychodziły, więc zapisany stan
+        // kopii mógł rozjechać się z prawdą. Oznaczamy je jako nieaktualne — pierwsze
+        // przeliczenie danego rozgłoszenia zsynchronizuje je od nowa (raz, nie przy każdym).
+        for (const bc of Object.values(this._broadcasts)) {
+            for (const copy of Object.values(bc.copies || {})) copy.stale = true;
         }
         this._pruneOld();
         this._rebuildIndex();
@@ -158,19 +161,6 @@ class BroadcastReactionService {
         for (const m of clean) this._messageIndex.set(m.messageId, broadcastId);
         await this._saveState();
         return broadcastId;
-    }
-
-    /**
-     * Kasuje zapamiętane listy reagujących danego rozgłoszenia. Wołane przy KAŻDEJ zmianie
-     * stanu (reakcja, głos z przycisku) — dzięki temu cache nigdy nie przeżywa zmiany,
-     * której dotyczy, i nie trzeba go strzec krótkim TTL-em.
-     */
-    _invalidateReactors(broadcastId) {
-        if (!broadcastId) return;
-        const prefix = `${broadcastId}|`;
-        for (const key of this._reactorCache.keys()) {
-            if (key.startsWith(prefix)) this._reactorCache.delete(key);
-        }
     }
 
     /** @returns {string|null} do którego rozgłoszenia należy ta wiadomość */
@@ -234,10 +224,13 @@ class BroadcastReactionService {
      *
      * @param {Object} opts.message - wiadomość, pod którą kliknięto (kopia z serwera gracza)
      */
-    async toggleVote({ broadcastId, emojiKey, user, guildId, message, client }) {
+    async toggleVote({ broadcastId, emojiKey, user, userName, guildId, message, client }) {
         const bc = this._broadcasts[broadcastId];
         if (!bc || !user?.id) return { state: 'noop' };
-        this._invalidateReactors(broadcastId);
+
+        // Nick zapamiętany przy kliknięciu — lista reagujących nie dociąga potem członków
+        bc.people = bc.people || {};
+        if (userName) bc.people[user.id] = userName;
 
         bc.votes = bc.votes || {};
         bc.voteEmojis = bc.voteEmojis || {};
@@ -258,6 +251,17 @@ class BroadcastReactionService {
             const users = await own.users.fetch().catch(() => null);
             if (users?.has(user.id)) {
                 const removed = await own.users.remove(user.id).then(() => true).catch(() => false);
+                if (removed) {
+                    // Stan tej kopii aktualizujemy od razu — inaczej trzeba by ją odpytywać
+                    // ponownie tylko po to, żeby dowiedzieć się o zmianie, którą sami zrobiliśmy
+                    const copy = bc.copies?.[message?.id];
+                    const wpis = copy?.emojis?.[emojiKey];
+                    if (wpis) {
+                        wpis.ids = (wpis.ids || []).filter(id => id !== user.id);
+                        if (wpis.ids.length === 0) delete copy.emojis[emojiKey];
+                    }
+                    await this._saveState();
+                }
                 return { state: removed ? 'unreacted' : 'reaction' };
             }
         }
@@ -327,15 +331,25 @@ class BroadcastReactionService {
     onReactionEvent(messageId, client) {
         const broadcastId = this.findBroadcastId(messageId);
         if (!broadcastId) return;
-        this._invalidateReactors(broadcastId);
+
+        // Zmieniła się TA kopia — przy przeliczaniu odpytamy tylko ją
+        if (!this._dirtyCopies.has(broadcastId)) this._dirtyCopies.set(broadcastId, new Set());
+        this._dirtyCopies.get(broadcastId).add(messageId);
         if (this._timers.has(broadcastId)) return;
+
+        // Okno rośnie z liczbą kopii: przebudowa to edycja wiadomości na każdym serwerze,
+        // więc przy stu kopiach nie ma sensu robić jej co pięć sekund
+        const kopie = (this._broadcasts[broadcastId]?.messages || []).length;
+        const okno = Math.min(DEBOUNCE_MAX_MS, Math.max(DEBOUNCE_MS, kopie * DEBOUNCE_PER_COPY_MS));
 
         this._timers.set(broadcastId, setTimeout(() => {
             this._timers.delete(broadcastId);
-            this.refresh(broadcastId, client).catch(err =>
+            const brudne = this._dirtyCopies.get(broadcastId);
+            this._dirtyCopies.delete(broadcastId);
+            this.refresh(broadcastId, client, { dirty: brudne }).catch(err =>
                 this.logger.warn(`⚠️ Błąd przeliczania reakcji rozgłoszenia: ${err.message}`)
             );
-        }, DEBOUNCE_MS));
+        }, okno));
     }
 
     /**
@@ -359,7 +373,7 @@ class BroadcastReactionService {
 
         for (const [i, id] of ids.entries()) {
             try {
-                const ok = await this.refresh(id, client);
+                const ok = await this.refresh(id, client, { force: true });
                 if (ok) updated++; else skipped++;
             } catch (err) {
                 skipped++;
@@ -384,97 +398,153 @@ class BroadcastReactionService {
             clearTimeout(timer);
             this._timers.delete(broadcastId);
         }
-        return this.refresh(broadcastId, client);
+        // Głos z przycisku nie zmienia żadnej kopii na Discordzie — sumy liczymy z zapisanego
+        // stanu, więc nie ma czego odpytywać. Zostają same edycje tych kopii, na których
+        // licznik faktycznie się zmienił.
+        return this.refresh(broadcastId, client, { skipSync: true });
     }
 
     /**
-     * Pobiera wszystkie żyjące kopie rozgłoszenia i sumuje reakcje. Jedno źródło prawdy
-     * dla liczników i dla listy osób — inaczej klik w przycisk mógłby pokazać co innego,
-     * niż mówi liczba na nim.
+     * Synchronizuje JEDNĄ kopię rozgłoszenia: odczytuje wiadomość i zapisuje w stanie, KTO
+     * zareagował którą emotką (`bc.copies[messageId].emojis[key].ids`).
      *
-     * Kopie, których już nie ma (skasowana wiadomość/kanał), wypadają z rejestru — inaczej
-     * próbowalibyśmy ich w nieskończoność.
+     * ⚠️ To jest sedno przeliczania przyrostowego. Wcześniej każde zdarzenie reakcji kazało
+     * odczytać kopie ze WSZYSTKICH serwerów — przy stu serwerach ponad dwieście zapytań na
+     * jedną reakcję. Zmiana dotyczy zawsze jednej kopii, więc tylko ją odpytujemy; sumy
+     * powstają z zapisanego stanu (`_totalsFromState`).
      *
-     * @returns {Promise<{live: Array, totals: Map}>}
+     * Zapisujemy ID osób, nie same liczby, bo ten sam stan obsługuje trzy rzeczy naraz:
+     * licznik, dedupe z głosami z przycisków i listę reagujących (bez ani jednego zapytania).
+     *
+     * @returns {Promise<boolean>} czy kopia żyje
      */
-    async _collect(bc, client) {
+    async _syncCopy(bc, ref, client) {
+        const msg = await this._fetchMessage(client, ref);
+        if (!msg) return false;
+
+        bc.copies = bc.copies || {};
+        const wpis = bc.copies[ref.messageId] || {};
+        const emojis = {};
+        let position = 0;
+
+        for (const reaction of msg.reactions.cache.values()) {
+            const emoji = reaction.emoji;
+            const key = emoji.id || emoji.name;
+            position++;
+            if (!key) continue;
+
+            const users = await reaction.users.fetch().catch(() => null);
+            const ids = [];
+            for (const user of (users?.values() || [])) {
+                if (user.bot) continue;
+                ids.push(user.id);
+                // Nick zapamiętujemy RAZ, przy odczycie — dzięki temu lista reagujących
+                // nie musi potem dociągać członków (przy stu serwerach to sto zapytań)
+                if (!bc.people?.[user.id]) {
+                    bc.people = bc.people || {};
+                    const guild = client.guilds?.cache?.get(ref.guildId) || null;
+                    bc.people[user.id] = guild?.members?.cache?.get(user.id)?.displayName
+                        || user.displayName || user.username || user.id;
+                }
+            }
+            if (ids.length === 0) continue;
+
+            emojis[key] = {
+                ids,
+                emoji: { id: emoji.id || null, name: emoji.name || null, animated: !!emoji.animated },
+                order: position,
+            };
+        }
+
+        bc.copies[ref.messageId] = { ...wpis, emojis, syncedAt: new Date().toISOString(), stale: false };
+        return true;
+    }
+
+    /**
+     * Dosynchronizowuje kopie przed przeliczeniem.
+     *
+     * - `dirtyIds` — zdarzenia reakcji: odpytujemy TYLKO kopie, pod którymi coś się zmieniło,
+     * - `force` — przycisk „Odśwież ogłoszenia" i pierwsze przeliczenie po restarcie:
+     *   pełna synchronizacja, bo w czasie przestoju bota zdarzenia nie przychodziły
+     *   i stan mógł się rozjechać z prawdą,
+     * - domyślnie — tylko kopie, których nigdy nie widzieliśmy.
+     *
+     * @returns {Promise<Array>} referencje żyjących kopii
+     */
+    async _ensureCopies(bc, client, { dirtyIds = null, force = false } = {}) {
+        bc.copies = bc.copies || {};
+        const brudne = dirtyIds ? new Set(dirtyIds) : null;
         const live = [];
-        const totals = new Map(); // klucz emoji → { count, emoji, order }
         let dropped = false;
 
         for (const ref of bc.messages) {
-            const msg = await this._fetchMessage(client, ref);
-            if (!msg) { dropped = true; continue; }
-            live.push({ ref, msg });
+            const wpis = bc.copies[ref.messageId];
+            const trzeba = force
+                || !wpis
+                || wpis.stale
+                || (brudne && brudne.has(ref.messageId));
 
-            // Discord zwraca reakcje wiadomości w kolejności PIERWSZEGO dodania, więc pozycja
-            // na tej liście jest wskazówką o wieku emotki. Bierzemy najmniejszą pozycję ze
-            // wszystkich serwerów — to rozstrzyga remisy wewnątrz jednej rundy przeliczania.
-            let position = 0;
-            for (const reaction of msg.reactions.cache.values()) {
-                const emoji = reaction.emoji;
-                const key = emoji.id || emoji.name;
-                position++;
-                if (!key) continue;
-                const prev = totals.get(key);
-                totals.set(key, {
-                    count: (prev?.count || 0) + (reaction.count || 0),
-                    emoji,
-                    order: Math.min(prev?.order ?? Number.MAX_SAFE_INTEGER, position),
-                });
-            }
+            if (!trzeba) { live.push(ref); continue; }
+
+            const ok = await this._syncCopy(bc, ref, client);
+            if (ok) live.push(ref);
+            else { delete bc.copies[ref.messageId]; dropped = true; }
         }
 
-        // Głosy oddane przyciskami. Dla emotki, którą ktoś kliknął, licznik NIE MOŻE być
-        // prostą sumą `reaction.count` + liczba głosów: ta sama osoba mogła i zareagować,
-        // i kliknąć. Dla takich emotek (zwykle garstka) dociągamy listy reagujących i liczymy
-        // UNIKALNE osoby; pozostałe emotki zostają przy tanim `reaction.count`.
-        const votes = bc.votes || {};
-        for (const [key, voters] of Object.entries(votes)) {
-            const voterIds = Object.keys(voters);
-            if (voterIds.length === 0) continue;
+        if (dropped) {
+            bc.messages = live;
+            this._rebuildIndex();
+        }
+        return live;
+    }
 
-            const unique = new Set(voterIds);
-            let emoji = totals.get(key)?.emoji || this._findEmojiDescriptor(bc, key);
-            for (const { msg } of live) {
-                const reaction = [...msg.reactions.cache.values()]
-                    .find(r => (r.emoji.id || r.emoji.name) === key);
-                if (!reaction) continue;
-                emoji = emoji || reaction.emoji;
-                const users = await reaction.users.fetch().catch(() => null);
-                if (!users) continue;
-                for (const u of users.values()) if (!u.bot) unique.add(u.id);
-            }
-            if (!emoji) continue;
-
+    /**
+     * Sumy liczników z ZAPISANEGO stanu — zero zapytań do Discorda.
+     *
+     * Jedna osoba liczy się RAZ na emotkę, niezależnie od tego, czy zostawiła prawdziwą
+     * reakcję (na dowolnej kopii), czy kliknęła przycisk: sumujemy zbiór unikalnych ID.
+     *
+     * @returns {{totals: Map<string, {count: number, emoji: Object, order: number}>}}
+     */
+    _totalsFromState(bc) {
+        const totals = new Map();
+        const dodaj = (key, emoji, order, ids) => {
             const prev = totals.get(key);
+            const zbior = prev?.users || new Set();
+            for (const id of ids) zbior.add(id);
             totals.set(key, {
-                count: unique.size,
-                emoji,
-                order: prev?.order ?? Number.MAX_SAFE_INTEGER,
+                users: zbior,
+                emoji: prev?.emoji || emoji,
+                order: Math.min(prev?.order ?? Number.MAX_SAFE_INTEGER, order ?? Number.MAX_SAFE_INTEGER),
+                count: zbior.size,
             });
+        };
+
+        for (const copy of Object.values(bc.copies || {})) {
+            for (const [key, entry] of Object.entries(copy.emojis || {})) {
+                dodaj(key, entry.emoji, entry.order, entry.ids || []);
+            }
+        }
+        for (const [key, voters] of Object.entries(bc.votes || {})) {
+            const emoji = this._findEmojiDescriptor(bc, key) || totals.get(key)?.emoji;
+            if (!emoji) continue;
+            dodaj(key, emoji, totals.get(key)?.order, Object.keys(voters));
+        }
+
+        for (const [key, entry] of totals) {
+            if (entry.count === 0) totals.delete(key);
         }
 
         // Kiedy emotka pojawiła się pierwszy raz — Discord nie daje znacznika czasu na
         // reakcji, więc zapisujemy moment pierwszego zaobserwowania. Bez tego „od najstarszej"
         // przy równych licznikach nie miałoby się o co oprzeć i kolejność skakałaby.
         bc.firstSeen = bc.firstSeen || {};
-        let firstSeenChanged = false;
         const now = Date.now();
         for (const key of totals.keys()) {
-            if (bc.firstSeen[key] === undefined) {
-                bc.firstSeen[key] = now;
-                firstSeenChanged = true;
-            }
+            if (bc.firstSeen[key] === undefined) bc.firstSeen[key] = now;
         }
 
-        if (dropped) {
-            bc.messages = live.map(l => l.ref);
-            this._rebuildIndex();
-        }
-        if (dropped || firstSeenChanged) await this._saveState();
-
-        return { live, totals, firstSeen: bc.firstSeen };
+        return { totals, firstSeen: bc.firstSeen };
     }
 
     /**
@@ -532,21 +602,29 @@ class BroadcastReactionService {
      *
      * @returns {Promise<boolean>} czy cokolwiek zaktualizowano
      */
-    async refresh(broadcastId, client) {
+    async refresh(broadcastId, client, opts = {}) {
         const trwajaca = this._refreshing.get(broadcastId);
         if (trwajaca) {
+            // Kopie zgłoszone w trakcie trwającej przebudowy dołączają do domykającej,
+            // żeby ich zmiany nie wypadły z przeliczenia
+            if (opts.dirty) {
+                if (!this._dirtyCopies.has(broadcastId)) this._dirtyCopies.set(broadcastId, new Set());
+                for (const id of opts.dirty) this._dirtyCopies.get(broadcastId).add(id);
+            }
             this._refreshQueued.add(broadcastId);
             return trwajaca;
         }
 
         const bieg = (async () => {
             try {
-                return await this._refreshOnce(broadcastId, client);
+                return await this._refreshOnce(broadcastId, client, this._normalizeRefreshOpts(opts));
             } finally {
                 this._refreshing.delete(broadcastId);
                 if (this._refreshQueued.delete(broadcastId)) {
                     // domykająca — detached, bo wołający czekał na przebieg, który już się skończył
-                    this.refresh(broadcastId, client).catch(err =>
+                    const brudne = this._dirtyCopies.get(broadcastId);
+                    this._dirtyCopies.delete(broadcastId);
+                    this.refresh(broadcastId, client, { dirty: brudne }).catch(err =>
                         this.logger.warn(`⚠️ Błąd domykającej przebudowy rozgłoszenia: ${err.message}`)
                     );
                 }
@@ -558,18 +636,38 @@ class BroadcastReactionService {
     }
 
     /**
-     * Właściwa przebudowa — zawsze przez `refresh()`, nigdy bezpośrednio.
+     * Zamienia `dirty` (zbiór kopii ze zdarzeń) na opcje synchronizacji dla `_refreshOnce`.
+     * Jedna zmieniona kopia → odpytujemy tylko ją; kilka → każdą z nich po kolei.
      */
-    async _refreshOnce(broadcastId, client) {
+    _normalizeRefreshOpts(opts) {
+        if (opts.force || opts.skipSync) return opts;
+        const dirty = opts.dirty ? [...opts.dirty] : [];
+        if (dirty.length === 0) return opts;
+        return { ...opts, dirtyIds: dirty };
+    }
+
+    /**
+     * Właściwa przebudowa — zawsze przez `refresh()`, nigdy bezpośrednio.
+     *
+     * @param {{dirtyIds?: string[], force?: boolean, skipSync?: boolean}} opts
+     *        `dirtyIds` — zdarzenia reakcji dotyczą konkretnych kopii, tylko je odpytujemy;
+     *        `force` — pełna synchronizacja (przycisk „Odśwież ogłoszenia", start bota);
+     *        `skipSync` — głos z przycisku nie zmienia żadnej kopii, więc nie ma czego odpytywać.
+     */
+    async _refreshOnce(broadcastId, client, opts = {}) {
         const bc = this._broadcasts[broadcastId];
         if (!bc) return false;
 
-        const { live, totals, firstSeen } = await this._collect(bc, client);
+        const live = opts.skipSync
+            ? bc.messages.filter(ref => bc.copies?.[ref.messageId])
+            : await this._ensureCopies(bc, client, opts);
         if (!live.length) return false;
 
-        // 2. Zbuduj przyciski. Liczniki są wszędzie identyczne, ale rząd „ostatnia reakcja"
-        //    ma tekst, a bot jest dwujęzyczny — więc budujemy zestaw PER JĘZYK i cache'ujemy,
-        //    żeby nie renderować go od nowa dla każdego serwera.
+        const { totals, firstSeen } = this._totalsFromState(bc);
+
+        // Zbuduj przyciski. Liczniki są wszędzie identyczne, ale rząd „ostatnia reakcja"
+        // ma tekst, a bot jest dwujęzyczny — więc budujemy zestaw PER JĘZYK i cache'ujemy,
+        // żeby nie renderować go od nowa dla każdego serwera.
         // Domyślnie PRÓBUJEMY wstawić na przyciski także emotki z serwerów bez bota — dopiero
         // odrzucenie komponentu przez Discorda przełącza to rozgłoszenie na wariant zachowawczy
         // (takie emotki lądują wtedy w zbiorczym `➕`). Flaga jest persystowana, żeby nie
@@ -584,20 +682,36 @@ class BroadcastReactionService {
             return rowsByLang.get(cacheKey);
         };
 
-        // 3. Nanieś na wszystkie kopie. Mapę języków budujemy RAZ — `getAllGuilds()` składa
-        //    tablicę od nowa przy każdym wywołaniu, więc w pętli po serwerach byłoby to
-        //    przeliczane bez potrzeby.
+        // Mapę języków budujemy RAZ — `getAllGuilds()` składa tablicę od nowa przy każdym
+        // wywołaniu, więc w pętli po serwerach byłoby to przeliczane bez potrzeby.
         const langByGuild = new Map(
             (this.config.getAllGuilds() || []).map(g => [g.id, g.lang || 'pol'])
         );
 
         let updated = 0;
-        for (const { ref, msg } of live) {
+        let dropped = false;
+        for (const ref of live) {
             const lang = langByGuild.get(ref.guildId) || 'pol';
+            const rows = rowsFor(lang);
+            const podpis = this._rowsSignature(rows);
+            const copy = bc.copies[ref.messageId] || {};
+
+            // Nic się na tej kopii nie zmieniło od ostatniego zapisu — edycja byłaby
+            // zapytaniem bez żadnego efektu. Przy stu serwerach to sto zapytań mniej
+            // na każdą przebudowę, która niczego nie zmienia (np. domykająca).
+            if (copy.sig === podpis) continue;
+
             try {
-                await msg.edit({ components: rowsFor(lang) });
+                await this._editComponents(client, ref, rows);
+                bc.copies[ref.messageId] = { ...copy, sig: podpis };
                 updated++;
             } catch (err) {
+                // Wiadomości już nie ma — kopia wypada z rejestru
+                if (err?.code === 10008 || err?.code === 10003 || err?.code === 50001) {
+                    delete bc.copies[ref.messageId];
+                    dropped = true;
+                    continue;
+                }
                 // Najbardziej prawdopodobna przyczyna: emotka, której bot nie może użyć,
                 // trafiła na przycisk i Discord odrzucił komponent. Wycofujemy się do
                 // wariantu zachowawczego (taka emotka idzie do zbiorczego `➕`), zapamiętujemy
@@ -605,10 +719,11 @@ class BroadcastReactionService {
                 if (tryAll) {
                     tryAll = false;
                     bc.buttonEmojiFallback = true;
-                    await this._saveState();
                     this.logger.warn('⚠️ Discord odrzucił emotkę na przycisku — przechodzę na wariant zachowawczy');
+                    const zapasowe = rowsFor(lang);
                     try {
-                        await msg.edit({ components: rowsFor(lang) });
+                        await this._editComponents(client, ref, zapasowe);
+                        bc.copies[ref.messageId] = { ...copy, sig: this._rowsSignature(zapasowe) };
                         updated++;
                         continue;
                     } catch (retryErr) {
@@ -619,7 +734,43 @@ class BroadcastReactionService {
                 this.logger.warn(`⚠️ Nie udało się zaktualizować liczników reakcji: ${err.message}`);
             }
         }
+
+        if (dropped) {
+            bc.messages = bc.messages.filter(ref => bc.copies[ref.messageId]);
+            this._rebuildIndex();
+        }
+        await this._saveState();
         return updated > 0;
+    }
+
+    /**
+     * Podmienia komponenty wiadomości BEZ jej pobierania.
+     *
+     * `msg.edit()` wymaga obiektu wiadomości, a ten kosztuje osobny odczyt z API — przy stu
+     * kopiach to sto zapytań, których jedynym celem jest zdobycie uchwytu do edycji.
+     * `channel.messages.edit(id, ...)` robi to samo jednym PATCH-em; kanał idzie z cache'u.
+     */
+    async _editComponents(client, ref, rows) {
+        const channel = await client.channels.fetch(ref.channelId).catch(() => null);
+        if (!channel?.messages) {
+            const err = new Error('Kanał niedostępny');
+            err.code = 10003;
+            throw err;
+        }
+        return channel.messages.edit(ref.messageId, { components: rows });
+    }
+
+    /**
+     * Odcisk wyrenderowanych rzędów — po nim poznajemy, czy edycja wiadomości cokolwiek
+     * zmieni. Liczą się dokładnie te pola, które widać: etykieta, emotka, styl, stan.
+     */
+    _rowsSignature(rows) {
+        return JSON.stringify((rows || []).map(row =>
+            (row.components || []).map(c => {
+                const d = c.data || {};
+                return [d.custom_id, d.label, d.style, d.disabled ? 1 : 0, d.emoji?.id || d.emoji?.name || ''];
+            })
+        ));
     }
 
     /**
@@ -776,22 +927,16 @@ class BroadcastReactionService {
         const bc = this._broadcasts[broadcastId];
         if (!bc) return null;
 
-        // Gotowa lista sprzed chwili wystarczy: każda zmiana (reakcja, głos) natychmiast
-        // kasuje wpis, więc z cache'u nie da się dostać stanu sprzed zmiany.
-        const cacheKey = `${broadcastId}|${target.type}|${target.key || ''}`;
-        const cached = this._reactorCache.get(cacheKey);
-        if (cached && Date.now() - cached.at < REACTORS_CACHE_MS) return cached.data;
+        // ZERO zapytań do Discorda: kto zareagował i pod jakim nickiem, wiemy z zapisanego
+        // stanu (`copies[].emojis[].ids` + `votes` + `people`). Wcześniej ta lista odpytywała
+        // każdą kopię i każdą reakcję z osobna — przy stu serwerach ponad dwa tysiące zapytań
+        // na jedno kliknięcie.
+        const { totals, firstSeen } = this._totalsFromState(bc);
 
-        const { live, totals, firstSeen } = await this._collect(bc, client);
-        if (!live.length) return null;
-
-        // Zbiorczy przycisk musi pokazać DOKŁADNIE tych, których zlicza — dlatego zestaw
-        // kluczy bierzemy z tego samego podziału, którego użyto do zbudowania przycisków
         let keys;
         let label = null;
         if (target.type === 'all') {
-            // Rząd „ostatnia reakcja" — pełna lista, wszystkie emotki rozgłoszenia
-            keys = new Set([...totals.keys(), ...Object.keys(bc.votes || {})]);
+            keys = new Set(totals.keys());
         } else if (target.type === 'other') {
             const { hidden } = this._splitShownHidden(totals, client, firstSeen);
             keys = new Set(hidden.map(([key]) => key));
@@ -800,125 +945,65 @@ class BroadcastReactionService {
             const entry = totals.get(target.key);
             label = entry ? this._emojiDisplay(entry.emoji) : null;
         }
-        if (!keys.size) {
-            const empty = { groups: [], emojis: [], total: 0, label };
-            this._reactorCache.set(cacheKey, { at: Date.now(), data: empty });
-            return empty;
-        }
+        if (!keys.size) return { groups: [], emojis: [], total: 0, label };
 
-        const langByGuild = new Map((this.config.getAllGuilds() || []).map(g => [g.id, g]));
-        const groups = [];
-        let total = 0;
-        // Kto już wystąpił z PRAWDZIWĄ reakcją — głosu przyciskiem tej samej osoby nie
-        // dopisujemy drugi raz (można kliknąć przycisk, a potem dorzucić emotkę ręcznie).
-        // Bez tego lista pokazywałaby więcej osób, niż mówi licznik, który dedupikuje.
-        const seenByKey = new Map();
+        const guildCfg = new Map((this.config.getAllGuilds() || []).map(g => [g.id, g]));
+        const nazwaSerwera = (guildId) => client.guilds?.cache?.get(guildId)?.name
+            || guildCfg.get(guildId)?.tag
+            || guildId
+            || '?';
+        const nick = (userId) => bc.people?.[userId] || userId;
 
-        for (const { ref, msg } of live) {
-            const matching = [...msg.reactions.cache.values()]
-                .filter(r => keys.has(r.emoji.id || r.emoji.name));
-            if (!matching.length) continue;
-
-            const guild = client.guilds?.cache?.get(ref.guildId) || null;
-            const guildName = guild?.name || langByGuild.get(ref.guildId)?.tag || ref.guildId;
-
-            // Najpierw zbieramy użytkowników wszystkich pasujących reakcji, dopiero potem
-            // jednym zapytaniem dociągamy członków — nick serwerowy wymaga membera, a
-            // pobieranie ich pojedynczo to prosta droga do rate limitu
-            const collected = [];
-            for (const reaction of matching) {
-                const users = await reaction.users.fetch().catch(() => null);
-                if (!users) continue;
-                for (const user of users.values()) {
-                    if (user.bot) continue;
-                    collected.push({ user, emoji: reaction.emoji });
-                }
-            }
-            if (!collected.length) continue;
-
-            let members = null;
-            if (guild) {
-                const ids = [...new Set(collected.map(c => c.user.id))];
-                members = await guild.members.fetch({ user: ids }).catch(() => null);
-            }
-
-            const entries = collected.map(({ user, emoji }) => ({
-                userId: user.id,
-                name: members?.get(user.id)?.displayName || user.displayName || user.username,
-                emojiKey: emoji.id || emoji.name,
-                emoji: this._emojiDisplay(emoji),
-            }));
-            for (const e of entries) {
-                if (!seenByKey.has(e.emojiKey)) seenByKey.set(e.emojiKey, new Set());
-                seenByKey.get(e.emojiKey).add(e.userId);
-            }
-
-            total += entries.length;
-            groups.push({ guildName, entries });
-        }
-
-        // Głosy oddane przyciskami. Osoby, które kliknęły, nie mają reakcji na wiadomości,
-        // więc trzeba je dołożyć osobno — inaczej lista pokazywałaby mniej ludzi, niż mówi licznik.
-        for (const [key, voters] of Object.entries(bc.votes || {})) {
-            if (!keys.has(key)) continue;
-            const emoji = this._findEmojiDescriptor(bc, key) || totals.get(key)?.emoji || { name: key };
-            const byGuild = new Map();
-            const seen = seenByKey.get(key);
-            for (const [userId, vote] of Object.entries(voters)) {
-                if (seen?.has(userId)) continue;
-                if (!byGuild.has(vote.guildId)) byGuild.set(vote.guildId, []);
-                byGuild.get(vote.guildId).push(userId);
-            }
-
-            for (const [guildId, userIds] of byGuild) {
-                const guild = client.guilds?.cache?.get(guildId) || null;
-                const guildName = guild?.name || langByGuild.get(guildId)?.tag || guildId || '?';
-                const members = guild
-                    ? await guild.members.fetch({ user: userIds }).catch(() => null)
-                    : null;
-
-                if (userIds.length === 0) continue;
-                const entries = userIds.map(userId => ({
-                    userId,
-                    name: members?.get(userId)?.displayName
-                        || client.users?.cache?.get(userId)?.username
-                        || userId,
-                    emojiKey: key,
-                    emoji: this._emojiDisplay(emoji),
-                }));
-
-                total += entries.length;
-                const existing = groups.find(g => g.guildName === guildName);
-                if (existing) existing.entries.push(...entries);
-                else groups.push({ guildName, entries });
-            }
-        }
-
-        // Grupowanie PER EMOTKA — potrzebne, żeby każda dostała własną ikonę.
-        // Emotki customowej z serwera bez bota Discord NIE wyrenderuje w treści (pokaże
-        // goły `:nazwa:`), ale jej obrazek w CDN jest publiczny i można go wstawić jako
-        // ikonę embeda — i to jedyny sposób, żeby taka emotka była widoczna jako ikona.
+        // Jedna osoba = jeden wpis na emotkę, nawet gdy ma i reakcję, i głos z przycisku
+        const widziani = new Map();   // emojiKey → Set(userId)
         const byEmoji = new Map();
-        for (const group of groups) {
-            for (const entry of group.entries) {
-                if (!byEmoji.has(entry.emojiKey)) {
-                    const src = totals.get(entry.emojiKey)?.emoji || null;
-                    byEmoji.set(entry.emojiKey, {
-                        key: entry.emojiKey,
-                        display: entry.emoji,
-                        iconUrl: this._emojiImageUrl(src),
-                        name: src?.name || entry.emojiKey,
-                        isCustom: !!src?.id,
-                        total: 0,
-                        groups: new Map(),
-                    });
-                }
-                const bucket = byEmoji.get(entry.emojiKey);
-                bucket.total++;
-                if (!bucket.groups.has(group.guildName)) bucket.groups.set(group.guildName, []);
-                bucket.groups.get(group.guildName).push(entry.name);
+        const perGuild = new Map();   // guildName → Map(userId → emojiKey[])
+        let total = 0;
+
+        const dodaj = (key, userId, guildId) => {
+            if (!keys.has(key)) return;
+            if (!widziani.has(key)) widziani.set(key, new Set());
+            if (widziani.get(key).has(userId)) return;
+            widziani.get(key).add(userId);
+
+            const src = totals.get(key)?.emoji || this._findEmojiDescriptor(bc, key) || { name: key };
+            if (!byEmoji.has(key)) {
+                byEmoji.set(key, {
+                    key,
+                    display: this._emojiDisplay(src),
+                    iconUrl: this._emojiImageUrl(src),
+                    name: src?.name || key,
+                    isCustom: !!src?.id,
+                    total: 0,
+                    groups: new Map(),
+                });
+            }
+            const bucket = byEmoji.get(key);
+            bucket.total++;
+            total++;
+
+            const gName = nazwaSerwera(guildId);
+            if (!bucket.groups.has(gName)) bucket.groups.set(gName, []);
+            bucket.groups.get(gName).push(nick(userId));
+
+            if (!perGuild.has(gName)) perGuild.set(gName, []);
+            perGuild.get(gName).push({ userId, name: nick(userId), emojiKey: key, emoji: this._emojiDisplay(src) });
+        };
+
+        // Reakcje zostawione pod konkretną kopią — serwer bierzemy z jej rejestru
+        const guildByMessage = new Map((bc.messages || []).map(m => [m.messageId, m.guildId]));
+        for (const [messageId, copy] of Object.entries(bc.copies || {})) {
+            const guildId = guildByMessage.get(messageId);
+            for (const [key, entry] of Object.entries(copy.emojis || {})) {
+                for (const userId of entry.ids || []) dodaj(key, userId, guildId);
             }
         }
+        // Głosy z przycisków — serwer zapamiętany przy kliknięciu
+        for (const [key, voters] of Object.entries(bc.votes || {})) {
+            for (const [userId, vote] of Object.entries(voters)) dodaj(key, userId, vote.guildId);
+        }
+
+        const groups = [...perGuild.entries()].map(([guildName, entries]) => ({ guildName, entries }));
 
         // Ta sama kolejność co na przyciskach: malejąco po liczbie, remis → starsza wyżej
         const emojis = [...byEmoji.values()]
@@ -927,9 +1012,7 @@ class BroadcastReactionService {
                 b.total - a.total
                 || (firstSeen[a.key] ?? 0) - (firstSeen[b.key] ?? 0));
 
-        const result = { groups, emojis, total, label };
-        this._reactorCache.set(cacheKey, { at: Date.now(), data: result });
-        return result;
+        return { groups, emojis, total, label };
     }
 
     /**
@@ -956,7 +1039,6 @@ class BroadcastReactionService {
     stop() {
         for (const timer of this._timers.values()) clearTimeout(timer);
         this._timers.clear();
-        this._reactorCache.clear();
     }
 }
 

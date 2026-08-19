@@ -7966,6 +7966,7 @@ class InteractionHandler {
                 broadcastId,
                 emojiKey,
                 user: interaction.user,
+                userName: interaction.member?.displayName || interaction.user.username,
                 guildId: interaction.guildId,
                 message: interaction.message,
                 client: interaction.client,
