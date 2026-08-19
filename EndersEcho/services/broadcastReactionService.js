@@ -39,12 +39,17 @@ const store = require('../../utils/jsonStore');
  */
 
 /**
- * Ile reakcji dostaje własny przycisk z ikoną — 19 najczęstszych. Dwudziesty slot zostaje
- * dla zbiorczego `➕`, ale ten dokłada się DOPIERO gdy jest co w nim schować (20. emotka
- * w górę). Liczniki wypełniają więc maksymalnie CZTERY rzędy (Discord: 5 przycisków na rząd,
+ * Ile przycisków w rzędzie. Discord pozwala na 5, ale przy czterech etykiety liczników
+ * są szersze i cały blok czyta się spokojniej.
+ */
+const BUTTONS_PER_ROW = 4;
+/**
+ * Ile reakcji dostaje własny przycisk z ikoną — 15 najczęstszych. Szesnasty slot zostaje
+ * dla zbiorczego `➕`, ale ten dokłada się DOPIERO gdy jest co w nim schować (16. emotka
+ * w górę). Liczniki wypełniają więc maksymalnie CZTERY rzędy po cztery przyciski (Discord:
  * 5 rzędów na wiadomość), a piąty rząd zostaje dla „ostatniej reakcji".
  */
-const TOP_BUTTONS = 19;
+const TOP_BUTTONS = 15;
 /**
  * Po tylu dniach przestajemy pilnować rozgłoszenia (i edytować stare wiadomości).
  * Po wypadnięciu z rejestru przyciski zostają na wiadomości, ale bot nie wie już, do
@@ -794,16 +799,16 @@ class BroadcastReactionService {
     }
 
     /**
-     * Buduje rzędy przycisków z posortowanych sum: 19 najczęstszych reakcji z ikoną,
-     * a na 20. slocie zbiorczy `➕ N`.
+     * Buduje rzędy przycisków z posortowanych sum: 15 najczęstszych reakcji z ikoną,
+     * a na 16. slocie zbiorczy `➕ N`.
      *
      * Do zbiorczego wpada wszystko, co nie dostało własnego przycisku:
-     *   • reakcje poza pierwszą dziewiętnastką,
+     *   • reakcje poza pierwszą piętnastką,
      *   • emotki customowe z serwerów, na których NIE MA bota — Discord odrzuciłby
      *     taki komponent, więc nie da się ich pokazać z ikoną.
      * Dzięki temu suma wszystkich przycisków zawsze równa się sumie wszystkich reakcji.
      *
-     * Rzędy 1-4 — liczniki (19 emotek + zbiorczy `➕`), ZAWSZE szare (Secondary).
+     * Rzędy 1-4 — liczniki (15 emotek + zbiorczy `➕`, po 4 w rzędzie), ZAWSZE szare (Secondary).
      * Rząd 5 — „ostatnia reakcja": kto, z jakiego serwera i jaką emotką; kolor rotuje
      * przy każdej nowej reakcji, żeby odcinał się od szarych liczników. Klik w ten rząd
      * otwiera listę WSZYSTKICH reagujących.
@@ -833,7 +838,7 @@ class BroadcastReactionService {
             return btn;
         });
 
-        // `➕` pojawia się DOPIERO gdy jest co w nim schować — czyli od 20. różnej emotki
+        // `➕` pojawia się DOPIERO gdy jest co w nim schować — czyli od 16. różnej emotki
         // w górę (albo gdy któraś nie da się wstawić na przycisk). Przycisk z zerem niósłby
         // zero informacji i tylko zjadał slot. Jest aktywny, ale bezczynny — listę
         // reagujących otwiera rząd „ostatnia reakcja".
@@ -846,8 +851,8 @@ class BroadcastReactionService {
         }
 
         const rows = [];
-        for (let i = 0; i < buttons.length; i += 5) {
-            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + 5)));
+        for (let i = 0; i < buttons.length; i += BUTTONS_PER_ROW) {
+            rows.push(new ActionRowBuilder().addComponents(buttons.slice(i, i + BUTTONS_PER_ROW)));
         }
 
         const lastRow = this._buildLastReactionRow(broadcastId, client, lang, tryAllEmojis);
