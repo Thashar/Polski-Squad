@@ -987,7 +987,7 @@ async function handleEditScheduledResume(interaction, sharedState) {
 // ==================== CHANNEL SELECT MENU ====================
 
 async function handleChannelSelectMenu(interaction, sharedState) {
-    const { logger, userStates } = sharedState;
+    const { logger, userStates, tablicaMenedzer } = sharedState;
     const customId = interaction.customId;
 
     logger.info(`Channel Select: ${customId} by ${interaction.user.username}`);
@@ -2380,7 +2380,7 @@ async function handleConfirmDeleteScheduled(interaction, sharedState) {
 }
 
 async function handleConfirmDeleteEvent(interaction, sharedState) {
-    const { eventMenedzer, listaEventowMenedzer, logger } = sharedState;
+    const { eventMenedzer, listaEventowMenedzer, tablicaMenedzer, logger } = sharedState;
 
     await interaction.deferUpdate();
 
