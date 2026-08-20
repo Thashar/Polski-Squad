@@ -191,6 +191,51 @@ class ComputeBoostService {
     }
 
     /**
+     * Wchodzi na domenę API puli jako zwykła strona i czeka, aż Cloudflare wystawi
+     * ciasteczko `cf_clearance`.
+     *
+     * ⚠️ To jest krok, bez którego całość nie ma prawa zadziałać. Wyzwanie „Just a moment…"
+     * rozwiązuje się WYŁĄCZNIE przy nawigacji najwyższego poziomu. Socket.io odpytuje API
+     * XHR-em, więc przy zablokowanym adresie JavaScript dostaje gołe 403 i nie ma jak
+     * wyzwania przejść - dokładnie tak, jak dzieje się to u człowieka, który wkleiłby adres
+     * API do konsoli zamiast otworzyć go w karcie.
+     *
+     * Ciasteczko zapisuje się w stałym profilu, więc kolejne boosty zaczynają już z górki.
+     */
+    async _przejdzWyzwanie(page) {
+        const apiHost = new URL(this.config.apiUrl).hostname;
+
+        try {
+            await page.goto(this.config.apiUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        } catch (error) {
+            this.logger.warn(`[CALC-BOOST] ⚠️ Nie udało się otworzyć domeny API: ${error.message}`);
+            return false;
+        }
+
+        // Wyzwanie liczy się kilka sekund i samo przeładowuje stronę - dajemy mu 45 s
+        const koniec = Date.now() + 45000;
+
+        while (Date.now() < koniec) {
+            const ciasteczka = await page.cookies().catch(() => []);
+            if (ciasteczka.some(c => c.name === 'cf_clearance')) {
+                this.logger.info(`[CALC-BOOST] 🔓 Cloudflare wpuścił - mam cf_clearance dla ${apiHost}`);
+                return true;
+            }
+
+            const tytul = await page.title().catch(() => '');
+            if (tytul && !/just a moment|attention required|please wait/i.test(tytul)) {
+                this.logger.info(`[CALC-BOOST] 🔓 Domena API otwarta bez wyzwania (tytuł: "${tytul}")`);
+                return true;
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+
+        this.logger.warn('[CALC-BOOST] ⚠️ Wyzwanie Cloudflare nie zostało rozwiązane w 45 s');
+        return false;
+    }
+
+    /**
      * Uruchamia przeglądarkę, dołącza do puli i trzyma ją przez zadany czas.
      * Zwraca statystyki sesji. `onConnected` dostaje informację o połączeniu, gdy tylko
      * strona zamelduje się w puli (albo gdy minie limit oczekiwania).
@@ -224,6 +269,7 @@ class ComputeBoostService {
             poolUpdates: 0,
             blockedRequests: 0,
             cloudflareChallenge: false,
+            clearance: false,
             peakWorkers: 0,
             peakHosts: 0,
             peakAppetite: 0,
@@ -281,7 +327,11 @@ class ComputeBoostService {
                     '--no-default-browser-check',
                     '--metrics-recording-only',
                     ...(regulaDns ? [regulaDns] : [])
-                ]
+                ],
+                // Puppeteer domyślnie dokłada --enable-automation (pasek "sterowana przez
+                // oprogramowanie testujące"). Zwykła przeglądarka tej flagi nie ma, a my nie
+                // uruchamiamy testów - po prostu odwiedzamy stronę.
+                ignoreDefaultArgs: ['--enable-automation']
             });
 
             const page = await browser.newPage();
@@ -303,7 +353,10 @@ class ComputeBoostService {
             // ⚠️ Cloudflare NIGDY nie jest odcinany. Przed API puli stoi wyzwanie bota
             // ("Just a moment...") i bez skryptów z challenges.cloudflare.com przeglądarka
             // nie ma jak go przejść - handshake socket.io kończy się wtedy kodem 403.
-            const ZAWSZE_PRZEPUSZCZAJ = /cloudflare\.com/;
+            // Nic z domeny API ani ze ścieżek /cdn-cgi/ nie może być odcięte - to zasoby
+            // strony wyzwania, a okaleczone wyzwanie nigdy się nie domyka
+            const hostApi = new URL(this.config.apiUrl).hostname.replace(/\./g, '\\.');
+            const ZAWSZE_PRZEPUSZCZAJ = new RegExp(`cloudflare\\.com|/cdn-cgi/|${hostApi}`);
 
             await page.setRequestInterception(true);
             page.on('request', request => {
@@ -406,6 +459,10 @@ class ComputeBoostService {
                     this.logger.info(`[CALC-BOOST] 📝 worker:register → ${JSON.stringify(frame[1])}`);
                 }
             });
+
+            // Najpierw domena API - tam mieszka wyzwanie. Dopiero z ciasteczkiem w profilu
+            // przechodzimy na kalkulator, żeby socket.io miał czym się wylegitymować.
+            stats.clearance = await this._przejdzWyzwanie(page);
 
             await page.goto(this.config.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
