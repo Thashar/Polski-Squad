@@ -196,44 +196,5 @@ module.exports = {
     newsRelay: {
         // Kanał, na który przychodzą posty z innego serwera (webhook/follow/bot). Brak = funkcja wyłączona
         sourceChannelId: process.env.STALKER_LME_NEWS_CHANNEL_ID || null
-    },
-
-    // Calc Boost - headless Chromium dołączający do puli obliczeniowej kalkulatora sio-tools
-    computeBoost: {
-        url: process.env.STALKER_LME_CALC_BOOST_URL || 'https://sio-tools.exp0.dev/',
-        // Wartość klucza localStorage `computePool` na stronie
-        poolId: process.env.STALKER_LME_CALC_BOOST_POOL || 'POLSKA GUROM',
-        // Backend puli (socket.io) - używany wyłącznie do testu łączności przed startem przeglądarki
-        apiUrl: process.env.STALKER_LME_CALC_BOOST_API || 'https://sio-api.exp0.dev',
-        // Domyślny czas trwania boosta (komenda /calc-boost)
-        durationMs: (parseInt(process.env.STALKER_LME_CALC_BOOST_SECONDS, 10) || 900) * 1000,
-        // Twardy limit - bezpiecznik przed trzymaniem przeglądarki w nieskończoność
-        maxDurationMs: 30 * 60 * 1000,
-        // Górny limit wątków (klucz `multithread`). null = tyle, ile rdzeni ma serwer (maksimum suwaka)
-        maxThreads: parseInt(process.env.STALKER_LME_CALC_BOOST_THREADS, 10) || null,
-        // Ścieżka do binarki Chromium/Chrome. Brak = serwis szuka w typowych lokalizacjach
-        chromiumPath: process.env.STALKER_LME_CHROMIUM_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || null
-    },
-
-    // Pula proxy - system przepisany z Garego (ten sam, z którego korzysta /rivals).
-    // Używany przez /calc-boost: IP hostingu jest zablokowane przez Cloudflare przed API puli,
-    // więc przeglądarka wychodzi przez cudzy adres.
-    proxy: {
-        // Domyślnie WŁĄCZONE - wyłącz jawnie wpisując "false". Brak listy proxy i tak
-        // sprowadza się do połączenia bezpośredniego, więc nic to nie psuje
-        enabled: process.env.STALKER_LME_PROXY_ENABLED !== 'false',
-        // 'random' (domyślnie) albo 'round-robin' - jak w Garym
-        strategy: process.env.STALKER_LME_PROXY_STRATEGY || 'random',
-        // Ile proxy spróbować, zanim boost przejdzie na połączenie bezpośrednie
-        retryAttempts: parseInt(process.env.STALKER_LME_PROXY_RETRY_ATTEMPTS, 10) || 3,
-        // Plik z listą proxy - ten sam co u Garego (katalog główny, poza gitem)
-        proxyFilePath: process.env.STALKER_LME_PROXY_FILE || process.env.GARY_PROXY_FILE || path.join(__dirname, '../../proxy.txt'),
-        // Webshare API jako zapas, gdy pliku nie ma
-        webshareUrl: process.env.STALKER_LME_WEBSHARE_URL || process.env.GARY_WEBSHARE_URL || '',
-        // Ręczna lista z .env (zapas ostatniej szansy)
-        proxyList: process.env.STALKER_LME_PROXY_LIST
-            ? process.env.STALKER_LME_PROXY_LIST.split(',').map(p => p.trim()).filter(Boolean)
-            : [],
-        refreshOnStartup: true
     }
 };

@@ -123,7 +123,7 @@ async function handleSlashCommand(interaction, sharedState) {
     const { config, databaseService, ocrService, punishmentService, reminderService, reminderUsageService, phaseService } = sharedState;
 
     // Sprawdź uprawnienia dla wszystkich komend oprócz /wyniki, /progres, /player-status, /clan-status i /clan-progres
-    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode', 'calc-boost'];
+    const publicCommands = ['wyniki', 'progres', 'player-status', 'player-compare', 'clan-status', 'clan-progres', 'core-ranking', 'remove-id', 'list-ids', 'giftcode'];
     if (!publicCommands.includes(interaction.commandName) && !hasPermission(interaction.member, config.allowedPunishRoles)) {
         await interaction.reply({ content: messages.errors.noPermission, flags: MessageFlags.Ephemeral });
         return;
@@ -231,9 +231,6 @@ async function handleSlashCommand(interaction, sharedState) {
             break;
         case 'giftcode':
             await handleGiftcodeCommand(interaction, sharedState);
-            break;
-        case 'calc-boost':
-            await handleCalcBoostCommand(interaction, sharedState);
             break;
         default:
             await interaction.reply({ content: 'Nieznana komenda!', flags: MessageFlags.Ephemeral });
@@ -3156,11 +3153,7 @@ async function registerSlashCommands(client) {
         new SlashCommandBuilder()
             .setName('glory-test')
             .setDescription('Wypycha dane progresu Fazy 1 do shared_data dla loterii Glory (Kontroler) — do testów')
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
-        new SlashCommandBuilder()
-            .setName('calc-boost')
-            .setDescription('Użycza moc serwera puli obliczeniowej kalkulatora sio-tools na 15 minut')
+            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     ];
 
     try {
@@ -14972,133 +14965,6 @@ async function generateClanProgressChart(clanProgressData, clanName) {
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
-}
-
-/**
- * /calc-boost - odpala headless Chromium, który dołącza do puli obliczeniowej kalkulatora
- * sio-tools i przez zadany czas przelicza zadania mocą serwera.
- *
- * Odpowiedź jest edytowana dwa razy: po dołączeniu do puli i po zakończeniu boosta.
- * Token interakcji żyje 15 minut, a boost domyślnie 10 - mieści się, ale gdyby czas
- * wydłużono w konfiguracji, podsumowanie leci zwykłą wiadomością na kanał.
- */
-async function handleCalcBoostCommand(interaction, sharedState) {
-    const { config, computeBoostService } = sharedState;
-    const boostConfig = config.computeBoost;
-
-    // Tylko członkowie klanów (i administratorzy) - boost obciąża wszystkie rdzenie serwera
-    if (!_hasAnyClanRole(interaction.member, config) && !_isAdmin(interaction.member)) {
-        await interaction.reply({
-            content: '❌ Komenda `/calc-boost` jest dostępna tylko dla członków klanu.',
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    if (computeBoostService.isActive()) {
-        const zostaloSekund = Math.ceil(computeBoostService.getRemainingMs() / 1000);
-        await interaction.reply({
-            content: `⚙️ Boost już trwa — zostało **${zostaloSekund} s**. Poczekaj na zakończenie.`,
-            flags: MessageFlags.Ephemeral
-        });
-        return;
-    }
-
-    await interaction.deferReply();
-
-    const minuty = Math.round(boostConfig.durationMs / 60000);
-    const czasOpis = minuty >= 1 ? `${minuty} min` : `${Math.round(boostConfig.durationMs / 1000)} s`;
-
-    // Token interakcji żyje 15 minut, a boost trwa tyle samo - podsumowanie długiego boosta
-    // leci więc od razu zwykłą wiadomością na kanał, bez skazanej na porażkę edycji.
-    const podsumowanieNaKanal = boostConfig.durationMs >= 14 * 60 * 1000;
-
-    // `naKanal` wymusza zwykłą wiadomość; błąd startu leci edycją, bo pojawia się od razu
-    // i inaczej odpowiedź została by na zawsze w stanie "bot myśli".
-    const wyslijPodsumowanie = async (embed, naKanal) => {
-        try {
-            if (naKanal) {
-                await interaction.channel.send({ embeds: [embed] });
-                return;
-            }
-            await interaction.editReply({ embeds: [embed] });
-        } catch (error) {
-            logger.warn(`[CALC-BOOST] ⚠️ Nie udało się dostarczyć podsumowania: ${error.message}`);
-            try {
-                await interaction.channel.send({ embeds: [embed] });
-            } catch (sendError) {
-                logger.error(`[CALC-BOOST] ❌ Nie udało się wysłać podsumowania: ${sendError.message}`);
-            }
-        }
-    };
-
-    try {
-        const stats = await computeBoostService.runBoost({
-            requestedBy: interaction.member?.displayName || interaction.user.username,
-            onConnected: async info => {
-                await interaction.editReply({
-                    embeds: [new EmbedBuilder()
-                        .setTitle('⚡ Calc Boost uruchomiony')
-                        .setDescription(
-                            info.connected
-                                ? `Serwer dołączył do puli **${info.poolId}** i liczy zadania.`
-                                : `Przeglądarka wystartowała, ale pula **${info.poolId}** jeszcze się nie odezwała — czekam dalej.`
-                        )
-                        .addFields(
-                            { name: '🧵 Wątki', value: `${info.threads}`, inline: true },
-                            { name: '⏱️ Czas', value: czasOpis, inline: true },
-                            { name: '👷 Robotnicy w puli', value: `${info.peakWorkers || 1}`, inline: true },
-                            { name: '📝 Zarejestrowany', value: info.registered ? 'tak' : 'nie', inline: true },
-                            { name: '🌐 Wyjście', value: info.exitLabel || 'bezpośrednie', inline: true }
-                        )
-                        .setColor(info.connected ? '#57F287' : '#FFA500')
-                        .setTimestamp()]
-                });
-            }
-        });
-
-        // Bez tego rozróżnienia zablokowany boost pokazywał same zera i wyglądał jak
-        // sesja, w której po prostu nikt nic nie liczył - a to zupełnie inna sytuacja
-        if (!stats.connected && stats.cloudflareChallenge) {
-            const proxyStats = sharedState.proxyService?.getStats();
-            const opisProxy = proxyStats?.enabled
-                ? `Próbowaliśmy wyjść przez pulę proxy (**${proxyStats.availableProxies}** dostępnych adresów), ` +
-                  'ale żaden nie przeszedł wyzwania. Odprawione adresy wracają do gry po dobie.'
-                : 'Pula proxy jest wyłączona, więc boost wychodzi z adresu hostingu — a ten jest zablokowany.';
-
-            await wyslijPodsumowanie(new EmbedBuilder()
-                .setTitle('❌ Calc Boost — API puli odrzuciło serwer')
-                .setDescription(
-                    `Backend puli (**${new URL(boostConfig.apiUrl).hostname}**) wita ten serwer wyzwaniem ` +
-                    'Cloudflare („Just a moment…") i nie przepuszcza połączenia. Sama strona kalkulatora ' +
-                    'działa — blokada dotyczy wyłącznie API puli i adresu IP.\n\n' +
-                    `${opisProxy}\n\n` +
-                    'Drugim rozwiązaniem jest wpuszczenie tego serwera przez autora sio-tools.'
-                )
-                .setColor('#ED4245')
-                .setTimestamp(), podsumowanieNaKanal);
-            return;
-        }
-
-        await wyslijPodsumowanie(new EmbedBuilder()
-            .setTitle('✅ Calc Boost zakończony')
-            .setDescription(`Pula **${stats.poolId}** — serwer liczył przez ${czasOpis} na ${stats.threads} wątkach.`)
-            .addFields(
-                { name: '📥 Odebrane zadania', value: `${stats.jobsReceived}`, inline: true },
-                { name: '📤 Odesłane wyniki', value: `${stats.jobsDone}`, inline: true },
-                { name: '👷 Szczyt puli', value: `${stats.peakWorkers} robotników / ${stats.peakHosts} hostów`, inline: true },
-                { name: '🌐 Wyjście', value: stats.exitLabel || 'bezpośrednie', inline: true }
-            )
-            .setColor(stats.connected ? '#57F287' : '#ED4245')
-            .setTimestamp(), podsumowanieNaKanal);
-    } catch (error) {
-        logger.error(`[CALC-BOOST] ❌ Błąd boosta: ${error.message}`);
-        await wyslijPodsumowanie(new EmbedBuilder()
-            .setTitle('❌ Calc Boost nie wystartował')
-            .setDescription(error.message)
-            .setColor('#ED4245')
-            .setTimestamp(), false);
-    }
 }
 
 module.exports = {

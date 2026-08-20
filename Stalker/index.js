@@ -110,12 +110,6 @@ const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
-// Pula proxy przepisana z Garego - /calc-boost wychodzi przez cudze IP, bo adres hostingu
-// jest odprawiany przez Cloudflare stojące przed API puli obliczeniowej
-const ProxyService = require('./services/proxyService');
-const proxyService = new ProxyService(config, logger);
-const ComputeBoostService = require('./services/computeBoostService');
-const computeBoostService = new ComputeBoostService(config, logger, proxyService);
 const NewsRelayService = require('./services/newsRelayService');
 const newsRelayService = new NewsRelayService(config, llmAdapter, logger);
 
@@ -283,9 +277,7 @@ const sharedState = {
     phaseService,
     garyCombatIngestionService,
     kalkulatorEmbedService,
-    giftcodeService,
-    computeBoostService,
-    proxyService
+    giftcodeService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -1222,9 +1214,6 @@ async function stopBot() {
 
         // Zatrzymaj serwis automatycznego usuwania wiadomości
         messageCleanupService.stop();
-
-        // Ubij przeglądarkę boosta, jeśli akurat trwa (żyje tylko w pamięci procesu)
-        await computeBoostService.stop();
 
         await client.destroy();
         logger.info('Bot został zatrzymany');

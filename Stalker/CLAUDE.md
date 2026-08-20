@@ -16,7 +16,6 @@
 > - Ścieżka realna to: pobranie screena → `sharp` → base64 → zapytanie do AI
 > - Zmieniając cokolwiek w OCR, patrz na `services/aiOcrService.js`, nie na `ocrService.js`
 
-
 **11 Systemów:**
 1. **Kary OCR** - Dwa tryby:
    - **Tradycyjny:** `ocrService.js` - Tesseract, upscaling 3x, gamma 3.0, Levenshtein matching, wykrywanie 0
@@ -287,7 +286,7 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`, `/glory-test`, `/calc-boost`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`, `/glory-test`
 
 **`/glory-test`** (admin, ukryta dla nie-adminów): ręcznie wypycha dane progresu Fazy 1 do `shared_data/glory_progress.json` (wywołuje `exportGloryProgress()`) — do testów loterii Glory w Kontrolerze, bez czekania na kolejne `/faza1`. Odpowiedź ephemeral pokazuje uczestników i pulę losów per klan. Uwaga: eksport i tak dzieje się automatycznie po każdym `/faza1` i przy starcie bota.
 
@@ -318,43 +317,9 @@
 - Wykres: Discord dark theme (#1E1F22), krzywa Catmull-Rom, oś miesięczna (pl), detekcja kolizji etykiet
 - **Krzywa a plateau** (`catmullRomControlPoints`, wspólne dla linii i wypełnienia): czysty Catmull-Rom liczy styczną z sąsiadów, więc **poziomy odcinek zaczynał się unosić jeszcze przed faktycznym wzrostem** — a przy corach plateau to norma (gracz przez tydzień nie zbiera, potem skacze). Reguły: (1) `selfFlat` — odcinek bez zmiany ilości jest idealnie poziomy na całej długości (ma **pierwszeństwo**; bez tego ostatni odcinek plateau wyginał się w dół tuż przed wzrostem, bo styczna w jego końcu liczona była już z rosnącego fragmentu), (2) `prevFlat`/`nextFlat` — gdy sąsiedni odcinek jest poziomy, styczna liczona jest z własnego odcinka, więc przejście plateau → wzrost jest **ostre**. Zaokrąglenie zostaje wszędzie tam, gdzie plateau nie ma
 
-**Calc Boost** - `computeBoostService.js` + `/calc-boost` (członkowie klanu i administratorzy — komenda jest na liście `publicCommands`, czyli omija bramkę moderatorską, a w handlerze sprawdzane jest `_hasAnyClanRole()`):
-- **Co robi:** odpala headless Chromium (`puppeteer-core`) na stronie kalkulatora (`https://sio-tools.exp0.dev/`), dołącza do puli obliczeniowej i przez **15 minut** (`config.computeBoost.durationMs`) liczy zadania mocą serwera. Po czasie przeglądarka jest zamykana.
-- **Ustawienia strony:** wstrzykiwane przez `page.evaluateOnNewDocument()`, czyli ZANIM wystartują skrypty strony — dlatego wystarczy jedno wejście, bez przeładowania. Klucze `localStorage`: `computePool` = `"POLSKA GUROM"` (JSON string) i `multithread` = liczba wątków (JSON number). Wartości muszą być **JSON-owane** — strona czyta je przez `JSON.parse`.
-- **Liczba wątków:** domyślnie `navigator.hardwareConcurrency`, czyli tyle, ile rdzeni widzi Chromium na serwerze — to zarazem maksimum suwaka „Multithread Limit" na stronie. `STALKER_LME_CALC_BOOST_THREADS` pozwala zejść niżej (wartość jest przycinana do liczby rdzeni).
-- **Chromium:** `resolveChromiumPath()` sprawdza po kolei `STALKER_LME_CHROMIUM_PATH`/`PUPPETEER_EXECUTABLE_PATH`, **cache puppeteera** (`_znajdzWCache()`), typowe ścieżki Linuksa (`/usr/bin/chromium`, `/usr/bin/google-chrome`…) i przeglądarki z Windowsa (praca lokalna). Brak binarki = czytelny błąd w embedzie, bot nie wywala się. W repo jest **`puppeteer-core`**, a NIE `puppeteer` — paczka nie pobiera własnego Chromium.
-- **Skąd binarka na hostingu:** `scripts/install-chromium.js` podpięty jako **`postinstall`** w `package.json`. Panel (Pterodactyl/Wispbyte) odpala `npm install` przy każdym starcie serwera, więc `chrome-headless-shell` pobiera się sam do `~/.cache/puppeteer` — bez roota i bez zmiany komendy startowej. Skrypt jest **idempotentny** (istniejąca binarka = natychmiastowy no-op) i pomija się na Windowsie, przy `SKIP_CHROMIUM_INSTALL=1` oraz gdy Chromium jest już w systemie. **Nigdy nie kończy się błędem** — brak sieci czy miejsca na dysku nie może wywrócić `npm install` wszystkich dziewięciu botów. Ręcznie: `npm run chromium:install`.
-  - ⚠️ **Bibliotek systemowych (`libnss3`, `libgbm`, `libasound2`) NIE da się zainstalować przez npm** — to pakiety Debiana, `npm install libasound2` kończy się błędem 404. Jeśli binarka jest, a Chromium nie startuje, przyczyną jest właśnie ich brak w obrazie kontenera.
-  - **Pobierany jest pełny Chrome, nie `chrome-headless-shell`** — shell to stary wariant headless bez części API przeglądarki, przez co strona dostaje uboższe środowisko niż u zwykłego użytkownika. Shell został jako zapas, gdy Chrome nie da się pobrać. Profil (`Stalker/temp/calc_boost_profile`) jest **stały**, więc ciasteczka przeżywają kolejne boosty; leży w `temp/`, nie w `data/`, żeby nie wchodził do backupów.
-  - `chrome-headless-shell` to stara binarka headless — puppeteer uruchamia ją **wyłącznie** w trybie `headless: 'shell'`. Serwis wykrywa to po nazwie pliku (`includes('headless-shell')`); pełny Chrome idzie zwykłym `headless: true`. Wersja w ścieżce cache zmienia się z każdą aktualizacją, dlatego katalog jest **przeglądany**, a nie zaszyty na sztywno.
-- **Flagi startowe:** `--no-sandbox`, `--disable-dev-shm-usage` (kontenery) oraz trzy wyłączające dławienie tła (`--disable-background-timer-throttling`, `--disable-renderer-backgrounding`, `--disable-backgrounding-occluded-windows`) — headless zawsze jest „w tle", więc bez nich pula dostawałaby ułamek zadeklarowanej mocy.
-- **Cloudflare przed stroną:** UA `HeadlessChrome/...` bywa odrzucany na handshake'u socket.io (HTTP 403), a bez niego nie ma ani WebSocketa, ani `compute:worker:register` — strona po prostu milczy. Dlatego serwis podmienia w UA sam człon `HeadlessChrome` → `Chrome` (reszta zostaje prawdziwa), dokłada `Accept-Language` i flagę `--disable-blink-features=AutomationControlled`.
-- **Odcinanie zbędnych żądań:** `page.setRequestInterception(true)` blokuje `image`/`media`/`font` oraz hosty `wsrv.nl`, Google Analytics, `monitoring.exp0.dev` i `challenges.cloudflare.com`. Powód nie jest kosmetyczny: strona ciągnie kilkadziesiąt ikon naraz, a w kontenerze z limitem pamięci i procesów kończy się to `ERR_INSUFFICIENT_RESOURCES` — i przy tym ścisku pada **także handshake socket.io do API puli**, czyli jedyne żądanie, na którym nam zależy. Żądania odcięte przez nas nie są logowane (`ERR_ABORTED`/`ERR_BLOCKED_BY_CLIENT`), inaczej zalałyby konsolę.
-- **Jedno przeładowanie przy nieudanym starcie:** socket.io ma `reconnectionAttempts: 5` i po nieudanej serii milczy do końca sesji. Gdy po 20 s nie ma meldunku, serwis przeładowuje stronę i daje drugie podejście — bez tego chwilowy zator w kontenerze kosztowałby cały kwadrans.
-- ⚠️ **Cloudflare przed API puli, nie przed stroną:** `sio-tools.exp0.dev` stoi na Vercelu i ładuje się bez przeszkód — wyzwanie bota (`Just a moment...`, HTTP 403) wystawia dopiero `sio-api.exp0.dev`. Adres IP hostingu dostaje je niezależnie od nagłówków (sprawdzone: gołe żądanie i żądanie z pełnym zestawem nagłówków przeglądarki dają ten sam 403), więc musi je rozwiązać przeglądarka.
-- ⚠️ **`brunhild.challenges.cloudflare.com` NIE MA rekordu A** — istnieje wyłącznie po IPv6. Kontener bez trasy IPv6 dostaje na nim `ERR_ADDRESS_UNREACHABLE`, przez co wyzwanie się nie domyka. `_regulaDnsCloudflare()` kieruje `*.challenges.cloudflare.com` na IPv4 hosta `challenges.cloudflare.com` przez `--host-resolver-rules` (TLS dogaduje się po SNI). Bez tego cała ścieżka kończy się na 403, mimo że sama strona działa.
-- **Test łączności przed startem przeglądarki** (`_sprawdzApi(proxy)`, axios): odpytuje `${apiUrl}/socket.io/?EIO=4&transport=polling` **tym samym tunelem, którym pójdzie przeglądarka** — inaczej diagnoza opisywałaby łączność hostingu, a nie tę, na której faktycznie stanie boost. Rozdziela „kontener nie dociera do backendu puli" od „dociera, ale odbija się na Cloudflare" — w logu przeglądarki oba wyglądają identycznie. Błąd tutaj NIE przerywa boosta, z jednym wyjątkiem: kod **407 od samego proxy** kończy podejście bez startu Chrome'a (konto proxy wygasło, przeglądarka i tak nie przejdzie).
-- 🌐 **Pula proxy (`services/proxyService.js`)** — system przepisany z Garego, ten sam, z którego korzysta `/rivals`. Powód: adres IP hostingu jest zablokowany przez Cloudflare przed API puli, więc boost musi wyjść przez cudzy adres.
-  - **Lista proxy:** `proxy.txt` w katalogu głównym (**wspólny plik z Garym**, poza gitem), a gdy pliku nie ma — Webshare API. Obsługiwane formaty linii: `user:pass@ip:port`, `http(s)://…`, `ip:port`, `ip:port:user:pass`.
-  - **Statusy błędów trzymane są OSOBNO od Garego** (`Stalker/data/proxy_status.json`) — proxy odprawione przez garrytools potrafi bez problemu obsłużyć sio-tools i odwrotnie. Wspólna czarna lista wyłączałaby sprawne adresy.
-  - **Rotacja:** `_zbudujListePodejsc()` układa kolejkę — do `retryAttempts` (domyślnie 3) **różnych** proxy, a na końcu ZAWSZE połączenie bezpośrednie. Powtórzenia są ucinane: przy puli mniejszej niż limit prób drugie podejście tym samym adresem skończy się tak samo, a kosztuje półtorej minuty. Wyłączona pula = samo podejście bezpośrednie, czyli stan sprzed zmiany.
-  - **Wpięcie w przeglądarkę:** flaga `--proxy-server=http://ip:port` + `page.authenticate()` na dane logowania. ⚠️ **Chromium NIE przyjmuje użytkownika ani hasła w `--proxy-server`** — muszą pójść osobno, inaczej każde żądanie wraca z 407.
-  - ⚠️ **Osobny profil przeglądarki na każdy adres wyjściowy** (`temp/calc_boost_profile_<ip>_<port>`). `cf_clearance` Cloudflare wiąże z adresem IP — ciasteczko wyrobione przez jedno proxy podane z drugiego jest nieważne i sprowadza wyzwanie z powrotem, mimo że wyglądałoby na załatwione.
-  - **Kary za nieudane podejście** (`_ukarzProxy()`, zasady 1:1 z Garym): **407** → wyłączenie trwałe (konto proxy wygasło), **403 / nieprzejście wyzwania Cloudflare** → wyłączenie na dobę. Zwykła awaria (padnięta przeglądarka, zerwane połączenie, zatkany kontener) powoduje **samą rotację** — proxy nie zawiniło i szkoda wyłączać sprawny adres na 24 h.
-  - **Przez proxy pomijana jest reguła DNS** dla `*.challenges.cloudflare.com` — nazwy rozwiązuje wtedy serwer pośredniczący, Chromium nie robi lokalnego DNS-u i `--host-resolver-rules` nic by nie dało.
-  - **Czas boosta liczy się od dołączenia do puli**, nie od wpisania komendy — rotacja proxy potrafi zjeść kilka minut, a użytkownik ma dostać pełny zadeklarowany czas liczenia. Sesja jest jednak rezerwowana od razu, żeby w trakcie rotacji nie dało się odpalić drugiej przeglądarki.
-  - **Widoczne dla użytkownika:** pole `🌐 Wyjście` w embedzie (adres bez danych logowania albo „bezpośrednie"), a przy porażce — ile adresów było dostępnych w puli.
-- **Diagnostyka w logu bota:** błędy strony (`pageerror`), błędy konsoli, nieudane żądania, **kod i URL każdej odpowiedzi HTTP >= 400** (sama konsola pokazuje `Failed to load resource: 403` bez adresu), zdarzenia WebSocket (`🔌` utworzenie, `⚠️` zamknięcie), wysłany `worker:register` (`📝`) i pierwsze trzy `pool_update` (`📊`). Po starcie logowany jest odczyt `localStorage` — brak `🔌` oznacza, że strona nie doszła do połączenia, brak `📝` przy obecnym `🔌` — że nie zobaczyła puli w `localStorage`.
-  - ⚠️ **Nazwa puli ze spacją musi być w cudzysłowie** (`STALKER_LME_CALC_BOOST_POOL="POLSKA GUROM"`) albo wcale — przy podstawieniu w powłoce niecytowana wartość urywa się na spacji i bot ląduje w puli `POLSKA` zamiast `POLSKA GUROM`, czyli osobnej i pustej.
-- **Statystyki:** ruch z pulą leci WebSocketem, więc serwis podgląda ramki przez CDP (`Network.webSocketFrameReceived/Sent`) i liczy `compute:do_job` (odebrane zadania), `compute:done` (odesłane wyniki) oraz `compute:pool_update` (szczyt robotników/hostów w puli). Zero odebranych zadań przy `connected: true` znaczy tylko tyle, że nikt akurat nic nie liczył.
-- **Jedna sesja naraz:** `isActive()`/`getRemainingMs()` — druga próba dostaje ephemeral z czasem do końca. Twardy bezpiecznik `maxDurationMs` = 15 min.
-- **Persistencja:** brak i nie jest potrzebna — sesja żyje w pamięci procesu, `stopBot()` woła `computeBoostService.stop()` (przerywa sen i ubija przeglądarkę, w razie zawieszenia `SIGKILL`). Po restarcie po prostu nie ma czego wznawiać.
-- **Odpowiedź:** `deferReply()`, edycja embeda po dołączeniu do puli i druga po zakończeniu. Token interakcji żyje 15 min — przy wydłużeniu boosta w konfiguracji podsumowanie leci zwykłą wiadomością na kanał (fallback w `wyslijPodsumowanie`).
-
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
 ---
-
 
 ## Zmienne Środowiskowe
 
@@ -405,29 +370,6 @@ STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 # News Relay (opcjonalne) - kanał z postami z innego serwera do streszczania po polsku
 # Wymaga STALKER_GOOGLE_AI_API_KEY (Gemini Vision). Brak = funkcja wyłączona
 STALKER_LME_NEWS_CHANNEL_ID=channel_id
-
-# Calc Boost (/calc-boost) - wszystkie opcjonalne, poniżej wartości domyślne
-STALKER_LME_CALC_BOOST_URL=https://sio-tools.exp0.dev/
-STALKER_LME_CALC_BOOST_POOL=POLSKA GUROM
-STALKER_LME_CALC_BOOST_SECONDS=900
-# Górny limit wątków; brak = tyle, ile rdzeni ma serwer (maksimum suwaka na stronie)
-STALKER_LME_CALC_BOOST_THREADS=
-# Ścieżka do Chromium/Chrome; brak = szukanie w typowych lokalizacjach
-STALKER_LME_CHROMIUM_PATH=/usr/bin/chromium
-
-# Pula proxy dla /calc-boost (system przepisany z Garego) - wszystkie opcjonalne
-# Domyślnie WŁĄCZONA; brak listy proxy sprowadza się do połączenia bezpośredniego
-STALKER_LME_PROXY_ENABLED=true
-# 'random' (domyślnie) albo 'round-robin'
-STALKER_LME_PROXY_STRATEGY=random
-# Ile różnych proxy spróbować, zanim boost przejdzie na połączenie bezpośrednie
-STALKER_LME_PROXY_RETRY_ATTEMPTS=3
-# Plik z listą proxy; brak = proxy.txt w katalogu głównym (ten sam co u Garego)
-STALKER_LME_PROXY_FILE=
-# Webshare API jako zapas, gdy pliku nie ma; brak = GARY_WEBSHARE_URL
-STALKER_LME_WEBSHARE_URL=
-# Ręczna lista proxy po przecinku (zapas ostatniej szansy)
-STALKER_LME_PROXY_LIST=
 
 ```
 
