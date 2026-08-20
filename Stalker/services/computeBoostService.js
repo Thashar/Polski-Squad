@@ -518,6 +518,14 @@ class ComputeBoostService {
                 }
             }
 
+            // Po dwóch nieudanych podejściach pula już się nie odezwie - klient socket.io
+            // wyczerpał swoje pięć ponowień i milczy. Trzymanie Chrome'a przez pozostałe
+            // kilkanaście minut to czysta strata pamięci i rdzeni serwera.
+            if (!stats.connected) {
+                this.logger.warn('[CALC-BOOST] ⏹️ Serwer nie dołączył do puli - kończę wcześniej zamiast czekać do końca czasu');
+                return { ...stats };
+            }
+
             // Sen do końca sesji da się przerwać z zewnątrz (`stop()` przy zamykaniu bota),
             // inaczej `runBoost` czekałby do końca minuty na zamkniętej już przeglądarce.
             const pozostalo = this.session ? Math.max(0, this.session.endsAt - Date.now()) : 0;
