@@ -117,6 +117,10 @@ const MODELE_Z_EFFORT = /(opus-(5|4-[5-8])|sonnet-(5|4-6)|fable-5|mythos-5)/;
 const MAKS_ITERACJI_NARZEDZI = 4;
 const LIMIT_ZNAKOW_DISCORD = 1900;
 
+// Emoji przy wypowiedziach w transkrypcji rozmowy
+const EMOJI_BOTA = '<:PepeBizensik:1278014731113857037>';
+const EMOJI_UZYTKOWNIKA = '<:G_SSJCommon:1268828660509573203>';
+
 class AIInterviewService {
     constructor(config) {
         this.config = config;
@@ -539,7 +543,9 @@ class AIInterviewService {
         if (!rozmowa) return stopka || '';
 
         const wpisy = rozmowa.log.slice(-6).map(wpis =>
-            wpis.kto === 'bot' ? `🤖 ${wpis.tekst}` : `🧍 ${wpis.tekst}`
+            wpis.kto === 'bot'
+                ? `${EMOJI_BOTA} ${wpis.tekst}`
+                : `${EMOJI_UZYTKOWNIKA} ${wpis.tekst}`
         );
         if (stopka) wpisy.push(stopka);
 

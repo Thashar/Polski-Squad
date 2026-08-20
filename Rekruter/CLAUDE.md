@@ -127,7 +127,8 @@ maksymalnie jedno emoji na wiadomość, **pogrubienie** na kluczowej rzeczy w da
 (nazwa ekranu, ścieżka w grze, zakres liczb) — jedno, dwa miejsca, nigdy całe zdania.
 
 **Prezentacja w Discordzie:** rozmowa toczy się w jednej efemerycznej odpowiedzi, edytowanej po każdej
-turze i pokazującej **transkrypcję ostatnich 6 wypowiedzi** (wiadomości kandydata są kasowane z kanału,
+turze i pokazującej **transkrypcję ostatnich 6 wypowiedzi** (bot: `<:PepeBizensik:1278014731113857037>`,
+kandydat: `<:G_SSJCommon:1268828660509573203>` — stałe `EMOJI_BOTA` / `EMOJI_UZYTKOWNIKA` w serwisie) (wiadomości kandydata są kasowane z kanału,
 więc bez transkrypcji widziałby tylko ostatnie zdanie bota). Token interakcji Discorda żyje 15 minut —
 gdy edycja przestaje działać, bot pisze na kanale z pingiem i kasuje tę wiadomość po 2 minutach,
 żeby rozmowa nie urwała się w ciszy.
