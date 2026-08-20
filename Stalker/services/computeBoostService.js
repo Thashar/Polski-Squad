@@ -155,6 +155,30 @@ class ComputeBoostService {
     }
 
     /**
+     * Buduje regułę DNS dla Chromium omijającą brak IPv6 w kontenerze.
+     *
+     * `brunhild.challenges.cloudflare.com` (krok wyzwania Cloudflare przed API puli) NIE MA
+     * rekordu A - istnieje wyłącznie po IPv6. Hosting bez trasy IPv6 dostaje na nim
+     * ERR_ADDRESS_UNREACHABLE, wyzwanie się nie domyka i handshake socket.io kończy się 403.
+     *
+     * Kierujemy więc wszystkie hosty `*.challenges.cloudflare.com` na adres IPv4 tej samej
+     * infrastruktury. TLS dogaduje się po SNI, więc brzeg Cloudflare i tak trafia do
+     * właściwej usługi. Gdy adresu nie da się ustalić - zwracamy null i lecimy bez reguły.
+     */
+    async _regulaDnsCloudflare() {
+        try {
+            const dns = require('dns').promises;
+            const [ip] = await dns.resolve4('challenges.cloudflare.com');
+            if (!ip) return null;
+            this.logger.info(`[CALC-BOOST] 🌐 Hosty wyzwania Cloudflare kieruję na IPv4 ${ip} (kontener bez IPv6)`);
+            return `--host-resolver-rules=MAP *.challenges.cloudflare.com ${ip}`;
+        } catch (error) {
+            this.logger.warn(`[CALC-BOOST] ⚠️ Nie udało się ustalić IPv4 dla wyzwania Cloudflare: ${error.message}`);
+            return null;
+        }
+    }
+
+    /**
      * Uruchamia przeglądarkę, dołącza do puli i trzyma ją przez zadany czas.
      * Zwraca statystyki sesji. `onConnected` dostaje informację o połączeniu, gdy tylko
      * strona zamelduje się w puli (albo gdy minie limit oczekiwania).
@@ -197,6 +221,7 @@ class ComputeBoostService {
         let browser = null;
 
         await this._sprawdzApi();
+        const regulaDns = await this._regulaDnsCloudflare();
 
         try {
             // `chrome-headless-shell` to stara binarka headless - puppeteer obsługuje ją
@@ -228,7 +253,8 @@ class ComputeBoostService {
                     '--disable-software-rasterizer',
                     '--no-first-run',
                     '--no-default-browser-check',
-                    '--metrics-recording-only'
+                    '--metrics-recording-only',
+                    ...(regulaDns ? [regulaDns] : [])
                 ]
             });
 
