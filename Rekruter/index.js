@@ -177,6 +177,65 @@ function uruchomSprzatanieRekrutacji() {
     setInterval(przebieg, INTERWAL_SPRZATANIA_MS).unref();
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  PRZYCISK „CHCĘ DOŁĄCZYĆ DO KLANU”
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Wejście do rekrutacji dla osób, które są już na serwerze (np. weszły kiedyś bez
+// klanu). Kliknięcie startuje tę samą rozmowę co przy rekrutacji, tylko z pominięciem
+// pytania o cel wizyty - ten wynika z samego przycisku.
+
+const ETYKIETA_PRZYCISKU_KLANU = 'Chcę dołączyć do klanu';
+
+function zbudujPrzyciskDolaczenia() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('join_clan_start')
+            .setLabel(ETYKIETA_PRZYCISKU_KLANU)
+            .setStyle(ButtonStyle.Success)
+            .setEmoji('<:Peperednice:1341085025306808400>')
+    );
+}
+
+/**
+ * Pilnuje, żeby na kanale wisiała dokładnie jedna wiadomość z przyciskiem.
+ *
+ * Istniejąca wiadomość jest zostawiana (albo edytowana, gdy zmieni się etykieta),
+ * a nie kasowana i wysyłana od nowa - dzięki temu link do niej przeżywa restarty
+ * i kanał nie zapełnia się kolejnymi kopiami.
+ */
+async function zadbajOPrzyciskDolaczenia() {
+    const kanalId = config.channels.joinClan;
+    if (!kanalId) return;
+
+    try {
+        const kanal = client.channels.cache.get(kanalId) || await client.channels.fetch(kanalId);
+        if (!kanal) {
+            logger.error(`[DOLACZ_DO_KLANU] ❌ Nie znaleziono kanału ${kanalId}`);
+            return;
+        }
+
+        const wiadomosci = await kanal.messages.fetch({ limit: 50 });
+        const istniejaca = wiadomosci.find(msg =>
+            msg.author.id === client.user.id &&
+            msg.components[0]?.components?.[0]?.customId === 'join_clan_start'
+        );
+
+        if (istniejaca) {
+            if (istniejaca.components[0].components[0].label !== ETYKIETA_PRZYCISKU_KLANU) {
+                await istniejaca.edit({ components: [zbudujPrzyciskDolaczenia()] });
+                logger.info('[DOLACZ_DO_KLANU] Zaktualizowano wiadomość z przyciskiem');
+            }
+            return;
+        }
+
+        await kanal.send({ components: [zbudujPrzyciskDolaczenia()] });
+        logger.info(`[DOLACZ_DO_KLANU] ✅ Wysłano wiadomość z przyciskiem na kanał ${kanalId}`);
+    } catch (error) {
+        logger.error(`[DOLACZ_DO_KLANU] ❌ Błąd wysyłania przycisku: ${error.message}`);
+    }
+}
+
 const RELAY_FILE_2 = path.join(__dirname, 'data', 'message_relay.json');
 const MAX_RELAY_ENTRIES_2 = 200;
 
@@ -317,6 +376,8 @@ client.once(Events.ClientReady, async () => {
         } else {
             logger.error(`[BOT] ❌ Nie znaleziono kanału rekrutacji`);
         }
+
+        await zadbajOPrzyciskDolaczenia();
 
         await updateActivationMessage(
             client, config.robot2Users, 'Rekruter', 'robot_activate_rekruter_',

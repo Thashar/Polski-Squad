@@ -57,6 +57,8 @@ module.exports = {
         clan2: process.env.CLAN2_CHANNEL,
         mainClan: process.env.MAIN_CLAN_CHANNEL,
         welcome: process.env.WELCOME_CHANNEL,
+        // Kanał z przyciskiem „Chcę dołączyć do klanu" dla osób już obecnych na serwerze
+        joinClan: process.env.REKRUTER_JOIN_CLAN_CHANNEL || '1209283124765265970',
         main: process.env.REKRUTER_MAIN_CHANNEL || '1170323972173340744',
         boost: process.env.REKRUTER_BOOST_BONUS_CHANNEL || '1384597663378440363'
     },

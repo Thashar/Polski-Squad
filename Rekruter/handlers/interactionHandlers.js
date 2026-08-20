@@ -89,6 +89,11 @@ async function handleInteraction(interaction, state, config, client) {
     case 'other_purpose':
       await handleOtherPurpose(interaction, state, config);
       break;
+
+    /* ──────────────── przycisk „Chcę dołączyć do klanu” ────────────────── */
+    case 'join_clan_start':
+      await handleJoinClanStart(interaction, state, config);
+      break;
   }
 }
 
@@ -222,8 +227,59 @@ async function handleYesPolish(interaction, state, config) {
   state.userEphemeralReplies.set(interaction.user.id, interaction);
 }
 
+/* --------------------------- przycisk „Chcę dołączyć do klanu” ----------- */
+/**
+ * Wejście do rekrutacji dla osób, które są już na serwerze.
+ *
+ * Cel wizyty jest znany z samego kliknięcia, więc rozmowa startuje od pytania
+ * o dane (Core Stock, Lunar Mine, zdjęcie postaci) zamiast od „po co przyszedłeś”.
+ */
+async function handleJoinClanStart(interaction, state, config) {
+  const path = require('path');
+  const fs = require('fs');
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+  const userId = interaction.user.id;
+
+  // Ponowne kliknięcie zaczyna rekrutację od nowa - poprzednia rozmowa idzie do kosza
+  state.aiInterviewService?.zakonczRozmowe(userId);
+
+  state.userInfo.set(userId, {
+    username:        interaction.user.username,
+    isPolish:        true,
+    purpose:         'Szukam klanu',
+    coreStock:       null,
+    lunarLevel:      null,
+    lunarPoints:     null,
+    characterAttack: null,
+    playerNick:      null
+  });
+
+  logger.info(`[DOLACZ_DO_KLANU] ${interaction.user.username} rozpoczął rekrutację przyciskiem`);
+
+  if (state.aiInterviewService?.czyAktywny()) {
+    await handleAiInterviewStart(interaction, state, config, { celUstalony: true });
+    return;
+  }
+
+  // Bez trybu AI lecimy klasycznymi krokami, tyle że z pominięciem wyboru ścieżki
+  state.userStates.set(userId, { step: 'waiting_core_stock' });
+
+  const examplePath = path.join(__dirname, '../files/Core_Stock.jpg');
+  const files = fs.existsSync(examplePath)
+    ? [new AttachmentBuilder(examplePath, { name: 'Core_Stock.jpg' })]
+    : [];
+
+  await interaction.reply({
+    content: config.messages.coreStockQuestion,
+    files,
+    flags: MessageFlags.Ephemeral
+  });
+  state.userEphemeralReplies.set(userId, interaction);
+}
+
 /* --------------------------- start rozmowy z AI -------------------------- */
-async function handleAiInterviewStart(interaction, state, config) {
+async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
   const { createBotLogger } = require('../../utils/consoleLogger');
   const logger = createBotLogger('Rekruter');
   const userId = interaction.user.id;
@@ -237,7 +293,7 @@ async function handleAiInterviewStart(interaction, state, config) {
   state.userEphemeralReplies.set(userId, interaction);
 
   try {
-    const wynik = await state.aiInterviewService.rozpocznij(userId, state);
+    const wynik = await state.aiInterviewService.rozpocznij(userId, state, opcje);
     await state.aiInterviewService.pokazOdpowiedz(
       userId,
       state.aiInterviewService.zbudujTranskrypcje(userId),

@@ -91,10 +91,16 @@ async function handleMessage(
     }
   }
 
-  // Reszta logiki tylko dla kanału rekrutacyjnego
-  if (message.channel.id !== RECRUIT_CHANNEL_ID) return;
-
   const step = state.userStates.get(message.author.id)?.step;
+
+  // Kanał z przyciskiem „Chcę dołączyć do klanu” NIE jest kanałem wyłącznie rekrutacyjnym,
+  // więc reagujemy tam tylko na osoby z rozpoczętą rekrutacją. Bez tego warunku wpadłyby
+  // one w `default` poniżej i bot kasowałby wszystkim wszystkie wiadomości
+  if (message.channel.id === config.channels.joinClan && message.channel.id !== RECRUIT_CHANNEL_ID) {
+    if (!step) return;
+  } else if (message.channel.id !== RECRUIT_CHANNEL_ID) {
+    return;
+  }
 
   switch (step) {
     case 'waiting_core_stock':

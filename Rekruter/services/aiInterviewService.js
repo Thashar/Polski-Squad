@@ -144,13 +144,17 @@ class AIInterviewService {
 
     /**
      * Otwiera nową rozmowę i zwraca pierwszą wiadomość rekrutera.
+     *
+     * @param {{celUstalony?: boolean}} opcje `celUstalony` = kandydat wszedł przyciskiem
+     *        „Chcę dołączyć do klanu”, więc cel wizyty jest już znany i nie ma o co pytać.
      */
-    async rozpocznij(userId, state) {
+    async rozpocznij(userId, state, opcje = {}) {
+        const otwarcie = opcje.celUstalony
+            ? '[SYSTEM] Kandydat jest już na serwerze i kliknął przycisk "Chcę dołączyć do klanu". Cel wizyty jest więc znany i ZAPISANY - nie pytaj o niego i nie wywołuj zapisz_dane z celem. To Twoja pierwsza wiadomość: przedstaw się jako bot rekrutacyjny Polskiego Squadu, powiedz krótko, że zbierzesz kilka informacji do dobrania klanu, i od razu poproś o pierwszą rzecz z listy.'
+            : '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty.';
+
         this.rozmowy.set(userId, {
-            messages: [{
-                role: 'user',
-                content: '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty.'
-            }],
+            messages: [{ role: 'user', content: otwarcie }],
             log: [],
             tury: 0,
             zakonczona: false

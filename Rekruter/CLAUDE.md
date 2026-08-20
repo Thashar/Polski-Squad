@@ -31,6 +31,26 @@
 
 ---
 
+## 🎮 Przycisk „Chcę dołączyć do klanu"
+
+Drugie wejście do rekrutacji — dla osób, które **są już na serwerze** (weszły kiedyś bez klanu,
+wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283124765265970`).
+
+- Przy starcie bota `zadbajOPrzyciskDolaczenia()` pilnuje, żeby na kanale wisiała **dokładnie jedna**
+  wiadomość z przyciskiem (sama wiadomość jest pusta — tylko przycisk). Istniejąca jest zostawiana,
+  a nie kasowana i wysyłana od nowa — dzięki temu link do niej przeżywa restarty i kanał nie zapełnia
+  się kopiami. Etykieta różna od aktualnej → wiadomość jest edytowana w miejscu
+- Kliknięcie ustawia `purpose = 'Szukam klanu'` i startuje rekrutację **z pominięciem pytania o cel** —
+  ten wynika z samego przycisku. Z aktywnym trybem AI rusza rozmowa (model dostaje w otwarciu
+  informację, że cel jest już zapisany i nie ma o niego pytać); bez trybu AI lecą klasyczne kroki
+  od razu od `waiting_core_stock`
+- **Ponowne kliknięcie zaczyna rekrutację od zera** (czyści kartę kandydata i porzuca poprzednią rozmowę)
+- ⚠️ **Ten kanał NIE jest kanałem wyłącznie rekrutacyjnym**, więc `handleMessage` reaguje tam wyłącznie
+  na osoby z rozpoczętą rekrutacją (`userStates`). Bez tego warunku cudze wiadomości wpadałyby
+  w gałąź `default` i bot kasowałby na kanale wszystko jak leci
+
+---
+
 ## 🤖 Tryb rozmowy z AI (`REKRUTER_AI_INTERVIEW`)
 
 Alternatywa dla ankiety z przyciskami: zamiast sztywnych kroków kandydat prowadzi **swobodną rozmowę
@@ -192,6 +212,7 @@ REKRUTER_AI_INTERVIEW_MAX_TURNS=40          # limit wiadomości kandydata w jedn
 REKRUTER_AI_INTERVIEW_HISTORY=30            # ile wiadomości trafia do kontekstu modelu
 
 # Opcjonalne - z fallbackiem do wartości produkcyjnych
+REKRUTER_JOIN_CLAN_CHANNEL=channel_id     # Kanał z przyciskiem „Chcę dołączyć do klanu" (domyślnie 1209283124765265970)
 REKRUTER_MAIN_CHANNEL=channel_id          # Kanał główny (notyfikacje dołączeń/boostów)
 REKRUTER_BOOST_BONUS_CHANNEL=channel_id   # Kanał bonusowy dla boosterów
 ROBOT2_FORWARD_CHANNEL=channel_id         # Kanał forward dla Robot2
