@@ -996,6 +996,13 @@ AUTO_GIT_FIX=false
 AUTO_NPM_FIX=false
 AUTO_NPM_FIX_FORCE=false
 
+# ===== CHROMIUM DLA /calc-boost (Stalker) =====
+# `postinstall` (scripts/install-chromium.js) pobiera chrome-headless-shell do
+# ~/.cache/puppeteer przy npm install - na hostingu dzieje się to przy każdym starcie.
+# Ustaw tylko, gdy binarka leży gdzie indziej albo chcesz wyłączyć pobieranie.
+STALKER_LME_CHROMIUM_PATH=
+SKIP_CHROMIUM_INSTALL=0
+
 # ===== RAPORT RUCHU DYSKOWEGO (skrócona linia w logu) =====
 # Jedna zbiorcza linia co godzinę: ile operacji i bajtów poszło na odczyt/zapis.
 # Godziny bez I/O są pomijane. Wartość w sekundach; 0 = wyłącz raport.

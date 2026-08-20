@@ -1,4 +1,6 @@
 const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 /**
  * Serwis "calc-boost" — użycza moc obliczeniową serwera puli obliczeniowej kalkulatora
@@ -40,12 +42,48 @@ class ComputeBoostService {
     }
 
     /**
-     * Znajduje binarkę Chromium/Chrome. Kolejność: konfiguracja (.env) → typowe ścieżki
-     * systemowe Linuksa (serwer) → przeglądarki z Windowsa (praca lokalna).
+     * Szuka binarki pobranej przez `scripts/install-chromium.js` (postinstall) w cache
+     * puppeteera. Katalog wygląda tak:
+     *   ~/.cache/puppeteer/chrome-headless-shell/linux-140.0.0/chrome-headless-shell-linux64/chrome-headless-shell
+     * Wersja w nazwie zmienia się z każdą aktualizacją, więc katalog trzeba przejrzeć,
+     * a nie zaszywać ścieżkę na sztywno.
+     */
+    _znajdzWCache() {
+        const cacheDir = process.env.PUPPETEER_CACHE_DIR
+            || path.join(process.env.HOME || os.homedir(), '.cache', 'puppeteer');
+
+        const warianty = [
+            ['chrome-headless-shell', 'chrome-headless-shell-linux64', 'chrome-headless-shell'],
+            ['chrome', 'chrome-linux64', 'chrome']
+        ];
+
+        for (const [katalog, podkatalog, binarka] of warianty) {
+            const bazowy = path.join(cacheDir, katalog);
+            let wersje;
+            try {
+                wersje = fs.readdirSync(bazowy).sort().reverse();
+            } catch {
+                continue;
+            }
+
+            for (const wersja of wersje) {
+                const kandydat = path.join(bazowy, wersja, podkatalog, binarka);
+                if (fs.existsSync(kandydat)) return kandydat;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Znajduje binarkę Chromium/Chrome. Kolejność: konfiguracja (.env) → cache puppeteera
+     * (binarka pobrana przez postinstall) → typowe ścieżki systemowe Linuksa (serwer) →
+     * przeglądarki z Windowsa (praca lokalna).
      */
     resolveChromiumPath() {
         const candidates = [
             this.config.chromiumPath,
+            this._znajdzWCache(),
             '/usr/bin/chromium',
             '/usr/bin/chromium-browser',
             '/usr/bin/google-chrome',
@@ -108,9 +146,13 @@ class ComputeBoostService {
         let browser = null;
 
         try {
+            // `chrome-headless-shell` to stara binarka headless - puppeteer obsługuje ją
+            // wyłącznie w trybie 'shell'. Pełny Chrome/Chromium idzie zwykłym `true`.
+            const trybHeadless = executablePath.includes('headless-shell') ? 'shell' : true;
+
             browser = await puppeteer.launch({
                 executablePath,
-                headless: true,
+                headless: trybHeadless,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
