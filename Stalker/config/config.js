@@ -203,6 +203,8 @@ module.exports = {
         url: process.env.STALKER_LME_CALC_BOOST_URL || 'https://sio-tools.exp0.dev/',
         // Wartość klucza localStorage `computePool` na stronie
         poolId: process.env.STALKER_LME_CALC_BOOST_POOL || 'POLSKA GUROM',
+        // Backend puli (socket.io) - używany wyłącznie do testu łączności przed startem przeglądarki
+        apiUrl: process.env.STALKER_LME_CALC_BOOST_API || 'https://sio-api.exp0.dev',
         // Domyślny czas trwania boosta (komenda /calc-boost)
         durationMs: (parseInt(process.env.STALKER_LME_CALC_BOOST_SECONDS, 10) || 900) * 1000,
         // Twardy limit - bezpiecznik przed trzymaniem przeglądarki w nieskończoność

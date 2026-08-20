@@ -107,6 +107,32 @@ class ComputeBoostService {
     }
 
     /**
+     * Odpytuje backend puli prosto z Node, PRZED startem przeglądarki. Rozdziela dwie
+     * sytuacje, które w logu przeglądarki wyglądają identycznie (403/400 bez adresu):
+     * kontener w ogóle nie dociera do API, albo dociera, ale odbija się na Cloudflare.
+     *
+     * Handshake socket.io na transporcie `polling` odpowiada `0{"sid":...}` z kodem 200.
+     * Wynik trafia tylko do logu - błąd tutaj NIE przerywa boosta.
+     */
+    async _sprawdzApi() {
+        const axios = require('axios');
+        const url = `${this.config.apiUrl.replace(/\/$/, '')}/socket.io/?EIO=4&transport=polling`;
+
+        try {
+            const odpowiedz = await axios.get(url, { timeout: 10000, validateStatus: () => true });
+            const tresc = typeof odpowiedz.data === 'string'
+                ? odpowiedz.data.slice(0, 120)
+                : JSON.stringify(odpowiedz.data).slice(0, 120);
+            this.logger.info(`[CALC-BOOST] 🌐 Test API puli: HTTP ${odpowiedz.status}, treść: ${tresc}`);
+        } catch (error) {
+            this.logger.warn(
+                `[CALC-BOOST] ⚠️ Test API puli nieudany: ${error.code || ''} ${error.message} ` +
+                '(kontener nie dociera do backendu puli)'
+            );
+        }
+    }
+
+    /**
      * Uruchamia przeglądarkę, dołącza do puli i trzyma ją przez zadany czas.
      * Zwraca statystyki sesji. `onConnected` dostaje informację o połączeniu, gdy tylko
      * strona zamelduje się w puli (albo gdy minie limit oczekiwania).
@@ -146,6 +172,8 @@ class ComputeBoostService {
         };
 
         let browser = null;
+
+        await this._sprawdzApi();
 
         try {
             // `chrome-headless-shell` to stara binarka headless - puppeteer obsługuje ją
