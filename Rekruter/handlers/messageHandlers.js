@@ -91,16 +91,23 @@ async function handleMessage(
     }
   }
 
-  const step = state.userStates.get(message.author.id)?.step;
+  // Oba kanały rekrutacyjne działają tak samo: wszystko, co nie jest częścią trwającej
+  // rekrutacji, jest kasowane (gałąź `default` poniżej)
+  const kanalyRekrutacyjne = [RECRUIT_CHANNEL_ID, config.channels.joinClan].filter(Boolean);
+  if (!kanalyRekrutacyjne.includes(message.channel.id)) return;
 
-  // Kanał z przyciskiem „Chcę dołączyć do klanu” NIE jest kanałem wyłącznie rekrutacyjnym,
-  // więc reagujemy tam tylko na osoby z rozpoczętą rekrutacją. Bez tego warunku wpadłyby
-  // one w `default` poniżej i bot kasowałby wszystkim wszystkie wiadomości
-  if (message.channel.id === config.channels.joinClan && message.channel.id !== RECRUIT_CHANNEL_ID) {
-    if (!step) return;
-  } else if (message.channel.id !== RECRUIT_CHANNEL_ID) {
-    return;
-  }
+  // ⚠️ Kasujemy WYŁĄCZNIE świeżo napisane wiadomości. Edycja wiadomości sprzed uruchomienia
+  // bota nie może skończyć się jej usunięciem: dziś nikt nie podpina `MessageUpdate`, więc
+  // ten warunek nigdy nie zadziała, ale jest bezpiecznikiem, gdyby ktoś kiedyś to zrobił
+  if (message.editedTimestamp) return;
+
+  // ⚠️ Rekrutacja toczy się WYŁĄCZNIE na kanale, na którym się zaczęła — czyli tam, gdzie
+  // kliknięto przycisk. Napisanie czegokolwiek na drugim kanale rekrutacyjnym nie może
+  // podjąć rozmowy; taka wiadomość jest po prostu kasowana. Rozmowę da się rozpocząć
+  // tylko przyciskiem, nigdy wiadomością
+  const stanRekrutacji = state.userStates.get(message.author.id);
+  const kanalRozmowy   = stanRekrutacji?.channelId || RECRUIT_CHANNEL_ID;
+  const step = kanalRozmowy === message.channel.id ? stanRekrutacji?.step : null;
 
   switch (step) {
     case 'waiting_core_stock':
@@ -186,7 +193,11 @@ async function handleCoreStockImage(msg, state, config) {
     }
 
     state.userInfo.get(msg.author.id).coreStock = result.items;
-    state.userStates.set(msg.author.id, { step: 'waiting_lunar_level' });
+    // ...stan poprzedni - żeby nie zgubić `channelId`, czyli kanału, na którym toczy się rekrutacja
+    state.userStates.set(msg.author.id, {
+      ...state.userStates.get(msg.author.id),
+      step: 'waiting_lunar_level'
+    });
 
     await updateUserEphemeralReply(
       msg.author.id,
@@ -221,6 +232,7 @@ async function handleLunarLevelInput(msg, state, config) {
 
   state.userInfo.get(msg.author.id).lunarLevel = lvl;
   state.userStates.set(msg.author.id, {
+    ...state.userStates.get(msg.author.id),
     step: 'waiting_lunar_points',
     lunarLevel: lvl
   });
@@ -249,6 +261,7 @@ async function handleLunarPointsInput(msg, state, config) {
 
   state.userInfo.get(msg.author.id).lunarPoints = pts;
   state.userStates.set(msg.author.id, {
+    ...state.userStates.get(msg.author.id),
     step:        'waiting_image',
     lunarLevel:  state.userInfo.get(msg.author.id).lunarLevel,
     lunarPoints: pts

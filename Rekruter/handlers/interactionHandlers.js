@@ -263,7 +263,8 @@ async function handleJoinClanStart(interaction, state, config) {
   }
 
   // Bez trybu AI lecimy klasycznymi krokami, tyle że z pominięciem wyboru ścieżki
-  state.userStates.set(userId, { step: 'waiting_core_stock' });
+  // channelId - rekrutacja toczy się wyłącznie na kanale, na którym kliknięto przycisk
+  state.userStates.set(userId, { step: 'waiting_core_stock', channelId: interaction.channelId });
 
   const examplePath = path.join(__dirname, '../files/Core_Stock.jpg');
   const files = fs.existsSync(examplePath)
@@ -284,7 +285,8 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
   const logger = createBotLogger('Rekruter');
   const userId = interaction.user.id;
 
-  state.userStates.set(userId, { step: 'ai_interview' });
+  // channelId - rekrutacja toczy się wyłącznie na kanale, na którym kliknięto przycisk
+  state.userStates.set(userId, { step: 'ai_interview', channelId: interaction.channelId });
 
   await interaction.reply({
     content: config.messages.aiInterviewStart,
@@ -318,7 +320,7 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
 /* --------------------------- ścieżka „Szukam klanu” ---------------------- */
 async function handleLookingClan(interaction, state, config) {
   state.userInfo.get(interaction.user.id).purpose = 'Szukam klanu';
-  state.userStates.set(interaction.user.id, { step: 'waiting_core_stock' });
+  state.userStates.set(interaction.user.id, { step: 'waiting_core_stock', channelId: interaction.channelId });
 
   const examplePath = path.join(__dirname, '../files/Core_Stock.jpg');
   const files = fs.existsSync(examplePath)
@@ -337,7 +339,7 @@ async function handleLookingClan(interaction, state, config) {
 /* --------------------------- ścieżka „Inny cel” -------------------------- */
 async function handleOtherPurpose(interaction, state, config) {
   state.userInfo.get(interaction.user.id).purpose = 'Przyszedłem w innym celu';
-  state.userStates.set(interaction.user.id, { step: 'waiting_image' });
+  state.userStates.set(interaction.user.id, { step: 'waiting_image', channelId: interaction.channelId });
 
   await updateUserEphemeralReply(
     interaction.user.id,

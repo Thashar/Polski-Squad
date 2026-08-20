@@ -45,9 +45,15 @@ wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283
   informację, że cel jest już zapisany i nie ma o niego pytać); bez trybu AI lecą klasyczne kroki
   od razu od `waiting_core_stock`
 - **Ponowne kliknięcie zaczyna rekrutację od zera** (czyści kartę kandydata i porzuca poprzednią rozmowę)
-- ⚠️ **Ten kanał NIE jest kanałem wyłącznie rekrutacyjnym**, więc `handleMessage` reaguje tam wyłącznie
-  na osoby z rozpoczętą rekrutacją (`userStates`). Bez tego warunku cudze wiadomości wpadałyby
-  w gałąź `default` i bot kasowałby na kanale wszystko jak leci
+- Kanał działa dokładnie jak kanał rekrutacyjny: **wszystko, co nie jest częścią trwającej rekrutacji,
+  jest kasowane** (gałąź `default` w `handleMessage`)
+- ⚠️ **Rozmowę da się rozpocząć wyłącznie przyciskiem, nigdy wiadomością.** `userStates` trzyma
+  `channelId` kanału, na którym kliknięto przycisk, a `handleMessage` podejmuje rozmowę tylko tam —
+  napisanie czegokolwiek na drugim kanale rekrutacyjnym kończy się skasowaniem wiadomości.
+  Krok zmieniany w trakcie rekrutacji zachowuje `channelId` (`...state.userStates.get(id)`)
+- ⚠️ **Edycja starej wiadomości nie może jej skasować** — bot nasłuchuje wyłącznie `MessageCreate`,
+  a dodatkowy warunek `if (message.editedTimestamp) return;` pilnuje tego również na wypadek,
+  gdyby ktoś kiedyś podpiął `MessageUpdate`
 
 ---
 
@@ -115,6 +121,10 @@ jest kasowane od razu po odczycie.
   `tool_use`/`tool_result`** (API odrzuca niesparowany ogon), więc odcina zawsze do zwykłej wiadomości użytkownika
 - Maks. 4 iteracje narzędzi na turę — zabezpieczenie przed zapętleniem modelu
 - Błąd API nie zrywa rozmowy: kandydat dostaje komunikat i może napisać ponownie, historia zostaje
+
+**Styl wypowiedzi:** pierwsza osoba liczby pojedynczej, bez komentowania własnych zapisów danych,
+maksymalnie jedno emoji na wiadomość, **pogrubienie** na kluczowej rzeczy w danej wiadomości
+(nazwa ekranu, ścieżka w grze, zakres liczb) — jedno, dwa miejsca, nigdy całe zdania.
 
 **Prezentacja w Discordzie:** rozmowa toczy się w jednej efemerycznej odpowiedzi, edytowanej po każdej
 turze i pokazującej **transkrypcję ostatnich 6 wypowiedzi** (wiadomości kandydata są kasowane z kanału,
