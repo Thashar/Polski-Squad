@@ -116,19 +116,41 @@ class ComputeBoostService {
      */
     async _sprawdzApi() {
         const axios = require('axios');
-        const url = `${this.config.apiUrl.replace(/\/$/, '')}/socket.io/?EIO=4&transport=polling`;
+        const dns = require('dns').promises;
+        const apiHost = new URL(this.config.apiUrl).hostname;
 
-        try {
-            const odpowiedz = await axios.get(url, { timeout: 10000, validateStatus: () => true });
-            const tresc = typeof odpowiedz.data === 'string'
-                ? odpowiedz.data.slice(0, 120)
-                : JSON.stringify(odpowiedz.data).slice(0, 120);
-            this.logger.info(`[CALC-BOOST] 🌐 Test API puli: HTTP ${odpowiedz.status}, treść: ${tresc}`);
-        } catch (error) {
-            this.logger.warn(
-                `[CALC-BOOST] ⚠️ Test API puli nieudany: ${error.code || ''} ${error.message} ` +
-                '(kontener nie dociera do backendu puli)'
-            );
+        // DNS: adres wyłącznie w IPv6 przy kontenerze bez trasy IPv6 daje dokładnie ten
+        // objaw, który widzieliśmy - ERR_ADDRESS_UNREACHABLE na hoście wyzwania Cloudflare
+        for (const host of [apiHost, 'challenges.cloudflare.com']) {
+            const v4 = await dns.resolve4(host).catch(e => [e.code]);
+            const v6 = await dns.resolve6(host).catch(e => [e.code]);
+            this.logger.info(`[CALC-BOOST] 🌐 DNS ${host}: A=${v4.join(',')} | AAAA=${v6.join(',')}`);
+        }
+
+        const naglowkiPrzegladarki = {
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8',
+            'Origin': this.config.url.replace(/\/$/, ''),
+            'Referer': this.config.url
+        };
+
+        const probki = [
+            ['API puli (gołe żądanie)', `${this.config.apiUrl.replace(/\/$/, '')}/socket.io/?EIO=4&transport=polling`, {}],
+            ['API puli (nagłówki przeglądarki)', `${this.config.apiUrl.replace(/\/$/, '')}/socket.io/?EIO=4&transport=polling`, naglowkiPrzegladarki],
+            ['skrypt wyzwania Cloudflare', 'https://challenges.cloudflare.com/turnstile/v0/api.js', naglowkiPrzegladarki]
+        ];
+
+        for (const [nazwa, url, headers] of probki) {
+            try {
+                const odpowiedz = await axios.get(url, { timeout: 10000, headers, validateStatus: () => true });
+                const tresc = typeof odpowiedz.data === 'string'
+                    ? odpowiedz.data.replace(/\s+/g, ' ').slice(0, 90)
+                    : JSON.stringify(odpowiedz.data).slice(0, 90);
+                this.logger.info(`[CALC-BOOST] 🌐 Test — ${nazwa}: HTTP ${odpowiedz.status}, treść: ${tresc}`);
+            } catch (error) {
+                this.logger.warn(`[CALC-BOOST] ⚠️ Test — ${nazwa}: ${error.code || ''} ${error.message}`);
+            }
         }
     }
 
@@ -225,13 +247,23 @@ class ComputeBoostService {
             // tym ścisku pada TAKŻE handshake socket.io do API puli - czyli to, po co tu jesteśmy.
             // Nikt tego widoku nie ogląda, więc wszystko poza kodem i danymi jest odcinane.
             const BLOKOWANE_TYPY = new Set(['image', 'media', 'font']);
-            const BLOKOWANE_HOSTY = /wsrv\.nl|google-analytics|googletagmanager|monitoring\.exp0\.dev|challenges\.cloudflare\.com/;
+            const BLOKOWANE_HOSTY = /wsrv\.nl|google-analytics|googletagmanager|monitoring\.exp0\.dev/;
+            // ⚠️ Cloudflare NIGDY nie jest odcinany. Przed API puli stoi wyzwanie bota
+            // ("Just a moment...") i bez skryptów z challenges.cloudflare.com przeglądarka
+            // nie ma jak go przejść - handshake socket.io kończy się wtedy kodem 403.
+            const ZAWSZE_PRZEPUSZCZAJ = /cloudflare\.com/;
 
             await page.setRequestInterception(true);
             page.on('request', request => {
-                if (BLOKOWANE_TYPY.has(request.resourceType()) || BLOKOWANE_HOSTY.test(request.url())) {
+                const url = request.url();
+                const blokuj = !ZAWSZE_PRZEPUSZCZAJ.test(url)
+                    && (BLOKOWANE_TYPY.has(request.resourceType()) || BLOKOWANE_HOSTY.test(url));
+
+                if (blokuj) {
                     stats.blockedRequests++;
-                    request.abort().catch(() => {});
+                    // 'aborted' zamiast domyślnego 'failed' - inaczej nasze własne blokady
+                    // raportują się jako net::ERR_FAILED i wyglądają w logu jak awarie sieci
+                    request.abort('aborted').catch(() => {});
                     return;
                 }
                 request.continue().catch(() => {});
