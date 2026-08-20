@@ -113,6 +113,10 @@ async function handleMessage(
       await handleImageInput(message, state, config, client);
       break;
 
+    case 'ai_interview':
+      await handleAiInterviewMessage(message, state, config, client);
+      break;
+
     default:
       await safeDeleteMessage(message); // niepotrzebna wiadomość
   }
@@ -396,6 +400,181 @@ async function handleImageInput(msg, state, config, client) {
     }
   }
   state.userStates.delete(msg.author.id);
+}
+
+/* ========================================================================== */
+/*                        ROZMOWA REKRUTACYJNA Z AI                           */
+/* ========================================================================== */
+
+/**
+ * Obsługuje jedną wiadomość kandydata w trybie rozmowy z AI.
+ *
+ * Wiadomość (tekst albo zdjęcie) jest kasowana z kanału tak samo jak w klasycznej
+ * ścieżce, a cała rozmowa toczy się w efemerycznej odpowiedzi widocznej tylko
+ * dla kandydata.
+ */
+async function handleAiInterviewMessage(msg, state, config, client) {
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+
+  const serwis = state.aiInterviewService;
+  const userId = msg.author.id;
+  const kanal  = msg.channel;
+
+  if (!serwis?.czyAktywny()) {
+    await safeDeleteMessage(msg);
+    return;
+  }
+
+  const zalacznik = msg.attachments.first();
+  const tekst     = msg.content?.trim();
+
+  if (!zalacznik && !tekst) {
+    await safeDeleteMessage(msg);
+    await serwis.pokazOdpowiedz(
+      userId,
+      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewEmptyMessage),
+      state,
+      kanal
+    );
+    return;
+  }
+
+  if (zalacznik && !zalacznik.contentType?.startsWith('image/')) {
+    await safeDeleteMessage(msg);
+    await serwis.pokazOdpowiedz(
+      userId,
+      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewInvalidImage),
+      state,
+      kanal
+    );
+    return;
+  }
+
+  await serwis.pokazOdpowiedz(
+    userId,
+    serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewThinking),
+    state,
+    kanal
+  );
+
+  let wynik;
+
+  try {
+    if (zalacznik) {
+      const imgPath = path.join(
+        __dirname,
+        '../temp',
+        `ai_${Date.now()}_${userId}.png`
+      );
+      await downloadImage(zalacznik.url, imgPath);
+      await safeDeleteMessage(msg);
+
+      const analiza = await serwis.przeanalizujZdjecie(userId, imgPath, state);
+
+      if (analiza.typ === 'ekwipunek') {
+        // Ten screen ląduje w podsumowaniu na kanale klanowym - zostawiamy go na dysku
+        const poprzedni = state.userImages.get(userId);
+        if (poprzedni && poprzedni !== imgPath) await usunPlik(poprzedni);
+        state.userImages.set(userId, imgPath);
+      } else {
+        await usunPlik(imgPath);
+      }
+
+      wynik = await serwis.wiadomoscSystemowa(userId, analiza.opis, state, '📷 *przesłano zdjęcie*');
+    } else {
+      await safeDeleteMessage(msg);
+      wynik = await serwis.wiadomoscUzytkownika(userId, tekst, state);
+    }
+  } catch (error) {
+    logger.error(`[AI_WYWIAD] ❌ Błąd tury rozmowy dla ${msg.author.username}: ${error.message}`);
+    await serwis.pokazOdpowiedz(
+      userId,
+      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewError),
+      state,
+      kanal
+    );
+    return;
+  }
+
+  if (!wynik) {
+    // Rozmowa zniknęła z pamięci (restart bota albo sprzątanie) - kończymy po cichu
+    state.userStates.delete(userId);
+    return;
+  }
+
+  await serwis.pokazOdpowiedz(userId, serwis.zbudujTranskrypcje(userId), state, kanal);
+
+  if (wynik.przerwane) {
+    logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
+    serwis.zakonczRozmowe(userId);
+    state.userStates.delete(userId);
+    return;
+  }
+
+  if (wynik.zakonczone) {
+    await finalizujRekrutacjeAI(msg, state, config, client);
+  }
+}
+
+/**
+ * Domyka rekrutację po zakończonej rozmowie z AI.
+ *
+ * Od tego miejsca w dół wszystko dzieje się tak samo jak w klasycznej ścieżce:
+ * propozycja zmiany nicku, przydział klanu i podsumowanie na kanale.
+ */
+async function finalizujRekrutacjeAI(msg, state, config, client) {
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+
+  const userId = msg.author.id;
+  const info   = state.userInfo.get(userId);
+
+  state.aiInterviewService.zakonczRozmowe(userId);
+  state.userStates.delete(userId);
+
+  if (!info) {
+    logger.error('[AI_WYWIAD] ❌ Brak danych kandydata przy finalizacji');
+    return;
+  }
+
+  state.client = client;
+  state.config = config;
+
+  const nick = info.playerNick && info.playerNick !== 'Nieznany' ? info.playerNick : null;
+
+  /* ---------------- ścieżka „inne cele” ---------------- */
+  if (info.purpose === 'Przyszedłem w innym celu') {
+    if (nick) {
+      await proposeNicknameChange(msg.author, nick, msg.member, null, state, true);
+    } else {
+      await finishOtherPurposeRecruitment(msg.member, state);
+    }
+    return;
+  }
+
+  /* ---------------- ścieżka „szukam klanu” -------------- */
+  const pq = {
+    member:      msg.member,
+    lunarPoints: info.lunarPoints ?? null,
+    user:        msg.author,
+    config,
+    client,
+    guildId:     msg.guild?.id ?? null
+  };
+
+  if (nick) {
+    await proposeNicknameChange(msg.author, nick, msg.member, pq, state, false);
+  } else {
+    await sendPendingQualification(userId, pq, state);
+  }
+}
+
+async function usunPlik(sciezka) {
+  try {
+    const fs = require('fs').promises;
+    await fs.unlink(sciezka);
+  } catch {/* pomijamy */}
 }
 
 module.exports = { handleMessage };

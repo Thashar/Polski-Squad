@@ -12,6 +12,7 @@ const MemberNotificationService = require('./services/memberNotificationService'
 const MemberCacheService = require('./services/memberCacheService');
 const ClanRoleChangeService = require('./services/clanRoleChangeService');
 const NotificationPreferencesService = require('./services/notificationPreferencesService');
+const AIInterviewService = require('./services/aiInterviewService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { getCacheOptions } = require('../utils/discordCache');
@@ -23,6 +24,7 @@ const memberNotificationService = new MemberNotificationService(config);
 const memberCacheService = new MemberCacheService(config);
 const notificationPreferencesService = new NotificationPreferencesService();
 const clanRoleChangeService = new ClanRoleChangeService(config, notificationPreferencesService);
+const aiInterviewService = new AIInterviewService(config);
 
 const client = new Client({
     ...getCacheOptions(),
@@ -53,6 +55,7 @@ const sharedState = {
     userImages,
     pendingOtherPurposeFinish,
     notificationPreferencesService,
+    aiInterviewService,
     client,
     config
 };
@@ -79,7 +82,9 @@ const INTERWAL_SPRZATANIA_MS = 6 * 60 * 60 * 1000;
 
 const mapyRekrutacji = [
     userStates, userInfo, nicknameRequests, userEphemeralReplies,
-    pendingQualifications, userImages, pendingOtherPurposeFinish
+    pendingQualifications, userImages, pendingOtherPurposeFinish,
+    // Historie rozmów z AI - też kluczowane po userId i też zostawałyby w pamięci
+    aiInterviewService.rozmowy
 ];
 
 // userId -> kiedy sprzątacz zobaczył go po raz pierwszy
@@ -136,7 +141,8 @@ async function sprzatajOsieroconeObrazy() {
         let usuniete = 0;
 
         for (const nazwa of pliki) {
-            if (!nazwa.startsWith('img_')) continue;
+            // img_ - klasyczna ścieżka, ai_ - zdjęcia z rozmowy prowadzonej przez AI
+            if (!nazwa.startsWith('img_') && !nazwa.startsWith('ai_')) continue;
 
             const pelna = path.join(katalog, nazwa);
             try {

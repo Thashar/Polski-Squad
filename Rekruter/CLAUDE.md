@@ -25,6 +25,83 @@
 4. Wpisanie punktów I fazy (0–9999) → `step: waiting_image`
 5. Zdjęcie postaci (OCR) → `lunarPoints` porównane z progami klanów → kwalifikacja → embed powitalny
 
+**Flow rekrutacji (ścieżka "Przyszedłem w innym celu"):**
+1. Klik "Przyszedłem w innym celu" → `step: waiting_image`
+2. Zdjęcie postaci (OCR) → propozycja zmiany nicku → rola `VERIFIED` → powitanie na kanale WELCOME
+
+---
+
+## 🤖 Tryb rozmowy z AI (`REKRUTER_AI_INTERVIEW`)
+
+Alternatywa dla ankiety z przyciskami: zamiast sztywnych kroków kandydat prowadzi **swobodną rozmowę
+z rekruterem-AI**, który po drodze wyciąga te same dane. Przełącznik jest niezależny — bez
+`REKRUTER_AI_INTERVIEW=true` (albo bez `ANTHROPIC_API_KEY`) bot działa dokładnie jak dotąd, cała
+klasyczna ścieżka zostaje nietknięta w kodzie.
+
+**Plik:** `services/aiInterviewService.js`
+
+**Co się zmienia:** po kliknięciu „Oczywiście, że tak!" (deklaracja polskości) **nie pojawiają się
+przyciski wyboru ścieżki** — startuje rozmowa (`step: 'ai_interview'`). Wszystko poniżej zebrania
+danych — propozycja zmiany nicku, przydział klanu, embed podsumowania — jest **wspólne z klasyczną
+ścieżką**, bo AI zapisuje dane do `state.userInfo` w tym samym kształcie.
+
+**Zbierane dane** (identyczne jak w ankiecie):
+
+| Dane | Skąd | Kto zapisuje |
+|---|---|---|
+| Cel wizyty (`purpose`) | rozmowa | AI przez `zapisz_dane` |
+| Poziom LME (`lunarLevel`, 1–16) | rozmowa | AI przez `zapisz_dane` |
+| Punkty I fazy (`lunarPoints`, 0–9999) | rozmowa | AI przez `zapisz_dane` |
+| `coreStock` | zdjęcie | OCR (`analyzeCoreStockImage`) |
+| `playerNick`, `characterAttack` | zdjęcie | OCR (`analyzeRecruitmentImage` lub Tesseract) |
+
+⚠️ **Nick, atak i Core Stock są celowo NIEDOSTĘPNE dla modelu jako narzędzie** — schemat `zapisz_dane`
+przyjmuje wyłącznie cel i dwie liczby z LME. Gdyby AI mogło zapisać nick albo atak z tekstu, kandydat
+podałby dowolne wartości i ominął OCR.
+
+**Narzędzia (tool use):**
+- `zapisz_dane` — cel / poziom / punkty; waliduje zakresy po stronie bota i **zwraca modelowi listę
+  tego, czego jeszcze brakuje** (dzięki temu model wie, o co pytać dalej, bez dopisywania stanu do promptu)
+- `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
+  czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"
+
+**Rozpoznawanie zdjęć bez pytania modelu:** typ screena wynika z tego, czego brakuje —
+najpierw próba Core Stock (jeśli kandydat szuka klanu i jeszcze go nie ma), potem ekran postaci.
+Wynik wraca do rozmowy jako wiadomość `[SYSTEM] …`, której kandydat nie widzi. Screen postaci
+zostaje w `temp/` (`ai_<timestamp>_<userId>.png`, trafia do embeda podsumowania), zdjęcie Core Stock
+jest kasowane od razu po odczycie.
+
+**Ustawienia zapytania do API:**
+- Model domyślnie `claude-opus-5`, nadpisywalny przez `REKRUTER_AI_INTERVIEW_MODEL`
+- `output_config.effort` (domyślnie `low`) wysyłany **tylko dla modeli, które go obsługują** — starsze
+  (np. `claude-3-haiku`) odrzuciłyby to błędem 400
+- **Myślenie zostaje włączone.** Przy wyłączonym modele potrafią wypisać wywołanie narzędzia jako
+  zwykły tekst — tura kończy się „sukcesem", a dane nigdy się nie zapisują. Kosztem sterujemy
+  poziomem `effort`, nie wyłączaniem myślenia
+- Brak `temperature` — nowsze modele odrzucają ten parametr
+- **Prompt caching:** prompt systemowy i definicje narzędzi są niezmienne i oznaczone
+  `cache_control: ephemeral`, więc prefiks cache'uje się między turami i między kandydatami
+
+**Bezpieczniki:**
+- `maxTurns` (domyślnie 40) — po przekroczeniu rozmowa jest zamykana z prośbą o kontakt z moderatorem
+- `historyLimit` (domyślnie 30 wiadomości) — przycinanie historii **nigdy nie rozrywa pary
+  `tool_use`/`tool_result`** (API odrzuca niesparowany ogon), więc odcina zawsze do zwykłej wiadomości użytkownika
+- Maks. 4 iteracje narzędzi na turę — zabezpieczenie przed zapętleniem modelu
+- Błąd API nie zrywa rozmowy: kandydat dostaje komunikat i może napisać ponownie, historia zostaje
+
+**Prezentacja w Discordzie:** rozmowa toczy się w jednej efemerycznej odpowiedzi, edytowanej po każdej
+turze i pokazującej **transkrypcję ostatnich 6 wypowiedzi** (wiadomości kandydata są kasowane z kanału,
+więc bez transkrypcji widziałby tylko ostatnie zdanie bota). Token interakcji Discorda żyje 15 minut —
+gdy edycja przestaje działać, bot pisze na kanale z pingiem i kasuje tę wiadomość po 2 minutach,
+żeby rozmowa nie urwała się w ciszy.
+
+**Persistencja:** historie rozmów żyją wyłącznie w pamięci (`aiInterviewService.rozmowy`, klucz = userId),
+tak samo jak pozostałe mapy stanu rekrutacji — restart bota przerywa rozmowy w toku i kandydat zaczyna
+od nowa przyciskiem na kanale. Mapa jest podpięta pod `uruchomSprzatanieRekrutacji()` w `index.js`
+(retencja 30 dni), a `sprzatajOsieroconeObrazy()` kasuje też pliki `ai_*` z `temp/`.
+
+---
+
 **Kwalifikacja klanów (dynamiczna):**
 - `services/stalkerThresholdsService.js` - czyta `shared_data/clan_thresholds.json` z cache store'a (wspólnego ze Stalkerem, bez wymuszanego odświeżania)
 - Porównanie: `lunarPoints >= thresholds[clanKey]` od Main w dół → najwyższy pasujący klan
@@ -97,6 +174,15 @@ MAIN_CLAN_ROLE=role_id
 USE_AI_OCR=false
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ANTHROPIC_MODEL=claude-3-haiku-20240307
+
+# Rozmowa rekrutacyjna z AI (opcjonalne, niezależne od USE_AI_OCR)
+# true = po kliknięciu "Oczywiście, że tak!" startuje swobodna rozmowa zamiast ankiety z przyciskami
+# Wymaga ANTHROPIC_API_KEY - bez niego tryb sam się wyłącza z ostrzeżeniem w logu
+REKRUTER_AI_INTERVIEW=false
+REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5   # domyślnie claude-opus-5
+REKRUTER_AI_INTERVIEW_EFFORT=low            # low | medium | high (tylko modele 4.5+)
+REKRUTER_AI_INTERVIEW_MAX_TURNS=40          # limit wiadomości kandydata w jednej rozmowie
+REKRUTER_AI_INTERVIEW_HISTORY=30            # ile wiadomości trafia do kontekstu modelu
 
 # Opcjonalne - z fallbackiem do wartości produkcyjnych
 REKRUTER_MAIN_CHANNEL=channel_id          # Kanał główny (notyfikacje dołączeń/boostów)

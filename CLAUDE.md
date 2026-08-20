@@ -781,7 +781,7 @@ Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i re
 
 **Każdy bot ma własną szczegółową dokumentację:**
 
-1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + AI), kwalifikacja klanów
+1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + AI), kwalifikacja klanów, opcjonalna rozmowa rekrutacyjna z AI (`REKRUTER_AI_INTERVIEW`)
 2. **[Szkolenia Bot](Szkolenia/CLAUDE.md)** - Wątki treningowe z przypomnieniami, auto-zamykanie po 7 dniach
 3. **[Stalker Bot](Stalker/CLAUDE.md)** - 8 systemów (kary OCR, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
 4. **[Muteusz Bot](Muteusz/CLAUDE.md)** - Auto-moderacja, cache mediów, zarządzanie rolami, chaos mode
@@ -867,6 +867,12 @@ WAITING_ROOM_CHANNEL=poczekalnia
 USE_AI_OCR=false
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 ANTHROPIC_MODEL=claude-3-haiku-20240307
+# Rozmowa rekrutacyjna prowadzona przez AI zamiast ankiety z przyciskami (opcjonalne)
+REKRUTER_AI_INTERVIEW=false
+REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5
+REKRUTER_AI_INTERVIEW_EFFORT=low
+REKRUTER_AI_INTERVIEW_MAX_TURNS=40
+REKRUTER_AI_INTERVIEW_HISTORY=30
 # Przekazywanie wiadomości (robot2) - lista user ID rozdzielona przecinkami
 ROBOT=user_id_1,user_id_2
 

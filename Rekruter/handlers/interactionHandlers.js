@@ -194,6 +194,12 @@ async function handleYesPolish(interaction, state, config) {
     playerNick:      null
   });
 
+  // Tryb rozmowy z AI - zamiast przycisków wyboru ścieżki startuje wywiad
+  if (state.aiInterviewService?.czyAktywny()) {
+    await handleAiInterviewStart(interaction, state, config);
+    return;
+  }
+
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('looking_clan')
@@ -214,6 +220,43 @@ async function handleYesPolish(interaction, state, config) {
   });
 
   state.userEphemeralReplies.set(interaction.user.id, interaction);
+}
+
+/* --------------------------- start rozmowy z AI -------------------------- */
+async function handleAiInterviewStart(interaction, state, config) {
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+  const userId = interaction.user.id;
+
+  state.userStates.set(userId, { step: 'ai_interview' });
+
+  await interaction.reply({
+    content: config.messages.aiInterviewStart,
+    flags: MessageFlags.Ephemeral
+  });
+  state.userEphemeralReplies.set(userId, interaction);
+
+  try {
+    const wynik = await state.aiInterviewService.rozpocznij(userId, state);
+    await state.aiInterviewService.pokazOdpowiedz(
+      userId,
+      state.aiInterviewService.zbudujTranskrypcje(userId),
+      state,
+      interaction.channel
+    );
+    logger.info(`[AI_WYWIAD] Rozpoczęto rozmowę z ${interaction.user.username}`);
+    if (!wynik) logger.warn(`[AI_WYWIAD] Brak odpowiedzi startowej dla ${interaction.user.username}`);
+  } catch (error) {
+    logger.error(`[AI_WYWIAD] ❌ Nie udało się rozpocząć rozmowy: ${error.message}`);
+    state.userStates.delete(userId);
+    state.aiInterviewService.zakonczRozmowe(userId);
+    await state.aiInterviewService.pokazOdpowiedz(
+      userId,
+      config.messages.aiInterviewError,
+      state,
+      interaction.channel
+    );
+  }
 }
 
 /* --------------------------- ścieżka „Szukam klanu” ---------------------- */

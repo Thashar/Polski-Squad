@@ -98,6 +98,19 @@ module.exports = {
         }
     },
 
+    // Rozmowa rekrutacyjna prowadzona przez AI zamiast ankiety z przyciskami.
+    // Wyłączona domyślnie - bez tej zmiennej bot działa dokładnie jak dotąd.
+    aiInterview: {
+        enabled: process.env.REKRUTER_AI_INTERVIEW === 'true',
+        model: process.env.REKRUTER_AI_INTERVIEW_MODEL || 'claude-opus-5',
+        // low wystarcza do prowadzenia rozmowy i mocno skraca czas odpowiedzi
+        effort: process.env.REKRUTER_AI_INTERVIEW_EFFORT || 'low',
+        // Bezpiecznik przed rozmową bez końca (jedna tura = jedna wiadomość kandydata)
+        maxTurns: parseInt(process.env.REKRUTER_AI_INTERVIEW_MAX_TURNS || '40', 10),
+        // Ile wiadomości trafia do kontekstu modelu
+        historyLimit: parseInt(process.env.REKRUTER_AI_INTERVIEW_HISTORY || '30', 10)
+    },
+
     // Konfiguracja OCR
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
