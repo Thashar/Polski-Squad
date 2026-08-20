@@ -52,7 +52,6 @@ async function main() {
 
     const cacheDir = process.env.PUPPETEER_CACHE_DIR
         || path.join(process.env.HOME || os.homedir(), '.cache', 'puppeteer');
-    const browser = Browser.CHROMEHEADLESSSHELL;
     const platform = detectBrowserPlatform();
 
     if (!platform) {
@@ -60,17 +59,32 @@ async function main() {
         return;
     }
 
-    const buildId = await resolveBuildId(browser, platform, 'stable');
-    const executablePath = computeExecutablePath({ browser, buildId, cacheDir });
+    // Pełny Chrome, nie `chrome-headless-shell`. Shell to stary wariant headless bez części
+    // API przeglądarki - strona dostaje w nim uboższe środowisko niż u zwykłego użytkownika.
+    // Chrome jest cięższy (~200 MB), ale zachowuje się dokładnie jak przeglądarka na biurku.
+    // Shell zostaje jako zapas, gdyby Chrome nie chciał się pobrać albo uruchomić.
+    const kolejnosc = [Browser.CHROME, Browser.CHROMEHEADLESSSHELL];
 
-    if (fs.existsSync(executablePath)) {
-        log(`już pobrany: ${executablePath}`);
-        return;
+    for (const browser of kolejnosc) {
+        try {
+            const buildId = await resolveBuildId(browser, platform, 'stable');
+            const executablePath = computeExecutablePath({ browser, buildId, cacheDir });
+
+            if (fs.existsSync(executablePath)) {
+                log(`już pobrany: ${executablePath}`);
+                return;
+            }
+
+            log(`pobieram ${browser} ${buildId} do ${cacheDir} (jednorazowo)...`);
+            const zainstalowany = await install({ browser, buildId, cacheDir });
+            log(`gotowe: ${zainstalowany.executablePath}`);
+            return;
+        } catch (error) {
+            log(`⚠️ ${browser} nieudany: ${error.message}`);
+        }
     }
 
-    log(`pobieram ${browser} ${buildId} do ${cacheDir} (~150 MB, tylko raz)...`);
-    const zainstalowany = await install({ browser, buildId, cacheDir });
-    log(`gotowe: ${zainstalowany.executablePath}`);
+    throw new Error('żaden wariant przeglądarki nie dał się pobrać');
 }
 
 main().catch(error => {

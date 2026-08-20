@@ -52,9 +52,11 @@ class ComputeBoostService {
         const cacheDir = process.env.PUPPETEER_CACHE_DIR
             || path.join(process.env.HOME || os.homedir(), '.cache', 'puppeteer');
 
+        // Pełny Chrome ma pierwszeństwo - `chrome-headless-shell` to wariant okrojony
+        // i służy tylko za zapas, gdy Chrome nie dał się pobrać
         const warianty = [
-            ['chrome-headless-shell', 'chrome-headless-shell-linux64', 'chrome-headless-shell'],
-            ['chrome', 'chrome-linux64', 'chrome']
+            ['chrome', 'chrome-linux64', 'chrome'],
+            ['chrome-headless-shell', 'chrome-headless-shell-linux64', 'chrome-headless-shell']
         ];
 
         for (const [katalog, podkatalog, binarka] of warianty) {
@@ -240,9 +242,21 @@ class ComputeBoostService {
             // wyłącznie w trybie 'shell'. Pełny Chrome/Chromium idzie zwykłym `true`.
             const trybHeadless = executablePath.includes('headless-shell') ? 'shell' : true;
 
+            // Stały profil zamiast świeżego katalogu przy każdym uruchomieniu - ciasteczka
+            // i stan sesji przeżywają kolejne boosty, tak jak w normalnej przeglądarce.
+            // Leży w `temp/`, a nie w `data/`, więc nie wchodzi do codziennych backupów.
+            const userDataDir = path.join(__dirname, '..', 'temp', 'calc_boost_profile');
+            fs.mkdirSync(userDataDir, { recursive: true });
+
+            this.logger.info(
+                `[CALC-BOOST] 🧭 Przeglądarka: ${path.basename(executablePath)} ` +
+                `(tryb headless: ${trybHeadless === 'shell' ? 'shell — wariant okrojony' : 'pełny'})`
+            );
+
             browser = await puppeteer.launch({
                 executablePath,
                 headless: trybHeadless,
+                userDataDir,
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
