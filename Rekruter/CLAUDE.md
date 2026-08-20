@@ -234,6 +234,12 @@ ROBOT2_ACTIVATION_CHANNEL=channel_id      # Kanał z przyciskiem aktywacji Robot
 ## Najlepsze Praktyki
 
 - **Zawsze używaj createBotLogger('Rekruter')** zamiast console.log
+- **Kasowanie wiadomości i „duchy" w kliencie:** `safeDeleteMessage(message, opoznienieMs)` przyjmuje
+  opcjonalną zwłokę. Wiadomości spoza rekrutacji (gałąź `default` w `handleMessage`) kasujemy dopiero
+  po sekundzie — natychmiastowe usunięcie zostawia autorowi wiadomość-ducha: na serwerze jej już nie ma,
+  ale jego klient wciąż ją pokazuje i nie da się jej usunąć, dopóki aplikacja się nie odświeży.
+  Kroki rekrutacji zwłoki nie potrzebują, bo tam między wysłaniem a skasowaniem i tak mija chwila na obsługę.
+  Nieudane usunięcie loguje `error.message` i kod Discorda (**50013** = brak uprawnień, **10008** = wiadomości już nie ma)
 - **OCR debug:** `/ocr-debug true` włącza szczegółowe logowanie
 - **Walidacja danych:** Sprawdzaj formaty przed zapisem
 - **Persistencja przez `utils/jsonStore` (cache-first):** `data/notification_preferences.json`, dane monitorowania ról, cache boostów (`memberCacheService`) oraz plik relay Robot2 i ID wiadomości aktywacji. Odczyt z dysku raz, przy pierwszym sięgnięciu; zapis atomowy (plik tymczasowy + rename) jednocześnie do pliku i pamięci

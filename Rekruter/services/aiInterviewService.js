@@ -542,10 +542,11 @@ class AIInterviewService {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) return stopka || '';
 
+        // Podwójna spacja - przy emoji serwerowym pojedyncza wygląda w Discordzie na sklejoną z tekstem
         const wpisy = rozmowa.log.slice(-6).map(wpis =>
             wpis.kto === 'bot'
-                ? `${EMOJI_BOTA} ${wpis.tekst}`
-                : `${EMOJI_UZYTKOWNIKA} ${wpis.tekst}`
+                ? `${EMOJI_BOTA}  ${wpis.tekst}`
+                : `${EMOJI_UZYTKOWNIKA}  ${wpis.tekst}`
         );
         if (stopka) wpisy.push(stopka);
 

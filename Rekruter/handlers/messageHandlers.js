@@ -19,6 +19,9 @@ const {
 
 const AIOCRService = require('../services/aiOcrService');
 
+// Zwłoka przed skasowaniem wiadomości spoza rekrutacji - patrz `safeDeleteMessage`
+const OPOZNIENIE_KASOWANIA_MS = 1_000;
+
 const { proposeNicknameChange } = require('../services/nicknameService');
 const {
   finishOtherPurposeRecruitment,
@@ -131,7 +134,11 @@ async function handleMessage(
       break;
 
     default:
-      await safeDeleteMessage(message); // niepotrzebna wiadomość
+      // Niepotrzebna wiadomość. Kasujemy z chwilą zwłoki, bo natychmiastowe usunięcie
+      // zostawia autorowi „ducha" - wiadomości nie ma już na serwerze, ale jego klient
+      // wciąż ją pokazuje (znika dopiero po restarcie aplikacji). Kroki rekrutacji tego
+      // nie potrzebują: tam między wysłaniem a skasowaniem i tak mija chwila na obsługę
+      await safeDeleteMessage(message, OPOZNIENIE_KASOWANIA_MS);
   }
 }
 
