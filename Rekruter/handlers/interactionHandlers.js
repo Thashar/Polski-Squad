@@ -196,7 +196,8 @@ async function handleYesPolish(interaction, state, config) {
     lunarLevel:      null,
     lunarPoints:     null,
     characterAttack: null,
-    playerNick:      null
+    playerNick:      null,
+    referralSource:  null
   });
 
   // Tryb rozmowy z AI - zamiast przycisków wyboru ścieżki startuje wywiad
@@ -252,7 +253,8 @@ async function handleJoinClanStart(interaction, state, config) {
     lunarLevel:      null,
     lunarPoints:     null,
     characterAttack: null,
-    playerNick:      null
+    playerNick:      null,
+    referralSource:  null
   });
 
   logger.info(`[DOLACZ_DO_KLANU] ${interaction.user.username} rozpoczął rekrutację przyciskiem`);

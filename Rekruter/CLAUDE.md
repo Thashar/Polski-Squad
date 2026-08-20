@@ -72,22 +72,31 @@ przedstawia się jako bot rekrutacyjny Polskiego Squadu, żeby kandydat od razu 
 danych — propozycja zmiany nicku, przydział klanu, embed podsumowania — jest **wspólne z klasyczną
 ścieżką**, bo AI zapisuje dane do `state.userInfo` w tym samym kształcie.
 
-**Zbierane dane** (identyczne jak w ankiecie):
+**Zbierane dane:**
 
 | Dane | Skąd | Kto zapisuje |
 |---|---|---|
 | Cel wizyty (`purpose`) | rozmowa | AI przez `zapisz_dane` |
-| Poziom LME (`lunarLevel`, 1–16) | rozmowa | AI przez `zapisz_dane` |
 | Punkty I fazy (`lunarPoints`, 0–9999) | rozmowa | AI przez `zapisz_dane` |
+| Skąd o nas wie (`referralSource`) | rozmowa, **pytanie na sam koniec** | AI przez `zapisz_dane` |
 | `coreStock` | zdjęcie | OCR (`analyzeCoreStockImage`) |
 | `playerNick`, `characterAttack` | zdjęcie | OCR (`analyzeRecruitmentImage` lub Tesseract) |
 
+⚠️ **Rozmowa NIE pyta o poziom trudności LME** (`lunarLevel`) — do kwalifikacji liczą się wyłącznie
+punkty z I fazy. Klasyczna ścieżka krokowa nadal go zbiera, więc pole w embedzie pojawia się tylko tam.
+
+⚠️ **Pytanie „skąd się o nas dowiedziałeś?" zadawane jest wyłącznie w rekrutacji od zera** (przycisk
+„Oczywiście, że tak!") i **dopiero po zebraniu całej reszty** — `_brakujaceDane()` dopisuje je do braków
+dopiero, gdy nic innego nie brakuje. Rozmowa z przycisku „Chcę dołączyć do klanu" go nie zadaje
+(flaga `pytajOZrodlo` na rozmowie), bo ta osoba jest na serwerze od dawna. Odpowiedź trafia do embeda
+podsumowania jako pole **📣 Skąd o nas wie**.
+
 ⚠️ **Nick, atak i Core Stock są celowo NIEDOSTĘPNE dla modelu jako narzędzie** — schemat `zapisz_dane`
-przyjmuje wyłącznie cel i dwie liczby z LME. Gdyby AI mogło zapisać nick albo atak z tekstu, kandydat
+przyjmuje wyłącznie cel, punkty i źródło. Gdyby AI mogło zapisać nick albo atak z tekstu, kandydat
 podałby dowolne wartości i ominął OCR.
 
 **Narzędzia (tool use):**
-- `zapisz_dane` — cel / poziom / punkty; waliduje zakresy po stronie bota i **zwraca modelowi listę
+- `zapisz_dane` — cel / punkty / źródło; waliduje zakresy po stronie bota i **zwraca modelowi listę
   tego, czego jeszcze brakuje** (dzięki temu model wie, o co pytać dalej, bez dopisywania stanu do promptu)
 - `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
   czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"

@@ -105,6 +105,7 @@ async function sendUserSummary(user, channelId, state, config) {
   if (info.characterAttack)   txt += `<:L_ATK:1209754263228522516> **Atak postaci:** ${info.characterAttack.toLocaleString()}\n`;
   if (info.lunarLevel != null) txt += `<:I_LVL:1389178270888759296> **Lunar Mine – Poziom:** ${info.lunarLevel}\n`;
   if (info.lunarPoints != null) txt += `<:M_Medal:1209754405373747260> **Lunar Mine – Punkty I fazy:** ${info.lunarPoints.toLocaleString()}\n`;
+  if (info.referralSource)    txt += `📣 **Skąd o nas wie:** ${info.referralSource}\n`;
 
   const embed = new EmbedBuilder()
     .setColor(0x0099ff)

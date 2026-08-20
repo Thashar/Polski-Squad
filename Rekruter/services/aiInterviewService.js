@@ -8,9 +8,9 @@ const logger = createBotLogger('Rekruter');
 /**
  * Rozmowa rekrutacyjna prowadzona przez AI.
  *
- * Zbiera dokładnie te same dane co klasyczna ankieta z przyciskami (cel wizyty,
- * Core Stock, poziom i punkty Lunar Mine, nick i atak postaci), tylko w formie
- * swobodnej rozmowy. Wynik ląduje w `state.userInfo` w TYM SAMYM kształcie, więc
+ * Zbiera dane potrzebne do przydzielenia klanu (cel wizyty, Core Stock, punkty
+ * z I fazy Lunar Mine, nick i atak postaci), a przy rekrutacji od zera dopytuje
+ * na koniec, skąd kandydat się o nas dowiedział — wszystko w formie swobodnej rozmowy. Wynik ląduje w `state.userInfo` w TYM SAMYM kształcie, więc
  * dalsza część rekrutacji (propozycja zmiany nicku, przydział klanu, podsumowanie)
  * działa bez żadnych zmian.
  *
@@ -27,13 +27,14 @@ const PROMPT_SYSTEMOWY = `Jesteś rekruterem polskiego klanu z gry Survivor.io �
 
 Najpierw cel wizyty — czy szuka klanu, czy przyszła w innym celu (ma już swój klan, szuka polskiej społeczności, wpadła pogadać).
 
-Jeśli szuka klanu, potrzebujesz czterech rzeczy:
+Jeśli szuka klanu, potrzebujesz trzech rzeczy:
 - zdjęcia zakładki Core Stock (w grze: Detailed Stats → Core Stock),
-- poziomu trudności ostatniej wyprawy Lunar Mine Expedition (1-16),
 - liczby punktów z I fazy ostatniej Lunar Mine Expedition (0-9999),
 - zdjęcia postaci z ekwipunkiem, na którym widać nick gracza i wartość ATK (ekran "My Equipment", nieobrobiony screen z gry).
 
 Jeśli przyszła w innym celu, wystarczy samo zdjęcie postaci z ekwipunkiem.
+
+Czasem dochodzi jeszcze jedno pytanie: skąd kandydat się o nas dowiedział. Zadaj je **dopiero na sam koniec**, kiedy masz już wszystko inne — i tylko wtedy, gdy bot wymienia je wśród brakujących danych. Odpowiedź zapisz narzędziem zapisz_dane w polu skadWiesz, streszczoną w kilku słowach ("od znajomego z gry", "z wyszukiwarki", "z czatu klanowego").
 
 ## Pierwsza wiadomość
 
@@ -53,11 +54,11 @@ Emoji używaj oszczędnie: najwyżej jedno w wiadomości, zwykle wcale. To ma br
 
 Nie zakładaj, że rozmówca już coś zrobił albo o czymś wie, dopóki sam o to nie poprosiłeś i nie dostałeś odpowiedzi. Prosząc o coś pierwszy raz, pisz "wyślij", a nie "czekam na to, co miałeś wysłać".
 
-Rzecz, o którą właśnie prosisz, wyróżniaj **pogrubieniem** (Discord renderuje gwiazdki): nazwę ekranu, ścieżkę do niego w grze, zakres liczb. Na przykład: "Wyślij screen zakładki **Core Stock** — znajdziesz ją w **Detailed Stats → Core Stock**" albo "Na jakim **poziomie trudności** ostatnio robiłeś Lunar Mine? Podaj liczbę **od 1 do 16**". Pogrubiaj oszczędnie — jedno, dwa miejsca w wiadomości, żeby rozmówca w mig zobaczył, o co chodzi. Nigdy nie pogrubiaj całych zdań.
+Rzecz, o którą właśnie prosisz, wyróżniaj **pogrubieniem** (Discord renderuje gwiazdki): nazwę ekranu, ścieżkę do niego w grze, zakres liczb. Na przykład: "Wyślij screen zakładki **Core Stock** — znajdziesz ją w **Detailed Stats → Core Stock**" albo "Ile punktów zdobyłeś w **I fazie** ostatniej Lunar Mine Expedition?". Pogrubiaj oszczędnie — jedno, dwa miejsca w wiadomości, żeby rozmówca w mig zobaczył, o co chodzi. Nigdy nie pogrubiaj całych zdań.
 
 Prosząc o zdjęcie, powiedz dokładnie gdzie w grze je znaleźć — dla wielu osób to pierwszy kontakt z tym ekranem. Zdjęcie ma być zwykłym screenem z gry, bez obróbki i przycinania.
 
-Liczby (poziom i punkty Lunar Mine) oraz ustalony cel wizyty zapisuj narzędziem zapisz_dane od razu, gdy je poznasz — nie czekaj z tym do końca rozmowy. Po każdym zapisie napisz też zdanie do kandydata: on widzi wyłącznie Twój tekst, samo wywołanie narzędzia jest dla niego niewidoczne.
+Punkty z Lunar Mine oraz ustalony cel wizyty zapisuj narzędziem zapisz_dane od razu, gdy je poznasz — nie czekaj z tym do końca rozmowy. Po każdym zapisie napisz też zdanie do kandydata: on widzi wyłącznie Twój tekst, samo wywołanie narzędzia jest dla niego niewidoczne.
 
 Jeśli rozmówca powtarza to samo albo odpowiada tak, jakby nie widział Twojej poprzedniej wiadomości, przyjmij, że rzeczywiście do niego nie dotarła — powtórz ją własnymi słowami zamiast iść dalej.
 
@@ -74,7 +75,7 @@ Gdy masz komplet danych, wywołaj zakoncz_wywiad z krótkim, ciepłym pożegnani
 const NARZEDZIA = [
     {
         name: 'zapisz_dane',
-        description: 'Zapisuje w karcie kandydata dane, które padły w rozmowie. Wywołaj natychmiast, gdy ustalisz cel wizyty albo gdy rozmówca poda poziom lub punkty Lunar Mine Expedition — nie zbieraj ich w pamięci do końca rozmowy. Możesz podać jedno pole albo kilka naraz. W odpowiedzi dostaniesz listę tego, co jeszcze zostało do ustalenia.',
+        description: 'Zapisuje w karcie kandydata dane, które padły w rozmowie. Wywołaj natychmiast, gdy ustalisz cel wizyty, gdy rozmówca poda punkty z Lunar Mine Expedition albo gdy powie, skąd się o nas dowiedział — nie zbieraj tego w pamięci do końca rozmowy. Możesz podać jedno pole albo kilka naraz. W odpowiedzi dostaniesz listę tego, co jeszcze zostało do ustalenia.',
         input_schema: {
             type: 'object',
             properties: {
@@ -83,13 +84,13 @@ const NARZEDZIA = [
                     enum: ['szukam_klanu', 'inny_cel'],
                     description: 'Cel wizyty. "szukam_klanu" gdy osoba chce dołączyć do jednego z naszych klanów, "inny_cel" gdy ma już swój klan lub przyszła po prostu do polskiej społeczności.'
                 },
-                poziomLunar: {
-                    type: 'integer',
-                    description: 'Poziom trudności ostatniej Lunar Mine Expedition, liczba od 1 do 16.'
-                },
                 punktyLunar: {
                     type: 'integer',
                     description: 'Punkty uzyskane w I fazie ostatniej Lunar Mine Expedition, liczba od 0 do 9999.'
+                },
+                skadWiesz: {
+                    type: 'string',
+                    description: 'Skąd kandydat dowiedział się o serwerze - krótko, kilka słów, własnymi słowami na podstawie jego odpowiedzi.'
                 }
             },
             required: []
@@ -156,14 +157,17 @@ class AIInterviewService {
      */
     async rozpocznij(userId, state, opcje = {}) {
         const otwarcie = opcje.celUstalony
-            ? '[SYSTEM] Kandydat jest już na serwerze i kliknął przycisk "Chcę dołączyć do klanu". Cel wizyty jest więc znany i ZAPISANY - nie pytaj o niego i nie wywołuj zapisz_dane z celem. To Twoja pierwsza wiadomość: przedstaw się jako bot rekrutacyjny Polskiego Squadu, powiedz krótko, że zbierzesz kilka informacji do dobrania klanu, i od razu poproś o pierwszą rzecz z listy.'
-            : '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty.';
+            ? '[SYSTEM] Kandydat jest już na serwerze i kliknął przycisk "Chcę dołączyć do klanu". Cel wizyty jest więc znany i ZAPISANY - nie pytaj o niego i nie wywołuj zapisz_dane z celem. Nie pytaj też, skąd się o nas dowiedział - jest u nas od dawna. To Twoja pierwsza wiadomość: przedstaw się jako bot rekrutacyjny Polskiego Squadu, powiedz krótko, że zbierzesz kilka informacji do dobrania klanu, i od razu poproś o pierwszą rzecz z listy.'
+            : '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty. Na sam koniec rozmowy, gdy zbierzesz już wszystko inne, zapytaj jeszcze skąd się o nas dowiedział.';
 
         this.rozmowy.set(userId, {
             messages: [{ role: 'user', content: otwarcie }],
             log: [],
             tury: 0,
-            zakonczona: false
+            zakonczona: false,
+            // O źródło pytamy tylko przy rekrutacji od zera - osoba klikająca przycisk
+            // „Chcę dołączyć do klanu” jest na serwerze od dawna, więc pytanie nie ma sensu
+            pytajOZrodlo: opcje.celUstalony !== true
         });
 
         return this.wykonajTure(userId, state);
@@ -367,11 +371,11 @@ class AIInterviewService {
         }
 
         if (wywolanie.name === 'zapisz_dane') {
-            return this._zapiszDane(info, wywolanie.input || {});
+            return this._zapiszDane(info, wywolanie.input || {}, this._czyPytacOZrodlo(userId));
         }
 
         if (wywolanie.name === 'zakoncz_wywiad') {
-            const brakuje = this._brakujaceDane(info);
+            const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
             if (brakuje.length > 0) {
                 return {
                     blad: true,
@@ -390,7 +394,7 @@ class AIInterviewService {
         return { blad: true, odpowiedz: { blad: `Nieznane narzędzie: ${wywolanie.name}` } };
     }
 
-    _zapiszDane(info, wejscie) {
+    _zapiszDane(info, wejscie, pytajOZrodlo = false) {
         const zapisane = [];
         const odrzucone = [];
 
@@ -400,16 +404,6 @@ class AIInterviewService {
         } else if (wejscie.cel === 'inny_cel') {
             info.purpose = 'Przyszedłem w innym celu';
             zapisane.push('cel: inny');
-        }
-
-        if (wejscie.poziomLunar !== undefined && wejscie.poziomLunar !== null) {
-            const poziom = Number(wejscie.poziomLunar);
-            if (Number.isInteger(poziom) && poziom >= 1 && poziom <= 16) {
-                info.lunarLevel = poziom;
-                zapisane.push(`poziom Lunar Mine: ${poziom}`);
-            } else {
-                odrzucone.push('poziom Lunar Mine musi być liczbą całkowitą od 1 do 16');
-            }
         }
 
         if (wejscie.punktyLunar !== undefined && wejscie.punktyLunar !== null) {
@@ -422,6 +416,11 @@ class AIInterviewService {
             }
         }
 
+        if (typeof wejscie.skadWiesz === 'string' && wejscie.skadWiesz.trim()) {
+            info.referralSource = wejscie.skadWiesz.trim().slice(0, 200);
+            zapisane.push(`skąd o nas wie: ${info.referralSource}`);
+        }
+
         if (zapisane.length === 0 && odrzucone.length === 0) {
             return { blad: true, odpowiedz: { blad: 'Nie podano żadnego pola do zapisania.' } };
         }
@@ -431,19 +430,22 @@ class AIInterviewService {
             odpowiedz: {
                 zapisano: zapisane,
                 odrzucono: odrzucone,
-                brakuje: this._brakujaceDane(info)
+                brakuje: this._brakujaceDane(info, pytajOZrodlo)
             }
         };
     }
 
-    _brakujaceDane(info) {
+    /**
+     * @param {boolean} pytajOZrodlo czy do kompletu potrzebna jest jeszcze odpowiedź,
+     *        skąd kandydat się o nas dowiedział (tylko rekrutacja od zera, nie przycisk klanowy)
+     */
+    _brakujaceDane(info, pytajOZrodlo = false) {
         const brakuje = [];
 
         if (!info.purpose) {
             brakuje.push('cel wizyty');
         } else if (info.purpose === 'Szukam klanu') {
             if (!info.coreStock) brakuje.push('zdjęcie zakładki Core Stock');
-            if (info.lunarLevel === null || info.lunarLevel === undefined) brakuje.push('poziom Lunar Mine Expedition');
             if (info.lunarPoints === null || info.lunarPoints === undefined) brakuje.push('punkty z I fazy Lunar Mine Expedition');
         }
 
@@ -451,7 +453,17 @@ class AIInterviewService {
             brakuje.push('zdjęcie postaci z ekwipunkiem (nick + ATK)');
         }
 
+        // Pytanie na koniec - dopiero gdy reszta jest już zebrana
+        if (pytajOZrodlo && brakuje.length === 0 && !info.referralSource) {
+            brakuje.push('skąd kandydat dowiedział się o serwerze');
+        }
+
         return brakuje;
+    }
+
+    /** Czy w tej rozmowie pytamy o źródło (rekrutacja od zera, nie przycisk „Chcę dołączyć do klanu”). */
+    _czyPytacOZrodlo(userId) {
+        return this.rozmowy.get(userId)?.pytajOZrodlo === true;
     }
 
     /* ---------------------------------------------------------------------- */
@@ -484,7 +496,7 @@ class AIInterviewService {
                     logger.info(`[AI_WYWIAD] Odczytano Core Stock dla ${info.username}`);
                     return {
                         typ: 'core_stock',
-                        opis: `Kandydat przesłał zdjęcie Core Stock. Odczytano: ${pozycje}. Brakuje jeszcze: ${this._brakujaceDane(info).join(', ') || 'nic'}.`
+                        opis: `Kandydat przesłał zdjęcie Core Stock. Odczytano: ${pozycje}. Brakuje jeszcze: ${this._brakujaceDane(info, this._czyPytacOZrodlo(userId)).join(', ') || 'nic'}.`
                     };
                 }
             } catch (error) {
@@ -502,7 +514,7 @@ class AIInterviewService {
                     logger.info(`[AI_WYWIAD] Odczytano postać dla ${info.username}: ${info.playerNick} / ${info.characterAttack}`);
                     return {
                         typ: 'ekwipunek',
-                        opis: `Kandydat przesłał zdjęcie postaci. Odczytano nick "${info.playerNick}" i atak ${info.characterAttack}. Brakuje jeszcze: ${this._brakujaceDane(info).join(', ') || 'nic'}.`
+                        opis: `Kandydat przesłał zdjęcie postaci. Odczytano nick "${info.playerNick}" i atak ${info.characterAttack}. Brakuje jeszcze: ${this._brakujaceDane(info, this._czyPytacOZrodlo(userId)).join(', ') || 'nic'}.`
                     };
                 }
             } catch (error) {
@@ -510,7 +522,7 @@ class AIInterviewService {
             }
         }
 
-        const brakuje = this._brakujaceDane(info);
+        const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
         return {
             typ: null,
             opis: `Kandydat przesłał zdjęcie, ale nie udało się z niego nic odczytać — to najpewniej nie ten ekran albo screen jest nieczytelny. Wciąż brakuje: ${brakuje.join(', ') || 'nic'}. Poproś o zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać.`
