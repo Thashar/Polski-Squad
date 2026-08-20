@@ -15056,6 +15056,22 @@ async function handleCalcBoostCommand(interaction, sharedState) {
             }
         });
 
+        // Bez tego rozróżnienia zablokowany boost pokazywał same zera i wyglądał jak
+        // sesja, w której po prostu nikt nic nie liczył - a to zupełnie inna sytuacja
+        if (!stats.connected && stats.cloudflareChallenge) {
+            await wyslijPodsumowanie(new EmbedBuilder()
+                .setTitle('❌ Calc Boost — API puli odrzuciło serwer')
+                .setDescription(
+                    `Backend puli (**${new URL(boostConfig.apiUrl).hostname}**) wita ten serwer wyzwaniem ` +
+                    'Cloudflare („Just a moment…") i nie przepuszcza połączenia. Sama strona kalkulatora ' +
+                    'działa — blokada dotyczy wyłącznie API puli i adresu IP hostingu.\n\n' +
+                    'Rozwiązaniem jest wpuszczenie tego serwera przez autora sio-tools.'
+                )
+                .setColor('#ED4245')
+                .setTimestamp(), podsumowanieNaKanal);
+            return;
+        }
+
         await wyslijPodsumowanie(new EmbedBuilder()
             .setTitle('✅ Calc Boost zakończony')
             .setDescription(`Pula **${stats.poolId}** — serwer liczył przez ${czasOpis} na ${stats.threads} wątkach.`)

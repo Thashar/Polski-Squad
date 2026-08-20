@@ -141,6 +141,8 @@ class ComputeBoostService {
             ['skrypt wyzwania Cloudflare', 'https://challenges.cloudflare.com/turnstile/v0/api.js', naglowkiPrzegladarki]
         ];
 
+        let wyzwanie = false;
+
         for (const [nazwa, url, headers] of probki) {
             try {
                 const odpowiedz = await axios.get(url, { timeout: 10000, headers, validateStatus: () => true });
@@ -148,10 +150,18 @@ class ComputeBoostService {
                     ? odpowiedz.data.replace(/\s+/g, ' ').slice(0, 90)
                     : JSON.stringify(odpowiedz.data).slice(0, 90);
                 this.logger.info(`[CALC-BOOST] 🌐 Test — ${nazwa}: HTTP ${odpowiedz.status}, treść: ${tresc}`);
+
+                // "Just a moment..." to strona wyzwania Cloudflare - wiadomo wtedy z góry,
+                // że przeglądarka będzie musiała je rozwiązać, i czemu może nie dać rady
+                if (url.includes(apiHost) && odpowiedz.status === 403 && /Just a moment/i.test(String(odpowiedz.data))) {
+                    wyzwanie = true;
+                }
             } catch (error) {
                 this.logger.warn(`[CALC-BOOST] ⚠️ Test — ${nazwa}: ${error.code || ''} ${error.message}`);
             }
         }
+
+        return { wyzwanieCloudflare: wyzwanie };
     }
 
     /**
@@ -211,6 +221,7 @@ class ComputeBoostService {
             registered: false,
             poolUpdates: 0,
             blockedRequests: 0,
+            cloudflareChallenge: false,
             peakWorkers: 0,
             peakHosts: 0,
             peakAppetite: 0,
@@ -220,7 +231,8 @@ class ComputeBoostService {
 
         let browser = null;
 
-        await this._sprawdzApi();
+        const diagnoza = await this._sprawdzApi();
+        stats.cloudflareChallenge = diagnoza.wyzwanieCloudflare;
         const regulaDns = await this._regulaDnsCloudflare();
 
         try {
