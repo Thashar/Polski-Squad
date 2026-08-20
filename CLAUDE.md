@@ -1003,6 +1003,18 @@ AUTO_NPM_FIX_FORCE=false
 STALKER_LME_CHROMIUM_PATH=
 SKIP_CHROMIUM_INSTALL=0
 
+# ===== PULA PROXY DLA /calc-boost (Stalker) =====
+# System przepisany z Garego (ten sam, z którego korzysta /rivals). IP hostingu jest
+# blokowane przez Cloudflare przed API puli obliczeniowej, więc przeglądarka wychodzi
+# przez cudzy adres. Lista proxy: wspólny proxy.txt z katalogu głównego.
+# Domyślnie WŁĄCZONE - brak listy proxy sprowadza się do połączenia bezpośredniego.
+STALKER_LME_PROXY_ENABLED=true
+STALKER_LME_PROXY_STRATEGY=random
+STALKER_LME_PROXY_RETRY_ATTEMPTS=3
+STALKER_LME_PROXY_FILE=
+STALKER_LME_WEBSHARE_URL=
+STALKER_LME_PROXY_LIST=
+
 # ===== RAPORT RUCHU DYSKOWEGO (skrócona linia w logu) =====
 # Jedna zbiorcza linia co godzinę: ile operacji i bajtów poszło na odczyt/zapis.
 # Godziny bez I/O są pomijane. Wartość w sekundach; 0 = wyłącz raport.

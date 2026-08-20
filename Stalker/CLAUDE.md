@@ -333,7 +333,17 @@
 - **Jedno przeładowanie przy nieudanym starcie:** socket.io ma `reconnectionAttempts: 5` i po nieudanej serii milczy do końca sesji. Gdy po 20 s nie ma meldunku, serwis przeładowuje stronę i daje drugie podejście — bez tego chwilowy zator w kontenerze kosztowałby cały kwadrans.
 - ⚠️ **Cloudflare przed API puli, nie przed stroną:** `sio-tools.exp0.dev` stoi na Vercelu i ładuje się bez przeszkód — wyzwanie bota (`Just a moment...`, HTTP 403) wystawia dopiero `sio-api.exp0.dev`. Adres IP hostingu dostaje je niezależnie od nagłówków (sprawdzone: gołe żądanie i żądanie z pełnym zestawem nagłówków przeglądarki dają ten sam 403), więc musi je rozwiązać przeglądarka.
 - ⚠️ **`brunhild.challenges.cloudflare.com` NIE MA rekordu A** — istnieje wyłącznie po IPv6. Kontener bez trasy IPv6 dostaje na nim `ERR_ADDRESS_UNREACHABLE`, przez co wyzwanie się nie domyka. `_regulaDnsCloudflare()` kieruje `*.challenges.cloudflare.com` na IPv4 hosta `challenges.cloudflare.com` przez `--host-resolver-rules` (TLS dogaduje się po SNI). Bez tego cała ścieżka kończy się na 403, mimo że sama strona działa.
-- **Test łączności przed startem przeglądarki** (`_sprawdzApi()`, axios): odpytuje `${apiUrl}/socket.io/?EIO=4&transport=polling`. Rozdziela „kontener nie dociera do backendu puli" od „dociera, ale odbija się na Cloudflare" — w logu przeglądarki oba wyglądają identycznie. Błąd tutaj NIE przerywa boosta.
+- **Test łączności przed startem przeglądarki** (`_sprawdzApi(proxy)`, axios): odpytuje `${apiUrl}/socket.io/?EIO=4&transport=polling` **tym samym tunelem, którym pójdzie przeglądarka** — inaczej diagnoza opisywałaby łączność hostingu, a nie tę, na której faktycznie stanie boost. Rozdziela „kontener nie dociera do backendu puli" od „dociera, ale odbija się na Cloudflare" — w logu przeglądarki oba wyglądają identycznie. Błąd tutaj NIE przerywa boosta, z jednym wyjątkiem: kod **407 od samego proxy** kończy podejście bez startu Chrome'a (konto proxy wygasło, przeglądarka i tak nie przejdzie).
+- 🌐 **Pula proxy (`services/proxyService.js`)** — system przepisany z Garego, ten sam, z którego korzysta `/rivals`. Powód: adres IP hostingu jest zablokowany przez Cloudflare przed API puli, więc boost musi wyjść przez cudzy adres.
+  - **Lista proxy:** `proxy.txt` w katalogu głównym (**wspólny plik z Garym**, poza gitem), a gdy pliku nie ma — Webshare API. Obsługiwane formaty linii: `user:pass@ip:port`, `http(s)://…`, `ip:port`, `ip:port:user:pass`.
+  - **Statusy błędów trzymane są OSOBNO od Garego** (`Stalker/data/proxy_status.json`) — proxy odprawione przez garrytools potrafi bez problemu obsłużyć sio-tools i odwrotnie. Wspólna czarna lista wyłączałaby sprawne adresy.
+  - **Rotacja:** `_zbudujListePodejsc()` układa kolejkę — do `retryAttempts` (domyślnie 3) **różnych** proxy, a na końcu ZAWSZE połączenie bezpośrednie. Powtórzenia są ucinane: przy puli mniejszej niż limit prób drugie podejście tym samym adresem skończy się tak samo, a kosztuje półtorej minuty. Wyłączona pula = samo podejście bezpośrednie, czyli stan sprzed zmiany.
+  - **Wpięcie w przeglądarkę:** flaga `--proxy-server=http://ip:port` + `page.authenticate()` na dane logowania. ⚠️ **Chromium NIE przyjmuje użytkownika ani hasła w `--proxy-server`** — muszą pójść osobno, inaczej każde żądanie wraca z 407.
+  - ⚠️ **Osobny profil przeglądarki na każdy adres wyjściowy** (`temp/calc_boost_profile_<ip>_<port>`). `cf_clearance` Cloudflare wiąże z adresem IP — ciasteczko wyrobione przez jedno proxy podane z drugiego jest nieważne i sprowadza wyzwanie z powrotem, mimo że wyglądałoby na załatwione.
+  - **Kary za nieudane podejście** (`_ukarzProxy()`, zasady 1:1 z Garym): **407** → wyłączenie trwałe (konto proxy wygasło), **403 / nieprzejście wyzwania Cloudflare** → wyłączenie na dobę. Zwykła awaria (padnięta przeglądarka, zerwane połączenie, zatkany kontener) powoduje **samą rotację** — proxy nie zawiniło i szkoda wyłączać sprawny adres na 24 h.
+  - **Przez proxy pomijana jest reguła DNS** dla `*.challenges.cloudflare.com` — nazwy rozwiązuje wtedy serwer pośredniczący, Chromium nie robi lokalnego DNS-u i `--host-resolver-rules` nic by nie dało.
+  - **Czas boosta liczy się od dołączenia do puli**, nie od wpisania komendy — rotacja proxy potrafi zjeść kilka minut, a użytkownik ma dostać pełny zadeklarowany czas liczenia. Sesja jest jednak rezerwowana od razu, żeby w trakcie rotacji nie dało się odpalić drugiej przeglądarki.
+  - **Widoczne dla użytkownika:** pole `🌐 Wyjście` w embedzie (adres bez danych logowania albo „bezpośrednie"), a przy porażce — ile adresów było dostępnych w puli.
 - **Diagnostyka w logu bota:** błędy strony (`pageerror`), błędy konsoli, nieudane żądania, **kod i URL każdej odpowiedzi HTTP >= 400** (sama konsola pokazuje `Failed to load resource: 403` bez adresu), zdarzenia WebSocket (`🔌` utworzenie, `⚠️` zamknięcie), wysłany `worker:register` (`📝`) i pierwsze trzy `pool_update` (`📊`). Po starcie logowany jest odczyt `localStorage` — brak `🔌` oznacza, że strona nie doszła do połączenia, brak `📝` przy obecnym `🔌` — że nie zobaczyła puli w `localStorage`.
   - ⚠️ **Nazwa puli ze spacją musi być w cudzysłowie** (`STALKER_LME_CALC_BOOST_POOL="POLSKA GUROM"`) albo wcale — przy podstawieniu w powłoce niecytowana wartość urywa się na spacji i bot ląduje w puli `POLSKA` zamiast `POLSKA GUROM`, czyli osobnej i pustej.
 - **Statystyki:** ruch z pulą leci WebSocketem, więc serwis podgląda ramki przez CDP (`Network.webSocketFrameReceived/Sent`) i liczy `compute:do_job` (odebrane zadania), `compute:done` (odesłane wyniki) oraz `compute:pool_update` (szczyt robotników/hostów w puli). Zero odebranych zadań przy `connected: true` znaczy tylko tyle, że nikt akurat nic nie liczył.
@@ -404,6 +414,20 @@ STALKER_LME_CALC_BOOST_SECONDS=900
 STALKER_LME_CALC_BOOST_THREADS=
 # Ścieżka do Chromium/Chrome; brak = szukanie w typowych lokalizacjach
 STALKER_LME_CHROMIUM_PATH=/usr/bin/chromium
+
+# Pula proxy dla /calc-boost (system przepisany z Garego) - wszystkie opcjonalne
+# Domyślnie WŁĄCZONA; brak listy proxy sprowadza się do połączenia bezpośredniego
+STALKER_LME_PROXY_ENABLED=true
+# 'random' (domyślnie) albo 'round-robin'
+STALKER_LME_PROXY_STRATEGY=random
+# Ile różnych proxy spróbować, zanim boost przejdzie na połączenie bezpośrednie
+STALKER_LME_PROXY_RETRY_ATTEMPTS=3
+# Plik z listą proxy; brak = proxy.txt w katalogu głównym (ten sam co u Garego)
+STALKER_LME_PROXY_FILE=
+# Webshare API jako zapas, gdy pliku nie ma; brak = GARY_WEBSHARE_URL
+STALKER_LME_WEBSHARE_URL=
+# Ręczna lista proxy po przecinku (zapas ostatniej szansy)
+STALKER_LME_PROXY_LIST=
 
 ```
 

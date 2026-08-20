@@ -2,6 +2,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const ProxyService = require('./proxyService');
+
 /**
  * Serwis "calc-boost" — użycza moc obliczeniową serwera puli obliczeniowej kalkulatora
  * sio-tools (https://sio-tools.exp0.dev).
@@ -18,12 +20,19 @@ const path = require('path');
  *
  * ⚠️ Sesja żyje wyłącznie w pamięci — restart bota ubija przeglądarkę razem z procesem.
  * To jest zamierzone: boost trwa minutę i nie ma czego odtwarzać po restarcie.
+ *
+ * 🌐 Proxy: IP hostingu jest zablokowane przez Cloudflare stojące przed API puli, więc
+ * przeglądarka wychodzi przez pulę proxy przepisaną z Garego (`services/proxyService.js`,
+ * ten sam mechanizm co w `/rivals`). Nieudane podejście rotuje na kolejny adres, a adres
+ * odprawiony przez Cloudflare ląduje na dobę na czarnej liście. Gdy proxy nie ma albo
+ * wszystkie odpadły — zostaje połączenie bezpośrednie, czyli zachowanie sprzed zmiany.
  */
 class ComputeBoostService {
-    constructor(config, logger) {
+    constructor(config, logger, proxyService = null) {
         this.config = config.computeBoost;
         this.logger = logger;
         this.session = null;
+        this.proxyService = proxyService || new ProxyService(config, logger);
     }
 
     /**
@@ -114,20 +123,29 @@ class ComputeBoostService {
      * kontener w ogóle nie dociera do API, albo dociera, ale odbija się na Cloudflare.
      *
      * Handshake socket.io na transporcie `polling` odpowiada `0{"sid":...}` z kodem 200.
-     * Wynik trafia tylko do logu - błąd tutaj NIE przerywa boosta.
+     * Wynik trafia tylko do logu - błąd tutaj NIE przerywa boosta, z jednym wyjątkiem:
+     * kod 407 od samego proxy oznacza wygasłe konto i nie ma sensu odpalać przeglądarki.
+     *
+     * @param {Object|null} proxy - opis proxy z `describeProxy()`; null = połączenie bezpośrednie
      */
-    async _sprawdzApi() {
-        const axios = require('axios');
+    async _sprawdzApi(proxy = null) {
         const dns = require('dns').promises;
         const apiHost = new URL(this.config.apiUrl).hostname;
 
-        // DNS: adres wyłącznie w IPv6 przy kontenerze bez trasy IPv6 daje dokładnie ten
-        // objaw, który widzieliśmy - ERR_ADDRESS_UNREACHABLE na hoście wyzwania Cloudflare
-        for (const host of [apiHost, 'challenges.cloudflare.com']) {
-            const v4 = await dns.resolve4(host).catch(e => [e.code]);
-            const v6 = await dns.resolve6(host).catch(e => [e.code]);
-            this.logger.info(`[CALC-BOOST] 🌐 DNS ${host}: A=${v4.join(',')} | AAAA=${v6.join(',')}`);
+        // Przez proxy DNS rozwiązuje serwer pośredniczący, więc lokalne rekordy nic nie mówią
+        if (!proxy) {
+            // DNS: adres wyłącznie w IPv6 przy kontenerze bez trasy IPv6 daje dokładnie ten
+            // objaw, który widzieliśmy - ERR_ADDRESS_UNREACHABLE na hoście wyzwania Cloudflare
+            for (const host of [apiHost, 'challenges.cloudflare.com']) {
+                const v4 = await dns.resolve4(host).catch(e => [e.code]);
+                const v6 = await dns.resolve6(host).catch(e => [e.code]);
+                this.logger.info(`[CALC-BOOST] 🌐 DNS ${host}: A=${v4.join(',')} | AAAA=${v6.join(',')}`);
+            }
         }
+
+        // Ten sam tunel, którym pójdzie przeglądarka - inaczej diagnoza opisywałaby
+        // łączność hostingu, a nie tę, na której faktycznie stanie boost
+        const klient = this.proxyService.createProxyAxios(proxy?.url || null, { timeout: 10000 });
 
         const naglowkiPrzegladarki = {
             'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36',
@@ -144,14 +162,20 @@ class ComputeBoostService {
         ];
 
         let wyzwanie = false;
+        let statusProxy = null;
 
         for (const [nazwa, url, headers] of probki) {
             try {
-                const odpowiedz = await axios.get(url, { timeout: 10000, headers, validateStatus: () => true });
+                const odpowiedz = await klient.get(url, { headers });
                 const tresc = typeof odpowiedz.data === 'string'
                     ? odpowiedz.data.replace(/\s+/g, ' ').slice(0, 90)
                     : JSON.stringify(odpowiedz.data).slice(0, 90);
                 this.logger.info(`[CALC-BOOST] 🌐 Test — ${nazwa}: HTTP ${odpowiedz.status}, treść: ${tresc}`);
+
+                // 407 nie pochodzi od strony, tylko od proxy - konto wygasło
+                if (proxy && odpowiedz.status === 407) {
+                    statusProxy = 407;
+                }
 
                 // "Just a moment..." to strona wyzwania Cloudflare - wiadomo wtedy z góry,
                 // że przeglądarka będzie musiała je rozwiązać, i czemu może nie dać rady
@@ -160,10 +184,16 @@ class ComputeBoostService {
                 }
             } catch (error) {
                 this.logger.warn(`[CALC-BOOST] ⚠️ Test — ${nazwa}: ${error.code || ''} ${error.message}`);
+
+                // Odrzucenie na tunelu CONNECT nie ma odpowiedzi HTTP - kod siedzi w komunikacie
+                if (proxy) {
+                    const kod = this.proxyService.rozpoznajBladProxy(error);
+                    if (kod === 407) statusProxy = 407;
+                }
             }
         }
 
-        return { wyzwanieCloudflare: wyzwanie };
+        return { wyzwanieCloudflare: wyzwanie, statusProxy };
     }
 
     /**
@@ -236,9 +266,53 @@ class ComputeBoostService {
     }
 
     /**
-     * Uruchamia przeglądarkę, dołącza do puli i trzyma ją przez zadany czas.
-     * Zwraca statystyki sesji. `onConnected` dostaje informację o połączeniu, gdy tylko
-     * strona zamelduje się w puli (albo gdy minie limit oczekiwania).
+     * Buduje kolejkę podejść: najpierw proxy (tyle sztuk, ile mówi `retryAttempts`),
+     * a na końcu ZAWSZE połączenie bezpośrednie.
+     *
+     * Bezpośrednie na końcu, a nie na początku, bo to właśnie IP hostingu jest zablokowane —
+     * ale gdy proxy padnie albo pula się wyczerpie, lepiej spróbować niż nie zrobić nic.
+     * Przy wyłączonej puli zostaje samo podejście bezpośrednie, czyli stan sprzed zmiany.
+     */
+    _zbudujListePodejsc() {
+        const podejscia = [];
+
+        if (this.proxyService?.enabled) {
+            // Czyścimy ślad po poprzednim boostcie - inaczej "nieużyte proxy" szybko by się skończyły
+            this.proxyService.resetUsedProxies();
+
+            const ile = Math.max(1, this.proxyService.retryAttempts);
+            const wziete = new Set();
+
+            for (let i = 0; i < ile; i++) {
+                const proxyUrl = this.proxyService.pickProxy();
+                if (!proxyUrl) break;
+
+                // Pula mniejsza niż limit prób - wybór zaczyna się powtarzać. Drugie
+                // podejście tym samym adresem skończy się tak samo, a kosztuje półtorej minuty
+                if (wziete.has(proxyUrl)) break;
+                wziete.add(proxyUrl);
+
+                const opis = this.proxyService.describeProxy(proxyUrl);
+                if (opis) podejscia.push(opis);
+            }
+
+            if (podejscia.length === 0) {
+                this.logger.warn('[CALC-BOOST] ⚠️ Brak dostępnych proxy - lecę bezpośrednio z IP hostingu');
+            }
+        }
+
+        podejscia.push(null);
+        return podejscia;
+    }
+
+    /**
+     * Uruchamia boost: kolejno próbuje podejść z puli proxy, aż któreś zamelduje się
+     * w puli obliczeniowej. Zwraca statystyki udanej sesji, a gdy żadne podejście nie
+     * wypaliło - statystyki ostatniego.
+     *
+     * `onConnected` dostaje informację o połączeniu, gdy tylko strona zamelduje się w puli.
+     * Przy nieudanym podejściu powiadomienie NIE leci - poszłoby ono do Discorda tyle razy,
+     * ile było proxy. Wyjątek to podejście ostatnie: tam trzeba powiedzieć, że nie wyszło.
      */
     async runBoost({ durationMs, requestedBy = 'nieznany', onConnected = null } = {}) {
         if (this.session) {
@@ -255,6 +329,86 @@ class ComputeBoostService {
             );
         }
 
+        const podejscia = this._zbudujListePodejsc();
+
+        // Sesję rezerwujemy PRZED pierwszym podejściem - rotacja proxy potrafi potrwać kilka
+        // minut, a bez tej blokady druga osoba odpaliłaby w tym czasie równoległą przeglądarkę
+        const teraz = Date.now();
+        this.session = { browser: null, startedAt: teraz, endsAt: teraz + czas, requestedBy };
+
+        let ostatnieStats = null;
+
+        try {
+            for (let i = 0; i < podejscia.length; i++) {
+                const proxy = podejscia[i];
+                const ostatnie = i === podejscia.length - 1;
+
+                this.logger.info(
+                    `[CALC-BOOST] 🌐 Podejście ${i + 1}/${podejscia.length} — ` +
+                    (proxy ? `proxy ${proxy.masked}` : 'połączenie bezpośrednie (IP hostingu)')
+                );
+
+                const stats = await this._sesja({
+                    proxy,
+                    czas,
+                    requestedBy,
+                    executablePath,
+                    powiadom: async info => {
+                        if (!onConnected) return;
+                        if (!info.connected && !ostatnie) return;
+                        await onConnected(info);
+                    }
+                });
+
+                ostatnieStats = stats;
+
+                if (stats.connected) return stats;
+
+                // stop() w trakcie podejścia (zamykanie bota) - nie ma czego rotować
+                if (!this.session) return stats;
+
+                this._ukarzProxy(proxy, stats);
+            }
+
+            // Gdy każde podejście wywróciło się na wyjątku (np. Chrome w ogóle nie wstaje),
+            // komenda ma pokazać powód awarii, a nie podsumowanie sesji z samymi zerami
+            if (ostatnieStats?.error) {
+                throw new Error(ostatnieStats.error);
+            }
+
+            return ostatnieStats;
+        } finally {
+            this.session = null;
+        }
+    }
+
+    /**
+     * Odkłada nieudane proxy na czarną listę - dokładnie na tych samych zasadach co w Garym.
+     *
+     * Karane są WYŁĄCZNIE dwie sytuacje: wygasłe konto proxy (407, blokada trwała) oraz
+     * odprawienie przez Cloudflare (403, doba). Zwykła awaria - padnięta przeglądarka,
+     * zerwane połączenie, zatkany kontener - powoduje samą rotację, bo proxy nie zawiniło
+     * i szkoda byłoby wyłączać sprawny adres na 24 godziny.
+     */
+    _ukarzProxy(proxy, stats) {
+        if (!proxy) return;
+
+        if (stats.proxyStatus === 407) {
+            this.proxyService.disableProxy(proxy.url, 407, 'Proxy odrzuciło uwierzytelnienie');
+            return;
+        }
+
+        if (stats.cloudflareChallenge && !stats.clearance) {
+            this.proxyService.disableProxy(proxy.url, 403, 'Cloudflare nie wpuścił tego adresu do API puli');
+        }
+    }
+
+    /**
+     * Pojedyncze podejście: uruchamia przeglądarkę (opcjonalnie przez proxy), dołącza do puli
+     * i przy powodzeniu trzyma ją przez zadany czas. Nieudane podejście kończy się od razu,
+     * żeby `runBoost` mógł spróbować kolejnego adresu.
+     */
+    async _sesja({ proxy, czas, requestedBy, executablePath, powiadom }) {
         // Puppeteer ładujemy dopiero tutaj - wszystkie dziewięć botów dzieli jeden proces,
         // nie ma po co trzymać go w pamięci, gdy nikt nie używa boosta.
         const puppeteer = require('puppeteer-core');
@@ -274,14 +428,28 @@ class ComputeBoostService {
             peakHosts: 0,
             peakAppetite: 0,
             durationMs: czas,
-            executablePath
+            executablePath,
+            // Adres wyjściowy bez danych logowania - trafia do embeda na Discordzie
+            exitLabel: proxy ? proxy.server.replace(/^https?:\/\//, '') : 'bezpośrednie (IP hostingu)',
+            proxyStatus: null
         };
 
         let browser = null;
 
-        const diagnoza = await this._sprawdzApi();
+        const diagnoza = await this._sprawdzApi(proxy);
         stats.cloudflareChallenge = diagnoza.wyzwanieCloudflare;
-        const regulaDns = await this._regulaDnsCloudflare();
+        stats.proxyStatus = diagnoza.statusProxy;
+
+        // 407 = konto proxy wygasło. Przeglądarka i tak nie przejdzie przez ten tunel,
+        // a start Chrome'a kosztuje kilkanaście sekund i sporo pamięci kontenera
+        if (stats.proxyStatus === 407) {
+            this.logger.warn(`[CALC-BOOST] 🚫 Proxy ${proxy.masked} odrzuca uwierzytelnienie (407) - pomijam bez startu przeglądarki`);
+            return { ...stats };
+        }
+
+        // Przez proxy nazwy rozwiązuje serwer pośredniczący, więc podmiana adresów wyzwania
+        // Cloudflare na IPv4 nic by nie dała - Chromium i tak nie robi tu lokalnego DNS-u
+        const regulaDns = proxy ? null : await this._regulaDnsCloudflare();
 
         try {
             // `chrome-headless-shell` to stara binarka headless - puppeteer obsługuje ją
@@ -291,12 +459,18 @@ class ComputeBoostService {
             // Stały profil zamiast świeżego katalogu przy każdym uruchomieniu - ciasteczka
             // i stan sesji przeżywają kolejne boosty, tak jak w normalnej przeglądarce.
             // Leży w `temp/`, a nie w `data/`, więc nie wchodzi do codziennych backupów.
-            const userDataDir = path.join(__dirname, '..', 'temp', 'calc_boost_profile');
+            //
+            // ⚠️ Osobny profil na każdy adres wyjściowy. `cf_clearance` Cloudflare wiąże
+            // z adresem IP - ciasteczko wyrobione przez jedno proxy podane z drugiego jest
+            // nieważne i sprowadza wyzwanie z powrotem, mimo że wyglądałoby na załatwione.
+            const nazwaProfilu = proxy ? `calc_boost_profile_${proxy.profileKey}` : 'calc_boost_profile';
+            const userDataDir = path.join(__dirname, '..', 'temp', nazwaProfilu);
             fs.mkdirSync(userDataDir, { recursive: true });
 
             this.logger.info(
                 `[CALC-BOOST] 🧭 Przeglądarka: ${path.basename(executablePath)} ` +
-                `(tryb headless: ${trybHeadless === 'shell' ? 'shell — wariant okrojony' : 'pełny'})`
+                `(tryb headless: ${trybHeadless === 'shell' ? 'shell — wariant okrojony' : 'pełny'}, ` +
+                `wyjście: ${stats.exitLabel})`
             );
 
             browser = await puppeteer.launch({
@@ -326,7 +500,11 @@ class ComputeBoostService {
                     '--no-first-run',
                     '--no-default-browser-check',
                     '--metrics-recording-only',
-                    ...(regulaDns ? [regulaDns] : [])
+                    ...(regulaDns ? [regulaDns] : []),
+                    // Cały ruch przeglądarki (także WebSocket puli) idzie przez proxy.
+                    // ⚠️ Chromium nie przyjmuje tu użytkownika ani hasła - te lecą niżej,
+                    // przez `page.authenticate()`
+                    ...(proxy ? [`--proxy-server=${proxy.server}`] : [])
                 ],
                 // Puppeteer domyślnie dokłada --enable-automation (pasek "sterowana przez
                 // oprogramowanie testujące"). Zwykła przeglądarka tej flagi nie ma, a my nie
@@ -334,8 +512,18 @@ class ComputeBoostService {
                 ignoreDefaultArgs: ['--enable-automation']
             });
 
+            // Przeglądarka wpisana do sesji od razu po starcie - inaczej `stop()` przy
+            // zamykaniu bota nie miałaby czego ubić i proces Chrome'a zostałby sierotą
+            if (this.session) this.session.browser = browser;
+
             const page = await browser.newPage();
             const maxThreads = this.config.maxThreads;
+
+            // Dane logowania do proxy. Chromium prosi o nie dopiero przy pierwszym żądaniu
+            // (odpowiedź 407), więc wystarczy ustawić je przed nawigacją.
+            if (proxy?.username) {
+                await page.authenticate({ username: proxy.username, password: proxy.password || '' });
+            }
 
             // To samo co wyżej: UA "HeadlessChrome/152..." bywa odrzucany, a bez handshake'u
             // nie ma WebSocketa ani rejestracji w puli. Podmieniamy wyłącznie ten fragment,
@@ -484,12 +672,19 @@ class ComputeBoostService {
             );
             this.logger.info(`[CALC-BOOST] 🔍 UA: ${ustawienia.agent}`);
 
+            // Odliczanie czasu boosta rusza dopiero teraz - rotacja proxy potrafi zjeść
+            // kilka minut, a użytkownik ma dostać pełny zadeklarowany czas liczenia
             const startedAt = Date.now();
-            this.session = { browser, startedAt, endsAt: startedAt + czas, stats, requestedBy };
+            if (this.session) {
+                this.session.browser = browser;
+                this.session.startedAt = startedAt;
+                this.session.endsAt = startedAt + czas;
+                this.session.stats = stats;
+            }
 
             this.logger.info(
                 `[CALC-BOOST] 🚀 Start (${requestedBy}) - pula "${this.config.poolId}", ` +
-                `${stats.threads} wątków, ${Math.round(czas / 1000)} s`
+                `${stats.threads} wątków, ${Math.round(czas / 1000)} s, wyjście: ${stats.exitLabel}`
             );
 
             // Czekamy na meldunek w puli, ale nie dłużej niż 20 s - przeglądarkę i tak
@@ -510,9 +705,9 @@ class ComputeBoostService {
                 }
             }
 
-            if (onConnected) {
+            if (powiadom) {
                 try {
-                    await onConnected({ ...stats });
+                    await powiadom({ ...stats });
                 } catch (error) {
                     this.logger.warn(`[CALC-BOOST] ⚠️ Błąd powiadomienia o połączeniu: ${error.message}`);
                 }
@@ -520,9 +715,13 @@ class ComputeBoostService {
 
             // Po dwóch nieudanych podejściach pula już się nie odezwie - klient socket.io
             // wyczerpał swoje pięć ponowień i milczy. Trzymanie Chrome'a przez pozostałe
-            // kilkanaście minut to czysta strata pamięci i rdzeni serwera.
+            // kilkanaście minut to czysta strata pamięci i rdzeni serwera - a przy proxy
+            // jest jeszcze co robić: `runBoost` weźmie kolejny adres wyjściowy.
             if (!stats.connected) {
-                this.logger.warn('[CALC-BOOST] ⏹️ Serwer nie dołączył do puli - kończę wcześniej zamiast czekać do końca czasu');
+                this.logger.warn(
+                    `[CALC-BOOST] ⏹️ Wyjście ${stats.exitLabel} nie dołączyło do puli - ` +
+                    'kończę podejście zamiast czekać do końca czasu'
+                );
                 return { ...stats };
             }
 
@@ -545,8 +744,15 @@ class ComputeBoostService {
             );
 
             return { ...stats };
+        } catch (error) {
+            // Awaria podejścia nie kończy boosta - `runBoost` sięgnie po kolejne proxy.
+            // Wyjątek leci dalej tylko wtedy, gdy nie ma już czego próbować.
+            this.logger.warn(`[CALC-BOOST] ⚠️ Podejście przez ${stats.exitLabel} nie wypaliło: ${error.message}`);
+            stats.error = error.message;
+            return { ...stats };
         } finally {
-            this.session = null;
+            // Sesję zeruje `runBoost` - tutaj tylko domykamy przeglądarkę tego podejścia
+            if (this.session) this.session.browser = null;
             if (browser) await this._closeBrowser(browser);
         }
     }
@@ -560,7 +766,8 @@ class ComputeBoostService {
         this.session = null;
         this.logger.info('[CALC-BOOST] ⏹️ Przerywam boost');
         if (finishEarly) finishEarly();
-        await this._closeBrowser(browser);
+        // Przy przerwaniu w trakcie rotacji proxy przeglądarki jeszcze nie ma
+        if (browser) await this._closeBrowser(browser);
     }
 
     /**

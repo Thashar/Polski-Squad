@@ -110,8 +110,12 @@ const KalkulatorEmbedService = require('./services/kalkulatorEmbedService');
 const kalkulatorEmbedService = new KalkulatorEmbedService(config, databaseService, logger);
 const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
+// Pula proxy przepisana z Garego - /calc-boost wychodzi przez cudze IP, bo adres hostingu
+// jest odprawiany przez Cloudflare stojące przed API puli obliczeniowej
+const ProxyService = require('./services/proxyService');
+const proxyService = new ProxyService(config, logger);
 const ComputeBoostService = require('./services/computeBoostService');
-const computeBoostService = new ComputeBoostService(config, logger);
+const computeBoostService = new ComputeBoostService(config, logger, proxyService);
 const NewsRelayService = require('./services/newsRelayService');
 const newsRelayService = new NewsRelayService(config, llmAdapter, logger);
 
@@ -280,7 +284,8 @@ const sharedState = {
     garyCombatIngestionService,
     kalkulatorEmbedService,
     giftcodeService,
-    computeBoostService
+    computeBoostService,
+    proxyService
 };
 
 client.once(Events.ClientReady, async () => {

@@ -15048,7 +15048,8 @@ async function handleCalcBoostCommand(interaction, sharedState) {
                             { name: '🧵 Wątki', value: `${info.threads}`, inline: true },
                             { name: '⏱️ Czas', value: czasOpis, inline: true },
                             { name: '👷 Robotnicy w puli', value: `${info.peakWorkers || 1}`, inline: true },
-                            { name: '📝 Zarejestrowany', value: info.registered ? 'tak' : 'nie', inline: true }
+                            { name: '📝 Zarejestrowany', value: info.registered ? 'tak' : 'nie', inline: true },
+                            { name: '🌐 Wyjście', value: info.exitLabel || 'bezpośrednie', inline: true }
                         )
                         .setColor(info.connected ? '#57F287' : '#FFA500')
                         .setTimestamp()]
@@ -15059,13 +15060,20 @@ async function handleCalcBoostCommand(interaction, sharedState) {
         // Bez tego rozróżnienia zablokowany boost pokazywał same zera i wyglądał jak
         // sesja, w której po prostu nikt nic nie liczył - a to zupełnie inna sytuacja
         if (!stats.connected && stats.cloudflareChallenge) {
+            const proxyStats = sharedState.proxyService?.getStats();
+            const opisProxy = proxyStats?.enabled
+                ? `Próbowaliśmy wyjść przez pulę proxy (**${proxyStats.availableProxies}** dostępnych adresów), ` +
+                  'ale żaden nie przeszedł wyzwania. Odprawione adresy wracają do gry po dobie.'
+                : 'Pula proxy jest wyłączona, więc boost wychodzi z adresu hostingu — a ten jest zablokowany.';
+
             await wyslijPodsumowanie(new EmbedBuilder()
                 .setTitle('❌ Calc Boost — API puli odrzuciło serwer')
                 .setDescription(
                     `Backend puli (**${new URL(boostConfig.apiUrl).hostname}**) wita ten serwer wyzwaniem ` +
                     'Cloudflare („Just a moment…") i nie przepuszcza połączenia. Sama strona kalkulatora ' +
-                    'działa — blokada dotyczy wyłącznie API puli i adresu IP hostingu.\n\n' +
-                    'Rozwiązaniem jest wpuszczenie tego serwera przez autora sio-tools.'
+                    'działa — blokada dotyczy wyłącznie API puli i adresu IP.\n\n' +
+                    `${opisProxy}\n\n` +
+                    'Drugim rozwiązaniem jest wpuszczenie tego serwera przez autora sio-tools.'
                 )
                 .setColor('#ED4245')
                 .setTimestamp(), podsumowanieNaKanal);
@@ -15078,7 +15086,8 @@ async function handleCalcBoostCommand(interaction, sharedState) {
             .addFields(
                 { name: '📥 Odebrane zadania', value: `${stats.jobsReceived}`, inline: true },
                 { name: '📤 Odesłane wyniki', value: `${stats.jobsDone}`, inline: true },
-                { name: '👷 Szczyt puli', value: `${stats.peakWorkers} robotników / ${stats.peakHosts} hostów`, inline: true }
+                { name: '👷 Szczyt puli', value: `${stats.peakWorkers} robotników / ${stats.peakHosts} hostów`, inline: true },
+                { name: '🌐 Wyjście', value: stats.exitLabel || 'bezpośrednie', inline: true }
             )
             .setColor(stats.connected ? '#57F287' : '#ED4245')
             .setTimestamp(), podsumowanieNaKanal);
