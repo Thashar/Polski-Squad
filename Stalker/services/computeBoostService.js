@@ -166,12 +166,22 @@ class ComputeBoostService {
                     // zawsze jest w tle, więc pula dostawałaby ułamek deklarowanej mocy.
                     '--disable-background-timer-throttling',
                     '--disable-renderer-backgrounding',
-                    '--disable-backgrounding-occluded-windows'
+                    '--disable-backgrounding-occluded-windows',
+                    // Domyślnie Chromium ogłasza się jako sterowany automatycznie, przez co
+                    // Cloudflare przed stroną potrafi odrzucić handshake socket.io (403)
+                    '--disable-blink-features=AutomationControlled'
                 ]
             });
 
             const page = await browser.newPage();
             const maxThreads = this.config.maxThreads;
+
+            // To samo co wyżej: UA "HeadlessChrome/152..." bywa odrzucany, a bez handshake'u
+            // nie ma WebSocketa ani rejestracji w puli. Podmieniamy wyłącznie ten fragment,
+            // reszta UA (wersja, platforma) zostaje prawdziwa.
+            const userAgent = (await browser.userAgent()).replace(/HeadlessChrome/g, 'Chrome');
+            await page.setUserAgent(userAgent);
+            await page.setExtraHTTPHeaders({ 'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8' });
 
             await page.evaluateOnNewDocument((poolId, limit) => {
                 const rdzenie = navigator.hardwareConcurrency || 4;
@@ -189,6 +199,13 @@ class ComputeBoostService {
             });
             page.on('requestfailed', req => {
                 this.logger.warn(`[CALC-BOOST] ⚠️ Nieudane żądanie: ${req.url().slice(0, 120)} (${req.failure()?.errorText})`);
+            });
+            // Sama konsola pokazuje "Failed to load resource: 403" bez adresu - bezużyteczne,
+            // gdy trzeba ustalić, czy odbiło się żądanie do API puli, czy jakiś pyłek z CDN
+            page.on('response', res => {
+                if (res.status() >= 400) {
+                    this.logger.warn(`[CALC-BOOST] ⚠️ HTTP ${res.status()}: ${res.url().slice(0, 140)}`);
+                }
             });
 
             // Ruch z pulą leci po WebSockecie, więc podglądamy go przez CDP - stąd wiemy,
