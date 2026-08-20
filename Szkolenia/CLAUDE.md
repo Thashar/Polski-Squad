@@ -5,9 +5,21 @@
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 
 **Serwisy:**
-- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach. Wątki już zablokowane (`thread.locked`) są pomijane na samym początku `processThread` (PRZED pobraniem wiadomości i PRZED threadOwner) — zapobiega odarchiwizowaniu i ponownemu wysyłaniu komunikatu o zamknięciu do dawno zamkniętych wątków przy restarcie. `lockThread` dodatkowo zabezpieczone przed ponownym zamykaniem zablokowanego wątku.
+- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach. Wątki już zablokowane (`thread.locked`) są pomijane na samym początku `processThread` (PRZED pobraniem wiadomości i PRZED threadOwner) — zapobiega odarchiwizowaniu i ponownemu wysyłaniu komunikatu o zamknięciu do dawno zamkniętych wątków przy restarcie. `lockThread` dodatkowo zabezpieczone przed ponownym zamykaniem zablokowanego wątku. Eksportuje też `znajdzWatekUzytkownika`, `otworzWatek` i `pobierzArchiwalneWatki` — używane przez `reactionHandlers` (opis niżej).
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
 - `aiChatService.js` - AI Chat z trzema providerami: Anthropic (prosty prompt), Grok (web_search) i Perplexity (web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER`
+
+**Odnajdywanie wątku przy reakcji (`reactionHandlers.js`):** Zanim bot założy nowy wątek, szuka istniejącego w czterech krokach — od źródeł pewnych i tanich do kosztownych:
+1. **Wątek wyrastający z tej samej wiadomości** — wątek utworzony z wiadomości ma **to samo ID co ta wiadomość**, więc przy `message.hasThread` wystarczy `threads.fetch(message.id)`. Jedno żądanie, niezależne od nazwy.
+2. **Zapisany `ownerId`** z `data/reminders.json` — wiąże wątek z użytkownikiem, nie z nickiem.
+3. **Aktywne wątki z API** (`fetchActive()`) — a NIE `channel.threads.cache`, bo discord.js sam sprząta cache wątków (sweeper `threads`, domyślnie co godzinę usuwa archiwalne starsze niż 4 h).
+4. **Archiwum ze stronicowaniem** (`pobierzArchiwalneWatki`, po 100 wątków na stronę, do 10 stron przy reakcji / 20 przy codziennym sprawdzaniu) — dopasowanie po nazwie.
+
+⚠️ **Dlaczego nie samo dopasowanie po nazwie:** nazwa wątku to nick z chwili jego założenia. Po zmianie nicku kroki 3-4 nie mają czego dopasować — ratują wyłącznie kroki 1-2. Dlatego **`ownerId` musi przetrwać zamknięcie wątku**: zamknięcie wywołuje `markThreadClosed` (flaga `closed: true`, zachowany `ownerId`), a nie `removeReminder`, który kasował cały wpis. Po odnalezieniu wątku ze starą nazwą bot wyrównuje ją do aktualnego nicku (`setName`).
+
+⚠️ **`fetchArchived()` zwraca JEDNĄ stronę wyników.** Bez stronicowania starszy wątek jest niewidoczny i bot zakłada DRUGI wątek o tej samej nazwie — a gdy reakcja pada pod tą samą wiadomością co stary wątek, Discord odrzuca tworzenie (wątek dla tej wiadomości już istnieje) i użytkownik nie dostaje nic. Z tego samego powodu `checkThreads` czyści osierocone przypomnienia **tylko gdy przejrzało całe archiwum** (`kompletna`); przy niepełnej liście skasowałoby stan (w tym `ownerId`) wątków, które nadal istnieją.
+
+**Otwieranie zamkniętego wątku:** `otworzWatek` zdejmuje archiwizację i blokadę **jednym** `edit({ archived: false, locked: false })`, z krokowym zapasem. Osobne `setArchived` + `setLocked` potrafią się wykluczać (zarchiwizowanego wątku nie da się edytować inaczej niż polem `archived`), a wcześniej oba błędy były tylko logowane i kod leciał dalej do `send()` — który wywracał się na zamkniętym wątku, przez co **regułka nie docierała**. Teraz nieudane otwarcie przerywa obsługę z jednoznacznym logiem, a wysyłka regułki ma własny log błędu.
 
 **Uprawnienia:**
 - Admin/moderator/specjalne role -> mogą otworzyć wątek każdemu (reakcja pod czyimkolwiek postem)
@@ -81,6 +93,7 @@ SZKOLENIA_PERPLEXITY_MODEL=sonar-pro
 - **Logger:** Używaj createBotLogger('Szkolenia')
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
 - **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
+- **Wpis w `reminders.json`:** `{ lastReminder, threadCreated, reminderSent, ownerId, helpPingSent, closed }`. Wpis **przeżywa zamknięcie wątku** — trzyma `ownerId`, jedyne powiązanie wątku z użytkownikiem niezależne od nicku. Kasuje go dopiero `cleanupOrphanedReminders`, gdy wątek zniknie z Discorda (i tylko przy kompletnej liście archiwum). `setReminder` zdejmuje `closed` przy (ponownym) otwarciu.
 - **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON — oba przez `utils/jsonStore` (cache-first): `data/reminders.json` i `data/ai_chat_cooldowns.json` czytane z dysku raz, przy pierwszym sięgnięciu, zapis idzie jednocześnie do pliku i pamięci, atomowo (plik tymczasowy + rename). Obsługa `ENOENT` zniknęła z serwisów — store sam oddaje wartość domyślną przy braku pliku. Zapisywanie promptów AI do `data/prompts/` zostało na zwykłym `fs` (pliki tekstowe, nie JSON)
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`
 - **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 1440 min (24h) (admini bez limitu).
