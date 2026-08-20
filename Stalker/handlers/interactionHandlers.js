@@ -15047,7 +15047,8 @@ async function handleCalcBoostCommand(interaction, sharedState) {
                         .addFields(
                             { name: '🧵 Wątki', value: `${info.threads}`, inline: true },
                             { name: '⏱️ Czas', value: czasOpis, inline: true },
-                            { name: '👷 Robotnicy w puli', value: `${info.peakWorkers || 1}`, inline: true }
+                            { name: '👷 Robotnicy w puli', value: `${info.peakWorkers || 1}`, inline: true },
+                            { name: '📝 Zarejestrowany', value: info.registered ? 'tak' : 'nie', inline: true }
                         )
                         .setColor(info.connected ? '#57F287' : '#FFA500')
                         .setTimestamp()]

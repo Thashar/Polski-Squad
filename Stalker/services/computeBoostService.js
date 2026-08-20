@@ -136,6 +136,8 @@ class ComputeBoostService {
             connected: false,
             jobsReceived: 0,
             jobsDone: 0,
+            registered: false,
+            poolUpdates: 0,
             peakWorkers: 0,
             peakHosts: 0,
             peakAppetite: 0,
@@ -178,10 +180,31 @@ class ComputeBoostService {
                 localStorage.setItem('multithread', JSON.stringify(watki));
             }, this.config.poolId, maxThreads);
 
+            // Diagnostyka: gdy strona wywali się na tej konkretnej binarce (stary headless
+            // shell, brak jakiegoś API), pula po prostu milczy i bez tych logów nie widać
+            // dlaczego. Błędy strony trafiają do zwykłego logu bota.
+            page.on('pageerror', error => this.logger.warn(`[CALC-BOOST] ⚠️ Błąd strony: ${error.message}`));
+            page.on('console', msg => {
+                if (msg.type() === 'error') this.logger.warn(`[CALC-BOOST] ⚠️ Konsola strony: ${msg.text().slice(0, 300)}`);
+            });
+            page.on('requestfailed', req => {
+                this.logger.warn(`[CALC-BOOST] ⚠️ Nieudane żądanie: ${req.url().slice(0, 120)} (${req.failure()?.errorText})`);
+            });
+
             // Ruch z pulą leci po WebSockecie, więc podglądamy go przez CDP - stąd wiemy,
             // czy przeglądarka faktycznie dołączyła i ile zadań przeliczyła.
             const cdp = await page.createCDPSession();
             await cdp.send('Network.enable');
+
+            cdp.on('Network.webSocketCreated', event => {
+                this.logger.info(`[CALC-BOOST] 🔌 WebSocket: ${event.url.split('?')[0]}`);
+            });
+            cdp.on('Network.webSocketFrameError', event => {
+                this.logger.warn(`[CALC-BOOST] ⚠️ Błąd ramki WebSocket: ${event.errorMessage}`);
+            });
+            cdp.on('Network.webSocketClosed', () => {
+                this.logger.warn('[CALC-BOOST] ⚠️ WebSocket zamknięty');
+            });
 
             let onPoolJoin = null;
             const poolJoined = new Promise(resolve => { onPoolJoin = resolve; });
@@ -205,6 +228,11 @@ class ComputeBoostService {
                     stats.peakWorkers = Math.max(stats.peakWorkers, dane.workers || 0);
                     stats.peakHosts = Math.max(stats.peakHosts, dane.hosts || 0);
                     stats.peakAppetite = Math.max(stats.peakAppetite, dane.poolAppetite || 0);
+                    // Pierwsze trzy aktualizacje do logu - widać, czy serwer w ogóle
+                    // policzył się jako robotnik i ilu jeszcze jest w puli
+                    if (stats.poolUpdates++ < 3) {
+                        this.logger.info(`[CALC-BOOST] 📊 pool_update: ${JSON.stringify(dane)}`);
+                    }
                     if (onPoolJoin) { onPoolJoin(); onPoolJoin = null; }
                 } else if (nazwa === 'compute:do_job') {
                     stats.jobsReceived++;
@@ -213,12 +241,33 @@ class ComputeBoostService {
 
             cdp.on('Network.webSocketFrameSent', event => {
                 const frame = parseFrame(event.request && event.request.payloadData);
-                if (frame && frame[0] === 'compute:done') stats.jobsDone++;
+                if (!frame) return;
+                if (frame[0] === 'compute:done') stats.jobsDone++;
+                if (frame[0] === 'compute:worker:register') {
+                    stats.registered = true;
+                    this.logger.info(`[CALC-BOOST] 📝 worker:register → ${JSON.stringify(frame[1])}`);
+                }
             });
 
             await page.goto(this.config.url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-            stats.threads = await page.evaluate(() => JSON.parse(localStorage.getItem('multithread') || '0'));
+            // Odczyt PO załadowaniu strony - potwierdza, że klucze przeżyły start skryptów
+            // (a nie zostały nadpisane) i że strona widzi dokładnie tę pulę, o którą chodzi.
+            const ustawienia = await page.evaluate(() => ({
+                multithread: localStorage.getItem('multithread'),
+                computePool: localStorage.getItem('computePool'),
+                rdzenie: navigator.hardwareConcurrency,
+                ukryta: document.hidden,
+                agent: navigator.userAgent
+            }));
+
+            stats.threads = parseInt(ustawienia.multithread, 10) || 0;
+            this.logger.info(
+                `[CALC-BOOST] 🔍 localStorage: computePool=${ustawienia.computePool}, ` +
+                `multithread=${ustawienia.multithread}, rdzenie=${ustawienia.rdzenie}, ` +
+                `document.hidden=${ustawienia.ukryta}`
+            );
+            this.logger.info(`[CALC-BOOST] 🔍 UA: ${ustawienia.agent}`);
 
             const startedAt = Date.now();
             this.session = { browser, startedAt, endsAt: startedAt + czas, stats, requestedBy };
@@ -251,7 +300,9 @@ class ComputeBoostService {
             clearTimeout(timeoutId);
 
             this.logger.info(
-                `[CALC-BOOST] ✅ Koniec - odebrano ${stats.jobsReceived} zadań, ` +
+                `[CALC-BOOST] ✅ Koniec - zarejestrowany: ${stats.registered ? 'tak' : 'NIE'}, ` +
+                `pool_update: ${stats.poolUpdates}, szczyt puli: ${stats.peakWorkers} robotników / ` +
+                `${stats.peakHosts} hostów, odebrano ${stats.jobsReceived} zadań, ` +
                 `odesłano ${stats.jobsDone} wyników`
             );
 
