@@ -83,6 +83,12 @@ jest kasowane od razu po odczycie.
   `cache_control: ephemeral`, więc prefiks cache'uje się między turami i między kandydatami
 
 **Bezpieczniki:**
+- **Teksty z całej tury są kumulowane, nie nadpisywane.** Model zwykle pisze wiadomość do kandydata
+  RAZEM z wywołaniem narzędzia („Wrzuć screena Core Stock" + `zapisz_dane`), a po `tool_result`
+  kończy turę już bez tekstu. Nadpisywanie gubiło tę wiadomość: kandydat widział komunikat o błędzie,
+  a tekst zostawał w historii — więc model był przekonany, że już o screena poprosił, i nie powtarzał prośby
+- **Pusta tura → dopytanie modelu.** Gdy w całej turze nie padł żaden tekst, bot dosyła
+  `[SYSTEM] napisz wiadomość do kandydata` i dopiero gdy to też nie pomoże, pokazuje komunikat o błędzie
 - `maxTurns` (domyślnie 40) — po przekroczeniu rozmowa jest zamykana z prośbą o kontakt z moderatorem
 - `historyLimit` (domyślnie 30 wiadomości) — przycinanie historii **nigdy nie rozrywa pary
   `tool_use`/`tool_result`** (API odrzuca niesparowany ogon), więc odcina zawsze do zwykłej wiadomości użytkownika

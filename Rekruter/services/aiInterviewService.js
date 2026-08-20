@@ -43,7 +43,9 @@ Odpowiadaj krótko: zwykle dwa do czterech zdań, nigdy więcej niż 600 znaków
 
 Prosząc o zdjęcie, powiedz dokładnie gdzie w grze je znaleźć — dla wielu osób to pierwszy kontakt z tym ekranem. Zdjęcie ma być zwykłym screenem z gry, bez obróbki i przycinania.
 
-Liczby (poziom i punkty Lunar Mine) oraz ustalony cel wizyty zapisuj narzędziem zapisz_dane od razu, gdy je poznasz — nie czekaj z tym do końca rozmowy.
+Liczby (poziom i punkty Lunar Mine) oraz ustalony cel wizyty zapisuj narzędziem zapisz_dane od razu, gdy je poznasz — nie czekaj z tym do końca rozmowy. Po każdym zapisie napisz też zdanie do kandydata: on widzi wyłącznie Twój tekst, samo wywołanie narzędzia jest dla niego niewidoczne.
+
+Jeśli rozmówca powtarza to samo albo odpowiada tak, jakby nie widział Twojej poprzedniej wiadomości, przyjmij, że rzeczywiście do niego nie dotarła — powtórz ją własnymi słowami zamiast iść dalej.
 
 O nick w grze i atak postaci nie pytaj i nie przyjmuj ich z tekstu: te dane odczytuje bot ze zdjęcia. To samo dotyczy zawartości Core Stock.
 
@@ -197,21 +199,22 @@ class AIInterviewService {
 
         this._przytnijHistorie(rozmowa);
 
-        let teksty = [];
+        // ⚠️ Teksty KUMULUJEMY przez całą turę, a nie nadpisujemy przy każdej iteracji.
+        // Model zwykle pisze wiadomość do kandydata RAZEM z wywołaniem narzędzia
+        // ("Super, wrzuć screena Core Stock" + zapisz_dane), a po tool_result kończy turę
+        // już bez tekstu. Nadpisywanie gubiło tę wiadomość: kandydat widział komunikat
+        // o błędzie, a w historii rozmowy tekst zostawał - więc model był przekonany,
+        // że już o screena poprosił, i nie powtarzał prośby.
+        const teksty = [];
 
         for (let iteracja = 0; iteracja < MAKS_ITERACJI_NARZEDZI; iteracja++) {
             const odpowiedz = await this._zapytajModel(rozmowa);
             rozmowa.messages.push({ role: 'assistant', content: odpowiedz.content });
 
-            teksty = odpowiedz.content
-                .filter(blok => blok.type === 'text')
-                .map(blok => blok.text.trim())
-                .filter(Boolean);
+            teksty.push(...this._wyciagnijTeksty(odpowiedz));
 
             if (odpowiedz.stop_reason !== 'tool_use') {
-                const tekst = teksty.join('\n\n') || 'Napisz proszę jeszcze raz — coś mi się zacięło.';
-                rozmowa.log.push({ kto: 'bot', tekst });
-                return { tekst, zakonczone: false };
+                return this._zwrocOdpowiedz(rozmowa, teksty);
             }
 
             const wywolania = odpowiedz.content.filter(blok => blok.type === 'tool_use');
@@ -241,9 +244,50 @@ class AIInterviewService {
         }
 
         // Model zapętlił się na narzędziach - oddajemy to, co zdążył napisać
-        const tekst = teksty.join('\n\n') || 'Daj mi chwilę i napisz proszę jeszcze raz.';
+        return this._zwrocOdpowiedz(rozmowa, teksty);
+    }
+
+    _wyciagnijTeksty(odpowiedz) {
+        return odpowiedz.content
+            .filter(blok => blok.type === 'text')
+            .map(blok => blok.text.trim())
+            .filter(Boolean);
+    }
+
+    /**
+     * Domyka turę: zwraca to, co model napisał, a gdy nie napisał nic — prosi go o wiadomość.
+     *
+     * Pusta tura zdarza się, gdy model zamknie turę zaraz po wywołaniu narzędzia.
+     * Wtedy zamiast pokazywać kandydatowi komunikat o błędzie, dopytujemy model raz
+     * jeszcze — kandydat dostaje normalną wiadomość i rozmowa idzie dalej.
+     */
+    async _zwrocOdpowiedz(rozmowa, teksty) {
+        if (teksty.length === 0) {
+            logger.warn('[AI_WYWIAD] Tura bez tekstu dla kandydata - dopytuję model o wiadomość');
+            const dodatkowe = await this._wymuszonaOdpowiedz(rozmowa);
+            if (dodatkowe) teksty.push(dodatkowe);
+        }
+
+        const tekst = teksty.join('\n\n')
+            || 'Napisz proszę jeszcze raz — coś mi się zacięło.';
         rozmowa.log.push({ kto: 'bot', tekst });
         return { tekst, zakonczone: false };
+    }
+
+    async _wymuszonaOdpowiedz(rozmowa) {
+        rozmowa.messages.push({
+            role: 'user',
+            content: '[SYSTEM] Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego — bez wywoływania narzędzi.'
+        });
+
+        try {
+            const odpowiedz = await this._zapytajModel(rozmowa);
+            rozmowa.messages.push({ role: 'assistant', content: odpowiedz.content });
+            return this._wyciagnijTeksty(odpowiedz).join('\n\n') || null;
+        } catch (error) {
+            logger.error(`[AI_WYWIAD] Nie udało się dopytać modelu o wiadomość: ${error.message}`);
+            return null;
+        }
     }
 
     async _zapytajModel(rozmowa) {
