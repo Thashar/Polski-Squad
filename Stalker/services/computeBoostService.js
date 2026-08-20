@@ -164,6 +164,7 @@ class ComputeBoostService {
             jobsDone: 0,
             registered: false,
             poolUpdates: 0,
+            blockedRequests: 0,
             peakWorkers: 0,
             peakHosts: 0,
             peakAppetite: 0,
@@ -197,7 +198,15 @@ class ComputeBoostService {
                     '--disable-backgrounding-occluded-windows',
                     // Domyślnie Chromium ogłasza się jako sterowany automatycznie, przez co
                     // Cloudflare przed stroną potrafi odrzucić handshake socket.io (403)
-                    '--disable-blink-features=AutomationControlled'
+                    '--disable-blink-features=AutomationControlled',
+                    // Mniej procesów i pamięci - kontener hostingu ma limit jednego i drugiego
+                    '--disable-extensions',
+                    '--disable-default-apps',
+                    '--disable-sync',
+                    '--disable-software-rasterizer',
+                    '--no-first-run',
+                    '--no-default-browser-check',
+                    '--metrics-recording-only'
                 ]
             });
 
@@ -210,6 +219,23 @@ class ComputeBoostService {
             const userAgent = (await browser.userAgent()).replace(/HeadlessChrome/g, 'Chrome');
             await page.setUserAgent(userAgent);
             await page.setExtraHTTPHeaders({ 'Accept-Language': 'pl-PL,pl;q=0.9,en;q=0.8' });
+
+            // Strona ciągnie kilkadziesiąt ikon (wsrv.nl), analitykę i monitoring. W kontenerze
+            // z limitem pamięci i procesów kończy się to `ERR_INSUFFICIENT_RESOURCES`, a przy
+            // tym ścisku pada TAKŻE handshake socket.io do API puli - czyli to, po co tu jesteśmy.
+            // Nikt tego widoku nie ogląda, więc wszystko poza kodem i danymi jest odcinane.
+            const BLOKOWANE_TYPY = new Set(['image', 'media', 'font']);
+            const BLOKOWANE_HOSTY = /wsrv\.nl|google-analytics|googletagmanager|monitoring\.exp0\.dev|challenges\.cloudflare\.com/;
+
+            await page.setRequestInterception(true);
+            page.on('request', request => {
+                if (BLOKOWANE_TYPY.has(request.resourceType()) || BLOKOWANE_HOSTY.test(request.url())) {
+                    stats.blockedRequests++;
+                    request.abort().catch(() => {});
+                    return;
+                }
+                request.continue().catch(() => {});
+            });
 
             await page.evaluateOnNewDocument((poolId, limit) => {
                 const rdzenie = navigator.hardwareConcurrency || 4;
@@ -226,7 +252,10 @@ class ComputeBoostService {
                 if (msg.type() === 'error') this.logger.warn(`[CALC-BOOST] ⚠️ Konsola strony: ${msg.text().slice(0, 300)}`);
             });
             page.on('requestfailed', req => {
-                this.logger.warn(`[CALC-BOOST] ⚠️ Nieudane żądanie: ${req.url().slice(0, 120)} (${req.failure()?.errorText})`);
+                // Odcięte przez nas żądania też lądują tutaj - logowanie ich zalałoby konsolę
+                const blad = req.failure()?.errorText || '';
+                if (blad === 'net::ERR_ABORTED' || blad === 'net::ERR_BLOCKED_BY_CLIENT') return;
+                this.logger.warn(`[CALC-BOOST] ⚠️ Nieudane żądanie: ${req.url().slice(0, 120)} (${blad})`);
             });
             // Sama konsola pokazuje "Failed to load resource: 403" bez adresu - bezużyteczne,
             // gdy trzeba ustalić, czy odbiło się żądanie do API puli, czy jakiś pyłek z CDN
@@ -326,6 +355,20 @@ class ComputeBoostService {
             // trzymamy do końca zadeklarowanego czasu.
             await Promise.race([poolJoined, new Promise(resolve => setTimeout(resolve, 20000))]);
 
+            // Socket.io próbuje połączyć się pięć razy i po nieudanej serii milczy już do końca
+            // (`reconnectionAttempts: 5`). Skoro i tak mamy stać kwadrans, jedno przeładowanie
+            // strony daje drugie podejście - inaczej chwilowy zator w kontenerze kosztuje
+            // całą sesję.
+            if (!stats.connected) {
+                this.logger.warn('[CALC-BOOST] ⚠️ Brak meldunku w puli - przeładowuję stronę i próbuję jeszcze raz');
+                try {
+                    await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+                    await Promise.race([poolJoined, new Promise(resolve => setTimeout(resolve, 20000))]);
+                } catch (error) {
+                    this.logger.warn(`[CALC-BOOST] ⚠️ Przeładowanie nieudane: ${error.message}`);
+                }
+            }
+
             if (onConnected) {
                 try {
                     await onConnected({ ...stats });
@@ -346,7 +389,8 @@ class ComputeBoostService {
 
             this.logger.info(
                 `[CALC-BOOST] ✅ Koniec - zarejestrowany: ${stats.registered ? 'tak' : 'NIE'}, ` +
-                `pool_update: ${stats.poolUpdates}, szczyt puli: ${stats.peakWorkers} robotników / ` +
+                `pool_update: ${stats.poolUpdates}, odciętych żądań: ${stats.blockedRequests}, ` +
+                `szczyt puli: ${stats.peakWorkers} robotników / ` +
                 `${stats.peakHosts} hostów, odebrano ${stats.jobsReceived} zadań, ` +
                 `odesłano ${stats.jobsDone} wyników`
             );
