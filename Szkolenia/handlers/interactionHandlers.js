@@ -66,7 +66,8 @@ async function handleLockThread(interaction, state, config) {
         components: []
     });
 
-    await reminderStorage.removeReminder(state.lastReminderMap, channel.id);
+    // Zachowujemy wpis (a w nim `ownerId`) — po zamknięciu wątek nadal musi dać się odnaleźć
+    await reminderStorage.markThreadClosed(state.lastReminderMap, channel.id);
 
     await delay(2000);
     try {

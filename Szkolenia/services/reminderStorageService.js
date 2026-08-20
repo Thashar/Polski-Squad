@@ -76,6 +76,35 @@ class ReminderStorageService {
     }
 
     /**
+     * Oznacza wątek jako zamknięty, ZACHOWUJĄC powiązanie z właścicielem.
+     *
+     * ⚠️ Wcześniej zamknięcie wątku kasowało cały wpis (`removeReminder`). Razem z nim
+     * ginął `ownerId`, czyli jedyne powiązanie wątku z użytkownikiem niezależne od nicku —
+     * po zmianie nicku bot nie potrafił już odnaleźć zamkniętego wątku i zakładał nowy.
+     * Zapis idzie na dysk tylko wtedy, gdy coś faktycznie się zmieniło: `processThread`
+     * przechodzi po zamkniętych wątkach przy każdym sprawdzeniu.
+     *
+     * @param {Map} reminderMap - Mapa z danymi przypomień
+     * @param {string} threadId - ID wątku
+     */
+    async markThreadClosed(reminderMap, threadId) {
+        const existingData = reminderMap.get(threadId);
+        if (!existingData) return;
+
+        const bezZmian = existingData.closed === true
+            && existingData.reminderSent === false
+            && existingData.helpPingSent === false;
+        if (bezZmian) return;
+
+        existingData.closed = true;
+        existingData.reminderSent = false;
+        existingData.helpPingSent = false;
+        reminderMap.set(threadId, existingData);
+        await this.saveReminders(reminderMap);
+        logger.info(`🔒 Oznaczono wątek jako zamknięty (właściciel zachowany): ${threadId}`);
+    }
+
+    /**
      * Dodaje/aktualizuje wpis o przypomnieniu
      * @param {Map} reminderMap - Mapa z danymi przypomień
      * @param {string} threadId - ID wątku
@@ -91,7 +120,9 @@ class ReminderStorageService {
             threadCreated: threadCreated || (existingData ? existingData.threadCreated : null),
             reminderSent: existingData ? existingData.reminderSent : false,
             ownerId: ownerId || (existingData ? existingData.ownerId : null),
-            helpPingSent: existingData ? (existingData.helpPingSent || false) : false
+            helpPingSent: existingData ? (existingData.helpPingSent || false) : false,
+            // Wpis żyje dalej po zamknięciu wątku (trzyma `ownerId`) — otwarcie zdejmuje flagę
+            closed: false
         };
 
         reminderMap.set(threadId, threadData);
