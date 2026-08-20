@@ -41,7 +41,8 @@ klasyczna ścieżka zostaje nietknięta w kodzie.
 **Plik:** `services/aiInterviewService.js`
 
 **Co się zmienia:** po kliknięciu „Oczywiście, że tak!" (deklaracja polskości) **nie pojawiają się
-przyciski wyboru ścieżki** — startuje rozmowa (`step: 'ai_interview'`). Wszystko poniżej zebrania
+przyciski wyboru ścieżki** — startuje rozmowa (`step: 'ai_interview'`). W pierwszej wiadomości AI
+przedstawia się jako bot rekrutacyjny Polskiego Squadu, żeby kandydat od razu wiedział, z czym rozmawia. Wszystko poniżej zebrania
 danych — propozycja zmiany nicku, przydział klanu, embed podsumowania — jest **wspólne z klasyczną
 ścieżką**, bo AI zapisuje dane do `state.userInfo` w tym samym kształcie.
 
