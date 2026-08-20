@@ -287,7 +287,7 @@
 - **Persistent cooldowns:** Cleanup starych danych (>2 dni) przy starcie
 - **ENV:** `ANTHROPIC_API_KEY` (opcjonalne), `STALKER_LME_AI_CHAT_MODEL` (opcjonalne, default: claude-3-haiku-20240307)
 
-**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`, `/glory-test`
+**Komendy:** `/punish`, `/remind`, `/punishment`, `/points`, `/faza1`, `/faza2`, `/wyniki`, `/img`, `/progres`, `/player-status`, `/player-compare`, `/clan-status`, `/clan-progres`, `/player-raport`, `/core-ranking`, `/msg`, `/ocr-debug`, `/glory-test`, `/calc-boost`
 
 **`/glory-test`** (admin, ukryta dla nie-adminów): ręcznie wypycha dane progresu Fazy 1 do `shared_data/glory_progress.json` (wywołuje `exportGloryProgress()`) — do testów loterii Glory w Kontrolerze, bez czekania na kolejne `/faza1`. Odpowiedź ephemeral pokazuje uczestników i pulę losów per klan. Uwaga: eksport i tak dzieje się automatycznie po każdym `/faza1` i przy starcie bota.
 
@@ -317,6 +317,17 @@
 - `generateCoreComparisonChart(players, coreName, valueFn?)` → Buffer PNG lub null. Wykres zbiorczy dla strony rankingu: jedna linia na gracza, paleta `SERIES_COLORS` (10 kolorów), legenda pod osią (5 na wiersz, nick ucinany do 16 znaków), wartość przy ostatnim punkcie serii z rozsuwaniem pionowym przy kolizji. **Bez wypełnienia pod krzywą i bez etykiet przy każdym punkcie** — przy dziesięciu seriach jedno i drugie zlewa się w plamę. Wysokość rośnie z liczbą wierszy legendy
 - Wykres: Discord dark theme (#1E1F22), krzywa Catmull-Rom, oś miesięczna (pl), detekcja kolizji etykiet
 - **Krzywa a plateau** (`catmullRomControlPoints`, wspólne dla linii i wypełnienia): czysty Catmull-Rom liczy styczną z sąsiadów, więc **poziomy odcinek zaczynał się unosić jeszcze przed faktycznym wzrostem** — a przy corach plateau to norma (gracz przez tydzień nie zbiera, potem skacze). Reguły: (1) `selfFlat` — odcinek bez zmiany ilości jest idealnie poziomy na całej długości (ma **pierwszeństwo**; bez tego ostatni odcinek plateau wyginał się w dół tuż przed wzrostem, bo styczna w jego końcu liczona była już z rosnącego fragmentu), (2) `prevFlat`/`nextFlat` — gdy sąsiedni odcinek jest poziomy, styczna liczona jest z własnego odcinka, więc przejście plateau → wzrost jest **ostre**. Zaokrąglenie zostaje wszędzie tam, gdzie plateau nie ma
+
+**Calc Boost** - `computeBoostService.js` + `/calc-boost` (członkowie klanu i administratorzy — komenda jest na liście `publicCommands`, czyli omija bramkę moderatorską, a w handlerze sprawdzane jest `_hasAnyClanRole()`):
+- **Co robi:** odpala headless Chromium (`puppeteer-core`) na stronie kalkulatora (`https://sio-tools.exp0.dev/`), dołącza do puli obliczeniowej i przez **15 minut** (`config.computeBoost.durationMs`) liczy zadania mocą serwera. Po czasie przeglądarka jest zamykana.
+- **Ustawienia strony:** wstrzykiwane przez `page.evaluateOnNewDocument()`, czyli ZANIM wystartują skrypty strony — dlatego wystarczy jedno wejście, bez przeładowania. Klucze `localStorage`: `computePool` = `"POLSKA GUROM"` (JSON string) i `multithread` = liczba wątków (JSON number). Wartości muszą być **JSON-owane** — strona czyta je przez `JSON.parse`.
+- **Liczba wątków:** domyślnie `navigator.hardwareConcurrency`, czyli tyle, ile rdzeni widzi Chromium na serwerze — to zarazem maksimum suwaka „Multithread Limit" na stronie. `STALKER_LME_CALC_BOOST_THREADS` pozwala zejść niżej (wartość jest przycinana do liczby rdzeni).
+- **Chromium:** `resolveChromiumPath()` sprawdza po kolei `STALKER_LME_CHROMIUM_PATH`/`PUPPETEER_EXECUTABLE_PATH`, typowe ścieżki Linuksa (`/usr/bin/chromium`, `/usr/bin/google-chrome`…) i przeglądarki z Windowsa (praca lokalna). Brak binarki = czytelny błąd w embedzie, bot nie wywala się. W repo jest **`puppeteer-core`**, a NIE `puppeteer` — paczka nie pobiera własnego Chromium, binarka musi być na maszynie.
+- **Flagi startowe:** `--no-sandbox`, `--disable-dev-shm-usage` (kontenery) oraz trzy wyłączające dławienie tła (`--disable-background-timer-throttling`, `--disable-renderer-backgrounding`, `--disable-backgrounding-occluded-windows`) — headless zawsze jest „w tle", więc bez nich pula dostawałaby ułamek zadeklarowanej mocy.
+- **Statystyki:** ruch z pulą leci WebSocketem, więc serwis podgląda ramki przez CDP (`Network.webSocketFrameReceived/Sent`) i liczy `compute:do_job` (odebrane zadania), `compute:done` (odesłane wyniki) oraz `compute:pool_update` (szczyt robotników/hostów w puli). Zero odebranych zadań przy `connected: true` znaczy tylko tyle, że nikt akurat nic nie liczył.
+- **Jedna sesja naraz:** `isActive()`/`getRemainingMs()` — druga próba dostaje ephemeral z czasem do końca. Twardy bezpiecznik `maxDurationMs` = 15 min.
+- **Persistencja:** brak i nie jest potrzebna — sesja żyje w pamięci procesu, `stopBot()` woła `computeBoostService.stop()` (przerywa sen i ubija przeglądarkę, w razie zawieszenia `SIGKILL`). Po restarcie po prostu nie ma czego wznawiać.
+- **Odpowiedź:** `deferReply()`, edycja embeda po dołączeniu do puli i druga po zakończeniu. Token interakcji żyje 15 min — przy wydłużeniu boosta w konfiguracji podsumowanie leci zwykłą wiadomością na kanał (fallback w `wyslijPodsumowanie`).
 
 **Env:** TOKEN, MODERATOR_ROLE_1-4, PUNISHMENT_ROLE_ID, LOTTERY_BAN_ROLE_ID, TARGET_ROLE_0/1/2/MAIN, WARNING_CHANNEL_0/1/2/MAIN, CONFIRMATION_CHANNEL_0/1/2/MAIN, VACATION_CHANNEL_ID
 
@@ -372,6 +383,15 @@ STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 # News Relay (opcjonalne) - kanał z postami z innego serwera do streszczania po polsku
 # Wymaga STALKER_GOOGLE_AI_API_KEY (Gemini Vision). Brak = funkcja wyłączona
 STALKER_LME_NEWS_CHANNEL_ID=channel_id
+
+# Calc Boost (/calc-boost) - wszystkie opcjonalne, poniżej wartości domyślne
+STALKER_LME_CALC_BOOST_URL=https://sio-tools.exp0.dev/
+STALKER_LME_CALC_BOOST_POOL=POLSKA GUROM
+STALKER_LME_CALC_BOOST_SECONDS=900
+# Górny limit wątków; brak = tyle, ile rdzeni ma serwer (maksimum suwaka na stronie)
+STALKER_LME_CALC_BOOST_THREADS=
+# Ścieżka do Chromium/Chrome; brak = szukanie w typowych lokalizacjach
+STALKER_LME_CHROMIUM_PATH=/usr/bin/chromium
 
 ```
 

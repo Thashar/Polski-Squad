@@ -401,6 +401,12 @@
           "requiredPermission": "clan_member"
         },
         {
+          "name": "/calc-boost",
+          "description": "Użycza moc obliczeniową serwera puli kalkulatora sio-tools na 15 minut (tylko dla członków klanu)",
+          "usage": "/calc-boost → bot uruchamia przeglądarkę w tle, dołącza do puli POLSKA GUROM i liczy zadania",
+          "requiredPermission": "clan_member"
+        },
+        {
           "name": "/clan-progres",
           "description": "Wyświetla progres TOP30 dla wybranego klanu przez ostatnie tygodnie z 4 wykresami (TOP30, Rank, RC+TC, Atak)",
           "usage": "/clan-progres → wybierz klan z menu → 4 wykresy + skumulowany progres + historia wyników",
