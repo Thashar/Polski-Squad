@@ -2500,8 +2500,13 @@ function _isAdmin(member) {
     return member.permissions.has(PermissionFlagsBits.Administrator);
 }
 
-function _hasAnyClanRole(member, config) {
-    return Object.values(config.targetRoles).some(roleId => roleId && member.roles.cache.has(roleId));
+// Role klanowe + dodatkowe role z .env (STALKER_LME_GIFTCODE_EXTRA_ROLE)
+function _giftcodeRoleIds(config) {
+    return config.giftcodeRoleIds ?? Object.values(config.targetRoles).filter(Boolean);
+}
+
+function _hasGiftcodeRole(member, config) {
+    return _giftcodeRoleIds(config).some(roleId => member.roles.cache.has(roleId));
 }
 
 async function handleRemoveIdCommand(interaction, sharedState) {
@@ -2594,7 +2599,7 @@ async function handleGiftcodeCommand(interaction, sharedState) {
 
     // Filtruj gracze bez roli klanowej
     const guild = interaction.guild;
-    const targetRoleIds = Object.values(config.targetRoles).filter(Boolean);
+    const targetRoleIds = _giftcodeRoleIds(config);
     const eligibleEntries = [];
     const skippedEntries = [];
 
@@ -2736,7 +2741,7 @@ async function handleGiftcodeAddIdButton(interaction, sharedState) {
 
     const uidInput = new TextInputBuilder()
         .setCustomId(GIFTCODE_INPUT_ID)
-        .setLabel('Działa tylko dla członków klanu!')
+        .setLabel('Tylko dla klanowiczów i uprawnionych ról')
         .setStyle(TextInputStyle.Short)
         .setPlaceholder('np. 48676567 (same cyfry, 5–20 znaków)')
         .setMinLength(5)
@@ -2752,8 +2757,8 @@ async function handleGiftcodeAddIdButton(interaction, sharedState) {
 async function handleGiftcodeUidModalSubmit(interaction, sharedState) {
     const { config, giftcodeService } = sharedState;
 
-    if (!_hasAnyClanRole(interaction.member, config)) {
-        return interaction.reply({ content: '❌ Tylko klanowicze mogą dodać swoje ID.', flags: MessageFlags.Ephemeral });
+    if (!_hasGiftcodeRole(interaction.member, config)) {
+        return interaction.reply({ content: '❌ Nie masz uprawnień, aby dodać swoje ID.', flags: MessageFlags.Ephemeral });
     }
 
     const uid = interaction.fields.getTextInputValue(GIFTCODE_INPUT_ID).trim();

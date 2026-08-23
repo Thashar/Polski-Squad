@@ -88,7 +88,14 @@ module.exports = {
         '2': process.env.STALKER_LME_TARGET_ROLE_2,
         'main': process.env.STALKER_LME_TARGET_ROLE_MAIN
     },
-    
+
+    // Dodatkowe role uprawnione do korzystania z kodów Habby (poza rolami klanowymi)
+    // Lista ID rozdzielona przecinkami, np. "123,456"
+    giftcodeExtraRoles: (process.env.STALKER_LME_GIFTCODE_EXTRA_ROLE || '')
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean),
+
     // Nazwy wyświetlane ról
     roleDisplayNames: {
         '0': '🎮PolskiSquad⁰🎮',
@@ -198,3 +205,9 @@ module.exports = {
         sourceChannelId: process.env.STALKER_LME_NEWS_CHANNEL_ID || null
     }
 };
+
+// Wszystkie role uprawnione do kodów Habby: role klanowe + dodatkowe z .env
+module.exports.giftcodeRoleIds = [
+    ...Object.values(module.exports.targetRoles),
+    ...module.exports.giftcodeExtraRoles
+].filter(Boolean);

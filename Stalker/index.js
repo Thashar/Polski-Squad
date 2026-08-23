@@ -180,7 +180,8 @@ async function autoRedeemFromMessage(code, message) {
         return;
     }
 
-    const targetRoleIds = Object.values(config.targetRoles).filter(Boolean);
+    // Role klanowe + dodatkowe role z .env (STALKER_LME_GIFTCODE_EXTRA_ROLE)
+    const targetRoleIds = config.giftcodeRoleIds ?? Object.values(config.targetRoles).filter(Boolean);
     const eligibleEntries = [];
     const skippedCount = { count: 0 };
     for (const [discordId, userData] of allEntries) {

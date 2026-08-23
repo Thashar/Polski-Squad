@@ -80,7 +80,7 @@
 10. **Borixoning** - Auto-odpowiedź na reply "zbij bossa" na kanałach WARNING → komunikat "Wykryto zaawansowany Borixoning" z przyciskami Tak/Nie (ephemeral), cooldown raz dziennie per kanał (kasuje się o północy, persistencja w `data/boroxoning_cooldowns.json`)
 11. **Reakcja Stalker** - Gdy ktoś napisze słowo "stalker" (case-insensitive) w wiadomości na serwerze → bot dodaje reakcję `<a:PepeEvil2:1280068960787632130>` (bez cooldownu)
 14. **Kody Podarunkowe Habby** - `giftcodeService.js`: System zbierania ID graczy i masowej aktywacji kodów podarunkowych przez Habby API (bez captcha).
-   - **Zbieranie ID przez przycisk:** Na kanale `1191791557607690442` zawsze na samym dole widnieje zielony przycisk "🎮 Dodaj swoje ID". Po kliknięciu otwiera modal z polem tekstowym. Każdy użytkownik może zapisać tylko jedno ID. Wymagana rola klanowa (targetRoles). Po zapisaniu ID → automatyczna aktywacja kodów z ostatnich 30 dni.
+   - **Zbieranie ID przez przycisk:** Na kanale `1191791557607690442` zawsze na samym dole widnieje zielony przycisk "🎮 Dodaj swoje ID". Po kliknięciu otwiera modal z polem tekstowym. Każdy użytkownik może zapisać tylko jedno ID. Wymagana rola klanowa (`targetRoles`) lub dodatkowa rola z `STALKER_LME_GIFTCODE_EXTRA_ROLE` — obie listy łączy `config.giftcodeRoleIds`, używane przy dodawaniu ID, w `/giftcode` i w auto-aktywacji. Po zapisaniu ID → automatyczna aktywacja kodów z ostatnich 30 dni.
    - **Aktualizacja przycisku:** Przy każdej nowej wiadomości na kanale bot sprawdza czy ostatnia wiadomość to jego przycisk — jeśli nie, usuwa stary i postuje nowy na dole. MessageId zapisywany w `data/giftcode_button.json`.
    - `/remove-id` — administrator usuwa własne lub cudze ID (opcjonalny parametr `user`). Tylko administrator.
    - `/list-ids` — administrator widzi listę wszystkich zapisanych ID (ephemeral). Tylko administrator.
@@ -342,6 +342,9 @@ STALKER_LME_TARGET_ROLE_0=role_id
 STALKER_LME_TARGET_ROLE_1=role_id
 STALKER_LME_TARGET_ROLE_2=role_id
 STALKER_LME_TARGET_ROLE_MAIN=role_id
+
+# Kody Habby - dodatkowe role uprawnione poza rolami klanowymi (opcjonalne, lista ID po przecinku)
+STALKER_LME_GIFTCODE_EXTRA_ROLE=role_id1,role_id2
 
 # Kanały ostrzeżeń
 STALKER_LME_WARNING_CHANNEL_0=channel_id
