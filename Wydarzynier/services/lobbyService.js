@@ -76,6 +76,12 @@ class LobbyService {
                 lobby.isFull = true;
             }
 
+            // Skład i flaga `isFull` muszą przetrwać restart - bez zapisu lobby wracało
+            // ze starą listą graczy (ścieżka `/party-add` nie zapisywała go w ogóle)
+            this.saveLobbies().catch(error => {
+                logger.error('❌ Błąd podczas zapisywania lobby po dodaniu gracza:', error);
+            });
+
             return true;
         }
 
@@ -250,6 +256,8 @@ class LobbyService {
                     createdAt: lobby.createdAt,
                     lastRepositionTime: lobby.lastRepositionTime || lobby.createdAt,
                     isExtended: lobby.isExtended || false,
+                    notificationInviteAt: lobby.notificationInviteAt || null, // Kiedy wysłać zaproszenie do powiadomień o party
+                    notificationInviteSent: lobby.notificationInviteSent || false,
                     rewardPromptAt: lobby.rewardPromptAt || null, // Kiedy wysłać pytanie o nagrodę specjalną
                     rewardPromptSent: lobby.rewardPromptSent || false,
                     rewardPromptMessageId: lobby.rewardPromptMessageId || null, // Aktualna wiadomość z pytaniem

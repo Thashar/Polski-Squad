@@ -165,6 +165,7 @@ client.once(Events.ClientReady, async () => {
         const interactionHandler = new InteractionHandler(config, lobbyService, timerService, bazarService);
         await interactionHandler.registerSlashCommands(client);
 
+        restoreNotificationInvites(interactionHandler, sharedState);
         restoreRewardPrompts(interactionHandler, sharedState);
 
         startRepositionSystem(sharedState);
@@ -429,6 +430,31 @@ process.on('uncaughtException', error => {
     // ma własny handler, który przed wyjściem domyka zapisy w toku (`jsonStore.flush()`).
     // Wyjście stąd ubijało proces zanim flush zdążył się wykonać.
 });
+
+/**
+ * Przywraca zaplanowane zaproszenia do powiadomień o party po restarcie bota.
+ * Timery żyją tylko w pamięci, więc bez tego lobby zapełnione tuż przed restartem
+ * nigdy nie dostałoby wiadomości o zapełnieniu.
+ * @param {InteractionHandler} interactionHandler - Handler interakcji
+ * @param {Object} sharedState - Współdzielony stan aplikacji
+ */
+function restoreNotificationInvites(interactionHandler, sharedState) {
+    const lobbies = sharedState.lobbyService.getAllActiveLobbies();
+
+    for (const lobby of lobbies) {
+        if (lobby.notificationInviteSent || !lobby.notificationInviteAt) continue;
+
+        const remaining = Math.max(0, lobby.notificationInviteAt - Date.now());
+
+        setTimeout(() => {
+            interactionHandler.sendNotificationInvite(lobby.id, sharedState).catch(error => {
+                logger.error(`❌ Błąd podczas wysyłania przywróconego zaproszenia do powiadomień (${lobby.id}):`, error);
+            });
+        }, remaining);
+
+        logger.info(`🔔 Przywrócono zaproszenie do powiadomień dla lobby ${lobby.id} - za ${Math.round(remaining / 1000)}s`);
+    }
+}
 
 /**
  * Przywraca zaplanowane pytania o nagrodę specjalną po restarcie bota

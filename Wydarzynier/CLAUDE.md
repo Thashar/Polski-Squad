@@ -14,6 +14,10 @@
    - Wiadomość powitalna w wątku (`messages.lobbyCreated`) wypisuje komendy właściciela (`/party-add`, `/party-kick`, `/party-close`) **oraz sekcję nagród** (`/rewards`, `/stats`) z krótkim opisem każdej
 3. **Repozytorium** - `repositionService.js`: 5min interval, repost ogłoszenia na górę, update licznika
 4. **Subskrypcje** - Toggle role notifications po zapełnieniu, ephemeral feedback
+   - **Zaproszenie do powiadomień** (`messages.lobbyFull` + przycisk `toggle_party_notifications`): wysyłane w wątku **30 sekund po zapełnieniu lobby** (`lobby.notificationInviteDelay`), a nie natychmiast. Planuje je `scheduleNotificationInvite` (z `handleFullLobby`), wysyła `sendNotificationInvite`
+   - **Persistencja:** `notificationInviteAt` i `notificationInviteSent` w `lobbies.json`; `restoreNotificationInvites` w `index.js` uzbraja timer po restarcie (timery żyją tylko w RAM, więc bez tego lobby zapełnione tuż przed restartem nie dostałoby wiadomości)
+   - **Wyrzucenie gracza przez właściciela** (`/party-kick`, gdy `isFull` spada na `false`) anuluje **niewysłane** zaproszenie (`cancelNotificationInvite`) - po ponownym zapełnieniu jest planowane od nowa. Zaproszenia już wysłanego nie powtarzamy
+   - **⚠️ Kroki w `handleFullLobby` są rozdzielone** - wcześniej wszystko siedziało w jednym `try`, zaczynając od `channels.fetch` i wysyłki wiadomości: jeden nieudany request zabierał ze sobą pytanie o nagrodę i 15-minutowy timer. Tak samo w `handleAcceptPlayer` i `/party-add` dodanie gracza do wątku ma własny `try` - wyjątek nie może pominąć sprawdzenia `isFull`, bo lobby zostawałoby pełne, ale bez wiadomości, pytania o nagrodę i timera
 8. **Nagrody specjalne (czerwone skrzynki)** - `nagrodyService.js`: Zliczanie nagród zdobytych w party, ranking `/stats`, korekta `/correct`
 
 **Funkcjonalność Nagród Specjalnych:**
