@@ -906,6 +906,8 @@ STALKER_LME_CONFIRMATION_CHANNEL_1=channel_id
 STALKER_LME_CONFIRMATION_CHANNEL_2=channel_id
 STALKER_LME_CONFIRMATION_CHANNEL_MAIN=channel_id
 STALKER_LME_VACATION_CHANNEL_ID=channel_id
+# Kody Habby - dodatkowe role uprawnione poza rolami klanowymi (opcjonalne, lista ID po przecinku)
+STALKER_LME_GIFTCODE_EXTRA_ROLE=role_id1,role_id2
 # AI Chat (opcjonalne)
 ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
 STALKER_LME_AI_CHAT_MODEL=claude-3-haiku-20240307
