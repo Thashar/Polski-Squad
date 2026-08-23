@@ -447,33 +447,42 @@ class InteractionHandler {
             const added = sharedState.lobbyService.addPlayerToLobby(lobby.id, playerId);
             
             if (added) {
-                // Dodaj gracza do wątku
-                const thread = await interaction.guild.channels.fetch(lobby.threadId);
-                await thread.members.add(playerId);
-
-                // Wyślij wiadomość o dodaniu gracza
-                await thread.send(this.config.messages.playerAdded(playerId));
-
-                // Usuń oczekującą prośbę
-                sharedState.lobbyService.removePendingRequest(lobby.id, playerId);
-
-                // Aktualizuj wiadomość ogłoszeniową z nową liczbą graczy
-                await this.updateAnnouncementMessage(lobby, sharedState);
-
-                // Usuń wiadomość z prośbą bezpośrednio
+                // ⚠️ Gracz jest już w składzie, więc dalsze kroki nie mogą zabrać obsługi
+                // zapełnienia. Wcześniej dowolny nieudany request (dodanie do wątku, wiadomość
+                // powitalna, aktualizacja ogłoszenia) wyrzucał wyjątek PRZED sprawdzeniem
+                // `isFull` - lobby zostawało pełne, ale bez wiadomości o zapełnieniu,
+                // bez pytania o nagrodę i bez 15-minutowego timera.
                 try {
-                    await interaction.message.delete();
-                } catch (error) {
-                    // Jeśli nie można usunąć wiadomości, zaktualizuj ją.
-                    // Interakcja jest już potwierdzona (deferUpdate), więc edytujemy przez editReply
+                    // Dodaj gracza do wątku
+                    const thread = await interaction.guild.channels.fetch(lobby.threadId);
+                    await thread.members.add(playerId);
+
+                    // Wyślij wiadomość o dodaniu gracza
+                    await thread.send(this.config.messages.playerAdded(playerId));
+
+                    // Usuń oczekującą prośbę
+                    sharedState.lobbyService.removePendingRequest(lobby.id, playerId);
+
+                    // Aktualizuj wiadomość ogłoszeniową z nową liczbą graczy
+                    await this.updateAnnouncementMessage(lobby, sharedState);
+
+                    // Usuń wiadomość z prośbą bezpośrednio
                     try {
-                        await interaction.editReply({
-                            content: '✅ **Zaakceptowano**',
-                            components: []
-                        });
-                    } catch (updateError) {
-                        logger.error('❌ Błąd podczas aktualizacji wiadomości:', updateError);
+                        await interaction.message.delete();
+                    } catch (error) {
+                        // Jeśli nie można usunąć wiadomości, zaktualizuj ją.
+                        // Interakcja jest już potwierdzona (deferUpdate), więc edytujemy przez editReply
+                        try {
+                            await interaction.editReply({
+                                content: '✅ **Zaakceptowano**',
+                                components: []
+                            });
+                        } catch (updateError) {
+                            logger.error('❌ Błąd podczas aktualizacji wiadomości:', updateError);
+                        }
                     }
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas dodawania gracza ${playerId} do wątku lobby ${lobby.id}:`, error);
                 }
 
                 // Sprawdź czy lobby jest pełne
@@ -589,27 +598,19 @@ class InteractionHandler {
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
     async handleFullLobby(lobby, sharedState) {
+        // ⚠️ Każdy krok osobno. Wcześniej wszystko siedziało w JEDNYM `try`, a zaczynało się od
+        // `channels.fetch(threadId)` i wysyłki wiadomości - jeden nieudany request (zanik sieci,
+        // wątek chwilowo niedostępny) zabierał ze sobą pytanie o nagrodę ORAZ 15-minutowy timer,
+        // czyli lobby zostawało bez zaproszenia do powiadomień i bez zamknięcia.
+        // Zaproszenie ma teraz własny, zapisywany termin, więc przeżywa też restart bota.
+
+        // Zaproszenie do powiadomień o party - 30 sekund po zapełnieniu lobby
+        await this.scheduleNotificationInvite(lobby, sharedState);
+
+        // Zaplanuj pytanie o nagrodę specjalną (1 minuta po zapełnieniu lobby)
+        await this.scheduleRewardPrompt(lobby, sharedState);
+
         try {
-            // Wyślij wiadomość o pełnym lobby z przyciskiem powiadomień
-            const thread = await sharedState.client.channels.fetch(lobby.threadId);
-            
-            // Utwórz przycisk do zarządzania rolą powiadomień
-            const notificationButton = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId('toggle_party_notifications')
-                        .setLabel('🔔 Powiadomienia o party')
-                        .setStyle(ButtonStyle.Success)
-                );
-
-            await thread.send({
-                content: this.config.messages.lobbyFull,
-                components: [notificationButton]
-            });
-
-            // Zaplanuj pytanie o nagrodę specjalną (1 minuta po zapełnieniu lobby)
-            await this.scheduleRewardPrompt(lobby, sharedState);
-
             // Ustaw nowy timer na 15 minut od zapełnienia
             const warningCallback = async (lobbyId) => {
                 await this.sendLobbyWarning(lobbyId, sharedState);
@@ -632,7 +633,105 @@ class InteractionHandler {
             );
 
         } catch (error) {
-            logger.error('❌ Błąd podczas obsługi pełnego lobby:', error);
+            logger.error('❌ Błąd podczas ustawiania timera pełnego lobby:', error);
+        }
+    }
+
+    /**
+     * Buduje przycisk zapisu na powiadomienia o party
+     * @returns {ActionRowBuilder[]} - Rząd z przyciskiem
+     */
+    buildNotificationInviteButtons() {
+        return [
+            new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('toggle_party_notifications')
+                        .setLabel('🔔 Powiadomienia o party')
+                        .setStyle(ButtonStyle.Success)
+                )
+        ];
+    }
+
+    /**
+     * Planuje zaproszenie do powiadomień o party (30 sekund po zapełnieniu lobby)
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async scheduleNotificationInvite(lobby, sharedState) {
+        try {
+            // Nie planuj ponownie jeśli zaproszenie już poszło lub czeka w kolejce
+            if (lobby.notificationInviteSent || lobby.notificationInviteAt) return;
+
+            const delayMs = this.config.lobby.notificationInviteDelay;
+
+            lobby.notificationInviteAt = Date.now() + delayMs;
+            lobby.notificationInviteSent = false;
+            await sharedState.lobbyService.saveLobbies();
+
+            setTimeout(() => {
+                this.sendNotificationInvite(lobby.id, sharedState).catch(error => {
+                    logger.error(`❌ Błąd podczas wysyłania zaproszenia do powiadomień (${lobby.id}):`, error);
+                });
+            }, delayMs);
+
+        } catch (error) {
+            logger.error('❌ Błąd podczas planowania zaproszenia do powiadomień:', error);
+        }
+    }
+
+    /**
+     * Wysyła w wątku wiadomość o zapełnieniu lobby wraz z przyciskiem powiadomień o party
+     * @param {string} lobbyId - ID lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async sendNotificationInvite(lobbyId, sharedState) {
+        const lobby = sharedState.lobbyService.getLobby(lobbyId);
+        if (!lobby || lobby.notificationInviteSent) return;
+
+        // Zaproszenie zostało anulowane (właściciel kogoś wyrzucił)
+        if (!lobby.notificationInviteAt) return;
+
+        // Timer sprzed anulowania - po ponownym zapełnieniu obowiązuje nowy termin
+        if (Date.now() + 1000 < lobby.notificationInviteAt) return;
+
+        const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
+        if (!thread) {
+            logger.warn(`⚠️ Nie znaleziono wątku lobby ${lobbyId} - zaproszenie do powiadomień pominięte`);
+            return;
+        }
+
+        await thread.send({
+            content: this.config.messages.lobbyFull,
+            components: this.buildNotificationInviteButtons()
+        });
+
+        lobby.notificationInviteSent = true;
+        lobby.notificationInviteAt = null;
+        await sharedState.lobbyService.saveLobbies();
+
+        logger.info(`🔔 Wysłano zaproszenie do powiadomień o party w lobby ${lobbyId}`);
+    }
+
+    /**
+     * Anuluje zaplanowane (jeszcze niewysłane) zaproszenie do powiadomień.
+     * Wywoływane gdy właściciel wyrzuci gracza i lobby przestaje być pełne - wiadomość
+     * „Lobby zapełnione!" nie ma wtedy prawa się pojawić. Po ponownym zapełnieniu
+     * `handleFullLobby` zaplanuje ją od nowa. Raz wysłanego zaproszenia nie powtarzamy.
+     * @param {Object} lobby - Dane lobby
+     * @param {Object} sharedState - Współdzielony stan aplikacji
+     */
+    async cancelNotificationInvite(lobby, sharedState) {
+        try {
+            if (!lobby || lobby.notificationInviteSent || !lobby.notificationInviteAt) return;
+
+            lobby.notificationInviteAt = null;
+            await sharedState.lobbyService.saveLobbies();
+
+            logger.info(`🔕 Party ${lobby.id} przestało być pełne - anulowano zaproszenie do powiadomień`);
+
+        } catch (error) {
+            logger.error(`❌ Błąd podczas anulowania zaproszenia do powiadomień (${lobby?.id}):`, error);
         }
     }
 
@@ -2386,8 +2485,10 @@ class InteractionHandler {
             if (ownerLobby.isFull && ownerLobby.players.length < this.config.lobby.maxPlayers) {
                 ownerLobby.isFull = false;
 
-                // Właściciel wyrzucił gracza - pytanie o nagrodę znika do czasu ponownego zapełnienia
+                // Właściciel wyrzucił gracza - pytanie o nagrodę i zaproszenie do powiadomień
+                // znikają do czasu ponownego zapełnienia
                 await this.cancelRewardPrompt(ownerLobby, sharedState);
+                await this.cancelNotificationInvite(ownerLobby, sharedState);
             }
 
             // Zapisz zmiany
@@ -2792,15 +2893,21 @@ class InteractionHandler {
             const added = sharedState.lobbyService.addPlayerToLobby(ownerLobby.id, targetUser.id);
             
             if (added) {
-                // Dodaj gracza do wątku
-                const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
-                await thread.members.add(targetUser.id);
+                // Jak w ścieżce akceptacji: gracz jest już w składzie, więc nieudany request
+                // do Discorda nie może pominąć obsługi zapełnionego lobby
+                try {
+                    // Dodaj gracza do wątku
+                    const thread = await sharedState.client.channels.fetch(ownerLobby.threadId);
+                    await thread.members.add(targetUser.id);
 
-                // Wyślij wiadomość o dodaniu gracza
-                await thread.send(sharedState.config.messages.playerAdded(targetUser.id));
+                    // Wyślij wiadomość o dodaniu gracza
+                    await thread.send(sharedState.config.messages.playerAdded(targetUser.id));
 
-                // Aktualizuj wiadomość ogłoszeniową z nową liczbą graczy
-                await this.updateAnnouncementMessage(ownerLobby, sharedState);
+                    // Aktualizuj wiadomość ogłoszeniową z nową liczbą graczy
+                    await this.updateAnnouncementMessage(ownerLobby, sharedState);
+                } catch (error) {
+                    logger.error(`❌ Błąd podczas dodawania gracza ${targetUser.id} do wątku lobby ${ownerLobby.id}:`, error);
+                }
 
                 // Sprawdź czy lobby jest pełne
                 if (ownerLobby.isFull) {
