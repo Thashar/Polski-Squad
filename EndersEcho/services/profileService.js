@@ -375,7 +375,7 @@ class ProfileService {
         const t = (pol, eng) => isPol ? pol : eng;
         const {
             view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed,
-            ownProfiles = [], currentProfileIndex = 1, mainProfileIndex = 1,
+            ownProfiles = [], currentProfileIndex = 1, mainProfileIndex = 1, potdHidden = false,
         } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
@@ -468,6 +468,18 @@ class ProfileService {
                     .setLabel(t('Dodaj profil', 'Add Profile'))
                     .setEmoji('➕')
                     .setStyle(ButtonStyle.Success)
+            );
+
+            // Wyróżnienie na stronie (Gracz Dnia). Etykieta mówi, co zrobi kliknięcie,
+            // a nie w jakim stanie jesteśmy — stan widać po kolorze i emotce.
+            toolButtons.push(
+                new ButtonBuilder()
+                    .setCustomId('profile_potd_toggle')
+                    .setLabel(potdHidden
+                        ? t('Pokaż na stronie', 'Show on site')
+                        : t('Ukryj na stronie', 'Hide on site'))
+                    .setEmoji(potdHidden ? '🌐' : '🙈')
+                    .setStyle(ButtonStyle.Secondary)
             );
 
             // Narzędzia zawsze w ostatnim rzędzie; nadmiar profili (limit > 3) idzie wyżej

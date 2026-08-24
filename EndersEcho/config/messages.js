@@ -83,6 +83,8 @@ const pol = {
     profileSetMainButton: '📌 Ustaw jako main',
     profileIsMainButton: '📌 Main',
     profileSetMainDone: '📌 Main: **{profile}**.\nOd teraz `/ranking` i `/profile` (statystyki, wykres, osiągnięcia) pokazują ten profil. Dopóki jest mainem, nie można go usunąć.',
+    profilePotdHidden: '🙈 Nie będziesz już losowany jako **Gracz Dnia** na stronie.\nJeśli akurat byłeś tam pokazany, karta zniknęła w tej chwili. Możesz to cofnąć w `/profile`.',
+    profilePotdShown: '🌐 Możesz znów zostać wylosowany jako **Gracz Dnia** na stronie.\nRaz na dobę trafia tam jeden gracz — nick, wynik, pozycje, wykres postępu i rekordy bossów. Twojego awatara ani ID z Discorda tam nie ma.',
 
     // Bramka edukacyjna przed dodaniem PIERWSZEGO dodatkowego profilu
     profileIntroTitle: '👥 Dodatkowy profil — przeczytaj, zanim dodasz',
@@ -586,6 +588,8 @@ const eng = {
     profileSetMainButton: '📌 Set as main',
     profileIsMainButton: '📌 Main',
     profileSetMainDone: '📌 Main: **{profile}**.\nFrom now on `/ranking` and `/profile` (stats, chart, achievements) show this profile. While it is your main, it cannot be deleted.',
+    profilePotdHidden: '🙈 You will no longer be drawn as **Player of the Day** on the website.\nIf you happened to be featured, the card is gone as of now. You can undo this in `/profile`.',
+    profilePotdShown: '🌐 You can be drawn as **Player of the Day** on the website again.\nOnce a day one player is featured there — nickname, score, rankings, progress chart and boss records. Your Discord avatar and ID are never shown.',
 
     // Educational gate before adding the FIRST additional profile
     profileIntroTitle: '👥 Additional profile — read this before adding',

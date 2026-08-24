@@ -7879,6 +7879,15 @@ class InteractionHandler {
     }
 
     /**
+     * Gracz dnia na stronie — potrzebny w /profile do przełącznika „Ukryj na stronie".
+     * Setterem z tego samego powodu co wyżej: konstruktor ma już ponad trzydzieści argumentów.
+     * @param {Object} service
+     */
+    setPlayerOfTheDayService(service) {
+        this.playerOfTheDayService = service;
+    }
+
+    /**
      * `🔁 Odśwież ogłoszenia` (Centrum Dowodzenia) — przebudowa przycisków pod WSZYSTKIMI
      * żyjącymi rozgłoszeniami globalnymi. Potrzebne po zmianie zasad w kodzie: układ
      * przycisków siedzi w wiadomości, więc bez tego stare ogłoszenie czeka na pierwszą
@@ -8469,6 +8478,7 @@ class InteractionHandler {
                 customId === 'profile_add_intro' ||
                 customId === 'profile_subscribe' ||
                 customId === 'profile_unsubscribe' || customId === 'profile_track' ||
+                customId === 'profile_potd_toggle' ||
                 customId.startsWith('profile_view_')) {
                 await this._handleProfileButton(interaction);
                 return;
@@ -10376,6 +10386,7 @@ class InteractionHandler {
                     ownProfiles: viewerProfiles,
                     currentProfileIndex: getProfileIndex(viewerPlayerKey),
                     mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
+                    potdHidden: this.playerOfTheDayService?.isOptedOut(viewerId) || false,
                 },
                 isPol
             );
@@ -10462,6 +10473,18 @@ class InteractionHandler {
                     );
                     await interaction.followUp({
                         content: formatMessage(msgs.profileSetMainDone, { profile: profName }),
+                        flags: ['Ephemeral'],
+                    }).catch(() => {});
+                }
+            } else if (customId === 'profile_potd_toggle') {
+                // Wypisanie działa NATYCHMIAST: gdy wypisuje się dzisiejszy gracz dnia,
+                // serwis kasuje wpis na stronie, zamiast czekać na kolejne losowanie.
+                const potd = this.playerOfTheDayService;
+                if (potd) {
+                    const nowHidden = !potd.isOptedOut(state.viewerId);
+                    await potd.setOptOut(state.viewerId, nowHidden);
+                    await interaction.followUp({
+                        content: nowHidden ? msgs.profilePotdHidden : msgs.profilePotdShown,
                         flags: ['Ephemeral'],
                     }).catch(() => {});
                 }
@@ -10574,6 +10597,7 @@ class InteractionHandler {
                 ownProfiles: isOwnProfileNow ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
                 currentProfileIndex: getProfileIndex(state.targetPlayerKey),
                 mainProfileIndex: this.profileRegistryService?.getMainIndex(state.viewerId) || 1,
+                potdHidden: this.playerOfTheDayService?.isOptedOut(state.viewerId) || false,
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -10625,6 +10649,7 @@ class InteractionHandler {
                             ownProfiles: isOwnPrev ? (this.profileRegistryService?.getProfiles(state.viewerId) || []) : [],
                             currentProfileIndex: getProfileIndex(state.targetPlayerKey),
                             mainProfileIndex: this.profileRegistryService?.getMainIndex(state.viewerId) || 1,
+                            potdHidden: this.playerOfTheDayService?.isOptedOut(state.viewerId) || false,
                         },
                         isPol
                     );
@@ -10670,6 +10695,7 @@ class InteractionHandler {
                         ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
                         currentProfileIndex: getProfileIndex(targetPlayerKey),
                         mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
+                        potdHidden: this.playerOfTheDayService?.isOptedOut(viewerId) || false,
                     },
                     newIsPol
                 );
@@ -10738,6 +10764,7 @@ class InteractionHandler {
                     ownProfiles: isOwnProfile ? (this.profileRegistryService?.getProfiles(viewerId) || []) : [],
                     currentProfileIndex: getProfileIndex(targetPlayerKey),
                     mainProfileIndex: this.profileRegistryService?.getMainIndex(viewerId) || 1,
+                    potdHidden: this.playerOfTheDayService?.isOptedOut(viewerId) || false,
                 },
                 isPol
             );

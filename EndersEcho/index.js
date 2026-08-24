@@ -47,6 +47,7 @@ const { createLlmAdapter } = require('../utils/llmAdapter');
 const { zarejestruj: zarejestrujZadanie } = require('../utils/cronCatchUp');
 const AdminPanelService = require('./services/adminPanelService');
 const WebRankingSyncService = require('./services/webRankingSyncService');
+const PlayerOfTheDayService = require('./services/playerOfTheDayService');
 const BroadcastReactionService = require('./services/broadcastReactionService');
 const CommandUsageService = require('./services/commandUsageService');
 
@@ -138,6 +139,15 @@ const kingBumChatService = new KingBumChatService(config, rankingService);
 const commandUsageService = new CommandUsageService(config.ranking.dataDir);
 // Wysyłka TOP 10 na stronę (endersecho.thashar.dev) — kierunek bot → strona
 const webRankingSyncService = new WebRankingSyncService(config, logger, { rankingService, guildConfigService });
+// Gracz dnia na stronie — jeden losowany gracz na dobę, ten sam kierunek bot → strona
+const playerOfTheDayService = new PlayerOfTheDayService(config, logger, {
+    rankingService,
+    guildConfigService,
+    scoreHistoryService,
+    bossRecordService,
+    achievementService,
+    notificationService,
+});
 const broadcastReactionService = new BroadcastReactionService(config, logger);
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
     rankingService,
@@ -163,6 +173,7 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
 // Setterem, nie kolejnym parametrem pozycyjnym — konstruktor ma ich już 31 i dokładanie
 // następnego to proszenie się o przestawienie argumentów przy kolejnej zmianie.
 interactionHandler.setBroadcastReactionService(broadcastReactionService);
+interactionHandler.setPlayerOfTheDayService(playerOfTheDayService);
 // Cykliczny raport Global TOP10 też idzie na wszystkie serwery naraz — jego reakcje
 // mają się sumować tak samo jak pod /info i ogłoszeniem nowego serwera
 globalTop10Service.setBroadcastReactionService(broadcastReactionService);
@@ -246,6 +257,12 @@ async function initializeBot() {
             await webRankingSyncService.load();
             webRankingSyncService.syncAll(client).catch(() => {});
             webRankingSyncService.startAutoSync(client);
+        }
+
+        // Gracz dnia — losowanie sprawdzane co minutę, żeby przeżyło restart i zmianę czasu
+        if (playerOfTheDayService.isEnabled()) {
+            await playerOfTheDayService.load();
+            playerOfTheDayService.start(client);
         }
 
         // Zbiorcze liczniki reakcji pod rozgłoszeniami — rejestr kopii wiadomości
@@ -574,6 +591,7 @@ async function stopBot() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     globalTop10Service.stop();
     webRankingSyncService.stopAutoSync();
+    playerOfTheDayService.stop();
     broadcastReactionService.stop();
     try {
         if (client.readyAt) {
