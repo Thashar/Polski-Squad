@@ -65,7 +65,7 @@ module.exports = {
 
     // Ranking /stats
     stats: {
-        usersPerPage: 10 // Ilu graczy na stronę (powyżej pojawia się paginacja)
+        usersPerPage: 10 // Maksymalnie ilu graczy na stronę - mniej, gdy rozbicie na ikony nagród nie mieści się w opisie embeda (buildStatsPages)
     },
 
     // Nagrody specjalne (czerwone skrzynki) - kolejność = kolejność przycisków

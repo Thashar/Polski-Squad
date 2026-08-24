@@ -19,6 +19,14 @@ const rewardPromptRepositioning = new Set();
 // które domyka wyłącznie editReply; po deferUpdate nic nie wisi i pasuje followUp.
 const ACK_MODE = Symbol('wydarzynierAckMode');
 
+// Ranking /stats: limit opisu embeda to 4096 znaków - zostawiamy zapas na dłuższe nicki.
+// Powyżej tej długości znikały ikony nagród, więc zamiast ucinać rozbicie zmniejszamy
+// liczbę graczy na stronie (buildStatsPages).
+const STATS_DESCRIPTION_LIMIT = 3800;
+
+// Wpisy graczy w rankingu rozdziela pusta linia
+const STATS_ENTRY_SEPARATOR = '\n\n';
+
 class InteractionHandler {
     constructor(config, lobbyService, timerService, bazarService) {
         this.config = config;
@@ -1348,6 +1356,73 @@ class InteractionHandler {
     }
 
     /**
+     * Buduje wpis pojedynczego gracza w rankingu /stats
+     * Układ jak w rankingu EndersEcho: numer w `kodzie`, pogrubiony nick, ikony dopiero
+     * w linii cytatu pod spodem
+     * @param {Object} entry - Wpis rankingu
+     * @param {number} position - Miejsce w rankingu (od 1)
+     * @param {boolean} withBreakdown - Czy pokazać rozbicie na ikony nagród
+     * @returns {string} - Tekst wpisu
+     */
+    formatStatsEntry(entry, position, withBreakdown) {
+        const lines = [`\`${String(position).padStart(2, '0')}\`  **${entry.displayName}**`];
+
+        if (withBreakdown) {
+            const party = this.formatRewardBreakdown(entry.rewards);
+            const manual = this.formatRewardBreakdown(entry.manualRewards);
+
+            if (party) lines.push(`> ${party}`);
+            if (manual) lines.push(`> Zdobyte na randomach:  ${manual}`);
+        }
+
+        // Suma na serwerze (licznik z party) ustawia miejsce w rankingu,
+        // suma z randomami dolicza jeszcze nagrody dopisane samodzielnie
+        lines.push(`> Suma na serwerze: **${entry.total}** | Suma z randomami: **${entry.total + entry.manualTotal}**`);
+
+        return lines.join('\n');
+    }
+
+    /**
+     * Dzieli ranking na strony tak, żeby rozbicie na ikony zawsze zmieściło się w opisie embeda.
+     * Gracz z wieloma rodzajami nagród zajmuje dużo miejsca (emotka niestandardowa to ~35 znaków),
+     * więc zamiast chować ikony na całej stronie wchodzi na nią po prostu mniej graczy.
+     * `config.stats.usersPerPage` jest maksimum, a nie stałą liczbą graczy na stronie.
+     * @param {Array} ranking - Pełny ranking
+     * @returns {Array} - Strony `{ start, entries }`, gdzie `start` to indeks pierwszego wpisu
+     */
+    buildStatsPages(ranking) {
+        const maxPerPage = this.config.stats.usersPerPage;
+        const pages = [];
+        let entries = [];
+        let start = 0;
+        let length = 0;
+
+        ranking.forEach((entry, index) => {
+            const text = this.formatStatsEntry(entry, index + 1, true);
+            const withEntry = entries.length === 0
+                ? text.length
+                : length + STATS_ENTRY_SEPARATOR.length + text.length;
+
+            // Pierwszy wpis wchodzi na stronę zawsze - nawet gdyby sam przekraczał limit
+            // (wtedy buildStatsView zdejmie ikony, bo nie ma czego już dzielić)
+            if (entries.length > 0 && (withEntry > STATS_DESCRIPTION_LIMIT || entries.length >= maxPerPage)) {
+                pages.push({ start, entries });
+                start = index;
+                entries = [entry];
+                length = text.length;
+                return;
+            }
+
+            entries.push(entry);
+            length = withEntry;
+        });
+
+        if (entries.length > 0) pages.push({ start, entries });
+
+        return pages;
+    }
+
+    /**
      * Buduje widok rankingu /stats dla wskazanej strony (embed + przyciski stronicowania)
      * @param {Object} sharedState - Współdzielony stan aplikacji
      * @param {number} page - Numer strony (od 0)
@@ -1357,39 +1432,19 @@ class InteractionHandler {
         const ranking = sharedState.nagrodyService.getRanking();
         if (ranking.length === 0) return null;
 
-        const perPage = this.config.stats.usersPerPage;
-        const totalPages = Math.max(1, Math.ceil(ranking.length / perPage));
+        const pages = this.buildStatsPages(ranking);
+        const totalPages = pages.length;
         const currentPage = Math.min(Math.max(page, 0), totalPages - 1);
-        const pageEntries = ranking.slice(currentPage * perPage, (currentPage + 1) * perPage);
-
-        // Układ jak w rankingu EndersEcho: numer w `kodzie`, pogrubiony nick, ikony dopiero
-        // w linii cytatu pod spodem, a gracze rozdzieleni pustą linią
-        const buildEntry = (entry, index, withBreakdown) => {
-            const position = String(currentPage * perPage + index + 1).padStart(2, '0');
-            const lines = [`\`${position}\`  **${entry.displayName}**`];
-
-            if (withBreakdown) {
-                const party = this.formatRewardBreakdown(entry.rewards);
-                const manual = this.formatRewardBreakdown(entry.manualRewards);
-
-                if (party) lines.push(`> ${party}`);
-                if (manual) lines.push(`> Zdobyte na randomach:  ${manual}`);
-            }
-
-            // Suma na serwerze (licznik z party) ustawia miejsce w rankingu,
-            // suma z randomami dolicza jeszcze nagrody dopisane samodzielnie
-            lines.push(`> Suma na serwerze: **${entry.total}** | Suma z randomami: **${entry.total + entry.manualTotal}**`);
-
-            return lines.join('\n');
-        };
+        const { start, entries: pageEntries } = pages[currentPage];
 
         const buildDescription = withBreakdown => pageEntries
-            .map((entry, index) => buildEntry(entry, index, withBreakdown))
-            .join('\n\n');
+            .map((entry, index) => this.formatStatsEntry(entry, start + index + 1, withBreakdown))
+            .join(STATS_ENTRY_SEPARATOR);
 
-        // Przy bardzo rozbudowanych kontach rozbicie nie mieści się w limicie opisu (4096 znaków)
+        // Strony są dobierane tak, żeby rozbicie na ikony się zmieściło (buildStatsPages),
+        // więc rezygnacja z ikon zostaje wyłącznie na wypadek jednego skrajnie długiego wpisu
         let description = buildDescription(true);
-        if (description.length > 3800) description = buildDescription(false);
+        if (description.length > STATS_DESCRIPTION_LIMIT) description = buildDescription(false);
 
         const partyTotals = sharedState.nagrodyService.getTotalsByReward('party');
         const manualTotals = sharedState.nagrodyService.getTotalsByReward('manual');
