@@ -820,6 +820,9 @@ Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreV
 - **Persistencja:** cooldowny w `data/king_bum_cooldowns.json` (auto-czyszczenie po 48h)
 - **Max długość pytania:** 500 znaków
 - **Persona:** King BUM — leniwy, ironiczny władca serwera, Discord markdown, krótkie odpowiedzi
+- **Kontekst dopinany do KAŻDEJ wiadomości** (`_buildRankingContext`): ranking serwera (numerowana lista `nick - wynik`) + wynik pytającego. To materiał referencyjny, nie temat rozmowy
+- **Zakaz niepytanego podawania pozycji** — sekcja `Ranking data attached to your prompt` w `SYSTEM_PROMPT`. Bez niej model dorzucał „Ty na 3." do wypowiedzi, w których nikt o ranking nie pytał (ranking siedzi w prompcie zawsze, więc traktował go jak materiał do wykorzystania). Dodając nowe dane do kontekstu, dopisz analogiczną regułę, kiedy wolno ich użyć
+- **Lore serwera** (`Server lore` w `SYSTEM_PROMPT`): tylko **Thashar** — twórca bota; wspominany **wyłącznie** na pytanie o niego, nigdy z własnej inicjatywy. Wpis o Incognito został usunięty
 
 ### Provider: Anthropic (domyślny)
 - **Model:** `ENDERSECHO_AI_CHAT_MODEL` (domyślnie `claude-3-haiku-20240307`)
