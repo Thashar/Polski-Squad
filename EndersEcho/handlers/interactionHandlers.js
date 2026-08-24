@@ -5395,6 +5395,35 @@ class InteractionHandler {
     }
 
     /**
+     * Rozstrzyga typ wpisu w kanale logów OCR po ZAPISANYM rekordzie (`/update`, panel).
+     * Brak wpisu profilu na tym serwerze nie znaczy jeszcze „nowy gracz":
+     *  - profil miał wynik na innym serwerze → przeprowadzka (`server_change`) z podaniem, skąd
+     *  - to dodatkowy profil tej samej osoby (slot > 1) → nowe konto w grze (`new_account`)
+     *  - dopiero pierwszy wynik pierwszego profilu to faktycznie nowy gracz (`new_player`)
+     * @param {Object|null} currentScore - dotychczasowy rekord profilu NA TYM serwerze
+     * @param {Object|null} prevGlobalUser - wpis profilu w rankingu globalnym sprzed zapisu
+     * @param {string} guildId - serwer, na którym wynik został zapisany
+     * @param {number} profileIndex - numer slotu profilu (1 = główny)
+     * @param {boolean} roleError - czy aktualizacja ról TOP padła (wariant żółty)
+     * @returns {{ type: string, movedFromGuildId: string|null }}
+     */
+    _resolveUpdateLogType(currentScore, prevGlobalUser, guildId, profileIndex, roleError = false) {
+        if (currentScore) return { type: roleError ? 'role_error' : 'new_record', movedFromGuildId: null };
+
+        const movedFromGuildId = prevGlobalUser?.sourceGuildId && prevGlobalUser.sourceGuildId !== guildId
+            ? prevGlobalUser.sourceGuildId
+            : null;
+
+        if (movedFromGuildId) {
+            return { type: roleError ? 'role_error_server_change' : 'server_change', movedFromGuildId };
+        }
+        if (profileIndex > 1) {
+            return { type: roleError ? 'role_error_new_account' : 'new_account', movedFromGuildId: null };
+        }
+        return { type: roleError ? 'role_error_new_player' : 'new_player', movedFromGuildId: null };
+    }
+
+    /**
      * Wiersz z przyciskiem cofnięcia dla admina (embed w kanale logów OCR).
      * Kluczem jest ID publicznego ogłoszenia — dzięki temu przycisk admina i przycisk
      * gracza dotyczą DOKŁADNIE tego samego rekordu. Fallback na starą postać
@@ -7567,12 +7596,14 @@ class InteractionHandler {
                 gl.success(`✅ ${this.logService.nickLink(userName, userId)} Role TOP zaktualizowane po nowym rekordzie`);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
                 const revertRow = this._buildAdminRevertRow(_newRecordPublicMsg?.id, playerKey, guildId);
-                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'new_record' : 'new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
+                const logType = this._resolveUpdateLogType(currentScore, _prevGlobalUser, guildId, profileIndex);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: logType.type, movedFromGuildId: logType.movedFromGuildId, userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score ?? _prevGlobalUser?.score, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
             } catch (roleError) {
                 await this.logService.logMessage('error', `Błąd aktualizacji ról TOP: ${roleError.message}`, interaction);
                 // Sesja cofnięcia wyniku (tylko dla zapisanego rekordu, nie dryRun)
                 const revertRow = this._buildAdminRevertRow(_newRecordPublicMsg?.id, playerKey, guildId);
-                _ocrEmbedParams = { profileIndex, profileLabel, type: currentScore ? 'role_error' : 'role_error_new_player', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score, roleError: roleError.message, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
+                const logTypeErr = this._resolveUpdateLogType(currentScore, _prevGlobalUser, guildId, profileIndex, true);
+                _ocrEmbedParams = { profileIndex, profileLabel, type: logTypeErr.type, movedFromGuildId: logTypeErr.movedFromGuildId, userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score ?? _prevGlobalUser?.score, roleError: roleError.message, revertComponents: revertRow, onSent: this._adminMsgTracker(_newRecordPublicMsg?.id) };
             }
 
             // Aktualizacja ról TOP na serwerach, z których usunięto gorszy wynik gracza

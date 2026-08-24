@@ -8,9 +8,16 @@ const OCR_EMBED_TYPES = {
     // Fuksja — pierwszy wynik gracza ma się wyróżniać na tle zwykłych rekordów.
     // Wcześniej dzielił zieleń z `new_record` i oba typy były nie do odróżnienia po kolorze.
     new_player:              { color: 0xEB459E, emoji: '🆕', label: 'NOWY GRACZ' },
+    // Przeprowadzka profilu: wynik był na innym serwerze i przeniósł się tutaj. Wcześniej taki
+    // wpis lądował jako „NOWY GRACZ" — na nowym serwerze profil nie ma wpisu, choć gracz nie jest nowy.
+    server_change:           { color: 0x3498DB, emoji: '🔀', label: 'ZMIANA SERWERA' },
+    // Pierwszy wynik DODATKOWEGO profilu tej samej osoby - to nowe konto w grze, nie nowy gracz
+    new_account:             { color: 0x9B59B6, emoji: '🪪', label: 'NOWE KONTO' },
     boss_record:             { color: 0x1ABC9C, emoji: '👾', label: 'POBITO REKORD BOSSA' },
     role_error:              { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY REKORD — błąd uprawnień ról' },
     role_error_new_player:   { color: 0xFEE75C, emoji: '⚠️', label: 'NOWY GRACZ — błąd uprawnień ról' },
+    role_error_server_change:{ color: 0xFEE75C, emoji: '⚠️', label: 'ZMIANA SERWERA — błąd uprawnień ról' },
+    role_error_new_account:  { color: 0xFEE75C, emoji: '⚠️', label: 'NOWE KONTO — błąd uprawnień ról' },
     rejected:                { color: 0xED4245, emoji: '🚫', label: 'ANALIZA ODRZUCONA' },
     no_record:               { color: 0x5865F2, emoji: '📊', label: 'REKORD NIE POBITY' },
     test_record:             { color: 0x00B4D8, emoji: '🧪', label: 'TEST — nowy rekord' },
@@ -130,6 +137,22 @@ class LogService {
      * @param {string} [options.roleError]    - wiadomość błędu ról
      * @param {import('discord.js').Guild|null} guildObj
      */
+    /**
+     * Czytelna nazwa serwera do pól embeda: tag (bez składni emoji, jak w autorze embeda)
+     * plus nazwa z konfiguracji, a gdy serwera nie ma w konfiguracji - nazwa z cache klienta
+     * albo samo ID.
+     * @param {string} guildId
+     * @param {import('discord.js').Client|null} client
+     * @returns {string}
+     */
+    _guildLabel(guildId, client = null) {
+        const cfg = this.config.getGuildConfig?.(guildId) || null;
+        const cached = (client || this._client)?.guilds?.cache?.get(guildId) || null;
+        const name = cfg?.guildName || cached?.name || guildId;
+        const tag = cfg?.tag ? cfg.tag.replace(/^<a?:([^:]+):\d+>$/, '$1') : null;
+        return tag ? `${tag}  ${name}` : name;
+    }
+
     sendOcrAnalysisEmbed(guildId, options = {}, guildObj = null, components = null, client = null) {
         const targetChannelId = this._ocrLogChannelId;
         if (!targetChannelId) {
@@ -154,6 +177,7 @@ class LogService {
                 globalPlayerCount = null,
                 profileIndex = null,
                 profileLabel = null,
+                movedFromGuildId = null,
             } = options;
 
             const cfg = OCR_EMBED_TYPES[type] || { color: 0x99AAB5, emoji: '•', label: type };
@@ -188,6 +212,14 @@ class LogService {
                     name: '👥 Profil',
                     value: profileLabel ? `#${profileIndex} — ${profileLabel}` : `#${profileIndex}`,
                     inline: true,
+                });
+            }
+            // Przeprowadzka profilu - admin ma od razu widzieć, skąd i dokąd powędrował wynik
+            if (movedFromGuildId) {
+                embed.addFields({
+                    name: '🔀 Zmiana serwera',
+                    value: [`**Z:** ${this._guildLabel(movedFromGuildId, client)}`, `**Na:** ${authorName}`].join('\n'),
+                    inline: false,
                 });
             }
             if (commandName) {
