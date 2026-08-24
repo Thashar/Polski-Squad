@@ -432,9 +432,10 @@ process.on('uncaughtException', error => {
 });
 
 /**
- * Przywraca zaplanowane zaproszenia do powiadomień o party po restarcie bota.
- * Timery żyją tylko w pamięci, więc bez tego lobby zapełnione tuż przed restartem
- * nigdy nie dostałoby wiadomości o zapełnieniu.
+ * Ponawia niewysłane wiadomości o zapełnieniu lobby po restarcie bota.
+ * Wiadomość idzie od razu po zapełnieniu, więc w kolejce (`notificationInviteAt` bez
+ * `notificationInviteSent`) zostaje tylko ta, której wysyłka padła - np. gdy wątek był
+ * chwilowo niedostępny albo bot zrestartował się dokładnie w trakcie.
  * @param {InteractionHandler} interactionHandler - Handler interakcji
  * @param {Object} sharedState - Współdzielony stan aplikacji
  */

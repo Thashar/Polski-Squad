@@ -612,8 +612,8 @@ class InteractionHandler {
         // czyli lobby zostawało bez zaproszenia do powiadomień i bez zamknięcia.
         // Zaproszenie ma teraz własny, zapisywany termin, więc przeżywa też restart bota.
 
-        // Zaproszenie do powiadomień o party - 30 sekund po zapełnieniu lobby
-        await this.scheduleNotificationInvite(lobby, sharedState);
+        // Wiadomość o zapełnieniu lobby razem z przyciskiem powiadomień - od razu po zapełnieniu
+        await this.announceFullLobby(lobby, sharedState);
 
         // Zaplanuj pytanie o nagrodę specjalną (1 minuta po zapełnieniu lobby)
         await this.scheduleRewardPrompt(lobby, sharedState);
@@ -662,29 +662,28 @@ class InteractionHandler {
     }
 
     /**
-     * Planuje zaproszenie do powiadomień o party (30 sekund po zapełnieniu lobby)
+     * Wysyła wiadomość o zapełnieniu lobby (`messages.lobbyFull`) razem z przyciskiem
+     * powiadomień o party - **od razu po zapełnieniu**. Wcześniej czekała 30 sekund
+     * (usunięte ustawienie `lobby.notificationInviteDelay`) i przez ten czas gracze mieli
+     * pełne lobby bez żadnej informacji.
+     * Termin zostaje zapisany w lobby (`notificationInviteAt`) PRZED wysyłką - dzięki temu
+     * nieudana wysyłka (zanik sieci, wątek chwilowo niedostępny) zostaje w kolejce i
+     * `restoreNotificationInvites` ponowi ją po restarcie bota.
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
-    async scheduleNotificationInvite(lobby, sharedState) {
+    async announceFullLobby(lobby, sharedState) {
         try {
-            // Nie planuj ponownie jeśli zaproszenie już poszło lub czeka w kolejce
-            if (lobby.notificationInviteSent || lobby.notificationInviteAt) return;
+            // Raz wysłanej wiadomości nie powtarzamy (np. po ponownym zapełnieniu lobby)
+            if (lobby.notificationInviteSent) return;
 
-            const delayMs = this.config.lobby.notificationInviteDelay;
-
-            lobby.notificationInviteAt = Date.now() + delayMs;
-            lobby.notificationInviteSent = false;
+            lobby.notificationInviteAt = Date.now();
             await sharedState.lobbyService.saveLobbies();
 
-            setTimeout(() => {
-                this.sendNotificationInvite(lobby.id, sharedState).catch(error => {
-                    logger.error(`❌ Błąd podczas wysyłania zaproszenia do powiadomień (${lobby.id}):`, error);
-                });
-            }, delayMs);
+            await this.sendNotificationInvite(lobby.id, sharedState);
 
         } catch (error) {
-            logger.error('❌ Błąd podczas planowania zaproszenia do powiadomień:', error);
+            logger.error(`❌ Błąd podczas wysyłania wiadomości o zapełnieniu lobby (${lobby?.id}):`, error);
         }
     }
 
@@ -700,7 +699,8 @@ class InteractionHandler {
         // Zaproszenie zostało anulowane (właściciel kogoś wyrzucił)
         if (!lobby.notificationInviteAt) return;
 
-        // Timer sprzed anulowania - po ponownym zapełnieniu obowiązuje nowy termin
+        // Ponowienie przywrócone po restarcie: gdy w międzyczasie ustalono nowy, późniejszy
+        // termin, czekamy na niego zamiast wysyłać wiadomość dwa razy
         if (Date.now() + 1000 < lobby.notificationInviteAt) return;
 
         const thread = await sharedState.client.channels.fetch(lobby.threadId).catch(() => null);
@@ -722,10 +722,11 @@ class InteractionHandler {
     }
 
     /**
-     * Anuluje zaplanowane (jeszcze niewysłane) zaproszenie do powiadomień.
-     * Wywoływane gdy właściciel wyrzuci gracza i lobby przestaje być pełne - wiadomość
-     * „Lobby zapełnione!" nie ma wtedy prawa się pojawić. Po ponownym zapełnieniu
-     * `handleFullLobby` zaplanuje ją od nowa. Raz wysłanego zaproszenia nie powtarzamy.
+     * Zdejmuje z kolejki wiadomość o zapełnieniu, której NIE udało się wysłać.
+     * Wiadomość idzie od razu po zapełnieniu, więc w kolejce zostaje tylko wtedy, gdy wysyłka
+     * padła (np. wątek chwilowo niedostępny). Wywoływane gdy właściciel wyrzuci gracza i lobby
+     * przestaje być pełne - „Lobby zapełnione!" nie ma się wtedy pojawić z opóźnieniem.
+     * Po ponownym zapełnieniu `handleFullLobby` wyśle ją od nowa. Raz wysłanej nie powtarzamy.
      * @param {Object} lobby - Dane lobby
      * @param {Object} sharedState - Współdzielony stan aplikacji
      */
