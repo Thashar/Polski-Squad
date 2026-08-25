@@ -3635,8 +3635,12 @@ class InteractionHandler {
             return;
         }
         const t = this._panelT(interaction.guildId);
+        // Diagnostyka odpytuje API (member, role, każdy kanał z osobna) i wysyła
+        // wiadomość próbną — spokojnie przekracza 3-sekundowe okno na odpowiedź.
+        // Bez wcześniejszego potwierdzenia interakcja kończy się błędem 10062.
+        await interaction.deferUpdate();
         const embed = await this._buildDiagnosticsEmbed(guild, t, interaction.client);
-        await interaction.update({ content: null, embeds: [embed], components: [] });
+        await interaction.editReply({ content: null, embeds: [embed], components: [] });
     }
 
     // ── CC: Podgląd raportu TOP10 na żądanie ─────────────────────────────────
@@ -11757,8 +11761,16 @@ class InteractionHandler {
             const lang = guildCfg.lang || 'pol';
             const embed = lang === 'eng' ? embedEN : embedPL;
             try {
-                const channel = await client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
-                if (!channel) continue;
+                const guildObj = client.guilds.cache.get(guildCfg.id);
+                if (!guildObj) continue;
+                // Ten sam resolver co w diagnostyce i /info: odrzuca kanał z obcego
+                // serwera i kanał, na który nie da się nic wysłać.
+                const wynikKanalu = await this._pobierzKanalSerwera(client, guildObj, guildCfg.allowedChannelId);
+                const channel = wynikKanalu.ch;
+                if (!channel) {
+                    logger.error(`Ogłoszenie nowego serwera pominięte dla "${guildObj.name}": kanał ${guildCfg.allowedChannelId} — powód=${wynikKanalu.powod}`);
+                    continue;
+                }
                 const sent = await channel.send({ embeds: [embed] });
                 sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: sent.id });
             } catch (err) {
@@ -11792,19 +11804,38 @@ class InteractionHandler {
             const guildLabel = guildObj?.name || guildCfg.tag || guildCfg.id;
             const lang = guildCfg.lang || 'pol';
 
-            if (!guildObj) continue;
+            // Serwer zostaje w konfiguracji także wtedy, gdy bot z niego wyleciał.
+            // Wcześniej znikał z raportu bez słowa i „wysłano 8/9" nie miało jak się
+            // zgodzić z liczbą serwerów pokazaną w podglądzie.
+            if (!guildObj) {
+                logger.error(`[/info] Pominięto "${guildLabel}" (${guildCfg.id}) — bota nie ma na tym serwerze`);
+                results.push({
+                    label: guildLabel, id: guildCfg.id, status: 'error', lang,
+                    error: {
+                        pol: 'Bota nie ma na tym serwerze (usunięty lub serwer niedostępny)',
+                        eng: 'The bot is not on this server (removed or server unavailable)',
+                        fix_pol: 'Zaproś bota ponownie albo usuń serwer z konfiguracji.',
+                        fix_eng: 'Re-invite the bot or remove the server from the configuration.',
+                    },
+                    channelId: guildCfg.allowedChannelId, guildObj: null,
+                });
+                continue;
+            }
 
             try {
-                const channel = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
+                // Ten sam resolver, na którym stoi diagnostyka — inaczej obie strony
+                // sprawdzają co innego i raport potrafi wskazywać nieistniejącą przyczynę
+                // (np. „nadaj Wyświetl kanał" dla kanału z zupełnie innego serwera).
+                const wynikKanalu = await this._pobierzKanalSerwera(interaction.client, guildObj, guildCfg.allowedChannelId);
+                const channel = wynikKanalu.ch;
                 if (!channel) {
+                    logger.error(
+                        `[/info] "${guildLabel}" (${guildCfg.id}): kanał ${guildCfg.allowedChannelId} odrzucony — powód=${wynikKanalu.powod}` +
+                        (wynikKanalu.obcyGuildId ? ` (należy do ${wynikKanalu.obcyGuildId})` : '') +
+                        (wynikKanalu.err ? ` (${wynikKanalu.err.code ?? '?'} ${wynikKanalu.err.message})` : ''));
                     results.push({
                         label: guildLabel, id: guildCfg.id, status: 'error', lang,
-                        error: {
-                            pol: 'Nie znaleziono kanału (ID kanału może być nieaktualne)',
-                            eng: 'Channel not found (channel ID may be outdated)',
-                            fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.',
-                            fix_eng: 'Use `/configure` to select a new channel for the bot.',
-                        },
+                        error: this._opisProblemuKanalu(wynikKanalu),
                         channelId: guildCfg.allowedChannelId, guildObj,
                     });
                     continue;
@@ -14634,11 +14665,102 @@ class InteractionHandler {
 
     async _handlePanelDiagnostics(interaction) {
         const t = this._panelT(interaction.guildId);
+        // Jak wyżej: odpytania API + wiadomość próbna nie mieszczą się w 3 sekundach.
+        await interaction.deferUpdate();
         const embed = await this._buildDiagnosticsEmbed(interaction.guild, t, interaction.client);
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_back_configure').setEmoji('◀️').setLabel(t('Wróć do konfiguracji', 'Back to Configuration')).setStyle(ButtonStyle.Secondary),
         );
-        await interaction.update({ embeds: [embed], components: [backRow] });
+        await interaction.editReply({ embeds: [embed], components: [backRow] });
+    }
+
+    /**
+     * Ustala kanał serwera po ID — wspólne źródło prawdy dla diagnostyki i dla
+     * realnej wysyłki (/info, ogłoszenie nowego serwera). Jedna implementacja, bo
+     * dopóki były dwie, diagnostyka sprawdzała co innego, niż robiła wysyłka.
+     *
+     * Stan bierzemy z API (`force`), nie z pamięci podręcznej: nakładki uprawnień
+     * odświeżają się zdarzeniem channelUpdate, a bot dostaje je wyłącznie dla
+     * kanałów, które widzi. Gdy ktoś odbierze mu „Wyświetl kanał", zdarzenia
+     * przestają przychodzić i w pamięci zostaje ostatnia, zielona wersja nakładek.
+     *
+     * Nieudany fetch jest odpowiedzią samą w sobie: 50001 znaczy, że bot tego
+     * kanału nie widzi, a 10003 – że kanału już nie ma.
+     *
+     * @returns {Promise<{ch: Object|null, powod: string|null, obcyGuildId?: string, obcaNazwa?: string, typ?: number, err?: Error}>}
+     */
+    async _pobierzKanalSerwera(client, guild, chId) {
+        if (!chId) return { ch: null, powod: 'brak' };
+        try {
+            const ch = await client.channels.fetch(chId, { force: true });
+            if (!ch) return { ch: null, powod: 'nieznany' };
+            // channels.fetch szuka GLOBALNIE, po wszystkich serwerach bota.
+            // Kanał spoza tego serwera trzeba odrzucić, bo liczenie na nim
+            // uprawnień membera z tego serwera daje wynik bez znaczenia –
+            // potrafiłby wyjść zielony, choć wysyłka nie ma prawa przejść.
+            if (ch.guildId && ch.guildId !== guild.id) {
+                return { ch: null, powod: 'obcy', obcyGuildId: ch.guildId, obcaNazwa: ch.name };
+            }
+            if (!ch.guildId) return { ch: null, powod: 'nieserwerowy', typ: ch.type };
+            // Kategoria, kanał głosowy bez czatu czy forum przejdą KAŻDY test uprawnień
+            // na zielono, bo uprawnienia liczy się dla nich normalnie — a `.send()`
+            // i tak nie istnieje albo kończy się błędem.
+            if (typeof ch.send !== 'function' || (typeof ch.isTextBased === 'function' && !ch.isTextBased())) {
+                return { ch: null, powod: 'nietekstowy', typ: ch.type };
+            }
+            return { ch, powod: null };
+        } catch (err) {
+            if (err.code === 50001) return { ch: null, powod: 'niewidoczny' };
+            if (err.code === 10003) return { ch: null, powod: 'usuniety' };
+            return { ch: null, powod: 'blad', err };
+        }
+    }
+
+    /**
+     * Tłumaczy `powod` z `_pobierzKanalSerwera` na komunikat w formacie
+     * `_mapSendError` — ten sam, którym raport `/info` i DM do właściciela
+     * opisują błędy Discorda.
+     */
+    _opisProblemuKanalu(wynik) {
+        switch (wynik.powod) {
+            case 'brak': return {
+                pol: 'Kanał nie jest skonfigurowany',
+                eng: 'Channel is not configured',
+                fix_pol: 'Użyj `/configure`, aby wskazać kanał dla bota.',
+                fix_eng: 'Use `/configure` to select a channel for the bot.',
+            };
+            case 'niewidoczny': return {
+                pol: 'Brak uprawnienia **Wyświetl kanał** — bot nie widzi tego kanału',
+                eng: 'Missing **View Channel** permission — bot cannot see this channel',
+                fix_pol: 'Wejdź w ustawienia kanału → Uprawnienia i nadaj botowi uprawnienie **Wyświetl kanał**.',
+                fix_eng: 'Go to channel settings → Permissions and grant the bot **View Channel**.',
+            };
+            case 'usuniety': return {
+                pol: 'Kanał nie istnieje lub został usunięty',
+                eng: 'Channel does not exist or was deleted',
+                fix_pol: 'Użyj `/configure`, aby wybrać nowy kanał dla bota.',
+                fix_eng: 'Use `/configure` to select a new channel for the bot.',
+            };
+            case 'obcy': return {
+                pol: `Skonfigurowany kanał należy do INNEGO serwera (\`${wynik.obcyGuildId}\`)`,
+                eng: `The configured channel belongs to a DIFFERENT server (\`${wynik.obcyGuildId}\`)`,
+                fix_pol: 'Użyj `/configure`, aby wybrać kanał na tym serwerze.',
+                fix_eng: 'Use `/configure` to pick a channel on this server.',
+            };
+            case 'nietekstowy':
+            case 'nieserwerowy': return {
+                pol: `Skonfigurowany kanał nie jest kanałem tekstowym (typ ${wynik.typ ?? '?'})`,
+                eng: `The configured channel is not a text channel (type ${wynik.typ ?? '?'})`,
+                fix_pol: 'Użyj `/configure`, aby wskazać kanał tekstowy.',
+                fix_eng: 'Use `/configure` to pick a text channel.',
+            };
+            default: return {
+                pol: `Nie udało się sprawdzić kanału: ${wynik.err?.message || 'nieznany błąd'}`,
+                eng: `Could not check the channel: ${wynik.err?.message || 'unknown error'}`,
+                fix_pol: 'Sprawdź logi bota lub skontaktuj się z administratorem.',
+                fix_eng: 'Check bot logs or contact the administrator.',
+            };
+        }
     }
 
     /**
@@ -14666,55 +14788,44 @@ class InteractionHandler {
         // Świeże role serwera – hierarchia ról TOP liczy się z ich pozycji.
         await guild.roles.fetch().catch(() => {});
 
-        /**
-         * Pobiera kanał z API zamiast z pamięci podręcznej. Nieudany fetch jest
-         * tu odpowiedzią samą w sobie: 50001 znaczy, że bot tego kanału nie widzi,
-         * a 10003 – że kanału już nie ma.
-         */
-        const pobierzKanal = async (chId) => {
-            if (!chId) return { ch: null, powod: 'brak' };
-            try {
-                const ch = await client.channels.fetch(chId, { force: true });
-                if (!ch) return { ch: null, powod: 'nieznany' };
-                // channels.fetch szuka GLOBALNIE, po wszystkich serwerach bota.
-                // Kanał spoza tego serwera trzeba odrzucić, bo liczenie na nim
-                // uprawnień membera z tego serwera daje wynik bez znaczenia –
-                // potrafiłby wyjść zielony, choć wysyłka nie ma prawa przejść.
-                if (ch.guildId && ch.guildId !== guild.id) {
-                    return { ch: null, powod: 'obcy', obcyGuildId: ch.guildId, obcaNazwa: ch.name };
-                }
-                return { ch, powod: null };
-            } catch (err) {
-                if (err.code === 50001) return { ch: null, powod: 'niewidoczny' };
-                if (err.code === 10003) return { ch: null, powod: 'usuniety' };
-                return { ch: null, powod: 'blad', err };
-            }
-        };
+        const pobierzKanal = (chId) => this._pobierzKanalSerwera(client, guild, chId);
 
         const lines = [];
         let issueCount = 0;
 
         // --- Kategoria 1: Uprawnienia serwera ---
+        // Część uprawnień jest potrzebna WYŁĄCZNIE pod funkcje, które ten serwer
+        // może mieć wyłączone. Zgłaszanie ich jako błędów zapalało nagłówek
+        // „Wykryto problemy" przy komplecie sprawnych funkcji i przykrywało to,
+        // co naprawdę nie działa.
+        const normalized = normalizeTiers(guildConfig?.topRoles || null);
+        const tiers = normalized?.tiers || [];
+        const uzywaRolTop = tiers.some(tier => tier.roleId);
+        const autoReakcja = this.guildConfigService?.getConfig(guildId)?.autoReactionEmoji || null;
+        const autoReakcjaCustom = !!autoReakcja && /<a?:\w+:\d+>/.test(autoReakcja);
+
         const SERVER_PERMS = [
-            [PermissionFlagsBits.ManageRoles,        'ManageRoles',        t('wymagane do przyznawania ról TOP', 'required to assign TOP roles')],
-            [PermissionFlagsBits.SendMessages,        'SendMessages',       t('wymagane do odpowiedzi na komendy', 'required to respond to commands')],
-            [PermissionFlagsBits.EmbedLinks,          'EmbedLinks',         t('wymagane do wyświetlania embedów', 'required to display embeds')],
-            [PermissionFlagsBits.ReadMessageHistory,  'ReadMessageHistory', t('wymagane do odczytu historii kanału', 'required to read channel history')],
-            [PermissionFlagsBits.ViewChannel,         'ViewChannel',        t('wymagane do widzenia kanałów', 'required to see channels')],
-            [PermissionFlagsBits.AttachFiles,         'AttachFiles',        t('wymagane do wysyłania plików', 'required to send files')],
-            [PermissionFlagsBits.AddReactions,        'AddReactions',       t('wymagane do auto-reakcji pod ogłoszeniami rekordów (/configure krok 10)', 'required for auto reactions under record announcements (/configure step 10)')],
-            [PermissionFlagsBits.UseExternalEmojis,   'UseExternalEmojis',  t('wymagane gdy auto-reakcja używa emotki customowej z innego serwera', 'required when the auto reaction uses a custom emote from another server')],
+            [PermissionFlagsBits.ManageRoles,        'ManageRoles',        t('wymagane do przyznawania ról TOP', 'required to assign TOP roles'), uzywaRolTop, t('role TOP nie są skonfigurowane', 'TOP roles are not configured')],
+            [PermissionFlagsBits.SendMessages,        'SendMessages',       t('wymagane do odpowiedzi na komendy', 'required to respond to commands'), true],
+            [PermissionFlagsBits.EmbedLinks,          'EmbedLinks',         t('wymagane do wyświetlania embedów', 'required to display embeds'), true],
+            [PermissionFlagsBits.ReadMessageHistory,  'ReadMessageHistory', t('wymagane do odczytu historii kanału', 'required to read channel history'), true],
+            [PermissionFlagsBits.ViewChannel,         'ViewChannel',        t('wymagane do widzenia kanałów', 'required to see channels'), true],
+            [PermissionFlagsBits.AttachFiles,         'AttachFiles',        t('wymagane do wysyłania plików', 'required to send files'), true],
+            [PermissionFlagsBits.AddReactions,        'AddReactions',       t('wymagane do auto-reakcji pod ogłoszeniami rekordów (/configure krok 10)', 'required for auto reactions under record announcements (/configure step 10)'), !!autoReakcja, t('auto-reakcja wyłączona', 'auto reaction disabled')],
+            [PermissionFlagsBits.UseExternalEmojis,   'UseExternalEmojis',  t('wymagane gdy auto-reakcja używa emotki customowej z innego serwera', 'required when the auto reaction uses a custom emote from another server'), autoReakcjaCustom, t('auto-reakcja nie używa emotki customowej', 'auto reaction does not use a custom emote')],
         ];
 
         const serverPermsHeader = t('🔐 **Uprawnienia serwera**', '🔐 **Server Permissions**');
         const addIssue = (line) => { issueCount++; lines.push(line); };
 
         lines.push(serverPermsHeader);
-        for (const [flag, name, reason] of SERVER_PERMS) {
+        for (const [flag, name, reason, wymagane, powodNieistotne] of SERVER_PERMS) {
             if (botMember.permissions.has(flag)) {
                 lines.push(`✅ ${name}`);
-            } else {
+            } else if (wymagane) {
                 addIssue(`❌ ${name} — ${reason}`);
+            } else {
+                lines.push(`ℹ️ ${name} — ` + t(`brak, ale nieużywane (${powodNieistotne})`, `missing, but unused (${powodNieistotne})`));
             }
         }
 
@@ -14745,20 +14856,33 @@ class InteractionHandler {
                     '└ The config points at a channel on a different server. Use `/configure` to pick a channel on this server.'));
             } else if (ocr.powod === 'brak') {
                 addIssue(t('❌ Kanał OCR nie jest skonfigurowany', '❌ OCR channel is not configured'));
+            } else if (ocr.powod === 'nietekstowy' || ocr.powod === 'nieserwerowy') {
+                // Kategoria/kanał głosowy przechodzi każdy test uprawnień na zielono,
+                // a mimo to nie da się na niego nic wysłać.
+                addIssue(t(
+                    `❌ Kanał OCR (ID: \`${idTxt}\`) nie jest kanałem tekstowym (typ ${ocr.typ ?? '?'}) — bot nie ma jak nic na nim wysłać`,
+                    `❌ The OCR channel (ID: \`${idTxt}\`) is not a text channel (type ${ocr.typ ?? '?'}) — the bot cannot post there`));
+                lines.push(t('└ Użyj `/configure`, aby wskazać kanał tekstowy.', '└ Use `/configure` to pick a text channel.'));
             } else {
                 addIssue(t(`❌ Nie udało się sprawdzić kanału OCR (ID: \`${idTxt}\`)`, `❌ Could not check the OCR channel (ID: \`${idTxt}\`)`));
             }
         } else {
             lines.push(t(`📺 **Uprawnienia w kanale #${channel.name}**`, `📺 **Permissions in #${channel.name}**`));
+            const jestWatkiem = typeof channel.isThread === 'function' && channel.isThread();
             const CHANNEL_PERMS = [
                 [PermissionFlagsBits.ViewChannel,        'ViewChannel'],
-                [PermissionFlagsBits.SendMessages,       'SendMessages'],
+                // W wątku „Wyślij wiadomości" NIE wystarcza — Discord sprawdza osobną
+                // flagę. Uprawnienia wątku liczy się z kanału-rodzica, więc SendMessages
+                // potrafi być zielone przy wysyłce lecącej na Missing Access.
+                jestWatkiem
+                    ? [PermissionFlagsBits.SendMessagesInThreads, 'SendMessagesInThreads']
+                    : [PermissionFlagsBits.SendMessages, 'SendMessages'],
                 [PermissionFlagsBits.EmbedLinks,         'EmbedLinks'],
                 [PermissionFlagsBits.ReadMessageHistory, 'ReadMessageHistory'],
                 [PermissionFlagsBits.AttachFiles,        'AttachFiles'],
-                [PermissionFlagsBits.AddReactions,       'AddReactions'],
-                [PermissionFlagsBits.UseExternalEmojis,  'UseExternalEmojis'],
             ];
+            if (autoReakcja) CHANNEL_PERMS.push([PermissionFlagsBits.AddReactions, 'AddReactions']);
+            if (autoReakcjaCustom) CHANNEL_PERMS.push([PermissionFlagsBits.UseExternalEmojis, 'UseExternalEmojis']);
             for (const [flag, name] of CHANNEL_PERMS) {
                 const hasGlobal = botMember.permissions.has(flag);
                 const hasChannel = botMember.permissionsIn(channel).has(flag);
@@ -14769,6 +14893,50 @@ class InteractionHandler {
                 } else {
                     addIssue(`❌ ${name} — ` + t('brak uprawnienia', 'missing permission'));
                 }
+            }
+            if (jestWatkiem && channel.locked) {
+                addIssue(t('❌ Wątek jest zamknięty (locked) — nikt poza moderacją nic w nim nie napisze', '❌ The thread is locked — nobody but moderators can post in it'));
+            } else if (jestWatkiem && channel.archived) {
+                lines.push(t('ℹ️ Wątek jest zarchiwizowany — wysyłka go odarchiwizuje', 'ℹ️ The thread is archived — sending will unarchive it'));
+            }
+        }
+
+        // --- Kategoria 2b: Rozgłoszenia /info ---
+        // Rachunek uprawnień to nie to samo, co zgoda Discorda: liczymy go z nakładek,
+        // a serwer sprawdza jeszcze typ kanału, stan wątku i to, czy aplikacja w ogóle
+        // ma dostęp do zasobu. Dlatego oprócz rachunku wykonujemy DOKŁADNIE tę operację,
+        // którą robi /info — wysyłamy embed i od razu go kasujemy. Ptaszek postawiony
+        // na podstawie samego rachunku potrafił kłamać, ten nie ma jak.
+        lines.push('');
+        lines.push(t('📨 **Rozgłoszenia /info**', '📨 **/info Broadcasts**'));
+
+        const naLiscieOdbiorcow = this.config.getAllGuilds().some(g => g.id === guildId);
+        if (naLiscieOdbiorcow) {
+            lines.push(t('✅ Serwer jest na liście odbiorców rozgłoszeń', '✅ Server is on the broadcast recipient list'));
+        } else {
+            addIssue(t(
+                '❌ Serwer NIE jest na liście odbiorców — `/info` pomija go po cichu',
+                '❌ Server is NOT on the recipient list — `/info` silently skips it'));
+            lines.push(t('└ Dokończ `/configure` na tym serwerze.', '└ Complete `/configure` on this server.'));
+        }
+
+        if (channel) {
+            const testEmbed = new EmbedBuilder()
+                .setColor(0x2B2D31)
+                .setDescription(t(
+                    '🔧 Test dostarczania `/info` — ta wiadomość zaraz zniknie.',
+                    '🔧 `/info` delivery test — this message will disappear in a moment.'));
+            try {
+                const probna = await channel.send({ embeds: [testEmbed] });
+                lines.push(t('✅ Test wysyłki — wiadomość dostarczona i usunięta', '✅ Delivery test — message delivered and removed'));
+                await probna.delete().catch(() => {
+                    lines.push(t('└ ℹ️ Nie udało się jej usunąć — skasuj ją ręcznie.', '└ ℹ️ Could not remove it — please delete it manually.'));
+                });
+            } catch (err) {
+                const opis = this._mapSendError(err);
+                addIssue('❌ ' + t('Test wysyłki NIE przeszedł', 'Delivery test FAILED')
+                    + `: ${t(opis.pol, opis.eng)} (${err.code ?? '?'} — ${err.message})`);
+                lines.push(`└ ${t(opis.fix_pol, opis.fix_eng)}`);
             }
         }
 
@@ -14789,6 +14957,8 @@ class InteractionHandler {
                         ? t(`kanał należy do innego serwera (\`${wynik.obcyGuildId}\`)`, `channel belongs to another server (\`${wynik.obcyGuildId}\`)`)
                     : wynik.powod === 'usuniety'
                         ? t(`kanał \`${chId}\` nie istnieje`, `channel \`${chId}\` does not exist`)
+                    : (wynik.powod === 'nietekstowy' || wynik.powod === 'nieserwerowy')
+                        ? t(`kanał \`${chId}\` nie jest kanałem tekstowym (typ ${wynik.typ ?? '?'})`, `channel \`${chId}\` is not a text channel (type ${wynik.typ ?? '?'})`)
                         : t(`nie udało się sprawdzić kanału \`${chId}\``, `could not check channel \`${chId}\``);
                 addIssue(`❌ ${label} — ${opis}`);
                 return;
@@ -14830,9 +15000,7 @@ class InteractionHandler {
         lines.push(t('🏅 **Hierarchia ról TOP**', '🏅 **TOP Role Hierarchy**'));
         const botHighestPos = botMember.roles.highest.position;
         const botRoleName = botMember.roles.highest.name;
-        const normalized = normalizeTiers(guildConfig?.topRoles || null);
-        const tiers = normalized?.tiers || [];
-        if (!tiers.length) {
+        if (!uzywaRolTop) {
             lines.push(t('ℹ️ Brak skonfigurowanych ról TOP', 'ℹ️ No TOP roles configured'));
         } else {
             for (const tier of tiers) {
@@ -14872,10 +15040,17 @@ class InteractionHandler {
             ? t('Wykryto problemy — sprawdź szczegóły poniżej.', 'Issues detected — check details below.')
             : t('✅ Wszystko wygląda poprawnie.', '✅ Everything looks correct.');
 
+        // Opis embeda ma twardy limit 4096 znaków — przekroczenie wywraca CAŁĄ
+        // diagnostykę na walidacji, więc przy długiej liście ról TOP wolimy uciąć.
+        let opis = `${summary}\n\n${lines.join('\n')}`;
+        if (opis.length > 4096) {
+            opis = opis.slice(0, 4040) + '\n' + t('… (raport skrócony)', '… (report truncated)');
+        }
+
         return new EmbedBuilder()
             .setColor(color)
             .setTitle(t(`🔍 Diagnostyka — ${guild.name}`, `🔍 Diagnostics — ${guild.name}`))
-            .setDescription(`${summary}\n\n${lines.join('\n')}`)
+            .setDescription(opis)
             .setFooter({ text: t(`Rola bota: "${botRoleName}" · poz. ${botHighestPos}`, `Bot role: "${botRoleName}" · pos. ${botHighestPos}`) })
             .setTimestamp();
     }
