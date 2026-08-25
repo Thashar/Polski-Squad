@@ -258,6 +258,32 @@ class BossRecordService {
      * @param {string} playerKey
      * @returns {Object} { bossName: { score, scoreValue, timestamp, username } }
      */
+    /**
+     * Najnowszy rekord bossa KAŻDEGO gracza, zebrany jednym przejściem po plikach.
+     *
+     * Używa tego losowanie Gracza Dnia do odsiania profili, na których nic się już
+     * nie dzieje. Świadomie NIE woła getUserBossRecordsAllGuilds per gracz: plik
+     * serwera trzyma rekordy wszystkich naraz, więc jedno wczytanie na serwer
+     * wystarcza na całą pulę, zamiast setek odczytów.
+     *
+     * @param {Iterable<string>} allGuildIds
+     * @returns {Promise<Object>} { playerKey: znacznik czasu w ms }
+     */
+    async getLastBossRecordTimestamps(allGuildIds) {
+        const latest = {};
+        for (const guildId of allGuildIds) {
+            const data = await this._load(guildId).catch(() => ({}));
+            for (const [playerKey, records] of Object.entries(data)) {
+                for (const rec of Object.values(records || {})) {
+                    const ts = Date.parse(rec?.timestamp);
+                    if (!Number.isFinite(ts)) continue;
+                    if (!latest[playerKey] || ts > latest[playerKey]) latest[playerKey] = ts;
+                }
+            }
+        }
+        return latest;
+    }
+
     async getUserBossRecords(guildId, playerKey) {
         const all = await this._load(guildId);
         return all[playerKey] || {};

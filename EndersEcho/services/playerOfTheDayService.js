@@ -37,6 +37,20 @@ const store = require('../../utils/jsonStore');
  * pusto — plakietka po prostu się nie pokazuje.
  */
 
+/**
+ * Okno aktywności: losujemy wyłącznie spośród graczy, którzy w tym czasie coś
+ * pobili. Bez tego karta trafiałaby na profile, na których od pół roku nic się
+ * nie dzieje – a płaski wykres pod czyimś nickiem na stronie głównej wygląda
+ * jak wytknięcie, nie jak wyróżnienie.
+ *
+ * UWAGA na to, co bot faktycznie potrafi zmierzyć. Nie ma trwałego znacznika
+ * „ostatnio wysłał wynik" (cooldowny /update żyją pięć minut i są kasowane), więc
+ * aktywnością jest tu NAJNOWSZY POBITY REKORD: albo wynik z rankingu, albo
+ * rekord dowolnego bossa. Ktoś, kto gra codziennie i od miesiąca się nie poprawił,
+ * do puli nie wejdzie – i tak nie miałby czym się pochwalić.
+ */
+const ACTIVE_DAYS = 30;
+
 /** Ile dni historii trafia na wykres. */
 const CHART_DAYS = 365;
 /** Górny limit punktów wykresu — tyle samo przyjmuje Worker. */
@@ -194,13 +208,28 @@ class PlayerOfTheDayService {
         return { bits, color: h[3] % 6 };
     }
 
-    /** Czy gracz nadaje się do pokazania. */
-    _eligible(entry) {
+    /**
+     * Czy gracz nadaje się do pokazania.
+     * @param {Object} entry - wpis z rankingu globalnego
+     * @param {Object} bossTs - { playerKey: ms } z getLastBossRecordTimestamps
+     * @param {number} cutoff - najstarszy akceptowany znacznik aktywności (ms)
+     */
+    _eligible(entry, bossTs, cutoff) {
         if (!entry || !entry.playerKey) return false;
         // Bez zapisanej nazwy nie ma czego pokazać, a NIE wolno nam podstawić
         // w to miejsce ID — to jedyna rzecz, której na stronie być nie może.
         if (!entry.username) return false;
-        return !this.isOptedOut(entry.playerKey);
+        if (this.isOptedOut(entry.playerKey)) return false;
+
+        // Aktywność = najnowszy pobity rekord, czy to wynik z rankingu, czy
+        // rekord pojedynczego bossa. Bierzemy późniejszy z dwóch, bo można
+        // poprawić bossa, nie ruszając swojego najlepszego wyniku w ogóle.
+        const scoreTs = Date.parse(entry.timestamp);
+        const last = Math.max(
+            Number.isFinite(scoreTs) ? scoreTs : 0,
+            bossTs?.[entry.playerKey] || 0
+        );
+        return last >= cutoff;
     }
 
     /**
@@ -214,8 +243,18 @@ class PlayerOfTheDayService {
         if (!force && this._state.date === today && this._state.playerKey) return;
 
         try {
-            const global = await this.rankingService.getGlobalRanking();
-            const pool = global.filter(e => this._eligible(e));
+            const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
+            const [global, bossTs] = await Promise.all([
+                this.rankingService.getGlobalRanking(),
+                this.bossRecordService
+                    ? this.bossRecordService.getLastBossRecordTimestamps(allGuildIds).catch(() => ({}))
+                    : Promise.resolve({}),
+            ]);
+
+            const cutoff = Date.now() - ACTIVE_DAYS * 24 * 60 * 60 * 1000;
+            const pool = global.filter(e => this._eligible(e, bossTs, cutoff));
+            // Pusta pula to normalny stan przy cichym miesiącu — wtedy kasujemy
+            // wpis i plakietki po prostu nie ma, zamiast wracać do nieaktywnych.
             if (!pool.length) {
                 this._state = { date: today, playerKey: null, seen: this._state.seen };
                 await this._saveState();
