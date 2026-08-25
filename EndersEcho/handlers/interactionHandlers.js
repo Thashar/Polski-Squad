@@ -522,6 +522,14 @@ class InteractionHandler {
                 await this._handleProfileSearchModal(interaction);
                 return;
             }
+            if (interaction.customId === 'cc_potd_modal') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcPotdSearch(interaction);
+                return;
+            }
             if (interaction.customId === 'panel_ach_del_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -7828,6 +7836,8 @@ class InteractionHandler {
         if (customId === 'cc_cost_alert') return 'CC: Alert kosztowy';
         if (customId === 'cc_global_ocr') return 'CC: Globalny OCR (przełącznik)';
         if (customId === 'cc_bcr_refresh') return 'CC: Odśwież przyciski ogłoszeń';
+        if (customId === 'cc_potd_set') return 'CC: Nadaj Gracza Dnia';
+        if (customId === 'cc_potd_ps') return 'CC: Nadaj Gracza Dnia (wybrano gracza)';
         if (customId.startsWith('cc_global_ocr_ok_')) return 'CC: Globalny OCR (potwierdzenie)';
         if (customId === 'cc_srv_pg_prev' || customId === 'cc_srv_pg_next') return 'CC: Paginacja serwerów';
         return `panel: ${customId}`;
@@ -8553,6 +8563,10 @@ class InteractionHandler {
             }
             if (customId === 'cc_action_tester') {
                 await this._handleCcActionTester(interaction);
+                return;
+            }
+            if (customId === 'cc_potd_set') {
+                await this._handleCcPotdSet(interaction);
                 return;
             }
             if (customId === 'cc_action_tokens') {
@@ -11072,6 +11086,15 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelTesterRemoveSelect(interaction);
+                return;
+            }
+
+            if (customId === 'cc_potd_ps') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcPotdSelect(interaction);
                 return;
             }
 
@@ -13872,6 +13895,133 @@ class InteractionHandler {
                     .setMaxLength(50)
             ));
         await interaction.showModal(modal);
+    }
+
+    /* ── Centrum Dowodzenia: ręczne nadanie Gracza Dnia ──────────────────────
+       Zastępuje dzisiejsze losowanie i wchodzi na stronę od razu. Filtr
+       aktywności tu nie obowiązuje — skoro ktoś wskazuje gracza palcem, to wie,
+       kogo chce pokazać. Wypisania się gracza nie da się jednak obejść. */
+
+    async _handleCcPotdSet(interaction) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        if (!this.playerOfTheDayService?.isEnabled()) {
+            await interaction.reply({
+                content: '⚪ Gracz Dnia jest wyłączony — brak konfiguracji wysyłki na stronę.',
+                flags: ['Ephemeral'],
+            });
+            return;
+        }
+        const modal = new ModalBuilder().setCustomId('cc_potd_modal').setTitle('🏆 Nadaj Gracza Dnia');
+        modal.addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+                .setCustomId('cc_potd_query')
+                .setLabel('Fragment nicku gracza')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMinLength(2)
+        ));
+        await interaction.showModal(modal);
+    }
+
+    async _handleCcPotdSearch(interaction) {
+        const query = normalizeForSearch(interaction.fields.getTextInputValue('cc_potd_query').trim());
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+        try {
+            // Szukamy w rankingu globalnym, bo to dokładnie ta pula, z której
+            // losuje Gracz Dnia — jeden wpis na profil, z najlepszym wynikiem.
+            const global = await this.rankingService.getGlobalRanking();
+            const matches = [];
+            for (let i = 0; i < global.length; i++) {
+                const pl = global[i];
+                if (!pl.username) continue; // bez nazwy nie ma czego pokazać na stronie
+                if (playerMatchesQuery(pl, query, interaction.client, pl.sourceGuildId)) {
+                    matches.push({ ...pl, pos: i + 1 });
+                }
+            }
+
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_potd_set').setEmoji('🔍').setLabel('Szukaj ponownie').setStyle(ButtonStyle.Primary),
+            );
+
+            if (!matches.length) {
+                await interaction.editReply({
+                    embeds: [new EmbedBuilder().setColor(0xFFD94D)
+                        .setTitle('🏆 Nie znaleziono gracza')
+                        .setDescription(`Brak gracza z nickiem zawierającym "**${query}**".`)],
+                    components: [retryRow],
+                });
+                return;
+            }
+
+            const options = matches.slice(0, 25).map(pl => {
+                const guildName = interaction.client.guilds.cache.get(pl.sourceGuildId)?.name || pl.sourceGuildId;
+                const hidden = this.playerOfTheDayService?.isOptedOut(pl.playerKey) ? '🙈 ' : '';
+                return {
+                    label: `${hidden}#${pl.pos} ${formatProfileDisplayName(pl.username, pl.profileIndex || 1).slice(0, 60)}`.slice(0, 100),
+                    description: `${guildName} | Wynik: ${pl.score}`.slice(0, 100),
+                    value: pl.playerKey,
+                };
+            });
+
+            const subtitle = matches.length > 25
+                ? `Znaleziono ${matches.length} — pokazuję 25. Zawęź wyszukiwanie.`
+                : `Znaleziono ${matches.length} gracz(y).`;
+
+            await interaction.editReply({
+                embeds: [new EmbedBuilder().setColor(0xFFD94D)
+                    .setTitle('🏆 Kogo wrzucić na stronę?')
+                    .setDescription(`${subtitle}\n🙈 = gracz wypisał się z wyróżnienia i nie da się go nadać.`)],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder().setCustomId('cc_potd_ps')
+                            .setPlaceholder('Wybierz gracza...')
+                            .addOptions(options)
+                    ),
+                    retryRow,
+                ],
+            });
+        } catch (err) {
+            logger.error('Błąd _handleCcPotdSearch:', err);
+            await interaction.editReply({ content: '❌ Błąd wczytywania rankingu.', embeds: [], components: [] });
+        }
+    }
+
+    async _handleCcPotdSelect(interaction) {
+        const playerKey = interaction.values[0];
+        await interaction.deferUpdate();
+
+        const res = await this.playerOfTheDayService.setManual(interaction.client, playerKey);
+        const powod = {
+            opted_out: '🙈 Ten gracz wypisał się z wyróżnienia na stronie — tego nie da się obejść z panelu.',
+            not_found: '❌ Nie ma go już w rankingu globalnym.',
+            no_name: '❌ Ten profil nie ma zapisanej nazwy, a samego ID na stronę nie wysyłamy.',
+            disabled: '⚪ Wysyłka na stronę jest wyłączona.',
+            build_failed: '❌ Nie udało się złożyć karty gracza.',
+            error: '❌ Wysyłka na stronę się nie powiodła — szczegóły w logach.',
+        };
+
+        const embed = new EmbedBuilder()
+            .setColor(res.ok ? 0x7DFF8A : 0xFF6B35)
+            .setTitle(res.ok ? '🏆 Gracz Dnia nadany' : '🏆 Nie udało się nadać')
+            .setDescription(res.ok
+                ? `Na stronie stoi teraz **${res.nick}**.\nJutrzejsze losowanie odbędzie się normalnie.`
+                : (powod[res.reason] || '❌ Nieznany błąd.'));
+
+        if (res.ok) {
+            this.logService._gl(interaction.guildId).info(
+                `🏆 ${this.logService.nickLink(interaction.member?.displayName || interaction.user.username, interaction.user.id)} nadał Gracza Dnia: ${res.nick}`
+            );
+        }
+
+        await interaction.editReply({
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_potd_set').setEmoji('🔍').setLabel('Nadaj innego').setStyle(ButtonStyle.Secondary),
+            )],
+        });
     }
 
     async _handlePanelAchDelSearch(interaction) {

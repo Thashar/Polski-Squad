@@ -1141,6 +1141,17 @@ class AdminPanelService {
             }
         } catch { /* pole opcjonalne */ }
 
+        // Kto stoi dziś w plakietce na stronie i ilu graczy się z niej wypisało
+        let potd = '⚪ Wyłączony (brak `ENDERSECHO_WEB_SYNC_URL` / `ENDERSECHO_WEB_SYNC_TOKEN`)';
+        try {
+            const st = this._services.playerOfTheDayService?.getStatus();
+            if (st?.enabled) {
+                potd = st.nick
+                    ? `👤 **${st.nick}** — od ${st.date}\nRotacja: **${st.rotated}** gracz(y) · wypisanych: **${st.optedOut}**`
+                    : `✅ Włączony — dziś nikogo nie pokazano\nWypisanych: **${st.optedOut}**`;
+            }
+        } catch { /* pole opcjonalne */ }
+
         return new EmbedBuilder()
             .setColor(0x95A5A6)
             .setTitle('⚙️ Narzędzia')
@@ -1150,6 +1161,7 @@ class AdminPanelService {
                 { name: '📅 Następny Global TOP10', value: nextTop10, inline: true },
                 { name: '🌐 Globalny OCR', value: globalState, inline: false },
                 { name: '📤 Rankingi na stronie', value: capField(webSync), inline: false },
+                { name: '🏆 Gracz Dnia', value: capField(potd), inline: false },
             );
     }
 
@@ -1160,6 +1172,8 @@ class AdminPanelService {
 
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_action_tester').setEmoji('🧪').setLabel('Testerzy').setStyle(ButtonStyle.Secondary),
+            // Ręczne nadanie wyróżnienia na stronie — zastępuje dzisiejsze losowanie
+            new ButtonBuilder().setCustomId('cc_potd_set').setEmoji('🏆').setLabel('Nadaj Gracza Dnia').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_top10_interval').setEmoji('📅').setLabel('Interwał TOP10').setStyle(ButtonStyle.Secondary),
             // Przyciski pod ogłoszeniami globalnymi zmieniają się dopiero przy przebudowie
             // wiadomości — ten przycisk wymusza ją na wszystkich naraz po zmianie zasad

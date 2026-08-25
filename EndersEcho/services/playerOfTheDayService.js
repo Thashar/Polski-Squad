@@ -19,7 +19,9 @@ const store = require('../../utils/jsonStore');
  *
  * CZEGO NIE WYSYŁAMY, ŚWIADOMIE:
  *   • ID Discorda i klucza profilu — nie opuszczają bota w żadnej postaci,
- *   • awatara z Discorda — na stronie rysowany jest wzór z 18 bitów (niżej),
+ *   • awatara z Discorda — strona rysuje u siebie jedną złotą sylwetkę, tę samą
+ *     dla każdego wyróżnionego, więc nie idzie stąd żaden obrazek ani nic, co
+ *     byłoby pochodną konta,
  *   • listy pozostałych profili gracza — nie mówimy publicznie, że kilka kont
  *     w grze należy do jednej osoby,
  *   • nazw ról i pozycji w rankingach ról — to wewnętrzna struktura serwera,
@@ -62,11 +64,6 @@ const CHECK_INTERVAL_MS = 60 * 1000;
 /** Limit pojedynczego POST-a — jak przy rankingach, wysyłka jest fire-and-forget. */
 const POST_TIMEOUT_MS = 15 * 1000;
 
-/** Sól wzoru awatara. Wzór to 18 bitów z jednokierunkowego skrótu klucza gracza:
- *  nie da się z niego odtworzyć ID, a ten sam gracz zawsze dostaje ten sam
- *  obrazek — także po zmianie nicku. */
-const AVATAR_SALT = 'ee-potd-avatar:v1:';
-
 class PlayerOfTheDayService {
     /**
      * @param {Object} config - config bota
@@ -101,7 +98,7 @@ class PlayerOfTheDayService {
         // rotacji nie może przypadkiem skasować niczyjego wypisania się.
         this.optOutFile = path.join(dataDir, 'potd_optout.json');
 
-        this._state = { date: null, playerKey: null, seen: [] };
+        this._state = { date: null, playerKey: null, nick: null, seen: [] };
         this._optOut = {};
         this._timer = null;
         this._queue = Promise.resolve();
@@ -117,10 +114,11 @@ class PlayerOfTheDayService {
             this._state = {
                 date: s?.date || null,
                 playerKey: s?.playerKey || null,
+                nick: s?.nick || null,
                 seen: Array.isArray(s?.seen) ? s.seen : [],
             };
         } catch {
-            this._state = { date: null, playerKey: null, seen: [] };
+            this._state = { date: null, playerKey: null, nick: null, seen: [] };
         }
         try {
             this._optOut = (await store.getOrLoad(this.optOutFile, () => ({}))) || {};
@@ -169,6 +167,7 @@ class PlayerOfTheDayService {
 
         if (optedOut && this._state.playerKey && getOwnerId(this._state.playerKey) === id) {
             this._state.playerKey = null;
+            this._state.nick = null;
             await this._saveState();
             await this._push(null).catch(() => {});
             this.logger.info('🌐 Gracz dnia wypisał się ze strony — wpis skasowany');
@@ -191,21 +190,6 @@ class PlayerOfTheDayService {
     _seed(dateStr) {
         const h = crypto.createHash('sha1').update(`ee-potd:${dateStr}`).digest();
         return h.readUInt32BE(0);
-    }
-
-    /**
-     * Wzór awatara: 18 bitów (6 wierszy × 3 kolumny, prawa połowa jest odbiciem)
-     * i indeks koloru z palety strony.
-     */
-    _avatar(playerKey) {
-        const h = crypto.createHash('sha1').update(AVATAR_SALT + playerKey).digest();
-        let bits = ((h[0] << 10) | (h[1] << 2) | (h[2] & 3)) & 0x3FFFF;
-        // Bardzo rzadki, ale brzydki przypadek: wzór niemal pusty. Dokładamy
-        // stałą maskę, żeby awatar nigdy nie był czarnym kółkiem.
-        let lit = 0;
-        for (let i = 0; i < 18; i++) if ((bits >> i) & 1) lit++;
-        if (lit < 4) bits |= 0b000010010010010010;
-        return { bits, color: h[3] % 6 };
     }
 
     /**
@@ -256,7 +240,7 @@ class PlayerOfTheDayService {
             // Pusta pula to normalny stan przy cichym miesiącu — wtedy kasujemy
             // wpis i plakietki po prostu nie ma, zamiast wracać do nieaktywnych.
             if (!pool.length) {
-                this._state = { date: today, playerKey: null, seen: this._state.seen };
+                this._state = { date: today, playerKey: null, nick: null, seen: this._state.seen };
                 await this._saveState();
                 await this._push(null);
                 return;
@@ -279,6 +263,7 @@ class PlayerOfTheDayService {
             this._state = {
                 date: today,
                 playerKey: picked.playerKey,
+                nick: payload.nick,
                 // Lista „już byli" nie może rosnąć w nieskończoność — trzymamy
                 // ją w rozmiarze puli, bo tyle wystarcza do pełnej rotacji.
                 seen: [...nextSeen, picked.playerKey].slice(-Math.max(pool.length, 1)),
@@ -288,6 +273,58 @@ class PlayerOfTheDayService {
         } catch (err) {
             this.logger.warn(`⚠️ Błąd losowania gracza dnia: ${this._errText(err)}`);
         }
+    }
+
+    /**
+     * Ręczne nadanie wyróżnienia z Centrum Dowodzenia — wchodzi natychmiast
+     * i zastępuje dzisiejsze losowanie. Jutrzejsze odbywa się normalnie.
+     *
+     * Filtr aktywności celowo NIE obowiązuje: skoro ktoś wskazuje gracza
+     * palcem, to wie, kogo chce pokazać. Wypisanie się gracza obowiązuje
+     * jednak zawsze — tego nie wolno obejść z panelu.
+     *
+     * @param {import('discord.js').Client} client
+     * @param {string} playerKey
+     * @returns {Promise<{ok: boolean, reason?: string, nick?: string}>}
+     */
+    async setManual(client, playerKey) {
+        if (!this.isEnabled()) return { ok: false, reason: 'disabled' };
+        if (this.isOptedOut(playerKey)) return { ok: false, reason: 'opted_out' };
+
+        try {
+            const global = await this.rankingService.getGlobalRanking();
+            const entry = global.find(e => e.playerKey === playerKey);
+            if (!entry) return { ok: false, reason: 'not_found' };
+            if (!entry.username) return { ok: false, reason: 'no_name' };
+
+            const today = this._today();
+            const payload = await this.buildPayload(client, entry, today);
+            if (!payload) return { ok: false, reason: 'build_failed' };
+
+            await this._push(payload);
+            // Dopisujemy do „już byli", żeby losowanie nie wyciągnęło tej samej
+            // osoby ponownie za kilka dni.
+            const seen = this._state.seen.filter(k => k !== playerKey);
+            this._state = { date: today, playerKey: playerKey, nick: payload.nick, seen: [...seen, playerKey] };
+            await this._saveState();
+            this.logger.info(`🌐 Gracz dnia nadany ręcznie (${today}): ${payload.nick}`);
+            return { ok: true, nick: payload.nick };
+        } catch (err) {
+            this.logger.warn(`⚠️ Błąd ręcznego nadania gracza dnia: ${this._errText(err)}`);
+            return { ok: false, reason: 'error' };
+        }
+    }
+
+    /** Kto stoi dziś na stronie — do podglądu w Centrum Dowodzenia. */
+    getStatus() {
+        return {
+            enabled: this.isEnabled(),
+            date: this._state.date,
+            playerKey: this._state.playerKey,
+            nick: this._state.nick,
+            optedOut: Object.keys(this._optOut).length,
+            rotated: this._state.seen.length,
+        };
     }
 
     /* ── budowa karty ───────────────────────────────────────────────────── */
@@ -366,7 +403,6 @@ class PlayerOfTheDayService {
             bosses: Object.keys(bossRecords).length || 0,
             achievements: achievements.length || 0,
             watchers: watchers.length || 0,
-            avatar: this._avatar(playerKey),
             history: chart,
             bossRecords: bosses,
         };
