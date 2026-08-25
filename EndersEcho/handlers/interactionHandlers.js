@@ -3635,7 +3635,7 @@ class InteractionHandler {
             return;
         }
         const t = this._panelT(interaction.guildId);
-        const embed = this._buildDiagnosticsEmbed(guild, t, interaction.client);
+        const embed = await this._buildDiagnosticsEmbed(guild, t, interaction.client);
         await interaction.update({ content: null, embeds: [embed], components: [] });
     }
 
@@ -14613,20 +14613,55 @@ class InteractionHandler {
 
     async _handlePanelDiagnostics(interaction) {
         const t = this._panelT(interaction.guildId);
-        const embed = this._buildDiagnosticsEmbed(interaction.guild, t, interaction.client);
+        const embed = await this._buildDiagnosticsEmbed(interaction.guild, t, interaction.client);
         const backRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_back_configure').setEmoji('◀️').setLabel(t('Wróć do konfiguracji', 'Back to Configuration')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [backRow] });
     }
 
-    /** Buduje embed diagnostyki uprawnień dla dowolnego serwera (używany przez /configure i Centrum Dowodzenia) */
-    _buildDiagnosticsEmbed(guild, t, client) {
+    /**
+     * Buduje embed diagnostyki uprawnień dla dowolnego serwera
+     * (używany przez /configure i Centrum Dowodzenia).
+     *
+     * Stan bierzemy z API, nie z pamięci podręcznej. Powód jest konkretny:
+     * nakładki uprawnień odświeżają się zdarzeniem channelUpdate, a bot dostaje
+     * je wyłącznie dla kanałów, które widzi. Gdy ktoś odbierze mu „Wyświetl
+     * kanał", zdarzenia przestają przychodzić i w pamięci zostaje ostatnia,
+     * zielona wersja nakładek – diagnostyka pokazywała wtedy komplet ptaszków,
+     * podczas gdy każda realna wysyłka leciała na Missing Access. Pętla sama się
+     * nie przerywa, bo im mniej bot widzi, tym mniej ma szans dowiedzieć się,
+     * że czegoś nie widzi.
+     */
+    async _buildDiagnosticsEmbed(guild, t, client) {
         const { normalizeTiers } = require('../services/roleService');
         const { PermissionFlagsBits } = require('discord.js');
-        const botMember = guild.members.me;
         const guildId = guild.id;
         const guildConfig = this.config.getGuildConfig(guildId);
+
+        // Świeży member bota: role i uprawnienia globalne prosto z API.
+        let botMember = guild.members.me;
+        try { botMember = await guild.members.fetchMe({ force: true }); } catch (e) { /* zostaje to, co jest */ }
+        // Świeże role serwera – hierarchia ról TOP liczy się z ich pozycji.
+        await guild.roles.fetch().catch(() => {});
+
+        /**
+         * Pobiera kanał z API zamiast z pamięci podręcznej. Nieudany fetch jest
+         * tu odpowiedzią samą w sobie: 50001 znaczy, że bot tego kanału nie widzi,
+         * a 10003 – że kanału już nie ma.
+         */
+        const pobierzKanal = async (chId) => {
+            if (!chId) return { ch: null, powod: 'brak' };
+            try {
+                const ch = await client.channels.fetch(chId, { force: true });
+                if (!ch) return { ch: null, powod: 'nieznany' };
+                return { ch, powod: null };
+            } catch (err) {
+                if (err.code === 50001) return { ch: null, powod: 'niewidoczny' };
+                if (err.code === 10003) return { ch: null, powod: 'usuniety' };
+                return { ch: null, powod: 'blad', err };
+            }
+        };
 
         const lines = [];
         let issueCount = 0;
@@ -14658,10 +14693,26 @@ class InteractionHandler {
         // --- Kategoria 2: Uprawnienia w kanale OCR ---
         lines.push('');
         const channelId = guildConfig?.allowedChannelId;
-        const channel = channelId ? guild.channels.cache.get(channelId) : null;
+        const ocr = await pobierzKanal(channelId);
+        const channel = ocr.ch;
         if (!channel) {
             lines.push(t('📺 **Uprawnienia w kanale OCR**', '📺 **OCR Channel Permissions**'));
-            addIssue(t(`❌ Kanał OCR nieznaleziony w cache (ID: \`${channelId || 'brak'}\`)`, `❌ OCR channel not found in cache (ID: \`${channelId || 'none'}\`)`));
+            const idTxt = channelId || (t('brak', 'none'));
+            if (ocr.powod === 'niewidoczny') {
+                addIssue(t(
+                    `❌ Bot nie widzi kanału OCR (ID: \`${idTxt}\`) — brak uprawnienia **Wyświetl kanał**`,
+                    `❌ Bot cannot see the OCR channel (ID: \`${idTxt}\`) — missing **View Channel**`));
+                lines.push(t(
+                    '└ Ustawienia kanału → Uprawnienia → nadaj botowi **Wyświetl kanał**.',
+                    '└ Channel settings → Permissions → grant the bot **View Channel**.'));
+            } else if (ocr.powod === 'usuniety') {
+                addIssue(t(`❌ Kanał OCR nie istnieje (ID: \`${idTxt}\`)`, `❌ OCR channel does not exist (ID: \`${idTxt}\`)`));
+                lines.push(t('└ Użyj `/configure`, aby wybrać nowy kanał.', '└ Use `/configure` to pick a new channel.'));
+            } else if (ocr.powod === 'brak') {
+                addIssue(t('❌ Kanał OCR nie jest skonfigurowany', '❌ OCR channel is not configured'));
+            } else {
+                addIssue(t(`❌ Nie udało się sprawdzić kanału OCR (ID: \`${idTxt}\`)`, `❌ Could not check the OCR channel (ID: \`${idTxt}\`)`));
+            }
         } else {
             lines.push(t(`📺 **Uprawnienia w kanale #${channel.name}**`, `📺 **Permissions in #${channel.name}**`));
             const CHANNEL_PERMS = [
@@ -14693,12 +14744,16 @@ class InteractionHandler {
             PermissionFlagsBits.EmbedLinks,
             PermissionFlagsBits.AttachFiles,
         ];
-        const checkReportChannel = (chId, label, useClientCache) => {
-            const ch = useClientCache
-                ? client.channels.cache.get(chId)
-                : guild.channels.cache.get(chId);
+        const checkReportChannel = async (chId, label) => {
+            const wynik = await pobierzKanal(chId);
+            const ch = wynik.ch;
             if (!ch) {
-                addIssue(`❌ ${label} — ` + t(`kanał \`${chId}\` nieznaleziony w cache`, `channel \`${chId}\` not found in cache`));
+                const opis = wynik.powod === 'niewidoczny'
+                    ? t('bot nie widzi tego kanału (brak **Wyświetl kanał**)', 'bot cannot see this channel (missing **View Channel**)')
+                    : wynik.powod === 'usuniety'
+                        ? t(`kanał \`${chId}\` nie istnieje`, `channel \`${chId}\` does not exist`)
+                        : t(`nie udało się sprawdzić kanału \`${chId}\``, `could not check channel \`${chId}\``);
+                addIssue(`❌ ${label} — ${opis}`);
                 return;
             }
             const chPerms = botMember.permissionsIn(ch);
@@ -14719,7 +14774,7 @@ class InteractionHandler {
         if (!invalidChId) {
             lines.push(t('ℹ️ Kanał odrzuconych screenów — nie skonfigurowany (opcjonalny)', 'ℹ️ Invalid screens channel — not configured (optional)'));
         } else {
-            checkReportChannel(invalidChId, t('Odrzucone screeny (per-serwer)', 'Invalid screens (per-guild)'), false);
+            await checkReportChannel(invalidChId, t('Odrzucone screeny (per-serwer)', 'Invalid screens (per-guild)'));
         }
 
         // Per-guild: kanał weryfikacji społeczności
@@ -14730,7 +14785,7 @@ class InteractionHandler {
         } else if (!cvChId) {
             lines.push(t('ℹ️ Kanał CV — nie skonfigurowany', 'ℹ️ CV channel — not configured'));
         } else {
-            checkReportChannel(cvChId, t('Weryfikacja społeczności (per-serwer)', 'Community verification (per-guild)'), false);
+            await checkReportChannel(cvChId, t('Weryfikacja społeczności (per-serwer)', 'Community verification (per-guild)'));
         }
 
         // --- Kategoria 5: Hierarchia ról TOP ---
