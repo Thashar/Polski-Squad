@@ -11815,7 +11815,28 @@ class InteractionHandler {
                 sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: sent.id });
                 results.push({ label: guildLabel, id: guildCfg.id, status: 'ok', lang, guildObj });
             } catch (err) {
-                logger.error(`Błąd wysyłania /info do serwera "${guildLabel}": ${err.message}`);
+                /* Sam komunikat Discorda nie mówi, CO dokładnie zawiodło. Zapisujemy
+                   więc stan, na którym operowaliśmy: do jakiego serwera należy kanał,
+                   jakiego jest typu i jakie uprawnienia widzi na nim bot. To rozstrzyga
+                   między „odebrano ViewChannel", „kanał z innego serwera" i „kanał
+                   nietekstowy" bez zgadywania. */
+                try {
+                    const ch = await interaction.client.channels.fetch(guildCfg.allowedChannelId).catch(() => null);
+                    const me = guildObj.members.me;
+                    const upr = (ch && me && ch.guildId === guildObj.id)
+                        ? me.permissionsIn(ch).toArray().join(', ')
+                        : '(nie policzono)';
+                    logger.error(
+                        `[/info] Diagnoza "${guildLabel}" (${guildCfg.id}): kanał=${guildCfg.allowedChannelId}` +
+                        ` | znaleziony=${ch ? 'tak' : 'nie'}` +
+                        ` | guildId kanału=${ch?.guildId || '?'} (serwer=${guildObj.id})` +
+                        ` | typ=${ch?.type ?? '?'}` +
+                        ` | wysyłalny=${ch && typeof ch.send === 'function' ? 'tak' : 'nie'}` +
+                        ` | uprawnienia bota=[${upr}]`);
+                } catch (diagErr) {
+                    logger.error(`[/info] Diagnoza "${guildLabel}" nie powiodła się: ${diagErr.message}`);
+                }
+                logger.error(`Błąd wysyłania /info do serwera "${guildLabel}": ${err.message} (kod ${err.code ?? '?'})`);
                 results.push({
                     label: guildLabel, id: guildCfg.id, status: 'error', lang,
                     error: this._mapSendError(err),
@@ -14655,6 +14676,13 @@ class InteractionHandler {
             try {
                 const ch = await client.channels.fetch(chId, { force: true });
                 if (!ch) return { ch: null, powod: 'nieznany' };
+                // channels.fetch szuka GLOBALNIE, po wszystkich serwerach bota.
+                // Kanał spoza tego serwera trzeba odrzucić, bo liczenie na nim
+                // uprawnień membera z tego serwera daje wynik bez znaczenia –
+                // potrafiłby wyjść zielony, choć wysyłka nie ma prawa przejść.
+                if (ch.guildId && ch.guildId !== guild.id) {
+                    return { ch: null, powod: 'obcy', obcyGuildId: ch.guildId, obcaNazwa: ch.name };
+                }
                 return { ch, powod: null };
             } catch (err) {
                 if (err.code === 50001) return { ch: null, powod: 'niewidoczny' };
@@ -14708,6 +14736,13 @@ class InteractionHandler {
             } else if (ocr.powod === 'usuniety') {
                 addIssue(t(`❌ Kanał OCR nie istnieje (ID: \`${idTxt}\`)`, `❌ OCR channel does not exist (ID: \`${idTxt}\`)`));
                 lines.push(t('└ Użyj `/configure`, aby wybrać nowy kanał.', '└ Use `/configure` to pick a new channel.'));
+            } else if (ocr.powod === 'obcy') {
+                addIssue(t(
+                    `❌ Kanał OCR (ID: \`${idTxt}\`) należy do INNEGO serwera (\`${ocr.obcyGuildId}\`, #${ocr.obcaNazwa})`,
+                    `❌ The OCR channel (ID: \`${idTxt}\`) belongs to a DIFFERENT server (\`${ocr.obcyGuildId}\`, #${ocr.obcaNazwa})`));
+                lines.push(t(
+                    '└ Konfiguracja wskazuje cudzy kanał. Użyj `/configure`, aby wybrać kanał na tym serwerze.',
+                    '└ The config points at a channel on a different server. Use `/configure` to pick a channel on this server.'));
             } else if (ocr.powod === 'brak') {
                 addIssue(t('❌ Kanał OCR nie jest skonfigurowany', '❌ OCR channel is not configured'));
             } else {
@@ -14750,6 +14785,8 @@ class InteractionHandler {
             if (!ch) {
                 const opis = wynik.powod === 'niewidoczny'
                     ? t('bot nie widzi tego kanału (brak **Wyświetl kanał**)', 'bot cannot see this channel (missing **View Channel**)')
+                    : wynik.powod === 'obcy'
+                        ? t(`kanał należy do innego serwera (\`${wynik.obcyGuildId}\`)`, `channel belongs to another server (\`${wynik.obcyGuildId}\`)`)
                     : wynik.powod === 'usuniety'
                         ? t(`kanał \`${chId}\` nie istnieje`, `channel \`${chId}\` does not exist`)
                         : t(`nie udało się sprawdzić kanału \`${chId}\``, `could not check channel \`${chId}\``);
