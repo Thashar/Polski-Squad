@@ -465,7 +465,7 @@
 | `cc_action_unblock` | Odblokuj gracza — modal wyszukiwania lub info "brak zablokowanych" (ephemeral) |
 | `cc_action_roles` | Przetwórz role TOP — **wybór serwera** (`cc_roles_sel`, paginacja `cc_roles_pg_{n}`), potem `_handlePanelProcessRoles(interaction, guildId)` na WYBRANYM serwerze. Head admin widzi wszystkie skonfigurowane serwery, zwykły admin tylko swój |
 | `cc_unconf_kick` | Kicknij bota z serwera — select nieskonfigurowanych (`cc_kick_sel`, paginacja `cc_kick_pg_{n}`) → potwierdzenie `cc_kick_ok_{guildId}` / `cc_kick_no` → `guild.leave()`. Dane serwera zostają nietknięte |
-| `cfg_ocr_en_{guildId}` | „🔓 Włącz OCR /update" pod powiadomieniem o konfiguracji serwera na kanale logów head admina — `ocrBlockService.unblock(guildId, ['update'])`, info na kanał bota tego serwera, przycisk zamienia się na wyszarzone potwierdzenie z nickiem klikającego |
+| `cfg_ocr_en_{guildId}` | „🔓 Włącz OCR /update" pod powiadomieniem o konfiguracji serwera na kanale logów head admina — `ocrBlockService.unblock(guildId, ['update'])`, info na kanał bota tego serwera, przycisk zamienia się na wyszarzone potwierdzenie z nickiem klikającego. **Wyzwala też ogłoszenie nowego serwera** (`_maybeAnnounceNewServer`), o ile jeszcze nie poszło |
 | `cc_action_tester` | Zarządzaj testerami — lista + przyciski Dodaj/Usuń (ephemeral) |
 | `cc_bcr_refresh` | Odśwież przyciski pod wszystkimi ogłoszeniami globalnymi (head admin, ephemeral) — patrz sekcja „Zbiorcze liczniki reakcji" |
 | `cc_action_tokens` | Zużycie tokenów globalnie (ephemeral, head admin) |
@@ -923,7 +923,7 @@ ENDERSECHO_COMMUNITY_CHANNEL_ID=channel_id
 
 # Użytkownicy uprawnieni do /ocr-on-off (ID rozdzielone przecinkami)
 # Komenda włącza/wyłącza /update i/lub /test per-guild (parametry: action, target, guild z autocomplete)
-# Stan per-guild persystowany w data/guild_configs.json (ocrBlocked[])
+# Stan per-guild persystowany w data/guild_configs.json (ocrBlocked[], newServerAnnounced)
 ENDERSECHO_BLOCK_OCR_USER_IDS=discord_user_id_1,discord_user_id_2
 
 # Jeśli true, komenda /configure dostępna WYŁĄCZNIE dla administratora serwera (head admin traci dostęp)
@@ -1039,20 +1039,33 @@ const label = this.config.getAllGuilds().find(g => g.id === guildId)?.tag || gui
 - Wysyłaj przez `logService.sendEmbed(embed)` lub `guildLogger.sendEmbed(embed)` — nie przez kanał Discord
 - Kanał Discord: `ENDERSECHO_SERVER_LOG_CHANNEL_ID`
 
-### Ogłoszenie nowego serwera (AUTOMATYCZNE)
+### Ogłoszenie nowego serwera (AUTOMATYCZNE — po odblokowaniu OCR `/update`)
 
-Po **pierwszej** konfiguracji serwera (`!wasAlreadyConfigured`) bot **automatycznie** wysyła ogłoszenie na `allowedChannelId` każdego skonfigurowanego serwera — bez żadnego przycisku ani potwierdzenia ze strony admina.
+Ogłoszenie leci **przy pierwszym odblokowaniu OCR `/update`** na danym serwerze, a **NIE** po zakończeniu konfiguracji. Powód: nowy serwer startuje z zablokowanym `/update` i `/test`, więc do momentu odblokowania nikt na nim nie zgłasza wyników i serwer faktycznie nie bierze udziału w rywalizacji — nie ma czego ogłaszać. Momentem realnego dołączenia jest decyzja head admina o odblokowaniu OCR.
 
 **Flow:**
-- `cfg_accept` → `_broadcastNewServerAnnouncement(client, guild)` (fire-and-forget, nie blokuje odpowiedzi)
+- `cfg_accept` (pierwsza konfiguracja) → zapis `ocrBlocked: ['update','test']` + `newServerAnnounced: false`. **Żadnego ogłoszenia.**
+- Head admin odblokowuje `/update` → `_maybeAnnounceNewServer(client, guildId, unlockedCommands)` → `_broadcastNewServerAnnouncement(client, guild)`
 - Broadcast na `allowedChannelId` wszystkich serwerów, embed w języku serwera (`pol`/`eng`)
 
+**Ścieżki odblokowania wyzwalające ogłoszenie** (wszystkie trzy wołają ten sam helper):
+- `cfg_ocr_en_{guildId}` — przycisk „🔓 Włącz OCR /update" pod powiadomieniem o konfiguracji (`_handleCfgOcrEnable`)
+- `panel_ocr_en_{update|both}_{guildId}` — Centrum Dowodzenia, OCR on/off (`_handlePanelOcrAction`)
+- `/block-ocr action:enable` — komenda head admina (`handleBlockOcrCommand`)
+
+Odblokowanie samego `/test` ogłoszenia **nie** wyzwala — liczy się wyłącznie `/update`.
+
+**Ochrona przed dublem — flaga `newServerAnnounced` w `data/guild_configs.json`:**
+- Ogłoszenie leci dokładnie raz na serwer; flaga jest **trwała**, więc przeżywa restart bota oraz ponowne wyłączenie i włączenie OCR
+- Flaga stawiana **PRZED** wysyłką broadcastu — częściowo nieudany broadcast jest mniejszym złem niż ogłoszenie tego samego serwera dwa razy
+- **Migracja przy starcie** (`GuildConfigService.load()`): serwerom skonfigurowanym przed tą zmianą, którym brakuje flagi, ustawiane jest `newServerAnnounced = !ocrBlocked.includes('update')`. Serwer z odblokowanym `/update` = już działa i już był ogłoszony; serwer wciąż zablokowany = ogłoszenie poleci przy odblokowaniu. Serwery importowane z `.env` dostają `newServerAnnounced: true` od razu
+
 **Zawartość embeda** (kolor `0xFFD700` — złoty, uroczysty):
-- Nazwa serwera, liczba członków, numer kolejny skonfigurowanego serwera w rywalizacji
+- Nazwa serwera, liczba członków, numer kolejny skonfigurowanego serwera w rywalizacji (liczony w momencie odblokowania OCR)
 - PL: "N. skonfigurowany serwer" · EN: "Nth configured server" (sufiks ordinalny przez `_enOrdinal()`)
 - Thumbnail: ikona serwera Discord
 
-**Metody:** `_buildNewServerAnnouncementEmbeds(guild, serverNumber)`, `_enOrdinal(n)`, `_broadcastNewServerAnnouncement(client, guild)`
+**Metody:** `_maybeAnnounceNewServer(client, guildId, unlockedCommands)`, `_buildNewServerAnnouncementEmbeds(guild, serverNumber)`, `_enOrdinal(n)`, `_broadcastNewServerAnnouncement(client, guild)` · `GuildConfigService.isNewServerAnnounced(guildId)` / `setNewServerAnnounced(guildId, value)`
 
 ---
 
