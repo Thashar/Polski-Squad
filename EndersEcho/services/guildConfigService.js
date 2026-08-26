@@ -72,6 +72,8 @@ class GuildConfigService {
                     topRoles: envGuild.topRoles || null,
                     globalTopNotifications: true,
                     ocrBlocked: legacyBlockedCommands.length > 0 ? [...legacyBlockedCommands] : [],
+                    // Serwer z .env działa od dawna — ogłoszenie o nim już poszło
+                    newServerAnnounced: true,
                     importedFromEnv: true,
                 };
                 this._guilds.set(envGuild.id, entry);
@@ -86,7 +88,22 @@ class GuildConfigService {
             }
         }
 
-        if (didImport) {
+        // Migracja flagi ogłoszenia nowego serwera.
+        // Ogłoszenie leci przy odblokowaniu OCR `/update`, a nie po zapisie konfiguracji,
+        // więc serwery sprzed tej zmiany trzeba oznaczyć, żeby kolejne przełączenie OCR
+        // nie wywołało ogłoszenia po raz drugi. Serwer, który wciąż czeka na odblokowanie
+        // `/update`, zostaje nieoznaczony — ogłoszenie poleci przy odblokowaniu.
+        let didMigrate = false;
+        for (const cfg of this._guilds.values()) {
+            if (!cfg.configured || typeof cfg.newServerAnnounced === 'boolean') continue;
+            cfg.newServerAnnounced = !(cfg.ocrBlocked || []).includes('update');
+            didMigrate = true;
+        }
+        if (didMigrate) {
+            logger.info('🔄 Zmigrowano flagę newServerAnnounced dla serwerów sprzed zmiany');
+        }
+
+        if (didImport || didMigrate) {
             await this._persist();
         }
 
@@ -170,6 +187,29 @@ class GuildConfigService {
     async setOcrBlocked(guildId, commands) {
         const existing = this._guilds.get(guildId) || {};
         this._guilds.set(guildId, { ...existing, ocrBlocked: commands });
+        await this._persist();
+    }
+
+    /**
+     * Czy ogłoszenie o dołączeniu tego serwera do rywalizacji już poleciało.
+     * Ogłoszenie wysyłane jest przy pierwszym odblokowaniu OCR `/update`, nie po
+     * samym zapisie konfiguracji — serwer bez odblokowanego OCR nie bierze jeszcze
+     * udziału w rywalizacji, więc nie ma czego ogłaszać.
+     * @param {string} guildId
+     * @returns {boolean}
+     */
+    isNewServerAnnounced(guildId) {
+        return this._guilds.get(guildId)?.newServerAnnounced === true;
+    }
+
+    /**
+     * Oznacza serwer jako ogłoszony (flaga trwała — przeżywa restart bota).
+     * @param {string} guildId
+     * @param {boolean} [value=true]
+     */
+    async setNewServerAnnounced(guildId, value = true) {
+        const existing = this._guilds.get(guildId) || {};
+        this._guilds.set(guildId, { ...existing, newServerAnnounced: value === true });
         await this._persist();
     }
 

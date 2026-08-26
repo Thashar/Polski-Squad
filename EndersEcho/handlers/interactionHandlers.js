@@ -2330,9 +2330,14 @@ class InteractionHandler {
                     configuredAt: new Date().toISOString(),
                 },
             };
-            // Nowy serwer domyślnie ma zablokowane OCR komendy
+            // Nowy serwer domyślnie ma zablokowane OCR komendy.
+            // Ogłoszenie o dołączeniu do rywalizacji NIE leci tutaj — poleci dopiero,
+            // gdy head admin odblokuje na tym serwerze OCR `/update` (patrz
+            // `_maybeAnnounceNewServer`). Do tego czasu serwer nic nie zgłasza,
+            // więc nie ma czego ogłaszać.
             if (!wasAlreadyConfigured) {
                 newData.ocrBlocked = ['update', 'test'];
+                newData.newServerAnnounced = false;
             }
 
             await this.guildConfigService.saveConfig(interaction.guildId, newData);
@@ -2392,13 +2397,6 @@ class InteractionHandler {
                 ],
                 components: []
             });
-
-            // Automatyczne ogłoszenie nowego serwera na wszystkich kanałach (fire-and-forget)
-            if (!wasAlreadyConfigured) {
-                this._broadcastNewServerAnnouncement(interaction.client, interaction.guild).catch(err =>
-                    logger.error(`Błąd automatycznego ogłoszenia nowego serwera: ${err.message}`)
-                );
-            }
 
             // Powiadomienie o skonfigurowanym serwerze — webhook logów lub fallback na kanał raportów
             try {
@@ -3199,6 +3197,9 @@ class InteractionHandler {
 
         this._ccAudit(interaction, `🔓 Włączono OCR /update — ${serverName}`);
         this.adminPanelService?.refresh();
+
+        // Serwer właśnie realnie dołączył do rywalizacji — czas na ogłoszenie
+        await this._maybeAnnounceNewServer(interaction.client, targetGuildId, ['update']);
     }
 
     /** Dopisuje wpis do dziennika akcji admina w Centrum Dowodzenia */
@@ -4992,10 +4993,12 @@ class InteractionHandler {
                     await ch.send({ content: formatMessage(guildMsgs.ocrBlockPerGuildDisabled, { commands: cmdLabel, serverName }) }).catch(() => {});
                 }
             }
+            await this._maybeAnnounceNewServer(interaction.client, targetGuildId, targetCommands);
         } else {
             await this.ocrBlockService.block(targetGuildId, targetCommands);
             logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} na serwerze ${serverName} (panel)`);
         }
+
         const actionLabel = action === 'en' ? t('🔓 Odblokowano', '🔓 Unblocked') : t('🔒 Zablokowano', '🔒 Blocked');
         await interaction.editReply({
             embeds: [new EmbedBuilder()
@@ -11784,6 +11787,49 @@ class InteractionHandler {
     }
 
     /**
+     * Ogłasza nowy serwer, jeśli właśnie odblokowano na nim OCR `/update`.
+     *
+     * Ogłoszenie celowo NIE leci po zakończeniu konfiguracji: nowy serwer startuje
+     * z zablokowanym OCR, więc do momentu odblokowania nikt na nim nie zgłasza wyników
+     * i nie bierze udziału w rywalizacji. Momentem, w którym serwer naprawdę do niej
+     * dołącza, jest odblokowanie `/update` przez head admina — i to on wyzwala ogłoszenie.
+     *
+     * Wywoływana ze WSZYSTKICH ścieżek odblokowania (przycisk pod powiadomieniem
+     * o konfiguracji, panel admina, komenda `/block-ocr`). Flaga `newServerAnnounced`
+     * w `guild_configs.json` gwarantuje, że ogłoszenie poleci dokładnie raz — także
+     * po restarcie bota i po ponownym wyłączeniu i włączeniu OCR.
+     *
+     * @param {import('discord.js').Client} client
+     * @param {string} guildId - serwer, na którym odblokowano OCR
+     * @param {string[]} unlockedCommands - komendy objęte odblokowaniem
+     */
+    async _maybeAnnounceNewServer(client, guildId, unlockedCommands) {
+        try {
+            if (!Array.isArray(unlockedCommands) || !unlockedCommands.includes('update')) return;
+            if (!guildId || !this.guildConfigService) return;
+            if (!this.guildConfigService.isConfigured(guildId)) return;
+            if (this.guildConfigService.isNewServerAnnounced(guildId)) return;
+            // Zabezpieczenie na wypadek, gdyby odblokowanie się nie zapisało
+            if (this.ocrBlockService?.isBlocked(guildId, 'update')) return;
+
+            const guild = client.guilds.cache.get(guildId)
+                || await client.guilds.fetch(guildId).catch(() => null);
+            if (!guild) {
+                logger.error(`Ogłoszenie nowego serwera pominięte: serwer ${guildId} niedostępny`);
+                return;
+            }
+
+            // Flagę stawiamy PRZED wysyłką — częściowo nieudany broadcast jest mniejszym
+            // złem niż ogłoszenie tego samego serwera po raz drugi
+            await this.guildConfigService.setNewServerAnnounced(guildId, true);
+            logger.info(`📣 Ogłaszam nowy serwer "${guild.name}" — OCR /update właśnie odblokowany`);
+            await this._broadcastNewServerAnnouncement(client, guild);
+        } catch (err) {
+            logger.error(`Błąd ogłoszenia nowego serwera (${guildId}): ${err.message}`);
+        }
+    }
+
+    /**
      * Obsługuje przycisk "Wyślij" — wysyła embed na kanały wszystkich serwerów.
      */
     async _handleInfoSend(interaction) {
@@ -12189,6 +12235,7 @@ class InteractionHandler {
                     await ch.send({ content: formatMessage(guildMsgs.ocrBlockPerGuildDisabled, { commands: cmdLabel, serverName }) }).catch(() => {});
                 }
             }
+            await this._maybeAnnounceNewServer(interaction.client, targetGuildId, targetCommands);
         } else {
             await this.ocrBlockService.block(targetGuildId, targetCommands);
             logger.warn(`🔒 OCR zablokowany dla ${cmdLabel} na serwerze ${serverName}`);
