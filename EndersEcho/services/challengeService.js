@@ -155,6 +155,17 @@ class ChallengeService {
             .sort((a, b) => Date.parse(a.expiresAt || 0) - Date.parse(b.expiresAt || 0));
     }
 
+    /**
+     * Zaproszenia czekające na odpowiedź — od NAJNOWSZEGO.
+     *
+     * Odwrotnie niż `getActive()` (tam decyduje najbliższy termin): zaproszenie samo wygaśnie
+     * po 48 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem
+     * „kto właśnie kogo wyzwał".
+     */
+    async getPending() {
+        return (await this.getAll()).filter(c => c.status === 'pending');
+    }
+
     /** Wyzwania zamknięte (dowolnym wynikiem), od ostatnio zamkniętego */
     async getClosed() {
         return (await this.getAll())

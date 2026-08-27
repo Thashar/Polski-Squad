@@ -7749,8 +7749,8 @@ class InteractionHandler {
                             if (chartAttachment) dmFiles.push(new AttachmentBuilder(chartAttachment.attachment, { name: chartName }));
                             if (positionIconAttachment) dmFiles.push(new AttachmentBuilder(positionIconAttachment.attachment, { name: positionIconName }));
                             if (bossImageAttachment) dmFiles.push(new AttachmentBuilder(bossImageAttachment.attachment, { name: bossImageName }));
-                            // Embed wyzwania jest klonowany razem ze stosem, więc jego ikona musi tu być
-                            dmFiles.push(...this._challengeIconFiles(_challengeIcon));
+                            // Embed wyzwania jest klonowany razem ze stosem, więc jego ikony muszą tu być
+                            this._pushUniqueFiles(dmFiles, this._challengeIconFiles(_challengeIcon));
                             await subscriberUser.send({ embeds: dmEmbeds, files: dmFiles });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {
@@ -7909,6 +7909,7 @@ class InteractionHandler {
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (lista)';
         if (customId.startsWith('panel_ban_page_')) return 'Zbanuj serwer (strona listy)';
         if (customId === 'panel_guild_list' || customId.startsWith('panel_guild_list_')) return 'Pokaż serwery bota';
+        if (customId === 'cc_chal_pending' || customId.startsWith('cc_chal_p')) return 'CC: Oczekujące zaproszenia';
         if (customId === 'cc_chal_history' || customId.startsWith('cc_chal_h')) return 'CC: Historia wyzwań';
         if (customId === 'cc_chal_finish' || customId.startsWith('cc_chal_f')) return 'CC: Zakończ wyzwanie';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
@@ -8719,6 +8720,14 @@ class InteractionHandler {
                     const rest = customId.replace('cc_chal_hpg_', '');
                     const cut = rest.lastIndexOf('_');
                     await this._handleCcChallengeHistoryGuild(interaction, rest.slice(0, cut), parseInt(rest.slice(cut + 1), 10) || 0);
+                    return;
+                }
+                if (customId === 'cc_chal_pending') {
+                    await this._handleCcChallengePending(interaction);
+                    return;
+                }
+                if (customId.startsWith('cc_chal_ppg_')) {
+                    await this._handleCcChallengePending(interaction, parseInt(customId.replace('cc_chal_ppg_', ''), 10) || 0);
                     return;
                 }
                 if (customId === 'cc_chal_finish') {
@@ -16984,20 +16993,44 @@ class InteractionHandler {
             logger.warn(`Nie udało się wygenerować ikony postępu wyzwania: ${err.message}`);
         }
 
-        // Bez ikony embed nadal ma sens — leci wtedy z samym tytułem tekstowym
-        if (buffer) {
-            embed.setAuthor({ name: msgs.challengeNoticeField, iconURL: `attachment://${name}` })
-                .setThumbnail(`attachment://${name}`);
-        } else {
-            embed.setAuthor({ name: msgs.challengeNoticeField });
-        }
+        // Ikona bossa w lewym górnym rogu (author), pierścień postępu jako miniatura po prawej —
+        // dwa różne pytania: „o którego bossa chodzi" i „ile z ilu wyników już jest".
+        // Wszystkie wpisy dotyczą tego samego bossa (wynik ma jedną nazwę), więc bierzemy pierwszy
+        const boss = await this._challengeBossImage(najdalszy?.boss);
 
-        return { embed, buffer, name };
+        // Gdy bossa nie ma w bazie zdjęć, author bierze pierścień — lepsze niż pusty róg
+        const authorIcon = boss.thumb || (buffer ? `attachment://${name}` : null);
+        embed.setAuthor(authorIcon
+            ? { name: msgs.challengeNoticeField, iconURL: authorIcon }
+            : { name: msgs.challengeNoticeField });
+        if (buffer) embed.setThumbnail(`attachment://${name}`);
+
+        return { embed, buffer, name, boss };
     }
 
-    /** Świeży załącznik ikony postępu — ten sam obrazek leci w ogłoszeniu i w DM subskrybentów */
+    /**
+     * Świeże załączniki embeda wyzwania — pierścień postępu i ikona bossa.
+     * Ten sam komplet leci w ogłoszeniu i w DM subskrybentów, a jednego
+     * `AttachmentBuilder` nie da się wysłać dwa razy.
+     */
     _challengeIconFiles(icon) {
-        return icon?.buffer ? [new AttachmentBuilder(icon.buffer, { name: icon.name })] : [];
+        const files = [];
+        if (icon?.buffer) files.push(new AttachmentBuilder(icon.buffer, { name: icon.name }));
+        files.push(...this._challengeBossFiles(icon?.boss));
+        return files;
+    }
+
+    /**
+     * Dokłada załączniki, pomijając te o nazwie już obecnej na liście.
+     *
+     * ⚠️ Ikona bossa bywa DOŚĆ CZĘSTO już dołączona — Embed 3 stosu ogłoszenia (ranking bossa)
+     * używa dokładnie tego samego pliku. Dwa załączniki o tej samej nazwie w jednej wiadomości
+     * to nieprzewidywalne rozwiązanie `attachment://`, a `setAuthor` i tak wskazuje po nazwie.
+     */
+    _pushUniqueFiles(files, additions) {
+        for (const plik of additions) {
+            if (!files.some(f => f.name === plik.name)) files.push(plik);
+        }
     }
 
     /**
@@ -17011,7 +17044,7 @@ class InteractionHandler {
     _appendChallengeEmbed(embeds, files, icon) {
         if (!icon) return;
         embeds.push(icon.embed);
-        files.push(...this._challengeIconFiles(icon));
+        this._pushUniqueFiles(files, this._challengeIconFiles(icon));
         this.rankingService._enforceEmbedCharLimit(embeds);
     }
 
@@ -17461,6 +17494,71 @@ class InteractionHandler {
             embeds: [new EmbedBuilder().setColor(0xE67E22)
                 .setTitle(`📜 ${nazwaSerwera}`.substring(0, 256))
                 .setDescription(t(`Rozstrzygniętych wyzwań: **${list.length}**\n\n`, `Resolved challenges: **${list.length}**\n\n`) + linie.join('\n'))
+                .setFooter({ text: t(`Strona ${safePage + 1}/${maxPage + 1}`, `Page ${safePage + 1}/${maxPage + 1}`) })],
+            components,
+        });
+    }
+
+    /**
+     * Wszystkie zaproszenia czekające na odpowiedź (8/stronę).
+     *
+     * Embed panelu pokazuje tylko 5 ostatnich — tu jest komplet, z terminem wygaśnięcia
+     * i serwerami obu stron przy pojedynku międzyserwerowym.
+     */
+    async _handleCcChallengePending(interaction, page = 0) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const PER_PAGE = 8;
+
+        const pending = await this.challengeService.getPending();
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+        );
+
+        if (pending.length === 0) {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle(t('⏳ Oczekujące zaproszenia', '⏳ Pending Invitations'))
+                    .setDescription(t('Żadne zaproszenie nie czeka na odpowiedź.', 'No invitation is awaiting a response.'))],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const maxPage = Math.ceil(pending.length / PER_PAGE) - 1;
+        const safePage = Math.min(Math.max(0, page), maxPage);
+
+        const linie = pending.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE).map((ch, idx) => {
+            const nr = safePage * PER_PAGE + idx + 1;
+            const wyslano = Date.parse(ch.createdAt || 0);
+            const wygasa = Date.parse(ch.inviteExpiresAt || 0);
+            const czasy = [
+                Number.isFinite(wyslano) ? t(`wysłane <t:${Math.floor(wyslano / 1000)}:R>`, `sent <t:${Math.floor(wyslano / 1000)}:R>`) : null,
+                Number.isFinite(wygasa) ? t(`wygasa <t:${Math.floor(wygasa / 1000)}:R>`, `expires <t:${Math.floor(wygasa / 1000)}:R>`) : null,
+            ].filter(Boolean).join(' · ');
+            // Serwery pokazujemy tylko przy pojedynku międzyserwerowym — przy jednym niczego nie wnoszą
+            const serwery = this._ccChalGuildIds(ch).length > 1
+                ? `\n└ 🔀 ${this._challengeGuildName(interaction.client, ch.challenger.guildId)} → ${this._challengeGuildName(interaction.client, ch.opponent.guildId)}`
+                : '';
+            return `**${nr}.** **${this._ccChalName(ch.challenger, msgs)}** → **${this._ccChalName(ch.opponent, msgs)}**\n`
+                + `└ ${ch.boss || '—'}${czasy ? ` · ${czasy}` : ''}${serwery}`;
+        });
+
+        const components = [];
+        if (maxPage > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`cc_chal_ppg_${safePage - 1}`).setEmoji('◀️')
+                    .setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Primary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId(`cc_chal_ppg_${safePage + 1}`).setEmoji('▶️')
+                    .setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Primary).setDisabled(safePage === maxPage),
+            ));
+        }
+        components.push(backRow);
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0xE67E22)
+                .setTitle(t('⏳ Oczekujące zaproszenia', '⏳ Pending Invitations'))
+                .setDescription(t(`Czeka na odpowiedź: **${pending.length}**\n\n`, `Awaiting a response: **${pending.length}**\n\n`) + linie.join('\n'))
                 .setFooter({ text: t(`Strona ${safePage + 1}/${maxPage + 1}`, `Page ${safePage + 1}/${maxPage + 1}`) })],
             components,
         });

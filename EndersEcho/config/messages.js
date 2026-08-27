@@ -547,7 +547,7 @@ const pol = {
 
     // ⚔️ Wyzwania — zaliczanie wyników
     challengeNoticeField: '⚔️ Wyzwanie',
-    challengeNoticeCounted: 'Wynik zaliczony do wyzwania z **{opponent}** (boss **{boss}**) — **{count}/{total}**.\nTwoja suma: **{sum}**.',
+    challengeNoticeCounted: 'Wynik zaliczony do wyzwania z **{opponent}**\nBoss **{boss}** — **{count}/{total}**.\n\nTwoja suma: **{sum}**.',
     challengeNoticePending: 'Nazwa bossa nie została rozpoznana, więc wynik **czeka na zatwierdzenie przez administratora**. Po weryfikacji zostanie doliczony do Twojego wyzwania.',
     challengeNoticeDuplicate: 'Wynik **{score}** jest już zaliczony do wyzwania z **{opponent}** (boss **{boss}**) — ten sam rezultat nie liczy się drugi raz. Nadal masz **{count}/{total}**.',
     challengeDmCountedTitle: '⚔️ Wynik zaliczony do wyzwania',
@@ -1146,7 +1146,7 @@ const eng = {
 
     // ⚔️ Challenges — score qualification
     challengeNoticeField: '⚔️ Challenge',
-    challengeNoticeCounted: 'Score counted towards your challenge with **{opponent}** (boss **{boss}**) — **{count}/{total}**.\nYour total: **{sum}**.',
+    challengeNoticeCounted: 'Score counted towards your challenge with **{opponent}**\nBoss **{boss}** — **{count}/{total}**.\n\nYour total: **{sum}**.',
     challengeNoticePending: 'The boss name was not recognised, so the score is **awaiting administrator approval**. Once verified, it will be counted towards your challenge.',
     challengeNoticeDuplicate: 'Score **{score}** is already counted towards your challenge with **{opponent}** (boss **{boss}**) — the same result does not count twice. You still have **{count}/{total}**.',
     challengeDmCountedTitle: '⚔️ Score counted towards your challenge',
