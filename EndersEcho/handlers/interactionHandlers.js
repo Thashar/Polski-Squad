@@ -4816,6 +4816,31 @@ class InteractionHandler {
         }
     }
 
+    /**
+     * Czy przycisk kliknięto w Centrum Dowodzenia (stałe, publiczne wiadomości panelu),
+     * czy w efemerycznym panelu `/manage`.
+     */
+    _isCcInteraction(interaction) {
+        return this.adminPanelService?.isPanelMessage?.(interaction.message?.id) === true;
+    }
+
+    /**
+     * Widok panelu: w `/manage` podmienia efemeryczną wiadomość, w Centrum Dowodzenia
+     * odpowiada NOWĄ wiadomością efemeryczną.
+     *
+     * ⚠️ Bez tego rozróżnienia `interaction.update()` nadpisywałby sekcję Centrum Dowodzenia —
+     * publiczną wiadomość współdzieloną przez wszystkich head adminów — prywatnym widokiem
+     * jednej osoby, aż do najbliższego `refresh()`. Panel wracał więc do siebie sam, ale przez
+     * ten czas pokazywał komuś innemu cudzy ekran zamiast statystyk.
+     */
+    async _panelRespond(interaction, payload) {
+        if (this._isCcInteraction(interaction)) {
+            await interaction.reply({ ...payload, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.update(payload);
+    }
+
     async _handlePanelOcr(interaction) {
         const t = this._panelT(interaction.guildId);
         const guildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
@@ -4838,7 +4863,7 @@ class InteractionHandler {
                 { name: t('🔓 /test włączone', '🔓 /test enabled'), value: testEnabled.length ? testEnabled.join('\n') : none, inline: true },
             );
 
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [embed],
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Zarządzaj OCR', 'Manage OCR')).setStyle(ButtonStyle.Primary),
@@ -15312,7 +15337,7 @@ class InteractionHandler {
         );
 
         if (guilds.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
                     .setTitle(t('📋 Serwery bota', '📋 Bot Servers'))
                     .setDescription(t('Bot nie jest na żadnym serwerze.', 'The bot is not on any server.'))],
@@ -15356,7 +15381,7 @@ class InteractionHandler {
         }
         components.push(backRow);
 
-        await interaction.update({ embeds: [embed], components });
+        await this._panelRespond(interaction, { embeds: [embed], components });
     }
 
     /**
@@ -15383,7 +15408,7 @@ class InteractionHandler {
         const backRow = new ActionRowBuilder().addComponents(backBtn);
 
         if (servers.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
                     .setTitle(t('🚫 Zablokuj serwer', '🚫 Block Server'))
                     .setDescription(t('Brak serwerów do zbanowania.', 'No servers available to ban.'))],
@@ -15424,7 +15449,7 @@ class InteractionHandler {
 
         const from = safeOffset + 1;
         const to = safeOffset + page.length;
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [new EmbedBuilder().setColor(0xFF0000)
                 .setTitle(t('🚫 Wybierz serwer do zbanowania', '🚫 Select Server to Ban'))
                 .setDescription(t(
@@ -15512,7 +15537,7 @@ class InteractionHandler {
         const absentGuilds = configuredIds.filter(guildId => !interaction.client.guilds.cache.has(guildId));
 
         if (absentGuilds.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder()
                     .setColor(0x57F287)
                     .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))
@@ -15537,7 +15562,7 @@ class InteractionHandler {
             };
         });
 
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [new EmbedBuilder()
                 .setColor(0xFF6B35)
                 .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))

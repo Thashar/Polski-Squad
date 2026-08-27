@@ -176,6 +176,19 @@ class AdminPanelService {
         return this._messageIds.system || null;
     }
 
+    /**
+     * Czy dana wiadomość jest jedną z sekcji Centrum Dowodzenia.
+     *
+     * Panel to STAŁE, publiczne wiadomości na kanale head admina — handler przycisku musi
+     * wiedzieć, że został kliknięty właśnie tam, żeby odpowiedzieć efemerycznie zamiast
+     * `interaction.update()`. Update nadpisałby sekcję panelu widokiem dla jednej osoby
+     * (do najbliższego `refresh()`, więc bez śladu, że coś zniknęło).
+     */
+    isPanelMessage(messageId) {
+        if (!messageId) return false;
+        return Object.values(this._messageIds || {}).includes(messageId);
+    }
+
     async setupChannel(channelId) {
         this._channelId = channelId;
         this._messageIds = {};

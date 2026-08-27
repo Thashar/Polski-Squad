@@ -1148,6 +1148,14 @@ ENDERSECHO_WEB_SYNC_TOP=10
 
 **Działanie:** Panel to **7 osobnych wiadomości** (każda: 1 embed + własne rzędy przycisków) na kanale head admina. Edytowane automatycznie po każdym zdarzeniu. Kolejność sekcji = `SECTION_KEYS` w `adminPanelService.js`: `system, users, servers, bosses, stats, costs, tools`. Przy zmianie układu sekcji stare wiadomości są usuwane (iteracja po `Object.values(_messageIds)` — także osierocone klucze starych układów) i wysyłane od nowa. Wszystkie dynamiczne pola przycinane helperem `capField()` (limit 1024/pole, 4096/opis) — zabezpieczenie przed crashem.
 
+**⚠️ KAŻDY przycisk panelu odpowiada EFEMERYCZNIE** (nowa wiadomość widoczna tylko dla klikającego) albo otwiera modal. Sekcje panelu to **stałe, publiczne wiadomości współdzielone przez wszystkich head adminów** — `interaction.update()` nadpisałby taką sekcję prywatnym widokiem jednej osoby aż do najbliższego `refresh()`, więc reszta zamiast statystyk oglądałaby cudzy ekran.
+
+Rozstrzyga to `_panelRespond(interaction, payload)` w `interactionHandlers.js`: w Centrum Dowodzenia robi `reply({ flags: ['Ephemeral'] })`, w efemerycznym panelu `/manage` — `interaction.update()`. Rozpoznanie idzie przez `adminPanelService.isPanelMessage(interaction.message?.id)` (porównanie z `_messageIds`), **nie** przez customId — te same handlery obsługują oba wejścia. Dotyczy `panel_ocr`, `panel_ban_guild`, `panel_guild_list` i `panel_delete_server_data`; pozostałe przyciski panelu już wcześniej odpowiadały przez `reply`/`deferReply` z flagą `Ephemeral` albo modalem.
+
+**Jedyny wyjątek: `cc_srv_pg_prev` / `cc_srv_pg_next`** — paginacja sekcji Serwery działa NA panelu (`deferUpdate()` + `changeServersPage()` + `refresh()`), bo jej sensem jest przewinięcie wspólnej wiadomości, a nie pokazanie czegoś jednej osobie.
+
+Dalsze kroki flow (select menu, potwierdzenia, przyciski stron) klikane są już w wiadomości efemerycznej, więc `interaction.update()` jest w nich poprawne i zostaje.
+
 **7 embedów panelu (każdy z własnymi przyciskami POD embedem):**
 
 | # | Embed | Kolor | Zawartość | Przyciski |
