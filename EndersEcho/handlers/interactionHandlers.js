@@ -18094,7 +18094,11 @@ class InteractionHandler {
     // ── Widok w /profile ──────────────────────────────────────────────────────
 
     /**
-     * Zakładka `⚔️ Wyzwania` — bilans, wyzwania w toku (tylko własny profil) i historia.
+     * Zakładka `⚔️ Wyzwania` — bilans, rzucone zaproszenia, wyzwania w toku i historia.
+     *
+     * Rzucone zaproszenia i wyzwania w toku pokazujemy **tylko na własnym profilu**: to stan
+     * gry w toku, a nie dorobek, więc na cudzym profilu byłby podglądaniem cudzej kartki.
+     * Historia i bilans są jawne dla każdego.
      * @returns {Promise<{ embed: EmbedBuilder, maxPage: number }>}
      */
     async _buildChallengeProfileEmbed(playerKey, displayName, msgs, page = 0, isOwnProfile = false) {
@@ -18109,6 +18113,20 @@ class InteractionHandler {
             .setTitle(formatMessage(msgs.challengeProfileTitle, { name: displayName }))
             .setDescription(formatMessage(msgs.challengeProfileSummary, stats));
 
+        // Rzucone zaproszenia czekające na odpowiedź — z czasem, jaki został przeciwnikowi.
+        // Liczą się WYSŁANE przez tego gracza; otrzymane obsługuje przycisk w DM, a i tak
+        // nie zajmują slotu, więc nie są jego stanem gry
+        const sent = isOwnProfile
+            ? all.filter(c => c.status === 'pending' && c.challenger?.playerKey === playerKey)
+            : [];
+        if (sent.length > 0) {
+            const lines = sent.map(c =>
+                `📨 **${cs.participantName(c.opponent, msgs)}** — \`${c.boss}\`\n`
+                + `└ ${msgs.challengeProfileSentWait} ${this._discordTs(c.inviteExpiresAt, 'R')}`
+            );
+            embed.addFields({ name: msgs.challengeProfileSent, value: lines.join('\n').slice(0, 1024), inline: false });
+        }
+
         const active = all.filter(c => c.status === 'active');
         if (isOwnProfile && active.length > 0) {
             const lines = active.map(c => {
@@ -18116,8 +18134,13 @@ class InteractionHandler {
                 const other = c[cs.otherSide(side)];
                 const mine = c[side].scores.length;
                 const theirs = other.scores.length;
+                // Licznik screenów ORAZ aktualna suma — sam licznik nie mówi, kto prowadzi.
+                // Kolejność jak w historii: najpierw moja strona, potem przeciwnik
+                const mySum = this.rankingService.formatScore(c[side].sum);
+                const theirSum = this.rankingService.formatScore(other.sum);
                 return `⚔️ **${cs.participantName(other, msgs)}** — \`${c.boss}\`\n`
-                    + `└ ${mine}/${cs.scoresPerSide} : ${theirs}/${cs.scoresPerSide} · ${this._discordTs(c.expiresAt, 'R')}`;
+                    + `└ **${mine}/${cs.scoresPerSide}** (${mySum}) : **${theirs}/${cs.scoresPerSide}** (${theirSum})\n`
+                    + `└ ⏳ ${this._discordTs(c.expiresAt, 'R')}`;
             });
             // Wynik oczekujący na zatwierdzenie nazwy bossa nie jest jeszcze przypisany
             // do konkretnego wyzwania, więc idzie jedną notką pod listą — nie przy wierszach
