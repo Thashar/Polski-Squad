@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, REST, Routes, AttachmentBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, LabelBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits, ChannelSelectMenuBuilder, ChannelType, RoleSelectMenuBuilder, ComponentType } = require('discord.js');
 const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp, makePlayerKey, getOwnerId, getProfileIndex, formatProfileDisplayName, getProfileButtonEmoji } = require('../utils/helpers');
 const { formatCooldownTime } = require('../services/updateCooldownService');
-const { generatePositionIcon } = require('../services/positionIconService');
+const { generatePositionIcon, generateChallengeProgressIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
 const MESSAGES = require('../config/messages');
 const fs = require('fs').promises;
@@ -6698,7 +6698,11 @@ class InteractionHandler {
                 timestamp: new Date().toISOString(),
                 wasUnknownBoss: aiResult.wasUnknownBoss === true,
             });
-            const _challengeNotice = this._challengeSystemNotice(_challengeResult, msgs);
+            // Osobny embed z ikoną postępu (1/3, 2/3, 3/3) — dokładany na końcu KAŻDEJ ścieżki
+            // odpowiedzi: ogłoszenia rekordu, „tylko rekord bossa", duplikatu cross-server,
+            // „brak rekordu" i nierozpoznanego bossa. Zastąpił pole `⚔️ Wyzwanie` w Embedzie 4
+            // i dopisek w `reasonText` — informacja jest w jednym miejscu, nie w trzech
+            const _challengeIcon = await this._buildChallengeEmbed(_challengeResult, msgs);
 
             // Stan globalny przed zapisem — liczony też w /test (dryRun), żeby podgląd był identyczny jak /update (read-only)
             const prevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
@@ -6833,8 +6837,6 @@ class InteractionHandler {
                         );
                         csSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
                     }
-                    // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
-                    if (_challengeNotice) csSystemNotices.push(_challengeNotice);
 
                     const safeUserNameCs = userName.replace(/[^a-zA-Z0-9]/g, '_');
                     const imageAttachmentCs = new AttachmentBuilder(tempImagePath, { name: `rekord_${safeUserNameCs}_${Date.now()}.${fileExtension}` });
@@ -6872,6 +6874,8 @@ class InteractionHandler {
                     });
                     const csFiles = [imageAttachmentCs];
                     if (csBossImageAttachment) csFiles.push(csBossImageAttachment);
+                    // ⚔️ Wyzwanie — osobny embed z ikoną postępu, na końcu stosu
+                    this._appendChallengeEmbed(csEmbeds, csFiles, _challengeIcon);
 
                     // /test (dryRun): podgląd ephemeral, bez publicznego ogłoszenia i bez sesji cofnięcia
                     if (dryRun) {
@@ -7076,11 +7080,8 @@ class InteractionHandler {
                     }
                     noRecordReasonLines.push(formatMessage(msgs.resultDifference, { diff: diffText }));
                     // ⚔️ Wyzwanie — ani rekord ogólny, ani rekord bossa nie padł, więc nie ma
-                    // publicznego ogłoszenia; informacja idzie do embeda odpowiedzi ORAZ na priv
-                    if (_challengeNotice) {
-                        noRecordReasonLines.push('');
-                        noRecordReasonLines.push(`**${_challengeNotice.name}**`);
-                        noRecordReasonLines.push(_challengeNotice.value);
+                    // publicznego ogłoszenia; informacja idzie osobnym embedem ORAZ na priv
+                    if (_challengeIcon) {
                         this._sendChallengeScoreDm(interaction.client, userId, guildId, _challengeResult).catch(() => {});
                     }
 
@@ -7093,8 +7094,11 @@ class InteractionHandler {
                         messages: msgs,
                     });
 
+                    const noRecordFiles = [imageAttachment];
+                    this._appendChallengeEmbed(resultEmbeds, noRecordFiles, _challengeIcon);
+
                     try {
-                        await interaction.editReply({ embeds: resultEmbeds, files: [imageAttachment] });
+                        await interaction.editReply({ embeds: resultEmbeds, files: noRecordFiles });
                         gl.info('✅ Wysłano embed z wynikiem (brak rekordu)');
                     } catch (editReplyError) {
                         gl.error(`❌ Błąd podczas wysyłania embed (brak rekordu): ${editReplyError.message}`);
@@ -7134,10 +7138,7 @@ class InteractionHandler {
                     unknownBossReasonLines.push(`**${msgs.resultScore}:** ${bestScore}`);
                     unknownBossReasonLines.push(statusVal);
                     // ⚔️ Wyzwanie — brak publicznego ogłoszenia, więc informacja też na priv
-                    if (_challengeNotice) {
-                        unknownBossReasonLines.push('');
-                        unknownBossReasonLines.push(`**${_challengeNotice.name}**`);
-                        unknownBossReasonLines.push(_challengeNotice.value);
+                    if (_challengeIcon) {
                         this._sendChallengeScoreDm(interaction.client, userId, guildId, _challengeResult).catch(() => {});
                     }
                     const warnEmbeds = this.rankingService.createNoRecordEmbeds({
@@ -7151,7 +7152,9 @@ class InteractionHandler {
                     });
                     _ocrEmbedParams = { profileIndex, profileLabel, type: 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
                     gl.info(`⚠️ [/${commandName}] Wynik zaakceptowany z nierozpoznanym bossem (bez poprawy rekordu): "${bossName || '???'}"`);
-                    await interaction.editReply({ embeds: warnEmbeds, files: [imageAttachmentAlt] });
+                    const warnFiles = [imageAttachmentAlt];
+                    this._appendChallengeEmbed(warnEmbeds, warnFiles, _challengeIcon);
+                    await interaction.editReply({ embeds: warnEmbeds, files: warnFiles });
                     return;
                 }
 
@@ -7236,7 +7239,6 @@ class InteractionHandler {
                     bossSystemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
                 }
                 // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
-                if (_challengeNotice) bossSystemNotices.push(_challengeNotice);
 
                 // Ikona bossa (Embed 3) — gdy boss znany
                 let bossOnlyImageAttachment = null;
@@ -7286,6 +7288,8 @@ class InteractionHandler {
 
                 const bossPublicFiles = [imageAttachmentAlt];
                 if (bossOnlyImageAttachment) bossPublicFiles.push(bossOnlyImageAttachment);
+                // ⚔️ Wyzwanie — osobny embed z ikoną postępu, na końcu stosu
+                this._appendChallengeEmbed(bossPublicEmbeds, bossPublicFiles, _challengeIcon);
 
                 gl.info(`🎯 [/${commandName}] Pobito rekord na bossie "${bossName}"${wasUnknownBoss ? ' (nieznany boss)' : ''} (rekord globalny bez zmian)`);
 
@@ -7450,8 +7454,6 @@ class InteractionHandler {
                 );
                 systemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
             }
-            // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
-            if (_challengeNotice) systemNotices.push(_challengeNotice);
             // Poprzedni wynik na innym serwerze zostaje ukryty (nowy wynik jest ściśle lepszy) — nadpisuje opis Embedu 4
             let crossServerScoreRemovedNote = null;
             if (_prevGlobalUser && _newScoreValue > _prevGlobalUser.scoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
@@ -7584,6 +7586,8 @@ class InteractionHandler {
             if (chartAttachment) publicFiles.push(chartAttachment);
             if (positionIconAttachment) publicFiles.push(positionIconAttachment);
             if (bossImageAttachment) publicFiles.push(bossImageAttachment);
+            // ⚔️ Wyzwanie — osobny embed z ikoną postępu, na końcu stosu
+            this._appendChallengeEmbed(publicEmbeds, publicFiles, _challengeIcon);
 
             let _newRecordPublicMsg = null;
             let _recordRevertSession = null;
@@ -7745,6 +7749,8 @@ class InteractionHandler {
                             if (chartAttachment) dmFiles.push(new AttachmentBuilder(chartAttachment.attachment, { name: chartName }));
                             if (positionIconAttachment) dmFiles.push(new AttachmentBuilder(positionIconAttachment.attachment, { name: positionIconName }));
                             if (bossImageAttachment) dmFiles.push(new AttachmentBuilder(bossImageAttachment.attachment, { name: bossImageName }));
+                            // Embed wyzwania jest klonowany razem ze stosem, więc jego ikona musi tu być
+                            dmFiles.push(...this._challengeIconFiles(_challengeIcon));
                             await subscriberUser.send({ embeds: dmEmbeds, files: dmFiles });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {
@@ -16939,10 +16945,74 @@ class InteractionHandler {
         return lines.length ? lines.join('\n\n') : null;
     }
 
-    /** Pole do `systemNotices` (Embed 4) albo null, gdy nie ma o czym informować */
-    _challengeSystemNotice(result, msgs) {
-        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs, result?.duplicates || []);
-        return value ? { name: msgs.challengeNoticeField, value } : null;
+    /**
+     * Osobny embed „wynik zaliczony do wyzwania" — dokładany do stosu ogłoszenia rekordu
+     * ORAZ do odpowiedzi „brak rekordu".
+     *
+     * ⚠️ Zastępuje dawne pole `⚔️ Wyzwanie` w Embedzie 4 i dopisek w `reasonText` — informacja
+     * jest w jednym miejscu, nie w trzech. Ikoną jest **generowany pierścień postępu**
+     * (`1/3`, `2/3`, `3/3`, `?` dla wyniku czekającego na zatwierdzenie bossa), więc stan
+     * wyzwania widać rzutem oka, bez czytania treści.
+     *
+     * Licznik bierzemy z PIERWSZEGO wpisu (`notices`, w razie braku `duplicates`) — przy
+     * `MAX_ACTIVE_PER_PLAYER = 1` wpis jest i tak jeden; gdyby limit kiedyś wzrósł, ikona
+     * pokazuje najwyżej zaawansowane wyzwanie, a treść i tak wylicza wszystkie.
+     *
+     * @returns {Promise<{embed: EmbedBuilder, buffer: Buffer|null, name: string}|null>}
+     */
+    async _buildChallengeEmbed(result, msgs) {
+        const notices = result?.notices || [];
+        const duplicates = result?.duplicates || [];
+        const value = this._challengeNoticeValue(notices, result?.pending, msgs, duplicates);
+        if (!value) return null;
+
+        const wpisy = notices.length ? notices : duplicates;
+        const najdalszy = wpisy.reduce((a, b) => ((b.count || 0) > (a?.count || 0) ? b : a), null);
+        const count = result?.pending ? null : (najdalszy?.count ?? null);
+        const total = najdalszy?.total ?? this.challengeService?.scoresPerSide ?? 3;
+
+        const komplet = count !== null && count >= total;
+        const embed = new EmbedBuilder()
+            .setColor(result?.pending ? 0xFEE75C : (komplet ? 0x57F287 : 0xE67E22))
+            .setDescription(value);
+
+        const name = 'challenge_progress.png';
+        let buffer = null;
+        try {
+            buffer = await generateChallengeProgressIcon(count, total);
+        } catch (err) {
+            logger.warn(`Nie udało się wygenerować ikony postępu wyzwania: ${err.message}`);
+        }
+
+        // Bez ikony embed nadal ma sens — leci wtedy z samym tytułem tekstowym
+        if (buffer) {
+            embed.setAuthor({ name: msgs.challengeNoticeField, iconURL: `attachment://${name}` })
+                .setThumbnail(`attachment://${name}`);
+        } else {
+            embed.setAuthor({ name: msgs.challengeNoticeField });
+        }
+
+        return { embed, buffer, name };
+    }
+
+    /** Świeży załącznik ikony postępu — ten sam obrazek leci w ogłoszeniu i w DM subskrybentów */
+    _challengeIconFiles(icon) {
+        return icon?.buffer ? [new AttachmentBuilder(icon.buffer, { name: icon.name })] : [];
+    }
+
+    /**
+     * Dokleja embed wyzwania na koniec stosu i dorzuca jego ikonę do załączników.
+     *
+     * ⚠️ Po doklejeniu limit 6000 znaków na wiadomość liczony jest PONOWNIE
+     * (`_enforceEmbedCharLimit`) — `createRecordEmbeds` przycina stos do 5800 znaków, czyli
+     * z buforem 200, a sam opis o zaliczeniu wyniku potrafi go zjeść w całości. Bez tego
+     * przy maksymalnie rozdmuchanym ogłoszeniu Discord odrzuciłby wiadomość.
+     */
+    _appendChallengeEmbed(embeds, files, icon) {
+        if (!icon) return;
+        embeds.push(icon.embed);
+        files.push(...this._challengeIconFiles(icon));
+        this.rankingService._enforceEmbedCharLimit(embeds);
     }
 
     /**

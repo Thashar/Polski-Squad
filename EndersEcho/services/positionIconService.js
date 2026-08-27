@@ -204,4 +204,55 @@ async function generatePositionIcon(position) {
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generatePositionIcon };
+/**
+ * Ikona postępu w wyzwaniu — pierścień „ile z ilu wyników" (`1/3`, `2/3`, `3/3`).
+ *
+ * Trafia w miejsce ikony URL embeda o zaliczeniu wyniku do wyzwania: liczba w treści
+ * mówi to samo, ale postęp widać wtedy dopiero po przeczytaniu, a nie rzutem oka.
+ *
+ * @param {number|null} count - ile wyników już zaliczono; `null` = wynik czeka na
+ *                              zatwierdzenie nazwy bossa (pierścień pusty, znak zapytania)
+ * @param {number} total - ile wyników składa się na wyzwanie
+ * @returns {Promise<Buffer|null>} bufor PNG albo null przy nieprawidłowych danych
+ */
+async function generateChallengeProgressIcon(count, total) {
+    const suma = parseInt(total, 10);
+    if (!Number.isFinite(suma) || suma < 1) return null;
+
+    const oczekuje = count === null || count === undefined;
+    const ile = oczekuje ? 0 : Math.max(0, Math.min(suma, parseInt(count, 10) || 0));
+    const komplet = !oczekuje && ile >= suma;
+
+    // Żółty = wynik zaparkowany do zatwierdzenia, zielony = komplet, pomarańczowy = w trakcie
+    const kolor = oczekuje ? '#FEE75C' : (komplet ? '#57F287' : '#E67E22');
+    const cx = 128, cy = 128, r = 92, grubosc = 18;
+
+    // Pełny okrąg rysujemy elementem <circle> — łuk o kącie 360° degeneruje się do punktu
+    let postep;
+    if (komplet) {
+        postep = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${kolor}" stroke-width="${grubosc}" stroke-linecap="round"/>`;
+    } else if (ile > 0) {
+        const kat = (ile / suma) * 2 * Math.PI;
+        const x = cx + r * Math.sin(kat);
+        const y = cy - r * Math.cos(kat);
+        const duzyLuk = kat > Math.PI ? 1 : 0;
+        postep = `<path d="M ${cx} ${cy - r} A ${r} ${r} 0 ${duzyLuk} 1 ${x.toFixed(2)} ${y.toFixed(2)}"`
+            + ` fill="none" stroke="${kolor}" stroke-width="${grubosc}" stroke-linecap="round"/>`;
+    } else {
+        postep = '';
+    }
+
+    const napis = oczekuje ? '?' : `${ile}/${suma}`;
+    const rozmiar = napis.length > 3 ? 62 : 72;
+
+    const svg = `<svg width="${SIZE}" height="${SIZE}" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="#2B2D31" stroke="#1E1F22" stroke-width="4"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#4E5058" stroke-width="${grubosc}"/>
+  ${postep}
+  ${_numberText(napis, cx, cy, rozmiar, '#FFFFFF', '#1E1F22')}
+</svg>`;
+
+    return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+module.exports = { generatePositionIcon, generateChallengeProgressIcon };
