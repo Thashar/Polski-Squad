@@ -7749,8 +7749,8 @@ class InteractionHandler {
                             if (chartAttachment) dmFiles.push(new AttachmentBuilder(chartAttachment.attachment, { name: chartName }));
                             if (positionIconAttachment) dmFiles.push(new AttachmentBuilder(positionIconAttachment.attachment, { name: positionIconName }));
                             if (bossImageAttachment) dmFiles.push(new AttachmentBuilder(bossImageAttachment.attachment, { name: bossImageName }));
-                            // Embed wyzwania jest klonowany razem ze stosem, więc jego ikona musi tu być
-                            dmFiles.push(...this._challengeIconFiles(_challengeIcon));
+                            // Embed wyzwania jest klonowany razem ze stosem, więc jego ikony muszą tu być
+                            this._pushUniqueFiles(dmFiles, this._challengeIconFiles(_challengeIcon));
                             await subscriberUser.send({ embeds: dmEmbeds, files: dmFiles });
                             gl.info(`✅ Wysłano DM powiadomienie do ${subscriberId}`);
                         } catch (dmError) {
@@ -16993,20 +16993,44 @@ class InteractionHandler {
             logger.warn(`Nie udało się wygenerować ikony postępu wyzwania: ${err.message}`);
         }
 
-        // Bez ikony embed nadal ma sens — leci wtedy z samym tytułem tekstowym
-        if (buffer) {
-            embed.setAuthor({ name: msgs.challengeNoticeField, iconURL: `attachment://${name}` })
-                .setThumbnail(`attachment://${name}`);
-        } else {
-            embed.setAuthor({ name: msgs.challengeNoticeField });
-        }
+        // Ikona bossa w lewym górnym rogu (author), pierścień postępu jako miniatura po prawej —
+        // dwa różne pytania: „o którego bossa chodzi" i „ile z ilu wyników już jest".
+        // Wszystkie wpisy dotyczą tego samego bossa (wynik ma jedną nazwę), więc bierzemy pierwszy
+        const boss = await this._challengeBossImage(najdalszy?.boss);
 
-        return { embed, buffer, name };
+        // Gdy bossa nie ma w bazie zdjęć, author bierze pierścień — lepsze niż pusty róg
+        const authorIcon = boss.thumb || (buffer ? `attachment://${name}` : null);
+        embed.setAuthor(authorIcon
+            ? { name: msgs.challengeNoticeField, iconURL: authorIcon }
+            : { name: msgs.challengeNoticeField });
+        if (buffer) embed.setThumbnail(`attachment://${name}`);
+
+        return { embed, buffer, name, boss };
     }
 
-    /** Świeży załącznik ikony postępu — ten sam obrazek leci w ogłoszeniu i w DM subskrybentów */
+    /**
+     * Świeże załączniki embeda wyzwania — pierścień postępu i ikona bossa.
+     * Ten sam komplet leci w ogłoszeniu i w DM subskrybentów, a jednego
+     * `AttachmentBuilder` nie da się wysłać dwa razy.
+     */
     _challengeIconFiles(icon) {
-        return icon?.buffer ? [new AttachmentBuilder(icon.buffer, { name: icon.name })] : [];
+        const files = [];
+        if (icon?.buffer) files.push(new AttachmentBuilder(icon.buffer, { name: icon.name }));
+        files.push(...this._challengeBossFiles(icon?.boss));
+        return files;
+    }
+
+    /**
+     * Dokłada załączniki, pomijając te o nazwie już obecnej na liście.
+     *
+     * ⚠️ Ikona bossa bywa DOŚĆ CZĘSTO już dołączona — Embed 3 stosu ogłoszenia (ranking bossa)
+     * używa dokładnie tego samego pliku. Dwa załączniki o tej samej nazwie w jednej wiadomości
+     * to nieprzewidywalne rozwiązanie `attachment://`, a `setAuthor` i tak wskazuje po nazwie.
+     */
+    _pushUniqueFiles(files, additions) {
+        for (const plik of additions) {
+            if (!files.some(f => f.name === plik.name)) files.push(plik);
+        }
     }
 
     /**
@@ -17020,7 +17044,7 @@ class InteractionHandler {
     _appendChallengeEmbed(embeds, files, icon) {
         if (!icon) return;
         embeds.push(icon.embed);
-        files.push(...this._challengeIconFiles(icon));
+        this._pushUniqueFiles(files, this._challengeIconFiles(icon));
         this.rankingService._enforceEmbedCharLimit(embeds);
     }
 

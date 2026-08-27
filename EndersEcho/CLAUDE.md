@@ -221,7 +221,7 @@
        - **Opis nadpisany** (`specialDescription`, pierwsze dopasowanie wygrywa): `manualVerificationNote` (panel „Analizuj") > `crossServerScoreRemovedNote` (nowy wynik ściśle lepszy niż na innym serwerze — treść = `systemInfoAllGood` + notka `crossServerScoreRemovedNotice` z nazwą starego i nowego serwera) > `crossServerMigratedNote` (dokładne wyrównanie wyniku z innego serwera — notka `crossServerMigratedNotice`, BEZ prefiksu `systemInfoAllGood`)
        - **Pola dodatkowe** (`systemNotices`, mogą wystąpić RAZEM z opisem nadpisanym): `unknownBossRankingField`/`unknownBossRankingNotice` (nowy nierozpoznany boss), `crossServerBossKeptField`/`crossServerBossKeptValue` (rekord bossa pobity mimo duplikatu globalnego — rekord globalny zostaje na poprzednim serwerze)
        - **Ikona** (author iconURL + thumbnail, 3 stany): `manualVerificationNote` obecna → `.../emojis/1297532628395622440.webp` (zweryfikowano manualnie); jakiekolwiek inne uwagi/komunikaty → `.../emojis/1522939660278435993.webp` (nowa, statyczna); brak uwag → `.../emojis/1297531523477540894.webp` (domyślna, animowana)
-     - **Embed 5 (opcjonalny) — ⚔️ Wyzwanie:** dokładany POZA `createRecordEmbeds`, przez `_appendChallengeEmbed(embeds, files, icon)` w `interactionHandlers.js`. Pojawia się tylko wtedy, gdy wynik ruszył jakieś wyzwanie. Author + thumbnail = **generowany pierścień postępu** `1/3` / `2/3` / `3/3` (`challenge_progress.png`), opis = ten sam tekst co dawniej w polu `⚔️ Wyzwanie`. Kolor: pomarańczowy w trakcie, zielony przy komplecie, żółty gdy wynik czeka na zatwierdzenie bossa. Szczegóły w sekcji „System Wyzwań 1 vs 1"
+     - **Embed 5 (opcjonalny) — ⚔️ Wyzwanie:** dokładany POZA `createRecordEmbeds`, przez `_appendChallengeEmbed(embeds, files, icon)` w `interactionHandlers.js`. Pojawia się tylko wtedy, gdy wynik ruszył jakieś wyzwanie. Author (lewy górny róg) = **zdjęcie bossa**, thumbnail = **generowany pierścień postępu** `1/3` / `2/3` / `3/3` (`challenge_progress.png`), opis = ten sam tekst co dawniej w polu `⚔️ Wyzwanie`. Kolor: pomarańczowy w trakcie, zielony przy komplecie, żółty gdy wynik czeka na zatwierdzenie bossa. Szczegóły w sekcji „System Wyzwań 1 vs 1"
      - **Załączniki** (`files`): `[screenshot, score_history.png?, bossImage?, challenge_progress.png?]`
      - **Guard 6000 znaków** (`_enforceEmbedCharLimit`) — przycina opisy/pola od końca, by zmieścić się w limicie wiadomości
      - **Ścieżka tylko-rekord-bossa** (globalny ranking niezmieniony): stos bez Embedu 2 (1 + 3 + 4)
@@ -720,7 +720,7 @@
   - Duplikat cross-server bez poprawy — `reasonLabel: resultDetailsField`, `reasonText` = boss + `resultNotBeatenCrossServer`
   - Boss nierozpoznany zaakceptowany bez poprawy (żółty, `color1: 0xFEE75C`) — `reasonLabel: resultDetailsField`, `reasonText` = boss + wynik + `unknownBossAccepted`
   - Panel Analizuj — nieudana analiza AI — `reasonLabel: analyzeFailReasonField`, `reasonText` = `aiResult.error`, `color2: 0xFF0000`
-- **Embed 3 (opcjonalny) — ⚔️ Wyzwanie:** gdy wynik został zaliczony do wyzwania, `_appendChallengeEmbed` dokłada embed z pierścieniem postępu (`1/3`, `2/3`, `3/3`) w miejscu ikony URL. Patrz sekcja „System Wyzwań 1 vs 1"
+- **Embed 3 (opcjonalny) — ⚔️ Wyzwanie:** gdy wynik został zaliczony do wyzwania, `_appendChallengeEmbed` dokłada embed ze **zdjęciem bossa** w miejscu ikony URL (author) i **pierścieniem postępu** (`1/3`, `2/3`, `3/3`) jako miniaturą. Patrz sekcja „System Wyzwań 1 vs 1"
 - **Nie dotyczy:** stosu 4 embedów nowego rekordu (`createRecordEmbeds`) ani turkusowego ogłoszenia „pobito rekord bossa bez globalnego" — to prawdziwe ogłoszenia rekordu, używają pełnego stosu jak dotychczas. Raport na kanale odrzuconych screenów dla admina (`_sendInvalidScreenReport`) też ma inny, niezmieniony layout (author = tag/ikona serwera, nie status).
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
@@ -1329,12 +1329,14 @@ Wpięcie w `_runUpdateFlow` **tuż po ustaleniu `bestScore`/`bossName`/`userName
 
 `_buildChallengeEmbed(result, msgs)` składa embed z opisu `_challengeNoticeValue(notices, pending, msgs, duplicates)` (zaliczone wyniki i odrzucone powtórki w jednej treści), a `_appendChallengeEmbed(embeds, files, icon)` dokłada go **na koniec KAŻDEJ ścieżki odpowiedzi** `_runUpdateFlow`: nowy rekord, „tylko rekord bossa", duplikat cross-server, „brak rekordu" i nierozpoznany boss bez poprawy. Gdy wynik nie ruszył żadnego wyzwania, embed w ogóle nie powstaje (`null`) — tak samo w `/test` (dryRun).
 
-- **Ikona = generowany pierścień postępu** (`generateChallengeProgressIcon(count, total)` w `positionIconService.js`) — `1/3`, `2/3`, `3/3`, a dla wyniku czekającego na zatwierdzenie bossa `?`. Idzie jednocześnie w `author.iconURL` i w `thumbnail` jako `attachment://challenge_progress.png`. Pełny okrąg rysowany jest elementem `<circle>`, nie łukiem — łuk o kącie 360° degeneruje się do punktu
+- **Dwie ikony, dwa różne pytania:** `author.iconURL` (lewy górny róg) = **zdjęcie bossa** (`_challengeBossImage` → `data/boss_images/`), `thumbnail` (prawy górny róg) = **generowany pierścień postępu** (`generateChallengeProgressIcon(count, total)` w `positionIconService.js`) — `1/3`, `2/3`, `3/3`, a dla wyniku czekającego na zatwierdzenie bossa `?`. Pełny okrąg rysowany jest elementem `<circle>`, nie łukiem — łuk o kącie 360° degeneruje się do punktu
+- **Gdy bossa nie ma w bazie zdjęć**, `author` bierze pierścień — pusty lewy róg wyglądałby na błąd. Wszystkie wpisy dotyczą tego samego bossa (wynik ma jedną nazwę), więc nazwa brana jest z pierwszego
+- ⚠️ **Załączniki doklejane z pominięciem duplikatów nazwy** (`_pushUniqueFiles`) — Embed 3 stosu ogłoszenia (ranking bossa) używa **dokładnie tego samego pliku**, a dwa załączniki o tej samej nazwie w jednej wiadomości to nieprzewidywalne rozwiązanie `attachment://`. `setAuthor` i tak wskazuje po nazwie, więc wystarczy jeden
 - **Kolor:** pomarańczowy `0xE67E22` w trakcie · zielony `0x57F287` przy komplecie · żółty `0xFEE75C` gdy wynik czeka na admina
 - **Licznik z PIERWSZEGO wpisu** (`notices`, w razie braku `duplicates`) — przy `MAX_ACTIVE_PER_PLAYER = 1` wpis jest i tak jeden; gdyby limit wzrósł, ikona pokaże najwyżej zaawansowane wyzwanie, a treść wyliczy wszystkie
 - **Błąd generowania ikony nie gubi informacji** — embed leci wtedy bez obrazka, z samym tytułem tekstowym
 - ⚠️ **Limit 6000 znaków przeliczany PO doklejeniu** (`_appendChallengeEmbed` woła `rankingService._enforceEmbedCharLimit`). `createRecordEmbeds` przycina stos do 5800, czyli z buforem 200 — a sam opis o zaliczeniu wyniku potrafi go zjeść w całości
-- ⚠️ **Ikona zwracana jako BUFOR**, `AttachmentBuilder` budowany osobno na każdą wysyłkę (`_challengeIconFiles`) — ten sam obrazek leci w ogłoszeniu i w DM subskrybentów, a jednego `AttachmentBuilder` nie da się wysłać dwa razy
+- ⚠️ **Obie ikony zwracane jako BUFORY**, `AttachmentBuilder` budowany osobno na każdą wysyłkę (`_challengeIconFiles`) — ten sam komplet leci w ogłoszeniu i w DM subskrybentów, a jednego `AttachmentBuilder` nie da się wysłać dwa razy
 - **Brak rekordu ogólnego i brak rekordu bossa** (nic nie idzie publicznie) → ten sam embed doklejany do `createNoRecordEmbeds` **oraz DM** do gracza (`_sendChallengeScoreDm`)
 
 **⚠️ Zastąpiło to dwa dawne miejsca:** pole `⚔️ Wyzwanie` w Embedzie 4 (`systemNotices`) i dopisek w `reasonText` embeda „brak rekordu". Metoda `_challengeSystemNotice` została usunięta — informacja jest w jednym miejscu, nie w trzech.
@@ -1425,7 +1427,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 - Każdy zapis przez `store.mutate()` (kolejka pod jednym zamkiem) — wyniki z dwóch serwerów mogą wpaść równocześnie
 - `id` = 8–11 znaków base36, żeby `chal_share_{id}_{c}` zmieścił się w limicie 100 znaków customId
 - **Ikona bossa zwracana jako BUFOR** (`_challengeBossImage` → `{buffer, name, thumb}`), a `AttachmentBuilder` budowany osobno dla każdej wysyłki (`_challengeBossFiles`) — ten sam obrazek leci w DM do obu graczy i w ogłoszeniu na serwerze
-- **Ikona postępu tak samo** (`_buildChallengeEmbed` → `{embed, buffer, name}`, `_challengeIconFiles`) — leci w ogłoszeniu i w DM subskrybentów
+- **Embed wyzwania tak samo** (`_buildChallengeEmbed` → `{embed, buffer, name, boss}`, `_challengeIconFiles`) — pierścień postępu ORAZ zdjęcie bossa lecą w ogłoszeniu i w DM subskrybentów, a `_pushUniqueFiles` pilnuje, żeby zdjęcie bossa nie trafiło tam dwa razy
 
 ### CustomIDs
 
