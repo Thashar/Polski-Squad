@@ -1027,6 +1027,7 @@ class AdminPanelService {
         const actionsRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_ocr').setEmoji('🔄').setLabel('AI OCR').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('cc_action_roles').setEmoji('🔁').setLabel('Przetwórz role').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('panel_guild_list').setEmoji('📋').setLabel('Pokaż serwery').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🚫').setLabel('Zbanuj serwer').setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('🗑️').setLabel('Usuń dane').setStyle(ButtonStyle.Danger),
         );

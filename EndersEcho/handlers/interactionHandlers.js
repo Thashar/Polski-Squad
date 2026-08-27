@@ -510,14 +510,6 @@ class InteractionHandler {
                 await this._handlePanelBlockSearch(interaction);
                 return;
             }
-            if (interaction.customId === 'panel_ban_guild_modal') {
-                if (!this._isHeadAdmin(interaction.user.id)) {
-                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
-                    return;
-                }
-                await this._handlePanelBanGuildSearch(interaction);
-                return;
-            }
             if (interaction.customId === 'cc_player_lookup_modal') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -2699,6 +2691,7 @@ class InteractionHandler {
                 ),
                 new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Konfiguracja bossów', 'Boss Configuration')).setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder().setCustomId('panel_guild_list').setEmoji('📋').setLabel(t('Pokaż serwery', 'Show Servers')).setStyle(ButtonStyle.Secondary),
                     new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('🚫').setLabel(t('Zbanuj serwer', 'Ban Server')).setStyle(ButtonStyle.Danger),
                     new ButtonBuilder().setCustomId('panel_delete_server_data').setEmoji('🗑️').setLabel(t('Usuń dane serwera', 'Delete Server Data')).setStyle(ButtonStyle.Danger),
                     back,
@@ -2779,6 +2772,8 @@ class InteractionHandler {
                   '📅 **TOP10 Interval** — set the date and time of the first global TOP10 report (then automatically every ~3 days).'),
                 t('👾 **Konfiguracja bossów** — zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach (automatyczna normalizacja OCR).',
                   '👾 **Boss Configuration** — manage English boss names and their aliases in other languages (automatic OCR normalization).'),
+                t('📋 **Pokaż serwery** — lista wszystkich serwerów, na których jest bot (również nieskonfigurowanych).',
+                  '📋 **Show Servers** — list of every server the bot is on (including unconfigured ones).'),
                 t('🚫 **Zbanuj serwer** — wyrzuć bota z wybranego serwera i zablokuj możliwość ponownego dodania go do tego serwera.',
                   '🚫 **Ban Server** — remove the bot from a selected server and prevent it from being re-added to that server.'),
             );
@@ -7880,7 +7875,9 @@ class InteractionHandler {
         if (customId === 'panel_process_roles') return 'Przetwórz role TOP';
         if (customId === 'panel_player_growth') return 'Przyrost graczy (statystyki)';
         if (customId === 'panel_ban_server') return 'Zbanuj serwer (panel)';
-        if (customId === 'panel_ban_guild') return 'Zbanuj serwer (szukaj)';
+        if (customId === 'panel_ban_guild') return 'Zbanuj serwer (lista)';
+        if (customId.startsWith('panel_ban_page_')) return 'Zbanuj serwer (strona listy)';
+        if (customId === 'panel_guild_list' || customId.startsWith('panel_guild_list_')) return 'Pokaż serwery bota';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
         if (customId.startsWith('panel_ban_guild_ok_')) return `Zbanuj serwer (potwierdź: ${customId.replace('panel_ban_guild_ok_', '')})`;
         if (customId === 'panel_delete_server_data') return 'Usuń dane serwera (panel)';
@@ -9140,6 +9137,22 @@ class InteractionHandler {
                     return;
                 }
                 await this._handlePanelBanGuild(interaction);
+                return;
+            }
+            if (customId.startsWith('panel_ban_page_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelBanGuild(interaction, parseInt(customId.replace('panel_ban_page_', ''), 10) || 0);
+                return;
+            }
+            if (customId === 'panel_guild_list' || customId.startsWith('panel_guild_list_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handlePanelGuildList(interaction, parseInt(customId.replace('panel_guild_list_', ''), 10) || 0);
                 return;
             }
             if (customId === 'panel_unban_guild') {
@@ -15268,74 +15281,158 @@ class InteractionHandler {
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🚫').setLabel(t('Zablokuj serwer', 'Block Server')).setStyle(ButtonStyle.Danger),
             new ButtonBuilder().setCustomId('panel_unban_guild').setEmoji('🔓').setLabel(t('Odblokuj serwer', 'Unblock Server')).setStyle(ButtonStyle.Secondary).setDisabled(bannedCount === 0),
+            new ButtonBuilder().setCustomId('panel_guild_list').setEmoji('📋').setLabel(t('Pokaż serwery', 'Show Servers')).setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('panel_back').setEmoji('◀️').setLabel(t('Wróć do panelu', 'Back to Panel')).setStyle(ButtonStyle.Secondary),
         );
         await interaction.update({ embeds: [embed], components: [row] });
     }
 
-    async _handlePanelBanGuild(interaction) {
+    /**
+     * Podgląd WSZYSTKICH serwerów, na których jest bot — również tych nieskonfigurowanych.
+     *
+     * `config.getAllGuilds()` zna wyłącznie serwery z zapisaną konfiguracją, więc sam w sobie
+     * nie odpowiada na pytanie „gdzie właściwie siedzi bot". Źródłem jest tu `client.guilds.cache`,
+     * a konfiguracja służy już tylko do oznaczenia wpisu.
+     */
+    async _handlePanelGuildList(interaction, page = 0) {
         const t = this._panelT(interaction.guildId);
-        const modal = new ModalBuilder()
-            .setCustomId('panel_ban_guild_modal')
-            .setTitle(t('Zbanuj serwer — wyszukaj', 'Ban Server — Search'));
-        modal.addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-                .setCustomId('ban_guild_query')
-                .setLabel(t('Fragment nazwy serwera', 'Part of server name'))
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder(t('np. Polski Squad', 'e.g. Gaming Hub'))
-                .setMinLength(1)
-                .setMaxLength(100)
-                .setRequired(true)
-        ));
-        await interaction.showModal(modal);
-    }
+        const PER_PAGE = 10;
 
-    async _handlePanelBanGuildSearch(interaction) {
-        const t = this._panelT(interaction.guildId);
-        const query = normalizeForSearch(interaction.fields.getTextInputValue('ban_guild_query').trim());
-        await interaction.deferReply({ flags: ['Ephemeral'] });
+        const guilds = [...interaction.client.guilds.cache.values()]
+            .map(g => ({
+                id: g.id,
+                name: g.name || g.id,
+                members: g.memberCount ?? 0,
+                configured: !!this.config.getGuildConfig(g.id),
+            }))
+            .sort((a, b) => this._compareSortNames(a.name, b.name));
 
-        const matches = [];
-        for (const [guildId, guild] of interaction.client.guilds.cache) {
-            if (!normalizeForSearch(guild.name).includes(query)) continue;
-            if (this.guildBanService?.isBanned(guildId)) continue;
-            matches.push({ guildId, guildName: guild.name });
-        }
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('panel_cat_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+        );
 
-        if (matches.length === 0) {
-            await interaction.editReply({
+        if (guilds.length === 0) {
+            await interaction.update({
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
-                    .setDescription(t(`Brak aktywnego serwera z nazwą zawierającą "**${query}**".`, `No active server with name containing "**${query}**".`))],
-                components: [new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
-                )],
+                    .setTitle(t('📋 Serwery bota', '📋 Bot Servers'))
+                    .setDescription(t('Bot nie jest na żadnym serwerze.', 'The bot is not on any server.'))],
+                components: [backRow],
             });
             return;
         }
 
-        const options = matches.slice(0, 25).map(({ guildId, guildName }) => ({
-            label: guildName.substring(0, 100),
-            description: guildId,
-            value: guildId,
-        }));
+        const maxPage = Math.ceil(guilds.length / PER_PAGE) - 1;
+        const safePage = Math.min(Math.max(0, page), maxPage);
+        const slice = guilds.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE);
 
-        await interaction.editReply({
+        const configured = guilds.filter(g => g.configured).length;
+        const members = guilds.reduce((sum, g) => sum + g.members, 0);
+
+        const lines = slice.map((g, idx) => {
+            const nr = safePage * PER_PAGE + idx + 1;
+            const mark = g.configured ? '⚙️' : '⚪';
+            return `**${nr}.** ${mark} **${g.name}**\n\`${g.id}\` · 👥 ${g.members.toLocaleString('pl-PL')}`;
+        });
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(t('📋 Serwery bota', '📋 Bot Servers'))
+            .setDescription(
+                t(
+                    `Bot jest na **${guilds.length}** serwerach · ⚙️ skonfigurowanych: **${configured}** · ⚪ nieskonfigurowanych: **${guilds.length - configured}** · 👥 łącznie: **${members.toLocaleString('pl-PL')}**\n\n`,
+                    `The bot is on **${guilds.length}** server(s) · ⚙️ configured: **${configured}** · ⚪ not configured: **${guilds.length - configured}** · 👥 total: **${members.toLocaleString('pl-PL')}**\n\n`
+                ) + lines.join('\n')
+            )
+            .setFooter({ text: t(`Strona ${safePage + 1}/${maxPage + 1}`, `Page ${safePage + 1}/${maxPage + 1}`) });
+
+        const components = [];
+        if (maxPage > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`panel_guild_list_${safePage - 1}`).setEmoji('◀️')
+                    .setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Primary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId(`panel_guild_list_${safePage + 1}`).setEmoji('▶️')
+                    .setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Primary).setDisabled(safePage === maxPage),
+            ));
+        }
+        components.push(backRow);
+
+        await interaction.update({ embeds: [embed], components });
+    }
+
+    /**
+     * Lista serwerów do zbanowania — 25/stronę + przyciski zakresów liter (`panel_ban_page_`),
+     * te same co w `/challenge`.
+     *
+     * ⚠️ **Wcześniej był tu modal z wyszukiwarką po fragmencie nazwy.** Trzeba było znać nazwę,
+     * a wyniki i tak lądowały w `slice(0, 25)`. Lista pokazuje wszystko, po czym można się
+     * przewijać alfabetycznie.
+     *
+     * Źródłem jest `client.guilds.cache`, nie `config.getAllGuilds()` — zbanować da się także
+     * serwer, którego nikt nie skonfigurował (a to zwykle właśnie takie się banuje).
+     */
+    async _handlePanelBanGuild(interaction, offset = 0) {
+        const t = this._panelT(interaction.guildId);
+        const PAGE_SIZE = 25;
+
+        const servers = [...interaction.client.guilds.cache.values()]
+            .filter(g => !this.guildBanService?.isBanned(g.id))
+            .map(g => ({ id: g.id, label: g.name || g.id }))
+            .sort((a, b) => this._compareSortNames(a.label, b.label));
+
+        const backBtn = new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary);
+        const backRow = new ActionRowBuilder().addComponents(backBtn);
+
+        if (servers.length === 0) {
+            await interaction.update({
+                embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                    .setTitle(t('🚫 Zablokuj serwer', '🚫 Block Server'))
+                    .setDescription(t('Brak serwerów do zbanowania.', 'No servers available to ban.'))],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, (Math.ceil(servers.length / PAGE_SIZE) - 1) * PAGE_SIZE));
+        const page = servers.slice(safeOffset, safeOffset + PAGE_SIZE);
+
+        const selectRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('panel_ban_guild_sel')
+                .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                .addOptions(page.map(srv => ({
+                    label: srv.label.substring(0, 100),
+                    description: srv.id,
+                    value: srv.id,
+                })))
+        );
+
+        // Rząd nawigacji zabiera jeden z pięciu slotów, więc zakresom zostają trzy
+        const paged = servers.length > PAGE_SIZE;
+        const rangeRows = paged ? this._buildRangeButtons(servers, safeOffset, 'panel_ban_page_', 3) : [];
+
+        // Zakresy mieszczą 15 przycisków (375 serwerów). Przyciski krok-po-kroku dokładamy,
+        // żeby przy dłuższej liście dalsze strony nie zrobiły się nieosiągalne
+        const navRow = new ActionRowBuilder();
+        if (paged) {
+            navRow.addComponents(
+                new ButtonBuilder().setCustomId(`panel_ban_page_${safeOffset - PAGE_SIZE}`).setEmoji('◀️')
+                    .setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Secondary).setDisabled(safeOffset === 0),
+                new ButtonBuilder().setCustomId(`panel_ban_page_${safeOffset + PAGE_SIZE}`).setEmoji('▶️')
+                    .setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Secondary).setDisabled(safeOffset + PAGE_SIZE >= servers.length),
+            );
+        }
+        navRow.addComponents(backBtn);
+
+        const from = safeOffset + 1;
+        const to = safeOffset + page.length;
+        await interaction.update({
             embeds: [new EmbedBuilder().setColor(0xFF0000)
                 .setTitle(t('🚫 Wybierz serwer do zbanowania', '🚫 Select Server to Ban'))
-                .setDescription(t(`Znaleziono **${matches.length}** serwer(ów). Wybierz z listy:`, `Found **${matches.length}** server(s). Select from the list:`))],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder().setCustomId('panel_ban_guild_sel')
-                        .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
-                        .addOptions(options)
-                ),
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder().setCustomId('panel_ban_guild').setEmoji('🔍').setLabel(t('Szukaj ponownie', 'Search Again')).setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder().setCustomId('panel_ban_server').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
-                ),
-            ],
+                .setDescription(t(
+                    `Bot jest na **${servers.length}** serwerach możliwych do zbanowania.\nWybierz serwer z listy:`,
+                    `The bot is on **${servers.length}** server(s) that can be banned.\nSelect a server from the list:`
+                ))
+                .setFooter({ text: t(`Pozycje ${from}-${to} z ${servers.length}`, `Entries ${from}-${to} of ${servers.length}`) })],
+            components: [...rangeRows, selectRow, navRow],
         });
     }
 
@@ -16308,7 +16405,7 @@ class InteractionHandler {
 
         const components = servers.length <= PAGE_SIZE
             ? [selectRow]
-            : [...this._buildChallengeRangeButtons(servers, safeOffset, 'chal_spage_'), selectRow];
+            : [...this._buildRangeButtons(servers, safeOffset, 'chal_spage_'), selectRow];
 
         const payload = { content: msgs.challengeIntro, components };
         await (initial ? interaction.reply({ ...payload, flags: ['Ephemeral'] }) : interaction.editReply(payload));
@@ -16369,7 +16466,7 @@ class InteractionHandler {
 
         const components = sorted.length <= PAGE_SIZE
             ? [selectRow]
-            : [...this._buildChallengeRangeButtons(
+            : [...this._buildRangeButtons(
                 sorted.map(p => ({ label: p.displayName })), offset, 'chal_page_'), selectRow];
 
         await interaction.editReply({ content: msgs.challengeSelectPlayer, components });
@@ -16383,14 +16480,18 @@ class InteractionHandler {
      * nie z surowej nazwy — inaczej przycisk pokazywałby `🔥 - ⭐` zamiast `A - K`.
      *
      * @param {Array<{label: string}>} items - lista posortowana tym samym kluczem
-     * @param {string} prefix - prefiks customId (`chal_page_` gracze, `chal_spage_` serwery)
+     * @param {string} prefix - prefiks customId (`chal_page_` gracze, `chal_spage_` serwery,
+     *                          `panel_ban_page_` lista serwerów do zbanowania)
+     * @param {number} maxRows - ile rzędów wolno zająć zakresom. Wiadomość mieści 5 rzędów,
+     *                          a select zabiera jeden — widok z dodatkowym rzędem nawigacji
+     *                          (np. „Wróć") musi więc zejść do 3
      */
-    _buildChallengeRangeButtons(items, activeOffset, prefix) {
+    _buildRangeButtons(items, activeOffset, prefix, maxRows = 4) {
         const PAGE_SIZE = 25;
         const rows = [];
         let currentRow = [];
         for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
-            if (rows.length >= 4 && currentRow.length === 0) break;
+            if (rows.length >= maxRows && currentRow.length === 0) break;
             const page = items.slice(offset, offset + PAGE_SIZE);
             const first = this._sortBucketLetter(page[0].label);
             const last = this._sortBucketLetter(page[page.length - 1].label);
@@ -16405,7 +16506,7 @@ class InteractionHandler {
                 currentRow = [];
             }
         }
-        if (currentRow.length > 0 && rows.length < 4) rows.push(new ActionRowBuilder().addComponents(currentRow));
+        if (currentRow.length > 0 && rows.length < maxRows) rows.push(new ActionRowBuilder().addComponents(currentRow));
         return rows;
     }
 
@@ -16507,11 +16608,14 @@ class InteractionHandler {
 
         if (opponentId === interaction.user.id) return void await done(msgs.challengeErrSelf);
 
-        const open = await this.challengeService.countOpenForPlayer(challengerKey);
-        if (open >= this.challengeService.maxActivePerPlayer) {
-            return void await done(formatMessage(msgs.challengeErrLimit, {
-                count: open, max: this.challengeService.maxActivePerPlayer,
-            }));
+        const limit = this.challengeService.maxActivePerPlayer;
+        if (await this.challengeService.countOpenForPlayer(challengerKey) >= limit) {
+            return void await done(msgs.challengeErrLimit);
+        }
+        // Przeciwnika sprawdzamy PRZED wysłaniem DM — inaczej dostałby zaproszenie,
+        // którego i tak nie mógłby przyjąć, a rzucający czekałby do wygaśnięcia
+        if (await this.challengeService.countOpenForPlayer(opponentKey) >= limit) {
+            return void await done(formatMessage(msgs.challengeErrOpponentBusy, { name: session.playerName }));
         }
         if (await this.challengeService.hasOpenBetween(challengerKey, opponentKey, session.boss)) {
             return void await done(formatMessage(msgs.challengeErrDuplicate, { boss: session.boss }));
@@ -16637,15 +16741,11 @@ class InteractionHandler {
         }
 
         if (accepted) {
+            // To zaproszenie slotu nie zajmuje (przyjmujący jest jego adresatem),
+            // więc licznik porównujemy wprost z limitem
             const open = await this.challengeService.countOpenForPlayer(challenge.opponent.playerKey);
-            // Zaproszenie liczy się do limitu, więc porównujemy z limitem powiększonym o nie samo
-            if (open > this.challengeService.maxActivePerPlayer) {
-                await interaction.reply({
-                    content: formatMessage(msgs.challengeErrAcceptLimit, {
-                        count: open - 1, max: this.challengeService.maxActivePerPlayer,
-                    }),
-                    flags: ['Ephemeral'],
-                });
+            if (open >= this.challengeService.maxActivePerPlayer) {
+                await interaction.reply({ content: msgs.challengeErrAcceptLimit, flags: ['Ephemeral'] });
                 return;
             }
         }

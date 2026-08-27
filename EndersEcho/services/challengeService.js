@@ -19,8 +19,12 @@ const CHALLENGE_TTL_MS = 72 * 60 * 60 * 1000;
  * jest już zamknięte, więc trzymanie zaparkowanego wyniku dłużej nie ma sensu.
  */
 const PENDING_SCORE_TTL_MS = 72 * 60 * 60 * 1000;
-/** Ile wyzwań naraz może prowadzić jeden profil */
-const MAX_ACTIVE_PER_PLAYER = 3;
+/**
+ * Ile wyzwań naraz może prowadzić jeden profil. Komunikaty `challengeErrLimit`
+ * i `challengeErrAcceptLimit` są napisane pod wartość 1 — zmiana tej stałej
+ * wymaga przepisania ich w obu językach.
+ */
+const MAX_ACTIVE_PER_PLAYER = 1;
 /** Zamknięte wyzwania bez rezultatu (odrzucone, wygasłe zaproszenia) kasujemy po 90 dniach */
 const CLOSED_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -146,10 +150,20 @@ class ChallengeService {
         return (await this.getForPlayer(playerKey)).filter(c => c.status === 'active');
     }
 
-    /** Zajęte sloty gracza: trwające + wysłane zaproszenia czekające na odpowiedź */
+    /**
+     * Zajęte sloty gracza: wyzwania w toku (obojętnie po której stronie) oraz
+     * WYSŁANE zaproszenia czekające na odpowiedź.
+     *
+     * ⚠️ OTRZYMANE zaproszenia slotu NIE zajmują — dopóki gracz ich nie przyjmie,
+     * niczego nie prowadzi. Przy limicie 1 liczenie ich blokowałoby gracza, który
+     * dostał dwa zaproszenia od różnych osób: nie mógłby przyjąć ŻADNEGO, bo już
+     * samo posiadanie drugiego zaproszenia wypełniałoby limit.
+     */
     async countOpenForPlayer(playerKey) {
-        return (await this.getForPlayer(playerKey))
-            .filter(c => c.status === 'active' || c.status === 'pending').length;
+        return (await this.getForPlayer(playerKey)).filter(c =>
+            c.status === 'active' ||
+            (c.status === 'pending' && c.challenger?.playerKey === playerKey)
+        ).length;
     }
 
     /** Czy między tymi profilami toczy się już wyzwanie na tym bossie */
