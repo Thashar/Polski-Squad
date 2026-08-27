@@ -31,6 +31,12 @@ const CLOSED_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 const SIDES = ['challenger', 'opponent'];
 /** Statusy, po których wyzwanie już się nie toczy — historia w Centrum Dowodzenia */
 const CLOSED_STATUSES = new Set(['finished', 'unresolved', 'declined', 'expired', 'cancelled']);
+/**
+ * Statusy, z których cofnięcie wyniku potrafi wyzwanie odzyskać: trwające (samo wypisanie
+ * wyniku) oraz zamknięte KOMPLETEM WYNIKÓW albo brakiem czasu. `declined`, `expired`
+ * i `cancelled` zamknęła decyzja człowieka, nie wynik — tych nie wskrzeszamy.
+ */
+const REVERTABLE_STATUSES = new Set(['active', 'finished', 'unresolved']);
 
 /**
  * System wyzwań 1 vs 1 (`/challenge`).
@@ -566,6 +572,22 @@ class ChallengeService {
     }
 
     /**
+     * Zapamiętuje ogłoszenie opublikowane przyciskiem „pochwal się".
+     *
+     * Bez tego cofnięcie wyniku nie miałoby czego skasować — `sharedGuildIds` mówi tylko,
+     * ŻE ogłoszenie poszło, nie GDZIE ono jest.
+     */
+    async attachSharedMessage(id, guildId, channelId, messageId) {
+        await this._mutate(draft => {
+            const ch = draft.challenges[id];
+            if (!ch) return;
+            if (!ch.result) ch.result = { dm: {}, shared: { challenger: false, opponent: false }, sharedGuildIds: [] };
+            if (!Array.isArray(ch.result.announcements)) ch.result.announcements = [];
+            ch.result.announcements.push({ guildId, channelId, messageId });
+        });
+    }
+
+    /**
      * Oznacza publikację wyniku przez jednego z uczestników. Przycisk działa RAZ —
      * stan siedzi w pliku, więc restart bota go nie resetuje.
      * @returns {Promise<{ ok: boolean, reason?: 'already_shared'|'guild_shared'|'not_found', guildId?: string }>}
@@ -722,29 +744,71 @@ class ChallengeService {
 
     /**
      * Cofnięcie wyniku (przycisk gracza / panel admina) — wypisuje wynik z wyzwań
-     * BĘDĄCYCH W TOKU. Wyzwania rozstrzygnięte zostają nietknięte: rezultat już padł
-     * i obie strony dostały powiadomienie.
-     * @returns {Promise<number>} liczba wypisanych wyników
+     * w toku ORAZ z tych, które ten wynik zamknął.
+     *
+     * Wyzwanie zamknięte KOMPLETEM WYNIKÓW (`finished`) albo BRAKIEM CZASU (`unresolved`)
+     * traci podstawę rozstrzygnięcia razem z cofniętym wynikiem, więc wraca do statusu
+     * `active`. `declined`, `expired` i `cancelled` zamknęła decyzja człowieka, nie wynik —
+     * tych nie wskrzeszamy.
+     *
+     * ⚠️ `expiresAt` NIE jest przedłużane. Gdy 72 h zdążyło minąć, najbliższy przebieg sweepa
+     * zamknie wyzwanie jako `unresolved` ze standardowym powiadomieniem — to uczciwsze niż
+     * dorysowanie czasu, którego nikt nie przyznał.
+     *
+     * @param {boolean} [opts.andAfter] kasuj też wyniki PÓŹNIEJSZE niż `timestamp`
+     *   (ścieżka `_cvRemoveRecord` tnie historię od cofniętego rekordu w górę)
+     * @returns {Promise<{removed: number, reopened: Array<{challenge, dm, announcements, winnerSide, loserSide}>}>}
+     *   `reopened` niesie stan sprzed otwarcia — adresy DM-ów i ogłoszeń do skasowania oraz
+     *   strony, którym trzeba cofnąć osiągnięcia
      */
-    async removeScore(playerKey, timestamp) {
-        if (!playerKey || !timestamp) return 0;
+    async removeScore(playerKey, timestamp, { andAfter = false } = {}) {
         const target = Date.parse(timestamp);
-        if (!Number.isFinite(target)) return 0;
+        if (!playerKey || !timestamp || !Number.isFinite(target)) return { removed: 0, reopened: [] };
+
         let removed = 0;
+        const reopened = [];
+
         await this._mutate(draft => {
             for (const ch of Object.values(draft.challenges)) {
-                if (ch.status !== 'active') continue;
+                if (!REVERTABLE_STATUSES.has(ch.status)) continue;
                 const side = this._sideOf(ch, playerKey);
                 if (!side) continue;
+
                 const me = ch[side];
-                const idx = me.scores.findIndex(s => Date.parse(s.timestamp) === target);
-                if (idx === -1) continue;
-                me.scores.splice(idx, 1);
+                const przed = me.scores.length;
+                me.scores = me.scores.filter(sc => {
+                    const ts = Date.parse(sc.timestamp);
+                    if (!Number.isFinite(ts)) return true;
+                    return andAfter ? ts < target : ts !== target;
+                });
+                if (me.scores.length === przed) continue;
+
+                removed += przed - me.scores.length;
                 this._recalcSum(me);
-                removed++;
+                if (ch.status === 'active') continue;
+
+                // Wyzwanie było zamknięte TYM wynikiem — rozstrzygnięcie traci podstawę,
+                // więc wraca do gry. Stan `result` (DM-y i ogłoszenia) oddajemy wywołującemu
+                // do skasowania i czyścimy, żeby kolejne rozstrzygnięcie zaczynało od zera.
+                const byloFinished = ch.status === 'finished';
+                const zwyciezca = byloFinished ? ch.winner : null;
+                reopened.push({
+                    challenge: { ...ch },
+                    dm: { ...(ch.result?.dm || {}) },
+                    announcements: [...(ch.result?.announcements || [])],
+                    winnerSide: zwyciezca,
+                    loserSide: zwyciezca ? this.otherSide(zwyciezca) : null,
+                });
+
+                ch.status = 'active';
+                ch.winner = null;
+                ch.finishedAt = null;
+                ch.finishedBy = null;
+                ch.result = { dm: {}, shared: { challenger: false, opponent: false }, sharedGuildIds: [], announcements: [] };
             }
         });
-        return removed;
+
+        return { removed, reopened };
     }
 
     // ─── Prezentacja ──────────────────────────────────────────────────────────
