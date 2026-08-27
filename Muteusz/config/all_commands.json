@@ -641,6 +641,12 @@
       "description": "Bot do rankingu wyników bossów z automatycznym przypisywaniem ról TOP",
       "commands": [
         {
+          "name": "/challenge",
+          "description": "Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie (3 kolejne wyniki, wyższa suma wygrywa)",
+          "usage": "/challenge",
+          "requiredPermission": "administrator"
+        },
+        {
           "name": "/configure",
           "description": "Konfiguruje EndersEcho na serwerze (wizard 10 kroków: język, kanały, tag, role TOP, powiadomienia, rankingi ról, weryfikacja społeczności, moderatorzy, auto-reakcja pod ogłoszeniami rekordów). Zawiera przycisk ⚙️ Panel Admina.",
           "usage": "/configure → przyciski kroków 1-10 + ⚙️ Panel Admina",
