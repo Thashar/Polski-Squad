@@ -346,7 +346,7 @@
    - **Usuń dane serwera (head admin):** lista skonfigurowanych serwerów, na których bota już nie ma (`configured=true` ale `!guilds.cache.has(guildId)`) → potwierdzenie → usuwa `data/guilds/{guildId}/` + wpis z `guild_configs.json`. Operacja nieodwracalna.
    - **Automatyczna retencja konfiguracji (30 dni)** — `guildDataRetentionService.js`: `guildDelete` zapisuje serwer do `data/pending_guild_deletions.json` (z nazwą, językiem i timestampem); sweep przy starcie + co 12 h usuwa po 30 dniach **WYŁĄCZNIE konfigurację serwera**: wpis w `guild_configs.json` + `data/guilds/{guildId}/role_rankings.json`. **Dane graczy zostają** (`ranking.json`, `wyniki/`, `achievements.json`, rekordy bossów) — należą do użytkowników i tylko oni decydują o ich usunięciu (autonomia; zasilają też profil/wykresy cross-server). **`data/token_usage.json` również nietykane** — statystyki tokenów AI do celów rozliczeniowych/statystycznych (sekcja 7 polityki prywatności). `guildCreate` anuluje oczekujące usunięcie (bot wrócił); sweep też anuluje wpisy serwerów obecnych w cache (osierocone przy downtime). Po faktycznym usunięciu — powiadomienie na kanał logów serwerowych (`sendAdminNotification`, ping do head admina) z listą co usunięto/zachowano, w języku zapamiętanym przy `guildDelete`. Błąd usuwania nie kasuje wpisu — retry przy kolejnym przebiegu. UWAGA: zakres CELOWO węższy niż panelowy przycisk „Usuń dane serwera" (który kasuje cały `data/guilds/{guildId}/`). Zgodne z deklaracją w polityce prywatności (endersecho.thashar.dev/privacy).
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
-   - **Centrum Dowodzenia (head admin):** panel 6 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
+   - **Centrum Dowodzenia (head admin):** panel 8 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
 **Komendy slash (KOMPLETNA lista rejestrowana w `getSlashCommands()`):** `/challenge`, `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
 
@@ -1146,9 +1146,17 @@ ENDERSECHO_WEB_SYNC_TOKEN=ten_sam_sekret_co_w_cloudflare
 ENDERSECHO_WEB_SYNC_TOP=10
 ```
 
-**Działanie:** Panel to **7 osobnych wiadomości** (każda: 1 embed + własne rzędy przycisków) na kanale head admina. Edytowane automatycznie po każdym zdarzeniu. Kolejność sekcji = `SECTION_KEYS` w `adminPanelService.js`: `system, users, servers, bosses, stats, costs, tools`. Przy zmianie układu sekcji stare wiadomości są usuwane (iteracja po `Object.values(_messageIds)` — także osierocone klucze starych układów) i wysyłane od nowa. Wszystkie dynamiczne pola przycinane helperem `capField()` (limit 1024/pole, 4096/opis) — zabezpieczenie przed crashem.
+**Działanie:** Panel to **8 osobnych wiadomości** (każda: 1 embed + własne rzędy przycisków) na kanale head admina. Edytowane automatycznie po każdym zdarzeniu. Kolejność sekcji = `SECTION_KEYS` w `adminPanelService.js`: `system, users, servers, bosses, challenges, stats, costs, tools`. Przy zmianie układu sekcji stare wiadomości są usuwane (iteracja po `Object.values(_messageIds)` — także osierocone klucze starych układów) i wysyłane od nowa. Wszystkie dynamiczne pola przycinane helperem `capField()` (limit 1024/pole, 4096/opis) — zabezpieczenie przed crashem.
 
-**7 embedów panelu (każdy z własnymi przyciskami POD embedem):**
+**⚠️ KAŻDY przycisk panelu odpowiada EFEMERYCZNIE** (nowa wiadomość widoczna tylko dla klikającego) albo otwiera modal. Sekcje panelu to **stałe, publiczne wiadomości współdzielone przez wszystkich head adminów** — `interaction.update()` nadpisałby taką sekcję prywatnym widokiem jednej osoby aż do najbliższego `refresh()`, więc reszta zamiast statystyk oglądałaby cudzy ekran.
+
+Rozstrzyga to `_panelRespond(interaction, payload)` w `interactionHandlers.js`: w Centrum Dowodzenia robi `reply({ flags: ['Ephemeral'] })`, w efemerycznym panelu `/manage` — `interaction.update()`. Rozpoznanie idzie przez `adminPanelService.isPanelMessage(interaction.message?.id)` (porównanie z `_messageIds`), **nie** przez customId — te same handlery obsługują oba wejścia. Dotyczy `panel_ocr`, `panel_ban_guild`, `panel_guild_list` i `panel_delete_server_data`; pozostałe przyciski panelu już wcześniej odpowiadały przez `reply`/`deferReply` z flagą `Ephemeral` albo modalem.
+
+**Jedyny wyjątek: `cc_srv_pg_prev` / `cc_srv_pg_next`** — paginacja sekcji Serwery działa NA panelu (`deferUpdate()` + `changeServersPage()` + `refresh()`), bo jej sensem jest przewinięcie wspólnej wiadomości, a nie pokazanie czegoś jednej osobie.
+
+Dalsze kroki flow (select menu, potwierdzenia, przyciski stron) klikane są już w wiadomości efemerycznej, więc `interaction.update()` jest w nich poprawne i zostaje.
+
+**8 embedów panelu (każdy z własnymi przyciskami POD embedem):**
 
 | # | Embed | Kolor | Zawartość | Przyciski |
 |---|---|---|---|---|
@@ -1156,9 +1164,10 @@ ENDERSECHO_WEB_SYNC_TOP=10
 | 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, oczekujące CV, **👑 Lider globalny**, **🕐 Ostatni rekord** (relative timestamp), **🏆 TOP10 pobijających rekordy** (liczba wpisów historii wyników per gracz, cross-server — `getActivePlayersStats().topRecordSetters`), **👥 Dodatkowe profile** (ilu graczy ma kilka kont i po ile — `profileRegistryService.getUsersWithAltProfiles()`, max 10 + "i N więcej", `⏳ N` przy profilach czekających na usunięcie), lista zablokowanych (max 3 + "i N więcej") | Rząd 1: `🔒 panel_block`, `🔓 cc_action_unblock`, `🗑️ panel_remove`, `🧹 panel_remove_score`, `🏆 panel_ach_del` · Rząd 2: `🔍 cc_player_lookup`, `🧊 cc_clear_cooldown`, `🗳️ cc_pending_cv` |
 | 3 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku; **paginacja 25 serwerów/stronę** (`_serversPage` w RAM, footer `Strona X/Y`); sekcje nieskonfigurowane/brak bota (max 10 + licznik) | Rząd 1 (paginacja): `◀️ cc_srv_pg_prev`, `cc_srv_pg_info` (disabled, wskaźnik strony), `▶️ cc_srv_pg_next` · Rząd 2: `🔄 panel_ocr`, `🔁 cc_action_roles`, `📋 panel_guild_list`, `🚫 panel_ban_guild`, `🗑️ panel_delete_server_data` · Rząd 3: `⚠️ cc_unconfigured`, `🔍 cc_diag_server` |
 | 4 | 👾 Bossowie | `0x1ABC9C` | Bossy w bazie, z rekordami, boss okresu, **🎯 Najczęstszy boss rekordów** (z aktualnych rekordów globalnego rankingu), **nieznane nazwy do zmapowania** (`bossRecordService.getUnknownBossNames()`, lista `• \`nazwa\`` max 5 + licznik), **bossy bez zdjęcia** (ten sam format, ale PEŁNA lista bez ucinania — chroni tylko twardy limit 1024 znaków przez `capField()`) | `👾 cc_action_boss_cfg` (pełny panel konfiguracji bossów jako ephemeral) |
-| 5 | 📊 Statystyki | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem**, odrzucone, interwencje admina, **🌩️ Zdrowie API** (globalne, nieresetowalne: odrzucone/wszystkie zapytania + %, pełne odrzuty po 10 retry), top odrzucani, aktywni/nowi gracze, przyrost miesięczny, **🔢 Użycia komend** (top 10 + suma, dawny przycisk scalony do embeda) | `📈 panel_player_growth` (przyciski Success Rate i Użycia komend usunięte — dane w embedzie; szczegóły/reset liczników nadal w `/manage → Statystyki`) |
-| 6 | 💰 Koszty & Limity | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), miesiąc + projekcja, **⚙️ Limity i alert** (limit dzienny, cooldown, próg alertu), top 3 serwery, top 5 użytkowników | `📊 cc_action_tokens`, `⚙️ panel_limit`, `🔔 cc_cost_alert` (modal progu USD/dzień) |
-| 7 | ⚙️ Narzędzia | `0x95A5A6` | **🧪 Testerzy z nickami** (nick serwerowy z serwera kanału panelu + username Discord z linkiem do profilu, `_resolveTestersDetailed()`), liczba serwerów z zablokowanym OCR per-guild, następny Global TOP10, **stan globalnego OCR**, **📤 Rankingi na stronie** (kiedy poszła ostatnia wysyłka TOP 10, czy był to pełny snapshot czy pojedynczy serwer, ile serwerów śledzonych; `⚪ Wyłączona` gdy brak `ENDERSECHO_WEB_SYNC_*`) | `🧪 cc_action_tester`, `📅 panel_top10_interval`, `🔁 cc_bcr_refresh`, `🛑/▶️ cc_global_ocr` (kill-switch z potwierdzeniem `cc_global_ocr_ok_{block\|unblock}`) |
+| 5 | ⚔️ Wyzwania | `0xE67E22` | **🏆 TOP 5 zwycięzców** i **💔 TOP 5 przegranych** bieżącego miesiąca (`monthlyStandings()` — miesiąc liczony po czasie **warszawskim**, remisy i nierozstrzygnięte nie liczą się nikomu), **⚔️ W toku** (wszystkie, `2/3 : 1/3` + termin `<t:…:R>`), **📜 Ostatnie rozstrzygnięte** (10) | `📜 cc_chal_history`, `🏁 cc_chal_finish` |
+| 6 | 📊 Statystyki | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem**, odrzucone, interwencje admina, **🌩️ Zdrowie API** (globalne, nieresetowalne: odrzucone/wszystkie zapytania + %, pełne odrzuty po 10 retry), top odrzucani, aktywni/nowi gracze, przyrost miesięczny, **🔢 Użycia komend** (top 10 + suma, dawny przycisk scalony do embeda) | `📈 panel_player_growth` (przyciski Success Rate i Użycia komend usunięte — dane w embedzie; szczegóły/reset liczników nadal w `/manage → Statystyki`) |
+| 7 | 💰 Koszty & Limity | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), miesiąc + projekcja, **⚙️ Limity i alert** (limit dzienny, cooldown, próg alertu), top 3 serwery, top 5 użytkowników | `📊 cc_action_tokens`, `⚙️ panel_limit`, `🔔 cc_cost_alert` (modal progu USD/dzień) |
+| 8 | ⚙️ Narzędzia | `0x95A5A6` | **🧪 Testerzy z nickami** (nick serwerowy z serwera kanału panelu + username Discord z linkiem do profilu, `_resolveTestersDetailed()`), liczba serwerów z zablokowanym OCR per-guild, następny Global TOP10, **stan globalnego OCR**, **📤 Rankingi na stronie** (kiedy poszła ostatnia wysyłka TOP 10, czy był to pełny snapshot czy pojedynczy serwer, ile serwerów śledzonych; `⚪ Wyłączona` gdy brak `ENDERSECHO_WEB_SYNC_*`) | `🧪 cc_action_tester`, `📅 panel_top10_interval`, `🔁 cc_bcr_refresh`, `🛑/▶️ cc_global_ocr` (kill-switch z potwierdzeniem `cc_global_ocr_ok_{block\|unblock}`) |
 
 **Nowe akcje CC (wszystkie tylko head admin, ephemeral):**
 - `🔍 cc_player_lookup` → modal (`cc_player_lookup_modal`) → wyszukiwanie w globalnym rankingu → przy wielu trafieniach select `cc_player_lookup_sel` → embed szczegółów gracza: pozycja globalna, rekord+boss, serwer, blokada, aktywny cooldown, odrzucenia w bieżącym miesiącu, liczba osiągnięć
@@ -1170,6 +1179,28 @@ ENDERSECHO_WEB_SYNC_TOP=10
 - `📢 cc_top10_preview` → `globalTop10Service.buildOnDemandEmbed()` jako ephemeral (bez zapisu snapshotu/harmonogramu)
 - `🔔 cc_cost_alert` → modal (`cc_cost_alert_modal`) progu dziennego kosztu AI w USD (puste = wyłącz). Po przekroczeniu progu `_maybeCostAlert()` wysyła na kanał panelu ping do head adminów (raz dziennie, `lastAlertDate` w persist)
 - `🛑 cc_global_ocr` → globalny kill-switch OCR (tryb serwisowy): `adminPanelService.setGlobalOcrBlocked()` persystowany w `admin_panel.json`; `_runUpdateFlow` sprawdza `isGlobalOcrBlocked()` po per-guild blocku (head admin pomija). Stan i przycisk (Wyłącz/Włącz) widoczne w embedzie Narzędzia
+
+### Sekcja ⚔️ Wyzwania — historia i ręczne zamykanie
+
+**`📜 cc_chal_history` — pełna historia z podziałem na serwery** (dwa kroki, oba efemeryczne):
+1. lista serwerów, na których cokolwiek się rozegrało, z licznikiem wyzwań (25/stronę + przyciski zakresów liter `cc_chal_hsp_{offset}`, ta sama normalizacja co `/challenge`)
+2. `cc_chal_hsrv` → historia jednego serwera, 8/stronę (`cc_chal_hpg_{guildId}_{page}`): pary graczy, boss, wynik (`3/3 : 2/3`), werdykt, data i — przy pojedynku międzyserwerowym — `🔀 nazwa drugiego serwera`
+
+⚠️ **Pojedynek dwóch serwerów liczy się do OBU list** (`_ccChalGuildIds`). Head admin patrzy na historię pytaniem „co się działo u nich", a taki pojedynek działł się u jednych i u drugich — przypisanie go tylko jednej stronie ukrywałoby go przed drugą.
+
+⚠️ **`cc_chal_hpg_{guildId}_{page}` parsowany od OSTATNIEGO `_`** — guildId to same cyfry, więc `split('_')` rozjechałby się na pierwszym separatorze.
+
+**`🏁 cc_chal_finish` — ręczne zamknięcie wyzwania** (trzy kroki): lista wyzwań w toku (25/stronę, `cc_chal_fpg_{offset}`, kolejność **wg terminu**, nie alfabetycznie — stąd zwykłe `◀️/▶️` zamiast zakresów liter) → `cc_chal_fsel` → potwierdzenie → `cc_chal_fok_{id}`.
+
+`challengeService.forceFinish(id, adminName)` rozstrzyga po **aktualnych sumach**, tak samo jak komplet wyników: wyższa wygrywa, równe = remis, `finishedBy` zapamiętuje admina. **Wyjątek: gdy ŻADNA ze stron nie wrzuciła wyniku** → status `unresolved`, nie `finished` — „remis 0:0" byłby kłamstwem i przyznawałby osiągnięcia za pojedynek, którego nie było.
+
+Powiadomienia idą **tą samą drogą co przy naturalnym końcu**, bez własnej ścieżki: `finished` → `_finishChallenges` (osiągnięcia + DM z przyciskiem „pochwal się"), `unresolved` → `_handleChallengeSweep({ unresolved: [ch] })` (komunikat jak po 72 h). Akcja trafia do dziennika (`_ccAudit`) i odświeża panel.
+
+**`✖️ cc_chal_close`** zamyka widok efemeryczny (podmienia go krótkim potwierdzeniem, bez komponentów).
+
+**Metody serwisu:** `getAll()` · `getActive()` (wg terminu) · `getClosed()` (wg `finishedAt`) · `monthlyStandings(refDate)` · `ChallengeService.warsawMonth(date)` · `forceFinish(id, adminName)`. Stała `CLOSED_STATUSES` = `finished, unresolved, declined, expired, cancelled`.
+
+**Helper `capLines(lines, max, more)`** w `adminPanelService.js` — jak `capField`, ale tnie CAŁYMI liniami i dopisuje, ilu pozycji nie widać. `capField` ucina w połowie wiersza, co przy listach wyzwań dawało urwany nick bez wyniku.
 
 **Dziennik akcji admina (`logAdminAction`):** wpisy dodawane helperem `_ccAudit(interaction, action)` przy: blokadzie/odblokowaniu gracza, usunięciu gracza/wyniku, akcjach CV (approve/remove/block), analizie manualnej, cofnięciach wyniku (ocr_revert + analyze revert), zmianie limitów, toggle AI OCR per-guild, banie/odbanowaniu serwera, usunięciu danych serwera, czyszczeniu cooldownu, alercie kosztowym, global OCR. Max 10 wpisów (wszystkie widoczne w embedzie System), persystowane w `admin_panel.json`. **We wpisach są NICKI, nie ID i nie pingi** — `_ccName(interaction, idOrKey)` rozwiązuje `userId`/`playerKey` (znacznik profilu zostaje) przez: member serwera → nick z rankingu globalnego → `users.cache` → fallback na samo ID. Ping `<@id>` renderowałby się w embedzie panelu jako klikalna wzmianka, a surowe ID jest nieczytelne. Wpisy zapisane przed tą zmianą są odpingowywane przy renderowaniu (`adminPanelService._auditNoPings()`).
 
@@ -1382,6 +1413,8 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 - **Ikona bossa zwracana jako BUFOR** (`_challengeBossImage` → `{buffer, name, thumb}`), a `AttachmentBuilder` budowany osobno dla każdej wysyłki (`_challengeBossFiles`) — ten sam obrazek leci w DM do obu graczy i w ogłoszeniu na serwerze
 
 ### CustomIDs
+
+`cc_chal_history` | `cc_chal_hsp_{offset}` | `cc_chal_hsrv` | `cc_chal_hpg_{guildId}_{page}` | `cc_chal_finish` | `cc_chal_fpg_{offset}` | `cc_chal_fsel` | `cc_chal_fok_{id}` | `cc_chal_close` (Centrum Dowodzenia)
 
 `chal_srv` | `chal_spage_{offset}` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
 

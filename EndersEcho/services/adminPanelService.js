@@ -52,10 +52,28 @@ function capField(value, max = 1024) {
     return str.slice(0, max - 2) + '…';
 }
 
+// Jak capField, ale tnie CAŁYMI liniami i dopisuje, ilu pozycji nie widać.
+// capField ucina w połowie wiersza — przy listach wyzwań dawałoby to urwany nick bez wyniku.
+function capLines(lines, max = 1024, more = (n) => `\n… i ${n} więcej`) {
+    if (lines.length === 0) return '—';
+    const out = [];
+    let len = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const add = (out.length ? 1 : 0) + lines[i].length;
+        // Zostawiamy zapas na dopisek o pominiętych pozycjach
+        if (len + add > max - 24 && out.length > 0) {
+            return out.join('\n') + more(lines.length - out.length);
+        }
+        out.push(lines[i]);
+        len += add;
+    }
+    return out.join('\n');
+}
+
 const MONTH_NAMES_PL = ['Sty', 'Lut', 'Mar', 'Kwi', 'Maj', 'Cze', 'Lip', 'Sie', 'Wrz', 'Paź', 'Lis', 'Gru'];
 
 // Klucze sekcji — kolejność = kolejność wiadomości na kanale
-const SECTION_KEYS = ['system', 'users', 'servers', 'bosses', 'stats', 'costs', 'tools'];
+const SECTION_KEYS = ['system', 'users', 'servers', 'bosses', 'challenges', 'stats', 'costs', 'tools'];
 
 /**
  * Centrum Dowodzenia Head Admina.
@@ -174,6 +192,19 @@ class AdminPanelService {
     // Zwraca ID pierwszej wiadomości panelu (dla backward compat z interactionHandlers)
     getMessageId() {
         return this._messageIds.system || null;
+    }
+
+    /**
+     * Czy dana wiadomość jest jedną z sekcji Centrum Dowodzenia.
+     *
+     * Panel to STAŁE, publiczne wiadomości na kanale head admina — handler przycisku musi
+     * wiedzieć, że został kliknięty właśnie tam, żeby odpowiedzieć efemerycznie zamiast
+     * `interaction.update()`. Update nadpisałby sekcję panelu widokiem dla jednej osoby
+     * (do najbliższego `refresh()`, więc bez śladu, że coś zniknęło).
+     */
+    isPanelMessage(messageId) {
+        if (!messageId) return false;
+        return Object.values(this._messageIds || {}).includes(messageId);
     }
 
     async setupChannel(channelId) {
@@ -345,7 +376,10 @@ class AdminPanelService {
         // Zapamiętaj dzisiejszy koszt do alertu kosztowego
         this._lastTodayCost = todayTokens.cost;
 
-        // Kolejność MUSI odpowiadać SECTION_KEYS: system, users, servers, bosses, stats, costs, tools
+        // Dane sekcji Wyzwania (serwis opcjonalny — embed pokazuje '—' gdy brak)
+        const challengeData = await this._getChallengeData();
+
+        // Kolejność MUSI odpowiadać SECTION_KEYS: system, users, servers, bosses, challenges, stats, costs, tools
         return [
             {
                 embed: this._buildSystemEmbed(serverData.configured, lastUpdated, [...guildIds]),
@@ -362,6 +396,10 @@ class AdminPanelService {
             {
                 embed: this._buildBossesEmbed(bossData, globalRanking),
                 components: [this._buildBossesRow()],
+            },
+            {
+                embed: this._buildChallengesEmbed(challengeData),
+                components: [this._buildChallengesRow()],
             },
             {
                 embed: this._buildOcrEmbed(ocrStats, [...guildIds], globalRanking, playerActivityStats, cmdUsage),
@@ -1080,6 +1118,78 @@ class AdminPanelService {
                 { name: `⚠️ Nieznane nazwy do zmapowania (${unknownNames.length})`, value: capField(unknownValue), inline: false },
                 { name: `🖼️ Bez zdjęcia (${noImage.length})`, value: capField(noImageValue), inline: false },
             );
+    }
+
+    // ─── EMBED 5: Wyzwania ────────────────────────────────────────────────────
+
+    /** Nazwa uczestnika w panelu — panel jest polskojęzyczny, więc etykieta usuniętego profilu na sztywno */
+    _challengeName(participant) {
+        const svc = this._services.challengeService;
+        if (!svc) return participant?.username || '—';
+        return svc.participantName(participant, { challengeDeletedProfile: '🗑️ Profil usunięty' });
+    }
+
+    async _getChallengeData() {
+        const svc = this._services.challengeService;
+        if (!svc) return null;
+        try {
+            const [standings, active, closed] = await Promise.all([
+                svc.monthlyStandings(),
+                svc.getActive(),
+                svc.getClosed(),
+            ]);
+            return { standings, active, closed };
+        } catch (err) {
+            logger.warn(`Panel: nie udało się pobrać wyzwań: ${err.message}`);
+            return null;
+        }
+    }
+
+    _buildChallengesEmbed(data) {
+        const embed = new EmbedBuilder().setColor(0xE67E22).setTitle('⚔️ Wyzwania');
+        if (!data) return embed.setDescription('Brak danych o wyzwaniach.');
+
+        const { standings, active, closed } = data;
+        const [rok, mies] = String(standings.monthKey || '').split('-');
+        const etykietaMiesiaca = mies ? `${MONTH_NAMES_PL[Number(mies) - 1] || mies} ${rok}` : 'ten miesiąc';
+
+        const MEDALE = ['🥇', '🥈', '🥉'];
+        const top5 = (lista, pole) => lista.slice(0, 5).map((e, i) =>
+            `${MEDALE[i] || `\`${i + 1}.\``} **${this._challengeName(e)}** — ${e[pole]}`);
+
+        const wTokuLinie = active.map(ch => {
+            const termin = Date.parse(ch.expiresAt || 0);
+            const kiedy = Number.isFinite(termin) ? ` · <t:${Math.floor(termin / 1000)}:R>` : '';
+            const total = this._services.challengeService?.scoresPerSide ?? 3;
+            return `• **${this._challengeName(ch.challenger)}** ${ch.challenger.scores?.length || 0}/${total}`
+                + ` vs ${ch.opponent.scores?.length || 0}/${total} **${this._challengeName(ch.opponent)}**`
+                + ` — ${ch.boss || '—'}${kiedy}`;
+        });
+
+        const ZNACZNIK = { finished: '🏁', unresolved: '❓', declined: '🚫', expired: '⌛', cancelled: '🗑️' };
+        const historiaLinie = closed.slice(0, 10).map(ch => {
+            const a = this._challengeName(ch.challenger);
+            const b = this._challengeName(ch.opponent);
+            let wynik;
+            if (ch.status !== 'finished') wynik = { unresolved: 'nierozstrzygnięte', declined: 'odrzucone', expired: 'zaproszenie wygasło', cancelled: 'anulowane' }[ch.status] || ch.status;
+            else if (!ch.winner) wynik = '🤝 remis';
+            else wynik = `🏆 **${this._challengeName(ch[ch.winner])}**`;
+            return `${ZNACZNIK[ch.status] || '•'} ${a} vs ${b} — ${ch.boss || '—'} · ${wynik}`;
+        });
+
+        return embed.addFields(
+            { name: `🏆 TOP 5 zwycięzców (${etykietaMiesiaca})`, value: capLines(top5(standings.winners, 'wins'), 1024), inline: true },
+            { name: `💔 TOP 5 przegranych (${etykietaMiesiaca})`, value: capLines(top5(standings.losers, 'losses'), 1024), inline: true },
+            { name: `⚔️ W toku (${active.length})`, value: capLines(wTokuLinie), inline: false },
+            { name: `📜 Ostatnie rozstrzygnięte (${closed.length})`, value: capLines(historiaLinie, 1024, () => ''), inline: false },
+        );
+    }
+
+    _buildChallengesRow() {
+        return new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_history').setEmoji('📜').setLabel('Historia').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('🏁').setLabel('Zakończ wyzwanie').setStyle(ButtonStyle.Danger),
+        );
     }
 
     _buildBossesRow() {

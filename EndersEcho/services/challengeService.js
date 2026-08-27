@@ -29,6 +29,8 @@ const MAX_ACTIVE_PER_PLAYER = 1;
 const CLOSED_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
 const SIDES = ['challenger', 'opponent'];
+/** Statusy, po których wyzwanie już się nie toczy — historia w Centrum Dowodzenia */
+const CLOSED_STATUSES = new Set(['finished', 'unresolved', 'declined', 'expired', 'cancelled']);
 
 /**
  * System wyzwań 1 vs 1 (`/challenge`).
@@ -135,6 +137,111 @@ class ChallengeService {
     async getById(id) {
         const data = await this._data();
         return data.challenges[id] || null;
+    }
+
+    // ─── Widok globalny (Centrum Dowodzenia) ──────────────────────────────────
+
+    /** Wszystkie wyzwania, od najnowszych */
+    async getAll() {
+        const data = await this._data();
+        return Object.values(data.challenges)
+            .sort((a, b) => Date.parse(b.createdAt || 0) - Date.parse(a.createdAt || 0));
+    }
+
+    /** Wyzwania w toku — od najbliższego terminu, bo to one wymagają uwagi admina */
+    async getActive() {
+        return (await this.getAll())
+            .filter(c => c.status === 'active')
+            .sort((a, b) => Date.parse(a.expiresAt || 0) - Date.parse(b.expiresAt || 0));
+    }
+
+    /** Wyzwania zamknięte (dowolnym wynikiem), od ostatnio zamkniętego */
+    async getClosed() {
+        return (await this.getAll())
+            .filter(c => CLOSED_STATUSES.has(c.status))
+            .sort((a, b) => Date.parse(b.finishedAt || 0) - Date.parse(a.finishedAt || 0));
+    }
+
+    /**
+     * Bilans wygranych i przegranych w danym miesiącu.
+     *
+     * Miesiąc liczony po **czasie warszawskim**, nie UTC — panel pokazuje daty w tej strefie,
+     * więc wyzwanie zamknięte 1. dnia miesiąca o 00:30 czasu lokalnego musi trafić do nowego
+     * miesiąca, a nie do poprzedniego. `sv-SE` daje format `RRRR-MM-DD`, z którego bierzemy
+     * pierwsze 7 znaków — bez własnej arytmetyki na przesunięciach CET/CEST.
+     *
+     * Remisy i wyzwania nierozstrzygnięte nie liczą się żadnej ze stron.
+     */
+    async monthlyStandings(refDate = new Date()) {
+        const monthKey = ChallengeService.warsawMonth(refDate);
+        const stats = new Map();
+
+        const bump = (participant, field) => {
+            if (!participant?.playerKey) return;
+            const entry = stats.get(participant.playerKey) || {
+                playerKey: participant.playerKey,
+                username: participant.username,
+                guildId: participant.guildId,
+                profileDeleted: participant.profileDeleted === true,
+                profileIndex: participant.profileIndex,
+                wins: 0,
+                losses: 0,
+            };
+            entry[field] += 1;
+            // Nazwa z najnowszego wyzwania wygrywa — `getAll` daje je od najnowszych
+            stats.set(participant.playerKey, entry);
+        };
+
+        for (const ch of await this.getAll()) {
+            if (ch.status !== 'finished' || !ch.winner) continue;
+            if (ChallengeService.warsawMonth(ch.finishedAt) !== monthKey) continue;
+            bump(ch[ch.winner], 'wins');
+            bump(ch[this.otherSide(ch.winner)], 'losses');
+        }
+
+        const all = [...stats.values()];
+        const rank = (field) => all
+            .filter(e => e[field] > 0)
+            .sort((a, b) => b[field] - a[field] || String(a.username || '').localeCompare(String(b.username || ''), 'pl'));
+
+        return { monthKey, winners: rank('wins'), losers: rank('losses') };
+    }
+
+    /** Klucz miesiąca (`RRRR-MM`) w strefie Europe/Warsaw */
+    static warsawMonth(date) {
+        const d = date instanceof Date ? date : new Date(date || 0);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Warsaw' }).slice(0, 7);
+    }
+
+    /**
+     * Ręczne zamknięcie wyzwania przez admina.
+     *
+     * Rozstrzygamy po AKTUALNYCH sumach, tak samo jak przy komplecie wyników — kto ma więcej,
+     * ten wygrywa, równo = remis. Wyjątkiem jest wyzwanie, w którym **nikt** nie wrzucił jeszcze
+     * wyniku: „remis 0:0" byłby kłamstwem i przyznawał osiągnięcia za coś, czego nie było,
+     * więc takie zamykamy jako `unresolved` — tym samym statusem, co wygaśnięcie po 72 h.
+     *
+     * @returns {Promise<{challenge: object, outcome: 'finished'|'unresolved'}|null>} null gdy nie ma czego zamykać
+     */
+    async forceFinish(id, adminName) {
+        let result = null;
+        await this._mutate(draft => {
+            const ch = draft.challenges[id];
+            if (!ch || ch.status !== 'active') return;
+
+            const anyScore = SIDES.some(side => (ch[side]?.scores?.length || 0) > 0);
+            if (anyScore) {
+                this._finalize(ch);
+            } else {
+                ch.status = 'unresolved';
+                ch.finishedAt = new Date().toISOString();
+                ch.winner = null;
+            }
+            ch.finishedBy = adminName || null;
+            result = { challenge: ch, outcome: ch.status };
+        });
+        return result;
     }
 
     /** Wszystkie wyzwania profilu (dowolny status), od najnowszych */

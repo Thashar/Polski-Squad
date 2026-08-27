@@ -4816,6 +4816,31 @@ class InteractionHandler {
         }
     }
 
+    /**
+     * Czy przycisk kliknięto w Centrum Dowodzenia (stałe, publiczne wiadomości panelu),
+     * czy w efemerycznym panelu `/manage`.
+     */
+    _isCcInteraction(interaction) {
+        return this.adminPanelService?.isPanelMessage?.(interaction.message?.id) === true;
+    }
+
+    /**
+     * Widok panelu: w `/manage` podmienia efemeryczną wiadomość, w Centrum Dowodzenia
+     * odpowiada NOWĄ wiadomością efemeryczną.
+     *
+     * ⚠️ Bez tego rozróżnienia `interaction.update()` nadpisywałby sekcję Centrum Dowodzenia —
+     * publiczną wiadomość współdzieloną przez wszystkich head adminów — prywatnym widokiem
+     * jednej osoby, aż do najbliższego `refresh()`. Panel wracał więc do siebie sam, ale przez
+     * ten czas pokazywał komuś innemu cudzy ekran zamiast statystyk.
+     */
+    async _panelRespond(interaction, payload) {
+        if (this._isCcInteraction(interaction)) {
+            await interaction.reply({ ...payload, flags: ['Ephemeral'] });
+            return;
+        }
+        await interaction.update(payload);
+    }
+
     async _handlePanelOcr(interaction) {
         const t = this._panelT(interaction.guildId);
         const guildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [];
@@ -4838,7 +4863,7 @@ class InteractionHandler {
                 { name: t('🔓 /test włączone', '🔓 /test enabled'), value: testEnabled.length ? testEnabled.join('\n') : none, inline: true },
             );
 
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [embed],
             components: [new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('panel_ocr_manage').setEmoji('🔍').setLabel(t('Zarządzaj OCR', 'Manage OCR')).setStyle(ButtonStyle.Primary),
@@ -7878,6 +7903,8 @@ class InteractionHandler {
         if (customId === 'panel_ban_guild') return 'Zbanuj serwer (lista)';
         if (customId.startsWith('panel_ban_page_')) return 'Zbanuj serwer (strona listy)';
         if (customId === 'panel_guild_list' || customId.startsWith('panel_guild_list_')) return 'Pokaż serwery bota';
+        if (customId === 'cc_chal_history' || customId.startsWith('cc_chal_h')) return 'CC: Historia wyzwań';
+        if (customId === 'cc_chal_finish' || customId.startsWith('cc_chal_f')) return 'CC: Zakończ wyzwanie';
         if (customId === 'panel_unban_guild') return 'Odbanuj serwer (lista)';
         if (customId.startsWith('panel_ban_guild_ok_')) return `Zbanuj serwer (potwierdź: ${customId.replace('panel_ban_guild_ok_', '')})`;
         if (customId === 'panel_delete_server_data') return 'Usuń dane serwera (panel)';
@@ -8659,6 +8686,47 @@ class InteractionHandler {
             if (customId === 'cc_action_ocr_stats') {
                 await this._handleCcActionOcrStats(interaction);
                 return;
+            }
+            if (customId.startsWith('cc_chal_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                if (customId === 'cc_chal_close') {
+                    const t = this._panelT(interaction.guildId);
+                    await interaction.update({
+                        embeds: [new EmbedBuilder().setColor(0x95A5A6).setDescription(t('Zamknięto.', 'Closed.'))],
+                        components: [],
+                    });
+                    return;
+                }
+                if (customId === 'cc_chal_history') {
+                    await this._handleCcChallengeHistory(interaction);
+                    return;
+                }
+                if (customId.startsWith('cc_chal_hsp_')) {
+                    await this._handleCcChallengeHistory(interaction, parseInt(customId.replace('cc_chal_hsp_', ''), 10) || 0);
+                    return;
+                }
+                if (customId.startsWith('cc_chal_hpg_')) {
+                    // `cc_chal_hpg_{guildId}_{page}` — guildId to same cyfry, więc tniemy od OSTATNIEGO `_`
+                    const rest = customId.replace('cc_chal_hpg_', '');
+                    const cut = rest.lastIndexOf('_');
+                    await this._handleCcChallengeHistoryGuild(interaction, rest.slice(0, cut), parseInt(rest.slice(cut + 1), 10) || 0);
+                    return;
+                }
+                if (customId === 'cc_chal_finish') {
+                    await this._handleCcChallengeFinish(interaction);
+                    return;
+                }
+                if (customId.startsWith('cc_chal_fpg_')) {
+                    await this._handleCcChallengeFinish(interaction, parseInt(customId.replace('cc_chal_fpg_', ''), 10) || 0);
+                    return;
+                }
+                if (customId.startsWith('cc_chal_fok_')) {
+                    await this._handleCcChallengeFinishConfirm(interaction, customId.replace('cc_chal_fok_', ''));
+                    return;
+                }
             }
             if (customId === 'cc_srv_pg_prev' || customId === 'cc_srv_pg_next') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
@@ -11186,6 +11254,15 @@ class InteractionHandler {
 
             if (customId === 'panel_ocr_guild_select') {
                 await this._handlePanelOcrGuildSelect(interaction);
+                return;
+            }
+            if (customId === 'cc_chal_hsrv' || customId === 'cc_chal_fsel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                if (customId === 'cc_chal_hsrv') await this._handleCcChallengeHistoryGuild(interaction, interaction.values[0], 0);
+                else await this._handleCcChallengeFinishSelect(interaction);
                 return;
             }
             if (customId === 'panel_ban_guild_sel') {
@@ -15312,7 +15389,7 @@ class InteractionHandler {
         );
 
         if (guilds.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
                     .setTitle(t('📋 Serwery bota', '📋 Bot Servers'))
                     .setDescription(t('Bot nie jest na żadnym serwerze.', 'The bot is not on any server.'))],
@@ -15356,7 +15433,7 @@ class InteractionHandler {
         }
         components.push(backRow);
 
-        await interaction.update({ embeds: [embed], components });
+        await this._panelRespond(interaction, { embeds: [embed], components });
     }
 
     /**
@@ -15383,7 +15460,7 @@ class InteractionHandler {
         const backRow = new ActionRowBuilder().addComponents(backBtn);
 
         if (servers.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder().setColor(0xFF8C00)
                     .setTitle(t('🚫 Zablokuj serwer', '🚫 Block Server'))
                     .setDescription(t('Brak serwerów do zbanowania.', 'No servers available to ban.'))],
@@ -15424,7 +15501,7 @@ class InteractionHandler {
 
         const from = safeOffset + 1;
         const to = safeOffset + page.length;
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [new EmbedBuilder().setColor(0xFF0000)
                 .setTitle(t('🚫 Wybierz serwer do zbanowania', '🚫 Select Server to Ban'))
                 .setDescription(t(
@@ -15512,7 +15589,7 @@ class InteractionHandler {
         const absentGuilds = configuredIds.filter(guildId => !interaction.client.guilds.cache.has(guildId));
 
         if (absentGuilds.length === 0) {
-            await interaction.update({
+            await this._panelRespond(interaction, {
                 embeds: [new EmbedBuilder()
                     .setColor(0x57F287)
                     .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))
@@ -15537,7 +15614,7 @@ class InteractionHandler {
             };
         });
 
-        await interaction.update({
+        await this._panelRespond(interaction, {
             embeds: [new EmbedBuilder()
                 .setColor(0xFF6B35)
                 .setTitle(t('🗑️ Usuń dane serwera', '🗑️ Delete Server Data'))
@@ -17162,6 +17239,326 @@ class InteractionHandler {
     // ── Sweep ─────────────────────────────────────────────────────────────────
 
     /** Uruchamiany z index.js po starcie bota */
+    // ── Centrum Dowodzenia: historia i ręczne zamykanie wyzwań ────────────────
+
+    /** Nazwa uczestnika w języku serwera, z etykietą usuniętego profilu */
+    _ccChalName(participant, msgs) {
+        return this.challengeService?.participantName(participant, msgs) ?? (participant?.username || '—');
+    }
+
+    /** Serwery, których dotyczy dane wyzwanie — cross-server pojedynek należy do OBU */
+    _ccChalGuildIds(challenge) {
+        return [...new Set(['challenger', 'opponent']
+            .map(side => challenge[side]?.guildId)
+            .filter(Boolean))];
+    }
+
+    /**
+     * Historia wyzwań z podziałem na serwery — krok 1: wybór serwera.
+     *
+     * Wyzwanie między graczami z dwóch serwerów liczy się do OBU list: head admin patrzy
+     * na historię pytaniem „co się działo u nich", a taki pojedynek działł się u jednych
+     * i u drugich.
+     */
+    async _handleCcChallengeHistory(interaction, offset = 0) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const PAGE_SIZE = 25;
+
+        const closed = await this.challengeService.getClosed();
+        const perGuild = new Map();
+        for (const ch of closed) {
+            for (const guildId of this._ccChalGuildIds(ch)) {
+                if (!perGuild.has(guildId)) perGuild.set(guildId, []);
+                perGuild.get(guildId).push(ch);
+            }
+        }
+
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+        );
+
+        if (perGuild.size === 0) {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0xE67E22)
+                    .setTitle(t('📜 Historia wyzwań', '📜 Challenge History'))
+                    .setDescription(t('Żadne wyzwanie nie zostało jeszcze rozstrzygnięte.', 'No challenge has been resolved yet.'))],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const servers = [...perGuild.entries()]
+            .map(([id, list]) => ({ id, label: this._challengeGuildName(interaction.client, id), count: list.length }))
+            .sort((a, b) => this._compareSortNames(a.label, b.label));
+
+        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, (Math.ceil(servers.length / PAGE_SIZE) - 1) * PAGE_SIZE));
+        const page = servers.slice(safeOffset, safeOffset + PAGE_SIZE);
+
+        const selectRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('cc_chal_hsrv')
+                .setPlaceholder(t('Wybierz serwer...', 'Select a server...'))
+                .addOptions(page.map(srv => ({
+                    label: srv.label.substring(0, 100),
+                    description: t(`${srv.count} rozstrzygniętych`, `${srv.count} resolved`).substring(0, 100),
+                    value: srv.id,
+                })))
+        );
+
+        // Rząd nawigacji zabiera jeden z pięciu slotów, więc zakresom zostają trzy
+        const rangeRows = servers.length > PAGE_SIZE
+            ? this._buildRangeButtons(servers, safeOffset, 'cc_chal_hsp_', 3)
+            : [];
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0xE67E22)
+                .setTitle(t('📜 Historia wyzwań', '📜 Challenge History'))
+                .setDescription(t(
+                    `Rozstrzygniętych wyzwań: **${closed.length}** na **${servers.length}** serwerach.\nWybierz serwer:`,
+                    `Resolved challenges: **${closed.length}** across **${servers.length}** server(s).\nSelect a server:`
+                ))],
+            components: [...rangeRows, selectRow, backRow],
+        });
+    }
+
+    /** Historia wyzwań jednego serwera (8/stronę) */
+    async _handleCcChallengeHistoryGuild(interaction, guildId, page = 0) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const PER_PAGE = 8;
+
+        const list = (await this.challengeService.getClosed())
+            .filter(ch => this._ccChalGuildIds(ch).includes(guildId));
+
+        const nazwaSerwera = this._challengeGuildName(interaction.client, guildId);
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_history').setEmoji('◀️').setLabel(t('Lista serwerów', 'Server list')).setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+        );
+
+        if (list.length === 0) {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0xE67E22)
+                    .setTitle(t(`📜 Historia — ${nazwaSerwera}`, `📜 History — ${nazwaSerwera}`).substring(0, 256))
+                    .setDescription(t('Brak rozstrzygniętych wyzwań.', 'No resolved challenges.'))],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const maxPage = Math.ceil(list.length / PER_PAGE) - 1;
+        const safePage = Math.min(Math.max(0, page), maxPage);
+        const total = this.challengeService.scoresPerSide;
+
+        const opisStatusu = (ch) => {
+            if (ch.status === 'finished') {
+                if (!ch.winner) return t('🤝 remis', '🤝 draw');
+                return `🏆 **${this._ccChalName(ch[ch.winner], msgs)}**`;
+            }
+            return {
+                unresolved: t('❓ nierozstrzygnięte', '❓ unresolved'),
+                declined: t('🚫 odrzucone', '🚫 declined'),
+                expired: t('⌛ zaproszenie wygasło', '⌛ invite expired'),
+                cancelled: t('🗑️ anulowane', '🗑️ cancelled'),
+            }[ch.status] || ch.status;
+        };
+
+        const linie = list.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE).map((ch, idx) => {
+            const nr = safePage * PER_PAGE + idx + 1;
+            const kiedy = Date.parse(ch.finishedAt || 0);
+            const data = Number.isFinite(kiedy) ? ` · <t:${Math.floor(kiedy / 1000)}:d>` : '';
+            const obcy = this._ccChalGuildIds(ch).filter(id => id !== guildId);
+            const zInnego = obcy.length > 0 ? ` · 🔀 ${this._challengeGuildName(interaction.client, obcy[0])}` : '';
+            const wyniki = ch.status === 'finished' || ch.status === 'unresolved'
+                ? ` (${ch.challenger.scores?.length || 0}/${total} : ${ch.opponent.scores?.length || 0}/${total})`
+                : '';
+            return `**${nr}.** ${this._ccChalName(ch.challenger, msgs)} vs ${this._ccChalName(ch.opponent, msgs)}${wyniki}\n`
+                + `└ ${ch.boss || '—'} · ${opisStatusu(ch)}${data}${zInnego}`;
+        });
+
+        const components = [];
+        if (maxPage > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`cc_chal_hpg_${guildId}_${safePage - 1}`).setEmoji('◀️')
+                    .setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Primary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId(`cc_chal_hpg_${guildId}_${safePage + 1}`).setEmoji('▶️')
+                    .setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Primary).setDisabled(safePage === maxPage),
+            ));
+        }
+        components.push(backRow);
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0xE67E22)
+                .setTitle(`📜 ${nazwaSerwera}`.substring(0, 256))
+                .setDescription(t(`Rozstrzygniętych wyzwań: **${list.length}**\n\n`, `Resolved challenges: **${list.length}**\n\n`) + linie.join('\n'))
+                .setFooter({ text: t(`Strona ${safePage + 1}/${maxPage + 1}`, `Page ${safePage + 1}/${maxPage + 1}`) })],
+            components,
+        });
+    }
+
+    /** Ręczne zamknięcie wyzwania — krok 1: lista wyzwań w toku (25/stronę) */
+    async _handleCcChallengeFinish(interaction, offset = 0) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const PAGE_SIZE = 25;
+
+        const active = await this.challengeService.getActive();
+        const backRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+        );
+
+        if (active.length === 0) {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0x57F287)
+                    .setTitle(t('🏁 Zakończ wyzwanie', '🏁 End Challenge'))
+                    .setDescription(t('Żadne wyzwanie nie jest w toku.', 'No challenge is in progress.'))],
+                components: [backRow],
+            });
+            return;
+        }
+
+        const total = this.challengeService.scoresPerSide;
+        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, (Math.ceil(active.length / PAGE_SIZE) - 1) * PAGE_SIZE));
+        const page = active.slice(safeOffset, safeOffset + PAGE_SIZE);
+
+        const selectRow = new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder().setCustomId('cc_chal_fsel')
+                .setPlaceholder(t('Wybierz wyzwanie...', 'Select a challenge...'))
+                .addOptions(page.map(ch => ({
+                    label: `${this._ccChalName(ch.challenger, msgs)} vs ${this._ccChalName(ch.opponent, msgs)}`.substring(0, 100),
+                    description: `${ch.boss || '—'} · ${ch.challenger.scores?.length || 0}/${total} : ${ch.opponent.scores?.length || 0}/${total}`.substring(0, 100),
+                    value: ch.id,
+                })))
+        );
+
+        // Etykiety zakresów liczone z nicku wyzywającego — lista jest posortowana po terminie,
+        // więc zakresy alfabetyczne wprowadzałyby w błąd; przy dłuższej liście zostają same strony
+        const navRow = new ActionRowBuilder();
+        if (active.length > PAGE_SIZE) {
+            navRow.addComponents(
+                new ButtonBuilder().setCustomId(`cc_chal_fpg_${safeOffset - PAGE_SIZE}`).setEmoji('◀️')
+                    .setLabel(t('Poprzednia', 'Previous')).setStyle(ButtonStyle.Primary).setDisabled(safeOffset === 0),
+                new ButtonBuilder().setCustomId(`cc_chal_fpg_${safeOffset + PAGE_SIZE}`).setEmoji('▶️')
+                    .setLabel(t('Następna', 'Next')).setStyle(ButtonStyle.Primary).setDisabled(safeOffset + PAGE_SIZE >= active.length),
+            );
+        }
+        navRow.addComponents(
+            new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+        );
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0xE67E22)
+                .setTitle(t('🏁 Zakończ wyzwanie', '🏁 End Challenge'))
+                .setDescription(t(
+                    `W toku: **${active.length}**. Wybierz wyzwanie, które ma zostać zamknięte teraz:`,
+                    `In progress: **${active.length}**. Select the challenge to close now:`
+                ))
+                .setFooter({ text: t(
+                    `Pozycje ${safeOffset + 1}-${safeOffset + page.length} z ${active.length} · lista wg terminu`,
+                    `Entries ${safeOffset + 1}-${safeOffset + page.length} of ${active.length} · sorted by deadline`
+                ) })],
+            components: [selectRow, navRow],
+        });
+    }
+
+    /** Ręczne zamknięcie wyzwania — krok 2: potwierdzenie */
+    async _handleCcChallengeFinishSelect(interaction) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const id = interaction.values[0];
+        const ch = await this.challengeService.getById(id);
+
+        if (!ch || ch.status !== 'active') {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                    .setDescription(t('To wyzwanie nie jest już w toku.', 'That challenge is no longer in progress.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+
+        const total = this.challengeService.scoresPerSide;
+        const a = ch.challenger;
+        const b = ch.opponent;
+        const bezWynikow = (a.scores?.length || 0) === 0 && (b.scores?.length || 0) === 0;
+
+        const skutek = bezWynikow
+            ? t('Żadna ze stron nie wrzuciła wyniku, więc wyzwanie zostanie zamknięte jako **nierozstrzygnięte** (bez zwycięzcy i bez osiągnięć).',
+                'Neither side submitted a score, so the challenge will be closed as **unresolved** (no winner, no achievements).')
+            : t('Wyzwanie zostanie rozstrzygnięte po **aktualnych sumach** — wyższa wygrywa, równe = remis. Zwycięzca i przegrany dostaną osiągnięcia.',
+                'The challenge will be decided by the **current totals** — higher wins, equal = draw. Winner and loser get their achievements.');
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0xFF6B35)
+                .setTitle(t('⚠️ Potwierdź zamknięcie wyzwania', '⚠️ Confirm Closing the Challenge'))
+                .setDescription(`**${this._ccChalName(a, msgs)}** vs **${this._ccChalName(b, msgs)}** — ${ch.boss || '—'}\n\n${skutek}`)
+                .addFields(
+                    { name: this._ccChalName(a, msgs).substring(0, 256), value: `${a.scores?.length || 0}/${total} · ${a.sum ? this.rankingService.formatScore(a.sum) : '—'}`, inline: true },
+                    { name: this._ccChalName(b, msgs).substring(0, 256), value: `${b.scores?.length || 0}/${total} · ${b.sum ? this.rankingService.formatScore(b.sum) : '—'}`, inline: true },
+                )],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`cc_chal_fok_${ch.id}`).setEmoji('✅').setLabel(t('Tak, zakończ', 'Yes, end it')).setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('❌').setLabel(t('Anuluj', 'Cancel')).setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    /** Ręczne zamknięcie wyzwania — krok 3: wykonanie + powiadomienia */
+    async _handleCcChallengeFinishConfirm(interaction, id) {
+        const t = this._panelT(interaction.guildId);
+        const msgs = this.msgs(interaction.guildId);
+        const adminName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+
+        const wynik = await this.challengeService.forceFinish(id, adminName);
+        if (!wynik) {
+            await this._panelRespond(interaction, {
+                embeds: [new EmbedBuilder().setColor(0xFF8C00)
+                    .setDescription(t('To wyzwanie nie jest już w toku.', 'That challenge is no longer in progress.'))],
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('◀️').setLabel(t('Wróć', 'Back')).setStyle(ButtonStyle.Secondary),
+                )],
+            });
+            return;
+        }
+
+        const { challenge, outcome } = wynik;
+        // Powiadomienia idą tą samą drogą co przy naturalnym końcu: rozstrzygnięte dostaje
+        // osiągnięcia i przycisk „pochwal się", nierozstrzygnięte — komunikat jak po 72 h
+        try {
+            if (outcome === 'finished') {
+                await this._finishChallenges(interaction.client, [challenge]);
+            } else {
+                await this._handleChallengeSweep(interaction.client, { expiredInvites: [], unresolved: [challenge], stalePending: [] });
+            }
+        } catch (err) {
+            logger.error(`Błąd powiadomień po ręcznym zamknięciu wyzwania ${id}: ${err.message}`);
+        }
+
+        const a = this._ccChalName(challenge.challenger, msgs);
+        const b = this._ccChalName(challenge.opponent, msgs);
+        const werdykt = outcome === 'unresolved'
+            ? t('❓ nierozstrzygnięte', '❓ unresolved')
+            : (challenge.winner ? `🏆 **${this._ccChalName(challenge[challenge.winner], msgs)}**` : t('🤝 remis', '🤝 draw'));
+
+        this.logService._gl(challenge.challenger.guildId).warn(
+            `${this.logService.nickLink(adminName, interaction.user.id)} Ręcznie zamknął wyzwanie "${challenge.challenger.username}" vs "${challenge.opponent.username}" (${challenge.boss})`
+        );
+        this._ccAudit(interaction, `🏁 Zamknięto wyzwanie: ${a} vs ${b}`);
+        this.adminPanelService?.refresh();
+
+        await this._panelRespond(interaction, {
+            embeds: [new EmbedBuilder().setColor(0x57F287)
+                .setTitle(t('✅ Wyzwanie zamknięte', '✅ Challenge Closed'))
+                .setDescription(`**${a}** vs **${b}** — ${challenge.boss || '—'}\n${werdykt}`)],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('🏁').setLabel(t('Zamknij kolejne', 'Close another')).setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('cc_chal_close').setEmoji('✖️').setLabel(t('Zamknij', 'Close')).setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
     startChallengeSweep(client) {
         if (!this.challengeService) return;
         this.challengeService.start(async (events) => {
