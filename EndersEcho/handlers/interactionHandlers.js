@@ -16602,15 +16602,20 @@ class InteractionHandler {
             this.achievementService.trackChallengeAccepted(updated.opponent.guildId, updated.opponent.playerKey).catch(() => {});
         }
 
-        // Powiadomienie dla wyzywającego — w języku JEGO serwera
+        // Powiadomienie dla wyzywającego — embed w języku JEGO serwera, z avatarem przeciwnika
         const challengerMsgs = this.msgs(updated.challenger.guildId);
         const opponentName = this.challengeService.participantName(updated.opponent, challengerMsgs);
-        await this._dmUser(interaction.client, updated.challenger.userId, {
-            content: formatMessage(
+        const notifEmbed = new EmbedBuilder()
+            .setColor(accepted ? 0x57F287 : 0xED4245)
+            .setTitle(accepted ? challengerMsgs.challengeDmAcceptedTitle : challengerMsgs.challengeDmDeclinedTitle)
+            .setDescription(formatMessage(
                 accepted ? challengerMsgs.challengeDmAcceptedNotice : challengerMsgs.challengeDmDeclinedNotice,
                 { opponent: opponentName, boss: updated.boss }
-            ),
-        });
+            ))
+            .setTimestamp();
+        const notifAvatar = await this._challengeOpponentAvatar(interaction.client, [{ opponent: updated.opponent }]);
+        if (notifAvatar) notifEmbed.setThumbnail(notifAvatar);
+        await this._dmUser(interaction.client, updated.challenger.userId, { embeds: [notifEmbed] });
     }
 
     /** Bezpieczna wysyłka DM — zamknięte wiadomości prywatne nie mogą wywrócić flow */
@@ -16687,6 +16692,28 @@ class InteractionHandler {
     }
 
     /**
+     * Avatar przeciwnika do embeda „wynik zaliczony do wyzwania" — żeby od razu było
+     * widać, z kim toczy się pojedynek.
+     *
+     * Embed ma JEDEN slot na miniaturę, a wynik może zaliczyć się do kilku wyzwań na tym
+     * samym bossie naraz. Przy więcej niż jednym przeciwniku nie stawiamy żadnego avatara,
+     * zamiast arbitralnie wybierać pierwszego z brzegu. Usunięty profil też go nie dostaje —
+     * w treści widnieje wtedy „Profil usunięty", więc czyjaś twarz obok byłaby myląca.
+     * @returns {Promise<string|null>}
+     */
+    async _challengeOpponentAvatar(client, entries) {
+        const opponents = (entries || []).map(e => e.opponent).filter(o => o && !o.profileDeleted);
+        const uniqueIds = [...new Set(opponents.map(o => o.userId).filter(Boolean))];
+        if (uniqueIds.length !== 1) return null;
+        try {
+            const user = await client.users.fetch(uniqueIds[0]);
+            return user.displayAvatarURL();
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * DM o zaliczeniu wyniku — wysyłany wyłącznie wtedy, gdy nie poszło publiczne
      * ogłoszenie (brak rekordu ogólnego i brak rekordu bossa), bo wtedy gracz nie
      * zobaczyłby tej informacji nigdzie indziej.
@@ -16705,6 +16732,8 @@ class InteractionHandler {
             .setTitle((result?.notices || []).length ? msgs.challengeDmCountedTitle : msgs.challengeDmDroppedTitle)
             .setDescription(value)
             .setTimestamp();
+        const avatar = await this._challengeOpponentAvatar(client, [...(result?.notices || []), ...duplicates]);
+        if (avatar) embed.setThumbnail(avatar);
         await this._dmUser(client, userId, { embeds: [embed] });
     }
 
@@ -16729,6 +16758,9 @@ class InteractionHandler {
                         this._challengeNoticeValue(item.notices, false, msgs),
                     ].filter(Boolean).join('\n'))
                     .setTimestamp();
+                // To ten sam komunikat „wynik zaliczony", tylko dostarczony po weryfikacji admina
+                const verifiedAvatar = await this._challengeOpponentAvatar(client, item.notices);
+                if (verifiedAvatar) embed.setThumbnail(verifiedAvatar);
                 await this._dmUser(client, item.userId, { embeds: [embed] });
             }
 
