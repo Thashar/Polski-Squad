@@ -1216,17 +1216,32 @@ Powiadomienia idą **tą samą drogą co przy naturalnym końcu**, bez własnej 
 **Widok `/manage → 📡 Centrum Dowodzenia`:**
 Prosta informacja o kanale panelu + przycisk `🔄 Odśwież Panel`.
 
+**⚠️ ZASADA: panel ma być ZAWSZE aktualny.** Każda zmiana danych, które któraś z ośmiu sekcji
+wyświetla, MUSI kończyć się wywołaniem `this.adminPanelService?.refresh()`. Nie ma tu „drobnych"
+zmian — admin patrzy na panel zamiast na pliki, więc nieodświeżona sekcja po prostu kłamie.
+Dokładając nową funkcję, sprawdź, czy dotyka którejkolwiek sekcji, i dopisz `refresh()`.
+Metoda jest **debounce'owana i tania** (patrz niżej), więc nadmiarowe wywołanie nic nie kosztuje —
+brakujące kosztuje wiarygodność panelu.
+
 **Triggery automatycznego refresh:**
-- ✅ Po każdym zapisie wyniku (`/update` — zarówno nowy rekord jak i brak rekordu, `!dryRun`)
-- ✅ Po analizie admina (`Analizuj` panel)
-- ✅ Po usunięciu gracza z rankingu (`panel_remove_confirm_*`)
-- ✅ Po zablokowaniu gracza (`panel_block_time_*`)
-- ✅ Po odblokowaniu gracza (`panel_unblock_select`)
-- ✅ Po akcji Community Verification (approve/remove/block)
-- ✅ Na żądanie: `🔄 cc_refresh` na wiadomości panelu lub `/manage → Centrum Dowodzenia → Odśwież`
-- ✅ Przy starcie bota (jeśli kanał skonfigurowany)
+
+| Sekcja | Kiedy |
+|---|---|
+| 👥 Użytkownicy | zapis wyniku (`/update`, `!dryRun`) · analiza admina (`Analizuj`) · usunięcie gracza (`panel_remove_confirm_*`) · usunięcie wyniku (`panel_remove_score_*`) · blokada (`panel_block_time_*`) i odblokowanie (`panel_unblock_select`) · akcje CV (approve/remove/block) · cofnięcie wyniku · czyszczenie cooldownu · **dodanie profilu, zaplanowanie i odwołanie usunięcia profilu**, przepalenie profilu (`_purgeProfileData`) |
+| 🖥️ Serwery | **`cfg_accept`** (serwer skonfigurowany) · **`guildCreate` / `guildDelete`** (`index.js`) · toggle AI OCR · ban/unban serwera · usunięcie danych serwera · kick z nieskonfigurowanego |
+| 👾 Bossowie | **dodanie / usunięcie / zmiana nazwy bossa, dodanie i usunięcie aliasu, przypisanie zdjęcia** · **zmapowanie nieznanej nazwy** z alertu (`boss_map_lang_sel`) |
+| ⚔️ Wyzwania | **wysłanie zaproszenia** (`chal_ok`) · **przyjęcie / odrzucenie** (`chal_acc_*` / `chal_rej_*`) · **zaliczenie wyniku** (`_registerChallengeScore`, gdy `notices` niepuste) · **rozstrzygnięcie** (`_finishChallenges` — jedno miejsce dla kompletu wyników, upływu czasu, ręcznego zamknięcia i doliczenia zaparkowanego wyniku) · **sweep** (wygasłe zaproszenia, nierozstrzygnięte) · **doliczenie zaparkowanych wyników** po zmapowaniu bossa · **anulowanie wyzwań usuniętego profilu** · cofnięcie wyniku otwierające wyzwanie |
+| 💰 Koszty | alert kosztowy · zmiana limitów |
+| ⚙️ Narzędzia | **dodanie / usunięcie testera** · globalny kill-switch OCR |
+| wszystkie | `🔄 cc_refresh` na wiadomości panelu · `/manage → Centrum Dowodzenia → Odśwież` · start bota (gdy kanał skonfigurowany) |
+
+⚠️ **`_finishChallenges` jest JEDYNYM miejscem odświeżania po rozstrzygnięciu wyzwania** — schodzą
+się w nim wszystkie cztery drogi (komplet wyników, upływ 72 h, `forceFinish` z panelu, doliczenie
+zaparkowanego wyniku). Dokładając piątą, nie dopisuj `refresh()` u siebie, tylko przepuść ją tędy.
 
 **Debouncing:** Maksymalnie 1 refresh naraz + 1 oczekujący (dodatkowe wywołania w trakcie odrzucane).
+`_doRefresh` dodatkowo wychodzi od razu bez klienta albo bez kanału, więc `refresh()` jest bezpieczne
+do wołania z dowolnego miejsca, także zanim panel zostanie skonfigurowany.
 
 **Persistencja:** `data/admin_panel.json` — `{ messageId, channelId }`. Jeśli wiadomość usunięta, serwis tworzy nową.
 
@@ -1306,6 +1321,14 @@ Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKe
 - kolejność: litery → cyfry → `#` (nazwy złożone wyłącznie ze znaków ozdobnych) na końcu
 - **przyciski zakresów buduje `_buildRangeButtons(items, activeOffset, prefix, maxRows)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
 - ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
+
+⚠️ **Lista graczy to WYŁĄCZNIE osoby z wynikiem w rankingu tego serwera** (`getSortedPlayers` czyta `ranking.json`), nigdy wszyscy członkowie Discorda. Nicki serwerowe dociąga `_resolveGuildDisplayNames(guildId, client, userIds)`:
+
+- najpierw cache Discorda (`guild.members.cache`), resztę **batchami po 100 ID, równolegle** (`guild.members.fetch({ user: chunk })` w `Promise.allSettled`)
+- **dedup po `userId` przed pobraniem** — gracz z kilkoma profilami ma jeden nick, więc nie ma powodu pobierać go raz na profil
+- wynik cache'owany per serwer na **3 minuty**, żeby przewijanie stron (`chal_page_*`, `notif_page_*`) nie powtarzało całej operacji przy każdym kliknięciu. Cache'owana jest CAŁA mapa, więc osoby, których nie udało się pobrać (opuściły serwer), nie są odpytywane ponownie w obrębie TTL
+
+⚠️ **Wcześniej była tu pętla z `await targetGuild.members.fetch(player.userId)` na KAŻDY wpis rankingu** — tyle żądań do Discorda, ile wpisów, jedno po drugim. Przy kilkuset graczach lista otwierała się kilkanaście sekund i dłużej, a przy rate limicie jeszcze gorzej. Dokładając nowe miejsce, które potrzebuje nicków całej listy, użyj tego helpera zamiast pojedynczych `members.fetch(id)` w pętli.
 
 **⚠️ Jednocześnie można prowadzić TYLKO JEDNO wyzwanie** (`MAX_ACTIVE_PER_PLAYER = 1`). Slot zajmuje wyzwanie w toku (obojętnie po której stronie) **oraz WYSŁANE zaproszenie** czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz z dwoma zaproszeniami od różnych osób nie mógłby przyjąć żadnego, bo samo ich posiadanie wypełniałoby limit. Sprawdzane w dwóch miejscach: przy `chal_ok` (rzucający → `challengeErrLimit`, przeciwnik → `challengeErrOpponentBusy`) i przy `chal_acc_{id}` (przyjmujący → `challengeErrAcceptLimit`). **Zajętość przeciwnika sprawdzana PRZED wysłaniem DM** — bez tego dostawałby zaproszenie, którego i tak nie mógłby przyjąć, a rzucający czekałby do jego wygaśnięcia.
 

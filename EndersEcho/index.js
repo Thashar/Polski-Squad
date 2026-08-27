@@ -452,6 +452,8 @@ client.on('guildCreate', async (guild) => {
             guildName: guild.name,
         });
         await interactionHandler.registerCommandsForGuild(client, guild.id);
+        // Sekcja 🖥️ Serwery liczy też serwery bez konfiguracji — panel ma o nim wiedzieć od razu
+        adminPanelService.refresh();
         if (guild.systemChannel) {
             await guild.systemChannel.send(
                 '⚙️ **EndersEcho** has been added to your server!\nAn administrator must run **/configure** to set up the bot before it can be used.'
@@ -494,6 +496,8 @@ client.on('guildDelete', async (guild) => {
     await guildDataRetentionService.schedule(guild.id, guild.name).catch(err =>
         logger.error(`Błąd planowania retencji dla "${guild.name}": ${err.message}`)
     );
+    // Serwer przechodzi w panelu do kategorii „skonfigurowane, brak bota"
+    adminPanelService.refresh();
     await sendAdminNotification(client, new EmbedBuilder()
         .setColor(0xED4245)
         .setTitle(tGD('🚪 Bot usunięty z serwera', '🚪 Bot removed from server'))
