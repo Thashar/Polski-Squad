@@ -441,8 +441,12 @@ class AchievementService {
         return this._trackExplorer(guildId, playerKey, p => { p.challengesLost = (p.challengesLost || 0) + 1; });
     }
 
+    async trackChallengeDraw(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.challengesDraws = (p.challengesDraws || 0) + 1; });
+    }
+
     /**
-     * Cofa naliczenie wygranej/przegranej po ponownym otwarciu rozstrzygniętego wyzwania
+     * Cofa naliczenie wygranej/przegranej/remisu po ponownym otwarciu rozstrzygniętego wyzwania
      * (cofnięcie wyniku wypisało go z wyzwania, więc rezultat traci podstawę).
      *
      * Bez tego ponowne rozstrzygnięcie naliczyłoby to samo drugi raz — a licznik wygranych
@@ -452,10 +456,10 @@ class AchievementService {
      * `check(p, {})` po całej kategorii `explorer` odebrałoby te, które do warunku potrzebują
      * kontekstu (`ctx`) — pusty obiekt zawsze im go odmawia.
      *
-     * @param {'challengesWon'|'challengesLost'} field
+     * @param {'challengesWon'|'challengesLost'|'challengesDraws'} field
      */
     async revertChallengeOutcome(guildId, playerKey, field) {
-        if (!['challengesWon', 'challengesLost'].includes(field)) return;
+        if (!['challengesWon', 'challengesLost', 'challengesDraws'].includes(field)) return;
         return this._enqueue(guildId, async () => {
             try {
                 const data = await this.loadData(guildId);

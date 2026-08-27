@@ -523,7 +523,7 @@ const pol = {
     challengeErrOpponentBusy: '❌ **{name}** prowadzi już inne wyzwanie — jednocześnie można prowadzić tylko jedno. Spróbuj ponownie, gdy je zakończy.',
     challengeErrDuplicate: '❌ Masz już otwarte wyzwanie z tym graczem na bossie **{boss}**.',
     challengeErrDmClosed: '❌ Gracz **{opponent}** nie odbiera wiadomości od bota — nie można rzucić mu wyzwania.',
-    challengeSent: '✅ Wyzwanie wysłane do gracza **{opponent}** (boss **{boss}**). Masz **48 godzin** na jego odpowiedź.',
+    challengeSent: '✅ Wyzwanie wysłane do gracza **{opponent}** (boss **{boss}**). Masz **24 godziny** na jego odpowiedź.',
 
     // ⚔️ Wyzwania — DM z zaproszeniem
     challengeDmInviteTitle: '⚔️ Rzucono Ci wyzwanie!',
@@ -543,7 +543,7 @@ const pol = {
     challengeDmDeclinedTitle: '❌ Wyzwanie odrzucone',
     challengeDmAcceptedNotice: '**{opponent}** podejmuje Twoje wyzwanie na bossie **{boss}**!\nWrzuć **3 wyniki** komendą `/update`.',
     challengeDmDeclinedNotice: '**{opponent}** odrzuca Twoje wyzwanie na bossie **{boss}**.',
-    challengeDmInviteExpiredNotice: '⏳ Brak odpowiedzi od **{opponent}** na Twoje wyzwanie na bossie **{boss}** w ciągu 48 godzin — zaproszenie wygasło.',
+    challengeDmInviteExpiredNotice: '⏳ Brak odpowiedzi od **{opponent}** na Twoje wyzwanie na bossie **{boss}** w ciągu 24 godzin — zaproszenie wygasło.',
 
     // ⚔️ Wyzwania — zaliczanie wyników
     challengeNoticeField: 'Wyzwanie',
@@ -577,7 +577,7 @@ const pol = {
     challengeShareFailed: '❌ Nie udało się opublikować wyniku na serwerze **{guild}**.',
     challengePublicTitle: '⚔️ Zakończone wyzwanie',
     challengeDmUnresolvedTitle: '❓ Wyzwanie nierozstrzygnięte',
-    challengeDmUnresolvedDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** trwało **72 godziny** i nie zostało dokończone — pozostaje nierozstrzygnięte.',
+    challengeDmUnresolvedDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** trwało **72 godziny** i żadna ze stron nie zebrała kompletu wyników — pozostaje nierozstrzygnięte.',
     challengeDmCancelledTitle: '🚫 Wyzwanie anulowane',
     challengeDmCancelledDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** zostało anulowane — przeciwnik usunął swój profil.',
 
@@ -1122,7 +1122,7 @@ const eng = {
     challengeErrOpponentBusy: '❌ **{name}** is already in another challenge — only one at a time is allowed. Try again once it is finished.',
     challengeErrDuplicate: '❌ You already have an open challenge with this player on boss **{boss}**.',
     challengeErrDmClosed: '❌ **{opponent}** does not accept messages from the bot — they cannot be challenged.',
-    challengeSent: '✅ Challenge sent to **{opponent}** (boss **{boss}**). They have **48 hours** to respond.',
+    challengeSent: '✅ Challenge sent to **{opponent}** (boss **{boss}**). They have **24 hours** to respond.',
 
     // ⚔️ Challenges — invitation DM
     challengeDmInviteTitle: '⚔️ You have been challenged!',
@@ -1142,7 +1142,7 @@ const eng = {
     challengeDmDeclinedTitle: '❌ Challenge declined',
     challengeDmAcceptedNotice: '**{opponent}** accepted your challenge on boss **{boss}**!\nSubmit **3 scores** using `/update`.',
     challengeDmDeclinedNotice: '**{opponent}** declined your challenge on boss **{boss}**.',
-    challengeDmInviteExpiredNotice: '⏳ **{opponent}** did not respond to your challenge on boss **{boss}** within 48 hours — the invitation expired.',
+    challengeDmInviteExpiredNotice: '⏳ **{opponent}** did not respond to your challenge on boss **{boss}** within 24 hours — the invitation expired.',
 
     // ⚔️ Challenges — score qualification
     challengeNoticeField: 'Challenge',
@@ -1176,7 +1176,7 @@ const eng = {
     challengeShareFailed: '❌ Could not publish the result on **{guild}**.',
     challengePublicTitle: '⚔️ Challenge finished',
     challengeDmUnresolvedTitle: '❓ Challenge unresolved',
-    challengeDmUnresolvedDesc: 'Your challenge with **{opponent}** on boss **{boss}** ran for **72 hours** and was not completed — it stays unresolved.',
+    challengeDmUnresolvedDesc: 'Your challenge with **{opponent}** on boss **{boss}** ran for **72 hours** and neither side completed their scores — it stays unresolved.',
     challengeDmCancelledTitle: '🚫 Challenge cancelled',
     challengeDmCancelledDesc: 'Your challenge with **{opponent}** on boss **{boss}** was cancelled — your opponent deleted their profile.',
 

@@ -275,8 +275,7 @@ class InteractionHandler {
             new SlashCommandBuilder()
                 .setName('challenge')
                 .setDescription('Challenge another player to a 1v1 duel on a chosen boss')
-                .setDescriptionLocalizations(pl('Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie'))
-                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+                .setDescriptionLocalizations(pl('Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie')),
 
             new SlashCommandBuilder()
                 .setName('profile')
@@ -399,13 +398,6 @@ class InteractionHandler {
                 return;
             }
 
-            // /challenge — na razie wyłącznie head admin (dowolny kanał, wymaga konfiguracji)
-            if (interaction.commandName === 'challenge') {
-                if (!this._checkConfigured(interaction)) return;
-                await this.handleChallengeCommand(interaction);
-                return;
-            }
-
             // Komendy admin — dowolny kanał, ale wymagają konfiguracji serwera
             if (interaction.commandName === 'test') {
                 if (!this._checkConfigured(interaction)) return;
@@ -427,6 +419,7 @@ class InteractionHandler {
             }
 
             switch (interaction.commandName) {
+                case 'challenge':    await this.handleChallengeCommand(interaction);      break;
                 case 'ranking':      await this.handleRankingCommand(interaction);        break;
                 case 'update':       await this.handleUpdateCommand(interaction);         break;
                 case 'subscribe':    await this.handleNotificationsCommand(interaction);  break;
@@ -16553,10 +16546,6 @@ class InteractionHandler {
      */
     async handleChallengeCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
-        if (!this._isHeadAdmin(interaction.user.id)) {
-            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
-            return;
-        }
         if (!this.challengeService) {
             await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
             return;
@@ -17362,7 +17351,7 @@ class InteractionHandler {
         if (!client || !Array.isArray(reopened) || reopened.length === 0) return;
 
         for (const wpis of reopened) {
-            const { challenge, dm, announcements, winnerSide, loserSide } = wpis;
+            const { challenge, dm, announcements, winnerSide, loserSide, wasDraw } = wpis;
             try {
                 // 1. DM z rezultatem u obu graczy
                 for (const side of ['challenger', 'opponent']) {
@@ -17384,7 +17373,8 @@ class InteractionHandler {
                     } catch { /* wiadomość mógł już skasować moderator */ }
                 }
 
-                // 3. Naliczone osiągnięcia — tylko przy rozstrzygnięciu ze zwycięzcą
+                // 3. Naliczone osiągnięcia — przy rozstrzygnięciu ze zwycięzcą oraz przy remisie
+                // (ten dostały OBIE strony). `unresolved` niczego nie naliczyło, więc nic nie cofamy
                 if (this.achievementService && winnerSide && loserSide) {
                     const winner = challenge[winnerSide];
                     const loser = challenge[loserSide];
@@ -17392,6 +17382,12 @@ class InteractionHandler {
                         .revertChallengeOutcome(winner.guildId, winner.playerKey, 'challengesWon').catch(() => {});
                     await this.achievementService
                         .revertChallengeOutcome(loser.guildId, loser.playerKey, 'challengesLost').catch(() => {});
+                } else if (this.achievementService && wasDraw) {
+                    for (const side of ['challenger', 'opponent']) {
+                        const p = challenge[side];
+                        await this.achievementService
+                            .revertChallengeOutcome(p.guildId, p.playerKey, 'challengesDraws').catch(() => {});
+                    }
                 }
 
                 this.logService._gl(challenge.challenger.guildId).info(
@@ -17405,9 +17401,21 @@ class InteractionHandler {
         this.adminPanelService?.refresh();
     }
 
-    /** Osiągnięcia za wygraną/przegraną — remis i nierozstrzygnięcie nie liczą się */
+    /**
+     * Osiągnięcia za rozstrzygnięty pojedynek: wygrana, przegrana albo remis (obie strony).
+     * Nierozstrzygnięcie (`unresolved`) nie nalicza niczego — pojedynek się nie odbył.
+     */
     async _applyChallengeAchievements(challenge) {
-        if (!this.achievementService || challenge.status !== 'finished' || !challenge.winner) return;
+        if (!this.achievementService || challenge.status !== 'finished') return;
+
+        if (!challenge.winner) {
+            for (const side of ['challenger', 'opponent']) {
+                const p = challenge[side];
+                await this.achievementService.trackChallengeDraw(p.guildId, p.playerKey).catch(() => {});
+            }
+            return;
+        }
+
         const winner = challenge[challenge.winner];
         const loser = challenge[challenge.winner === 'challenger' ? 'opponent' : 'challenger'];
         await this.achievementService.trackChallengeWon(winner.guildId, winner.playerKey).catch(() => {});
@@ -17903,7 +17911,12 @@ class InteractionHandler {
         });
     }
 
-    async _handleChallengeSweep(client, { expiredInvites, unresolved, stalePending }) {
+    async _handleChallengeSweep(client, { expiredInvites = [], unresolved = [], finished = [], stalePending = [] }) {
+        // Pojedynek rozstrzygnięty upływem czasu (komplet wyników po jednej ze stron)
+        // domykamy tą samą drogą co naturalny koniec: osiągnięcia, DM z werdyktem
+        // i jednorazowy przycisk „pochwal się"
+        if (finished.length) await this._finishChallenges(client, finished);
+
         for (const challenge of expiredInvites) {
             const msgs = this.msgs(challenge.challenger.guildId);
             await this._dmUser(client, challenge.challenger.userId, {

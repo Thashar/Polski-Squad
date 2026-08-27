@@ -282,7 +282,7 @@
 
 7. **System Osiągnięć** — `achievementService.js` + `config/achievements.js`:
    - **101 stałych osiągnięć** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
-   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (8: 1/3/5/7/10/13/16/20 różnych bossów, dwa najwyższe: ☄️ Nieśmiertelny Łowca i 👑 Bóg Łowów, oba mythic) · 🕵️ Eksplorator/ukryte (65 — w tym 22 sekretne za wyzwania `/challenge`) · 💎 Prestiż (13)
+   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (8: 1/3/5/7/10/13/16/20 różnych bossów, dwa najwyższe: ☄️ Nieśmiertelny Łowca i 👑 Bóg Łowów, oba mythic) · 🕵️ Eksplorator/ukryte (64 — w tym 23 sekretne za wyzwania `/challenge`) · 💎 Prestiż (13)
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
    - **Kasowanie częściowe:** `clearUserAchievements(guildId, userId)` — usuwa WSZYSTKIE osiągnięcia kategorii `score` i `records` oraz resetuje `recordCount`/`lastRecordAt`/`lastRecordBeatAt`; pozostałe kategorie (bosses, explorer, prestige) zostają; wywoływane przy usunięciu gracza z rankingu (panel admina + komenda `/remove` — usunięcie całego gracza)
@@ -302,7 +302,7 @@
    - **Widok osiągnięć** (zakładka `🏆 Osiągnięcia` w `/profile` — osobnej komendy `/achievements` NIE MA): ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania + przycisk "Sprawdź gracza". Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie` + `🔍 Sprawdź gracza`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po wejściu w zakładkę: kategoria `score`. **Osiągnięcia cross-server:** `buildAchievementsViewGlobal(allGuildIds, userId, ...)` merguje dane ze WSZYSTKICH serwerów (`_mergeAchievements`); to samo dla `/profile` i "Sprawdź gracza".
    - **Sprawdź gracza (`ach_check_player`):** otwiera modal z polem nicku → wyszukuje cross-server przez `getGlobalRanking()` → jeśli 1 trafienie: od razu pokazuje osiągnięcia; jeśli wiele: StringSelectMenu (`ach_check_sel`). Wyświetla osiągnięcia ze **wszystkich serwerów** (`buildAchievementsViewForUserGlobal`). **Bez opisów jak zdobyć** — format: `emoji (rarity_emoji) **nazwa** *(rarity)* — data`. Przyciski nawigacji osadzają userId+guildId w customId (`ach_vc_{cat}_{userId}_{guildId}`, `ach_vo_{userId}_{guildId}`). Powrót do własnych osiągnięć przez `ach_vb`.
    - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm`; `trackNonRecord(guildId, userId)` — wołane w `_runUpdateFlow` gdy `!isNewRecord && !dryRun`; `trackCvApproved(guildId, userId)` — wołane w CV approve handler; `trackAiAnalyzed(guildId, userId)` — wołane w `_handleAnalyzeButton` po zapisaniu wyniku; `trackProfileSearch(guildId, userId)` — wołane w `_handleProfileSearchModal` gdy znaleziono ≥1 wynik; `trackChallengeSent/Accepted/Won/Lost(guildId, playerKey)` — wyzwania `/challenge`
-   - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`, `progress.profileSearches`, `progress.challengesSent`, `progress.challengesAccepted`, `progress.challengesWon`, `progress.challengesLost`
+   - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`, `progress.profileSearches`, `progress.challengesSent`, `progress.challengesAccepted`, `progress.challengesWon`, `progress.challengesLost`, `progress.challengesDraws`
    - **Context w processSubmission:** `ctx.scoreValue`, `ctx.isNewRecord`, `ctx.prevScoreValue`, `ctx.currentPosition` (pozycja na serwerze), `ctx.bossName`, `ctx.globalPosition` (pozycja w rankingu globalnym — 0 jeśli brak)
    - **CustomIDs:** `ach_cat_{categoryKey}` (score/records/bosses/prestige/explorer) | `ach_overview` | `ach_check_player` | `ach_check_modal` | `ach_check_sel` | `ach_vc_{cat}_{userId}_{guildId}` | `ach_vo_{userId}_{guildId}` | `ach_vb`
 
@@ -743,8 +743,7 @@
 - `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); gdy `ENDERSECHO_CONFIGURE_ADMIN_ONLY=true` → tylko Administrator; błąd: `configureNotAdmin`
 - `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
-- Wymaga konfiguracji, dowolny kanał: `/challenge` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS` — na razie wyłącznie head admin)
-- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/profile`
+- Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/profile`, `/challenge`
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
@@ -1196,7 +1195,7 @@ Dalsze kroki flow (select menu, potwierdzenia, przyciski stron) klikane są już
 
 **`⏳ cc_chal_pending` — WSZYSTKIE zaproszenia czekające na odpowiedź** (8/stronę, `cc_chal_ppg_{page}`): `wyzywający → przeciwnik`, boss, kiedy wysłane i kiedy wygasa, a przy pojedynku międzyserwerowym linia `🔀 serwer wyzywającego → serwer przeciwnika` (przy jednym serwerze pomijana, bo niczego nie wnosi). Embed panelu pokazuje tylko 5 ostatnich — ten przycisk daje komplet.
 
-`getPending()` sortuje **od NAJNOWSZEGO**, odwrotnie niż `getActive()` (tam decyduje najbliższy termin). Zaproszenie samo wygaśnie po 48 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem „kto właśnie kogo wyzwał".
+`getPending()` sortuje **od NAJNOWSZEGO**, odwrotnie niż `getActive()` (tam decyduje najbliższy termin). Zaproszenie samo wygaśnie po 24 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem „kto właśnie kogo wyzwał".
 
 **`🏁 cc_chal_finish` — ręczne zamknięcie wyzwania** (trzy kroki): lista wyzwań w toku (25/stronę, `cc_chal_fpg_{offset}`, kolejność **wg terminu**, nie alfabetycznie — stąd zwykłe `◀️/▶️` zamiast zakresów liter) → `cc_chal_fsel` → potwierdzenie → `cc_chal_fok_{id}`.
 
@@ -1274,20 +1273,22 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 
 **⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
 
-**⚠️ Komenda `/challenge` jest na razie WYŁĄCZNIE dla head admina** — widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`), a wykonać może ją tylko użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS` (jak `/generate`). Routing jak `/test`: dowolny kanał, wymaga skonfigurowanego serwera. **Przyjęcie wyzwania, zaliczanie wyników i osiągnięcia działają dla KAŻDEGO gracza** — ograniczenie dotyczy wyłącznie rzucania wyzwania.
+**Komenda `/challenge` jest dostępna dla KAŻDEGO gracza** — bez `setDefaultMemberPermissions` i bez bramki head admina. Routing zwykły, jak `/update` i `/ranking`: wymaga skonfigurowanego serwera **i kanału bota** (`isAllowedChannel`).
+
+⚠️ **Wcześniej komenda była zamknięta dla head admina i szła własną ścieżką routingu**, przed sprawdzeniem kanału. Otwierając ją dla graczy przeniesiono ją do zwykłego `switch`, żeby podlegała tej samej zasadzie „komendy gracza tylko na kanale bota" co reszta. Select menu `chal_*` nadal routowane są przed `isAllowedChannel` — wizard jest efemeryczny i tak czy owak żyje w wiadomości, która powstała już na dozwolonym kanale.
 
 ### Terminy i limity
 
 | Parametr | Wartość | Stała |
 |---|---|---|
 | Wyniki na uczestnika | 3 | `SCORES_PER_SIDE` |
-| Zaproszenie bez odpowiedzi | 48 h → `expired` | `INVITE_TTL_MS` |
-| Przyjęte wyzwanie | **72 h** → `unresolved` (nierozstrzygnięte) | `CHALLENGE_TTL_MS` |
+| Zaproszenie bez odpowiedzi | **24 h** → `expired` | `INVITE_TTL_MS` |
+| Przyjęte wyzwanie | **72 h** → rozstrzygnięcie po sumach albo `unresolved` (patrz niżej) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
 | Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
 
-Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h bez kompletu wyników) · `cancelled` (uczestnik usunął profil).
+Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h i kompletu nie zebrał NIKT) · `cancelled` (uczestnik usunął profil).
 
 ### Wizard (ephemeral, wzorzec `/subscribe`)
 
@@ -1367,7 +1368,14 @@ Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie t
 
 ### Rozstrzygnięcie i „pochwal się wynikami"
 
-Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, równe = **remis**. Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
+Pojedynek rozstrzyga się **po sumach `scoreValue`** — wyższa wygrywa, równe = **remis**. Dzieje się to w dwóch momentach:
+
+1. **Obaj uczestnicy mają po 3 wyniki** — `registerScore` domyka wyzwanie od razu
+2. **Minęły 72 h, a komplet zebrała PRZYNAJMNIEJ JEDNA strona** — `sweep()` rozstrzyga po aktualnych sumach
+
+⚠️ **Sam komplet nie przesądza o wygranej — decyduje suma.** Gracz z trzema słabszymi wynikami przegra z kimś, kto wrzucił jeden lepszy: komplet jest warunkiem *rozstrzygnięcia*, nie *zwycięstwa*. `unresolved` zostaje wyłącznie na sytuację, w której po 72 h kompletu nie ma **nikt** — wtedy nie ma czego porównywać i nikt nie dostaje osiągnięć.
+
+Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
 
 - **DM do OBU graczy**, każdy w języku swojego serwera: embed z ikoną bossa, wynikami i sumami obu stron, osobistym werdyktem (`challengeResultWin`/`Loss`/`Draw`) i linią zwycięzcy
 - **Nazwa serwera przy każdym graczu, gdy pojedynek łączy DWA serwery** (`⚔️ Ala — Polski Squad`) — sama para nicków nie mówi wtedy, kto skąd jest. Przy obu graczach z jednego serwera nazwa niczego nie wnosi, więc jej nie ma. Wymaga przekazania `client` do `_buildChallengeResultEmbed` (robią to wszystkie cztery wywołania: DM rezultatu, ogłoszenie po „pochwal się", DM o nierozstrzygnięciu). Etykieta pola przycinana do 256 znaków — limit Discorda
@@ -1387,8 +1395,9 @@ Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unre
 
 | Warunek | Efekt |
 |---|---|
-| `pending` starsze niż 48 h | → `expired`, DM do wyzywającego, wygaszenie przycisków w DM zaproszenia |
-| `active` starsze niż 72 h | → `unresolved`, DM do obu z aktualnymi wynikami, bez zwycięzcy i bez osiągnięć |
+| `pending` starsze niż 24 h | → `expired`, DM do wyzywającego, wygaszenie przycisków w DM zaproszenia |
+| `active` starsze niż 72 h, **komplet po którejś ze stron** | → `finished` po sumach, dalej normalną drogą `_finishChallenges` (osiągnięcia + DM z werdyktem + „pochwal się") |
+| `active` starsze niż 72 h, **kompletu nie ma nikt** | → `unresolved`, DM do obu z aktualnymi wynikami, bez zwycięzcy i bez osiągnięć |
 | `pendingScore` starszy niż 72 h | porzucony, DM do gracza |
 
 ### Spójność z profilami
@@ -1408,7 +1417,7 @@ Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unre
   3. **cofa osiągnięcia** — `achievementService.revertChallengeOutcome(guildId, playerKey, 'challengesWon'|'challengesLost')` dekrementuje licznik (podłoga 0) i odbiera osiągnięcia o ID `chal_*`, których warunek przestał być spełniony. Bez tego ponowne rozstrzygnięcie naliczyłoby wygraną drugi raz
   4. **odświeża Centrum Dowodzenia** (`adminPanelService.refresh()`) — sekcja ⚔️ Wyzwania pokazuje wyzwanie znów w toku
 - **Nowego powiadomienia „wynik cofnięty" NIE wysyłamy** — komunikat o cofnięciu rekordu idzie osobno, ze ścieżki cofania wyniku. Werdykt po prostu znika
-- ⚠️ **Adresy wiadomości muszą być ZAPISANE, żeby dało się je skasować.** `attachResultDm(id, side, channelId, messageId)` (DM rezultatu — także tego po 72 h bez kompletu wyników, `_handleChallengeSweep`) i `attachSharedMessage(id, guildId, channelId, messageId)` (ogłoszenie z „pochwal się"). `sharedGuildIds` mówi tylko, ŻE ogłoszenie poszło, nie GDZIE ono jest — dokładając kolejne miejsce publikacji rezultatu, zapisz jego adres tak samo
+- ⚠️ **Adresy wiadomości muszą być ZAPISANE, żeby dało się je skasować.** `attachResultDm(id, side, channelId, messageId)` (DM rezultatu — także tego po 72 h bez kompletu po obu stronach, `_handleChallengeSweep`) i `attachSharedMessage(id, guildId, channelId, messageId)` (ogłoszenie z „pochwal się"). `sharedGuildIds` mówi tylko, ŻE ogłoszenie poszło, nie GDZIE ono jest — dokładając kolejne miejsce publikacji rezultatu, zapisz jego adres tak samo
 - **Po ponownym otwarciu ta sama wartość wyniku może wejść jeszcze raz** — wypadła z tablicy, więc blokada powtórek jej nie widzi
 
 **Przycisk „↩️ Cofnij wynik wyzwania" (`ocr_chal_undo_{playerKey}_{tsMs}`, head admin)** — pod embedem OCR typu `challenge`, czyli tam, gdzie rekord NIE padł, a wynik i tak wszedł do wyzwania.
@@ -1430,12 +1439,14 @@ Stan `chalPage`/`chalMaxPage` w `_profileStates`; komunikaty przez **`_msgsByLan
 
 **CustomIDs `/profile`:** `profile_challenges` | `profile_chal_prev` | `profile_chal_next` — jak każdy nowy `profile_*` **MUSZĄ być na whiteliście** w `handleButtonInteraction`, inaczej przycisk nie zadziała.
 
-### Osiągnięcia (22, sekretne)
+### Osiągnięcia (23, sekretne)
 
 Kategoria **`explorer`** (`hidden: true`) — bez zmian w UI kategorii (rząd ma już komplet 5 przycisków), a `_trackExplorer` odblokowuje wyłącznie tę kategorię. Dodatkowa zaleta: `clearUserAchievements` i `clearRecordAchievementsAfter` **pomijają `explorer`**, więc cofnięcie wyniku nie odbiera osiągnięć za wyzwania.
 
-Liczniki w `progress`: `challengesSent`, `challengesAccepted`, `challengesWon`, `challengesLost`.
-Metody: `trackChallengeSent/Accepted/Won/Lost(guildId, playerKey)` — naliczane na serwerze danego uczestnika.
+Liczniki w `progress`: `challengesSent`, `challengesAccepted`, `challengesWon`, `challengesLost`, `challengesDraws`.
+Metody: `trackChallengeSent/Accepted/Won/Lost/Draw(guildId, playerKey)` — naliczane na serwerze danego uczestnika.
+
+**Remis nalicza osiągnięcie OBU stronom** (`_applyChallengeAchievements`: `finished` bez zwycięzcy → `trackChallengeDraw` dla obu). **`unresolved` nadal nie nalicza niczego** — pojedynek się nie odbył. Cofnięcie wyniku, które otwiera zremisowane wyzwanie, zdejmuje je obu stronom: `removeScore` oddaje w `reopened` flagę `wasDraw` (remis to `finished` z `winner === null`, więc same `winnerSide`/`loserSide` by go nie wykryły), a `_undoChallengeResolution` woła `revertChallengeOutcome(..., 'challengesDraws')`.
 
 Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_acc_*`) i wygranych (`chal_win_*`) + jedno za przegraną (`chal_lost_1`):
 
@@ -1445,6 +1456,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 | Przyjęte | Podjęte Wyzwanie/Challenge Accepted ⬜ · Honorowy/Honorable 🟩 · Nieustępliwy/Unyielding 🟩 · Gladiator/Gladiator 🟦 · Mur Nie Do Przejścia/Immovable Wall 🟪 · Lew Areny/Lion of the Arena 🟧 · Zawsze Gotowy/Ever Ready 🔴 |
 | Wygrane | Pierwsza Krew/First Blood 🟩 · Triumfator/Triumphant 🟩 · Pogromca/Vanquisher 🟦 · Dziesięciu Pokonanych/Ten Fallen 🟦 · Mistrz Areny/Arena Master 🟪 · Kolekcjoner Czaszek/Skull Collector 🟧 · Legenda Pojedynków/Duel Legend 🔴 |
 | Przegrana | Gorzka Lekcja/Bitter Lesson ⬜ |
+| Remis | Godny Przeciwnik/Worthy Opponent 🟦 |
 
 ### Pułapki magazynu (`jsonStore`)
 

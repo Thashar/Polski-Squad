@@ -10,8 +10,8 @@ const logger = createBotLogger('EndersEcho');
 
 /** Ile wyników składa się na wyzwanie (per uczestnik) */
 const SCORES_PER_SIDE = 3;
-/** Zaproszenie bez odpowiedzi wygasa po 48 h */
-const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
+/** Zaproszenie bez odpowiedzi wygasa po 24 h */
+const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Przyjęte wyzwanie trwa maksymalnie 72 h — potem kończy się jako nierozstrzygnięte */
 const CHALLENGE_TTL_MS = 72 * 60 * 60 * 1000;
 /**
@@ -165,7 +165,7 @@ class ChallengeService {
      * Zaproszenia czekające na odpowiedź — od NAJNOWSZEGO.
      *
      * Odwrotnie niż `getActive()` (tam decyduje najbliższy termin): zaproszenie samo wygaśnie
-     * po 48 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem
+     * po 24 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem
      * „kto właśnie kogo wyzwał".
      */
     async getPending() {
@@ -237,7 +237,11 @@ class ChallengeService {
      * Rozstrzygamy po AKTUALNYCH sumach, tak samo jak przy komplecie wyników — kto ma więcej,
      * ten wygrywa, równo = remis. Wyjątkiem jest wyzwanie, w którym **nikt** nie wrzucił jeszcze
      * wyniku: „remis 0:0" byłby kłamstwem i przyznawał osiągnięcia za coś, czego nie było,
-     * więc takie zamykamy jako `unresolved` — tym samym statusem, co wygaśnięcie po 72 h.
+     * więc takie zamykamy jako `unresolved`.
+     *
+     * ⚠️ Próg jest tu NIŻSZY niż przy wygaśnięciu po 72 h (tam trzeba kompletu po którejś ze
+     * stron, patrz `sweep()`). Świadomie: zamknięcie ręczne to wyraźna decyzja admina o tym,
+     * że pojedynek ma się rozstrzygnąć teraz, a nie automat działający pod nieobecność ludzi.
      *
      * @returns {Promise<{challenge: object, outcome: 'finished'|'unresolved'}|null>} null gdy nie ma czego zamykać
      */
@@ -647,6 +651,7 @@ class ChallengeService {
         const now = Date.now();
         const expiredInvites = [];
         const unresolved = [];
+        const finished = [];
         const stalePending = [];
 
         await this._mutate(draft => {
@@ -661,10 +666,20 @@ class ChallengeService {
                 } else if (ch.status === 'active') {
                     const due = Date.parse(ch.expiresAt || 0);
                     if (Number.isFinite(due) && due <= now) {
-                        ch.status = 'unresolved';
-                        ch.finishedAt = new Date().toISOString();
-                        ch.winner = null;
-                        unresolved.push(ch);
+                        // Czas minął. Gdy KTÓRAKOLWIEK strona dowiozła komplet wyników,
+                        // rozstrzygamy po sumach — druga miała dokładnie tyle samo czasu
+                        // i go nie wykorzystała, więc „nierozstrzygnięte" byłoby dla tej
+                        // pierwszej karą za cudzą bezczynność. `unresolved` zostaje na
+                        // sytuację, w której kompletu nie zebrał NIKT.
+                        if (SIDES.some(side => this._isComplete(ch[side]))) {
+                            this._finalize(ch);
+                            finished.push(ch);
+                        } else {
+                            ch.status = 'unresolved';
+                            ch.finishedAt = new Date().toISOString();
+                            ch.winner = null;
+                            unresolved.push(ch);
+                        }
                     }
                 }
             }
@@ -677,14 +692,14 @@ class ChallengeService {
             }
         });
 
-        if (this._onSweep && (expiredInvites.length || unresolved.length || stalePending.length)) {
+        if (this._onSweep && (expiredInvites.length || unresolved.length || finished.length || stalePending.length)) {
             try {
-                await this._onSweep({ expiredInvites, unresolved, stalePending });
+                await this._onSweep({ expiredInvites, unresolved, finished, stalePending });
             } catch (err) {
                 logger.error(`Błąd powiadomień o wyzwaniach: ${err.message}`);
             }
         }
-        return { expiredInvites, unresolved, stalePending };
+        return { expiredInvites, unresolved, finished, stalePending };
     }
 
     // ─── Spójność z profilami ─────────────────────────────────────────────────
@@ -798,6 +813,9 @@ class ChallengeService {
                     announcements: [...(ch.result?.announcements || [])],
                     winnerSide: zwyciezca,
                     loserSide: zwyciezca ? this.otherSide(zwyciezca) : null,
+                    // Remis to `finished` BEZ zwycięzcy — osiągnięcie dostały obie strony,
+                    // więc obu trzeba je cofnąć. `unresolved` nie nalicza niczego
+                    wasDraw: byloFinished && !zwyciezca,
                 });
 
                 ch.status = 'active';
