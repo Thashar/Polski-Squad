@@ -1304,11 +1304,13 @@ Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie t
 Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, równe = **remis**. Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
 
 - **DM do OBU graczy**, każdy w języku swojego serwera: embed z ikoną bossa, wynikami i sumami obu stron, osobistym werdyktem (`challengeResultWin`/`Loss`/`Draw`) i linią zwycięzcy
+- **Nazwa serwera przy każdym graczu, gdy pojedynek łączy DWA serwery** (`⚔️ Ala — Polski Squad`) — sama para nicków nie mówi wtedy, kto skąd jest. Przy obu graczach z jednego serwera nazwa niczego nie wnosi, więc jej nie ma. Wymaga przekazania `client` do `_buildChallengeResultEmbed` (robią to wszystkie cztery wywołania: DM rezultatu, ogłoszenie po „pochwal się", DM o nierozstrzygnięciu). Etykieta pola przycinana do 256 znaków — limit Discorda
 - Pod DM **jednorazowy przycisk** `📢 Pochwal się wynikami na swoim serwerze` (`chal_share_{id}_{c|o}`):
   - publikuje ten sam embed na kanale bota (`allowedChannelId`) serwera **tego** gracza, zbudowany **w języku serwera docelowego**, nie odbiorcy DM
   - potem przycisk zmienia się w **nieaktywny** `✅ Pochwalono się`
   - stan `result.shared.{challenger|opponent}` siedzi w pliku, więc przycisk działa raz **także po restarcie bota**
-  - gdy obaj gracze są z tego samego serwera, drugie kliknięcie nie duplikuje ogłoszenia (`result.sharedGuildIds` → `challengeSharedAlready`)
+  - **⚠️ Ten sam serwer = JEDNO ogłoszenie, oba przyciski gasną naraz.** Gdy obaj gracze siedzą na tym samym serwerze, publikacja przez jednego zamyka sprawę także drugiemu: `markShared` zwraca `alsoClosed` z drugą stroną, a handler od razu wygasza jej przycisk w DM (`_disableChallengeShareButton`). Wcześniej przycisk zostawał aktywny i dopiero kliknięcie kończyło się komunikatem „już opublikowano". Kliknięcie mimo wszystko (wyścig dwóch kliknięć) nadal jest bezpieczne — `sharedGuildIds` nie dopuści duplikatu ogłoszenia
+  - **Różne serwery = każdy publikuje osobno, u siebie** — wtedy `alsoClosed` jest `null` i przycisk drugiego gracza zostaje aktywny
 
 Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unresolved` i `cancelled` nie naliczają niczego.**
 
