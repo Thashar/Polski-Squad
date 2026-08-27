@@ -16507,11 +16507,14 @@ class InteractionHandler {
 
         if (opponentId === interaction.user.id) return void await done(msgs.challengeErrSelf);
 
-        const open = await this.challengeService.countOpenForPlayer(challengerKey);
-        if (open >= this.challengeService.maxActivePerPlayer) {
-            return void await done(formatMessage(msgs.challengeErrLimit, {
-                count: open, max: this.challengeService.maxActivePerPlayer,
-            }));
+        const limit = this.challengeService.maxActivePerPlayer;
+        if (await this.challengeService.countOpenForPlayer(challengerKey) >= limit) {
+            return void await done(msgs.challengeErrLimit);
+        }
+        // Przeciwnika sprawdzamy PRZED wysłaniem DM — inaczej dostałby zaproszenie,
+        // którego i tak nie mógłby przyjąć, a rzucający czekałby do wygaśnięcia
+        if (await this.challengeService.countOpenForPlayer(opponentKey) >= limit) {
+            return void await done(formatMessage(msgs.challengeErrOpponentBusy, { name: session.playerName }));
         }
         if (await this.challengeService.hasOpenBetween(challengerKey, opponentKey, session.boss)) {
             return void await done(formatMessage(msgs.challengeErrDuplicate, { boss: session.boss }));
@@ -16637,15 +16640,11 @@ class InteractionHandler {
         }
 
         if (accepted) {
+            // To zaproszenie slotu nie zajmuje (przyjmujący jest jego adresatem),
+            // więc licznik porównujemy wprost z limitem
             const open = await this.challengeService.countOpenForPlayer(challenge.opponent.playerKey);
-            // Zaproszenie liczy się do limitu, więc porównujemy z limitem powiększonym o nie samo
-            if (open > this.challengeService.maxActivePerPlayer) {
-                await interaction.reply({
-                    content: formatMessage(msgs.challengeErrAcceptLimit, {
-                        count: open - 1, max: this.challengeService.maxActivePerPlayer,
-                    }),
-                    flags: ['Ephemeral'],
-                });
+            if (open >= this.challengeService.maxActivePerPlayer) {
+                await interaction.reply({ content: msgs.challengeErrAcceptLimit, flags: ['Ephemeral'] });
                 return;
             }
         }

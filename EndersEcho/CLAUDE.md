@@ -1241,7 +1241,7 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 | Zaproszenie bez odpowiedzi | 48 h → `expired` | `INVITE_TTL_MS` |
 | Przyjęte wyzwanie | **72 h** → `unresolved` (nierozstrzygnięte) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
-| Otwarte wyzwania na profil | 3 (trwające + wysłane zaproszenia) | `MAX_ACTIVE_PER_PLAYER` |
+| Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
 
 Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h bez kompletu wyników) · `cancelled` (uczestnik usunął profil).
@@ -1262,6 +1262,8 @@ Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKe
 - kolejność: litery → cyfry → `#` (nazwy złożone wyłącznie ze znaków ozdobnych) na końcu
 - **przyciski zakresów buduje `_buildChallengeRangeButtons(items, activeOffset, prefix)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
 - ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
+
+**⚠️ Jednocześnie można prowadzić TYLKO JEDNO wyzwanie** (`MAX_ACTIVE_PER_PLAYER = 1`). Slot zajmuje wyzwanie w toku (obojętnie po której stronie) **oraz WYSŁANE zaproszenie** czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz z dwoma zaproszeniami od różnych osób nie mógłby przyjąć żadnego, bo samo ich posiadanie wypełniałoby limit. Sprawdzane w dwóch miejscach: przy `chal_ok` (rzucający → `challengeErrLimit`, przeciwnik → `challengeErrOpponentBusy`) i przy `chal_acc_{id}` (przyjmujący → `challengeErrAcceptLimit`). **Zajętość przeciwnika sprawdzana PRZED wysłaniem DM** — bez tego dostawałby zaproszenie, którego i tak nie mógłby przyjąć, a rzucający czekałby do jego wygaśnięcia.
 
 **Rekord powstaje dopiero po UDANEJ wysyłce DM.** Gdy przeciwnik ma zamknięte wiadomości prywatne, wpis jest kasowany (`discard`), a wyzywający dostaje `challengeErrDmClosed`.
 
