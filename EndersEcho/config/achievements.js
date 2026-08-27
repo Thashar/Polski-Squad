@@ -569,6 +569,12 @@ const ACHIEVEMENTS = [
         descPol: 'Przegraj wyzwanie', descEng: 'Lose a challenge',
         check: (p, _ctx) => (p.challengesLost || 0) >= 1,
     },
+    {
+        id: 'chal_draw_1', category: 'explorer', rarity: 'rare', hidden: true, icon: '🤝',
+        namePol: 'Godny Przeciwnik',   nameEng: 'Worthy Opponent',
+        descPol: 'Zremisuj wyzwanie', descEng: 'Draw a challenge',
+        check: (p, _ctx) => (p.challengesDraws || 0) >= 1,
+    },
 
     // ===== PRESTIŻ (PRESTIGE) =====
     {

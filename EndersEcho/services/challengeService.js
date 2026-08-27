@@ -10,8 +10,8 @@ const logger = createBotLogger('EndersEcho');
 
 /** Ile wyników składa się na wyzwanie (per uczestnik) */
 const SCORES_PER_SIDE = 3;
-/** Zaproszenie bez odpowiedzi wygasa po 48 h */
-const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
+/** Zaproszenie bez odpowiedzi wygasa po 24 h */
+const INVITE_TTL_MS = 24 * 60 * 60 * 1000;
 /** Przyjęte wyzwanie trwa maksymalnie 72 h — potem kończy się jako nierozstrzygnięte */
 const CHALLENGE_TTL_MS = 72 * 60 * 60 * 1000;
 /**
@@ -165,7 +165,7 @@ class ChallengeService {
      * Zaproszenia czekające na odpowiedź — od NAJNOWSZEGO.
      *
      * Odwrotnie niż `getActive()` (tam decyduje najbliższy termin): zaproszenie samo wygaśnie
-     * po 48 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem
+     * po 24 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem
      * „kto właśnie kogo wyzwał".
      */
     async getPending() {
@@ -798,6 +798,9 @@ class ChallengeService {
                     announcements: [...(ch.result?.announcements || [])],
                     winnerSide: zwyciezca,
                     loserSide: zwyciezca ? this.otherSide(zwyciezca) : null,
+                    // Remis to `finished` BEZ zwycięzcy — osiągnięcie dostały obie strony,
+                    // więc obu trzeba je cofnąć. `unresolved` nie nalicza niczego
+                    wasDraw: byloFinished && !zwyciezca,
                 });
 
                 ch.status = 'active';
