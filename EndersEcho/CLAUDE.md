@@ -1283,12 +1283,12 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 |---|---|---|
 | Wyniki na uczestnika | 3 | `SCORES_PER_SIDE` |
 | Zaproszenie bez odpowiedzi | **24 h** → `expired` | `INVITE_TTL_MS` |
-| Przyjęte wyzwanie | **72 h** → `unresolved` (nierozstrzygnięte) | `CHALLENGE_TTL_MS` |
+| Przyjęte wyzwanie | **72 h** → rozstrzygnięcie po sumach albo `unresolved` (patrz niżej) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
 | Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
 
-Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h bez kompletu wyników) · `cancelled` (uczestnik usunął profil).
+Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h i kompletu nie zebrał NIKT) · `cancelled` (uczestnik usunął profil).
 
 ### Wizard (ephemeral, wzorzec `/subscribe`)
 
@@ -1368,7 +1368,14 @@ Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie t
 
 ### Rozstrzygnięcie i „pochwal się wynikami"
 
-Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, równe = **remis**. Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
+Pojedynek rozstrzyga się **po sumach `scoreValue`** — wyższa wygrywa, równe = **remis**. Dzieje się to w dwóch momentach:
+
+1. **Obaj uczestnicy mają po 3 wyniki** — `registerScore` domyka wyzwanie od razu
+2. **Minęły 72 h, a komplet zebrała PRZYNAJMNIEJ JEDNA strona** — `sweep()` rozstrzyga po aktualnych sumach
+
+⚠️ **Sam komplet nie przesądza o wygranej — decyduje suma.** Gracz z trzema słabszymi wynikami przegra z kimś, kto wrzucił jeden lepszy: komplet jest warunkiem *rozstrzygnięcia*, nie *zwycięstwa*. `unresolved` zostaje wyłącznie na sytuację, w której po 72 h kompletu nie ma **nikt** — wtedy nie ma czego porównywać i nikt nie dostaje osiągnięć.
+
+Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
 
 - **DM do OBU graczy**, każdy w języku swojego serwera: embed z ikoną bossa, wynikami i sumami obu stron, osobistym werdyktem (`challengeResultWin`/`Loss`/`Draw`) i linią zwycięzcy
 - **Nazwa serwera przy każdym graczu, gdy pojedynek łączy DWA serwery** (`⚔️ Ala — Polski Squad`) — sama para nicków nie mówi wtedy, kto skąd jest. Przy obu graczach z jednego serwera nazwa niczego nie wnosi, więc jej nie ma. Wymaga przekazania `client` do `_buildChallengeResultEmbed` (robią to wszystkie cztery wywołania: DM rezultatu, ogłoszenie po „pochwal się", DM o nierozstrzygnięciu). Etykieta pola przycinana do 256 znaków — limit Discorda
@@ -1389,7 +1396,8 @@ Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unre
 | Warunek | Efekt |
 |---|---|
 | `pending` starsze niż 24 h | → `expired`, DM do wyzywającego, wygaszenie przycisków w DM zaproszenia |
-| `active` starsze niż 72 h | → `unresolved`, DM do obu z aktualnymi wynikami, bez zwycięzcy i bez osiągnięć |
+| `active` starsze niż 72 h, **komplet po którejś ze stron** | → `finished` po sumach, dalej normalną drogą `_finishChallenges` (osiągnięcia + DM z werdyktem + „pochwal się") |
+| `active` starsze niż 72 h, **kompletu nie ma nikt** | → `unresolved`, DM do obu z aktualnymi wynikami, bez zwycięzcy i bez osiągnięć |
 | `pendingScore` starszy niż 72 h | porzucony, DM do gracza |
 
 ### Spójność z profilami
@@ -1409,7 +1417,7 @@ Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unre
   3. **cofa osiągnięcia** — `achievementService.revertChallengeOutcome(guildId, playerKey, 'challengesWon'|'challengesLost')` dekrementuje licznik (podłoga 0) i odbiera osiągnięcia o ID `chal_*`, których warunek przestał być spełniony. Bez tego ponowne rozstrzygnięcie naliczyłoby wygraną drugi raz
   4. **odświeża Centrum Dowodzenia** (`adminPanelService.refresh()`) — sekcja ⚔️ Wyzwania pokazuje wyzwanie znów w toku
 - **Nowego powiadomienia „wynik cofnięty" NIE wysyłamy** — komunikat o cofnięciu rekordu idzie osobno, ze ścieżki cofania wyniku. Werdykt po prostu znika
-- ⚠️ **Adresy wiadomości muszą być ZAPISANE, żeby dało się je skasować.** `attachResultDm(id, side, channelId, messageId)` (DM rezultatu — także tego po 72 h bez kompletu wyników, `_handleChallengeSweep`) i `attachSharedMessage(id, guildId, channelId, messageId)` (ogłoszenie z „pochwal się"). `sharedGuildIds` mówi tylko, ŻE ogłoszenie poszło, nie GDZIE ono jest — dokładając kolejne miejsce publikacji rezultatu, zapisz jego adres tak samo
+- ⚠️ **Adresy wiadomości muszą być ZAPISANE, żeby dało się je skasować.** `attachResultDm(id, side, channelId, messageId)` (DM rezultatu — także tego po 72 h bez kompletu po obu stronach, `_handleChallengeSweep`) i `attachSharedMessage(id, guildId, channelId, messageId)` (ogłoszenie z „pochwal się"). `sharedGuildIds` mówi tylko, ŻE ogłoszenie poszło, nie GDZIE ono jest — dokładając kolejne miejsce publikacji rezultatu, zapisz jego adres tak samo
 - **Po ponownym otwarciu ta sama wartość wyniku może wejść jeszcze raz** — wypadła z tablicy, więc blokada powtórek jej nie widzi
 
 **Przycisk „↩️ Cofnij wynik wyzwania" (`ocr_chal_undo_{playerKey}_{tsMs}`, head admin)** — pod embedem OCR typu `challenge`, czyli tam, gdzie rekord NIE padł, a wynik i tak wszedł do wyzwania.

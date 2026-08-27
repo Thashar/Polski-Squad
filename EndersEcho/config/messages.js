@@ -577,7 +577,7 @@ const pol = {
     challengeShareFailed: '❌ Nie udało się opublikować wyniku na serwerze **{guild}**.',
     challengePublicTitle: '⚔️ Zakończone wyzwanie',
     challengeDmUnresolvedTitle: '❓ Wyzwanie nierozstrzygnięte',
-    challengeDmUnresolvedDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** trwało **72 godziny** i nie zostało dokończone — pozostaje nierozstrzygnięte.',
+    challengeDmUnresolvedDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** trwało **72 godziny** i żadna ze stron nie zebrała kompletu wyników — pozostaje nierozstrzygnięte.',
     challengeDmCancelledTitle: '🚫 Wyzwanie anulowane',
     challengeDmCancelledDesc: 'Wyzwanie z **{opponent}** na bossie **{boss}** zostało anulowane — przeciwnik usunął swój profil.',
 
@@ -1176,7 +1176,7 @@ const eng = {
     challengeShareFailed: '❌ Could not publish the result on **{guild}**.',
     challengePublicTitle: '⚔️ Challenge finished',
     challengeDmUnresolvedTitle: '❓ Challenge unresolved',
-    challengeDmUnresolvedDesc: 'Your challenge with **{opponent}** on boss **{boss}** ran for **72 hours** and was not completed — it stays unresolved.',
+    challengeDmUnresolvedDesc: 'Your challenge with **{opponent}** on boss **{boss}** ran for **72 hours** and neither side completed their scores — it stays unresolved.',
     challengeDmCancelledTitle: '🚫 Challenge cancelled',
     challengeDmCancelledDesc: 'Your challenge with **{opponent}** on boss **{boss}** was cancelled — your opponent deleted their profile.',
 

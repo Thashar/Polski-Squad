@@ -17911,7 +17911,12 @@ class InteractionHandler {
         });
     }
 
-    async _handleChallengeSweep(client, { expiredInvites, unresolved, stalePending }) {
+    async _handleChallengeSweep(client, { expiredInvites = [], unresolved = [], finished = [], stalePending = [] }) {
+        // Pojedynek rozstrzygnięty upływem czasu (komplet wyników po jednej ze stron)
+        // domykamy tą samą drogą co naturalny koniec: osiągnięcia, DM z werdyktem
+        // i jednorazowy przycisk „pochwal się"
+        if (finished.length) await this._finishChallenges(client, finished);
+
         for (const challenge of expiredInvites) {
             const msgs = this.msgs(challenge.challenger.guildId);
             await this._dmUser(client, challenge.challenger.userId, {
