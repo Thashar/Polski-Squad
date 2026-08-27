@@ -11468,6 +11468,53 @@ class InteractionHandler {
     /**
      * Pobiera graczy z rankingu z display names i sortuje alfabetycznie (znaki specjalne na końcu).
      */
+    /**
+     * Klucz alfabetyczny nazwy — do sortowania i do etykiet zakresów liter.
+     *
+     * Nicki i nazwy serwerów na Discordzie zaczynają się od emoji, ramek i znaków
+     * ozdobnych częściej niż od litery. Bez normalizacji `🔥 Alicja` lądowała w koszu
+     * „nie-litera", a przycisk zakresu pokazywał `🔥` zamiast `A` — czyli lista
+     * alfabetyczna nie była alfabetyczna.
+     *
+     * Zdejmujemy więc wszystko przed pierwszym znakiem PISANYM (literą albo cyfrą)
+     * i sprowadzamy diakrytyki do liter bazowych: `Ą→A`, `Ż→Z`, `Ł→L`.
+     *
+     * ⚠️ `ł`/`Ł` NIE rozkłada się w NFD (to osobny punkt kodowy z kreską, nie litera
+     * ze znakiem łączącym) — dlatego jest mapa dla niego i garści podobnych liter
+     * z innych alfabetów (ø, đ, þ, æ, ß…), których sam NFD też nie rozbije.
+     */
+    _normalizeSortName(raw) {
+        const MAP = {
+            'ł': 'l', 'Ł': 'L', 'ø': 'o', 'Ø': 'O', 'đ': 'd', 'Đ': 'D', 'ð': 'd', 'Ð': 'D',
+            'þ': 't', 'Þ': 'T', 'æ': 'a', 'Æ': 'A', 'œ': 'o', 'Œ': 'O', 'ß': 's', 'ı': 'i',
+        };
+        const text = String(raw || '')
+            .replace(/[łŁøØđĐðÐþÞæÆœŒßı]/g, ch => MAP[ch] || ch)
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, ''); // znaki łączące (diakrytyki)
+        const first = text.search(/[\p{L}\p{N}]/u);
+        return first === -1 ? '' : text.slice(first);
+    }
+
+    /** Litera kosza alfabetycznego; `#` dla nazw złożonych wyłącznie ze znaków ozdobnych */
+    _sortBucketLetter(raw) {
+        const normalized = this._normalizeSortName(raw);
+        return normalized ? normalized[0].toUpperCase() : '#';
+    }
+
+    /** Porównanie nazw po kluczu alfabetycznym — litery przed resztą, `#` na końcu */
+    _compareSortNames(rawA, rawB) {
+        const a = this._normalizeSortName(rawA);
+        const b = this._normalizeSortName(rawB);
+        if (!a && !b) return String(rawA).localeCompare(String(rawB), 'pl', { sensitivity: 'base' });
+        if (!a) return 1;
+        if (!b) return -1;
+        const letterA = /^\p{L}/u.test(a);
+        const letterB = /^\p{L}/u.test(b);
+        if (letterA !== letterB) return letterA ? -1 : 1;
+        return a.localeCompare(b, 'pl', { sensitivity: 'base' });
+    }
+
     async _getNotifSortedPlayers(guildId, client) {
         const players = await this.rankingService.getSortedPlayers(guildId);
         const targetGuild = client.guilds.cache.get(guildId);
@@ -11483,16 +11530,7 @@ class InteractionHandler {
             // Profil dodatkowy → nick ze znacznikiem, żeby lista rozróżniała konta jednej osoby
             result.push({ ...player, displayName: formatProfileDisplayName(displayName, player.profileIndex || 1) });
         }
-        const isLetter = name => /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/.test(name);
-        result.sort((a, b) => {
-            const nameA = a.displayName.toLowerCase();
-            const nameB = b.displayName.toLowerCase();
-            const letterA = isLetter(nameA);
-            const letterB = isLetter(nameB);
-            if (letterA && !letterB) return -1;
-            if (!letterA && letterB) return 1;
-            return nameA.localeCompare(nameB, 'pl', { sensitivity: 'base' });
-        });
+        result.sort((a, b) => this._compareSortNames(a.displayName, b.displayName));
         return result;
     }
 
@@ -16231,25 +16269,46 @@ class InteractionHandler {
             createdAt: Date.now(),
         });
 
-        const options = this.config.getAllGuilds().map(g =>
-            new StringSelectMenuOptionBuilder()
-                .setValue(g.id)
-                .setLabel(this._challengeGuildName(interaction.client, g.id).substring(0, 100))
-        );
-        if (options.length === 0) {
-            await interaction.reply({ content: msgs.challengeNoPlayers, flags: ['Ephemeral'] });
+        await this._renderChallengeServerPicker(interaction, 0, { initial: true });
+    }
+
+    /**
+     * Lista serwerów (25/stronę + przyciski zakresów liter).
+     *
+     * ⚠️ Wcześniej lista była **ucinana** do 25 pozycji (`options.slice(0, 25)`) — przy
+     * większej liczbie serwerów reszty po prostu nie dało się wybrać, bez żadnego śladu
+     * w UI. Stronicowanie jest tu więc naprawą, nie ozdobnikiem.
+     */
+    async _renderChallengeServerPicker(interaction, offset, { initial = false } = {}) {
+        const msgs = this.msgs(interaction.guildId);
+        const PAGE_SIZE = 25;
+
+        const servers = this.config.getAllGuilds()
+            .map(g => ({ id: g.id, label: this._challengeGuildName(interaction.client, g.id) }))
+            .sort((a, b) => this._compareSortNames(a.label, b.label));
+
+        if (servers.length === 0) {
+            const empty = { content: msgs.challengeNoPlayers, components: [] };
+            await (initial ? interaction.reply({ ...empty, flags: ['Ephemeral'] }) : interaction.editReply(empty));
             return;
         }
+
+        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, (Math.ceil(servers.length / PAGE_SIZE) - 1) * PAGE_SIZE));
+        const page = servers.slice(safeOffset, safeOffset + PAGE_SIZE);
         const select = new StringSelectMenuBuilder()
             .setCustomId('chal_srv')
             .setPlaceholder(msgs.challengeSelectServerPlaceholder)
-            .addOptions(options.slice(0, 25));
+            .addOptions(page.map(s =>
+                new StringSelectMenuOptionBuilder().setValue(s.id).setLabel(s.label.substring(0, 100))
+            ));
+        const selectRow = new ActionRowBuilder().addComponents(select);
 
-        await interaction.reply({
-            content: msgs.challengeIntro,
-            components: [new ActionRowBuilder().addComponents(select)],
-            flags: ['Ephemeral'],
-        });
+        const components = servers.length <= PAGE_SIZE
+            ? [selectRow]
+            : [...this._buildChallengeRangeButtons(servers, safeOffset, 'chal_spage_'), selectRow];
+
+        const payload = { content: msgs.challengeIntro, components };
+        await (initial ? interaction.reply({ ...payload, flags: ['Ephemeral'] }) : interaction.editReply(payload));
     }
 
     /** Sesja wizarda (RAM, TTL 15 min) — customId nie pomieści guildId + playerKey + nazwy bossa */
@@ -16307,24 +16366,34 @@ class InteractionHandler {
 
         const components = sorted.length <= PAGE_SIZE
             ? [selectRow]
-            : [...this._buildChallengePageButtons(sorted, offset), selectRow];
+            : [...this._buildChallengeRangeButtons(
+                sorted.map(p => ({ label: p.displayName })), offset, 'chal_page_'), selectRow];
 
         await interaction.editReply({ content: msgs.challengeSelectPlayer, components });
     }
 
-    /** Przyciski zakresów liter dla listy graczy (analogicznie do `/subscribe`) */
-    _buildChallengePageButtons(players, activeOffset) {
+    /**
+     * Przyciski zakresów liter dla długiej listy (gracze, serwery) — select menu Discorda
+     * mieści 25 pozycji, więc dłuższa lista musi dać się przewijać alfabetycznie.
+     *
+     * Etykiety zakresów liczone są z **klucza znormalizowanego** (`_sortBucketLetter`),
+     * nie z surowej nazwy — inaczej przycisk pokazywałby `🔥 - ⭐` zamiast `A - K`.
+     *
+     * @param {Array<{label: string}>} items - lista posortowana tym samym kluczem
+     * @param {string} prefix - prefiks customId (`chal_page_` gracze, `chal_spage_` serwery)
+     */
+    _buildChallengeRangeButtons(items, activeOffset, prefix) {
         const PAGE_SIZE = 25;
         const rows = [];
         let currentRow = [];
-        for (let offset = 0; offset < players.length; offset += PAGE_SIZE) {
+        for (let offset = 0; offset < items.length; offset += PAGE_SIZE) {
             if (rows.length >= 4 && currentRow.length === 0) break;
-            const page = players.slice(offset, offset + PAGE_SIZE);
-            const first = (page[0].displayName || '?')[0].toUpperCase();
-            const last = (page[page.length - 1].displayName || '?')[0].toUpperCase();
+            const page = items.slice(offset, offset + PAGE_SIZE);
+            const first = this._sortBucketLetter(page[0].label);
+            const last = this._sortBucketLetter(page[page.length - 1].label);
             currentRow.push(
                 new ButtonBuilder()
-                    .setCustomId(`chal_page_${offset}`)
+                    .setCustomId(`${prefix}${offset}`)
                     .setLabel(first === last ? first : `${first} - ${last}`)
                     .setStyle(offset === activeOffset ? ButtonStyle.Success : ButtonStyle.Primary)
             );
@@ -16519,6 +16588,11 @@ class InteractionHandler {
                 return;
             }
             if (customId === 'chal_ok') { await this._handleChallengeConfirm(interaction); return; }
+            if (customId.startsWith('chal_spage_')) {
+                await interaction.deferUpdate();
+                await this._renderChallengeServerPicker(interaction, parseInt(customId.replace('chal_spage_', ''), 10) || 0);
+                return;
+            }
             if (customId.startsWith('chal_page_')) {
                 await interaction.deferUpdate();
                 await this._renderChallengePlayerPicker(interaction, parseInt(customId.replace('chal_page_', ''), 10) || 0);
