@@ -1166,7 +1166,7 @@ Dalsze kroki flow (select menu, potwierdzenia, przyciski stron) klikane są już
 | 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, oczekujące CV, **👑 Lider globalny**, **🕐 Ostatni rekord** (relative timestamp), **🏆 TOP10 pobijających rekordy** (liczba wpisów historii wyników per gracz, cross-server — `getActivePlayersStats().topRecordSetters`), **👥 Dodatkowe profile** (ilu graczy ma kilka kont i po ile — `profileRegistryService.getUsersWithAltProfiles()`, max 10 + "i N więcej", `⏳ N` przy profilach czekających na usunięcie), lista zablokowanych (max 3 + "i N więcej") | Rząd 1: `🔒 panel_block`, `🔓 cc_action_unblock`, `🗑️ panel_remove`, `🧹 panel_remove_score`, `🏆 panel_ach_del` · Rząd 2: `🔍 cc_player_lookup`, `🧊 cc_clear_cooldown`, `🗳️ cc_pending_cv` |
 | 3 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku; **paginacja 25 serwerów/stronę** (`_serversPage` w RAM, footer `Strona X/Y`); sekcje nieskonfigurowane/brak bota (max 10 + licznik) | Rząd 1 (paginacja): `◀️ cc_srv_pg_prev`, `cc_srv_pg_info` (disabled, wskaźnik strony), `▶️ cc_srv_pg_next` · Rząd 2: `🔄 panel_ocr`, `🔁 cc_action_roles`, `📋 panel_guild_list`, `🚫 panel_ban_guild`, `🗑️ panel_delete_server_data` · Rząd 3: `⚠️ cc_unconfigured`, `🔍 cc_diag_server` |
 | 4 | 👾 Bossowie | `0x1ABC9C` | Bossy w bazie, z rekordami, boss okresu, **🎯 Najczęstszy boss rekordów** (z aktualnych rekordów globalnego rankingu), **nieznane nazwy do zmapowania** (`bossRecordService.getUnknownBossNames()`, lista `• \`nazwa\`` max 5 + licznik), **bossy bez zdjęcia** (ten sam format, ale PEŁNA lista bez ucinania — chroni tylko twardy limit 1024 znaków przez `capField()`) | `👾 cc_action_boss_cfg` (pełny panel konfiguracji bossów jako ephemeral) |
-| 5 | ⚔️ Wyzwania | `0xE67E22` | **🏆 TOP 5 zwycięzców** i **💔 TOP 5 przegranych** bieżącego miesiąca (`monthlyStandings()` — miesiąc liczony po czasie **warszawskim**, remisy i nierozstrzygnięte nie liczą się nikomu), **⚔️ W toku** (wszystkie, `2/3 : 1/3` + termin `<t:…:R>`), **📜 Ostatnie rozstrzygnięte** (10) | `📜 cc_chal_history`, `🏁 cc_chal_finish` |
+| 5 | ⚔️ Wyzwania | `0xE67E22` | **🏆 TOP 5 zwycięzców** i **💔 TOP 5 przegranych** bieżącego miesiąca (`monthlyStandings()` — miesiąc liczony po czasie **warszawskim**, remisy i nierozstrzygnięte nie liczą się nikomu), **⚔️ W toku** (wszystkie, `2/3 : 1/3` + termin `<t:…:R>`), **⏳ Oczekujące na odpowiedź** (licznik w nazwie pola + **5 ostatnich**, `wyzywający → przeciwnik` i termin wygaśnięcia), **📜 Ostatnie rozstrzygnięte** (10) | `📜 cc_chal_history`, `⏳ cc_chal_pending`, `🏁 cc_chal_finish` |
 | 6 | 📊 Statystyki | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem**, odrzucone, interwencje admina, **🌩️ Zdrowie API** (globalne, nieresetowalne: odrzucone/wszystkie zapytania + %, pełne odrzuty po 10 retry), top odrzucani, aktywni/nowi gracze, przyrost miesięczny, **🔢 Użycia komend** (top 10 + suma, dawny przycisk scalony do embeda) | `📈 panel_player_growth` (przyciski Success Rate i Użycia komend usunięte — dane w embedzie; szczegóły/reset liczników nadal w `/manage → Statystyki`) |
 | 7 | 💰 Koszty & Limity | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), miesiąc + projekcja, **⚙️ Limity i alert** (limit dzienny, cooldown, próg alertu), top 3 serwery, top 5 użytkowników | `📊 cc_action_tokens`, `⚙️ panel_limit`, `🔔 cc_cost_alert` (modal progu USD/dzień) |
 | 8 | ⚙️ Narzędzia | `0x95A5A6` | **🧪 Testerzy z nickami** (nick serwerowy z serwera kanału panelu + username Discord z linkiem do profilu, `_resolveTestersDetailed()`), liczba serwerów z zablokowanym OCR per-guild, następny Global TOP10, **stan globalnego OCR**, **📤 Rankingi na stronie** (kiedy poszła ostatnia wysyłka TOP 10, czy był to pełny snapshot czy pojedynczy serwer, ile serwerów śledzonych; `⚪ Wyłączona` gdy brak `ENDERSECHO_WEB_SYNC_*`) | `🧪 cc_action_tester`, `📅 panel_top10_interval`, `🔁 cc_bcr_refresh`, `🛑/▶️ cc_global_ocr` (kill-switch z potwierdzeniem `cc_global_ocr_ok_{block\|unblock}`) |
@@ -1192,6 +1192,10 @@ Dalsze kroki flow (select menu, potwierdzenia, przyciski stron) klikane są już
 
 ⚠️ **`cc_chal_hpg_{guildId}_{page}` parsowany od OSTATNIEGO `_`** — guildId to same cyfry, więc `split('_')` rozjechałby się na pierwszym separatorze.
 
+**`⏳ cc_chal_pending` — WSZYSTKIE zaproszenia czekające na odpowiedź** (8/stronę, `cc_chal_ppg_{page}`): `wyzywający → przeciwnik`, boss, kiedy wysłane i kiedy wygasa, a przy pojedynku międzyserwerowym linia `🔀 serwer wyzywającego → serwer przeciwnika` (przy jednym serwerze pomijana, bo niczego nie wnosi). Embed panelu pokazuje tylko 5 ostatnich — ten przycisk daje komplet.
+
+`getPending()` sortuje **od NAJNOWSZEGO**, odwrotnie niż `getActive()` (tam decyduje najbliższy termin). Zaproszenie samo wygaśnie po 48 h i nie wymaga niczyjej interwencji, a admin patrzy na tę listę pytaniem „kto właśnie kogo wyzwał".
+
 **`🏁 cc_chal_finish` — ręczne zamknięcie wyzwania** (trzy kroki): lista wyzwań w toku (25/stronę, `cc_chal_fpg_{offset}`, kolejność **wg terminu**, nie alfabetycznie — stąd zwykłe `◀️/▶️` zamiast zakresów liter) → `cc_chal_fsel` → potwierdzenie → `cc_chal_fok_{id}`.
 
 `challengeService.forceFinish(id, adminName)` rozstrzyga po **aktualnych sumach**, tak samo jak komplet wyników: wyższa wygrywa, równe = remis, `finishedBy` zapamiętuje admina. **Wyjątek: gdy ŻADNA ze stron nie wrzuciła wyniku** → status `unresolved`, nie `finished` — „remis 0:0" byłby kłamstwem i przyznawałby osiągnięcia za pojedynek, którego nie było.
@@ -1200,7 +1204,7 @@ Powiadomienia idą **tą samą drogą co przy naturalnym końcu**, bez własnej 
 
 **`✖️ cc_chal_close`** zamyka widok efemeryczny (podmienia go krótkim potwierdzeniem, bez komponentów).
 
-**Metody serwisu:** `getAll()` · `getActive()` (wg terminu) · `getClosed()` (wg `finishedAt`) · `monthlyStandings(refDate)` · `ChallengeService.warsawMonth(date)` · `forceFinish(id, adminName)`. Stała `CLOSED_STATUSES` = `finished, unresolved, declined, expired, cancelled`.
+**Metody serwisu:** `getAll()` · `getActive()` (wg terminu) · `getPending()` (od najnowszego) · `getClosed()` (wg `finishedAt`) · `monthlyStandings(refDate)` · `ChallengeService.warsawMonth(date)` · `forceFinish(id, adminName)`. Stała `CLOSED_STATUSES` = `finished, unresolved, declined, expired, cancelled`.
 
 **Helper `capLines(lines, max, more)`** w `adminPanelService.js` — jak `capField`, ale tnie CAŁYMI liniami i dopisuje, ilu pozycji nie widać. `capField` ucina w połowie wiersza, co przy listach wyzwań dawało urwany nick bez wyniku.
 
@@ -1425,7 +1429,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 
 ### CustomIDs
 
-`cc_chal_history` | `cc_chal_hsp_{offset}` | `cc_chal_hsrv` | `cc_chal_hpg_{guildId}_{page}` | `cc_chal_finish` | `cc_chal_fpg_{offset}` | `cc_chal_fsel` | `cc_chal_fok_{id}` | `cc_chal_close` (Centrum Dowodzenia)
+`cc_chal_history` | `cc_chal_hsp_{offset}` | `cc_chal_hsrv` | `cc_chal_hpg_{guildId}_{page}` | `cc_chal_pending` | `cc_chal_ppg_{page}` | `cc_chal_finish` | `cc_chal_fpg_{offset}` | `cc_chal_fsel` | `cc_chal_fok_{id}` | `cc_chal_close` (Centrum Dowodzenia)
 
 `chal_srv` | `chal_spage_{offset}` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
 

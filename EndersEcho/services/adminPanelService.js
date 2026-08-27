@@ -1133,12 +1133,13 @@ class AdminPanelService {
         const svc = this._services.challengeService;
         if (!svc) return null;
         try {
-            const [standings, active, closed] = await Promise.all([
+            const [standings, active, pending, closed] = await Promise.all([
                 svc.monthlyStandings(),
                 svc.getActive(),
+                svc.getPending(),
                 svc.getClosed(),
             ]);
-            return { standings, active, closed };
+            return { standings, active, pending, closed };
         } catch (err) {
             logger.warn(`Panel: nie udało się pobrać wyzwań: ${err.message}`);
             return null;
@@ -1149,7 +1150,7 @@ class AdminPanelService {
         const embed = new EmbedBuilder().setColor(0xE67E22).setTitle('⚔️ Wyzwania');
         if (!data) return embed.setDescription('Brak danych o wyzwaniach.');
 
-        const { standings, active, closed } = data;
+        const { standings, active, pending, closed } = data;
         const [rok, mies] = String(standings.monthKey || '').split('-');
         const etykietaMiesiaca = mies ? `${MONTH_NAMES_PL[Number(mies) - 1] || mies} ${rok}` : 'ten miesiąc';
 
@@ -1163,6 +1164,14 @@ class AdminPanelService {
             const total = this._services.challengeService?.scoresPerSide ?? 3;
             return `• **${this._challengeName(ch.challenger)}** ${ch.challenger.scores?.length || 0}/${total}`
                 + ` vs ${ch.opponent.scores?.length || 0}/${total} **${this._challengeName(ch.opponent)}**`
+                + ` — ${ch.boss || '—'}${kiedy}`;
+        });
+
+        // Ostatnie 5 zaproszeń czekających na odpowiedź; pełną listę daje przycisk `⏳ Oczekujące`
+        const oczekujaceLinie = pending.slice(0, 5).map(ch => {
+            const termin = Date.parse(ch.inviteExpiresAt || 0);
+            const kiedy = Number.isFinite(termin) ? ` · wygasa <t:${Math.floor(termin / 1000)}:R>` : '';
+            return `• **${this._challengeName(ch.challenger)}** → **${this._challengeName(ch.opponent)}**`
                 + ` — ${ch.boss || '—'}${kiedy}`;
         });
 
@@ -1181,6 +1190,7 @@ class AdminPanelService {
             { name: `🏆 TOP 5 zwycięzców (${etykietaMiesiaca})`, value: capLines(top5(standings.winners, 'wins'), 1024), inline: true },
             { name: `💔 TOP 5 przegranych (${etykietaMiesiaca})`, value: capLines(top5(standings.losers, 'losses'), 1024), inline: true },
             { name: `⚔️ W toku (${active.length})`, value: capLines(wTokuLinie), inline: false },
+            { name: `⏳ Oczekujące na odpowiedź (${pending.length})`, value: capLines(oczekujaceLinie, 1024, () => ''), inline: false },
             { name: `📜 Ostatnie rozstrzygnięte (${closed.length})`, value: capLines(historiaLinie, 1024, () => ''), inline: false },
         );
     }
@@ -1188,6 +1198,7 @@ class AdminPanelService {
     _buildChallengesRow() {
         return new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_chal_history').setEmoji('📜').setLabel('Historia').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_chal_pending').setEmoji('⏳').setLabel('Wszystkie oczekujące').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('cc_chal_finish').setEmoji('🏁').setLabel('Zakończ wyzwanie').setStyle(ButtonStyle.Danger),
         );
     }
