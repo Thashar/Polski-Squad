@@ -1259,7 +1259,9 @@ Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKe
 
 ### DM z zaproszeniem
 
-Embed z **ikoną bossa jako thumbnail** (`_challengeBossImage` → `data/boss_images/`), zasadami i terminem odpowiedzi. Przyciski `chal_acc_{id}` / `chal_rej_{id}` → po kliknięciu zamieniane na **nieaktywny znacznik** `chal_done_{id}`. Wyzywający dostaje DM o decyzji.
+Embed z **ikoną bossa jako thumbnail** (`_challengeBossImage` → `data/boss_images/`), zasadami i terminem odpowiedzi. Przyciski `chal_acc_{id}` / `chal_rej_{id}` → po kliknięciu zamieniane na **nieaktywny znacznik** `chal_done_{id}`.
+
+Wyzywający dostaje o decyzji **embed** (zielony przy przyjęciu, czerwony przy odrzuceniu) z **avatarem przeciwnika jako miniaturą** — nie zwykłą wiadomość tekstową.
 
 **Uprawnienie sprawdzane po `challenge.opponent.userId`, nie po customId** — customId nie jest źródłem prawdy.
 
@@ -1277,6 +1279,8 @@ Komunikat składa `_challengeNoticeValue(notices, pending, msgs, duplicates)` �
 
 - **Jest publiczne ogłoszenie** → pole `⚔️ Wyzwanie` dokładane do `systemNotices` → trafia do **Embeda 4 (ℹ️ Informacje systemowe)**, bez żadnych zmian w `rankingService`. Dotyczy wszystkich trzech wywołań `createRecordEmbeds` w `_runUpdateFlow` (duplikat cross-server, „tylko rekord bossa", nowy rekord)
 - **Brak rekordu ogólnego i brak rekordu bossa** (nic nie idzie publicznie) → linia w `reasonText` embeda `createNoRecordEmbeds` **oraz DM** do gracza (`_sendChallengeScoreDm`)
+
+**Avatar przeciwnika w embedach wyzwania** (`_challengeOpponentAvatar(client, entries)`) — miniatura DM-ów o zaliczeniu wyniku, doliczeniu po zatwierdzeniu bossa i o przyjęciu/odrzuceniu wyzwania. Embed ma **jeden** slot na miniaturę, a wynik może zaliczyć się do kilku wyzwań na tym samym bossie naraz — przy więcej niż jednym przeciwniku avatar jest **pomijany**, zamiast arbitralnie wybierać pierwszego z brzegu. Usunięty profil też go nie dostaje (w treści widnieje „Profil usunięty", więc czyjaś twarz obok byłaby myląca), a błąd `users.fetch` kończy się `null`, nie wywrotką.
 
 ### Nierozpoznana nazwa bossa → wynik oczekujący
 
@@ -1300,11 +1304,13 @@ Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie t
 Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, równe = **remis**. Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
 
 - **DM do OBU graczy**, każdy w języku swojego serwera: embed z ikoną bossa, wynikami i sumami obu stron, osobistym werdyktem (`challengeResultWin`/`Loss`/`Draw`) i linią zwycięzcy
+- **Nazwa serwera przy każdym graczu, gdy pojedynek łączy DWA serwery** (`⚔️ Ala — Polski Squad`) — sama para nicków nie mówi wtedy, kto skąd jest. Przy obu graczach z jednego serwera nazwa niczego nie wnosi, więc jej nie ma. Wymaga przekazania `client` do `_buildChallengeResultEmbed` (robią to wszystkie cztery wywołania: DM rezultatu, ogłoszenie po „pochwal się", DM o nierozstrzygnięciu). Etykieta pola przycinana do 256 znaków — limit Discorda
 - Pod DM **jednorazowy przycisk** `📢 Pochwal się wynikami na swoim serwerze` (`chal_share_{id}_{c|o}`):
   - publikuje ten sam embed na kanale bota (`allowedChannelId`) serwera **tego** gracza, zbudowany **w języku serwera docelowego**, nie odbiorcy DM
   - potem przycisk zmienia się w **nieaktywny** `✅ Pochwalono się`
   - stan `result.shared.{challenger|opponent}` siedzi w pliku, więc przycisk działa raz **także po restarcie bota**
-  - gdy obaj gracze są z tego samego serwera, drugie kliknięcie nie duplikuje ogłoszenia (`result.sharedGuildIds` → `challengeSharedAlready`)
+  - **⚠️ Ten sam serwer = JEDNO ogłoszenie, oba przyciski gasną naraz.** Gdy obaj gracze siedzą na tym samym serwerze, publikacja przez jednego zamyka sprawę także drugiemu: `markShared` zwraca `alsoClosed` z drugą stroną, a handler od razu wygasza jej przycisk w DM (`_disableChallengeShareButton`). Wcześniej przycisk zostawał aktywny i dopiero kliknięcie kończyło się komunikatem „już opublikowano". Kliknięcie mimo wszystko (wyścig dwóch kliknięć) nadal jest bezpieczne — `sharedGuildIds` nie dopuści duplikatu ogłoszenia
+  - **Różne serwery = każdy publikuje osobno, u siebie** — wtedy `alsoClosed` jest `null` i przycisk drugiego gracza zostaje aktywny
 
 Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unresolved` i `cancelled` nie naliczają niczego.**
 
@@ -1364,5 +1370,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 ### CustomIDs
 
 `chal_srv` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
+
+**⚠️ Formy bezrodzajowe w komunikatach PL** — polska forma męska („przyjął", „Wygrałeś") misgenderuje każdego, kto nie jest mężczyzną. Dlatego: `podejmuje`/`odrzuca` zamiast `przyjął`/`odrzucił`, `Zwycięstwo!`/`Porażka.` zamiast `Wygrałeś!`/`Przegrałeś.`, `została zatwierdzona przez administrację` zamiast `Administrator zatwierdził`. Dokładając komunikat, nie wprowadzaj z powrotem form rodzajowych (ta sama zasada co w rzędzie „ostatnia reakcja" pod rozgłoszeniami).
 
 **⚠️ Wszystkie `chal_*` routowane są PRZED głównym `try` w `handleButtonInteraction`** — przyciski w DM nie mają `interaction.guild` ani `interaction.member`, więc nie mogą przejść przez kod zakładający kontekst serwera. Select menu `chal_*` routowane są przed sprawdzeniem `isAllowedChannel` (komenda head admina działa na dowolnym kanale).

@@ -16602,15 +16602,20 @@ class InteractionHandler {
             this.achievementService.trackChallengeAccepted(updated.opponent.guildId, updated.opponent.playerKey).catch(() => {});
         }
 
-        // Powiadomienie dla wyzywającego — w języku JEGO serwera
+        // Powiadomienie dla wyzywającego — embed w języku JEGO serwera, z avatarem przeciwnika
         const challengerMsgs = this.msgs(updated.challenger.guildId);
         const opponentName = this.challengeService.participantName(updated.opponent, challengerMsgs);
-        await this._dmUser(interaction.client, updated.challenger.userId, {
-            content: formatMessage(
+        const notifEmbed = new EmbedBuilder()
+            .setColor(accepted ? 0x57F287 : 0xED4245)
+            .setTitle(accepted ? challengerMsgs.challengeDmAcceptedTitle : challengerMsgs.challengeDmDeclinedTitle)
+            .setDescription(formatMessage(
                 accepted ? challengerMsgs.challengeDmAcceptedNotice : challengerMsgs.challengeDmDeclinedNotice,
                 { opponent: opponentName, boss: updated.boss }
-            ),
-        });
+            ))
+            .setTimestamp();
+        const notifAvatar = await this._challengeOpponentAvatar(interaction.client, [{ opponent: updated.opponent }]);
+        if (notifAvatar) notifEmbed.setThumbnail(notifAvatar);
+        await this._dmUser(interaction.client, updated.challenger.userId, { embeds: [notifEmbed] });
     }
 
     /** Bezpieczna wysyłka DM — zamknięte wiadomości prywatne nie mogą wywrócić flow */
@@ -16687,6 +16692,28 @@ class InteractionHandler {
     }
 
     /**
+     * Avatar przeciwnika do embeda „wynik zaliczony do wyzwania" — żeby od razu było
+     * widać, z kim toczy się pojedynek.
+     *
+     * Embed ma JEDEN slot na miniaturę, a wynik może zaliczyć się do kilku wyzwań na tym
+     * samym bossie naraz. Przy więcej niż jednym przeciwniku nie stawiamy żadnego avatara,
+     * zamiast arbitralnie wybierać pierwszego z brzegu. Usunięty profil też go nie dostaje —
+     * w treści widnieje wtedy „Profil usunięty", więc czyjaś twarz obok byłaby myląca.
+     * @returns {Promise<string|null>}
+     */
+    async _challengeOpponentAvatar(client, entries) {
+        const opponents = (entries || []).map(e => e.opponent).filter(o => o && !o.profileDeleted);
+        const uniqueIds = [...new Set(opponents.map(o => o.userId).filter(Boolean))];
+        if (uniqueIds.length !== 1) return null;
+        try {
+            const user = await client.users.fetch(uniqueIds[0]);
+            return user.displayAvatarURL();
+        } catch {
+            return null;
+        }
+    }
+
+    /**
      * DM o zaliczeniu wyniku — wysyłany wyłącznie wtedy, gdy nie poszło publiczne
      * ogłoszenie (brak rekordu ogólnego i brak rekordu bossa), bo wtedy gracz nie
      * zobaczyłby tej informacji nigdzie indziej.
@@ -16705,6 +16732,8 @@ class InteractionHandler {
             .setTitle((result?.notices || []).length ? msgs.challengeDmCountedTitle : msgs.challengeDmDroppedTitle)
             .setDescription(value)
             .setTimestamp();
+        const avatar = await this._challengeOpponentAvatar(client, [...(result?.notices || []), ...duplicates]);
+        if (avatar) embed.setThumbnail(avatar);
         await this._dmUser(client, userId, { embeds: [embed] });
     }
 
@@ -16729,6 +16758,9 @@ class InteractionHandler {
                         this._challengeNoticeValue(item.notices, false, msgs),
                     ].filter(Boolean).join('\n'))
                     .setTimestamp();
+                // To ten sam komunikat „wynik zaliczony", tylko dostarczony po weryfikacji admina
+                const verifiedAvatar = await this._challengeOpponentAvatar(client, item.notices);
+                if (verifiedAvatar) embed.setThumbnail(verifiedAvatar);
                 await this._dmUser(client, item.userId, { embeds: [embed] });
             }
 
@@ -16756,10 +16788,16 @@ class InteractionHandler {
     // ── Rezultat ──────────────────────────────────────────────────────────────
 
     /** Embed z rezultatem — składany w języku odbiorcy, nigdy nie przechowywany gotowy */
-    _buildChallengeResultEmbed(challenge, msgs, { viewerSide = null, thumb = null, publicView = false } = {}) {
+    _buildChallengeResultEmbed(challenge, msgs, { viewerSide = null, thumb = null, publicView = false, client = null } = {}) {
         const cs = this.challengeService;
         const nameA = cs.participantName(challenge.challenger, msgs);
         const nameB = cs.participantName(challenge.opponent, msgs);
+        // Pojedynek potrafi łączyć dwa serwery — wtedy sama para nicków nie mówi, kto skąd jest.
+        // Przy obu graczach z tego samego serwera nazwa niczego nie wnosi, więc jej nie dodajemy.
+        const crossServer = challenge.challenger.guildId !== challenge.opponent.guildId;
+        const serverOf = (side) => (crossServer && client)
+            ? ` — ${this._challengeGuildName(client, challenge[side].guildId)}`
+            : '';
         const fmt = (side) => {
             const scores = challenge[side].scores || [];
             const list = scores.length ? scores.map(s => `\`${s.score}\``).join(' · ') : msgs.challengeNoScores;
@@ -16796,8 +16834,8 @@ class InteractionHandler {
                 headline,
             ].join('\n'))
             .addFields(
-                { name: `⚔️ ${nameA}`, value: fmt('challenger'), inline: true },
-                { name: `🛡️ ${nameB}`, value: fmt('opponent'), inline: true },
+                { name: `⚔️ ${nameA}${serverOf('challenger')}`.slice(0, 256), value: fmt('challenger'), inline: true },
+                { name: `🛡️ ${nameB}${serverOf('opponent')}`.slice(0, 256), value: fmt('opponent'), inline: true },
             )
             .setTimestamp(challenge.finishedAt ? new Date(challenge.finishedAt) : new Date());
         if (thumb) embed.setThumbnail(thumb);
@@ -16818,7 +16856,7 @@ class InteractionHandler {
                     const participant = challenge[side];
                     if (participant.profileDeleted) continue;
                     const msgs = this.msgs(participant.guildId);
-                    const embed = this._buildChallengeResultEmbed(challenge, msgs, { viewerSide: side, thumb: bossImage.thumb });
+                    const embed = this._buildChallengeResultEmbed(challenge, msgs, { viewerSide: side, thumb: bossImage.thumb, client });
                     const row = new ActionRowBuilder().addComponents(
                         new ButtonBuilder()
                             .setCustomId(`chal_share_${challenge.id}_${side === 'challenger' ? 'c' : 'o'}`)
@@ -16850,6 +16888,30 @@ class InteractionHandler {
         const loser = challenge[challenge.winner === 'challenger' ? 'opponent' : 'challenger'];
         await this.achievementService.trackChallengeWon(winner.guildId, winner.playerKey).catch(() => {});
         await this.achievementService.trackChallengeLost(loser.guildId, loser.playerKey).catch(() => {});
+    }
+
+    /**
+     * Wygasza przycisk „pochwal się" w DM danego uczestnika. Używane, gdy publikacja
+     * przez jednego gracza zamyka sprawę także drugiemu (obaj z tego samego serwera).
+     */
+    async _disableChallengeShareButton(client, challenge, side) {
+        const ref = challenge.result?.dm?.[side];
+        if (!ref?.channelId || !ref?.messageId) return;
+        try {
+            const msgs = this.msgs(challenge[side].guildId);
+            const channel = await client.channels.fetch(ref.channelId);
+            const message = await channel.messages.fetch(ref.messageId);
+            await message.edit({
+                components: [new ActionRowBuilder().addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`chal_done_${challenge.id}`)
+                        .setEmoji('📢')
+                        .setLabel(msgs.challengeBtnShared)
+                        .setStyle(ButtonStyle.Secondary)
+                        .setDisabled(true)
+                )],
+            });
+        } catch { /* DM mógł zostać skasowany albo zamknięty */ }
     }
 
     /**
@@ -16903,10 +16965,17 @@ class InteractionHandler {
             // Embed w języku SERWERA docelowego, nie odbiorcy DM
             const guildMsgs = this.msgs(guildId);
             const bossImage = await this._challengeBossImage(challenge.boss);
-            const embed = this._buildChallengeResultEmbed(challenge, guildMsgs, { thumb: bossImage.thumb, publicView: true });
+            const embed = this._buildChallengeResultEmbed(challenge, guildMsgs, {
+                thumb: bossImage.thumb, publicView: true, client: interaction.client,
+            });
             await channel.send({ embeds: [embed], files: this._challengeBossFiles(bossImage) });
             await interaction.reply({ content: formatMessage(msgs.challengeSharedOk, { guild: guildName }), flags: ['Ephemeral'] });
             await disableButton(msgs.challengeBtnShared, ButtonStyle.Secondary);
+            // Drugi gracz z TEGO SAMEGO serwera nie ma już czego publikować — gasimy mu przycisk
+            // od razu, zamiast zostawiać aktywny do kliknięcia zakończonego błędem
+            if (marked.alsoClosed) {
+                await this._disableChallengeShareButton(interaction.client, challenge, marked.alsoClosed);
+            }
         } catch (err) {
             logger.warn(`⚠️ Nie udało się opublikować wyniku wyzwania ${challengeId}: ${err.message}`);
             await interaction.reply({ content: formatMessage(msgs.challengeShareFailed, { guild: guildName }), flags: ['Ephemeral'] }).catch(() => {});
@@ -16942,7 +17011,7 @@ class InteractionHandler {
                 if (participant.profileDeleted) continue;
                 const msgs = this.msgs(participant.guildId);
                 const other = challenge[side === 'challenger' ? 'opponent' : 'challenger'];
-                const embed = this._buildChallengeResultEmbed(challenge, msgs, { thumb: bossImage.thumb })
+                const embed = this._buildChallengeResultEmbed(challenge, msgs, { thumb: bossImage.thumb, client })
                     .setTitle(msgs.challengeDmUnresolvedTitle)
                     .setColor(0x95A5A6);
                 embed.setDescription([

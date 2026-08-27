@@ -451,12 +451,21 @@ class ChallengeService {
             const guildId = ch[side]?.guildId;
             ch.result.shared[side] = true;
             if (ch.result.sharedGuildIds.includes(guildId)) {
-                // Obaj gracze z tego samego serwera — drugie kliknięcie nie duplikuje ogłoszenia
+                // Wyścig dwóch kliknięć z tego samego serwera — ogłoszenie już poszło
                 outcome = { ok: false, reason: 'guild_shared', guildId };
                 return;
             }
             ch.result.sharedGuildIds.push(guildId);
-            outcome = { ok: true, guildId };
+
+            // Gracze z TEGO SAMEGO serwera dzielą jedno ogłoszenie, więc publikacja przez
+            // jednego zamyka sprawę także drugiemu — jego przycisk gaśnie od razu, zamiast
+            // czekać na kliknięcie zakończone komunikatem „już opublikowano".
+            // Przy RÓŻNYCH serwerach każdy publikuje osobno, u siebie — drugiego nie ruszamy.
+            const other = side === 'challenger' ? 'opponent' : 'challenger';
+            const alsoClosed = (ch[other]?.guildId === guildId && !ch.result.shared[other]) ? other : null;
+            if (alsoClosed) ch.result.shared[alsoClosed] = true;
+
+            outcome = { ok: true, guildId, alsoClosed };
         });
         return outcome;
     }
