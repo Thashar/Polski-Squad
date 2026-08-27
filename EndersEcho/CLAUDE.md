@@ -339,7 +339,10 @@
    - **AI OCR on/off (head admin):** modal wyszukiwania nazwy serwera → jeśli 1 wynik: bezpośrednio toggle, jeśli wiele: lista → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
    - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
-   - **Zbanuj serwer (head admin):** modal wyszukiwania nazwy → lista → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
+   - **Zbanuj serwer (head admin):** **lista wszystkich serwerów bota** (25/stronę, przyciski zakresów liter `panel_ban_page_` + `◀️/▶️`) → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
+     - **⚠️ Wcześniej był tu modal z wyszukiwarką po fragmencie nazwy** — trzeba było znać nazwę, a wyniki i tak lądowały w `slice(0, 25)`. Lista pokazuje komplet i przewija się alfabetycznie tą samą normalizacją co `/challenge` (`_buildRangeButtons`, `_compareSortNames`)
+     - Źródłem jest `client.guilds.cache`, **nie** `config.getAllGuilds()` — zbanować da się także serwer, którego nikt nie skonfigurował (a zwykle właśnie takie się banuje). Serwery już zbanowane są odfiltrowane
+   - **Pokaż serwery (head admin, `panel_guild_list`):** lista **wszystkich** serwerów bota — 10/stronę (`◀️/▶️`), nazwa + ID + liczba członków, znacznik `⚙️` skonfigurowany / `⚪` nieskonfigurowany, w nagłówku sumy. Też z `client.guilds.cache`, bo `config.getAllGuilds()` zna wyłącznie serwery z zapisaną konfiguracją i nie odpowiada na pytanie „gdzie właściwie siedzi bot".
    - **Usuń dane serwera (head admin):** lista skonfigurowanych serwerów, na których bota już nie ma (`configured=true` ale `!guilds.cache.has(guildId)`) → potwierdzenie → usuwa `data/guilds/{guildId}/` + wpis z `guild_configs.json`. Operacja nieodwracalna.
    - **Automatyczna retencja konfiguracji (30 dni)** — `guildDataRetentionService.js`: `guildDelete` zapisuje serwer do `data/pending_guild_deletions.json` (z nazwą, językiem i timestampem); sweep przy starcie + co 12 h usuwa po 30 dniach **WYŁĄCZNIE konfigurację serwera**: wpis w `guild_configs.json` + `data/guilds/{guildId}/role_rankings.json`. **Dane graczy zostają** (`ranking.json`, `wyniki/`, `achievements.json`, rekordy bossów) — należą do użytkowników i tylko oni decydują o ich usunięciu (autonomia; zasilają też profil/wykresy cross-server). **`data/token_usage.json` również nietykane** — statystyki tokenów AI do celów rozliczeniowych/statystycznych (sekcja 7 polityki prywatności). `guildCreate` anuluje oczekujące usunięcie (bot wrócił); sweep też anuluje wpisy serwerów obecnych w cache (osierocone przy downtime). Po faktycznym usunięciu — powiadomienie na kanał logów serwerowych (`sendAdminNotification`, ping do head admina) z listą co usunięto/zachowano, w języku zapamiętanym przy `guildDelete`. Błąd usuwania nie kasuje wpisu — retry przy kolejnym przebiegu. UWAGA: zakres CELOWO węższy niż panelowy przycisk „Usuń dane serwera" (który kasuje cały `data/guilds/{guildId}/`). Zgodne z deklaracją w polityce prywatności (endersecho.thashar.dev/privacy).
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
@@ -365,7 +368,7 @@
   - Rząd 1: `🔁 Przetwórz role`, `◀️ Wróć`
 - **Sub-panel "Zarządzaj serwerem" (Head Admin):**
   - Rząd 1: `🔄 AI OCR`, `⚙️ Ustaw limity`, `🧪 Testerzy`, `📅 Interwał TOP10`, `🔁 Przetwórz role`
-  - Rząd 2: `🎯 Konfiguracja bossów`, `🚫 Zbanuj serwer`, `🗑️ Usuń dane serwera`, `◀️ Wróć`
+  - Rząd 2: `🎯 Konfiguracja bossów`, `📋 Pokaż serwery`, `🚫 Zbanuj serwer`, `🗑️ Usuń dane serwera`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Admin):**
   - Rząd 1: `📊 Zużycie tokenów`, `🔢 Użycia komend`, `◀️ Wróć`
 - **Sub-panel "Statystyki" (Head Admin):**
@@ -481,9 +484,10 @@
 | `panel_player_growth` | Statystyki przyrostu unikalnych graczy globalnie + wykres (head admin, ephemeral) |
 | `panel_cmd_usage` | Użycia komend — admin widzi swój serwer, head admin globalnie; dane w `data/command_usage.json` |
 | `panel_ban_server` | Panel zbanowania serwera (head admin) |
-| `panel_ban_guild` | Otwórz modal wyszukiwania serwera do bana |
-| `panel_ban_guild_modal` | Modal wyszukiwania (pole `ban_guild_query`) |
-| `panel_ban_guild_sel` | StringSelectMenu — wybór serwera z wyników |
+| `panel_ban_guild` | Lista serwerów do zbanowania (25/stronę) |
+| `panel_ban_page_{offset}` | Strona listy serwerów do zbanowania (zakresy liter + `◀️/▶️`) |
+| `panel_guild_list` / `panel_guild_list_{page}` | Lista wszystkich serwerów bota (10/stronę) |
+| `panel_ban_guild_sel` | StringSelectMenu — wybór serwera z listy |
 | `panel_ban_guild_ok_{guildId}` | Potwierdź ban serwera |
 | `panel_unban_guild` | Lista zbanowanych serwerów |
 | `panel_unban_guild_sel` | StringSelectMenu — wybór serwera do odbanowania |
@@ -1150,7 +1154,7 @@ ENDERSECHO_WEB_SYNC_TOP=10
 |---|---|---|---|---|
 | 1 | 📡 Przegląd Systemu | `0xFF6B35` | Uptime, ping, RAM, liczba serwerów, AI OCR (aktywnych/zablokowanych), następny Global TOP10, **🏆 Ostatnie rekordy** (feed 5, persystowany), **📜 Ostatnie akcje admina** (dziennik 10 wpisów — tyle samo w embedzie i w pliku) | `🔄 cc_refresh`, `📢 cc_top10_preview`, `📢 panel_info` |
 | 2 | 👥 Użytkownicy | `0x57F287` | Łącznie graczy, aktywne cooldowny, oczekujące CV, **👑 Lider globalny**, **🕐 Ostatni rekord** (relative timestamp), **🏆 TOP10 pobijających rekordy** (liczba wpisów historii wyników per gracz, cross-server — `getActivePlayersStats().topRecordSetters`), **👥 Dodatkowe profile** (ilu graczy ma kilka kont i po ile — `profileRegistryService.getUsersWithAltProfiles()`, max 10 + "i N więcej", `⏳ N` przy profilach czekających na usunięcie), lista zablokowanych (max 3 + "i N więcej") | Rząd 1: `🔒 panel_block`, `🔓 cc_action_unblock`, `🗑️ panel_remove`, `🧹 panel_remove_score`, `🏆 panel_ach_del` · Rząd 2: `🔍 cc_player_lookup`, `🧊 cc_clear_cooldown`, `🗳️ cc_pending_cv` |
-| 3 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku; **paginacja 25 serwerów/stronę** (`_serversPage` w RAM, footer `Strona X/Y`); sekcje nieskonfigurowane/brak bota (max 10 + licznik) | Rząd 1 (paginacja): `◀️ cc_srv_pg_prev`, `cc_srv_pg_info` (disabled, wskaźnik strony), `▶️ cc_srv_pg_next` · Rząd 2: `🔄 panel_ocr`, `🔁 cc_action_roles`, `🚫 panel_ban_guild`, `🗑️ panel_delete_server_data` · Rząd 3: `⚠️ cc_unconfigured`, `🔍 cc_diag_server` |
+| 3 | 🖥️ Serwery | `0xEB459E` | Per serwer: OCR on/off, liczba graczy, język, tag + globalny limit/cooldown w nagłówku; **paginacja 25 serwerów/stronę** (`_serversPage` w RAM, footer `Strona X/Y`); sekcje nieskonfigurowane/brak bota (max 10 + licznik) | Rząd 1 (paginacja): `◀️ cc_srv_pg_prev`, `cc_srv_pg_info` (disabled, wskaźnik strony), `▶️ cc_srv_pg_next` · Rząd 2: `🔄 panel_ocr`, `🔁 cc_action_roles`, `📋 panel_guild_list`, `🚫 panel_ban_guild`, `🗑️ panel_delete_server_data` · Rząd 3: `⚠️ cc_unconfigured`, `🔍 cc_diag_server` |
 | 4 | 👾 Bossowie | `0x1ABC9C` | Bossy w bazie, z rekordami, boss okresu, **🎯 Najczęstszy boss rekordów** (z aktualnych rekordów globalnego rankingu), **nieznane nazwy do zmapowania** (`bossRecordService.getUnknownBossNames()`, lista `• \`nazwa\`` max 5 + licznik), **bossy bez zdjęcia** (ten sam format, ale PEŁNA lista bez ucinania — chroni tylko twardy limit 1024 znaków przez `capField()`) | `👾 cc_action_boss_cfg` (pełny panel konfiguracji bossów jako ephemeral) |
 | 5 | 📊 Statystyki | `0x5865F2` | Analizy łącznie/od resetu, Success Rate z paskami `[████░░]`, **Wzorzec OK za 2. razem**, odrzucone, interwencje admina, **🌩️ Zdrowie API** (globalne, nieresetowalne: odrzucone/wszystkie zapytania + %, pełne odrzuty po 10 retry), top odrzucani, aktywni/nowi gracze, przyrost miesięczny, **🔢 Użycia komend** (top 10 + suma, dawny przycisk scalony do embeda) | `📈 panel_player_growth` (przyciski Success Rate i Użycia komend usunięte — dane w embedzie; szczegóły/reset liczników nadal w `/manage → Statystyki`) |
 | 6 | 💰 Koszty & Limity | `0xFEE75C` | Dziś (requesty, tokeny IN/OUT, koszt), miesiąc + projekcja, **⚙️ Limity i alert** (limit dzienny, cooldown, próg alertu), top 3 serwery, top 5 użytkowników | `📊 cc_action_tokens`, `⚙️ panel_limit`, `🔔 cc_cost_alert` (modal progu USD/dzień) |
@@ -1260,7 +1264,7 @@ Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKe
 - diakrytyki sprowadzane do liter bazowych (`Ą→A`, `Ż→Z`, `Ł→L`)
 - **`ł`/`Ł` NIE rozkłada się w NFD** (osobny punkt kodowy z kreską, nie litera ze znakiem łączącym) — dlatego jest mapa dla niego i garści podobnych liter z innych alfabetów (`ø đ ð þ æ œ ß ı`), których sam NFD też nie rozbije
 - kolejność: litery → cyfry → `#` (nazwy złożone wyłącznie ze znaków ozdobnych) na końcu
-- **przyciski zakresów buduje `_buildChallengeRangeButtons(items, activeOffset, prefix)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
+- **przyciski zakresów buduje `_buildRangeButtons(items, activeOffset, prefix, maxRows)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
 - ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
 
 **⚠️ Jednocześnie można prowadzić TYLKO JEDNO wyzwanie** (`MAX_ACTIVE_PER_PLAYER = 1`). Slot zajmuje wyzwanie w toku (obojętnie po której stronie) **oraz WYSŁANE zaproszenie** czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz z dwoma zaproszeniami od różnych osób nie mógłby przyjąć żadnego, bo samo ich posiadanie wypełniałoby limit. Sprawdzane w dwóch miejscach: przy `chal_ok` (rzucający → `challengeErrLimit`, przeciwnik → `challengeErrOpponentBusy`) i przy `chal_acc_{id}` (przyjmujący → `challengeErrAcceptLimit`). **Zajętość przeciwnika sprawdzana PRZED wysłaniem DM** — bez tego dostawałby zaproszenie, którego i tak nie mógłby przyjąć, a rzucający czekałby do jego wygaśnięcia.
