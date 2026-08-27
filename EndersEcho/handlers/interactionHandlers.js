@@ -4220,10 +4220,13 @@ class InteractionHandler {
                 ? await this.scoreHistoryService.removeEntryByTimestamp(targetGuildId, targetPlayerKey, tsMs)
                 : null;
 
-            // ⚔️ Wyzwania — ten sam wynik przestaje liczyć się w wyzwaniach w toku
+            // ⚔️ Wyzwania — wynik przestaje liczyć się w wyzwaniach w toku, a wyzwanie, które
+            // ten wynik zamknął, wraca do gry (rezultat traci podstawę)
             if (removed && this.challengeService) {
-                await this.challengeService.removeScore(targetPlayerKey, removed.timestamp)
-                    .catch(e => logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`));
+                const chalRevert = await this.challengeService.removeScore(targetPlayerKey, removed.timestamp)
+                    .catch(e => { logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`); return null; });
+                await this._undoChallengeResolution(interaction.client, chalRevert?.reopened)
+                    .catch(e => logger.warn(`⚠️ Błąd cofania rozstrzygnięcia wyzwania: ${e.message}`));
             }
 
             if (!removed) {
@@ -9791,12 +9794,15 @@ class InteractionHandler {
                 session.guildId, (session.playerKey || session.userId), session.newRecord.timestamp
             ).catch(e => { logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`); return 0; });
         }
-        // ⚔️ Wyzwania — wynik wypisany z wyzwań BĘDĄCYCH W TOKU. Wyzwania rozstrzygnięte
-        // zostają nietknięte: rezultat już padł i obie strony dostały powiadomienie.
+        // ⚔️ Wyzwania — ta ścieżka tnie historię OD cofniętego rekordu w górę
+        // (`removeEntriesAfter` kasuje A + B + C), więc z wyzwań wypisujemy tak samo:
+        // `andAfter`. Wyzwanie zamknięte którymkolwiek z tych wyników wraca do gry.
         if (this.challengeService && session.newRecord?.timestamp) {
-            await this.challengeService.removeScore(
-                (session.playerKey || session.userId), session.newRecord.timestamp
-            ).catch(e => logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`));
+            const chalRevert = await this.challengeService.removeScore(
+                (session.playerKey || session.userId), session.newRecord.timestamp, { andAfter: true }
+            ).catch(e => { logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`); return null; });
+            await this._undoChallengeResolution(opts.client, chalRevert?.reopened)
+                .catch(e => logger.warn(`⚠️ Błąd cofania rozstrzygnięcia wyzwania: ${e.message}`));
         }
         // Cofnij tylko osiągnięcia score/records zdobyte od momentu zgłoszonego rekordu — wcześniejsze zostają
         try {
@@ -17043,7 +17049,9 @@ class InteractionHandler {
      */
     _appendChallengeEmbed(embeds, files, icon) {
         if (!icon) return;
-        embeds.push(icon.embed);
+        // PRZEDOSTATNI, nie ostatni — ostatni embed stosu (informacje systemowe / powód braku
+        // rekordu) niesie zrzut ekranu i domyka ogłoszenie, więc wyzwanie wchodzi tuż przed nim
+        embeds.splice(Math.max(0, embeds.length - 1), 0, icon.embed);
         this._pushUniqueFiles(files, this._challengeIconFiles(icon));
         this.rankingService._enforceEmbedCharLimit(embeds);
     }
@@ -17238,6 +17246,65 @@ class InteractionHandler {
         }
     }
 
+    /**
+     * Sprząta po ponownym otwarciu wyzwania zamkniętego cofniętym wynikiem.
+     *
+     * Rozstrzygnięcie zostawia po sobie trzy ślady: DM z rezultatem u obu graczy,
+     * ewentualne ogłoszenie opublikowane przyciskiem „pochwal się" i naliczoną
+     * wygraną/przegraną w osiągnięciach. Wszystkie trzy trzeba zdjąć — inaczej gracze
+     * oglądaliby werdykt pojedynku, który znowu trwa, a ponowne rozstrzygnięcie
+     * naliczyłoby osiągnięcia drugi raz.
+     *
+     * ⚠️ Nowego powiadomienia o cofnięciu NIE wysyłamy — komunikat „wynik cofnięty"
+     * przychodzi osobno, ze ścieżki cofania rekordu.
+     */
+    async _undoChallengeResolution(client, reopened) {
+        if (!client || !Array.isArray(reopened) || reopened.length === 0) return;
+
+        for (const wpis of reopened) {
+            const { challenge, dm, announcements, winnerSide, loserSide } = wpis;
+            try {
+                // 1. DM z rezultatem u obu graczy
+                for (const side of ['challenger', 'opponent']) {
+                    const ref = dm?.[side];
+                    if (!ref?.channelId || !ref?.messageId) continue;
+                    try {
+                        const channel = await client.channels.fetch(ref.channelId);
+                        await channel.messages.delete(ref.messageId);
+                    } catch { /* DM skasowany albo zamknięty — nic do zrobienia */ }
+                }
+
+                // 2. Ogłoszenia opublikowane przyciskiem „pochwal się"
+                for (const ogl of announcements || []) {
+                    if (!ogl?.channelId || !ogl?.messageId) continue;
+                    try {
+                        const channel = client.channels.cache.get(ogl.channelId)
+                            || await client.channels.fetch(ogl.channelId);
+                        await channel.messages.delete(ogl.messageId);
+                    } catch { /* wiadomość mógł już skasować moderator */ }
+                }
+
+                // 3. Naliczone osiągnięcia — tylko przy rozstrzygnięciu ze zwycięzcą
+                if (this.achievementService && winnerSide && loserSide) {
+                    const winner = challenge[winnerSide];
+                    const loser = challenge[loserSide];
+                    await this.achievementService
+                        .revertChallengeOutcome(winner.guildId, winner.playerKey, 'challengesWon').catch(() => {});
+                    await this.achievementService
+                        .revertChallengeOutcome(loser.guildId, loser.playerKey, 'challengesLost').catch(() => {});
+                }
+
+                this.logService._gl(challenge.challenger.guildId).info(
+                    `⚔️ Wyzwanie otwarte ponownie po cofnięciu wyniku: "${challenge.challenger.username}" vs "${challenge.opponent.username}" (${challenge.boss})`
+                );
+            } catch (err) {
+                logger.warn(`⚠️ Błąd cofania rozstrzygnięcia wyzwania ${wpis?.challenge?.id}: ${err.message}`);
+            }
+        }
+
+        this.adminPanelService?.refresh();
+    }
+
     /** Osiągnięcia za wygraną/przegraną — remis i nierozstrzygnięcie nie liczą się */
     async _applyChallengeAchievements(challenge) {
         if (!this.achievementService || challenge.status !== 'finished' || !challenge.winner) return;
@@ -17325,7 +17392,9 @@ class InteractionHandler {
             const embed = this._buildChallengeResultEmbed(challenge, guildMsgs, {
                 thumb: bossImage.thumb, publicView: true, client: interaction.client,
             });
-            await channel.send({ embeds: [embed], files: this._challengeBossFiles(bossImage) });
+            const announcement = await channel.send({ embeds: [embed], files: this._challengeBossFiles(bossImage) });
+            // Zapamiętujemy adres ogłoszenia — cofnięcie wyniku musi umieć je skasować
+            await this.challengeService.attachSharedMessage(challengeId, guildId, channel.id, announcement.id).catch(() => {});
             await interaction.reply({ content: formatMessage(msgs.challengeSharedOk, { guild: guildName }), flags: ['Ephemeral'] });
             await disableButton(msgs.challengeBtnShared, ButtonStyle.Secondary);
             // Drugi gracz z TEGO SAMEGO serwera nie ma już czego publikować — gasimy mu przycisk
@@ -17762,10 +17831,13 @@ class InteractionHandler {
                         boss: challenge.boss,
                     }),
                 ].join('\n'));
-                await this._dmUser(client, participant.userId, {
+                const dm = await this._dmUser(client, participant.userId, {
                     embeds: [embed],
                     files: this._challengeBossFiles(bossImage),
                 });
+                // Zapamiętujemy adres także tutaj — cofnięcie wyniku otwiera wyzwanie zamknięte
+                // z braku czasu tak samo jak rozstrzygnięte, więc i ten DM trzeba umieć skasować
+                if (dm) await this.challengeService.attachResultDm(challenge.id, side, dm.channelId, dm.id);
             }
         }
 

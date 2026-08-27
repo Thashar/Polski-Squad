@@ -546,7 +546,7 @@ const pol = {
     challengeDmInviteExpiredNotice: '⏳ Brak odpowiedzi od **{opponent}** na Twoje wyzwanie na bossie **{boss}** w ciągu 48 godzin — zaproszenie wygasło.',
 
     // ⚔️ Wyzwania — zaliczanie wyników
-    challengeNoticeField: '⚔️ Wyzwanie',
+    challengeNoticeField: 'Wyzwanie',
     challengeNoticeCounted: 'Wynik zaliczony do wyzwania z **{opponent}**\nBoss **{boss}** — **{count}/{total}**.\n\nTwoja suma: **{sum}**.',
     challengeNoticePending: 'Nazwa bossa nie została rozpoznana, więc wynik **czeka na zatwierdzenie przez administratora**. Po weryfikacji zostanie doliczony do Twojego wyzwania.',
     challengeNoticeDuplicate: 'Wynik **{score}** jest już zaliczony do wyzwania z **{opponent}** (boss **{boss}**) — ten sam rezultat nie liczy się drugi raz. Nadal masz **{count}/{total}**.',
@@ -1145,7 +1145,7 @@ const eng = {
     challengeDmInviteExpiredNotice: '⏳ **{opponent}** did not respond to your challenge on boss **{boss}** within 48 hours — the invitation expired.',
 
     // ⚔️ Challenges — score qualification
-    challengeNoticeField: '⚔️ Challenge',
+    challengeNoticeField: 'Challenge',
     challengeNoticeCounted: 'Score counted towards your challenge with **{opponent}**\nBoss **{boss}** — **{count}/{total}**.\n\nYour total: **{sum}**.',
     challengeNoticePending: 'The boss name was not recognised, so the score is **awaiting administrator approval**. Once verified, it will be counted towards your challenge.',
     challengeNoticeDuplicate: 'Score **{score}** is already counted towards your challenge with **{opponent}** (boss **{boss}**) — the same result does not count twice. You still have **{count}/{total}**.',

@@ -221,7 +221,7 @@
        - **Opis nadpisany** (`specialDescription`, pierwsze dopasowanie wygrywa): `manualVerificationNote` (panel „Analizuj") > `crossServerScoreRemovedNote` (nowy wynik ściśle lepszy niż na innym serwerze — treść = `systemInfoAllGood` + notka `crossServerScoreRemovedNotice` z nazwą starego i nowego serwera) > `crossServerMigratedNote` (dokładne wyrównanie wyniku z innego serwera — notka `crossServerMigratedNotice`, BEZ prefiksu `systemInfoAllGood`)
        - **Pola dodatkowe** (`systemNotices`, mogą wystąpić RAZEM z opisem nadpisanym): `unknownBossRankingField`/`unknownBossRankingNotice` (nowy nierozpoznany boss), `crossServerBossKeptField`/`crossServerBossKeptValue` (rekord bossa pobity mimo duplikatu globalnego — rekord globalny zostaje na poprzednim serwerze)
        - **Ikona** (author iconURL + thumbnail, 3 stany): `manualVerificationNote` obecna → `.../emojis/1297532628395622440.webp` (zweryfikowano manualnie); jakiekolwiek inne uwagi/komunikaty → `.../emojis/1522939660278435993.webp` (nowa, statyczna); brak uwag → `.../emojis/1297531523477540894.webp` (domyślna, animowana)
-     - **Embed 5 (opcjonalny) — ⚔️ Wyzwanie:** dokładany POZA `createRecordEmbeds`, przez `_appendChallengeEmbed(embeds, files, icon)` w `interactionHandlers.js`. Pojawia się tylko wtedy, gdy wynik ruszył jakieś wyzwanie. Author (lewy górny róg) = **zdjęcie bossa**, thumbnail = **generowany pierścień postępu** `1/3` / `2/3` / `3/3` (`challenge_progress.png`), opis = ten sam tekst co dawniej w polu `⚔️ Wyzwanie`. Kolor: pomarańczowy w trakcie, zielony przy komplecie, żółty gdy wynik czeka na zatwierdzenie bossa. Szczegóły w sekcji „System Wyzwań 1 vs 1"
+     - **Embed wyzwania (opcjonalny) — PRZEDOSTATNI w stosie:** dokładany POZA `createRecordEmbeds`, przez `_appendChallengeEmbed(embeds, files, icon)` w `interactionHandlers.js`. Pojawia się tylko wtedy, gdy wynik ruszył jakieś wyzwanie. **Wchodzi PRZED ostatni embed stosu** (`splice(length - 1, 0, …)`), czyli tuż przed „Informacjami systemowymi" — tamten domyka ogłoszenie zrzutem ekranu i ma zostać na końcu. Author (lewy górny róg) = **zdjęcie bossa**, nazwa autora = `challengeNoticeField` — **samo `Wyzwanie` / `Challenge`, BEZ ikony mieczy** (miecze stały wcześniej w tekście, mając tuż obok obrazek bossa; ikona i emoji w tym samym miejscu dublowały się). Thumbnail = **generowany pierścień postępu** `1/3` / `2/3` / `3/3` (`challenge_progress.png`), opis = informacja o zaliczeniu wyniku. Kolor: pomarańczowy w trakcie, zielony przy komplecie, żółty gdy wynik czeka na zatwierdzenie bossa. Szczegóły w sekcji „System Wyzwań 1 vs 1"
      - **Załączniki** (`files`): `[screenshot, score_history.png?, bossImage?, challenge_progress.png?]`
      - **Guard 6000 znaków** (`_enforceEmbedCharLimit`) — przycina opisy/pola od końca, by zmieścić się w limicie wiadomości
      - **Ścieżka tylko-rekord-bossa** (globalny ranking niezmieniony): stos bez Embedu 2 (1 + 3 + 4)
@@ -720,7 +720,7 @@
   - Duplikat cross-server bez poprawy — `reasonLabel: resultDetailsField`, `reasonText` = boss + `resultNotBeatenCrossServer`
   - Boss nierozpoznany zaakceptowany bez poprawy (żółty, `color1: 0xFEE75C`) — `reasonLabel: resultDetailsField`, `reasonText` = boss + wynik + `unknownBossAccepted`
   - Panel Analizuj — nieudana analiza AI — `reasonLabel: analyzeFailReasonField`, `reasonText` = `aiResult.error`, `color2: 0xFF0000`
-- **Embed 3 (opcjonalny) — ⚔️ Wyzwanie:** gdy wynik został zaliczony do wyzwania, `_appendChallengeEmbed` dokłada embed ze **zdjęciem bossa** w miejscu ikony URL (author) i **pierścieniem postępu** (`1/3`, `2/3`, `3/3`) jako miniaturą. Patrz sekcja „System Wyzwań 1 vs 1"
+- **Embed wyzwania (opcjonalny) — PRZEDOSTATNI:** gdy wynik został zaliczony do wyzwania, `_appendChallengeEmbed` wstawia embed ze **zdjęciem bossa** w miejscu ikony URL (author) i **pierścieniem postępu** (`1/3`, `2/3`, `3/3`) jako miniaturą — **przed** embedem z powodem i zrzutem ekranu, nie za nim. Patrz sekcja „System Wyzwań 1 vs 1"
 - **Nie dotyczy:** stosu 4 embedów nowego rekordu (`createRecordEmbeds`) ani turkusowego ogłoszenia „pobito rekord bossa bez globalnego" — to prawdziwe ogłoszenia rekordu, używają pełnego stosu jak dotychczas. Raport na kanale odrzuconych screenów dla admina (`_sendInvalidScreenReport`) też ma inny, niezmieniony layout (author = tag/ikona serwera, nie status).
 
 **System blokowania per-użytkownik** — `userBlockService.js` + `data/user_blocks.json`:
@@ -1327,8 +1327,11 @@ Wpięcie w `_runUpdateFlow` **tuż po ustaleniu `bestScore`/`bossName`/`userName
 
 **Gdzie widać informację — OSOBNY EMBED z ikoną postępu:**
 
-`_buildChallengeEmbed(result, msgs)` składa embed z opisu `_challengeNoticeValue(notices, pending, msgs, duplicates)` (zaliczone wyniki i odrzucone powtórki w jednej treści), a `_appendChallengeEmbed(embeds, files, icon)` dokłada go **na koniec KAŻDEJ ścieżki odpowiedzi** `_runUpdateFlow`: nowy rekord, „tylko rekord bossa", duplikat cross-server, „brak rekordu" i nierozpoznany boss bez poprawy. Gdy wynik nie ruszył żadnego wyzwania, embed w ogóle nie powstaje (`null`) — tak samo w `/test` (dryRun).
+`_buildChallengeEmbed(result, msgs)` składa embed z opisu `_challengeNoticeValue(notices, pending, msgs, duplicates)` (zaliczone wyniki i odrzucone powtórki w jednej treści), a `_appendChallengeEmbed(embeds, files, icon)` wstawia go jako **PRZEDOSTATNI embed KAŻDEJ ścieżki odpowiedzi** `_runUpdateFlow`: nowy rekord, „tylko rekord bossa", duplikat cross-server, „brak rekordu" i nierozpoznany boss bez poprawy. Gdy wynik nie ruszył żadnego wyzwania, embed w ogóle nie powstaje (`null`) — tak samo w `/test` (dryRun).
 
+⚠️ **Wstawiany przez `splice(length - 1, 0, …)`, nie `push`.** Ostatni embed każdego stosu (Informacje systemowe przy rekordzie, powód przy „brak rekordu") niesie zrzut ekranu i domyka ogłoszenie — wyzwanie idzie tuż przed nim. Przy stosie jednoelementowym `Math.max(0, …)` sprowadza to do wstawienia na początek.
+
+- **Nazwa autora BEZ ikony mieczy** — `challengeNoticeField` to samo `Wyzwanie` / `Challenge`. Emoji ⚔️ stało w tekście dokładnie tam, gdzie obok wyświetla się obrazek bossa, więc dublowało ikonę
 - **Dwie ikony, dwa różne pytania:** `author.iconURL` (lewy górny róg) = **zdjęcie bossa** (`_challengeBossImage` → `data/boss_images/`), `thumbnail` (prawy górny róg) = **generowany pierścień postępu** (`generateChallengeProgressIcon(count, total)` w `positionIconService.js`) — `1/3`, `2/3`, `3/3`, a dla wyniku czekającego na zatwierdzenie bossa `?`. Pełny okrąg rysowany jest elementem `<circle>`, nie łukiem — łuk o kącie 360° degeneruje się do punktu
 - **Gdy bossa nie ma w bazie zdjęć**, `author` bierze pierścień — pusty lewy róg wyglądałby na błąd. Wszystkie wpisy dotyczą tego samego bossa (wynik ma jedną nazwę), więc nazwa brana jest z pierwszego
 - ⚠️ **Załączniki doklejane z pominięciem duplikatów nazwy** (`_pushUniqueFiles`) — Embed 3 stosu ogłoszenia (ranking bossa) używa **dokładnie tego samego pliku**, a dwa załączniki o tej samej nazwie w jednej wiadomości to nieprzewidywalne rozwiązanie `attachment://`. `setAuthor` i tak wskazuje po nazwie, więc wystarczy jeden
@@ -1370,6 +1373,7 @@ Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, ró
   - publikuje ten sam embed na kanale bota (`allowedChannelId`) serwera **tego** gracza, zbudowany **w języku serwera docelowego**, nie odbiorcy DM
   - potem przycisk zmienia się w **nieaktywny** `✅ Pochwalono się`
   - stan `result.shared.{challenger|opponent}` siedzi w pliku, więc przycisk działa raz **także po restarcie bota**
+  - **adres opublikowanej wiadomości ląduje w `result.announcements[]`** (`attachSharedMessage`) — cofnięcie wyniku kasuje po niej ogłoszenie
   - **⚠️ Ten sam serwer = JEDNO ogłoszenie, oba przyciski gasną naraz.** Gdy obaj gracze siedzą na tym samym serwerze, publikacja przez jednego zamyka sprawę także drugiemu: `markShared` zwraca `alsoClosed` z drugą stroną, a handler od razu wygasza jej przycisk w DM (`_disableChallengeShareButton`). Wcześniej przycisk zostawał aktywny i dopiero kliknięcie kończyło się komunikatem „już opublikowano". Kliknięcie mimo wszystko (wyścig dwóch kliknięć) nadal jest bezpieczne — `sharedGuildIds` nie dopuści duplikatu ogłoszenia
   - **Różne serwery = każdy publikuje osobno, u siebie** — wtedy `alsoClosed` jest `null` i przycisk drugiego gracza zostaje aktywny
 
@@ -1390,7 +1394,20 @@ Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unre
 - **`renamePlayerKey(from, to)` dopisany do `_migratePlayerKey`** — plik jest kluczowany `playerKey`, a numery slotów zjeżdżają po usunięciu profilu (2→1, 3→2). Bez tego dane osierocieją
 - **`_cancelChallengesForProfile(client, playerKey)` wołane z `_purgeProfileData`:** wyzwania `pending`/`active` → `cancelled` z DM do przeciwnika; wpisy **rozstrzygnięte ZOSTAJĄ** (to również historia przeciwnika), a uczestnik dostaje flagę `profileDeleted: true`
 - **⚠️ W pliku trzymamy FLAGĘ, nie napis „Profil usunięty".** Etykietę składa `participantName(participant, msgs)` w języku odbiorcy (`challengeDeletedProfile` → PL `🗑️ Profil usunięty`, EN `🗑️ Deleted profile`). Zapisanie polskiego stringa do pliku złamałoby dwujęzyczność na serwerach `eng`
-- **Cofnięcie wyniku** (`_cvRemoveRecord` — przycisk gracza/admina, CV, panel „Analizuj"; oraz panel `🧹 Usuń wynik`) → `removeScore(playerKey, timestamp)` wypisuje wynik z wyzwań **BĘDĄCYCH W TOKU**. Wyzwania rozstrzygnięte zostają nietknięte: rezultat już padł i obie strony dostały powiadomienie
+### Cofnięcie wyniku otwiera wyzwanie z powrotem
+
+`removeScore(playerKey, timestamp, { andAfter })` → `{ removed, reopened }`. Wołane z dwóch miejsc: `_cvRemoveRecord` (przycisk cofnięcia gracza/admina, CV, panel „Analizuj" — z `andAfter: true`, bo tamta ścieżka tnie historię OD cofniętego rekordu w górę) oraz panelu `🧹 Usuń wynik` (pojedynczy wpis, bez `andAfter`).
+
+- **Wynik wypisywany jest z wyzwań o statusie `active`, `finished` i `unresolved`** (`REVERTABLE_STATUSES`). Wyzwanie zamknięte KOMPLETEM WYNIKÓW albo BRAKIEM CZASU traci wraz z cofniętym wynikiem podstawę rozstrzygnięcia, więc wraca do `active` (`winner`, `finishedAt`, `finishedBy` i `result` czyszczone). `declined`, `expired` i `cancelled` zamknęła decyzja człowieka, nie wynik — **tych nie wskrzeszamy**
+- ⚠️ **`expiresAt` NIE jest przedłużane.** Gdy 72 h zdążyło minąć, najbliższy przebieg sweepa zamknie wyzwanie jako `unresolved` ze standardowym powiadomieniem. Dorysowanie czasu, którego nikt nie przyznał, byłoby gorsze niż uczciwe „skończyło się"
+- **`reopened` niesie stan sprzed otwarcia** — adresy DM-ów i ogłoszeń oraz strony do cofnięcia osiągnięć. Sprząta po nim `_undoChallengeResolution(client, reopened)` w `interactionHandlers.js`:
+  1. **kasuje DM z rezultatem** u obu graczy (`result.dm[side]`)
+  2. **kasuje ogłoszenia** opublikowane przyciskiem „pochwal się" (`result.announcements[]`)
+  3. **cofa osiągnięcia** — `achievementService.revertChallengeOutcome(guildId, playerKey, 'challengesWon'|'challengesLost')` dekrementuje licznik (podłoga 0) i odbiera osiągnięcia o ID `chal_*`, których warunek przestał być spełniony. Bez tego ponowne rozstrzygnięcie naliczyłoby wygraną drugi raz
+  4. **odświeża Centrum Dowodzenia** (`adminPanelService.refresh()`) — sekcja ⚔️ Wyzwania pokazuje wyzwanie znów w toku
+- **Nowego powiadomienia „wynik cofnięty" NIE wysyłamy** — komunikat o cofnięciu rekordu idzie osobno, ze ścieżki cofania wyniku. Werdykt po prostu znika
+- ⚠️ **Adresy wiadomości muszą być ZAPISANE, żeby dało się je skasować.** `attachResultDm(id, side, channelId, messageId)` (DM rezultatu — także tego po 72 h bez kompletu wyników, `_handleChallengeSweep`) i `attachSharedMessage(id, guildId, channelId, messageId)` (ogłoszenie z „pochwal się"). `sharedGuildIds` mówi tylko, ŻE ogłoszenie poszło, nie GDZIE ono jest — dokładając kolejne miejsce publikacji rezultatu, zapisz jego adres tak samo
+- **Po ponownym otwarciu ta sama wartość wyniku może wejść jeszcze raz** — wypadła z tablicy, więc blokada powtórek jej nie widzi
 
 ### Zakładka `⚔️ Wyzwania` w `/profile`
 

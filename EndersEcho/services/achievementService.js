@@ -442,6 +442,42 @@ class AchievementService {
     }
 
     /**
+     * Cofa naliczenie wygranej/przegranej po ponownym otwarciu rozstrzygniętego wyzwania
+     * (cofnięcie wyniku wypisało go z wyzwania, więc rezultat traci podstawę).
+     *
+     * Bez tego ponowne rozstrzygnięcie naliczyłoby to samo drugi raz — a licznik wygranych
+     * jest podstawą siedmiu osiągnięć.
+     *
+     * ⚠️ Odbieramy WYŁĄCZNIE osiągnięcia o ID zaczynającym się od `chal_`. Przelecenie
+     * `check(p, {})` po całej kategorii `explorer` odebrałoby te, które do warunku potrzebują
+     * kontekstu (`ctx`) — pusty obiekt zawsze im go odmawia.
+     *
+     * @param {'challengesWon'|'challengesLost'} field
+     */
+    async revertChallengeOutcome(guildId, playerKey, field) {
+        if (!['challengesWon', 'challengesLost'].includes(field)) return;
+        return this._enqueue(guildId, async () => {
+            try {
+                const data = await this.loadData(guildId);
+                const userData = data[playerKey];
+                if (!userData) return;
+
+                const p = userData.progress || (userData.progress = {});
+                p[field] = Math.max(0, (p[field] || 0) - 1);
+
+                for (const ach of ACHIEVEMENTS) {
+                    if (!ach.id.startsWith('chal_') || !userData.unlocked[ach.id]) continue;
+                    try {
+                        if (!ach.check(p, {})) delete userData.unlocked[ach.id];
+                    } catch {}
+                }
+
+                await this.saveData(guildId, data);
+            } catch {}
+        });
+    }
+
+    /**
      * Tworzy embed i komponenty dla komendy /achievements.
      * @param {string} guildId
      * @param {string} playerKey
