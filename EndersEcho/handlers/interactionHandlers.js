@@ -194,6 +194,8 @@ class InteractionHandler {
         this._bossMapSessions = new Map();
         // Sesje wizarda /challenge (userId -> { guildId, playerKey, playerName, boss })
         this._challengeSessions = new Map();
+        // Nicki serwerowe do list wyboru gracza (guildId -> { at, names: Map<userId, nick> })
+        this._guildNickCache = new Map();
         this.challengeService = null;
         // Sesje robocze panelu konfiguracji bossów (userId -> { pendingBoss? })
         this._bossCfgSessions = new Map();
@@ -11731,21 +11733,67 @@ class InteractionHandler {
 
     async _getNotifSortedPlayers(guildId, client) {
         const players = await this.rankingService.getSortedPlayers(guildId);
-        const targetGuild = client.guilds.cache.get(guildId);
-        const result = [];
-        for (const player of players) {
-            let displayName = player.username || `ID:${player.userId}`;
-            if (targetGuild) {
-                try {
-                    const member = await targetGuild.members.fetch(player.userId);
-                    displayName = member.displayName;
-                } catch {}
-            }
+        const nicks = await this._resolveGuildDisplayNames(guildId, client, players.map(pl => pl.userId));
+
+        const result = players.map(player => {
+            const displayName = nicks.get(player.userId) || player.username || `ID:${player.userId}`;
             // Profil dodatkowy → nick ze znacznikiem, żeby lista rozróżniała konta jednej osoby
-            result.push({ ...player, displayName: formatProfileDisplayName(displayName, player.profileIndex || 1) });
-        }
+            return { ...player, displayName: formatProfileDisplayName(displayName, player.profileIndex || 1) };
+        });
         result.sort((a, b) => this._compareSortNames(a.displayName, b.displayName));
         return result;
+    }
+
+    /**
+     * Nicki serwerowe dla listy ID — z cache'u Discorda, resztę batchami po 100 równolegle.
+     *
+     * ⚠️ **Lista dotyczy WYŁĄCZNIE graczy z wynikiem w rankingu tego serwera**
+     * (`getSortedPlayers` czyta `ranking.json`), nigdy wszystkich członków Discorda.
+     *
+     * ⚠️ Wcześniej każdy gracz miał własne `members.fetch(userId)` w pętli z `await` — czyli
+     * tyle żądań do Discorda, ile wpisów w rankingu, **jedno po drugim**. Przy kilkuset
+     * graczach lista ładowała się kilkanaście sekund i więcej, a przy rate limicie jeszcze
+     * dłużej. Gracz z kilkoma profilami był dodatkowo pobierany raz na profil, choć nick
+     * ma jeden — stąd dedup po `userId` przed pobraniem.
+     *
+     * Wynik trzymamy przez `NICK_CACHE_TTL_MS`, żeby przewijanie stron listy
+     * (`chal_page_*`, `notif_page_*`) nie powtarzało całej operacji przy każdym kliknięciu.
+     * Cache'ujemy CAŁĄ mapę, więc osoby, których nie udało się pobrać (opuściły serwer),
+     * nie są odpytywane ponownie w obrębie TTL.
+     *
+     * @returns {Promise<Map<string, string>>} userId → nick serwerowy (tylko udane trafienia)
+     */
+    async _resolveGuildDisplayNames(guildId, client, userIds) {
+        const NICK_CACHE_TTL_MS = 3 * 60 * 1000;
+        const BATCH = 100;
+
+        const cached = this._guildNickCache.get(guildId);
+        if (cached && Date.now() - cached.at < NICK_CACHE_TTL_MS) return cached.names;
+
+        const names = new Map();
+        const guild = client?.guilds?.cache?.get(guildId);
+        if (!guild) return names;
+
+        const missing = [];
+        for (const userId of new Set(userIds)) {
+            const member = guild.members.cache.get(userId);
+            if (member) names.set(userId, member.displayName);
+            else missing.push(userId);
+        }
+
+        const chunks = [];
+        for (let i = 0; i < missing.length; i += BATCH) chunks.push(missing.slice(i, i + BATCH));
+
+        const results = await Promise.allSettled(
+            chunks.map(chunk => guild.members.fetch({ user: chunk }))
+        );
+        for (const res of results) {
+            if (res.status !== 'fulfilled') continue;
+            for (const [id, member] of res.value) names.set(id, member.displayName);
+        }
+
+        this._guildNickCache.set(guildId, { at: Date.now(), names });
+        return names;
     }
 
     /**

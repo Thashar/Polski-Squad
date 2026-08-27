@@ -1322,6 +1322,14 @@ Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKe
 - **przyciski zakresów buduje `_buildRangeButtons(items, activeOffset, prefix, maxRows)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
 - ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
 
+⚠️ **Lista graczy to WYŁĄCZNIE osoby z wynikiem w rankingu tego serwera** (`getSortedPlayers` czyta `ranking.json`), nigdy wszyscy członkowie Discorda. Nicki serwerowe dociąga `_resolveGuildDisplayNames(guildId, client, userIds)`:
+
+- najpierw cache Discorda (`guild.members.cache`), resztę **batchami po 100 ID, równolegle** (`guild.members.fetch({ user: chunk })` w `Promise.allSettled`)
+- **dedup po `userId` przed pobraniem** — gracz z kilkoma profilami ma jeden nick, więc nie ma powodu pobierać go raz na profil
+- wynik cache'owany per serwer na **3 minuty**, żeby przewijanie stron (`chal_page_*`, `notif_page_*`) nie powtarzało całej operacji przy każdym kliknięciu. Cache'owana jest CAŁA mapa, więc osoby, których nie udało się pobrać (opuściły serwer), nie są odpytywane ponownie w obrębie TTL
+
+⚠️ **Wcześniej była tu pętla z `await targetGuild.members.fetch(player.userId)` na KAŻDY wpis rankingu** — tyle żądań do Discorda, ile wpisów, jedno po drugim. Przy kilkuset graczach lista otwierała się kilkanaście sekund i dłużej, a przy rate limicie jeszcze gorzej. Dokładając nowe miejsce, które potrzebuje nicków całej listy, użyj tego helpera zamiast pojedynczych `members.fetch(id)` w pętli.
+
 **⚠️ Jednocześnie można prowadzić TYLKO JEDNO wyzwanie** (`MAX_ACTIVE_PER_PLAYER = 1`). Slot zajmuje wyzwanie w toku (obojętnie po której stronie) **oraz WYSŁANE zaproszenie** czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz z dwoma zaproszeniami od różnych osób nie mógłby przyjąć żadnego, bo samo ich posiadanie wypełniałoby limit. Sprawdzane w dwóch miejscach: przy `chal_ok` (rzucający → `challengeErrLimit`, przeciwnik → `challengeErrOpponentBusy`) i przy `chal_acc_{id}` (przyjmujący → `challengeErrAcceptLimit`). **Zajętość przeciwnika sprawdzana PRZED wysłaniem DM** — bez tego dostawałby zaproszenie, którego i tak nie mógłby przyjąć, a rzucający czekałby do jego wygaśnięcia.
 
 **Rekord powstaje dopiero po UDANEJ wysyłce DM.** Gdy przeciwnik ma zamknięte wiadomości prywatne, wpis jest kasowany (`discard`), a wyzywający dostaje `challengeErrDmClosed`.
