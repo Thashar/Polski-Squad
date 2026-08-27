@@ -376,9 +376,11 @@ class ProfileService {
         const {
             view, category, bossPage, bossMaxPage, isOwnProfile, isSubscribed,
             ownProfiles = [], currentProfileIndex = 1, mainProfileIndex = 1, potdHidden = false,
+            chalPage = 0, chalMaxPage = 1,
         } = state;
 
         const inAch = view === 'ach_overview' || view === 'ach_cat';
+        const inChallenges = view === 'challenges';
 
         // Rząd 1: zakładki główne
         const mainButtons = [
@@ -401,11 +403,20 @@ class ProfileService {
                 .setStyle(inAch ? ButtonStyle.Primary : ButtonStyle.Secondary)
                 .setDisabled(inAch && view === 'ach_overview'),
             new ButtonBuilder()
-                .setCustomId('profile_search')
-                .setLabel(t('Szukaj gracza', 'Search Player'))
-                .setEmoji('🔍')
-                .setStyle(ButtonStyle.Secondary),
+                .setCustomId('profile_challenges')
+                .setLabel(t('Wyzwania', 'Challenges'))
+                .setEmoji('⚔️')
+                .setStyle(inChallenges ? ButtonStyle.Primary : ButtonStyle.Secondary)
+                .setDisabled(inChallenges),
         ];
+
+        // Rząd 1 mieści 5 przycisków. Na WŁASNYM profilu piąte miejsce zajmują subskrypcje,
+        // a „Szukaj gracza" (narzędzie, nie zakładka) schodzi do rzędu narzędzi niżej.
+        const searchButton = new ButtonBuilder()
+            .setCustomId('profile_search')
+            .setLabel(t('Szukaj gracza', 'Search Player'))
+            .setEmoji('🔍')
+            .setStyle(ButtonStyle.Secondary);
 
         if (isOwnProfile) {
             mainButtons.push(
@@ -415,6 +426,8 @@ class ProfileService {
                     .setEmoji('🔔')
                     .setStyle(ButtonStyle.Secondary)
             );
+        } else {
+            mainButtons.push(searchButton);
         }
 
         const rows = [new ActionRowBuilder().addComponents(...mainButtons)];
@@ -440,7 +453,7 @@ class ProfileService {
                 return btn;
             }) : [];
 
-            const toolButtons = [];
+            const toolButtons = [searchButton];
             if (hasMany) {
                 // MAIN — rządzi statystykami w /ranking, /achievements i /profile,
                 // jest podpowiadany przy /update i jako jedyny nie może zostać usunięty
@@ -525,6 +538,22 @@ class ProfileService {
                     .setLabel(isSubscribed ? t('Odsubskrybuj', 'Unsubscribe') : t('Subskrybuj', 'Subscribe'))
                     .setEmoji(isSubscribed ? '🔕' : '🔔')
                     .setStyle(isSubscribed ? ButtonStyle.Secondary : ButtonStyle.Success)
+            ));
+        }
+
+        // Paginacja historii wyzwań
+        if (inChallenges && chalMaxPage > 1) {
+            rows.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('profile_chal_prev')
+                    .setEmoji('◀')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(chalPage === 0),
+                new ButtonBuilder()
+                    .setCustomId('profile_chal_next')
+                    .setEmoji('▶')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(chalPage >= chalMaxPage - 1)
             ));
         }
 

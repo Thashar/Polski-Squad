@@ -436,6 +436,140 @@ const ACHIEVEMENTS = [
         check: (p, _ctx) => (p.profileSearches || 0) >= 250,
     },
 
+    // ===== WYZWANIA (CHALLENGES) — sekretne =====
+    {
+        id: 'chal_sent_1', category: 'explorer', rarity: 'common', hidden: true, icon: '⚔️',
+        namePol: 'Rękawica',   nameEng: 'The Gauntlet',
+        descPol: 'Rzuć 1 wyzwanie', descEng: 'Send 1 challenge',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 1,
+    },
+    {
+        id: 'chal_sent_3', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🥊',
+        namePol: 'Zadziora',   nameEng: 'Scrapper',
+        descPol: 'Rzuć 3 wyzwania', descEng: 'Send 3 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 3,
+    },
+    {
+        id: 'chal_sent_5', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🎯',
+        namePol: 'Prowokator',   nameEng: 'Provocateur',
+        descPol: 'Rzuć 5 wyzwań', descEng: 'Send 5 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 5,
+    },
+    {
+        id: 'chal_sent_10', category: 'explorer', rarity: 'rare', hidden: true, icon: '🔥',
+        namePol: 'Podżegacz',   nameEng: 'Instigator',
+        descPol: 'Rzuć 10 wyzwań', descEng: 'Send 10 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 10,
+    },
+    {
+        id: 'chal_sent_20', category: 'explorer', rarity: 'epic', hidden: true, icon: '🐉',
+        namePol: 'Pogromca Spokoju',   nameEng: 'Peacebreaker',
+        descPol: 'Rzuć 20 wyzwań', descEng: 'Send 20 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 20,
+    },
+    {
+        id: 'chal_sent_50', category: 'explorer', rarity: 'legendary', hidden: true, icon: '👑',
+        namePol: 'Wojewoda',   nameEng: 'Warlord',
+        descPol: 'Rzuć 50 wyzwań', descEng: 'Send 50 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 50,
+    },
+    {
+        id: 'chal_sent_100', category: 'explorer', rarity: 'mythic', hidden: true, icon: '🌩️',
+        namePol: 'Zwiastun Wojny',   nameEng: 'Herald of War',
+        descPol: 'Rzuć 100 wyzwań', descEng: 'Send 100 challenges',
+        check: (p, _ctx) => (p.challengesSent || 0) >= 100,
+    },
+    {
+        id: 'chal_acc_1', category: 'explorer', rarity: 'common', hidden: true, icon: '🛡️',
+        namePol: 'Podjęte Wyzwanie',   nameEng: 'Challenge Accepted',
+        descPol: 'Przyjmij 1 wyzwanie', descEng: 'Accept 1 challenge',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 1,
+    },
+    {
+        id: 'chal_acc_3', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🤝',
+        namePol: 'Honorowy',   nameEng: 'Honorable',
+        descPol: 'Przyjmij 3 wyzwania', descEng: 'Accept 3 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 3,
+    },
+    {
+        id: 'chal_acc_5', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '⚖️',
+        namePol: 'Nieustępliwy',   nameEng: 'Unyielding',
+        descPol: 'Przyjmij 5 wyzwań', descEng: 'Accept 5 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 5,
+    },
+    {
+        id: 'chal_acc_10', category: 'explorer', rarity: 'rare', hidden: true, icon: '🏟️',
+        namePol: 'Gladiator',   nameEng: 'Gladiator',
+        descPol: 'Przyjmij 10 wyzwań', descEng: 'Accept 10 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 10,
+    },
+    {
+        id: 'chal_acc_20', category: 'explorer', rarity: 'epic', hidden: true, icon: '🗿',
+        namePol: 'Mur Nie Do Przejścia',   nameEng: 'Immovable Wall',
+        descPol: 'Przyjmij 20 wyzwań', descEng: 'Accept 20 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 20,
+    },
+    {
+        id: 'chal_acc_50', category: 'explorer', rarity: 'legendary', hidden: true, icon: '🦁',
+        namePol: 'Lew Areny',   nameEng: 'Lion of the Arena',
+        descPol: 'Przyjmij 50 wyzwań', descEng: 'Accept 50 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 50,
+    },
+    {
+        id: 'chal_acc_100', category: 'explorer', rarity: 'mythic', hidden: true, icon: '♾️',
+        namePol: 'Zawsze Gotowy',   nameEng: 'Ever Ready',
+        descPol: 'Przyjmij 100 wyzwań', descEng: 'Accept 100 challenges',
+        check: (p, _ctx) => (p.challengesAccepted || 0) >= 100,
+    },
+    {
+        id: 'chal_win_1', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🥇',
+        namePol: 'Pierwsza Krew',   nameEng: 'First Blood',
+        descPol: 'Wygraj 1 wyzwanie', descEng: 'Win 1 challenge',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 1,
+    },
+    {
+        id: 'chal_win_3', category: 'explorer', rarity: 'uncommon', hidden: true, icon: '🏅',
+        namePol: 'Triumfator',   nameEng: 'Triumphant',
+        descPol: 'Wygraj 3 wyzwania', descEng: 'Win 3 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 3,
+    },
+    {
+        id: 'chal_win_5', category: 'explorer', rarity: 'rare', hidden: true, icon: '🔱',
+        namePol: 'Pogromca',   nameEng: 'Vanquisher',
+        descPol: 'Wygraj 5 wyzwań', descEng: 'Win 5 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 5,
+    },
+    {
+        id: 'chal_win_10', category: 'explorer', rarity: 'rare', hidden: true, icon: '👊',
+        namePol: 'Dziesięciu Pokonanych',   nameEng: 'Ten Fallen',
+        descPol: 'Wygraj 10 wyzwań', descEng: 'Win 10 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 10,
+    },
+    {
+        id: 'chal_win_20', category: 'explorer', rarity: 'epic', hidden: true, icon: '🏆',
+        namePol: 'Mistrz Areny',   nameEng: 'Arena Master',
+        descPol: 'Wygraj 20 wyzwań', descEng: 'Win 20 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 20,
+    },
+    {
+        id: 'chal_win_50', category: 'explorer', rarity: 'legendary', hidden: true, icon: '💀',
+        namePol: 'Kolekcjoner Czaszek',   nameEng: 'Skull Collector',
+        descPol: 'Wygraj 50 wyzwań', descEng: 'Win 50 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 50,
+    },
+    {
+        id: 'chal_win_100', category: 'explorer', rarity: 'mythic', hidden: true, icon: '🌌',
+        namePol: 'Legenda Pojedynków',   nameEng: 'Duel Legend',
+        descPol: 'Wygraj 100 wyzwań', descEng: 'Win 100 challenges',
+        check: (p, _ctx) => (p.challengesWon || 0) >= 100,
+    },
+    {
+        id: 'chal_lost_1', category: 'explorer', rarity: 'common', hidden: true, icon: '💔',
+        namePol: 'Gorzka Lekcja',   nameEng: 'Bitter Lesson',
+        descPol: 'Przegraj wyzwanie', descEng: 'Lose a challenge',
+        check: (p, _ctx) => (p.challengesLost || 0) >= 1,
+    },
+
     // ===== PRESTIŻ (PRESTIGE) =====
     {
         id: 'rank_top10', category: 'prestige', rarity: 'rare', hidden: false, icon: '🎖️',

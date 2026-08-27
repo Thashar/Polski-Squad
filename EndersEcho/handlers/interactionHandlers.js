@@ -3,6 +3,7 @@ const { downloadFile, downloadBuffer, formatMessage, compareByScoreThenTimestamp
 const { formatCooldownTime } = require('../services/updateCooldownService');
 const { generatePositionIcon } = require('../services/positionIconService');
 const ProfileService = require('../services/profileService');
+const MESSAGES = require('../config/messages');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
 
@@ -188,6 +189,9 @@ class InteractionHandler {
         this._unknownBossEmbeds = new Map();
         // Sesje robocze flow mapowania (userId -> { rawBoss, adjustedBoss?, englishBoss? })
         this._bossMapSessions = new Map();
+        // Sesje wizarda /challenge (userId -> { guildId, playerKey, playerName, boss })
+        this._challengeSessions = new Map();
+        this.challengeService = null;
         // Sesje robocze panelu konfiguracji bossów (userId -> { pendingBoss? })
         this._bossCfgSessions = new Map();
         // Sesje cofnięcia wyniku OCR (playerKey_guildId -> { guildId, userId, playerKey, previousRecord, newRecord })
@@ -264,6 +268,12 @@ class InteractionHandler {
                         .setDescription('Screenshot of the boss result screen')
                         .setDescriptionLocalizations(pl('Screenshot ekranu wyników bossa'))
                         .setRequired(true)),
+
+            new SlashCommandBuilder()
+                .setName('challenge')
+                .setDescription('Challenge another player to a 1v1 duel on a chosen boss')
+                .setDescriptionLocalizations(pl('Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie'))
+                .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
             new SlashCommandBuilder()
                 .setName('profile')
@@ -383,6 +393,13 @@ class InteractionHandler {
             // /help — działa też na serwerach bez konfiguracji
             if (interaction.commandName === 'help') {
                 await this.handleHelpCommand(interaction);
+                return;
+            }
+
+            // /challenge — na razie wyłącznie head admin (dowolny kanał, wymaga konfiguracji)
+            if (interaction.commandName === 'challenge') {
+                if (!this._checkConfigured(interaction)) return;
+                await this.handleChallengeCommand(interaction);
                 return;
             }
 
@@ -4205,6 +4222,12 @@ class InteractionHandler {
                 ? await this.scoreHistoryService.removeEntryByTimestamp(targetGuildId, targetPlayerKey, tsMs)
                 : null;
 
+            // ⚔️ Wyzwania — ten sam wynik przestaje liczyć się w wyzwaniach w toku
+            if (removed && this.challengeService) {
+                await this.challengeService.removeScore(targetPlayerKey, removed.timestamp)
+                    .catch(e => logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`));
+            }
+
             if (!removed) {
                 const { embed, components } = this._buildAdminPanel(interaction);
                 embed.setDescription(t('⚠️ Wpis nie istnieje (mógł zostać już usunięty).\n\n', '⚠️ Entry not found (may have been removed already).\n\n') + (embed.data.description || ''));
@@ -6244,6 +6267,10 @@ class InteractionHandler {
         }
         // Subskrypcje wskazujące na ten profil tracą sens
         await this.notificationService.removeAllSubscriptionsForTarget?.(playerKey).catch(() => {});
+        // ⚔️ Wyzwania: te w toku są anulowane (z DM do przeciwnika), a rozstrzygnięte ZOSTAJĄ —
+        // to również historia przeciwnika. Uczestnik dostaje flagę `profileDeleted`, którą
+        // warstwa wyświetlania tłumaczy na „Profil usunięty" w języku odbiorcy.
+        await this._cancelChallengesForProfile(client, playerKey).catch(() => {});
 
         // Rejestr przenumerowuje pozostałe profile (2→1, 3→2) i mówi, co przenieść
         const removal = await registry.removeProfile(userId, profileIndex);
@@ -6266,7 +6293,7 @@ class InteractionHandler {
      * pozostałych zjeżdżają w dół (2→1, 3→2), a numer slotu jest częścią klucza danych.
      * Pominięcie któregokolwiek magazynu = osierocone dane, więc lista musi być pełna:
      * ranking, rekordy bossów, osiągnięcia, historia wyników (plik na profil),
-     * subskrypcje, sesje cofnięcia rekordu i sesje weryfikacji społeczności.
+     * subskrypcje, sesje cofnięcia rekordu, sesje weryfikacji społeczności i wyzwania.
      * @param {string[]} guildIds
      * @param {Object} gl - logger serwerowy
      */
@@ -6284,6 +6311,7 @@ class InteractionHandler {
         await this.notificationService?.renameTargetPlayerKey?.(fromKey, toKey).catch(() => {});
         await this.recordRevertService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         await this.communityVerificationService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
+        await this.challengeService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         gl.info(`👥 Przeniesiono dane profilu ${fromKey} → ${toKey}`);
     }
 
@@ -6634,6 +6662,21 @@ class InteractionHandler {
             const userId = interaction.user.id;
             const userName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
 
+            // ⚔️ Wyzwania — wynik zaliczany PRZED rozgałęzieniem na ścieżki (duplikat cross-server /
+            // brak rekordu / nowy rekord), żeby liczył się każdy pozytywnie zweryfikowany screen.
+            // /test (dryRun) nie zalicza niczego. Nierozpoznana nazwa bossa nie jest zaliczana od razu —
+            // wynik czeka na zmapowanie aliasu przez admina (_resolveChallengePendingBoss).
+            const _challengeResult = dryRun ? { notices: [], pending: false } : await this._registerChallengeScore(interaction, {
+                playerKey,
+                bossName,
+                score: bestScore,
+                scoreValue: this.rankingService.parseScoreValue(bestScore),
+                guildId,
+                timestamp: new Date().toISOString(),
+                wasUnknownBoss: aiResult.wasUnknownBoss === true,
+            });
+            const _challengeNotice = this._challengeSystemNotice(_challengeResult, msgs);
+
             // Stan globalny przed zapisem — liczony też w /test (dryRun), żeby podgląd był identyczny jak /update (read-only)
             const prevGlobalRanking = await this.rankingService.getGlobalRanking(new Set(interaction.client.guilds.cache.keys()));
             const prevGlobalPosition = (() => { const i = prevGlobalRanking?.findIndex(p => (p.playerKey || p.userId) === playerKey); return i !== -1 ? i + 1 : null; })();
@@ -6767,6 +6810,8 @@ class InteractionHandler {
                         );
                         csSystemNotices.push({ name: msgs.unknownBossRankingField || '⚠️ Unverified Boss Name', value: noticeVal });
                     }
+                    // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
+                    if (_challengeNotice) csSystemNotices.push(_challengeNotice);
 
                     const safeUserNameCs = userName.replace(/[^a-zA-Z0-9]/g, '_');
                     const imageAttachmentCs = new AttachmentBuilder(tempImagePath, { name: `rekord_${safeUserNameCs}_${Date.now()}.${fileExtension}` });
@@ -7007,6 +7052,14 @@ class InteractionHandler {
                         ));
                     }
                     noRecordReasonLines.push(formatMessage(msgs.resultDifference, { diff: diffText }));
+                    // ⚔️ Wyzwanie — ani rekord ogólny, ani rekord bossa nie padł, więc nie ma
+                    // publicznego ogłoszenia; informacja idzie do embeda odpowiedzi ORAZ na priv
+                    if (_challengeNotice) {
+                        noRecordReasonLines.push('');
+                        noRecordReasonLines.push(`**${_challengeNotice.name}**`);
+                        noRecordReasonLines.push(_challengeNotice.value);
+                        this._sendChallengeScoreDm(interaction.client, userId, guildId, _challengeResult).catch(() => {});
+                    }
 
                     const resultEmbeds = this.rankingService.createNoRecordEmbeds({
                         userName,
@@ -7057,6 +7110,13 @@ class InteractionHandler {
                     if (bossName) unknownBossReasonLines.push(`\`${bossName}\``);
                     unknownBossReasonLines.push(`**${msgs.resultScore}:** ${bestScore}`);
                     unknownBossReasonLines.push(statusVal);
+                    // ⚔️ Wyzwanie — brak publicznego ogłoszenia, więc informacja też na priv
+                    if (_challengeNotice) {
+                        unknownBossReasonLines.push('');
+                        unknownBossReasonLines.push(`**${_challengeNotice.name}**`);
+                        unknownBossReasonLines.push(_challengeNotice.value);
+                        this._sendChallengeScoreDm(interaction.client, userId, guildId, _challengeResult).catch(() => {});
+                    }
                     const warnEmbeds = this.rankingService.createNoRecordEmbeds({
                         userName,
                         userAvatarUrl: interaction.user.displayAvatarURL(),
@@ -7152,6 +7212,8 @@ class InteractionHandler {
                     );
                     bossSystemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
                 }
+                // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
+                if (_challengeNotice) bossSystemNotices.push(_challengeNotice);
 
                 // Ikona bossa (Embed 3) — gdy boss znany
                 let bossOnlyImageAttachment = null;
@@ -7365,6 +7427,8 @@ class InteractionHandler {
                 );
                 systemNotices.push({ name: msgs.unknownBossRankingField || 'Unverified Boss Name', value: noticeVal });
             }
+            // ⚔️ Wyzwanie — informacja o zaliczeniu wyniku (Embed 4)
+            if (_challengeNotice) systemNotices.push(_challengeNotice);
             // Poprzedni wynik na innym serwerze zostaje ukryty (nowy wynik jest ściśle lepszy) — nadpisuje opis Embedu 4
             let crossServerScoreRemovedNote = null;
             if (_prevGlobalUser && _newScoreValue > _prevGlobalUser.scoreValue && _prevGlobalUser.sourceGuildId !== guildId) {
@@ -8182,6 +8246,12 @@ class InteractionHandler {
             return;
         }
 
+        // === ⚔️ Wyzwania — poza głównym try, bo przyciski w DM nie mają guild ani member ===
+        if (customId.startsWith('chal_')) {
+            await this.handleChallengeButton(interaction, customId);
+            return;
+        }
+
         try {
 
             // === Cofnięcie własnego rekordu przez gracza ===
@@ -8491,6 +8561,8 @@ class InteractionHandler {
                 customId === 'profile_ach_overview' || customId.startsWith('profile_ach_cat_') ||
                 customId === 'profile_bosses_prev' || customId === 'profile_bosses_next' ||
                 customId === 'profile_back' || customId === 'profile_search' ||
+                customId === 'profile_challenges' ||
+                customId === 'profile_chal_prev' || customId === 'profile_chal_next' ||
                 customId === 'profile_manage_subs' || customId === 'profile_manage_prof' ||
                 customId === 'profile_add_intro' ||
                 customId === 'profile_subscribe' ||
@@ -9620,6 +9692,13 @@ class InteractionHandler {
                 session.guildId, (session.playerKey || session.userId), session.newRecord.timestamp
             ).catch(e => { logger.error(`CV _cvRemoveRecord revert history error: ${e.message}`); return 0; });
         }
+        // ⚔️ Wyzwania — wynik wypisany z wyzwań BĘDĄCYCH W TOKU. Wyzwania rozstrzygnięte
+        // zostają nietknięte: rezultat już padł i obie strony dostały powiadomienie.
+        if (this.challengeService && session.newRecord?.timestamp) {
+            await this.challengeService.removeScore(
+                (session.playerKey || session.userId), session.newRecord.timestamp
+            ).catch(e => logger.warn(`⚠️ Błąd wypisywania wyniku z wyzwań: ${e.message}`));
+        }
         // Cofnij tylko osiągnięcia score/records zdobyte od momentu zgłoszonego rekordu — wcześniejsze zostają
         try {
             if (this.achievementService && session.newRecord?.timestamp) {
@@ -10366,6 +10445,15 @@ class InteractionHandler {
     }
 
     // Pobiera lang dla profilu — na serwerze admina (brak konfiguracji) fallback na targetGuildId
+    /**
+     * Komunikaty po JĘZYKU, nie po serwerze — widok profilu trzyma `state.lang`
+     * (język wyliczony przez `_getProfileLang`), który nie musi pokrywać się
+     * z językiem serwera, na którym wywołano komendę.
+     */
+    _msgsByLang(lang) {
+        return lang === 'pol' ? MESSAGES.pol : MESSAGES.eng;
+    }
+
     _getProfileLang(interactionGuildId, targetGuildId) {
         const cfg = this.config.getGuildConfig(interactionGuildId);
         if (cfg?.lang) return cfg.lang;
@@ -10562,6 +10650,13 @@ class InteractionHandler {
                 state.bossPage = Math.max(0, state.bossPage - 1);
             } else if (customId === 'profile_bosses_next') {
                 state.bossPage = Math.min(state.bossMaxPage - 1, state.bossPage + 1);
+            } else if (customId === 'profile_challenges') {
+                state.view     = 'challenges';
+                state.chalPage = 0;
+            } else if (customId === 'profile_chal_prev') {
+                state.chalPage = Math.max(0, (state.chalPage || 0) - 1);
+            } else if (customId === 'profile_chal_next') {
+                state.chalPage = Math.min((state.chalMaxPage || 1) - 1, (state.chalPage || 0) + 1);
             } else if (customId === 'profile_ach_overview') {
                 state.view     = 'ach_overview';
                 state.category = null;
@@ -10590,6 +10685,15 @@ class InteractionHandler {
                 files = result.files || [];
                 state.bossMaxPage = result.totalPages;
                 state.bossPage    = result.currentPage;
+            } else if (state.view === 'challenges') {
+                const chalResult = await this._buildChallengeProfileEmbed(
+                    state.targetPlayerKey, data.username, this._msgsByLang(state.lang || 'pol'),
+                    state.chalPage || 0, isOwnProfileNow
+                );
+                embed = chalResult.embed;
+                state.chalMaxPage = chalResult.maxPage;
+                state.chalPage    = Math.min(state.chalPage || 0, chalResult.maxPage - 1);
+                if (data.userAvatarURL) embed.setThumbnail(data.userAvatarURL);
             } else {
                 const achView   = state.view === 'ach_overview' ? 'overview' : 'cat';
                 const isOwnProf = getOwnerId(state.targetPlayerKey) === state.viewerId;
@@ -10619,6 +10723,8 @@ class InteractionHandler {
                 currentProfileIndex: getProfileIndex(state.targetPlayerKey),
                 mainProfileIndex: this.profileRegistryService?.getMainIndex(state.viewerId) || 1,
                 potdHidden: this.playerOfTheDayService?.isOptedOut(state.viewerId) || false,
+                chalPage: state.chalPage || 0,
+                chalMaxPage: state.chalMaxPage || 1,
             }, isPol);
 
             await interaction.editReply({ embeds: [embed], components, files, attachments: [] });
@@ -10823,6 +10929,10 @@ class InteractionHandler {
     async handleSelectMenuInteraction(interaction) {
         try {
             const customId = interaction.customId;
+
+            if (customId === 'chal_srv') { await this._handleChallengeServerSelect(interaction); return; }
+            if (customId === 'chal_pl')  { await this._handleChallengePlayerSelect(interaction); return; }
+            if (customId === 'chal_boss') { await this._handleChallengeBossSelect(interaction); return; }
 
             if (customId === 'boss_cfg_add_alias_sel') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
@@ -16060,6 +16170,893 @@ class InteractionHandler {
         await interaction.editReply({ embeds: [embed], components: buttons, files: [], attachments: [] });
     }
 
+    // ─── ⚔️ WYZWANIA (/challenge) ─────────────────────────────────────────────
+
+    /**
+     * Serwis wyzwań podawany setterem, nie kolejnym parametrem pozycyjnym —
+     * konstruktor ma ich już 31 (patrz komentarz w index.js).
+     */
+    setChallengeService(service) {
+        this.challengeService = service;
+    }
+
+    /**
+     * Ikona bossa do thumbnaila embeda. Zwracamy BUFOR, nie gotowy AttachmentBuilder —
+     * ten sam obrazek leci w kilku wiadomościach (DM do obu graczy, ogłoszenie na serwerze),
+     * a załącznik trzeba zbudować osobno dla każdej wysyłki.
+     * @returns {Promise<{ buffer: Buffer|null, name: string|null, thumb: string|null }>}
+     */
+    async _challengeBossImage(boss) {
+        try {
+            const imgPath = this.bossAliasService?.getBossImagePath(boss);
+            if (!imgPath) return { buffer: null, name: null, thumb: null };
+            const buffer = await fs.readFile(path.join(__dirname, '../data/boss_images', imgPath));
+            return { buffer, name: imgPath, thumb: `attachment://${imgPath}` };
+        } catch {
+            return { buffer: null, name: null, thumb: null };
+        }
+    }
+
+    /** Świeży załącznik ikony bossa dla pojedynczej wiadomości */
+    _challengeBossFiles(image) {
+        return image?.buffer ? [new AttachmentBuilder(image.buffer, { name: image.name })] : [];
+    }
+
+    /** Nazwa serwera do embedów wyzwania */
+    _challengeGuildName(client, guildId) {
+        return client.guilds.cache.get(guildId)?.name
+            || this.config.getGuildConfig(guildId)?.guildName
+            || guildId;
+    }
+
+    // ── Wizard ────────────────────────────────────────────────────────────────
+
+    /**
+     * `/challenge` — na razie WYŁĄCZNIE dla head admina (komenda widoczna tylko dla
+     * administratorów przez setDefaultMemberPermissions, wykonanie dodatkowo bramkowane).
+     */
+    async handleChallengeCommand(interaction) {
+        const msgs = this.msgs(interaction.guildId);
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: msgs.noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        if (!this.challengeService) {
+            await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
+            return;
+        }
+
+        this._challengeSessions.set(interaction.user.id, {
+            guildId: null, playerKey: null, playerName: null, boss: null,
+            createdAt: Date.now(),
+        });
+
+        const options = this.config.getAllGuilds().map(g =>
+            new StringSelectMenuOptionBuilder()
+                .setValue(g.id)
+                .setLabel(this._challengeGuildName(interaction.client, g.id).substring(0, 100))
+        );
+        if (options.length === 0) {
+            await interaction.reply({ content: msgs.challengeNoPlayers, flags: ['Ephemeral'] });
+            return;
+        }
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('chal_srv')
+            .setPlaceholder(msgs.challengeSelectServerPlaceholder)
+            .addOptions(options.slice(0, 25));
+
+        await interaction.reply({
+            content: msgs.challengeIntro,
+            components: [new ActionRowBuilder().addComponents(select)],
+            flags: ['Ephemeral'],
+        });
+    }
+
+    /** Sesja wizarda (RAM, TTL 15 min) — customId nie pomieści guildId + playerKey + nazwy bossa */
+    _getChallengeSession(userId) {
+        const session = this._challengeSessions.get(userId);
+        if (!session) return null;
+        if (Date.now() - session.createdAt > 15 * 60 * 1000) {
+            this._challengeSessions.delete(userId);
+            return null;
+        }
+        return session;
+    }
+
+    async _handleChallengeServerSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
+        if (!session) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            return;
+        }
+        session.guildId = interaction.values[0];
+        await this._renderChallengePlayerPicker(interaction, 0);
+    }
+
+    /** Lista graczy wybranego serwera (25/stronę + przyciski zakresów liter) */
+    async _renderChallengePlayerPicker(interaction, offset) {
+        const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
+        if (!session?.guildId) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            return;
+        }
+
+        const sorted = (await this._getNotifSortedPlayers(session.guildId, interaction.client))
+            // Wyzwać można wyłącznie kogoś innego — wszystkie własne profile odpadają
+            .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id);
+
+        if (sorted.length === 0) {
+            await interaction.editReply({ content: msgs.challengeNoPlayers, components: [] });
+            return;
+        }
+
+        const PAGE_SIZE = 25;
+        const page = sorted.slice(offset, offset + PAGE_SIZE);
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('chal_pl')
+            .setPlaceholder(msgs.challengeSelectPlayerPlaceholder)
+            .addOptions(page.map(p =>
+                new StringSelectMenuOptionBuilder()
+                    .setValue(p.playerKey || p.userId)
+                    .setLabel(p.displayName.substring(0, 100))
+            ));
+        const selectRow = new ActionRowBuilder().addComponents(select);
+
+        const components = sorted.length <= PAGE_SIZE
+            ? [selectRow]
+            : [...this._buildChallengePageButtons(sorted, offset), selectRow];
+
+        await interaction.editReply({ content: msgs.challengeSelectPlayer, components });
+    }
+
+    /** Przyciski zakresów liter dla listy graczy (analogicznie do `/subscribe`) */
+    _buildChallengePageButtons(players, activeOffset) {
+        const PAGE_SIZE = 25;
+        const rows = [];
+        let currentRow = [];
+        for (let offset = 0; offset < players.length; offset += PAGE_SIZE) {
+            if (rows.length >= 4 && currentRow.length === 0) break;
+            const page = players.slice(offset, offset + PAGE_SIZE);
+            const first = (page[0].displayName || '?')[0].toUpperCase();
+            const last = (page[page.length - 1].displayName || '?')[0].toUpperCase();
+            currentRow.push(
+                new ButtonBuilder()
+                    .setCustomId(`chal_page_${offset}`)
+                    .setLabel(first === last ? first : `${first} - ${last}`)
+                    .setStyle(offset === activeOffset ? ButtonStyle.Success : ButtonStyle.Primary)
+            );
+            if (currentRow.length === 5) {
+                rows.push(new ActionRowBuilder().addComponents(currentRow));
+                currentRow = [];
+            }
+        }
+        if (currentRow.length > 0 && rows.length < 4) rows.push(new ActionRowBuilder().addComponents(currentRow));
+        return rows;
+    }
+
+    async _handleChallengePlayerSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
+        if (!session?.guildId) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            return;
+        }
+        session.playerKey = interaction.values[0];
+        const sorted = await this._getNotifSortedPlayers(session.guildId, interaction.client);
+        const chosen = sorted.find(p => (p.playerKey || p.userId) === session.playerKey);
+        session.playerName = chosen?.displayName || session.playerKey;
+        await this._renderChallengeBossPicker(interaction, 0);
+    }
+
+    /** Lista bossów (25/stronę — nazw bywa więcej niż limit select menu) */
+    async _renderChallengeBossPicker(interaction, page) {
+        const msgs = this.msgs(interaction.guildId);
+        const bosses = this._getAllEnglishBossNames();
+        if (bosses.length === 0) {
+            await interaction.editReply({ content: msgs.challengeNoBosses, components: [] });
+            return;
+        }
+        const PAGE_SIZE = 25;
+        const maxPage = Math.max(0, Math.ceil(bosses.length / PAGE_SIZE) - 1);
+        const safePage = Math.min(Math.max(0, page), maxPage);
+        const slice = bosses.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('chal_boss')
+            .setPlaceholder(msgs.challengeSelectBossPlaceholder)
+            .addOptions(slice.map(b =>
+                new StringSelectMenuOptionBuilder().setValue(b.substring(0, 100)).setLabel(b.substring(0, 100))
+            ));
+        const components = [new ActionRowBuilder().addComponents(select)];
+        if (maxPage > 0) {
+            components.push(new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`chal_bpage_${safePage - 1}`).setEmoji('◀').setStyle(ButtonStyle.Secondary).setDisabled(safePage === 0),
+                new ButtonBuilder().setCustomId('chal_bpage_info').setLabel(`${safePage + 1}/${maxPage + 1}`).setStyle(ButtonStyle.Secondary).setDisabled(true),
+                new ButtonBuilder().setCustomId(`chal_bpage_${safePage + 1}`).setEmoji('▶').setStyle(ButtonStyle.Secondary).setDisabled(safePage === maxPage),
+            ));
+        }
+        await interaction.editReply({ content: msgs.challengeSelectBoss, components });
+    }
+
+    async _handleChallengeBossSelect(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
+        if (!session?.playerKey) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            return;
+        }
+        session.boss = interaction.values[0];
+
+        const guildName = this._challengeGuildName(interaction.client, session.guildId);
+        const bossImage = await this._challengeBossImage(session.boss);
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.challengeConfirmTitle)
+            .setDescription([
+                formatMessage(msgs.challengeConfirmText, {
+                    opponent: session.playerName, guild: guildName, boss: session.boss,
+                }),
+                '',
+                msgs.challengeRules,
+            ].join('\n'));
+        if (bossImage.thumb) embed.setThumbnail(bossImage.thumb);
+
+        await interaction.editReply({
+            content: '',
+            embeds: [embed],
+            files: this._challengeBossFiles(bossImage),
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('chal_ok').setEmoji('⚔️').setLabel(msgs.challengeConfirmYes).setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('chal_no').setEmoji('❌').setLabel(msgs.challengeConfirmNo).setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    /** Zatwierdzenie wyzwania — walidacje, wysyłka DM, dopiero potem zapis rekordu */
+    async _handleChallengeConfirm(interaction) {
+        await interaction.deferUpdate();
+        const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
+        if (!session?.boss || !session?.playerKey) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, embeds: [], files: [], components: [] });
+            return;
+        }
+        const gl = this.logService._gl(interaction.guildId);
+        const challengerKey = this._mainPlayerKey(interaction.user.id);
+        const opponentKey = session.playerKey;
+        const opponentId = getOwnerId(opponentKey);
+
+        const done = (content) => interaction.editReply({ content, embeds: [], files: [], components: [] });
+
+        if (opponentId === interaction.user.id) return void await done(msgs.challengeErrSelf);
+
+        const open = await this.challengeService.countOpenForPlayer(challengerKey);
+        if (open >= this.challengeService.maxActivePerPlayer) {
+            return void await done(formatMessage(msgs.challengeErrLimit, {
+                count: open, max: this.challengeService.maxActivePerPlayer,
+            }));
+        }
+        if (await this.challengeService.hasOpenBetween(challengerKey, opponentKey, session.boss)) {
+            return void await done(formatMessage(msgs.challengeErrDuplicate, { boss: session.boss }));
+        }
+
+        const challengerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        const challenge = await this.challengeService.create({
+            challenger: { playerKey: challengerKey, guildId: interaction.guildId, username: challengerName },
+            opponent: { playerKey: opponentKey, guildId: session.guildId, username: session.playerName },
+            boss: session.boss,
+        });
+
+        // DM idzie PRZED utrwaleniem wyzwania jako ważne — gdy nie dojdzie, kasujemy wpis
+        const sent = await this._sendChallengeInvite(interaction.client, challenge, challengerName);
+        if (!sent) {
+            await this.challengeService.discard(challenge.id);
+            return void await done(formatMessage(msgs.challengeErrDmClosed, { opponent: session.playerName }));
+        }
+
+        this._challengeSessions.delete(interaction.user.id);
+        if (this.achievementService) {
+            this.achievementService.trackChallengeSent(interaction.guildId, challengerKey).catch(() => {});
+        }
+        gl.info(`⚔️ ${this.logService.nickLink(challengerName, interaction.user.id)} rzucił wyzwanie graczowi "${session.playerName}" na bossie "${session.boss}"`);
+        await done(formatMessage(msgs.challengeSent, { opponent: session.playerName, boss: session.boss }));
+    }
+
+    /** Wysyła DM z zaproszeniem. @returns {Promise<boolean>} czy doszło */
+    async _sendChallengeInvite(client, challenge, challengerName) {
+        const opponentMsgs = this.msgs(challenge.opponent.guildId);
+        const guildName = this._challengeGuildName(client, challenge.challenger.guildId);
+        const bossImage = await this._challengeBossImage(challenge.boss);
+
+        const embed = new EmbedBuilder()
+            .setColor(0xE67E22)
+            .setTitle(opponentMsgs.challengeDmInviteTitle)
+            .setDescription([
+                formatMessage(opponentMsgs.challengeDmInviteDesc, {
+                    challenger: challengerName, guild: guildName, boss: challenge.boss,
+                }),
+                '',
+                opponentMsgs.challengeRules,
+                '',
+                formatMessage(opponentMsgs.challengeDmInviteExpires, {
+                    date: this._discordTs(challenge.inviteExpiresAt, 'F'),
+                }),
+            ].join('\n'))
+            .setTimestamp();
+        if (bossImage.thumb) embed.setThumbnail(bossImage.thumb);
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId(`chal_acc_${challenge.id}`).setEmoji('⚔️').setLabel(opponentMsgs.challengeBtnAccept).setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId(`chal_rej_${challenge.id}`).setEmoji('❌').setLabel(opponentMsgs.challengeBtnDecline).setStyle(ButtonStyle.Danger),
+        );
+
+        try {
+            const user = await client.users.fetch(challenge.opponent.userId);
+            const dm = await user.send({ embeds: [embed], files: this._challengeBossFiles(bossImage), components: [row] });
+            await this.challengeService.attachInvite(challenge.id, dm.channelId, dm.id);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    // ── Przyciski (DM + wizard) ───────────────────────────────────────────────
+
+    /**
+     * Router przycisków wyzwań. Wołany PRZED głównym `try` w `handleButtonInteraction`,
+     * bo przyciski w DM nie mają `interaction.guild` ani `interaction.member`.
+     */
+    async handleChallengeButton(interaction, customId) {
+        try {
+            if (customId === 'chal_no') {
+                this._challengeSessions.delete(interaction.user.id);
+                await interaction.update({ content: this.msgs(interaction.guildId).challengeCancelled, embeds: [], files: [], components: [] });
+                return;
+            }
+            if (customId === 'chal_ok') { await this._handleChallengeConfirm(interaction); return; }
+            if (customId.startsWith('chal_page_')) {
+                await interaction.deferUpdate();
+                await this._renderChallengePlayerPicker(interaction, parseInt(customId.replace('chal_page_', ''), 10) || 0);
+                return;
+            }
+            if (customId === 'chal_bpage_info') { await interaction.deferUpdate().catch(() => {}); return; }
+            if (customId.startsWith('chal_bpage_')) {
+                await interaction.deferUpdate();
+                await this._renderChallengeBossPicker(interaction, parseInt(customId.replace('chal_bpage_', ''), 10) || 0);
+                return;
+            }
+            if (customId.startsWith('chal_acc_')) { await this._handleChallengeResponse(interaction, customId.replace('chal_acc_', ''), true); return; }
+            if (customId.startsWith('chal_rej_')) { await this._handleChallengeResponse(interaction, customId.replace('chal_rej_', ''), false); return; }
+            if (customId.startsWith('chal_share_')) { await this._handleChallengeShare(interaction, customId); return; }
+            if (customId.startsWith('chal_done_')) { await interaction.deferUpdate().catch(() => {}); return; }
+        } catch (error) {
+            logger.error(`Błąd obsługi przycisku wyzwania (${customId}): ${error.message}`);
+            try {
+                if (!interaction.replied && !interaction.deferred) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).challengeErrGone, flags: ['Ephemeral'] });
+                }
+            } catch {}
+        }
+    }
+
+    /** Przyjęcie / odrzucenie wyzwania z DM */
+    async _handleChallengeResponse(interaction, challengeId, accepted) {
+        const challenge = await this.challengeService.getById(challengeId);
+        const msgs = this.msgs(challenge?.opponent?.guildId || interaction.guildId);
+
+        if (!challenge || challenge.status !== 'pending') {
+            await interaction.reply({ content: msgs.challengeErrGone, flags: ['Ephemeral'] });
+            return;
+        }
+        // Uprawnienie sprawdzane po WŁAŚCICIELU profilu — customId nie jest źródłem prawdy
+        if (challenge.opponent.userId !== interaction.user.id) {
+            await interaction.reply({ content: msgs.challengeErrNotForYou, flags: ['Ephemeral'] });
+            return;
+        }
+
+        if (accepted) {
+            const open = await this.challengeService.countOpenForPlayer(challenge.opponent.playerKey);
+            // Zaproszenie liczy się do limitu, więc porównujemy z limitem powiększonym o nie samo
+            if (open > this.challengeService.maxActivePerPlayer) {
+                await interaction.reply({
+                    content: formatMessage(msgs.challengeErrAcceptLimit, {
+                        count: open - 1, max: this.challengeService.maxActivePerPlayer,
+                    }),
+                    flags: ['Ephemeral'],
+                });
+                return;
+            }
+        }
+
+        const updated = accepted
+            ? await this.challengeService.accept(challengeId)
+            : await this.challengeService.decline(challengeId);
+        if (!updated) {
+            await interaction.reply({ content: msgs.challengeErrGone, flags: ['Ephemeral'] });
+            return;
+        }
+
+        // Przycisk zamienia się w nieaktywny znacznik
+        const marker = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`chal_done_${challengeId}`)
+                .setEmoji(accepted ? '⚔️' : '❌')
+                .setLabel(accepted ? msgs.challengeBtnAccepted : msgs.challengeBtnDeclined)
+                .setStyle(accepted ? ButtonStyle.Success : ButtonStyle.Danger)
+                .setDisabled(true)
+        );
+        await interaction.update({ components: [marker] }).catch(() => {});
+        await interaction.followUp({
+            content: accepted
+                ? formatMessage(msgs.challengeAcceptedReply, { boss: updated.boss })
+                : msgs.challengeDeclinedReply,
+            flags: ['Ephemeral'],
+        }).catch(() => {});
+
+        if (accepted && this.achievementService) {
+            this.achievementService.trackChallengeAccepted(updated.opponent.guildId, updated.opponent.playerKey).catch(() => {});
+        }
+
+        // Powiadomienie dla wyzywającego — w języku JEGO serwera
+        const challengerMsgs = this.msgs(updated.challenger.guildId);
+        const opponentName = this.challengeService.participantName(updated.opponent, challengerMsgs);
+        await this._dmUser(interaction.client, updated.challenger.userId, {
+            content: formatMessage(
+                accepted ? challengerMsgs.challengeDmAcceptedNotice : challengerMsgs.challengeDmDeclinedNotice,
+                { opponent: opponentName, boss: updated.boss }
+            ),
+        });
+    }
+
+    /** Bezpieczna wysyłka DM — zamknięte wiadomości prywatne nie mogą wywrócić flow */
+    async _dmUser(client, userId, payload) {
+        try {
+            const user = await client.users.fetch(userId);
+            return await user.send(payload);
+        } catch {
+            return null;
+        }
+    }
+
+    // ── Zaliczanie wyników ────────────────────────────────────────────────────
+
+    /**
+     * Wpinane w `_runUpdateFlow` po pozytywnej weryfikacji screena, PRZED rozgałęzieniem
+     * na ścieżki (duplikat cross-server / brak rekordu / nowy rekord).
+     *
+     * Nierozpoznana nazwa bossa nie jest zaliczana od razu — wynik czeka na zmapowanie
+     * aliasu przez admina (`_resolveChallengePendingBoss`).
+     *
+     * @returns {Promise<{ notices: Array, pending: boolean }>} notices → pole w Embedzie 4
+     */
+    async _registerChallengeScore(interaction, { playerKey, bossName, score, scoreValue, guildId, timestamp, wasUnknownBoss }) {
+        if (!this.challengeService || !bossName) return { notices: [], pending: false };
+        try {
+            if (wasUnknownBoss) {
+                const parked = await this.challengeService.addPendingScore({
+                    playerKey, guildId, rawBoss: bossName, score, scoreValue, timestamp,
+                });
+                return { notices: [], pending: parked };
+            }
+            const { notices, finished } = await this.challengeService.registerScore({
+                playerKey, bossName, score, scoreValue, guildId, timestamp,
+            });
+            if (finished.length > 0) await this._finishChallenges(interaction.client, finished);
+            return { notices, pending: false };
+        } catch (err) {
+            this.logService._gl(guildId).warn(`⚠️ Błąd zaliczania wyniku do wyzwania: ${err.message}`);
+            return { notices: [], pending: false };
+        }
+    }
+
+    /** Buduje pole `⚔️ Wyzwanie` do Embeda 4 / treść DM o zaliczeniu wyniku */
+    _challengeNoticeValue(notices, pending, msgs) {
+        if (pending) return msgs.challengeNoticePending;
+        if (!notices.length) return null;
+        return notices.map(n => formatMessage(msgs.challengeNoticeCounted, {
+            opponent: this.challengeService.participantName(n.opponent, msgs),
+            boss: n.boss,
+            count: n.count,
+            total: n.total,
+            sum: this.rankingService.formatScore(n.sum),
+        })).join('\n\n');
+    }
+
+    /** Pole do `systemNotices` (Embed 4) albo null, gdy nie ma o czym informować */
+    _challengeSystemNotice(result, msgs) {
+        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs);
+        return value ? { name: msgs.challengeNoticeField, value } : null;
+    }
+
+    /**
+     * DM o zaliczeniu wyniku — wysyłany wyłącznie wtedy, gdy nie poszło publiczne
+     * ogłoszenie (brak rekordu ogólnego i brak rekordu bossa), bo wtedy gracz nie
+     * zobaczyłby tej informacji nigdzie indziej.
+     */
+    async _sendChallengeScoreDm(client, userId, guildId, result) {
+        const msgs = this.msgs(guildId);
+        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs);
+        if (!value) return;
+        const embed = new EmbedBuilder()
+            .setColor(result?.pending ? 0xFEE75C : 0x5865F2)
+            .setTitle(msgs.challengeDmCountedTitle)
+            .setDescription(value)
+            .setTimestamp();
+        await this._dmUser(client, userId, { embeds: [embed] });
+    }
+
+    /**
+     * Admin zmapował surową nazwę bossa na angielską — dopisujemy zaparkowane wyniki
+     * i DOPIERO TERAZ informujemy graczy na priv.
+     * Wołane z obu ścieżek mapowania: alertu o nieznanym bossie i panelu konfiguracji bossów.
+     */
+    async _resolveChallengePendingBoss(client, rawBoss, englishBoss) {
+        if (!this.challengeService) return;
+        try {
+            const { credited, dropped, finished } = await this.challengeService.resolvePendingBoss(rawBoss, englishBoss);
+
+            for (const item of credited) {
+                const msgs = this.msgs(item.guildId);
+                const embed = new EmbedBuilder()
+                    .setColor(0x57F287)
+                    .setTitle(msgs.challengeDmVerifiedTitle)
+                    .setDescription([
+                        formatMessage(msgs.challengeDmVerifiedDesc, { boss: englishBoss, score: item.score }),
+                        '',
+                        this._challengeNoticeValue(item.notices, false, msgs),
+                    ].filter(Boolean).join('\n'))
+                    .setTimestamp();
+                await this._dmUser(client, item.userId, { embeds: [embed] });
+            }
+
+            for (const item of dropped) {
+                const msgs = this.msgs(item.guildId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xFEE75C)
+                    .setTitle(msgs.challengeDmDroppedTitle)
+                    .setDescription(formatMessage(
+                        item.reason === 'too_late' ? msgs.challengeDmDroppedTooLate : msgs.challengeDmDroppedNoChallenge,
+                        { boss: englishBoss, score: item.score }
+                    ))
+                    .setTimestamp();
+                await this._dmUser(client, item.userId, { embeds: [embed] });
+            }
+
+            if (finished.length > 0) await this._finishChallenges(client, finished);
+        } catch (err) {
+            logger.warn(`⚠️ Błąd doliczania wyników wyzwań po zatwierdzeniu bossa: ${err.message}`);
+        }
+    }
+
+    // ── Rezultat ──────────────────────────────────────────────────────────────
+
+    /** Embed z rezultatem — składany w języku odbiorcy, nigdy nie przechowywany gotowy */
+    _buildChallengeResultEmbed(challenge, msgs, { viewerSide = null, thumb = null, publicView = false } = {}) {
+        const cs = this.challengeService;
+        const nameA = cs.participantName(challenge.challenger, msgs);
+        const nameB = cs.participantName(challenge.opponent, msgs);
+        const fmt = (side) => {
+            const scores = challenge[side].scores || [];
+            const list = scores.length ? scores.map(s => `\`${s.score}\``).join(' · ') : msgs.challengeNoScores;
+            return `${list}\n${msgs.challengeFieldSum}: **${this.rankingService.formatScore(challenge[side].sum)}**`;
+        };
+
+        let headline;
+        if (challenge.status !== 'finished') {
+            headline = msgs.challengeStatusUnresolved;
+        } else if (!challenge.winner) {
+            headline = msgs.challengeDrawLine;
+        } else {
+            const winnerName = challenge.winner === 'challenger' ? nameA : nameB;
+            headline = formatMessage(msgs.challengeWinnerLine, { winner: winnerName });
+        }
+        // Na własnym DM dokładamy osobisty werdykt („Wygrałeś" / „Przegrałeś" / „Remis")
+        if (viewerSide && challenge.status === 'finished') {
+            const personal = !challenge.winner
+                ? msgs.challengeResultDraw
+                : (challenge.winner === viewerSide ? msgs.challengeResultWin : msgs.challengeResultLoss);
+            headline = `${personal}\n${headline}`;
+        }
+
+        const color = challenge.status !== 'finished'
+            ? 0x95A5A6
+            : (!challenge.winner ? 0x5865F2 : (viewerSide && challenge.winner === viewerSide ? 0xF1C40F : (viewerSide ? 0xED4245 : 0xF1C40F)));
+
+        const embed = new EmbedBuilder()
+            .setColor(color)
+            .setTitle(publicView ? msgs.challengePublicTitle : msgs.challengeDmResultTitle)
+            .setDescription([
+                formatMessage(msgs.challengeResultDesc, { a: nameA, b: nameB, boss: challenge.boss }),
+                '',
+                headline,
+            ].join('\n'))
+            .addFields(
+                { name: `⚔️ ${nameA}`, value: fmt('challenger'), inline: true },
+                { name: `🛡️ ${nameB}`, value: fmt('opponent'), inline: true },
+            )
+            .setTimestamp(challenge.finishedAt ? new Date(challenge.finishedAt) : new Date());
+        if (thumb) embed.setThumbnail(thumb);
+        return embed;
+    }
+
+    /**
+     * Rozstrzygnięcie: osiągnięcia + DM do OBU graczy z jednorazowym przyciskiem
+     * „pochwal się wynikami na swoim serwerze". Wyniku nie ogłaszamy automatycznie.
+     */
+    async _finishChallenges(client, challenges) {
+        for (const challenge of challenges) {
+            try {
+                await this._applyChallengeAchievements(challenge);
+                const bossImage = await this._challengeBossImage(challenge.boss);
+
+                for (const side of ['challenger', 'opponent']) {
+                    const participant = challenge[side];
+                    if (participant.profileDeleted) continue;
+                    const msgs = this.msgs(participant.guildId);
+                    const embed = this._buildChallengeResultEmbed(challenge, msgs, { viewerSide: side, thumb: bossImage.thumb });
+                    const row = new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`chal_share_${challenge.id}_${side === 'challenger' ? 'c' : 'o'}`)
+                            .setEmoji('📢')
+                            .setLabel(msgs.challengeBtnShare)
+                            .setStyle(ButtonStyle.Success)
+                    );
+                    const dm = await this._dmUser(client, participant.userId, {
+                        embeds: [embed],
+                        files: this._challengeBossFiles(bossImage),
+                        components: [row],
+                    });
+                    if (dm) await this.challengeService.attachResultDm(challenge.id, side, dm.channelId, dm.id);
+                }
+
+                this.logService._gl(challenge.challenger.guildId).info(
+                    `⚔️ Wyzwanie zakończone: "${challenge.challenger.username}" vs "${challenge.opponent.username}" (${challenge.boss}) — ${challenge.winner ? `wygrał ${challenge[challenge.winner].username}` : 'remis'}`
+                );
+            } catch (err) {
+                logger.error(`Błąd finalizacji wyzwania ${challenge.id}: ${err.message}`);
+            }
+        }
+    }
+
+    /** Osiągnięcia za wygraną/przegraną — remis i nierozstrzygnięcie nie liczą się */
+    async _applyChallengeAchievements(challenge) {
+        if (!this.achievementService || challenge.status !== 'finished' || !challenge.winner) return;
+        const winner = challenge[challenge.winner];
+        const loser = challenge[challenge.winner === 'challenger' ? 'opponent' : 'challenger'];
+        await this.achievementService.trackChallengeWon(winner.guildId, winner.playerKey).catch(() => {});
+        await this.achievementService.trackChallengeLost(loser.guildId, loser.playerKey).catch(() => {});
+    }
+
+    /**
+     * „Pochwal się wynikami" — publikuje rezultat na kanale bota serwera klikającego.
+     * Przycisk działa RAZ; stan siedzi w pliku, więc restart bota go nie resetuje.
+     */
+    async _handleChallengeShare(interaction, customId) {
+        const rest = customId.replace('chal_share_', '');
+        const sep = rest.lastIndexOf('_');
+        const challengeId = rest.slice(0, sep);
+        const side = rest.slice(sep + 1) === 'c' ? 'challenger' : 'opponent';
+
+        const challenge = await this.challengeService.getById(challengeId);
+        const msgs = this.msgs(challenge?.[side]?.guildId || interaction.guildId);
+
+        if (!challenge) {
+            await interaction.reply({ content: msgs.challengeErrGone, flags: ['Ephemeral'] });
+            return;
+        }
+        if (challenge[side].userId !== interaction.user.id) {
+            await interaction.reply({ content: msgs.challengeErrNotForYou, flags: ['Ephemeral'] });
+            return;
+        }
+
+        const guildId = challenge[side].guildId;
+        const guildName = this._challengeGuildName(interaction.client, guildId);
+        const channelId = this.config.getGuildConfig(guildId)?.allowedChannelId;
+
+        const disableButton = async (label, style = ButtonStyle.Secondary) => {
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`chal_done_${challengeId}`).setEmoji('📢').setLabel(label).setStyle(style).setDisabled(true)
+            );
+            await interaction.message.edit({ components: [row] }).catch(() => {});
+        };
+
+        if (!channelId) {
+            await interaction.reply({ content: formatMessage(msgs.challengeShareNoChannel, { guild: guildName }), flags: ['Ephemeral'] });
+            return;
+        }
+
+        const marked = await this.challengeService.markShared(challengeId, side);
+        if (!marked.ok) {
+            await interaction.reply({ content: msgs.challengeSharedAlready, flags: ['Ephemeral'] });
+            await disableButton(msgs.challengeBtnShared);
+            return;
+        }
+
+        try {
+            const channel = interaction.client.channels.cache.get(channelId)
+                || await interaction.client.channels.fetch(channelId);
+            // Embed w języku SERWERA docelowego, nie odbiorcy DM
+            const guildMsgs = this.msgs(guildId);
+            const bossImage = await this._challengeBossImage(challenge.boss);
+            const embed = this._buildChallengeResultEmbed(challenge, guildMsgs, { thumb: bossImage.thumb, publicView: true });
+            await channel.send({ embeds: [embed], files: this._challengeBossFiles(bossImage) });
+            await interaction.reply({ content: formatMessage(msgs.challengeSharedOk, { guild: guildName }), flags: ['Ephemeral'] });
+            await disableButton(msgs.challengeBtnShared, ButtonStyle.Secondary);
+        } catch (err) {
+            logger.warn(`⚠️ Nie udało się opublikować wyniku wyzwania ${challengeId}: ${err.message}`);
+            await interaction.reply({ content: formatMessage(msgs.challengeShareFailed, { guild: guildName }), flags: ['Ephemeral'] }).catch(() => {});
+        }
+    }
+
+    // ── Sweep ─────────────────────────────────────────────────────────────────
+
+    /** Uruchamiany z index.js po starcie bota */
+    startChallengeSweep(client) {
+        if (!this.challengeService) return;
+        this.challengeService.start(async (events) => {
+            await this._handleChallengeSweep(client, events);
+        });
+    }
+
+    async _handleChallengeSweep(client, { expiredInvites, unresolved, stalePending }) {
+        for (const challenge of expiredInvites) {
+            const msgs = this.msgs(challenge.challenger.guildId);
+            await this._dmUser(client, challenge.challenger.userId, {
+                content: formatMessage(msgs.challengeDmInviteExpiredNotice, {
+                    opponent: this.challengeService.participantName(challenge.opponent, msgs),
+                    boss: challenge.boss,
+                }),
+            });
+            await this._disableChallengeInvite(client, challenge);
+        }
+
+        for (const challenge of unresolved) {
+            const bossImage = await this._challengeBossImage(challenge.boss);
+            for (const side of ['challenger', 'opponent']) {
+                const participant = challenge[side];
+                if (participant.profileDeleted) continue;
+                const msgs = this.msgs(participant.guildId);
+                const other = challenge[side === 'challenger' ? 'opponent' : 'challenger'];
+                const embed = this._buildChallengeResultEmbed(challenge, msgs, { thumb: bossImage.thumb })
+                    .setTitle(msgs.challengeDmUnresolvedTitle)
+                    .setColor(0x95A5A6);
+                embed.setDescription([
+                    formatMessage(msgs.challengeDmUnresolvedDesc, {
+                        opponent: this.challengeService.participantName(other, msgs),
+                        boss: challenge.boss,
+                    }),
+                ].join('\n'));
+                await this._dmUser(client, participant.userId, {
+                    embeds: [embed],
+                    files: this._challengeBossFiles(bossImage),
+                });
+            }
+        }
+
+        for (const pending of stalePending) {
+            const msgs = this.msgs(pending.guildId);
+            const embed = new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle(msgs.challengeDmDroppedTitle)
+                .setDescription(formatMessage(msgs.challengeDmDroppedStale, { score: pending.score }))
+                .setTimestamp();
+            await this._dmUser(client, pending.userId, { embeds: [embed] });
+        }
+    }
+
+    /** Wygasza przyciski pod DM z zaproszeniem */
+    async _disableChallengeInvite(client, challenge, labelKey = 'challengeBtnExpired') {
+        if (!challenge.invite?.channelId || !challenge.invite?.messageId) return;
+        try {
+            const msgs = this.msgs(challenge.opponent.guildId);
+            const channel = await client.channels.fetch(challenge.invite.channelId);
+            const message = await channel.messages.fetch(challenge.invite.messageId);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`chal_done_${challenge.id}`)
+                    .setEmoji('⏳')
+                    .setLabel(msgs[labelKey] || msgs.challengeBtnExpired)
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(true)
+            );
+            await message.edit({ components: [row] });
+        } catch { /* DM mógł zostać skasowany */ }
+    }
+
+    // ── Spójność z profilami ──────────────────────────────────────────────────
+
+    /**
+     * Gracz skasował profil: wyzwania w toku są anulowane (z powiadomieniem przeciwnika),
+     * a rozstrzygnięte zostają — w historii uczestnik pokazuje się jako „Profil usunięty".
+     */
+    async _cancelChallengesForProfile(client, playerKey) {
+        if (!this.challengeService) return;
+        try {
+            const { cancelled } = await this.challengeService.onProfilePurged(playerKey);
+            for (const challenge of cancelled) {
+                const otherSide = challenge.cancelledSide === 'challenger' ? 'opponent' : 'challenger';
+                const other = challenge[otherSide];
+                if (other.profileDeleted) continue;
+                const msgs = this.msgs(other.guildId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xED4245)
+                    .setTitle(msgs.challengeDmCancelledTitle)
+                    .setDescription(formatMessage(msgs.challengeDmCancelledDesc, {
+                        opponent: msgs.challengeDeletedProfile,
+                        boss: challenge.boss,
+                    }))
+                    .setTimestamp();
+                await this._dmUser(client, other.userId, { embeds: [embed] });
+                await this._disableChallengeInvite(client, challenge);
+            }
+        } catch (err) {
+            logger.warn(`⚠️ Błąd anulowania wyzwań usuniętego profilu ${playerKey}: ${err.message}`);
+        }
+    }
+
+    // ── Widok w /profile ──────────────────────────────────────────────────────
+
+    /**
+     * Zakładka `⚔️ Wyzwania` — bilans, wyzwania w toku (tylko własny profil) i historia.
+     * @returns {Promise<{ embed: EmbedBuilder, maxPage: number }>}
+     */
+    async _buildChallengeProfileEmbed(playerKey, displayName, msgs, page = 0, isOwnProfile = false) {
+        const PER_PAGE = 8;
+        const cs = this.challengeService;
+        const all = await cs.getForPlayer(playerKey);
+        const stats = cs.summarize(all, playerKey);
+        const pendingScores = isOwnProfile ? await cs.getPendingScoresForPlayer(playerKey) : [];
+
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(formatMessage(msgs.challengeProfileTitle, { name: displayName }))
+            .setDescription(formatMessage(msgs.challengeProfileSummary, stats));
+
+        const active = all.filter(c => c.status === 'active');
+        if (isOwnProfile && active.length > 0) {
+            const lines = active.map(c => {
+                const side = cs.sideOf(c, playerKey);
+                const other = c[cs.otherSide(side)];
+                const mine = c[side].scores.length;
+                const theirs = other.scores.length;
+                return `⚔️ **${cs.participantName(other, msgs)}** — \`${c.boss}\`\n`
+                    + `└ ${mine}/${cs.scoresPerSide} : ${theirs}/${cs.scoresPerSide} · ${this._discordTs(c.expiresAt, 'R')}`;
+            });
+            // Wynik oczekujący na zatwierdzenie nazwy bossa nie jest jeszcze przypisany
+            // do konkretnego wyzwania, więc idzie jedną notką pod listą — nie przy wierszach
+            if (pendingScores.length > 0) {
+                lines.push(formatMessage(msgs.challengeProfilePendingSuffix, { count: pendingScores.length }).trim());
+            }
+            embed.addFields({ name: msgs.challengeProfileActive, value: lines.join('\n').slice(0, 1024), inline: false });
+        }
+
+        const history = all.filter(c => ['finished', 'unresolved', 'cancelled'].includes(c.status));
+        const maxPage = Math.max(1, Math.ceil(history.length / PER_PAGE));
+        const safePage = Math.min(Math.max(0, page), maxPage - 1);
+
+        if (history.length === 0) {
+            embed.addFields({ name: msgs.challengeProfileHistory, value: msgs.challengeProfileEmpty, inline: false });
+        } else {
+            const lines = history.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE).map(c => {
+                const side = cs.sideOf(c, playerKey);
+                const other = c[cs.otherSide(side)];
+                const mySum = this.rankingService.formatScore(c[side].sum);
+                const theirSum = this.rankingService.formatScore(other.sum);
+                return `${cs.statusLabel(c, playerKey, msgs)} · **${cs.participantName(other, msgs)}** — \`${c.boss}\`\n`
+                    + `└ ${mySum} : ${theirSum} · ${this._discordTs(c.finishedAt, 'd')}`;
+            });
+            embed.addFields({ name: msgs.challengeProfileHistory, value: lines.join('\n').slice(0, 1024), inline: false });
+            if (maxPage > 1) embed.setFooter({ text: `${safePage + 1}/${maxPage}` });
+        }
+
+        return { embed, maxPage };
+    }
+
     // ─── BOSS ALIAS — panel konfiguracji bossów ───────────────────────────────
 
     /** Zwraca angielskie nazwy bossów z pliku boss_aliases.json, posortowane alfabetycznie */
@@ -16277,6 +17274,10 @@ class InteractionHandler {
                 .then(count => { if (count > 0) logger.info(`Migracja boss_records: "${rawAlias}" → "${engName}" (${count} graczy)`); })
                 .catch(e => logger.error(`Błąd migracji boss_records: ${e.message}`));
         }
+
+        // ⚔️ Wyzwania — ten sam efekt co przy mapowaniu z alertu o nieznanym bossie
+        this._resolveChallengePendingBoss(interaction.client, session.pendingAlias, session.pendingBoss)
+            .catch(e => logger.warn(`⚠️ Błąd doliczania wyników wyzwań: ${e.message}`));
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
                 .setTitle(t('✅ Alias dodany', '✅ Alias Added'))
@@ -16810,6 +17811,11 @@ class InteractionHandler {
                 .then(count => { if (count > 0) logger.info(`Migracja boss_records: "${rawBoss}" → "${engName}" (${count} graczy)`); })
                 .catch(e => logger.error(`Błąd migracji boss_records: ${e.message}`));
         }
+
+        // ⚔️ Wyzwania — wyniki zaparkowane pod surową nazwą bossa są DOPIERO TERAZ doliczane,
+        // a gracze dostają o tym informację na priv (wcześniej nie było wiadomo, jaki to boss)
+        this._resolveChallengePendingBoss(interaction.client, session.adjustedBoss, session.englishBoss)
+            .catch(e => logger.warn(`⚠️ Błąd doliczania wyników wyzwań: ${e.message}`));
 
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)

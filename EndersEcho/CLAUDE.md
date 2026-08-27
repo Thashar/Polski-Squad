@@ -73,7 +73,7 @@
 - **Rejestr profili** — `data/profiles.json`: `{ [userId]: { active, profiles: [{ index, label, createdAt, pendingDeleteAt? }] } }`
   - Gracz **bez wpisu w pliku** ma niejawnie jeden profil w slocie 1 — działa dokładnie jak przed wdrożeniem profili. Gdy wpis istnieje, lista `profiles` jest **jedynym źródłem prawdy** (slot 1 może w niej nie występować, jeśli został usunięty)
   - **Numery slotów są przesuwane po usunięciu** — skasowanie profilu 1 sprawia, że 2 staje się 1, a 3 staje się 2 (bez dziur w numeracji). Numer slotu jest częścią `playerKey`, więc `removeProfile` zwraca listę przesunięć `renumbered[{ fromIndex, toIndex, fromKey, toKey }]` (rosnąco — kolejny klucz docelowy jest zawsze wolny), a `_migratePlayerKey` przenosi po niej WSZYSTKIE dane profilu
-  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) i sesje CV (`communityVerificationService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
+  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) sesje CV (`communityVerificationService.renamePlayerKey`) i wyzwania (`challengeService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
   - `active` = numer profilu **MAIN** (pinezka 📌). Gdy zapisany main już nie istnieje → fallback na pierwszy istniejący slot (`getMainIndex`)
   - Limit: `ENDERSECHO_MAX_PROFILES` (domyślnie 3, `config.profiles.maxPerUser`)
   - Etykiety (nick w grze) sanityzowane: usuwane markdown/wzmianki/`#`, max 24 znaki, unikalne w obrębie gracza
@@ -117,7 +117,7 @@
   - **Limit dzienny i cooldown naliczane są dopiero po wyborze** — porzucony modal nie kosztuje gracza próby
   - **`deferReply` jest PIERWSZĄ operacją `_runUpdateAnalysis`** — wcześniej sprawdzenie dziennego limitu (`usageLimitService.checkAndRecord()` = odczyt + zapis `usage_limits.json`) szło przed potwierdzeniem interakcji i przy obciążonym serwerze wypychało `deferReply` poza 3-sekundowy limit Discorda → `DiscordAPIError[10062] Unknown interaction` i brak jakiejkolwiek odpowiedzi dla gracza. Teraz interakcja jest potwierdzana od razu, a komunikat o przekroczonym limicie idzie przez `editReply`. Kod 10062 przy samym `deferReply` kończy się krótkim ostrzeżeniem w logu (analiza pomijana), a globalny handler w `index.js` nie wypisuje dla niego stack trace'a. Wszystkie walidacje w `_runUpdateFlow` (przed modalem) muszą pozostać operacjami w pamięci — bez odczytów z dysku
 - **Zakres per OSOBA (bez zmian, klucz `userId`):** blokady (`user_blocks.json`), dzienny limit `/update` (`usage_limits.json`), cooldown (`update_cooldowns.json`), koszty tokenów, statystyki odrzuceń, osiągnięcia „Eksplorator" (rankingViews, profileSearches, subscriptions). Profile **nie mnożą** limitu ani nie pozwalają obejść cooldownu
-- **Zakres per PROFIL (klucz `playerKey`):** `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json`, subskrypcje (`targetPlayerKey`), sesje CV i cofnięcia wyniku
+- **Zakres per PROFIL (klucz `playerKey`):** `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json`, subskrypcje (`targetPlayerKey`), sesje CV, cofnięcia wyniku i wyzwania (`challenges.json`)
 - **Progi ról TOP liczone na liście zdeduplikowanej** (`getSortedPlayersByUser`) — jeden member Discorda ma jedną rolę, a profile dodatkowe nie mogą zajmować progów i odbierać ról innym graczom. Ranking pokazuje wszystkie profile, ale role przydzielane są wg pozycji OSOBY. Nagłówek embeda rekordu (author = rola TOP) używa pozycji osoby, nie profilu
 - **Liczniki graczy pokazują OSOBY — bez wyjątków.** Profil dodatkowy to ten sam człowiek, więc **żaden** widoczny licznik nie może liczyć wpisów rankingu. Miejsca i sposób dedupu:
   - `rankingService.getCountedPlayers()` — dedup po `userId` (`{ total, playerIds, profileCount }`); używane przez kamienie milowe, stopkę logu OCR i CC
@@ -280,8 +280,8 @@
    - Limit: max 25 subskrypcji wyświetlanych naraz w select menu (Discord API limit)
 
 7. **System Osiągnięć** — `achievementService.js` + `config/achievements.js`:
-   - **80 stałych osiągnięć** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
-   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (8: 1/3/5/7/10/13/16/20 różnych bossów, dwa najwyższe: ☄️ Nieśmiertelny Łowca i 👑 Bóg Łowów, oba mythic) · 🕵️ Eksplorator/ukryte (43) · 💎 Prestiż (13)
+   - **101 stałych osiągnięć** w 5 kategoriach + 1 dynamiczny status (`status_top1` — rewokowany gdy wynik usunięty)
+   - **Kategorie:** 🏆 Wyniki (9) · 🔁 Rekordy (8) · 🎯 Bossowie (8: 1/3/5/7/10/13/16/20 różnych bossów, dwa najwyższe: ☄️ Nieśmiertelny Łowca i 👑 Bóg Łowów, oba mythic) · 🕵️ Eksplorator/ukryte (65 — w tym 22 sekretne za wyzwania `/challenge`) · 💎 Prestiż (13)
    - **Rarities:** ⬜ Common · 🟩 Uncommon · 🟦 Rare · 🟪 Epic · 🟧 Legendary · 🔴 Mythic
    - **Odblokowanie:** osiągnięcia score/records/bosses/prestige blokowane przy każdym nowym rekordzie; ukryte (explorer) blokowane natychmiast przy przegladzie rankingu lub subskrypcji
    - **Kasowanie częściowe:** `clearUserAchievements(guildId, userId)` — usuwa WSZYSTKIE osiągnięcia kategorii `score` i `records` oraz resetuje `recordCount`/`lastRecordAt`/`lastRecordBeatAt`; pozostałe kategorie (bosses, explorer, prestige) zostają; wywoływane przy usunięciu gracza z rankingu (panel admina + komenda `/remove` — usunięcie całego gracza)
@@ -300,8 +300,8 @@
    - **Serializacja zapisu (anti-race):** wszystkie operacje mutujące (`processSubmission`, `_trackExplorer` używane przez metody `track*`, `revert*`, `clear*`, `reset*`, `removeOneAchievement`) przechodzą przez kolejkę per-serwer `_enqueue(guildId, fn)` (wzorzec z `rankingService`, timeout 30s). Zapobiega to race condition: bez kolejki częste metody `track*` (wołane przy każdym podejrzeniu rankingu/subskrypcji/wyszukaniu profilu) mogły nadpisać świeży zapis `processSubmission` swoim starym snapshotem, cofając `lastRecordBeatAt` — co powodowało **ponowne ogłaszanie już posiadanych osiągnięć** w embedzie rekordu. Wszystkie metody `track*` współdzielą helper `_trackExplorer(guildId, userId, incrementFn)`.
    - **Widok osiągnięć** (zakładka `🏆 Osiągnięcia` w `/profile` — osobnej komendy `/achievements` NIE MA): ephemeral embed — każda kategoria na osobnej stronie + przycisk podsumowania + przycisk "Sprawdź gracza". Wiersz 1: 5 przycisków kategorii (`🏆 Wyniki`, `🔁 Rekordy`, `🎯 Łowy`, `💎 Prestiż`, `🕵️ Eksplorator`). Wiersz 2: `📊 Podsumowanie` + `🔍 Sprawdź gracza`. Tytuł embeda = etykieta kategorii. Odblokowane: `emoji **nazwa** *(rarity)* \n└ opis — data`. Zablokowane nieukryte: `🔒 ~~nazwa~~`. Zablokowane ukryte: `🔒 **???**`. Stopka: `X/Y odblokowanych` (ukryte: `X/? odblokowanych`). Domyślna strona po wejściu w zakładkę: kategoria `score`. **Osiągnięcia cross-server:** `buildAchievementsViewGlobal(allGuildIds, userId, ...)` merguje dane ze WSZYSTKICH serwerów (`_mergeAchievements`); to samo dla `/profile` i "Sprawdź gracza".
    - **Sprawdź gracza (`ach_check_player`):** otwiera modal z polem nicku → wyszukuje cross-server przez `getGlobalRanking()` → jeśli 1 trafienie: od razu pokazuje osiągnięcia; jeśli wiele: StringSelectMenu (`ach_check_sel`). Wyświetla osiągnięcia ze **wszystkich serwerów** (`buildAchievementsViewForUserGlobal`). **Bez opisów jak zdobyć** — format: `emoji (rarity_emoji) **nazwa** *(rarity)* — data`. Przyciski nawigacji osadzają userId+guildId w customId (`ach_vc_{cat}_{userId}_{guildId}`, `ach_vo_{userId}_{guildId}`). Powrót do własnych osiągnięć przez `ach_vb`.
-   - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm`; `trackNonRecord(guildId, userId)` — wołane w `_runUpdateFlow` gdy `!isNewRecord && !dryRun`; `trackCvApproved(guildId, userId)` — wołane w CV approve handler; `trackAiAnalyzed(guildId, userId)` — wołane w `_handleAnalyzeButton` po zapisaniu wyniku; `trackProfileSearch(guildId, userId)` — wołane w `_handleProfileSearchModal` gdy znaleziono ≥1 wynik
-   - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`, `progress.profileSearches`
+   - **Tracking:** `trackRankingView(guildId, userId)` — wołane w `handleRankingCommand`; `trackSubscription(guildId, userId)` — wołane w `_handleNotifConfirm`; `trackNonRecord(guildId, userId)` — wołane w `_runUpdateFlow` gdy `!isNewRecord && !dryRun`; `trackCvApproved(guildId, userId)` — wołane w CV approve handler; `trackAiAnalyzed(guildId, userId)` — wołane w `_handleAnalyzeButton` po zapisaniu wyniku; `trackProfileSearch(guildId, userId)` — wołane w `_handleProfileSearchModal` gdy znaleziono ≥1 wynik; `trackChallengeSent/Accepted/Won/Lost(guildId, playerKey)` — wyzwania `/challenge`
+   - **Progress:** `progress.recordCount`, `progress.bossesEncountered[]`, `progress.rankingViews`, `progress.subscriptions`, `progress.lastRecordAt`, `progress.lastRecordBeatAt`, `progress.todayRecordDate` (YYYY-MM-DD UTC), `progress.todayRecordCount`, `progress.nonRecordCount`, `progress.cvApprovedCount`, `progress.aiRescuedCount`, `progress.profileSearches`, `progress.challengesSent`, `progress.challengesAccepted`, `progress.challengesWon`, `progress.challengesLost`
    - **Context w processSubmission:** `ctx.scoreValue`, `ctx.isNewRecord`, `ctx.prevScoreValue`, `ctx.currentPosition` (pozycja na serwerze), `ctx.bossName`, `ctx.globalPosition` (pozycja w rankingu globalnym — 0 jeśli brak)
    - **CustomIDs:** `ach_cat_{categoryKey}` (score/records/bosses/prestige/explorer) | `ach_overview` | `ach_check_player` | `ach_check_modal` | `ach_check_sel` | `ach_vc_{cat}_{userId}_{guildId}` | `ach_vo_{userId}_{guildId}` | `ach_vb`
 
@@ -345,7 +345,7 @@
    - **Konfiguracja bossów (head admin):** zarządzaj angielskimi nazwami bossów i ich aliasami w innych językach — patrz sekcja poniżej.
    - **Centrum Dowodzenia (head admin):** panel 6 embedów na dedykowanym kanale z 4 rzędami przycisków akcji, aktualizowany automatycznie po każdej analizie OCR i akcji admina — patrz sekcja poniżej.
 
-**Komendy slash (KOMPLETNA lista rejestrowana w `getSlashCommands()`):** `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
+**Komendy slash (KOMPLETNA lista rejestrowana w `getSlashCommands()`):** `/challenge`, `/configure`, `/help`, `/manage`, `/profile`, `/ranking`, `/test`, `/update`
 
 **⚠️ Wszystko dla gracza siedzi w `/profile`** — osobnych komend `/achievements`, `/subscribe` ani `/profiles` **NIE MA** (osiągnięcia = zakładka `🏆 Osiągnięcia`, subskrypcje = przycisk `🔔 Subskrypcje`, profile = `➕ Dodaj profil` / `👥 Moje profile`). W `handleCommand` zostały martwe `case 'achievements'` i `case 'subscribe'` — nigdy nie zostaną wywołane, bo te komendy nie są rejestrowane. **Nie odwołuj się do nich w komunikatach dla graczy.**
 
@@ -608,15 +608,16 @@
 - **Zakładka 🎯 Bossowie:** lista WSZYSTKICH znanych bossów (z `bossAliasService.getExtraEnglishNames()`), posortowana alfabetycznie, 15/stronę; ✅ z rekordem (score + data), — bez rekordu; paginacja gdy >15
 - **Zakładka 🏆 Osiągnięcia:** używa `achievementService.buildAchievementsViewGlobal/ForUserGlobal` — dane mergowane ze WSZYSTKICH serwerów; własny profil — z opisami osiągnięć; cudzy — bez opisów
 - **Szukaj gracza (🔍):** otwiera modal → wyszukiwanie cross-server w globalRanking → 1 trafienie: od razu profil; wiele: StringSelectMenu
-- **Własny profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | Szukaj gracza | 🔔 Subskrypcje (otwiera panel zarządzania subskrypcjami jako nowy ephemeral)
+- **Zakładka ⚔️ Wyzwania:** bilans, wyzwania w toku i historia pojedynków — patrz sekcja „System Wyzwań 1 vs 1 (`/challenge`)" niżej
+- **Własny profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | ⚔️ Wyzwania | 🔔 Subskrypcje (**`🔍 Szukaj gracza` zeszło do rzędu narzędzi** — rząd 1 mieści 5 przycisków)
 - **Własny profil — Rząd profili (zawsze):** przyciski profili `🏠 Main` | `② …` | `③ …` (`profile_view_{index}`, aktualnie oglądany Primary + disabled) **tylko gdy gracz ma >1 profil**, dalej `📌 Śledź ten profil` / `📌 Śledzony` (`profile_track`, Success + disabled gdy już śledzony — też tylko przy >1 profilu), a na końcu `👥 Moje profile` (`profile_manage_prof`). **Gracz z jednym profilem widzi w tym rzędzie wyłącznie `➕ Dodaj profil`** (`profile_add_intro`, Success) — panel dochodzi od drugiego profilu
   - **Układ rzędu:** narzędzia (`profile_track`, `profile_manage_prof`) zawsze na końcu **ostatniego** rzędu; przy podniesionym `ENDERSECHO_MAX_PROFILES` nadmiar przycisków profili przechodzi do rzędu wyżej (chunkowanie po 5), więc żaden rząd nie przekracza limitu Discorda
   - Kliknięcie `profile_track` zapisuje wybór w `profiles.json` (`setActive`), wysyła ephemeral potwierdzenie i przerysowuje przyciski. Na cudzym profilu rzędu profili nie ma wcale
 - **Pole 👥 Profile tego gracza** w zakładce Profil — lista profili z wynikami, `📌` przy śledzonym
-- **Cudzy profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | Szukaj gracza. **Rząd 2:** ◀️ Wróć do siebie (Danger, pierwszy) | 🔔 Subskrybuj / 🔕 Odsubskrybuj (ostatni, zmienia się po kliknięciu)
-- **Stan sesji:** `_profileStates` Map (messageId → state), TTL 15 min; pola: `viewerId, targetPlayerKey, targetGuildId, lang, view, category, bossPage, bossMaxPage, cachedData, isSubscribed, subscriberCount` (**`targetPlayerKey`, nie `targetUserId`** — widok dotyczy konkretnego profilu)
+- **Cudzy profil — Rząd 1:** Profil | Bossowie | Osiągnięcia | ⚔️ Wyzwania | Szukaj gracza. **Rząd 2:** ◀️ Wróć do siebie (Danger, pierwszy) | 🔔 Subskrybuj / 🔕 Odsubskrybuj (ostatni, zmienia się po kliknięciu)
+- **Stan sesji:** `_profileStates` Map (messageId → state), TTL 15 min; pola: `viewerId, targetPlayerKey, targetGuildId, lang, view, category, bossPage, bossMaxPage, chalPage, chalMaxPage, cachedData, isSubscribed, subscriberCount` (**`targetPlayerKey`, nie `targetUserId`** — widok dotyczy konkretnego profilu)
 - **Dane per-boss:** `bossRecordService.getUserBossRecordsAllGuilds(allGuildIds, userId)` — merge najlepszych wyników ze wszystkich serwerów
-- **CustomIDs:** `profile_main` | `profile_bosses` | `profile_bosses_prev` | `profile_bosses_next` | `profile_ach_overview` | `profile_ach_cat_{key}` | `profile_search` | `profile_search_modal` | `profile_search_sel` | `profile_back` | `profile_manage_subs` | `profile_manage_prof` | `profile_add_intro` | `profile_subscribe` | `profile_unsubscribe` | `profile_view_{index}` | `profile_track` (wszystkie routowane przez whitelistę w `handleButtonInteraction` — nowy customId `profile_*` MUSI tam trafić, inaczej przycisk nie zadziała)
+- **CustomIDs:** `profile_main` | `profile_bosses` | `profile_bosses_prev` | `profile_bosses_next` | `profile_ach_overview` | `profile_ach_cat_{key}` | `profile_search` | `profile_search_modal` | `profile_search_sel` | `profile_back` | `profile_manage_subs` | `profile_manage_prof` | `profile_add_intro` | `profile_subscribe` | `profile_unsubscribe` | `profile_view_{index}` | `profile_track` | `profile_challenges` | `profile_chal_prev` | `profile_chal_next` (wszystkie routowane przez whitelistę w `handleButtonInteraction` — nowy customId `profile_*` MUSI tam trafić, inaczej przycisk nie zadziała)
 - **Serwis:** `services/profileService.js` — `collectData`, `buildMainEmbed(data, isPol, subscriberCount?)`, `buildBossesEmbed`, `buildProfileComponents`
 
 **Komenda /configure** — wizard konfiguracji serwera (admin, dowolny kanał):
@@ -736,6 +737,7 @@
 - `/configure`: Administrator Discord LUB Head Admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`); gdy `ENDERSECHO_CONFIGURE_ADMIN_ONLY=true` → tylko Administrator; błąd: `configureNotAdmin`
 - `/manage`: Administrator Discord LUB Head Admin LUB moderator gry (z `guild_configs.json → moderators[]`); błąd: `manageNotAdmin`
 - Wymaga konfiguracji, dowolny kanał: `/test` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS`)
+- Wymaga konfiguracji, dowolny kanał: `/challenge` (Administrator + `ENDERSECHO_BLOCK_OCR_USER_IDS` — na razie wyłącznie head admin)
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/profile`
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
@@ -806,7 +808,8 @@ EndersEcho/data/
 ├── banned_guilds.json             # Zbanowane serwery
 ├── community_votes.json           # Sesje weryfikacji społeczności
 ├── profiles.json                  # Profile graczy (kilka kont w grze)
-└── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
+├── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
+└── challenges.json             # Wyzwania 1 vs 1 (/challenge) + wyniki czekające na zatwierdzenie bossa
 ```
 Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
 
@@ -1217,3 +1220,145 @@ adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie w
 ```
 
 **Dostęp przez `/manage`:** Rząd 2 (tylko Head Admin) → `📡 Centrum Dowodzenia` → info o kanale + `🔄 Odśwież Panel`.
+
+---
+
+## System Wyzwań 1 vs 1 (`/challenge`)
+
+**Pliki:** `services/challengeService.js` · **Stan:** `data/challenges.json` (GLOBALNY, nie per-serwer — wyzwanie łączy dwa serwery)
+
+Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** każdej ze stron, zrobione po przyjęciu wyzwania. Wyniki sumują się, wygrywa wyższa suma.
+
+**⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
+
+**⚠️ Komenda `/challenge` jest na razie WYŁĄCZNIE dla head admina** — widoczna tylko dla administratorów (`setDefaultMemberPermissions(Administrator)`), a wykonać może ją tylko użytkownik z `ENDERSECHO_BLOCK_OCR_USER_IDS` (jak `/generate`). Routing jak `/test`: dowolny kanał, wymaga skonfigurowanego serwera. **Przyjęcie wyzwania, zaliczanie wyników i osiągnięcia działają dla KAŻDEGO gracza** — ograniczenie dotyczy wyłącznie rzucania wyzwania.
+
+### Terminy i limity
+
+| Parametr | Wartość | Stała |
+|---|---|---|
+| Wyniki na uczestnika | 3 | `SCORES_PER_SIDE` |
+| Zaproszenie bez odpowiedzi | 48 h → `expired` | `INVITE_TTL_MS` |
+| Przyjęte wyzwanie | **72 h** → `unresolved` (nierozstrzygnięte) | `CHALLENGE_TTL_MS` |
+| Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
+| Otwarte wyzwania na profil | 3 (trwające + wysłane zaproszenia) | `MAX_ACTIVE_PER_PLAYER` |
+| Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
+
+Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h bez kompletu wyników) · `cancelled` (uczestnik usunął profil).
+
+### Wizard (ephemeral, wzorzec `/subscribe`)
+
+1. `chal_srv` — wybór serwera (`config.getAllGuilds()`)
+2. `chal_pl` — wybór gracza z rankingu tego serwera (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący)
+3. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
+4. Potwierdzenie z **miniaturą bossa** + zasady → `chal_ok` / `chal_no`
+
+Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków). To sesja czysto UI, restart bota tylko ją zeruje.
+
+**Rekord powstaje dopiero po UDANEJ wysyłce DM.** Gdy przeciwnik ma zamknięte wiadomości prywatne, wpis jest kasowany (`discard`), a wyzywający dostaje `challengeErrDmClosed`.
+
+### DM z zaproszeniem
+
+Embed z **ikoną bossa jako thumbnail** (`_challengeBossImage` → `data/boss_images/`), zasadami i terminem odpowiedzi. Przyciski `chal_acc_{id}` / `chal_rej_{id}` → po kliknięciu zamieniane na **nieaktywny znacznik** `chal_done_{id}`. Wyzywający dostaje DM o decyzji.
+
+**Uprawnienie sprawdzane po `challenge.opponent.userId`, nie po customId** — customId nie jest źródłem prawdy.
+
+### Zaliczanie wyników w `/update`
+
+Wpięcie w `_runUpdateFlow` **tuż po ustaleniu `bestScore`/`bossName`/`userName`, PRZED rozgałęzieniem** na ścieżki (duplikat cross-server / brak rekordu / nowy rekord) — dzięki temu liczy się każdy pozytywnie zweryfikowany screen, niezależnie od tego, czy padł rekord. `/test` (dryRun) **nie zalicza niczego**.
+
+- Liczą się wyłącznie wyniki z timestampem **po `respondedAt`** (akceptacji)
+- Uczestnik z kompletem 3 wyników nie przyjmuje kolejnych
+- Jeden wynik zalicza się do WSZYSTKICH aktywnych wyzwań tego profilu na tym bossie
+
+**Gdzie widać informację:**
+- **Jest publiczne ogłoszenie** → pole `⚔️ Wyzwanie` dokładane do `systemNotices` → trafia do **Embeda 4 (ℹ️ Informacje systemowe)**, bez żadnych zmian w `rankingService`. Dotyczy wszystkich trzech wywołań `createRecordEmbeds` w `_runUpdateFlow` (duplikat cross-server, „tylko rekord bossa", nowy rekord)
+- **Brak rekordu ogólnego i brak rekordu bossa** (nic nie idzie publicznie) → linia w `reasonText` embeda `createNoRecordEmbeds` **oraz DM** do gracza (`_sendChallengeScoreDm`)
+
+### Nierozpoznana nazwa bossa → wynik oczekujący
+
+Gdy `aiResult.wasUnknownBoss === true`, wynik **nie jest zaliczany od razu** — trafia do `pendingScores` (`addPendingScore`), ale **tylko gdy gracz ma jakiekolwiek wyzwanie w toku**. Embed pokazuje `challengeNoticePending` („czeka na zatwierdzenie przez administratora"), **żaden DM na tym etapie nie wychodzi**.
+
+Doliczenie następuje dopiero, gdy admin zmapuje alias — `_resolveChallengePendingBoss(client, rawBoss, englishBoss)` wołane z **OBU** ścieżek mapowania, obok istniejącej `migrateBossName`:
+- `_handleBossMapLangSel` — alert o nieznanym bossie (`boss_mapm_*`)
+- `_handleBossCfgAddLangSel` — panel `🎯 Konfiguracja bossów`
+
+Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie trafił do żadnego wyzwania, jest porzucany z DM-em wyjaśniającym **jednym z dwóch powodów**:
+- `too_late` — wyzwanie na tym bossie **było**, ale zdążyło się rozstrzygnąć (albo komplet wyników był już zebrany)
+- `no_challenge` — gracz nie ma i nie miał wyzwania na tym bossie
+
+⚠️ **Powód rozstrzyga się po WSZYSTKICH statusach wyzwań** (`getForPlayer`), nie po aktywnych. Po rozstrzygnięciu wyzwanie nie jest już `active`, więc sprawdzanie samych aktywnych dawałoby zawsze `no_challenge` — spóźniony gracz dostawałby komunikat „nie masz takiego wyzwania" zamiast „wyzwanie już się rozstrzygnęło".
+
+**Wynik oczekujący NIE blokuje rozstrzygnięcia** — decyzja świadoma. Wyzwanie może zamknąć się bez niego, a spóźniony wynik jest wtedy porzucany z powyższym komunikatem.
+
+### Rozstrzygnięcie i „pochwal się wynikami"
+
+Gdy obaj uczestnicy mają po 3 wyniki: sumy z `scoreValue`, wyższa wygrywa, równe = **remis**. Wyniku **NIE ogłaszamy automatycznie** — zamiast tego:
+
+- **DM do OBU graczy**, każdy w języku swojego serwera: embed z ikoną bossa, wynikami i sumami obu stron, osobistym werdyktem (`challengeResultWin`/`Loss`/`Draw`) i linią zwycięzcy
+- Pod DM **jednorazowy przycisk** `📢 Pochwal się wynikami na swoim serwerze` (`chal_share_{id}_{c|o}`):
+  - publikuje ten sam embed na kanale bota (`allowedChannelId`) serwera **tego** gracza, zbudowany **w języku serwera docelowego**, nie odbiorcy DM
+  - potem przycisk zmienia się w **nieaktywny** `✅ Pochwalono się`
+  - stan `result.shared.{challenger|opponent}` siedzi w pliku, więc przycisk działa raz **także po restarcie bota**
+  - gdy obaj gracze są z tego samego serwera, drugie kliknięcie nie duplikuje ogłoszenia (`result.sharedGuildIds` → `challengeSharedAlready`)
+
+Osiągnięcia: zwycięzca `+1 wygrana`, przegrany `+1 przegrana`. **Remis, `unresolved` i `cancelled` nie naliczają niczego.**
+
+### Sweep (co godzinę + przy starcie)
+
+`challengeService.start(onEvents)` uruchamiany z `index.js` przez `interactionHandler.startChallengeSweep(client)`:
+
+| Warunek | Efekt |
+|---|---|
+| `pending` starsze niż 48 h | → `expired`, DM do wyzywającego, wygaszenie przycisków w DM zaproszenia |
+| `active` starsze niż 72 h | → `unresolved`, DM do obu z aktualnymi wynikami, bez zwycięzcy i bez osiągnięć |
+| `pendingScore` starszy niż 72 h | porzucony, DM do gracza |
+
+### Spójność z profilami
+
+- **`renamePlayerKey(from, to)` dopisany do `_migratePlayerKey`** — plik jest kluczowany `playerKey`, a numery slotów zjeżdżają po usunięciu profilu (2→1, 3→2). Bez tego dane osierocieją
+- **`_cancelChallengesForProfile(client, playerKey)` wołane z `_purgeProfileData`:** wyzwania `pending`/`active` → `cancelled` z DM do przeciwnika; wpisy **rozstrzygnięte ZOSTAJĄ** (to również historia przeciwnika), a uczestnik dostaje flagę `profileDeleted: true`
+- **⚠️ W pliku trzymamy FLAGĘ, nie napis „Profil usunięty".** Etykietę składa `participantName(participant, msgs)` w języku odbiorcy (`challengeDeletedProfile` → PL `🗑️ Profil usunięty`, EN `🗑️ Deleted profile`). Zapisanie polskiego stringa do pliku złamałoby dwujęzyczność na serwerach `eng`
+- **Cofnięcie wyniku** (`_cvRemoveRecord` — przycisk gracza/admina, CV, panel „Analizuj"; oraz panel `🧹 Usuń wynik`) → `removeScore(playerKey, timestamp)` wypisuje wynik z wyzwań **BĘDĄCYCH W TOKU**. Wyzwania rozstrzygnięte zostają nietknięte: rezultat już padł i obie strony dostały powiadomienie
+
+### Zakładka `⚔️ Wyzwania` w `/profile`
+
+Rząd 1 mieści 5 przycisków, więc układ się przesunął:
+- **Własny profil, rząd 1:** `👤 Profil` · `🎯 Bossowie` · `🏆 Osiągnięcia` · `⚔️ Wyzwania` · `🔔 Subskrypcje`; **`🔍 Szukaj gracza` zeszło do rzędu narzędzi** (to narzędzie, nie zakładka)
+- **Cudzy profil, rząd 1:** `👤` · `🎯` · `🏆` · `⚔️` · `🔍 Szukaj gracza`
+
+Widok: bilans (`🏆 wygrane · 💔 przegrane · 🤝 remisy · ❓ nierozstrzygnięte · ⚔️ rzucone · 🛡️ przyjęte`), sekcja **W toku** (tylko własny profil — `2/3 : 1/3` + termin `<t:…:R>`, a wyniki oczekujące jedną notką pod listą, bo nie są jeszcze przypisane do konkretnego wyzwania) i **Historia** (8/stronę, paginacja `profile_chal_prev`/`profile_chal_next`).
+
+Stan `chalPage`/`chalMaxPage` w `_profileStates`; komunikaty przez **`_msgsByLang(state.lang)`**, nie `this.msgs(guildId)` — widok profilu trzyma własny język (`_getProfileLang`), który nie musi pokrywać się z językiem serwera wywołania.
+
+**CustomIDs `/profile`:** `profile_challenges` | `profile_chal_prev` | `profile_chal_next` — jak każdy nowy `profile_*` **MUSZĄ być na whiteliście** w `handleButtonInteraction`, inaczej przycisk nie zadziała.
+
+### Osiągnięcia (22, sekretne)
+
+Kategoria **`explorer`** (`hidden: true`) — bez zmian w UI kategorii (rząd ma już komplet 5 przycisków), a `_trackExplorer` odblokowuje wyłącznie tę kategorię. Dodatkowa zaleta: `clearUserAchievements` i `clearRecordAchievementsAfter` **pomijają `explorer`**, więc cofnięcie wyniku nie odbiera osiągnięć za wyzwania.
+
+Liczniki w `progress`: `challengesSent`, `challengesAccepted`, `challengesWon`, `challengesLost`.
+Metody: `trackChallengeSent/Accepted/Won/Lost(guildId, playerKey)` — naliczane na serwerze danego uczestnika.
+
+Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_acc_*`) i wygranych (`chal_win_*`) + jedno za przegraną (`chal_lost_1`):
+
+| Grupa | Nazwy PL / EN (od najniższego progu) |
+|---|---|
+| Rzucone | Rękawica/The Gauntlet ⬜ · Zadziora/Scrapper 🟩 · Prowokator/Provocateur 🟩 · Podżegacz/Instigator 🟦 · Pogromca Spokoju/Peacebreaker 🟪 · Wojewoda/Warlord 🟧 · Zwiastun Wojny/Herald of War 🔴 |
+| Przyjęte | Podjęte Wyzwanie/Challenge Accepted ⬜ · Honorowy/Honorable 🟩 · Nieustępliwy/Unyielding 🟩 · Gladiator/Gladiator 🟦 · Mur Nie Do Przejścia/Immovable Wall 🟪 · Lew Areny/Lion of the Arena 🟧 · Zawsze Gotowy/Ever Ready 🔴 |
+| Wygrane | Pierwsza Krew/First Blood 🟩 · Triumfator/Triumphant 🟩 · Pogromca/Vanquisher 🟦 · Dziesięciu Pokonanych/Ten Fallen 🟦 · Mistrz Areny/Arena Master 🟪 · Kolekcjoner Czaszek/Skull Collector 🟧 · Legenda Pojedynków/Duel Legend 🔴 |
+| Przegrana | Gorzka Lekcja/Bitter Lesson ⬜ |
+
+### Pułapki magazynu (`jsonStore`)
+
+- `register(plik, { defaultValue: () => ({ challenges: {}, pendingScores: {} }) })` — kształt **obiektu**; `_data()` dodatkowo domyka brakujące klucze
+- O istnieniu danych decyduje **ZAWARTOŚĆ**, nie wyjątek — `getOrLoad` przy braku pliku nie rzuca
+- Każdy zapis przez `store.mutate()` (kolejka pod jednym zamkiem) — wyniki z dwóch serwerów mogą wpaść równocześnie
+- `id` = 8–11 znaków base36, żeby `chal_share_{id}_{c}` zmieścił się w limicie 100 znaków customId
+- **Ikona bossa zwracana jako BUFOR** (`_challengeBossImage` → `{buffer, name, thumb}`), a `AttachmentBuilder` budowany osobno dla każdej wysyłki (`_challengeBossFiles`) — ten sam obrazek leci w DM do obu graczy i w ogłoszeniu na serwerze
+
+### CustomIDs
+
+`chal_srv` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
+
+**⚠️ Wszystkie `chal_*` routowane są PRZED głównym `try` w `handleButtonInteraction`** — przyciski w DM nie mają `interaction.guild` ani `interaction.member`, więc nie mogą przejść przez kod zakładający kontekst serwera. Select menu `chal_*` routowane są przed sprawdzeniem `isAllowedChannel` (komenda head admina działa na dowolnym kanale).

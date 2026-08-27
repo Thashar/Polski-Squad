@@ -37,6 +37,7 @@ const GlobalTop10Service = require('./services/globalTop10Service');
 const MilestoneService = require('./services/milestoneService');
 const ProfileRegistryService = require('./services/profileRegistryService');
 const RecordRevertService = require('./services/recordRevertService');
+const ChallengeService = require('./services/challengeService');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const BossRecordService = require('./services/bossRecordService');
@@ -133,6 +134,8 @@ const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHisto
 const profileRegistryService = new ProfileRegistryService(config.ranking.dataDir, config.profiles?.maxPerUser ?? 3);
 // Sesje cofnięcia rekordu (przycisk gracza pod ogłoszeniem + przycisk admina w logu OCR)
 const recordRevertService = new RecordRevertService(config.ranking.dataDir);
+// Wyzwania 1 vs 1 (/challenge) — plik globalny, bo wyzwanie może łączyć dwa serwery
+const challengeService = new ChallengeService(config.ranking.dataDir, { bossAliasService });
 const ocrStatsService = new OcrStatsService(config.ranking.dataDir, logger);
 const bossRecordService = new BossRecordService(config.ranking.dataDir);
 const kingBumChatService = new KingBumChatService(config, rankingService);
@@ -175,6 +178,7 @@ const interactionHandler = new InteractionHandler(config, ocrService, aiOcrServi
 // następnego to proszenie się o przestawienie argumentów przy kolejnej zmianie.
 interactionHandler.setBroadcastReactionService(broadcastReactionService);
 interactionHandler.setPlayerOfTheDayService(playerOfTheDayService);
+interactionHandler.setChallengeService(challengeService);
 // Cykliczny raport Global TOP10 też idzie na wszystkie serwery naraz — jego reakcje
 // mają się sumować tak samo jak pod /info i ogłoszeniem nowego serwera
 globalTop10Service.setBroadcastReactionService(broadcastReactionService);
@@ -209,10 +213,16 @@ async function initializeBot() {
         await updateCooldownService.load();
         await guildBanService.load();
         await ocrStatsService.load();
+        await challengeService.load();
 
         // Odroczone usuwanie profili: gracz zgłasza chęć usunięcia, dane znikają
         // dopiero po 7 dniach (do tego czasu może odwołać). Sweep co godzinę + przy starcie.
         interactionHandler.startProfileDeletionSweep(client);
+
+        // Wyzwania: zaproszenie bez odpowiedzi wygasa po 48 h, przyjęte wyzwanie po kolejnych
+        // 72 h kończy się jako nierozstrzygnięte, a wynik czekający na zatwierdzenie nazwy
+        // bossa jest porzucany po 72 h. Sweep co godzinę + przy starcie.
+        interactionHandler.startChallengeSweep(client);
 
         // Retencja danych: 30 dni po usunięciu bota z serwera dane serwera są
         // kasowane (zgodnie z polityką prywatności); statystyki tokenów AI zostają.
@@ -594,6 +604,7 @@ async function stopBot() {
     webRankingSyncService.stopAutoSync();
     playerOfTheDayService.stop();
     broadcastReactionService.stop();
+    challengeService.stop();
     try {
         if (client.readyAt) {
             await client.destroy();

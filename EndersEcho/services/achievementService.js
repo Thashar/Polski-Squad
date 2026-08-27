@@ -420,6 +420,28 @@ class AchievementService {
     }
 
     /**
+     * Liczniki wyzwań (`/challenge`). Osiągnięcia siedzą w kategorii `explorer`, więc
+     * odblokowuje je ten sam `_trackExplorer` i — co ważne — NIE kasują ich ścieżki
+     * cofania wyniku (`clearUserAchievements`, `clearRecordAchievementsAfter` pomijają
+     * tę kategorię). Wynik wyzwania nie zależy od tego, czy rekord został cofnięty.
+     */
+    async trackChallengeSent(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.challengesSent = (p.challengesSent || 0) + 1; });
+    }
+
+    async trackChallengeAccepted(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.challengesAccepted = (p.challengesAccepted || 0) + 1; });
+    }
+
+    async trackChallengeWon(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.challengesWon = (p.challengesWon || 0) + 1; });
+    }
+
+    async trackChallengeLost(guildId, playerKey) {
+        return this._trackExplorer(guildId, playerKey, p => { p.challengesLost = (p.challengesLost || 0) + 1; });
+    }
+
+    /**
      * Tworzy embed i komponenty dla komendy /achievements.
      * @param {string} guildId
      * @param {string} playerKey
