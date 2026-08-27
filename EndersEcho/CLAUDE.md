@@ -156,7 +156,7 @@
      - Trzyetapowa walidacja (trzy osobne requesty do API):
        - **KROK 1:** Sprawdza czy jest "Victory" (50 tokenów)
        - **KROK 2:** Sprawdza autentyczność zdjęcia (10 tokenów)
-       - **KROK 3:** Wyciąga nazwę bossa, wynik (Best) i Total (500 tokenów)
+       - **KROK 3:** Wyciąga nazwę bossa, wynik (Best), Total i **wynik pojedynczej walki** — liczbę nad linią „Best" (500 tokenów). Best zasila ranking i rekordy bossów, wynik walki wyłącznie wyzwania (`/challenge`) — patrz „System Wyzwań 1 vs 1"
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
      - **Walidacja długości cyfr** (`normalizeScore` w `aiOcrService.js`): jeśli wynik z jednostką (K/M/B/T/Q/Qi/Sx/Sp) ma więcej niż 5 cyfr przed jednostką LUB za dużo miejsc po przecinku → wynik **odrzucany jako podróbka** (`error: 'FAKE_PHOTO'`, `score: null`), NIE obcinany. Wcześniej funkcja obcinała nadmiarowe cyfry (`substring(0, 5)`), co potrafiło zaniżyć poprawnie odczytany wynik (np. AI poprawnie odczytało `213769Q`, obcięcie zamieniało go w błędny `21376Q` i wynik fałszywie nie bił rekordu)
        - **Wyjątek halucynacji `S→5` przed `Sx`** (dotyczy Best i Total): wzorzec `<int>.<cyfra>5Sx` (2 cyfry po przecinku, druga = `5`, jednostka `Sx`, gdy część całkowita ma ≥2 cyfry) NIE jest odrzucany — to klasyczna halucynacja AI, gdzie litera `S` została odczytana jako `5`, a jednostkę `Sx` model i tak dokleił (np. real `169.8Sx` → AI `169.85Sx`). W tym przypadku zdublowana `5` jest usuwana i wynik korygowany do `<int>.<cyfra>Sx` (`169.85Sx` → `169.8Sx`) zamiast `FAKE_PHOTO`. Bezpieczne: legalny wynik z 2 cyframi po przecinku jest możliwy tylko przy 1 cyfrze całkowitej (`maxDec=2`), więc taki przypadek nigdy nie wchodzi w ten blok. Wzorce z inną drugą cyfrą (`169.83Sx`) lub inną jednostką (`169.85Qi`) nadal odrzucane
@@ -1345,6 +1345,15 @@ Wyzywający dostaje o decyzji **embed** (zielony przy przyjęciu, czerwony przy 
 ### Zaliczanie wyników w `/update`
 
 Wpięcie w `_runUpdateFlow` **tuż po ustaleniu `bestScore`/`bossName`/`userName`, PRZED rozgałęzieniem** na ścieżki (duplikat cross-server / brak rekordu / nowy rekord) — dzięki temu liczy się każdy pozytywnie zweryfikowany screen, niezależnie od tego, czy padł rekord. `/test` (dryRun) **nie zalicza niczego**.
+
+⚠️ **DO WYZWANIA LICZY SIĘ WYNIK POJEDYNCZEJ WALKI (`aiResult.runScore`), NIE `Best`.**
+
+Ekran wyników ma trzy liczby: **wynik tej walki** (nad linią „Best"), **Best** (rekord gracza) i **Total**. Ranking, rekordy bossów i historia biorą **Best** — i tak zostaje. Wyzwania biorą **wynik walki**, bo Best jest **identyczny na każdym kolejnym screenie po ustanowieniu rekordu**: gdyby najlepszy wynik padł jako pierwszy z trzech, pozostałe dwa zdjęcia niosłyby tę samą liczbę i pojedynek policzyłby jeden rezultat trzy razy (a blokada powtórek odrzuciłaby dwa z trzech).
+
+- Wartość czyta `aiOcrService._extractData` jako **CZWARTĄ, OSTATNIĄ linię** odpowiedzi AI (`PROMPT_VERSIONS['extract-data-eng'] = 'v3'`). ⚠️ **Stoi na końcu, choć na ekranie jest nad „Best", i to jest ZAMIERZONE** — gdyby weszła w środek, model gubiący jedną linię przesunąłby indeksy i `score` (Best) dostałby cudzą wartość, czyli ranking zapisałby zły rekord po cichu. Na końcu brak linii oznacza tylko brak wyniku walki; boss, Best i Total zostają nietknięte
+- **Walidacja:** ta sama `normalizeScore` i ten sam wzorzec jednostki co dla Besta, plus `runScore <= Best` i `runScore <= Total` — jedna walka nie może przebić rekordu ani sumy, więc przekroczenie oznacza pomyłkę modelu i wartość jest odrzucana (`runScore: null`), a nie zapisywana
+- **Brak `runScore` NIE odrzuca screena** — ranking dostaje Besta jak zawsze, a wyzwanie po prostu nic nie zalicza. `_registerChallengeScore` zwraca wtedy `noRunScore: true` i gracz widzi żółty embed `challengeNoticeNoRunScore` z prośbą o ponowne wrzucenie. **Komunikat leci tylko wtedy, gdy gracz faktycznie ma pojedynek na tym bossie** (przy nierozpoznanym bossie — jakikolwiek pojedynek w toku, bo nie ma po czym dopasować nazwy); inaczej byłby to szum dla kogoś, kogo wyzwania nie dotyczą
+- ⚠️ **Nigdy nie podstawiaj `bestScore` jako zapasu, gdy `runScore` jest puste** — to dokładnie ten błąd, dla którego czytamy tę czwartą wartość
 
 - Liczą się wyłącznie wyniki z timestampem **po `respondedAt`** (akceptacji)
 - Uczestnik z kompletem 3 wyników nie przyjmuje kolejnych

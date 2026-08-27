@@ -6720,11 +6720,14 @@ class InteractionHandler {
             // Znacznik czasu wyciągnięty do zmiennej — trafia zarówno do wpisu w wyzwaniu,
             // jak i do customId przycisku „Cofnij wynik wyzwania" w embedzie head admina
             const _challengeTs = new Date().toISOString();
+            // ⚠️ Do wyzwania idzie `runScore` (wynik TEJ walki), a NIE `bestScore` (rekord gracza).
+            // Best jest identyczny na każdym kolejnym screenie po ustanowieniu rekordu, więc trzy
+            // zdjęcia z serii miałyby tę samą wartość — pojedynek liczyłby jeden wynik trzy razy
             const _challengeResult = dryRun ? { notices: [], duplicates: [], pending: false } : await this._registerChallengeScore(interaction, {
                 playerKey,
                 bossName,
-                score: bestScore,
-                scoreValue: this.rankingService.parseScoreValue(bestScore),
+                score: aiResult.runScore,
+                scoreValue: this.rankingService.parseScoreValue(aiResult.runScore),
                 guildId,
                 timestamp: _challengeTs,
                 wasUnknownBoss: aiResult.wasUnknownBoss === true,
@@ -17069,6 +17072,21 @@ class InteractionHandler {
     async _registerChallengeScore(interaction, { playerKey, bossName, score, scoreValue, guildId, timestamp, wasUnknownBoss }) {
         if (!this.challengeService || !bossName) return { notices: [], duplicates: [], pending: false };
         try {
+            // Bez wyniku walki NIE MA czego zaliczyć — podstawienie Besta zamiast niego wróciłoby
+            // dokładnie do błędu, dla którego ten wynik w ogóle czytamy. Gracz dowiaduje się o tym
+            // tylko wtedy, gdy faktycznie ma pojedynek na tym bossie — inaczej byłby to szum
+            if (!score || !(Number(scoreValue) > 0)) {
+                const aktywne = await this.challengeService.getActiveForPlayer(playerKey);
+                // Przy NIEROZPOZNANYM bossie nie ma po czym dopasować wyzwania (w pliku leży nazwa
+                // angielska, a tu mamy surowy odczyt), więc wystarczy jakiekolwiek wyzwanie w toku
+                const naTymBossie = wasUnknownBoss
+                    ? aktywne.length > 0
+                    : aktywne.some(c => String(c.boss || '').toLowerCase() === String(bossName).toLowerCase());
+                if (naTymBossie) {
+                    this.logService._gl(guildId).warn(`⚠️ Brak wyniku walki na screenie — wyzwanie nie zaliczyło zgłoszenia gracza "${playerKey}"`);
+                }
+                return { notices: [], duplicates: [], pending: false, noRunScore: naTymBossie };
+            }
             if (wasUnknownBoss) {
                 const parked = await this.challengeService.addPendingScore({
                     playerKey, guildId, rawBoss: bossName, score, scoreValue, timestamp,
@@ -17093,7 +17111,8 @@ class InteractionHandler {
      * Powtórzony wynik ma własny komunikat — gracz musi wiedzieć, że wrzucenie
      * tego samego rezultatu drugi raz nie podbiło mu licznika.
      */
-    _challengeNoticeValue(notices, pending, msgs, duplicates = []) {
+    _challengeNoticeValue(notices, pending, msgs, duplicates = [], noRunScore = false) {
+        if (noRunScore) return msgs.challengeNoticeNoRunScore;
         if (pending) return msgs.challengeNoticePending;
         const lines = notices.map(n => formatMessage(msgs.challengeNoticeCounted, {
             opponent: this.challengeService.participantName(n.opponent, msgs),
@@ -17132,17 +17151,20 @@ class InteractionHandler {
     async _buildChallengeEmbed(result, msgs) {
         const notices = result?.notices || [];
         const duplicates = result?.duplicates || [];
-        const value = this._challengeNoticeValue(notices, result?.pending, msgs, duplicates);
+        const value = this._challengeNoticeValue(notices, result?.pending, msgs, duplicates, result?.noRunScore);
         if (!value) return null;
 
         const wpisy = notices.length ? notices : duplicates;
         const najdalszy = wpisy.reduce((a, b) => ((b.count || 0) > (a?.count || 0) ? b : a), null);
-        const count = result?.pending ? null : (najdalszy?.count ?? null);
+        const count = (result?.pending || result?.noRunScore) ? null : (najdalszy?.count ?? null);
         const total = najdalszy?.total ?? this.challengeService?.scoresPerSide ?? 3;
 
         const komplet = count !== null && count >= total;
+        // Żółty to kolor „nic nie policzono, zajrzyj tu" — tak samo dla wyniku czekającego na
+        // zatwierdzenie bossa, jak i dla nieodczytanego wyniku walki
+        const ostrzezenie = result?.pending || result?.noRunScore;
         const embed = new EmbedBuilder()
-            .setColor(result?.pending ? 0xFEE75C : (komplet ? 0x57F287 : 0xE67E22))
+            .setColor(ostrzezenie ? 0xFEE75C : (komplet ? 0x57F287 : 0xE67E22))
             .setDescription(value);
 
         const name = 'challenge_progress.png';

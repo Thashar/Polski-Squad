@@ -17,7 +17,7 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v2',
+    'extract-data-eng':  'v3',
     'compare-template':  'v5',
 };
 const sharp = require('sharp');
@@ -111,10 +111,11 @@ class AIOCRService {
     }
 
     async _extractData(base64Image, mediaType, telemetryMeta, onRetry = null) {
-        const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego trzy wartości:
+        const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego cztery wartości:
 1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
-2. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
-3. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
+2. Wynik TEJ WALKI — duża liczba z jednostką wypisana BEZPOŚREDNIO NAD linią "Best". To rezultat pojedynczej, właśnie zakończonej walki
+3. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
+4. Wynik Total — liczba z jednostką, oznaczona jako "Total" na ekranie
 WAŻNE - Możliwe jednostki (od najmniejszej): K, M, B, T, Q, Qi, Sx, Sp
 UWAGA: Litera Q może wyglądać jak cyfra 0 — rozróżniaj je uważnie.
 UWAGA: Litera S może wyglądać jak cyfra 5 — gdy wynik kończy się na "5x", to prawdopodobnie "Sx"; gdy kończy się na "5p", to prawdopodobnie "Sp".
@@ -125,10 +126,11 @@ NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
 NIE DODAWAJ cyfr których nie ma na ekranie.
 JEŻELI NIE MA TEKSTU NA EKRANIE ZWRÓĆ ZERO!
 ZAKAZ HALUCYNACJI, ZAKAZ WYMYŚLANIA LICZB!
-Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
+Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kolejności):
 <nazwa bossa>
 <wynik Best z jednostką>
-<wynik Total z jednostką>`;
+<wynik Total z jednostką>
+<wynik TEJ WALKI z jednostką — ten NAD linią "Best">`;
 
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
@@ -195,6 +197,40 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
             return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
         }
 
+        // Wynik POJEDYNCZEJ WALKI (liczba nad linią „Best") — czwarta, OSTATNIA linia odpowiedzi.
+        //
+        // ⚠️ Stoi na końcu, choć na ekranie jest nad „Best", i to jest ZAMIERZONE: gdyby wszedł
+        // w środek, model gubiący jedną linię przesunąłby indeksy i `score` (Best) dostałby cudzą
+        // wartość — czyli ranking zapisałby zły rekord, po cichu. Na końcu brak linii oznacza
+        // tylko tyle, że nie ma wyniku walki; boss, Best i Total zostają nietknięte.
+        //
+        // ⚠️ To NIE jest to samo co `score`. `score` (Best) to rekord gracza, ten sam na każdym
+        // kolejnym screenie, więc do WYZWAŃ się nie nadaje — trzy screeny po nowym rekordzie
+        // miałyby identyczną wartość. Do pojedynków liczy się rezultat konkretnej walki.
+        let runScore = null;
+        if (lines.length >= 4) {
+            const rawRun = lines[3].replace(/^wynik[:\s]*/i, '').replace(/^walk[ai][:\s]*/i, '').trim();
+            const normalizedRun = this.normalizeScore(rawRun, log);
+            if (normalizedRun && validScorePattern.test(normalizedRun)) {
+                // Wynik jednej walki nie może przekroczyć ani rekordu gracza, ani sumy — gdy
+                // przekracza, model coś pomylił i lepiej nie mieć wartości niż mieć zmyśloną
+                const runNum   = this.parseScoreToNumber(normalizedRun);
+                const bestNum  = this.parseScoreToNumber(score);
+                const totalNum = total ? this.parseScoreToNumber(total) : null;
+                const ponadBest  = runNum !== null && bestNum  !== null && runNum > bestNum;
+                const ponadTotal = runNum !== null && totalNum !== null && runNum > totalNum;
+                if (ponadBest || ponadTotal) {
+                    log.warn(`[AI OCR] Wynik walki "${normalizedRun}" przekracza ${ponadBest ? `Best "${score}"` : `Total "${total}"`} — pomijam`);
+                } else {
+                    runScore = normalizedRun;
+                }
+            } else {
+                log.warn(`[AI OCR] Nie udało się odczytać wyniku walki z linii: "${lines[3]}"`);
+            }
+        } else {
+            log.warn(`[AI OCR] Odpowiedź bez wyniku walki (${lines.length} linii) — wyzwania nie zaliczą tego screena`);
+        }
+
         const isValid = !!(bossName && score && score.length > 0);
         if (!isValid) {
             log.warn(`[AI OCR] Walidacja ✗ boss:"${bossName}" score:"${score}"`);
@@ -203,6 +239,7 @@ Odpowiedz WYŁĄCZNIE w tym formacie (3 linie, nic więcej):
         return {
             bossName:        isValid ? bossName : null,
             score:           isValid ? score    : null,
+            runScore:        isValid ? runScore : null,
             isValidVictory:  isValid,
             wasUnknownBoss:  isValid && wasUnknown,
             rawBossName:     (isValid && wasUnknown) ? rawBoss : undefined,
