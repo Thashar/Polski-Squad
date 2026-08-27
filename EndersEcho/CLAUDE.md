@@ -1270,8 +1270,11 @@ Wpięcie w `_runUpdateFlow` **tuż po ustaleniu `bestScore`/`bossName`/`userName
 - Liczą się wyłącznie wyniki z timestampem **po `respondedAt`** (akceptacji)
 - Uczestnik z kompletem 3 wyników nie przyjmuje kolejnych
 - Jeden wynik zalicza się do WSZYSTKICH aktywnych wyzwań tego profilu na tym bossie
+- **⚠️ TEN SAM WYNIK NIE LICZY SIĘ DWA RAZY.** Bez tej blokady wystarczyło wrzucić ten sam screen trzy razy, żeby wypełnić wszystkie sloty jednym rezultatem — wynik nierekordowy też jest zaliczany do wyzwania, więc powtórka nie odbijała się o żadną inną blokadę (cooldown `/update` tylko ją opóźnia). Porównujemy **`scoreValue`, nie napis** — `1000B` i `1T` to ten sam wynik. Zakres celowo **per UCZESTNIK**: przeciwnik może legalnie trafić tę samą wartość. Odrzucona powtórka wraca w `registerScore().duplicates` i gracz dostaje o niej komunikat (`challengeNoticeDuplicate`) — inaczej nie wiedziałby, czemu licznik nie drgnął. Po cofnięciu wyniku ta sama wartość może wejść ponownie (wypada z tablicy, więc blokada jej nie widzi)
 
 **Gdzie widać informację:**
+Komunikat składa `_challengeNoticeValue(notices, pending, msgs, duplicates)` — zaliczone wyniki i odrzucone powtórki lecą w jednym polu. Gdy **nic** nie zostało zaliczone (sama powtórka albo wynik czekający na zatwierdzenie bossa), DM dostaje żółty kolor i tytuł `challengeDmDroppedTitle` zamiast „Wynik zaliczony".
+
 - **Jest publiczne ogłoszenie** → pole `⚔️ Wyzwanie` dokładane do `systemNotices` → trafia do **Embeda 4 (ℹ️ Informacje systemowe)**, bez żadnych zmian w `rankingService`. Dotyczy wszystkich trzech wywołań `createRecordEmbeds` w `_runUpdateFlow` (duplikat cross-server, „tylko rekord bossa", nowy rekord)
 - **Brak rekordu ogólnego i brak rekordu bossa** (nic nie idzie publicznie) → linia w `reasonText` embeda `createNoRecordEmbeds` **oraz DM** do gracza (`_sendChallengeScoreDm`)
 
@@ -1283,7 +1286,8 @@ Doliczenie następuje dopiero, gdy admin zmapuje alias — `_resolveChallengePen
 - `_handleBossMapLangSel` — alert o nieznanym bossie (`boss_mapm_*`)
 - `_handleBossCfgAddLangSel` — panel `🎯 Konfiguracja bossów`
 
-Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie trafił do żadnego wyzwania, jest porzucany z DM-em wyjaśniającym **jednym z dwóch powodów**:
+Dopiero wtedy gracz dostaje DM (`challengeDmVerifiedTitle`). Wynik, który nie trafił do żadnego wyzwania, jest porzucany z DM-em wyjaśniającym **jednym z trzech powodów**:
+- `duplicate` — ten sam `scoreValue` jest już zaliczony do tego wyzwania
 - `too_late` — wyzwanie na tym bossie **było**, ale zdążyło się rozstrzygnąć (albo komplet wyników był już zebrany)
 - `no_challenge` — gracz nie ma i nie miał wyzwania na tym bossie
 

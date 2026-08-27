@@ -546,12 +546,14 @@ const pol = {
     challengeNoticeField: '⚔️ Wyzwanie',
     challengeNoticeCounted: 'Wynik zaliczony do wyzwania z **{opponent}** (boss **{boss}**) — **{count}/{total}**.\nTwoja suma: **{sum}**.',
     challengeNoticePending: 'Nazwa bossa nie została rozpoznana, więc wynik **czeka na zatwierdzenie przez administratora**. Po weryfikacji zostanie doliczony do Twojego wyzwania.',
+    challengeNoticeDuplicate: 'Wynik **{score}** jest już zaliczony do wyzwania z **{opponent}** (boss **{boss}**) — ten sam rezultat nie liczy się drugi raz. Nadal masz **{count}/{total}**.',
     challengeDmCountedTitle: '⚔️ Wynik zaliczony do wyzwania',
     challengeDmVerifiedTitle: '⚔️ Administrator zatwierdził nazwę bossa',
     challengeDmVerifiedDesc: 'Administrator zatwierdził nazwę bossa **{boss}**. Twój wynik **{score}** został doliczony do wyzwania.',
     challengeDmDroppedTitle: '⚠️ Wynik nie został doliczony do wyzwania',
     challengeDmDroppedTooLate: 'Administrator zatwierdził nazwę bossa **{boss}**, ale Twoje wyzwanie zostało już w tym czasie rozstrzygnięte — wynik **{score}** nie został doliczony.',
     challengeDmDroppedNoChallenge: 'Administrator zatwierdził nazwę bossa **{boss}**, ale nie masz otwartego wyzwania na tym bossie — wynik **{score}** nie został doliczony.',
+    challengeDmDroppedDuplicate: 'Administrator zatwierdził nazwę bossa **{boss}**, ale wynik **{score}** jest już zaliczony do Twojego wyzwania — ten sam rezultat nie liczy się drugi raz.',
     challengeDmDroppedStale: 'Nazwa bossa z Twojego zgłoszenia nie została zatwierdzona przez administratora w ciągu 72 godzin — wynik **{score}** nie zostanie doliczony do wyzwania.',
 
     // ⚔️ Wyzwania — rezultat
@@ -1140,12 +1142,14 @@ const eng = {
     challengeNoticeField: '⚔️ Challenge',
     challengeNoticeCounted: 'Score counted towards your challenge with **{opponent}** (boss **{boss}**) — **{count}/{total}**.\nYour total: **{sum}**.',
     challengeNoticePending: 'The boss name was not recognised, so the score is **awaiting administrator approval**. Once verified, it will be counted towards your challenge.',
+    challengeNoticeDuplicate: 'Score **{score}** is already counted towards your challenge with **{opponent}** (boss **{boss}**) — the same result does not count twice. You still have **{count}/{total}**.',
     challengeDmCountedTitle: '⚔️ Score counted towards your challenge',
     challengeDmVerifiedTitle: '⚔️ Administrator approved the boss name',
     challengeDmVerifiedDesc: 'An administrator approved the boss name **{boss}**. Your score **{score}** has been counted towards your challenge.',
     challengeDmDroppedTitle: '⚠️ Score was not counted towards your challenge',
     challengeDmDroppedTooLate: 'An administrator approved the boss name **{boss}**, but your challenge had already been decided by then — score **{score}** was not counted.',
     challengeDmDroppedNoChallenge: 'An administrator approved the boss name **{boss}**, but you have no open challenge on that boss — score **{score}** was not counted.',
+    challengeDmDroppedDuplicate: 'An administrator approved the boss name **{boss}**, but score **{score}** is already counted towards your challenge — the same result does not count twice.',
     challengeDmDroppedStale: 'The boss name from your submission was not approved by an administrator within 72 hours — score **{score}** will not be counted towards your challenge.',
 
     // ⚔️ Challenges — result
