@@ -20,6 +20,11 @@ const OCR_EMBED_TYPES = {
     role_error_new_account:  { color: 0xFEE75C, emoji: '⚠️', label: 'NOWE KONTO — błąd uprawnień ról' },
     rejected:                { color: 0xED4245, emoji: '🚫', label: 'ANALIZA ODRZUCONA' },
     no_record:               { color: 0x5865F2, emoji: '📊', label: 'REKORD NIE POBITY' },
+    // Rekord nie padł, ale wynik wszedł do wyzwania — z punktu widzenia head admina to NIE jest
+    // „nic się nie stało", więc dostaje własny nagłówek zamiast `no_record`. Sjena jako jedyny
+    // brązowy odcień w tej palecie: pomarańcz `analyze_panel` (0xE67E22) jest wyraźnie jaśniejszy
+    // i bardziej nasycony, więc oba typy da się rozróżnić po samym kolorze paska.
+    challenge:               { color: 0xA0522D, emoji: '⚔️', label: 'WYNIK DO WYZWANIA' },
     test_record:             { color: 0x00B4D8, emoji: '🧪', label: 'TEST — nowy rekord' },
     test_no_record:          { color: 0x7289DA, emoji: '🧪', label: 'TEST — brak rekordu' },
     test_boss_record:        { color: 0x1ABC9C, emoji: '🧪', label: 'TEST — rekord bossa' },

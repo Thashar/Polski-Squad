@@ -5505,6 +5505,29 @@ class InteractionHandler {
     }
 
     /**
+     * Przycisk „Cofnij wynik wyzwania" pod embedem head admina typu `challenge`.
+     *
+     * ⚠️ To NIE jest `ocr_revert_*`. Tamten cofa REKORD i stoi na sesji `recordRevertService`,
+     * a tutaj rekord nie padł — jedyne, co wynik zmienił, to licznik w wyzwaniu. Adres wpisu
+     * (profil + znacznik czasu) siedzi w całości w customId, więc przycisk działa też po
+     * restarcie bota, bez żadnej sesji w pamięci.
+     *
+     * Znacznik czasu jako ms epoch: ISO ma dwukropki, a te rozbijają parsowanie customId
+     * w innych miejscach kodu. `playerKey` może zawierać `#` (profil dodatkowy), dlatego
+     * odczyt idzie od OSTATNIEGO `_`, nie przez `split`.
+     */
+    _buildChallengeUndoRow(playerKey, timestamp) {
+        const ms = Date.parse(timestamp);
+        if (!playerKey || !Number.isFinite(ms)) return null;
+        return [new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ocr_chal_undo_${playerKey}_${ms}`)
+                .setLabel('↩️ Cofnij wynik wyzwania')
+                .setStyle(ButtonStyle.Secondary)
+        ).toJSON()];
+    }
+
+    /**
      * Callback do `logService.sendOcrAnalysisEmbed({ onSent })` — zapamiętuje ID embeda
      * admina w sesji cofnięcia, żeby po cofnięciu przez gracza dało się dezaktywować
      * przycisk również po stronie admina.
@@ -6692,13 +6715,16 @@ class InteractionHandler {
             // brak rekordu / nowy rekord), żeby liczył się każdy pozytywnie zweryfikowany screen.
             // /test (dryRun) nie zalicza niczego. Nierozpoznana nazwa bossa nie jest zaliczana od razu —
             // wynik czeka na zmapowanie aliasu przez admina (_resolveChallengePendingBoss).
+            // Znacznik czasu wyciągnięty do zmiennej — trafia zarówno do wpisu w wyzwaniu,
+            // jak i do customId przycisku „Cofnij wynik wyzwania" w embedzie head admina
+            const _challengeTs = new Date().toISOString();
             const _challengeResult = dryRun ? { notices: [], duplicates: [], pending: false } : await this._registerChallengeScore(interaction, {
                 playerKey,
                 bossName,
                 score: bestScore,
                 scoreValue: this.rankingService.parseScoreValue(bestScore),
                 guildId,
-                timestamp: new Date().toISOString(),
+                timestamp: _challengeTs,
                 wasUnknownBoss: aiResult.wasUnknownBoss === true,
             });
             // Osobny embed z ikoną postępu (1/3, 2/3, 3/3) — dokładany na końcu KAŻDEJ ścieżki
@@ -7051,7 +7077,24 @@ class InteractionHandler {
 
             // Odrzuć tylko gdy: boss rozpoznany + brak rekordu globalnego + brak rekordu per-boss
             if (!isNewRecord && !wasUnknownBoss && !isNewBossRecord) {
-                _ocrEmbedParams = { profileIndex, profileLabel, type: dryRun ? 'test_no_record' : 'no_record', userName, userId, score: bestScore, bossName, commandName, previousScore: currentScore?.score };
+                // Rekord nie padł, ale wynik wszedł do wyzwania → embed head admina mówi
+                // „WYNIK DO WYZWANIA", nie „REKORD NIE POBITY". Liczą się WYŁĄCZNIE wyniki
+                // faktycznie zaliczone (`notices`): powtórka (`duplicates`) i wynik czekający
+                // na zmapowanie bossa (`pending`) niczego jeszcze do wyzwania nie dołożyły.
+                // W `/test` (dryRun) `notices` jest z definicji puste, więc etykieta testowa zostaje.
+                const zaliczonoDoWyzwania = _challengeResult?.notices?.length > 0;
+                const noRecordType = dryRun
+                    ? 'test_no_record'
+                    : (zaliczonoDoWyzwania ? 'challenge' : 'no_record');
+                _ocrEmbedParams = {
+                    profileIndex, profileLabel, type: noRecordType, userName, userId,
+                    score: bestScore, bossName, commandName, previousScore: currentScore?.score,
+                    // Rekordu nie ma czego cofać, ale wpis w wyzwaniu owszem — stąd OSOBNY przycisk,
+                    // niezależny od `ocr_revert_*` (tamten stoi na sesji `recordRevertService`)
+                    revertComponents: zaliczonoDoWyzwania
+                        ? this._buildChallengeUndoRow(playerKey, _challengeTs)
+                        : null,
+                };
                 try {
                     const safeUserName = userName.replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -8476,6 +8519,63 @@ class InteractionHandler {
                     skipMessageId: interaction.message.id,
                     publicNote: _noteText,
                 });
+                return;
+            }
+
+            // === Cofnięcie wyniku Z WYZWANIA (embed head admina typu `challenge`) ===
+            // Rekord nie padł, więc nie ma czego cofać w rankingu — jedyne, co ten wynik
+            // zmienił, to licznik w wyzwaniu. Osobny przycisk, osobna ścieżka: `ocr_revert_*`
+            // stoi na sesji `recordRevertService`, której tutaj w ogóle nie ma.
+            if (customId.startsWith('ocr_chal_undo_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                // `playerKey` może zawierać `#` (profil dodatkowy), więc tniemy od OSTATNIEGO `_`
+                const rest = customId.replace('ocr_chal_undo_', '');
+                const sep = rest.lastIndexOf('_');
+                const chalPlayerKey = sep === -1 ? '' : rest.slice(0, sep);
+                const chalMsRaw = sep === -1 ? '' : rest.slice(sep + 1);
+                const chalMs = /^\d+$/.test(chalMsRaw) ? Number(chalMsRaw) : NaN;
+                if (!chalPlayerKey || !Number.isFinite(chalMs) || !this.challengeService) {
+                    await interaction.reply({ content: '❌ Nieprawidłowy przycisk cofnięcia.', flags: ['Ephemeral'] });
+                    return;
+                }
+
+                await interaction.deferUpdate();
+                const chalAdminName = interaction.member?.displayName || interaction.user.username;
+                const chalUndo = await this.challengeService
+                    .removeScore(chalPlayerKey, new Date(chalMs).toISOString())
+                    .catch(e => { logger.warn(`⚠️ Błąd cofania wyniku z wyzwania: ${e.message}`); return null; });
+
+                if (!chalUndo || chalUndo.removed === 0) {
+                    // Wpis mógł zniknąć wcześniej: cofnięcie rekordu, usunięcie profilu, sweep.
+                    // Gasimy przycisk, żeby nikt nie klikał w pustkę.
+                    await interaction.followUp({ content: '❌ Ten wynik nie jest już zapisany w żadnym wyzwaniu.', flags: ['Ephemeral'] }).catch(() => {});
+                    await interaction.message.edit({
+                        components: [new ActionRowBuilder().addComponents(
+                            new ButtonBuilder().setCustomId(customId).setLabel('↩️ Cofnij wynik wyzwania').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                        )],
+                    }).catch(() => {});
+                    return;
+                }
+
+                // Wyzwanie zamknięte tym wynikiem wraca do gry — kasujemy DM-y z rezultatem,
+                // ogłoszenie z „pochwal się" i naliczone osiągnięcia
+                await this._undoChallengeResolution(interaction.client, chalUndo.reopened)
+                    .catch(e => logger.warn(`⚠️ Błąd cofania rozstrzygnięcia wyzwania: ${e.message}`));
+
+                const chalUpdatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+                    .addFields({ name: '↩️ Cofnięto z wyzwania', value: `przez **${chalAdminName}**`, inline: false });
+                await interaction.message.edit({
+                    embeds: [chalUpdatedEmbed],
+                    components: [new ActionRowBuilder().addComponents(
+                        new ButtonBuilder().setCustomId(customId).setLabel('↩️ Cofnij wynik wyzwania').setStyle(ButtonStyle.Secondary).setDisabled(true)
+                    )],
+                }).catch(() => {});
+
+                this._ccAudit(interaction, `⚔️ Cofnięto wynik z wyzwania: ${await this._ccName(interaction, getOwnerId(chalPlayerKey))}`);
+                this.adminPanelService?.refresh();
                 return;
             }
 
