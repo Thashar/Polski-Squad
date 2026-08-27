@@ -2347,6 +2347,8 @@ class InteractionHandler {
 
             await this.guildConfigService.saveConfig(interaction.guildId, newData);
             this._configWizard.delete(key);
+            // Serwer wchodzi do sekcji 🖥️ Serwery (albo znika z „nieskonfigurowanych")
+            this.adminPanelService?.refresh();
 
             // Re-register commands with new language
             try {
@@ -6115,6 +6117,7 @@ class InteractionHandler {
             const idx = parseInt(customId.slice('prof_delete_cancel_do_'.length), 10);
             const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
             const res = await registry.cancelDeletion(userId, idx, interaction.member?.displayName || interaction.user.username);
+            this.adminPanelService?.refresh();
             if (!res.ok) {
                 await interaction.update({ content: msgs.profileCmdNoPendingDeletions, components: [] });
                 return;
@@ -6163,6 +6166,8 @@ class InteractionHandler {
             const idx = parseInt(customId.slice('prof_delete_confirm_'.length), 10);
             const prof = registry.getProfiles(userId).find(pr => pr.index === idx);
             const res = await registry.scheduleDeletion(userId, idx, interaction.member?.displayName || interaction.user.username);
+            // Profil czekający na usunięcie ma w panelu znacznik ⏳
+            this.adminPanelService?.refresh();
             if (!res.ok) {
                 await interaction.update({
                     content: res.reason === 'IS_MAIN' ? msgs.profileCmdDeleteMain : msgs.profileCmdNotFound,
@@ -6214,6 +6219,8 @@ class InteractionHandler {
 
         if (mode === 'add' || mode === 'addfirst') {
             const res = await registry.addProfile(interaction.user.id, label, interaction.member?.displayName || interaction.user.username);
+            // Sekcja 👥 Użytkownicy pokazuje graczy z dodatkowymi profilami
+            this.adminPanelService?.refresh();
             if (!res.ok) {
                 const content = res.reason === 'LIMIT'
                     ? formatMessage(msgs.profileCmdAddLimit, { limit: res.limit })
@@ -14973,6 +14980,8 @@ class InteractionHandler {
             username = member.displayName || member.user.username || null;
         } catch {}
         const added = await this.testerService.addTester(userId, interaction.user.id, username);
+        // Sekcja ⚙️ Narzędzia wypisuje testerów z nickami
+        this.adminPanelService?.refresh();
         if (!added) {
             await interaction.reply({ content: t(`⚠️ Użytkownik <@${userId}> jest już testerem.`, `⚠️ User <@${userId}> is already a tester.`), flags: ['Ephemeral'] });
             return;
@@ -15018,6 +15027,7 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const userId = interaction.values[0];
         const removed = await this.testerService.removeTester(userId);
+        this.adminPanelService?.refresh();
         if (!removed) {
             await interaction.reply({ content: t('❌ Nie znaleziono testera.', '❌ Tester not found.'), flags: ['Ephemeral'] });
             return;
@@ -16826,7 +16836,9 @@ class InteractionHandler {
         if (this.achievementService) {
             this.achievementService.trackChallengeSent(interaction.guildId, challengerKey).catch(() => {});
         }
-        gl.info(`⚔️ ${this.logService.nickLink(challengerName, interaction.user.id)} rzucił wyzwanie graczowi "${session.playerName}" na bossie "${session.boss}"`);
+        gl.info(`⚔️ ${this.logService.nickLink(challengerName, interaction.user.id)} rzuca wyzwanie graczowi "${session.playerName}" na bossie "${session.boss}"`);
+        // Sekcja ⚔️ Wyzwania w Centrum Dowodzenia liczy też zaproszenia czekające na odpowiedź
+        this.adminPanelService?.refresh();
         await done(formatMessage(msgs.challengeSent, { opponent: session.playerName, boss: session.boss }));
     }
 
@@ -16980,6 +16992,9 @@ class InteractionHandler {
         const notifAvatar = await this._challengeOpponentAvatar(interaction.client, [{ opponent: updated.opponent }]);
         if (notifAvatar) notifEmbed.setThumbnail(notifAvatar);
         await this._dmUser(interaction.client, updated.challenger.userId, { embeds: [notifEmbed] });
+
+        // Zaproszenie przeszło z „oczekujących" do „w toku" albo zniknęło — panel to pokazuje
+        this.adminPanelService?.refresh();
     }
 
     /** Bezpieczna wysyłka DM — zamknięte wiadomości prywatne nie mogą wywrócić flow */
@@ -17016,6 +17031,8 @@ class InteractionHandler {
                 playerKey, bossName, score, scoreValue, guildId, timestamp,
             });
             if (finished.length > 0) await this._finishChallenges(interaction.client, finished);
+            // Licznik postępu (`2/3 : 1/3`) w sekcji „W toku" zmienia się z każdym zaliczonym wynikiem
+            if (notices.length > 0) this.adminPanelService?.refresh();
             return { notices, duplicates, pending: false };
         } catch (err) {
             this.logService._gl(guildId).warn(`⚠️ Błąd zaliczania wyniku do wyzwania: ${err.message}`);
@@ -17234,6 +17251,7 @@ class InteractionHandler {
             }
 
             if (finished.length > 0) await this._finishChallenges(client, finished);
+            this.adminPanelService?.refresh();
         } catch (err) {
             logger.warn(`⚠️ Błąd doliczania wyników wyzwań po zatwierdzeniu bossa: ${err.message}`);
         }
@@ -17327,12 +17345,17 @@ class InteractionHandler {
                 }
 
                 this.logService._gl(challenge.challenger.guildId).info(
-                    `⚔️ Wyzwanie zakończone: "${challenge.challenger.username}" vs "${challenge.opponent.username}" (${challenge.boss}) — ${challenge.winner ? `wygrał ${challenge[challenge.winner].username}` : 'remis'}`
+                    `⚔️ Wyzwanie zakończone: "${challenge.challenger.username}" vs "${challenge.opponent.username}" (${challenge.boss}) — ${challenge.winner ? `zwycięstwo: ${challenge[challenge.winner].username}` : 'remis'}`
                 );
             } catch (err) {
                 logger.error(`Błąd finalizacji wyzwania ${challenge.id}: ${err.message}`);
             }
         }
+
+        // Jedno miejsce dla WSZYSTKICH dróg rozstrzygnięcia (komplet wyników, upływ czasu,
+        // ręczne zamknięcie z panelu, doliczenie zaparkowanego wyniku) — wyzwanie znika
+        // z „W toku", wchodzi do historii i rusza miesięczny bilans TOP 5
+        this.adminPanelService?.refresh();
     }
 
     /**
@@ -17963,6 +17986,10 @@ class InteractionHandler {
                 .setTimestamp();
             await this._dmUser(client, pending.userId, { embeds: [embed] });
         }
+
+        // Sweep chodzi co godzinę bez udziału człowieka — bez tego panel pokazywałby
+        // wygasłe zaproszenia i zakończone pojedynki aż do najbliższej akcji admina
+        this.adminPanelService?.refresh();
     }
 
     /** Wygasza przyciski pod DM z zaproszeniem */
@@ -18010,6 +18037,7 @@ class InteractionHandler {
                 await this._dmUser(client, other.userId, { embeds: [embed] });
                 await this._disableChallengeInvite(client, challenge);
             }
+            if (cancelled.length > 0) this.adminPanelService?.refresh();
         } catch (err) {
             logger.warn(`⚠️ Błąd anulowania wyzwań usuniętego profilu ${playerKey}: ${err.message}`);
         }
@@ -18176,6 +18204,8 @@ class InteractionHandler {
             return;
         }
         await this.bossAliasService.addEnglishName(rawName);
+        // Sekcja 👾 Bossowie w Centrum Dowodzenia liczy bossów w bazie
+        this.adminPanelService?.refresh();
         await interaction.deferUpdate();
         const { embed, components } = this._buildBossConfigPanel(interaction);
         await interaction.editReply({ embeds: [embed], components });
@@ -18264,6 +18294,7 @@ class InteractionHandler {
         }
         const lang = interaction.values[0];
         const addResult = await this.bossAliasService.addAlias(session.pendingBoss, session.pendingAlias, lang);
+        this.adminPanelService?.refresh();
         const backRow = [new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('panel_boss_cfg').setEmoji('👾').setLabel(t('Powrót do konfiguracji bossów', 'Back to Boss Config')).setStyle(ButtonStyle.Primary),
         )];
@@ -18383,6 +18414,7 @@ class InteractionHandler {
         const [lang, ...aliasParts] = interaction.values[0].split('::');
         const alias = aliasParts.join('::');
         await this.bossAliasService.removeAlias(session.pendingBoss, lang, alias);
+        this.adminPanelService?.refresh();
         this._bossCfgSessions.delete(interaction.user.id);
         await interaction.update({
             embeds: [new EmbedBuilder().setColor(0x57F287)
@@ -18430,6 +18462,7 @@ class InteractionHandler {
         const t = this._panelT(interaction.guildId);
         const bossName = interaction.values[0];
         await this.bossAliasService.removeEnglishName(bossName);
+        this.adminPanelService?.refresh();
         const { embed, components } = this._buildBossConfigPanel(interaction);
         const confirmEmbed = new EmbedBuilder().setColor(0x57F287)
             .setTitle(t('✅ Boss usunięty', '✅ Boss Removed'))
@@ -18508,6 +18541,7 @@ class InteractionHandler {
             return;
         }
         await this.bossAliasService.renameEnglishName(oldName, newName);
+        this.adminPanelService?.refresh();
         await interaction.deferUpdate();
         const { embed, components } = this._buildBossConfigPanel(interaction);
         const confirmEmbed = new EmbedBuilder().setColor(0x57F287)
@@ -18792,6 +18826,8 @@ class InteractionHandler {
         }
         const lang = interaction.values[0];
         const addResult = await this.bossAliasService.addAlias(session.englishBoss, session.adjustedBoss, lang);
+        // Zmapowana nazwa znika z listy „nieznane do zmapowania"
+        this.adminPanelService?.refresh();
         const _langEntry = this.bossAliasService.getSupportedLanguages().find(l => l.code === lang);
         const langLabel = _langEntry?.label || lang;
         const langLabelEn = _langEntry?.labelEn || _langEntry?.label || lang;
@@ -18990,6 +19026,8 @@ class InteractionHandler {
             const buffer = await downloadBuffer(rawUrl);
             await fs.writeFile(path.join(imgDir, filename), buffer);
             await this.bossAliasService.setBossImage(bossName, filename);
+            // Boss schodzi z listy „bez zdjęcia"
+            this.adminPanelService?.refresh();
             const successMsg = (msgs.bossCfgImgSuccess || '✅ Zdjęcie przypisane do bossa **{bossName}**.').replace('{bossName}', bossName);
             await interaction.editReply({ content: successMsg });
             logger.info(`Zdjęcie bossa "${bossName}" zapisane jako ${filename}`);

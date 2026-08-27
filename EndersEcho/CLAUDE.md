@@ -1216,17 +1216,32 @@ Powiadomienia idą **tą samą drogą co przy naturalnym końcu**, bez własnej 
 **Widok `/manage → 📡 Centrum Dowodzenia`:**
 Prosta informacja o kanale panelu + przycisk `🔄 Odśwież Panel`.
 
+**⚠️ ZASADA: panel ma być ZAWSZE aktualny.** Każda zmiana danych, które któraś z ośmiu sekcji
+wyświetla, MUSI kończyć się wywołaniem `this.adminPanelService?.refresh()`. Nie ma tu „drobnych"
+zmian — admin patrzy na panel zamiast na pliki, więc nieodświeżona sekcja po prostu kłamie.
+Dokładając nową funkcję, sprawdź, czy dotyka którejkolwiek sekcji, i dopisz `refresh()`.
+Metoda jest **debounce'owana i tania** (patrz niżej), więc nadmiarowe wywołanie nic nie kosztuje —
+brakujące kosztuje wiarygodność panelu.
+
 **Triggery automatycznego refresh:**
-- ✅ Po każdym zapisie wyniku (`/update` — zarówno nowy rekord jak i brak rekordu, `!dryRun`)
-- ✅ Po analizie admina (`Analizuj` panel)
-- ✅ Po usunięciu gracza z rankingu (`panel_remove_confirm_*`)
-- ✅ Po zablokowaniu gracza (`panel_block_time_*`)
-- ✅ Po odblokowaniu gracza (`panel_unblock_select`)
-- ✅ Po akcji Community Verification (approve/remove/block)
-- ✅ Na żądanie: `🔄 cc_refresh` na wiadomości panelu lub `/manage → Centrum Dowodzenia → Odśwież`
-- ✅ Przy starcie bota (jeśli kanał skonfigurowany)
+
+| Sekcja | Kiedy |
+|---|---|
+| 👥 Użytkownicy | zapis wyniku (`/update`, `!dryRun`) · analiza admina (`Analizuj`) · usunięcie gracza (`panel_remove_confirm_*`) · usunięcie wyniku (`panel_remove_score_*`) · blokada (`panel_block_time_*`) i odblokowanie (`panel_unblock_select`) · akcje CV (approve/remove/block) · cofnięcie wyniku · czyszczenie cooldownu · **dodanie profilu, zaplanowanie i odwołanie usunięcia profilu**, przepalenie profilu (`_purgeProfileData`) |
+| 🖥️ Serwery | **`cfg_accept`** (serwer skonfigurowany) · **`guildCreate` / `guildDelete`** (`index.js`) · toggle AI OCR · ban/unban serwera · usunięcie danych serwera · kick z nieskonfigurowanego |
+| 👾 Bossowie | **dodanie / usunięcie / zmiana nazwy bossa, dodanie i usunięcie aliasu, przypisanie zdjęcia** · **zmapowanie nieznanej nazwy** z alertu (`boss_map_lang_sel`) |
+| ⚔️ Wyzwania | **wysłanie zaproszenia** (`chal_ok`) · **przyjęcie / odrzucenie** (`chal_acc_*` / `chal_rej_*`) · **zaliczenie wyniku** (`_registerChallengeScore`, gdy `notices` niepuste) · **rozstrzygnięcie** (`_finishChallenges` — jedno miejsce dla kompletu wyników, upływu czasu, ręcznego zamknięcia i doliczenia zaparkowanego wyniku) · **sweep** (wygasłe zaproszenia, nierozstrzygnięte) · **doliczenie zaparkowanych wyników** po zmapowaniu bossa · **anulowanie wyzwań usuniętego profilu** · cofnięcie wyniku otwierające wyzwanie |
+| 💰 Koszty | alert kosztowy · zmiana limitów |
+| ⚙️ Narzędzia | **dodanie / usunięcie testera** · globalny kill-switch OCR |
+| wszystkie | `🔄 cc_refresh` na wiadomości panelu · `/manage → Centrum Dowodzenia → Odśwież` · start bota (gdy kanał skonfigurowany) |
+
+⚠️ **`_finishChallenges` jest JEDYNYM miejscem odświeżania po rozstrzygnięciu wyzwania** — schodzą
+się w nim wszystkie cztery drogi (komplet wyników, upływ 72 h, `forceFinish` z panelu, doliczenie
+zaparkowanego wyniku). Dokładając piątą, nie dopisuj `refresh()` u siebie, tylko przepuść ją tędy.
 
 **Debouncing:** Maksymalnie 1 refresh naraz + 1 oczekujący (dodatkowe wywołania w trakcie odrzucane).
+`_doRefresh` dodatkowo wychodzi od razu bez klienta albo bez kanału, więc `refresh()` jest bezpieczne
+do wołania z dowolnego miejsca, także zanim panel zostanie skonfigurowany.
 
 **Persistencja:** `data/admin_panel.json` — `{ messageId, channelId }`. Jeśli wiadomość usunięta, serwis tworzy nową.
 
