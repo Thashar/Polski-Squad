@@ -6666,7 +6666,7 @@ class InteractionHandler {
             // brak rekordu / nowy rekord), żeby liczył się każdy pozytywnie zweryfikowany screen.
             // /test (dryRun) nie zalicza niczego. Nierozpoznana nazwa bossa nie jest zaliczana od razu —
             // wynik czeka na zmapowanie aliasu przez admina (_resolveChallengePendingBoss).
-            const _challengeResult = dryRun ? { notices: [], pending: false } : await this._registerChallengeScore(interaction, {
+            const _challengeResult = dryRun ? { notices: [], duplicates: [], pending: false } : await this._registerChallengeScore(interaction, {
                 playerKey,
                 bossName,
                 score: bestScore,
@@ -16635,41 +16635,54 @@ class InteractionHandler {
      * @returns {Promise<{ notices: Array, pending: boolean }>} notices → pole w Embedzie 4
      */
     async _registerChallengeScore(interaction, { playerKey, bossName, score, scoreValue, guildId, timestamp, wasUnknownBoss }) {
-        if (!this.challengeService || !bossName) return { notices: [], pending: false };
+        if (!this.challengeService || !bossName) return { notices: [], duplicates: [], pending: false };
         try {
             if (wasUnknownBoss) {
                 const parked = await this.challengeService.addPendingScore({
                     playerKey, guildId, rawBoss: bossName, score, scoreValue, timestamp,
                 });
-                return { notices: [], pending: parked };
+                return { notices: [], duplicates: [], pending: parked };
             }
-            const { notices, finished } = await this.challengeService.registerScore({
+            const { notices, duplicates, finished } = await this.challengeService.registerScore({
                 playerKey, bossName, score, scoreValue, guildId, timestamp,
             });
             if (finished.length > 0) await this._finishChallenges(interaction.client, finished);
-            return { notices, pending: false };
+            return { notices, duplicates, pending: false };
         } catch (err) {
             this.logService._gl(guildId).warn(`⚠️ Błąd zaliczania wyniku do wyzwania: ${err.message}`);
-            return { notices: [], pending: false };
+            return { notices: [], duplicates: [], pending: false };
         }
     }
 
-    /** Buduje pole `⚔️ Wyzwanie` do Embeda 4 / treść DM o zaliczeniu wyniku */
-    _challengeNoticeValue(notices, pending, msgs) {
+    /**
+     * Buduje pole `⚔️ Wyzwanie` do Embeda 4 / treść DM o zaliczeniu wyniku.
+     * Powtórzony wynik ma własny komunikat — gracz musi wiedzieć, że wrzucenie
+     * tego samego rezultatu drugi raz nie podbiło mu licznika.
+     */
+    _challengeNoticeValue(notices, pending, msgs, duplicates = []) {
         if (pending) return msgs.challengeNoticePending;
-        if (!notices.length) return null;
-        return notices.map(n => formatMessage(msgs.challengeNoticeCounted, {
+        const lines = notices.map(n => formatMessage(msgs.challengeNoticeCounted, {
             opponent: this.challengeService.participantName(n.opponent, msgs),
             boss: n.boss,
             count: n.count,
             total: n.total,
             sum: this.rankingService.formatScore(n.sum),
-        })).join('\n\n');
+        }));
+        for (const d of duplicates) {
+            lines.push(formatMessage(msgs.challengeNoticeDuplicate, {
+                score: d.score,
+                opponent: this.challengeService.participantName(d.opponent, msgs),
+                boss: d.boss,
+                count: d.count,
+                total: d.total,
+            }));
+        }
+        return lines.length ? lines.join('\n\n') : null;
     }
 
     /** Pole do `systemNotices` (Embed 4) albo null, gdy nie ma o czym informować */
     _challengeSystemNotice(result, msgs) {
-        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs);
+        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs, result?.duplicates || []);
         return value ? { name: msgs.challengeNoticeField, value } : null;
     }
 
@@ -16680,11 +16693,16 @@ class InteractionHandler {
      */
     async _sendChallengeScoreDm(client, userId, guildId, result) {
         const msgs = this.msgs(guildId);
-        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs);
+        const duplicates = result?.duplicates || [];
+        const value = this._challengeNoticeValue(result?.notices || [], result?.pending, msgs, duplicates);
         if (!value) return;
+        // Sama powtórka (nic nie zaliczono) to ostrzeżenie, nie potwierdzenie
+        const onlyDuplicate = duplicates.length > 0 && !(result?.notices || []).length;
         const embed = new EmbedBuilder()
-            .setColor(result?.pending ? 0xFEE75C : 0x5865F2)
-            .setTitle(msgs.challengeDmCountedTitle)
+            .setColor(result?.pending || onlyDuplicate ? 0xFEE75C : 0x5865F2)
+            // „Zaliczony" tylko gdy faktycznie coś weszło — powtórka i wynik czekający
+            // na zatwierdzenie nazwy bossa niczego nie doliczyły
+            .setTitle((result?.notices || []).length ? msgs.challengeDmCountedTitle : msgs.challengeDmDroppedTitle)
             .setDescription(value)
             .setTimestamp();
         await this._dmUser(client, userId, { embeds: [embed] });
@@ -16720,7 +16738,9 @@ class InteractionHandler {
                     .setColor(0xFEE75C)
                     .setTitle(msgs.challengeDmDroppedTitle)
                     .setDescription(formatMessage(
-                        item.reason === 'too_late' ? msgs.challengeDmDroppedTooLate : msgs.challengeDmDroppedNoChallenge,
+                        item.reason === 'duplicate' ? msgs.challengeDmDroppedDuplicate
+                            : item.reason === 'too_late' ? msgs.challengeDmDroppedTooLate
+                            : msgs.challengeDmDroppedNoChallenge,
                         { boss: englishBoss, score: item.score }
                     ))
                     .setTimestamp();

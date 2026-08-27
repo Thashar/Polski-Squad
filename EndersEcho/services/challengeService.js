@@ -269,10 +269,12 @@ class ChallengeService {
      *   finished = wyzwania rozstrzygnięte tym wynikiem (do rozesłania powiadomień)
      */
     async registerScore({ playerKey, bossName, score, scoreValue, guildId, timestamp }) {
-        if (!playerKey || !bossName) return { notices: [], finished: [] };
+        if (!playerKey || !bossName) return { notices: [], duplicates: [], finished: [] };
         const bossLc = String(bossName).toLowerCase();
         const ts = timestamp || new Date().toISOString();
+        const value = Number(scoreValue) || 0;
         const notices = [];
+        const duplicates = [];
         const finished = [];
 
         await this._mutate(draft => {
@@ -286,10 +288,31 @@ class ChallengeService {
                 // Liczą się WYŁĄCZNIE wyniki złożone po akceptacji wyzwania
                 if (ch.respondedAt && Date.parse(ts) < Date.parse(ch.respondedAt)) continue;
 
-                me.scores.push({ score, scoreValue: Number(scoreValue) || 0, timestamp: ts, guildId });
+                const other = ch[side === 'challenger' ? 'opponent' : 'challenger'];
+
+                // TEN SAM WYNIK NIE LICZY SIĘ DWA RAZY.
+                // Bez tego wystarczyło wrzucić ten sam screen trzy razy, żeby wypełnić
+                // wszystkie sloty jednym rezultatem — wynik nierekordowy też jest zaliczany
+                // do wyzwania, więc powtórka nie odbijała się od żadnej innej blokady.
+                // Porównujemy `scoreValue` (liczbę), nie napis: „1000B" i „1T" to ten sam wynik.
+                // Zakres celowo per UCZESTNIK — przeciwnik może legalnie trafić tę samą wartość.
+                if (me.scores.some(s => (Number(s.scoreValue) || 0) === value)) {
+                    duplicates.push({
+                        id: ch.id,
+                        boss: ch.boss,
+                        side,
+                        count: me.scores.length,
+                        total: SCORES_PER_SIDE,
+                        sum: me.sum,
+                        score,
+                        opponent: { ...other },
+                    });
+                    continue;
+                }
+
+                me.scores.push({ score, scoreValue: value, timestamp: ts, guildId });
                 this._recalcSum(me);
 
-                const other = ch[side === 'challenger' ? 'opponent' : 'challenger'];
                 notices.push({
                     id: ch.id,
                     boss: ch.boss,
@@ -307,7 +330,7 @@ class ChallengeService {
             }
         });
 
-        return { notices, finished };
+        return { notices, duplicates, finished };
     }
 
     /** Rozstrzyga wyzwanie (wołane wewnątrz `_mutate`) */
@@ -365,7 +388,7 @@ class ChallengeService {
         const finished = [];
 
         for (const [pid, pending] of matching) {
-            const { notices, finished: justFinished } = await this.registerScore({
+            const { notices, duplicates, finished: justFinished } = await this.registerScore({
                 playerKey: pending.playerKey,
                 bossName: englishBoss,
                 score: pending.score,
@@ -378,6 +401,9 @@ class ChallengeService {
             if (notices.length > 0) {
                 credited.push({ ...pending, boss: englishBoss, notices });
                 finished.push(...justFinished);
+            } else if (duplicates.length > 0) {
+                // Ten sam wynik jest już w wyzwaniu — zatwierdzenie nazwy bossa niczego nie zmienia
+                dropped.push({ ...pending, boss: englishBoss, reason: 'duplicate' });
             } else {
                 // Wynik nie wszedł do żadnego wyzwania. Rozróżniamy dwa powody, bo gracz
                 // dostaje o tym DM: „spóźniony" (wyzwanie na tym bossie było, ale zdążyło
