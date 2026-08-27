@@ -1456,7 +1456,14 @@ Rząd 1 mieści 5 przycisków, więc układ się przesunął:
 - **Własny profil, rząd 1:** `👤 Profil` · `🎯 Bossowie` · `🏆 Osiągnięcia` · `⚔️ Wyzwania` · `🔔 Subskrypcje`; **`🔍 Szukaj gracza` zeszło do rzędu narzędzi** (to narzędzie, nie zakładka)
 - **Cudzy profil, rząd 1:** `👤` · `🎯` · `🏆` · `⚔️` · `🔍 Szukaj gracza`
 
-Widok: bilans (`🏆 wygrane · 💔 przegrane · 🤝 remisy · ❓ nierozstrzygnięte · ⚔️ rzucone · 🛡️ przyjęte`), sekcja **W toku** (tylko własny profil — `2/3 : 1/3` + termin `<t:…:R>`, a wyniki oczekujące jedną notką pod listą, bo nie są jeszcze przypisane do konkretnego wyzwania) i **Historia** (8/stronę, paginacja `profile_chal_prev`/`profile_chal_next`).
+Widok składa się z czterech części:
+
+1. **Bilans** (opis embeda) — `🏆 wygrane · 💔 przegrane · 🤝 remisy · ❓ nierozstrzygnięte · ⚔️ rzucone · 🛡️ przyjęte`
+2. **📨 Rzucone — czekają na odpowiedź** — zaproszenia WYSŁANE przez tego gracza, z czasem, jaki został przeciwnikowi (`inviteExpiresAt` jako `<t:…:R>`). Otrzymanych zaproszeń tu nie ma: obsługuje je przycisk w DM i tak czy owak nie zajmują slotu, więc nie są stanem gry tego gracza
+3. **⚔️ W toku** — przeciwnik i boss, a pod spodem **licznik screenów ORAZ aktualna suma obu stron**: `**2/3** (12.5Sx) : **1/3** (8.1Sx)`, w trzeciej linii termin `⏳ <t:…:R>`. Kolejność jak w historii — najpierw moja strona, potem przeciwnik. **Sam licznik nie mówi, kto prowadzi**, dlatego suma stoi obok niego. Wyniki oczekujące na zmapowanie bossa idą jedną notką pod listą, bo nie są jeszcze przypisane do konkretnego wyzwania
+4. **📜 Historia** — 8/stronę, paginacja `profile_chal_prev`/`profile_chal_next`
+
+⚠️ **Punkty 2 i 3 pokazujemy WYŁĄCZNIE na własnym profilu.** To stan gry w toku, a nie dorobek — na cudzym profilu byłby podglądaniem cudzej kartki (widać by było, ile przeciwnik zdążył wrzucić i z jakim wynikiem). Bilans i historia są jawne dla każdego.
 
 Stan `chalPage`/`chalMaxPage` w `_profileStates`; komunikaty przez **`_msgsByLang(state.lang)`**, nie `this.msgs(guildId)` — widok profilu trzyma własny język (`_getProfileLang`), który nie musi pokrywać się z językiem serwera wywołania.
 

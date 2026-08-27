@@ -584,7 +584,9 @@ const pol = {
     // ⚔️ Wyzwania — profil
     challengeProfileTitle: '⚔️ Wyzwania — {name}',
     challengeProfileSummary: '🏆 Wygrane: **{won}** · 💔 Przegrane: **{lost}** · 🤝 Remisy: **{draw}** · ❓ Nierozstrzygnięte: **{unresolved}**\n⚔️ Rzucone: **{sent}** · 🛡️ Przyjęte: **{accepted}**',
-    challengeProfileActive: '⏳ W toku',
+    challengeProfileActive: '⚔️ W toku',
+    challengeProfileSent: '📨 Rzucone — czekają na odpowiedź',
+    challengeProfileSentWait: 'czas na odpowiedź:',
     challengeProfileHistory: '📜 Historia',
     challengeProfileEmpty: 'Ten gracz nie brał jeszcze udziału w żadnym wyzwaniu.',
     challengeProfilePendingSuffix: ' *(+{count} oczekujący)*',
@@ -1183,7 +1185,9 @@ const eng = {
     // ⚔️ Challenges — profile
     challengeProfileTitle: '⚔️ Challenges — {name}',
     challengeProfileSummary: '🏆 Won: **{won}** · 💔 Lost: **{lost}** · 🤝 Draws: **{draw}** · ❓ Unresolved: **{unresolved}**\n⚔️ Sent: **{sent}** · 🛡️ Accepted: **{accepted}**',
-    challengeProfileActive: '⏳ In progress',
+    challengeProfileActive: '⚔️ In progress',
+    challengeProfileSent: '📨 Sent — awaiting a reply',
+    challengeProfileSentWait: 'time to answer:',
     challengeProfileHistory: '📜 History',
     challengeProfileEmpty: 'This player has not taken part in any challenge yet.',
     challengeProfilePendingSuffix: ' *(+{count} pending)*',
