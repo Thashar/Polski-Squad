@@ -1248,12 +1248,20 @@ Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozst
 
 ### Wizard (ephemeral, wzorzec `/subscribe`)
 
-1. `chal_srv` — wybór serwera (`config.getAllGuilds()`)
+1. `chal_srv` — wybór serwera (`config.getAllGuilds()`, 25/stronę + przyciski zakresów liter `chal_spage_{offset}`). **⚠️ Wcześniej lista była ucinana** (`options.slice(0, 25)`) — przy większej liczbie serwerów reszty nie dało się wybrać, bez żadnego śladu w UI
 2. `chal_pl` — wybór gracza z rankingu tego serwera (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący)
 3. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
 4. Potwierdzenie z **miniaturą bossa** + zasady → `chal_ok` / `chal_no`
 
 Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków). To sesja czysto UI, restart bota tylko ją zeruje.
+
+**⚠️ Kolejność alfabetyczna liczona z klucza ZNORMALIZOWANEGO** (`_normalizeSortName` / `_sortBucketLetter` / `_compareSortNames` w `interactionHandlers.js`) — wspólne dla list graczy i serwerów:
+- zdejmowane jest wszystko przed pierwszym znakiem **pisanym** (literą albo cyfrą), więc `🔥 Polski Squad` trafia pod `P`, a `❰ Zenith ❱` pod `Z`. Nicki i nazwy serwerów zaczynają się od emoji i ramek częściej niż od litery, a bez tego lista „alfabetyczna" alfabetyczna nie była: takie nazwy lądowały w koszu „nie-litera", a przycisk zakresu pokazywał `🔥 - ⭐` zamiast `A - K`
+- diakrytyki sprowadzane do liter bazowych (`Ą→A`, `Ż→Z`, `Ł→L`)
+- **`ł`/`Ł` NIE rozkłada się w NFD** (osobny punkt kodowy z kreską, nie litera ze znakiem łączącym) — dlatego jest mapa dla niego i garści podobnych liter z innych alfabetów (`ø đ ð þ æ œ ß ı`), których sam NFD też nie rozbije
+- kolejność: litery → cyfry → `#` (nazwy złożone wyłącznie ze znaków ozdobnych) na końcu
+- **przyciski zakresów buduje `_buildChallengeRangeButtons(items, activeOffset, prefix)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
+- ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
 
 **Rekord powstaje dopiero po UDANEJ wysyłce DM.** Gdy przeciwnik ma zamknięte wiadomości prywatne, wpis jest kasowany (`discard`), a wyzywający dostaje `challengeErrDmClosed`.
 
@@ -1369,7 +1377,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 
 ### CustomIDs
 
-`chal_srv` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
+`chal_srv` | `chal_spage_{offset}` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
 
 **⚠️ Formy bezrodzajowe w komunikatach PL** — polska forma męska („przyjął", „Wygrałeś") misgenderuje każdego, kto nie jest mężczyzną. Dlatego: `podejmuje`/`odrzuca` zamiast `przyjął`/`odrzucił`, `Zwycięstwo!`/`Porażka.` zamiast `Wygrałeś!`/`Przegrałeś.`, `została zatwierdzona przez administrację` zamiast `Administrator zatwierdził`. Dokładając komunikat, nie wprowadzaj z powrotem form rodzajowych (ta sama zasada co w rzędzie „ostatnia reakcja" pod rozgłoszeniami).
 
