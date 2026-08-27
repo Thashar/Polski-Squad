@@ -6,6 +6,9 @@ const ProfileService = require('../services/profileService');
 const MESSAGES = require('../config/messages');
 const fs = require('fs').promises;
 const { createBotLogger } = require('../../utils/consoleLogger');
+// Cache plików JSON — `_handlePanelDeleteServerDataConfirm` wyrzuca z niego skasowane
+// dane serwera. Bez tego importu ta ścieżka leciała na `ReferenceError: store is not defined`
+const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
 
