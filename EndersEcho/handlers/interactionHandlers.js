@@ -276,8 +276,8 @@ class InteractionHandler {
 
             new SlashCommandBuilder()
                 .setName('challenge')
-                .setDescription('Challenge another player to a 1v1 duel on a chosen boss')
-                .setDescriptionLocalizations(pl('Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie')),
+                .setDescription('Challenge a player with a similar record (±20%) to a 1v1 duel on a chosen boss')
+                .setDescriptionLocalizations(pl('Rzuć wyzwanie 1 na 1 graczowi o zbliżonym rekordzie (±20%) na wybranym bossie')),
 
             new SlashCommandBuilder()
                 .setName('profile')
@@ -16592,6 +16592,30 @@ class InteractionHandler {
         return image?.buffer ? [new AttachmentBuilder(image.buffer, { name: image.name })] : [];
     }
 
+    /**
+     * Rekord wyzywającego — `scoreValue` profilu GŁÓWNEGO na serwerze, z którego poszła
+     * komenda. To właśnie ten profil staje się uczestnikiem wyzwania (`_mainPlayerKey`),
+     * więc przedział ±20% liczymy od jego wyniku, nie od najlepszego z kont gracza.
+     * @returns {Promise<number>} 0 gdy profil główny nie ma jeszcze wyniku
+     */
+    async _challengeChallengerRecord(guildId, userId) {
+        const key = this._mainPlayerKey(userId);
+        const players = await this.rankingService.getSortedPlayers(guildId);
+        const me = players.find(p => (p.playerKey || p.userId) === key);
+        return me?.scoreValue || 0;
+    }
+
+    /** Podstawienia do komunikatów o dozwolonym przedziale rekordów (±20%) */
+    _challengeRangeVars(challengerScore) {
+        const { min, max } = this.challengeService.recordRange(challengerScore);
+        return {
+            record: this.rankingService.formatScore(challengerScore),
+            min: this.rankingService.formatScore(min),
+            max: this.rankingService.formatScore(max),
+            percent: this.challengeService.maxRecordDiffPercent,
+        };
+    }
+
     /** Nazwa serwera do embedów wyzwania */
     _challengeGuildName(client, guildId) {
         return client.guilds.cache.get(guildId)?.name
@@ -16602,8 +16626,11 @@ class InteractionHandler {
     // ── Wizard ────────────────────────────────────────────────────────────────
 
     /**
-     * `/challenge` — na razie WYŁĄCZNIE dla head admina (komenda widoczna tylko dla
-     * administratorów przez setDefaultMemberPermissions, wykonanie dodatkowo bramkowane).
+     * `/challenge` — komenda dostępna dla każdego gracza (routing jak `/update`:
+     * skonfigurowany serwer + kanał bota).
+     *
+     * Wymaga WŁASNEGO rekordu: przeciwnika wolno wybrać tylko z przedziału ±20% wokół
+     * rekordu wyzywającego, więc bez wyniku w rankingu nie ma czego porównywać.
      */
     async handleChallengeCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
@@ -16612,8 +16639,17 @@ class InteractionHandler {
             return;
         }
 
+        // Wyzwanie musi być wyrównane (rekord przeciwnika ±20%), więc bez własnego
+        // rekordu nie ma czego porównywać — kreatora nawet nie otwieramy
+        const challengerScore = await this._challengeChallengerRecord(interaction.guildId, interaction.user.id);
+        if (!(challengerScore > 0)) {
+            await interaction.reply({ content: msgs.challengeErrNoRecord, flags: ['Ephemeral'] });
+            return;
+        }
+
         this._challengeSessions.set(interaction.user.id, {
             guildId: null, playerKey: null, playerName: null, boss: null,
+            challengerScore,
             createdAt: Date.now(),
         });
 
@@ -16691,12 +16727,28 @@ class InteractionHandler {
             return;
         }
 
+        // Sesja sprzed wdrożenia limitu rekordów (albo po dogranym wyniku) nie zna jeszcze
+        // rekordu wyzywającego — doliczamy go tutaj zamiast pokazywać pustą listę
+        if (!(session.challengerScore > 0)) {
+            session.challengerScore = await this._challengeChallengerRecord(interaction.guildId, interaction.user.id);
+            if (!(session.challengerScore > 0)) {
+                await interaction.editReply({ content: msgs.challengeErrNoRecord, components: [] });
+                return;
+            }
+        }
+
+        const rangeVars = this._challengeRangeVars(session.challengerScore);
         const sorted = (await this._getNotifSortedPlayers(session.guildId, interaction.client))
             // Wyzwać można wyłącznie kogoś innego — wszystkie własne profile odpadają
-            .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id);
+            .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id)
+            // ...i tylko gracza o zbliżonym rekordzie (±20%) — pojedynek ma być wyrównany
+            .filter(p => this.challengeService.isRecordInRange(session.challengerScore, p.scoreValue));
 
         if (sorted.length === 0) {
-            await interaction.editReply({ content: msgs.challengeNoPlayers, components: [] });
+            await interaction.editReply({
+                content: formatMessage(msgs.challengeNoPlayersInRange, rangeVars),
+                components: [],
+            });
             return;
         }
 
@@ -16717,7 +16769,10 @@ class InteractionHandler {
             : [...this._buildRangeButtons(
                 sorted.map(p => ({ label: p.displayName })), offset, 'chal_page_'), selectRow];
 
-        await interaction.editReply({ content: msgs.challengeSelectPlayer, components });
+        await interaction.editReply({
+            content: `${msgs.challengeSelectPlayer}\n${formatMessage(msgs.challengeRecordRange, rangeVars)}`,
+            components,
+        });
     }
 
     /**
@@ -16824,6 +16879,9 @@ class InteractionHandler {
                 }),
                 '',
                 msgs.challengeRules,
+                formatMessage(msgs.challengeRecordRule, {
+                    percent: this.challengeService.maxRecordDiffPercent,
+                }),
             ].join('\n'));
         if (bossImage.thumb) embed.setThumbnail(bossImage.thumb);
 
@@ -16855,6 +16913,20 @@ class InteractionHandler {
         const done = (content) => interaction.editReply({ content, embeds: [], files: [], components: [] });
 
         if (opponentId === interaction.user.id) return void await done(msgs.challengeErrSelf);
+
+        // Rekordy mogły się zmienić od otwarcia kreatora (sesja żyje 15 min) — przedział
+        // ±20% liczymy jeszcze raz na świeżych danych, a nie na wartości z sesji
+        const challengerScore = await this._challengeChallengerRecord(interaction.guildId, interaction.user.id);
+        if (!(challengerScore > 0)) return void await done(msgs.challengeErrNoRecord);
+        const opponentScore = (await this.rankingService.getSortedPlayers(session.guildId))
+            .find(p => (p.playerKey || p.userId) === opponentKey)?.scoreValue || 0;
+        if (!this.challengeService.isRecordInRange(challengerScore, opponentScore)) {
+            return void await done(formatMessage(msgs.challengeErrRecordRange, {
+                ...this._challengeRangeVars(challengerScore),
+                name: session.playerName,
+                score: this.rankingService.formatScore(opponentScore),
+            }));
+        }
 
         const limit = this.challengeService.maxActivePerPlayer;
         if (await this.challengeService.countOpenForPlayer(challengerKey) >= limit) {

@@ -1303,6 +1303,7 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 | Przyjęte wyzwanie | **72 h** → rozstrzygnięcie po sumach albo `unresolved` (patrz niżej) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
 | Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
+| Różnica rekordów wyzywający ↔ przeciwnik | **±20%** — poza przedziałem gracza nie da się wybrać | `MAX_RECORD_DIFF_RATIO` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
 
 Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h i kompletu nie zebrał NIKT) · `cancelled` (uczestnik usunął profil).
@@ -1310,9 +1311,20 @@ Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozst
 ### Wizard (ephemeral, wzorzec `/subscribe`)
 
 1. `chal_srv` — wybór serwera (`config.getAllGuilds()`, 25/stronę + przyciski zakresów liter `chal_spage_{offset}`). **⚠️ Wcześniej lista była ucinana** (`options.slice(0, 25)`) — przy większej liczbie serwerów reszty nie dało się wybrać, bez żadnego śladu w UI
-2. `chal_pl` — wybór gracza z rankingu tego serwera (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący)
+2. `chal_pl` — wybór gracza z rankingu tego serwera (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący) oraz **gracze z rekordem poza przedziałem ±20%** (patrz „Limit ±20%" niżej)
 3. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
-4. Potwierdzenie z **miniaturą bossa** + zasady → `chal_ok` / `chal_no`
+4. Potwierdzenie z **miniaturą bossa** + zasady + przypomnienie o limicie ±20% (`challengeRecordRule`) → `chal_ok` / `chal_no`
+
+### Limit ±20% — wyzwanie musi być wyrównane
+
+Wyzwać można **wyłącznie gracza, którego rekord mieści się w przedziale ±20%** rekordu wyzywającego. Bez tego dowolny gracz mógł wyzwać lidera rankingu (albo odwrotnie), a wynik pojedynku był znany z góry.
+
+- **Porównywany jest rekord z rankingu** (`scoreValue`), nie wyniki oddawane w trakcie wyzwania
+- **Po stronie wyzywającego liczy się profil GŁÓWNY** na serwerze, z którego poszła komenda (`_challengeChallengerRecord` → `_mainPlayerKey`) — to ten profil staje się uczestnikiem, więc porównanie idzie po jego wyniku, nie po najlepszym z kont gracza
+- **Brak rekordu = brak wyzwania.** `handleChallengeCommand` kończy się komunikatem `challengeErrNoRecord`, kreator nawet się nie otwiera
+- **Reguła w serwisie, nie w handlerze:** `challengeService.isRecordInRange(a, b)` / `recordRange(score)` / `maxRecordDiffPercent`, stała `MAX_RECORD_DIFF_RATIO = 0.2`. Porównanie z granicą ma margines `RECORD_RANGE_EPSILON` (1e-9) — rekord dokładnie o 20% wyższy MA się mieścić, a `score * 1.2` potrafi wyjść o ułamek za duże
+- **Sprawdzane DWA razy:** przy budowaniu listy graczy (filtr) i ponownie przy `chal_ok` na świeżo policzonych rekordach — sesja żyje 15 minut, a w tym czasie obie strony mogą poprawić wynik (`challengeErrRecordRange`)
+- **Gdzie widać restrykcję:** lista graczy pokazuje konkretny przedział (`challengeRecordRange` — rekord wyzywającego + widełki `min`–`max`), embed potwierdzenia — samą zasadę (`challengeRecordRule`), a gdy na serwerze nikt się nie łapie — `challengeNoPlayersInRange` z podpowiedzią, żeby wybrać inny serwer
 
 Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków). To sesja czysto UI, restart bota tylko ją zeruje.
 

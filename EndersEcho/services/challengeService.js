@@ -25,6 +25,17 @@ const PENDING_SCORE_TTL_MS = 72 * 60 * 60 * 1000;
  * wymaga przepisania ich w obu językach.
  */
 const MAX_ACTIVE_PER_PLAYER = 1;
+/**
+ * Maksymalna różnica rekordów między wyzywającym a wyzywanym (±20%). Pojedynek ma być
+ * wyrównany — bez tego dowolny gracz mógł wyzwać lidera rankingu (albo odwrotnie),
+ * a wynik był znany z góry. Liczy się rekord z rankingu, nie wyniki oddane w wyzwaniu.
+ */
+const MAX_RECORD_DIFF_RATIO = 0.2;
+/**
+ * Margines na błąd zmiennoprzecinkowy przy porównaniu z granicą przedziału — rekord
+ * dokładnie o 20% wyższy ma się MIEŚCIĆ, a `score * 1.2` potrafi wyjść o ułamek za duże.
+ */
+const RECORD_RANGE_EPSILON = 1e-9;
 /** Zamknięte wyzwania bez rezultatu (odrzucone, wygasłe zaproszenia) kasujemy po 90 dniach */
 const CLOSED_MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -312,6 +323,35 @@ class ChallengeService {
 
     get maxActivePerPlayer() { return MAX_ACTIVE_PER_PLAYER; }
     get scoresPerSide() { return SCORES_PER_SIDE; }
+    /** Dopuszczalna różnica rekordów jako ułamek (0.2 = ±20%) */
+    get maxRecordDiffRatio() { return MAX_RECORD_DIFF_RATIO; }
+    /** To samo w procentach — do komunikatów */
+    get maxRecordDiffPercent() { return Math.round(MAX_RECORD_DIFF_RATIO * 100); }
+
+    /**
+     * Przedział rekordów, z których wolno wybrać przeciwnika.
+     * @param {number} challengerScore - rekord wyzywającego (`scoreValue` z rankingu)
+     * @returns {{ min: number, max: number }}
+     */
+    recordRange(challengerScore) {
+        const base = Number(challengerScore) || 0;
+        return {
+            min: base * (1 - MAX_RECORD_DIFF_RATIO),
+            max: base * (1 + MAX_RECORD_DIFF_RATIO),
+        };
+    }
+
+    /**
+     * Czy rekord przeciwnika mieści się w przedziale ±20% wokół rekordu wyzywającego.
+     * Bez rekordu po którejkolwiek stronie nie ma czego porównywać — wtedy `false`.
+     */
+    isRecordInRange(challengerScore, opponentScore) {
+        const base = Number(challengerScore) || 0;
+        const other = Number(opponentScore) || 0;
+        if (base <= 0 || other <= 0) return false;
+        const { min, max } = this.recordRange(base);
+        return other >= min * (1 - RECORD_RANGE_EPSILON) && other <= max * (1 + RECORD_RANGE_EPSILON);
+    }
 
     // ─── Cykl życia ───────────────────────────────────────────────────────────
 
