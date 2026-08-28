@@ -15,7 +15,8 @@ const store = require('../../utils/jsonStore');
  * CO JEDZIE NA STRONĘ: nazwa wyświetlana zapisana przy wyniku (ta sama, która
  * stoi już w rankingach TOP 10), serwer i tag, najlepszy wynik z bossem i datą
  * DZIENNĄ, pozycje, liczniki (rekordy, bossowie, osiągnięcia, obserwatorzy),
- * historia wyników do wykresu i tabela rekordów bossów.
+ * historia wyników do wykresu, tabela rekordów bossów i BILANS WYZWAŃ 1 vs 1
+ * (same liczby: rozstrzygnięte pojedynki, wygrane, przegrane, remisy).
  *
  * CZEGO NIE WYSYŁAMY, ŚWIADOMIE:
  *   • ID Discorda i klucza profilu — nie opuszczają bota w żadnej postaci,
@@ -26,6 +27,9 @@ const store = require('../../utils/jsonStore');
  *     w grze należy do jednej osoby,
  *   • nazw ról i pozycji w rankingach ról — to wewnętrzna struktura serwera,
  *   • kto obserwuje gracza — jedzie sama liczba, nigdy lista,
+ *   • z kim gracz się pojedynkował – z wyzwań jedzie sam bilans, nigdy nazwy
+ *     przeciwników, bossowie pojedynków ani terminy; drugi gracz nie ma jak
+ *     wypisać się z CUDZEJ karty, więc nie może się na niej znaleźć,
  *   • godzin — wszędzie same daty dzienne, bo pełne znaczniki czasu układają
  *     się w rytm dnia i strefę czasową konkretnej osoby.
  *
@@ -69,7 +73,8 @@ class PlayerOfTheDayService {
      * @param {Object} config - config bota
      * @param {Object} logger
      * @param {Object} deps - { rankingService, guildConfigService, scoreHistoryService,
-     *                          bossRecordService, achievementService, notificationService }
+     *                          bossRecordService, achievementService, notificationService,
+     *                          challengeService }
      */
     constructor(config, logger, deps = {}) {
         this.config = config;
@@ -80,6 +85,7 @@ class PlayerOfTheDayService {
         this.bossRecordService = deps.bossRecordService || null;
         this.achievementService = deps.achievementService || null;
         this.notificationService = deps.notificationService || null;
+        this.challengeService = deps.challengeService || null;
 
         this.token = process.env.ENDERSECHO_WEB_SYNC_TOKEN || null;
         // Osobny adres jest opcjonalny — domyślnie bierzemy ten od rankingów
@@ -339,7 +345,7 @@ class PlayerOfTheDayService {
         const sourceGuildId = entry.sourceGuildId;
         const allGuildIds = this.guildConfigService?.getAllConfiguredGuildIds() || [sourceGuildId];
 
-        const [sortedPlayers, globalRanking, history, bossRecords, bossPositions, achievements, watchers] =
+        const [sortedPlayers, globalRanking, history, bossRecords, bossPositions, achievements, watchers, challenges] =
             await Promise.all([
                 this.rankingService.getSortedPlayers(sourceGuildId).catch(() => []),
                 this.rankingService.getGlobalRanking().catch(() => []),
@@ -357,6 +363,9 @@ class PlayerOfTheDayService {
                     : Promise.resolve([]),
                 this.notificationService
                     ? this.notificationService.getSubscribersForTarget(playerKey, sourceGuildId).catch(() => [])
+                    : Promise.resolve([]),
+                this.challengeService
+                    ? this.challengeService.getForPlayer(playerKey).catch(() => [])
                     : Promise.resolve([]),
             ]);
 
@@ -376,6 +385,19 @@ class PlayerOfTheDayService {
             .filter(h => Number.isFinite(h?.scoreValue) && new Date(h.timestamp).getTime() >= cutoff)
             .slice(-MAX_CHART_POINTS)
             .map(h => ({ d: h.timestamp, v: h.scoreValue, s: h.score }));
+
+        // Wyzwania: z całej historii pojedynków bierzemy SAME LICZBY. Nazwa
+        // przeciwnika byłaby tu cudzą daną na karcie, z której ten drugi nie ma
+        // jak się wypisać – jego zgoda dotyczy jego własnej karty, nie tej.
+        // Gdy gracz nie stoczył ani jednego pojedynku, pole jedzie jako null
+        // i strona nie rysuje bloku – pusty bilans 0:0 wyglądałby jak zarzut.
+        const chal = this.challengeService && challenges.length
+            ? this.challengeService.summarize(challenges, playerKey)
+            : null;
+        const settled = chal ? chal.won + chal.lost + chal.draw : 0;
+        const challengeStats = settled > 0
+            ? { settled, won: chal.won, lost: chal.lost, draw: chal.draw }
+            : null;
 
         const bosses = Object.entries(bossRecords)
             .sort((a, b) => (b[1].scoreValue || 0) - (a[1].scoreValue || 0))
@@ -405,6 +427,7 @@ class PlayerOfTheDayService {
             watchers: watchers.length || 0,
             history: chart,
             bossRecords: bosses,
+            challenges: challengeStats,
         };
     }
 

@@ -1288,6 +1288,8 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 
 **⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
 
+**Bilans pojedynków jedzie też na stronę** – karta Gracza Dnia (`playerOfTheDayService.buildPayload`) dostaje pole `challenges` z `summarize()`: `settled` / `won` / `lost` / `draw`, i tylko wtedy, gdy cokolwiek się już rozstrzygnęło. **Same liczby** – nazwa przeciwnika, boss i daty pojedynków NIE opuszczają bota: drugi gracz nie ma jak wypisać się z cudzej karty, więc nie może się na niej znaleźć (opisane w sekcji 5a polityki prywatności na stronie).
+
 **Komenda `/challenge` jest dostępna dla KAŻDEGO gracza** — bez `setDefaultMemberPermissions` i bez bramki head admina. Routing zwykły, jak `/update` i `/ranking`: wymaga skonfigurowanego serwera **i kanału bota** (`isAllowedChannel`).
 
 ⚠️ **Wcześniej komenda była zamknięta dla head admina i szła własną ścieżką routingu**, przed sprawdzeniem kanału. Otwierając ją dla graczy przeniesiono ją do zwykłego `switch`, żeby podlegała tej samej zasadzie „komendy gracza tylko na kanale bota" co reszta. Select menu `chal_*` nadal routowane są przed `isAllowedChannel` — wizard jest efemeryczny i tak czy owak żyje w wiadomości, która powstała już na dozwolonym kanale.
