@@ -11140,7 +11140,6 @@ class InteractionHandler {
         try {
             const customId = interaction.customId;
 
-            if (customId === 'chal_srv') { await this._handleChallengeServerSelect(interaction); return; }
             if (customId === 'chal_pl')  { await this._handleChallengePlayerSelect(interaction); return; }
             if (customId === 'chal_boss') { await this._handleChallengeBossSelect(interaction); return; }
 
@@ -16634,8 +16633,14 @@ class InteractionHandler {
      */
     async handleChallengeCommand(interaction) {
         const msgs = this.msgs(interaction.guildId);
+        // ⚠️ DEFER OD RAZU. Pierwszy ekran wizarda to lista kandydatów ze WSZYSTKICH
+        // serwerów — rankingi plus dociąganie nicków z Discorda potrafią przekroczyć
+        // 3 sekundy, które Discord daje na odpowiedź (wcześniej pierwszym ekranem był
+        // wybór serwera, czyli odpowiedź natychmiastowa, i defer nie był potrzebny)
+        await interaction.deferReply({ flags: ['Ephemeral'] });
+
         if (!this.challengeService) {
-            await interaction.reply({ content: msgs.updateError, flags: ['Ephemeral'] });
+            await interaction.editReply({ content: msgs.updateError });
             return;
         }
 
@@ -16643,59 +16648,25 @@ class InteractionHandler {
         // rekordu nie ma czego porównywać — kreatora nawet nie otwieramy
         const challengerScore = await this._challengeChallengerRecord(interaction.guildId, interaction.user.id);
         if (!(challengerScore > 0)) {
-            await interaction.reply({ content: msgs.challengeErrNoRecord, flags: ['Ephemeral'] });
+            await interaction.editReply({ content: msgs.challengeErrNoRecord });
             return;
         }
 
+        // `guildId` uzupełnia się dopiero przy wyborze gracza — bierze się z jego pozycji
+        // na liście, nie z osobnego kroku wizarda
         this._challengeSessions.set(interaction.user.id, {
             guildId: null, playerKey: null, playerName: null, boss: null,
-            challengerScore,
+            challengerScore, candidates: null,
             createdAt: Date.now(),
         });
 
-        await this._renderChallengeServerPicker(interaction, 0, { initial: true });
+        await this._renderChallengePlayerPicker(interaction, 0);
     }
 
     /**
-     * Lista serwerów (25/stronę + przyciski zakresów liter).
-     *
-     * ⚠️ Wcześniej lista była **ucinana** do 25 pozycji (`options.slice(0, 25)`) — przy
-     * większej liczbie serwerów reszty po prostu nie dało się wybrać, bez żadnego śladu
-     * w UI. Stronicowanie jest tu więc naprawą, nie ozdobnikiem.
+     * Sesja wizarda (RAM, TTL 15 min) — customId nie pomieści guildId + playerKey + nazwy
+     * bossa, a od czasu listy zbiorczej trzyma też gotową listę kandydatów.
      */
-    async _renderChallengeServerPicker(interaction, offset, { initial = false } = {}) {
-        const msgs = this.msgs(interaction.guildId);
-        const PAGE_SIZE = 25;
-
-        const servers = this.config.getAllGuilds()
-            .map(g => ({ id: g.id, label: this._challengeGuildName(interaction.client, g.id) }))
-            .sort((a, b) => this._compareSortNames(a.label, b.label));
-
-        if (servers.length === 0) {
-            const empty = { content: msgs.challengeNoPlayers, components: [] };
-            await (initial ? interaction.reply({ ...empty, flags: ['Ephemeral'] }) : interaction.editReply(empty));
-            return;
-        }
-
-        const safeOffset = Math.min(Math.max(0, offset), Math.max(0, (Math.ceil(servers.length / PAGE_SIZE) - 1) * PAGE_SIZE));
-        const page = servers.slice(safeOffset, safeOffset + PAGE_SIZE);
-        const select = new StringSelectMenuBuilder()
-            .setCustomId('chal_srv')
-            .setPlaceholder(msgs.challengeSelectServerPlaceholder)
-            .addOptions(page.map(s =>
-                new StringSelectMenuOptionBuilder().setValue(s.id).setLabel(s.label.substring(0, 100))
-            ));
-        const selectRow = new ActionRowBuilder().addComponents(select);
-
-        const components = servers.length <= PAGE_SIZE
-            ? [selectRow]
-            : [...this._buildRangeButtons(servers, safeOffset, 'chal_spage_'), selectRow];
-
-        const payload = { content: msgs.challengeIntro, components };
-        await (initial ? interaction.reply({ ...payload, flags: ['Ephemeral'] }) : interaction.editReply(payload));
-    }
-
-    /** Sesja wizarda (RAM, TTL 15 min) — customId nie pomieści guildId + playerKey + nazwy bossa */
     _getChallengeSession(userId) {
         const session = this._challengeSessions.get(userId);
         if (!session) return null;
@@ -16706,23 +16677,74 @@ class InteractionHandler {
         return session;
     }
 
-    async _handleChallengeServerSelect(interaction) {
-        await interaction.deferUpdate();
-        const msgs = this.msgs(interaction.guildId);
-        const session = this._getChallengeSession(interaction.user.id);
-        if (!session) {
-            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
-            return;
-        }
-        session.guildId = interaction.values[0];
-        await this._renderChallengePlayerPicker(interaction, 0);
+    /**
+     * Kandydaci na przeciwnika ze WSZYSTKICH skonfigurowanych serwerów — już bez własnych
+     * profili wyzywającego i bez graczy spoza przedziału ±20%, posortowani alfabetycznie
+     * po nicku (serwer rozstrzyga remisy).
+     *
+     * Lista trafia do sesji wizarda: przewijanie stron (`chal_page_*`) nie ma powodu
+     * przechodzić rankingów wszystkich serwerów po raz drugi, a nicki i tak dociągane są
+     * przez `_resolveGuildDisplayNames` z własnym cache'em.
+     *
+     * @returns {Promise<Array<{playerKey, guildId, guildName, displayName, label}>>}
+     */
+    async _getChallengeCandidates(interaction, session) {
+        if (session.candidates) return session.candidates;
+
+        const perGuild = await Promise.all(this.config.getAllGuilds().map(async guildCfg => {
+            const guildName = this._challengeGuildName(interaction.client, guildCfg.id);
+            const players = await this._getNotifSortedPlayers(guildCfg.id, interaction.client);
+            return players
+                // Wyzwać można wyłącznie kogoś innego — wszystkie własne profile odpadają
+                .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id)
+                // ...i tylko gracza o zbliżonym rekordzie (±20%) — pojedynek ma być wyrównany
+                .filter(p => this.challengeService.isRecordInRange(session.challengerScore, p.scoreValue))
+                .map(p => ({
+                    playerKey: p.playerKey || p.userId,
+                    guildId: guildCfg.id,
+                    guildName,
+                    displayName: p.displayName,
+                    label: this._challengeCandidateLabel(p.displayName, guildName),
+                }));
+        }));
+
+        session.candidates = perGuild.flat().sort((a, b) =>
+            this._compareSortNames(a.displayName, b.displayName)
+            || this._compareSortNames(a.guildName, b.guildName));
+        return session.candidates;
     }
 
-    /** Lista graczy wybranego serwera (25/stronę + przyciski zakresów liter) */
+    /**
+     * Etykieta pozycji: `nick (serwer)`. Nazwa serwera jest tu obowiązkowa — lista łączy
+     * wszystkie serwery, więc dwie osoby o tym samym nicku (albo jedna, grająca w dwóch
+     * miejscach) byłyby bez niej nie do rozróżnienia.
+     *
+     * Limit etykiety select menu to 100 znaków. Przycinamy NAJPIERW nazwę serwera do 30
+     * znaków, potem nick — nick niesie więcej informacji, więc dostaje resztę miejsca.
+     */
+    _challengeCandidateLabel(displayName, guildName) {
+        const MAX_LABEL = 100;
+        const MAX_GUILD = 30;
+        const guild = guildName.length > MAX_GUILD ? `${guildName.substring(0, MAX_GUILD - 1)}…` : guildName;
+        const suffix = ` (${guild})`;
+        const room = MAX_LABEL - suffix.length;
+        const name = displayName.length > room ? `${displayName.substring(0, room - 1)}…` : displayName;
+        return `${name}${suffix}`;
+    }
+
+    /**
+     * Lista graczy ze WSZYSTKICH serwerów (25/stronę + przyciski zakresów liter).
+     *
+     * ⚠️ Wcześniej wizard zaczynał się od wyboru serwera, a lista graczy pokazywała tylko
+     * ten jeden. Przy limicie ±20% wchodziło się w serwer po serwerze, żeby sprawdzić, czy
+     * ktokolwiek się łapie — teraz komplet kandydatów jest od razu, a serwer stoi przy nicku.
+     */
     async _renderChallengePlayerPicker(interaction, offset) {
         const msgs = this.msgs(interaction.guildId);
+        // Wołane zawsze po `deferReply` (start komendy) albo `deferUpdate` (przyciski
+        // stron), więc odpowiadamy wyłącznie przez `editReply`
         const session = this._getChallengeSession(interaction.user.id);
-        if (!session?.guildId) {
+        if (!session) {
             await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
             return;
         }
@@ -16738,36 +16760,37 @@ class InteractionHandler {
         }
 
         const rangeVars = this._challengeRangeVars(session.challengerScore);
-        const sorted = (await this._getNotifSortedPlayers(session.guildId, interaction.client))
-            // Wyzwać można wyłącznie kogoś innego — wszystkie własne profile odpadają
-            .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id)
-            // ...i tylko gracza o zbliżonym rekordzie (±20%) — pojedynek ma być wyrównany
-            .filter(p => this.challengeService.isRecordInRange(session.challengerScore, p.scoreValue));
+        const candidates = await this._getChallengeCandidates(interaction, session);
 
-        if (sorted.length === 0) {
-            await interaction.editReply({
-                content: formatMessage(msgs.challengeNoPlayersInRange, rangeVars),
-                components: [],
-            });
+        if (candidates.length === 0) {
+            await interaction.editReply({ content: formatMessage(msgs.challengeNoPlayersInRange, rangeVars), components: [] });
             return;
         }
 
         const PAGE_SIZE = 25;
-        const page = sorted.slice(offset, offset + PAGE_SIZE);
+        const safeOffset = Math.min(
+            Math.max(0, offset),
+            Math.max(0, (Math.ceil(candidates.length / PAGE_SIZE) - 1) * PAGE_SIZE)
+        );
+        const page = candidates.slice(safeOffset, safeOffset + PAGE_SIZE);
         const select = new StringSelectMenuBuilder()
             .setCustomId('chal_pl')
             .setPlaceholder(msgs.challengeSelectPlayerPlaceholder)
-            .addOptions(page.map(p =>
+            .addOptions(page.map(c =>
                 new StringSelectMenuOptionBuilder()
-                    .setValue(p.playerKey || p.userId)
-                    .setLabel(p.displayName.substring(0, 100))
+                    // Serwer w WARTOŚCI, nie tylko w etykiecie — ten sam profil może istnieć
+                    // w rankingu kilku serwerów, a wyzwanie musi wiedzieć, którego dotyczy
+                    .setValue(`${c.guildId}:${c.playerKey}`)
+                    .setLabel(c.label)
             ));
         const selectRow = new ActionRowBuilder().addComponents(select);
 
-        const components = sorted.length <= PAGE_SIZE
+        // Zakresy liter liczone z samego nicku — serwer w etykiecie jest dopiskiem,
+        // a sortowanie i tak idzie po nicku
+        const components = candidates.length <= PAGE_SIZE
             ? [selectRow]
             : [...this._buildRangeButtons(
-                sorted.map(p => ({ label: p.displayName })), offset, 'chal_page_'), selectRow];
+                candidates.map(c => ({ label: c.displayName })), safeOffset, 'chal_page_'), selectRow];
 
         await interaction.editReply({
             content: `${msgs.challengeSelectPlayer}\n${formatMessage(msgs.challengeRecordRange, rangeVars)}`,
@@ -16783,7 +16806,7 @@ class InteractionHandler {
      * nie z surowej nazwy — inaczej przycisk pokazywałby `🔥 - ⭐` zamiast `A - K`.
      *
      * @param {Array<{label: string}>} items - lista posortowana tym samym kluczem
-     * @param {string} prefix - prefiks customId (`chal_page_` gracze, `chal_spage_` serwery,
+     * @param {string} prefix - prefiks customId (`chal_page_` gracze w `/challenge`,
      *                          `panel_ban_page_` lista serwerów do zbanowania)
      * @param {number} maxRows - ile rzędów wolno zająć zakresom. Wiadomość mieści 5 rzędów,
      *                          a select zabiera jeden — widok z dodatkowym rzędem nawigacji
@@ -16817,14 +16840,24 @@ class InteractionHandler {
         await interaction.deferUpdate();
         const msgs = this.msgs(interaction.guildId);
         const session = this._getChallengeSession(interaction.user.id);
-        if (!session?.guildId) {
+        if (!session?.candidates) {
             await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
             return;
         }
-        session.playerKey = interaction.values[0];
-        const sorted = await this._getNotifSortedPlayers(session.guildId, interaction.client);
-        const chosen = sorted.find(p => (p.playerKey || p.userId) === session.playerKey);
-        session.playerName = chosen?.displayName || session.playerKey;
+        // Wartość opcji to `guildId:playerKey` — `playerKey` (`userId` albo `userId#N`)
+        // dwukropka nie zawiera, więc rozcinamy na pierwszym
+        const separator = interaction.values[0].indexOf(':');
+        const guildId = interaction.values[0].substring(0, separator);
+        const playerKey = interaction.values[0].substring(separator + 1);
+        const chosen = session.candidates.find(c => c.guildId === guildId && c.playerKey === playerKey);
+        if (!chosen) {
+            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            return;
+        }
+
+        session.guildId = guildId;
+        session.playerKey = playerKey;
+        session.playerName = chosen.displayName;
         await this._renderChallengeBossPicker(interaction, 0);
     }
 
@@ -17017,11 +17050,6 @@ class InteractionHandler {
                 return;
             }
             if (customId === 'chal_ok') { await this._handleChallengeConfirm(interaction); return; }
-            if (customId.startsWith('chal_spage_')) {
-                await interaction.deferUpdate();
-                await this._renderChallengeServerPicker(interaction, parseInt(customId.replace('chal_spage_', ''), 10) || 0);
-                return;
-            }
             if (customId.startsWith('chal_page_')) {
                 await interaction.deferUpdate();
                 await this._renderChallengePlayerPicker(interaction, parseInt(customId.replace('chal_page_', ''), 10) || 0);

@@ -1310,10 +1310,20 @@ Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozst
 
 ### Wizard (ephemeral, wzorzec `/subscribe`)
 
-1. `chal_srv` — wybór serwera (`config.getAllGuilds()`, 25/stronę + przyciski zakresów liter `chal_spage_{offset}`). **⚠️ Wcześniej lista była ucinana** (`options.slice(0, 25)`) — przy większej liczbie serwerów reszty nie dało się wybrać, bez żadnego śladu w UI
-2. `chal_pl` — wybór gracza z rankingu tego serwera (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący) oraz **gracze z rekordem poza przedziałem ±20%** (patrz „Limit ±20%" niżej)
-3. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
-4. Potwierdzenie z **miniaturą bossa** + zasady + przypomnienie o limicie ±20% (`challengeRecordRule`) → `chal_ok` / `chal_no`
+1. `chal_pl` — wybór gracza **ze wszystkich skonfigurowanych serwerów naraz** (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący) oraz **gracze z rekordem poza przedziałem ±20%** (patrz „Limit ±20%" niżej)
+2. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
+3. Potwierdzenie z **miniaturą bossa** + zasady + przypomnienie o limicie ±20% (`challengeRecordRule`) → `chal_ok` / `chal_no`
+
+**⚠️ Kroku „wybierz serwer" (`chal_srv` / `chal_spage_*`) NIE MA** — został usunięty razem z komunikatami `challengeIntro`, `challengeSelectServerPlaceholder` i `challengeNoPlayers`. Przy limicie ±20% wchodziło się w serwer po serwerze tylko po to, żeby sprawdzić, czy ktokolwiek się łapie; teraz komplet kandydatów jest od razu.
+
+### Lista kandydatów (`_getChallengeCandidates`)
+
+- **Zbiera graczy ze WSZYSTKICH serwerów** z `config.getAllGuilds()` (`Promise.all` po serwerach, każdy przez `_getNotifSortedPlayers`), odsiewa własne profile wyzywającego i wyniki spoza ±20%, sortuje po nicku (`_compareSortNames`; przy równych nickach rozstrzyga nazwa serwera)
+- **Etykieta pozycji: `nick (serwer)`** (`_challengeCandidateLabel`). Nazwa serwera jest obowiązkowa — lista łączy wszystkie serwery, więc dwie osoby o tym samym nicku (albo jedna, grająca w dwóch miejscach) byłyby bez niej nie do rozróżnienia. Limit etykiety to 100 znaków: najpierw przycinana jest nazwa serwera (do 30 znaków), potem nick
+- **Wartość opcji to `guildId:playerKey`**, nie sam `playerKey` — ten sam profil może siedzieć w rankingu kilku serwerów, a wyzwanie musi wiedzieć, którego dotyczy (`challenge.opponent.guildId`). `playerKey` (`userId` albo `userId#N`) dwukropka nie zawiera, więc handler rozcina wartość na pierwszym
+- **Lista trafia do sesji wizarda** (`session.candidates`) — przewijanie stron nie przechodzi rankingów wszystkich serwerów po raz drugi. Wybór gracza jest weryfikowany względem tej listy; sesja bez listy (TTL, restart bota) kończy się `challengeSessionExpired`
+- ⚠️ **`handleChallengeCommand` robi `deferReply` OD RAZU**, przed liczeniem czegokolwiek. Zbieranie kandydatów przechodzi rankingi wszystkich serwerów i potrafi dociągać nicki z Discorda, czyli spokojnie przekracza 3 sekundy, które Discord daje na pierwszą odpowiedź. Dopóki pierwszym ekranem był wybór serwera (odpowiedź natychmiastowa), defer nie był potrzebny — stąd `_renderChallengePlayerPicker` odpowiada dziś wyłącznie przez `editReply`
+- ⚠️ **`_buildRangeButtons` daje maksymalnie 4 rzędy × 5 przycisków = 20 stron po 25 pozycji**, czyli 500 kandydatów. Filtr ±20% schodzi realnie znacznie niżej, ale przy bardzo dużej liczbie serwerów warto o tym limicie pamiętać — nadmiar jest ucinany bez śladu w UI
 
 ### Limit ±20% — wyzwanie musi być wyrównane
 
@@ -1324,19 +1334,19 @@ Wyzwać można **wyłącznie gracza, którego rekord mieści się w przedziale �
 - **Brak rekordu = brak wyzwania.** `handleChallengeCommand` kończy się komunikatem `challengeErrNoRecord`, kreator nawet się nie otwiera
 - **Reguła w serwisie, nie w handlerze:** `challengeService.isRecordInRange(a, b)` / `recordRange(score)` / `maxRecordDiffPercent`, stała `MAX_RECORD_DIFF_RATIO = 0.2`. Porównanie z granicą ma margines `RECORD_RANGE_EPSILON` (1e-9) — rekord dokładnie o 20% wyższy MA się mieścić, a `score * 1.2` potrafi wyjść o ułamek za duże
 - **Sprawdzane DWA razy:** przy budowaniu listy graczy (filtr) i ponownie przy `chal_ok` na świeżo policzonych rekordach — sesja żyje 15 minut, a w tym czasie obie strony mogą poprawić wynik (`challengeErrRecordRange`)
-- **Gdzie widać restrykcję:** lista graczy pokazuje konkretny przedział (`challengeRecordRange` — rekord wyzywającego + widełki `min`–`max`), embed potwierdzenia — samą zasadę (`challengeRecordRule`), a gdy na serwerze nikt się nie łapie — `challengeNoPlayersInRange` z podpowiedzią, żeby wybrać inny serwer
+- **Gdzie widać restrykcję:** lista graczy pokazuje konkretny przedział (`challengeRecordRange` — rekord wyzywającego + widełki `min`–`max`), embed potwierdzenia — samą zasadę (`challengeRecordRule`), a gdy na ŻADNYM serwerze nikt się nie łapie — `challengeNoPlayersInRange`
 
-Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków). To sesja czysto UI, restart bota tylko ją zeruje.
+Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków), a od czasu listy zbiorczej sesja trzyma też rekord wyzywającego (`challengerScore`) i gotową listę kandydatów (`candidates`). To sesja czysto UI, restart bota tylko ją zeruje.
 
 **⚠️ Kolejność alfabetyczna liczona z klucza ZNORMALIZOWANEGO** (`_normalizeSortName` / `_sortBucketLetter` / `_compareSortNames` w `interactionHandlers.js`) — wspólne dla list graczy i serwerów:
 - zdejmowane jest wszystko przed pierwszym znakiem **pisanym** (literą albo cyfrą), więc `🔥 Polski Squad` trafia pod `P`, a `❰ Zenith ❱` pod `Z`. Nicki i nazwy serwerów zaczynają się od emoji i ramek częściej niż od litery, a bez tego lista „alfabetyczna" alfabetyczna nie była: takie nazwy lądowały w koszu „nie-litera", a przycisk zakresu pokazywał `🔥 - ⭐` zamiast `A - K`
 - diakrytyki sprowadzane do liter bazowych (`Ą→A`, `Ż→Z`, `Ł→L`)
 - **`ł`/`Ł` NIE rozkłada się w NFD** (osobny punkt kodowy z kreską, nie litera ze znakiem łączącym) — dlatego jest mapa dla niego i garści podobnych liter z innych alfabetów (`ø đ ð þ æ œ ß ı`), których sam NFD też nie rozbije
 - kolejność: litery → cyfry → `#` (nazwy złożone wyłącznie ze znaków ozdobnych) na końcu
-- **przyciski zakresów buduje `_buildRangeButtons(items, activeOffset, prefix, maxRows)`** — wspólne dla graczy (`chal_page_`) i serwerów (`chal_spage_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy
+- **przyciski zakresów buduje `_buildRangeButtons(items, activeOffset, prefix, maxRows)`** — wspólne dla graczy w `/challenge` (`chal_page_`) i listy serwerów do zbanowania (`panel_ban_page_`); etykiety liczone z klucza znormalizowanego, nie z surowej nazwy. W `/challenge` zakresy liczone są z samego **nicku**, bez dopisku serwera — sortowanie idzie po nicku
 - ta sama normalizacja obowiązuje sortowanie w `_getNotifSortedPlayers`, więc dotyczy również listy graczy w `/subscribe`
 
-⚠️ **Lista graczy to WYŁĄCZNIE osoby z wynikiem w rankingu tego serwera** (`getSortedPlayers` czyta `ranking.json`), nigdy wszyscy członkowie Discorda. Nicki serwerowe dociąga `_resolveGuildDisplayNames(guildId, client, userIds)`:
+⚠️ **Lista graczy to WYŁĄCZNIE osoby z wynikiem w rankingu** (`getSortedPlayers` czyta `ranking.json` danego serwera), nigdy wszyscy członkowie Discorda. Nicki serwerowe dociąga `_resolveGuildDisplayNames(guildId, client, userIds)`:
 
 - najpierw cache Discorda (`guild.members.cache`), resztę **batchami po 100 ID, równolegle** (`guild.members.fetch({ user: chunk })` w `Promise.allSettled`)
 - **dedup po `userId` przed pobraniem** — gracz z kilkoma profilami ma jeden nick, więc nie ma powodu pobierać go raz na profil
@@ -1524,7 +1534,7 @@ Progi **1/3/5/10/20/50/100** dla rzuconych (`chal_sent_*`), przyjętych (`chal_a
 
 `cc_chal_history` | `cc_chal_hsp_{offset}` | `cc_chal_hsrv` | `cc_chal_hpg_{guildId}_{page}` | `cc_chal_pending` | `cc_chal_ppg_{page}` | `cc_chal_finish` | `cc_chal_fpg_{offset}` | `cc_chal_fsel` | `cc_chal_fok_{id}` | `cc_chal_close` (Centrum Dowodzenia)
 
-`chal_srv` | `chal_spage_{offset}` | `chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
+`chal_pl` | `chal_page_{offset}` | `chal_boss` | `chal_bpage_{n}` | `chal_bpage_info` | `chal_ok` | `chal_no` | `chal_acc_{id}` | `chal_rej_{id}` | `chal_share_{id}_{c|o}` | `chal_done_{id}` (nieaktywny znacznik)
 
 `ocr_chal_undo_{playerKey}_{tsMs}` — przycisk „↩️ Cofnij wynik wyzwania" pod embedem head admina typu `challenge` (kanał logów OCR)
 
