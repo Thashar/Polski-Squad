@@ -16671,7 +16671,7 @@ class InteractionHandler {
         // `guildId` uzupełnia się dopiero przy wyborze gracza — bierze się z jego pozycji
         // na liście, nie z osobnego kroku wizarda
         this._challengeSessions.set(interaction.user.id, {
-            guildId: null, playerKey: null, playerName: null, boss: null,
+            guildId: null, playerKey: null, playerName: null, playerLabel: null, boss: null,
             challengerScore, candidates: null,
             createdAt: Date.now(),
         });
@@ -16779,7 +16779,7 @@ class InteractionHandler {
         // stron), więc odpowiadamy wyłącznie przez `editReply`
         const session = this._getChallengeSession(interaction.user.id);
         if (!session) {
-            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            await this._challengeWizardError(interaction, msgs.challengeSessionExpired);
             return;
         }
 
@@ -16788,7 +16788,7 @@ class InteractionHandler {
         if (!(session.challengerScore > 0)) {
             session.challengerScore = await this._challengeChallengerRecord(interaction.guildId, interaction.user.id);
             if (!(session.challengerScore > 0)) {
-                await interaction.editReply({ content: msgs.challengeErrNoRecord, components: [] });
+                await this._challengeWizardError(interaction, msgs.challengeErrNoRecord);
                 return;
             }
         }
@@ -16797,7 +16797,7 @@ class InteractionHandler {
         const candidates = await this._getChallengeCandidates(interaction, session);
 
         if (candidates.length === 0) {
-            await interaction.editReply({ content: formatMessage(msgs.challengeNoPlayersInRange, rangeVars), components: [] });
+            await this._challengeWizardError(interaction, formatMessage(msgs.challengeNoPlayersInRange, rangeVars));
             return;
         }
 
@@ -16826,10 +16826,31 @@ class InteractionHandler {
             : [...this._buildRangeButtons(
                 candidates.map(c => ({ label: c.displayName })), safeOffset, 'chal_page_'), selectRow];
 
-        await interaction.editReply({
-            content: `${msgs.challengeSelectPlayer}\n${formatMessage(msgs.challengeRecordRange, rangeVars)}`,
-            components,
-        });
+        // Rekord i widełki jako POLA embeda, nie doklejone zdanie — w jednym akapicie
+        // z instrukcją wyboru gubiły się w ścianie tekstu
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.challengeWizardTitle)
+            .setDescription(msgs.challengeSelectPlayer)
+            .addFields(
+                { name: msgs.challengeFieldYourRecord, value: rangeVars.record, inline: true },
+                {
+                    name: formatMessage(msgs.challengeFieldAllowedRange, { percent: rangeVars.percent }),
+                    value: `${rangeVars.min} – ${rangeVars.max}`,
+                    inline: true,
+                },
+            )
+            .setFooter({ text: msgs.challengeRangeFooter });
+
+        await interaction.editReply({ content: '', embeds: [embed], components });
+    }
+
+    /**
+     * Komunikat kończący kreator (wygasła sesja, brak kandydatów). Czyści embed poprzedniego
+     * kroku — bez `embeds: []` zostałby pod spodem razem z nieaktualnymi widełkami.
+     */
+    async _challengeWizardError(interaction, content) {
+        await interaction.editReply({ content, embeds: [], files: [], components: [] });
     }
 
     /**
@@ -16875,7 +16896,7 @@ class InteractionHandler {
         const msgs = this.msgs(interaction.guildId);
         const session = this._getChallengeSession(interaction.user.id);
         if (!session?.candidates) {
-            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            await this._challengeWizardError(interaction, msgs.challengeSessionExpired);
             return;
         }
         // Wartość opcji to `guildId:playerKey` — `playerKey` (`userId` albo `userId#N`)
@@ -16885,22 +16906,24 @@ class InteractionHandler {
         const playerKey = interaction.values[0].substring(separator + 1);
         const chosen = session.candidates.find(c => c.guildId === guildId && c.playerKey === playerKey);
         if (!chosen) {
-            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            await this._challengeWizardError(interaction, msgs.challengeSessionExpired);
             return;
         }
 
         session.guildId = guildId;
         session.playerKey = playerKey;
         session.playerName = chosen.displayName;
+        session.playerLabel = chosen.label;
         await this._renderChallengeBossPicker(interaction, 0);
     }
 
     /** Lista bossów (25/stronę — nazw bywa więcej niż limit select menu) */
     async _renderChallengeBossPicker(interaction, page) {
         const msgs = this.msgs(interaction.guildId);
+        const session = this._getChallengeSession(interaction.user.id);
         const bosses = this._getAllEnglishBossNames();
         if (bosses.length === 0) {
-            await interaction.editReply({ content: msgs.challengeNoBosses, components: [] });
+            await this._challengeWizardError(interaction, msgs.challengeNoBosses);
             return;
         }
         const PAGE_SIZE = 25;
@@ -16922,7 +16945,17 @@ class InteractionHandler {
                 new ButtonBuilder().setCustomId(`chal_bpage_${safePage + 1}`).setEmoji('▶').setStyle(ButtonStyle.Secondary).setDisabled(safePage === maxPage),
             ));
         }
-        await interaction.editReply({ content: msgs.challengeSelectBoss, components });
+        // Ten sam nagłówek co w kroku 1 + przypomnienie, kogo już wybrano — inaczej po
+        // przejściu dalej nie widać, komu właściwie rzuca się wyzwanie
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(msgs.challengeWizardTitle)
+            .setDescription(msgs.challengeSelectBoss);
+        if (session?.playerLabel) {
+            embed.addFields({ name: msgs.challengeFieldOpponent, value: session.playerLabel });
+        }
+
+        await interaction.editReply({ content: '', embeds: [embed], components });
     }
 
     async _handleChallengeBossSelect(interaction) {
@@ -16930,7 +16963,7 @@ class InteractionHandler {
         const msgs = this.msgs(interaction.guildId);
         const session = this._getChallengeSession(interaction.user.id);
         if (!session?.playerKey) {
-            await interaction.editReply({ content: msgs.challengeSessionExpired, components: [] });
+            await this._challengeWizardError(interaction, msgs.challengeSessionExpired);
             return;
         }
         session.boss = interaction.values[0];
