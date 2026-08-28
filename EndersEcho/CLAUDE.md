@@ -1312,6 +1312,11 @@ Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozst
 
 1. `chal_pl` — wybór gracza **ze wszystkich skonfigurowanych serwerów naraz** (25/stronę + przyciski zakresów liter `chal_page_{offset}`); **wszystkie własne profile odfiltrowane** (`getOwnerId` ≠ wywołujący) oraz **gracze z rekordem poza przedziałem ±20%** (patrz „Limit ±20%" niżej)
 2. `chal_boss` — wybór bossa (`_getAllEnglishBossNames()`, 25/stronę, `chal_bpage_{n}`)
+
+**Kroki 1–2 to EMBEDY**, nie goły `content` (wspólny tytuł `challengeWizardTitle`, kolor `0x5865F2`):
+- krok 1: opis + **pola** `🏆 Twój rekord` i `⚖️ Dozwolony przedział (±20%)` (obok siebie, `inline`) + stopka `challengeRangeFooter`. ⚠️ Rekord i widełki **muszą zostać polami** — jako doklejone zdanie w jednym akapicie z instrukcją wyboru ginęły w ścianie tekstu (to była realna skarga)
+- krok 2: opis + pole `🎯 Przeciwnik` z etykietą wybranego gracza (`session.playerLabel`) — po przejściu dalej inaczej nie widać, komu rzuca się wyzwanie
+- ⚠️ **Każde wyjście z kreatora musi wyczyścić embed** — stąd `_challengeWizardError(interaction, content)` zamiast gołego `editReply({ content })`. Bez `embeds: []` komunikat o wygasłej sesji zostawiłby pod sobą embed z nieaktualnymi widełkami
 3. Potwierdzenie z **miniaturą bossa** + zasady + przypomnienie o limicie ±20% (`challengeRecordRule`) → `chal_ok` / `chal_no`
 
 **⚠️ Kroku „wybierz serwer" (`chal_srv` / `chal_spage_*`) NIE MA** — został usunięty razem z komunikatami `challengeIntro`, `challengeSelectServerPlaceholder` i `challengeNoPlayers`. Przy limicie ±20% wchodziło się w serwer po serwerze tylko po to, żeby sprawdzić, czy ktokolwiek się łapie; teraz komplet kandydatów jest od razu.
@@ -1335,7 +1340,7 @@ Wyzwać można **wyłącznie gracza, którego rekord mieści się w przedziale �
 - **Brak rekordu = brak wyzwania.** `handleChallengeCommand` kończy się komunikatem `challengeErrNoRecord`, kreator nawet się nie otwiera
 - **Reguła w serwisie, nie w handlerze:** `challengeService.isRecordInRange(a, b)` / `recordRange(score)` / `maxRecordDiffPercent`, stała `MAX_RECORD_DIFF_RATIO = 0.2`. Porównanie z granicą ma margines `RECORD_RANGE_EPSILON` (1e-9) — rekord dokładnie o 20% wyższy MA się mieścić, a `score * 1.2` potrafi wyjść o ułamek za duże
 - **Sprawdzane DWA razy:** przy budowaniu listy graczy (filtr) i ponownie przy `chal_ok` na świeżo policzonych rekordach — sesja żyje 15 minut, a w tym czasie obie strony mogą poprawić wynik (`challengeErrRecordRange`)
-- **Gdzie widać restrykcję:** lista graczy pokazuje konkretny przedział (`challengeRecordRange` — rekord wyzywającego + widełki `min`–`max`), embed potwierdzenia — samą zasadę (`challengeRecordRule`), a gdy na ŻADNYM serwerze nikt się nie łapie — `challengeNoPlayersInRange`
+- **Gdzie widać restrykcję:** embed listy graczy pokazuje konkretny przedział w polach (`challengeFieldYourRecord` + `challengeFieldAllowedRange`), embed potwierdzenia — samą zasadę (`challengeRecordRule`), a gdy na ŻADNYM serwerze nikt się nie łapie — `challengeNoPlayersInRange`
 
 Stan wizarda: `_challengeSessions` Map (RAM, TTL 15 min) — `guildId + playerKey + nazwa bossa` nie zmieszczą się w customId (limit 100 znaków), a od czasu listy zbiorczej sesja trzyma też rekord wyzywającego (`challengerScore`) i gotową listę kandydatów (`candidates`). To sesja czysto UI, restart bota tylko ją zeruje.
 
