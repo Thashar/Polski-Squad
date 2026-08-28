@@ -642,7 +642,7 @@
       "commands": [
         {
           "name": "/challenge",
-          "description": "Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie (3 kolejne wyniki, wyższa suma wygrywa)",
+          "description": "Rzuć innemu graczowi wyzwanie 1 na 1 na wybranym bossie (3 kolejne wyniki, wyższa suma wygrywa). Wyzwać można tylko gracza, którego rekord różni się od Twojego maksymalnie o 20%",
           "usage": "/challenge",
           "requiredPermission": "public"
         },
