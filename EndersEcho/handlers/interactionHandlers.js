@@ -11760,28 +11760,42 @@ class InteractionHandler {
      *
      * Wynik trzymamy przez `NICK_CACHE_TTL_MS`, żeby przewijanie stron listy
      * (`chal_page_*`, `notif_page_*`) nie powtarzało całej operacji przy każdym kliknięciu.
-     * Cache'ujemy CAŁĄ mapę, więc osoby, których nie udało się pobrać (opuściły serwer),
-     * nie są odpytywane ponownie w obrębie TTL.
      *
-     * @returns {Promise<Map<string, string>>} userId → nick serwerowy (tylko udane trafienia)
+     * ⚠️ **Cache jest per ID, nie „cała mapa albo nic".** Wcześniej pierwszy wywołujący
+     * ustalał zawartość wpisu na całe TTL: gdyby ktoś poprosił o nicki DZIESIĘCIU graczy,
+     * przez następne trzy minuty `/subscribe` dostawałby te dziesięć zamiast całej listy
+     * i pokazywał `username` z rankingu zamiast nicków serwerowych. Teraz brakujące ID są
+     * dobierane do wpisu, a `tried` pamięta, o kogo już pytaliśmy — dzięki temu osoby,
+     * których nie udało się pobrać (opuściły serwer), nadal nie są odpytywane w kółko.
+     *
+     * @returns {Promise<Map<string, string>>} userId → nick serwerowy (tylko udane trafienia;
+     *          mapa może zawierać też ID spoza `userIds`, dołożone przez wcześniejsze wywołania)
      */
     async _resolveGuildDisplayNames(guildId, client, userIds) {
         const NICK_CACHE_TTL_MS = 3 * 60 * 1000;
         const BATCH = 100;
 
-        const cached = this._guildNickCache.get(guildId);
-        if (cached && Date.now() - cached.at < NICK_CACHE_TTL_MS) return cached.names;
+        let entry = this._guildNickCache.get(guildId);
+        if (!entry || Date.now() - entry.at >= NICK_CACHE_TTL_MS) {
+            entry = { at: Date.now(), names: new Map(), tried: new Set() };
+            this._guildNickCache.set(guildId, entry);
+        }
 
-        const names = new Map();
         const guild = client?.guilds?.cache?.get(guildId);
-        if (!guild) return names;
+        if (!guild) return entry.names;
 
         const missing = [];
         for (const userId of new Set(userIds)) {
+            if (entry.tried.has(userId)) continue;
             const member = guild.members.cache.get(userId);
-            if (member) names.set(userId, member.displayName);
-            else missing.push(userId);
+            if (member) {
+                entry.names.set(userId, member.displayName);
+                entry.tried.add(userId);
+            } else {
+                missing.push(userId);
+            }
         }
+        if (missing.length === 0) return entry.names;
 
         const chunks = [];
         for (let i = 0; i < missing.length; i += BATCH) chunks.push(missing.slice(i, i + BATCH));
@@ -11791,11 +11805,13 @@ class InteractionHandler {
         );
         for (const res of results) {
             if (res.status !== 'fulfilled') continue;
-            for (const [id, member] of res.value) names.set(id, member.displayName);
+            for (const [id, member] of res.value) entry.names.set(id, member.displayName);
         }
+        // Odpytane = załatwione, także gdy pobranie nie zwróciło membera — inaczej gracz,
+        // który opuścił serwer, byłby dociągany przy każdym kliknięciu strony
+        for (const userId of missing) entry.tried.add(userId);
 
-        this._guildNickCache.set(guildId, { at: Date.now(), names });
-        return names;
+        return entry.names;
     }
 
     /**
@@ -16683,8 +16699,15 @@ class InteractionHandler {
      * po nicku (serwer rozstrzyga remisy).
      *
      * Lista trafia do sesji wizarda: przewijanie stron (`chal_page_*`) nie ma powodu
-     * przechodzić rankingów wszystkich serwerów po raz drugi, a nicki i tak dociągane są
-     * przez `_resolveGuildDisplayNames` z własnym cache'em.
+     * przechodzić rankingów wszystkich serwerów po raz drugi.
+     *
+     * ⚠️ **Kolejność jest tu wydajnościowo krytyczna: NAJPIERW filtr, POTEM nicki.**
+     * Pierwsza wersja szła przez `_getNotifSortedPlayers`, czyli dociągała z Discorda nicki
+     * KAŻDEGO gracza KAŻDEGO serwera — setki członków przez `guild.members.fetch` — po to,
+     * żeby zaraz wyrzucić prawie wszystkich filtrem ±20%. Stąd kilkusekundowe czekanie po
+     * `/challenge`. Filtr działa na samych danych rankingowych (`scoreValue`, `userId`),
+     * więc nick jest potrzebny wyłącznie dla tych kilku, którzy zostaną: serwer bez ani
+     * jednego kandydata nie kosztuje teraz żadnego żądania do Discorda.
      *
      * @returns {Promise<Array<{playerKey, guildId, guildName, displayName, label}>>}
      */
@@ -16692,20 +16715,31 @@ class InteractionHandler {
         if (session.candidates) return session.candidates;
 
         const perGuild = await Promise.all(this.config.getAllGuilds().map(async guildCfg => {
-            const guildName = this._challengeGuildName(interaction.client, guildCfg.id);
-            const players = await this._getNotifSortedPlayers(guildCfg.id, interaction.client);
-            return players
+            const players = await this.rankingService.getSortedPlayers(guildCfg.id);
+            const matching = players.filter(p =>
                 // Wyzwać można wyłącznie kogoś innego — wszystkie własne profile odpadają
-                .filter(p => getOwnerId(p.playerKey || p.userId) !== interaction.user.id)
+                getOwnerId(p.playerKey || p.userId) !== interaction.user.id
                 // ...i tylko gracza o zbliżonym rekordzie (±20%) — pojedynek ma być wyrównany
-                .filter(p => this.challengeService.isRecordInRange(session.challengerScore, p.scoreValue))
-                .map(p => ({
+                && this.challengeService.isRecordInRange(session.challengerScore, p.scoreValue));
+
+            if (matching.length === 0) return [];
+
+            const guildName = this._challengeGuildName(interaction.client, guildCfg.id);
+            const nicks = await this._resolveGuildDisplayNames(
+                guildCfg.id, interaction.client, matching.map(p => p.userId));
+
+            return matching.map(p => {
+                const nick = nicks.get(p.userId) || p.username || `ID:${p.userId}`;
+                // Profil dodatkowy → nick ze znacznikiem, żeby lista rozróżniała konta jednej osoby
+                const displayName = formatProfileDisplayName(nick, p.profileIndex || 1);
+                return {
                     playerKey: p.playerKey || p.userId,
                     guildId: guildCfg.id,
                     guildName,
-                    displayName: p.displayName,
-                    label: this._challengeCandidateLabel(p.displayName, guildName),
-                }));
+                    displayName,
+                    label: this._challengeCandidateLabel(displayName, guildName),
+                };
+            });
         }));
 
         session.candidates = perGuild.flat().sort((a, b) =>
