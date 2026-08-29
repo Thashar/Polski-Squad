@@ -1302,9 +1302,16 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 | Zaproszenie bez odpowiedzi | **24 h** → `expired` | `INVITE_TTL_MS` |
 | Przyjęte wyzwanie | **72 h** → rozstrzygnięcie po sumach albo `unresolved` (patrz niżej) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
-| Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
+| Otwarte wyzwania na profil | **3** — tyle pojedynków naraz może prowadzić jeden profil | `MAX_ACTIVE_PER_PLAYER` |
 | Różnica rekordów wyzywający ↔ przeciwnik | **±20%** — poza przedziałem gracza nie da się wybrać | `MAX_RECORD_DIFF_RATIO` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
+
+**Limit 3 wyzwań naraz — co się z tym wiąże:**
+- **Slot zajmują:** wyzwania w toku (obojętnie po której stronie) oraz **wysłane** zaproszenia czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz, do którego przyszło więcej zaproszeń niż wynosi limit, nie mógłby przyjąć żadnego (`countOpenForPlayer`)
+- **Komunikaty o wyczerpanym limicie podstawiają liczbę przez `{limit}`** (`challengeErrLimit`, `challengeErrOpponentBusy`, `challengeErrAcceptLimit`) i są sformułowane bezosobowo („maksymalną liczbę otwartych wyzwań ({limit})"), więc zmiana stałej nie wymaga poprawiania odmiany w obu językach
+- **Jeden wynik zasila WSZYSTKIE pasujące wyzwania** — `registerScore` iteruje po wyzwaniach gracza i dopisuje wynik do każdego aktywnego na tym bossie. Przy dwóch pojedynkach na tym samym bossie (z różnymi przeciwnikami) jeden screen liczy się do obu. To zamierzone: gracz odbywa jedną walkę, a wyzwania mierzą ten sam rezultat
+- **`hasOpenBetween` blokuje wyłącznie duplikat tej samej pary na tym samym bossie** — z tym samym przeciwnikiem na INNYM bossie wyzwanie jest dozwolone
+- **Pierścień postępu w embedzie wyniku** pokazuje najdalej zaawansowane z zasilonych wyzwań; treść wylicza wszystkie (`_buildChallengeEmbed`)
 
 Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h i kompletu nie zebrał NIKT) · `cancelled` (uczestnik usunął profil).
 

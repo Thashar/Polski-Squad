@@ -17030,12 +17030,12 @@ class InteractionHandler {
 
         const limit = this.challengeService.maxActivePerPlayer;
         if (await this.challengeService.countOpenForPlayer(challengerKey) >= limit) {
-            return void await done(msgs.challengeErrLimit);
+            return void await done(formatMessage(msgs.challengeErrLimit, { limit }));
         }
         // Przeciwnika sprawdzamy PRZED wysłaniem DM — inaczej dostałby zaproszenie,
         // którego i tak nie mógłby przyjąć, a rzucający czekałby do wygaśnięcia
         if (await this.challengeService.countOpenForPlayer(opponentKey) >= limit) {
-            return void await done(formatMessage(msgs.challengeErrOpponentBusy, { name: session.playerName }));
+            return void await done(formatMessage(msgs.challengeErrOpponentBusy, { name: session.playerName, limit }));
         }
         if (await this.challengeService.hasOpenBetween(challengerKey, opponentKey, session.boss)) {
             return void await done(formatMessage(msgs.challengeErrDuplicate, { boss: session.boss }));
@@ -17160,9 +17160,13 @@ class InteractionHandler {
         if (accepted) {
             // To zaproszenie slotu nie zajmuje (przyjmujący jest jego adresatem),
             // więc licznik porównujemy wprost z limitem
+            const limit = this.challengeService.maxActivePerPlayer;
             const open = await this.challengeService.countOpenForPlayer(challenge.opponent.playerKey);
-            if (open >= this.challengeService.maxActivePerPlayer) {
-                await interaction.reply({ content: msgs.challengeErrAcceptLimit, flags: ['Ephemeral'] });
+            if (open >= limit) {
+                await interaction.reply({
+                    content: formatMessage(msgs.challengeErrAcceptLimit, { limit }),
+                    flags: ['Ephemeral'],
+                });
                 return;
             }
         }
@@ -17309,9 +17313,9 @@ class InteractionHandler {
      * (`1/3`, `2/3`, `3/3`, `?` dla wyniku czekającego na zatwierdzenie bossa), więc stan
      * wyzwania widać rzutem oka, bez czytania treści.
      *
-     * Licznik bierzemy z PIERWSZEGO wpisu (`notices`, w razie braku `duplicates`) — przy
-     * `MAX_ACTIVE_PER_PLAYER = 1` wpis jest i tak jeden; gdyby limit kiedyś wzrósł, ikona
-     * pokazuje najwyżej zaawansowane wyzwanie, a treść i tak wylicza wszystkie.
+     * Licznik na ikonie bierzemy z NAJDALEJ zaawansowanego wpisu (`notices`, w razie braku
+     * `duplicates`) — przy limicie 3 wyzwań naraz jeden wynik potrafi zasilić kilka z nich,
+     * a pierścień pokazuje wtedy to najbliższe kompletu. Treść wylicza wszystkie.
      *
      * @returns {Promise<{embed: EmbedBuilder, buffer: Buffer|null, name: string}|null>}
      */

@@ -20,11 +20,14 @@ const CHALLENGE_TTL_MS = 72 * 60 * 60 * 1000;
  */
 const PENDING_SCORE_TTL_MS = 72 * 60 * 60 * 1000;
 /**
- * Ile wyzwań naraz może prowadzić jeden profil. Komunikaty `challengeErrLimit`
- * i `challengeErrAcceptLimit` są napisane pod wartość 1 — zmiana tej stałej
- * wymaga przepisania ich w obu językach.
+ * Ile wyzwań naraz może prowadzić jeden profil.
+ *
+ * Komunikaty o wyczerpanym limicie (`challengeErrLimit`, `challengeErrOpponentBusy`,
+ * `challengeErrAcceptLimit`) podstawiają tę wartość przez `{limit}` i są sformułowane
+ * bezosobowo („maksymalną liczbę otwartych wyzwań ({limit})"), więc zmiana stałej nie
+ * wymaga już poprawiania odmiany w obu językach.
  */
-const MAX_ACTIVE_PER_PLAYER = 1;
+const MAX_ACTIVE_PER_PLAYER = 3;
 /**
  * Maksymalna różnica rekordów między wyzywającym a wyzywanym (±20%). Pojedynek ma być
  * wyrównany — bez tego dowolny gracz mógł wyzwać lidera rankingu (albo odwrotnie),
@@ -294,9 +297,9 @@ class ChallengeService {
      * WYSŁANE zaproszenia czekające na odpowiedź.
      *
      * ⚠️ OTRZYMANE zaproszenia slotu NIE zajmują — dopóki gracz ich nie przyjmie,
-     * niczego nie prowadzi. Przy limicie 1 liczenie ich blokowałoby gracza, który
-     * dostał dwa zaproszenia od różnych osób: nie mógłby przyjąć ŻADNEGO, bo już
-     * samo posiadanie drugiego zaproszenia wypełniałoby limit.
+     * niczego nie prowadzi. Liczenie ich blokowałoby gracza, do którego przyszło
+     * zaproszeń więcej niż wynosi limit: nie mógłby przyjąć ŻADNEGO, bo samo ich
+     * posiadanie wypełniałoby pulę.
      */
     async countOpenForPlayer(playerKey) {
         return (await this.getForPlayer(playerKey)).filter(c =>
