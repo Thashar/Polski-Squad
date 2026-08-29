@@ -1302,9 +1302,19 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 | Zaproszenie bez odpowiedzi | **24 h** → `expired` | `INVITE_TTL_MS` |
 | Przyjęte wyzwanie | **72 h** → rozstrzygnięcie po sumach albo `unresolved` (patrz niżej) | `CHALLENGE_TTL_MS` |
 | Wynik czekający na zatwierdzenie bossa | 72 h → porzucony | `PENDING_SCORE_TTL_MS` |
-| Otwarte wyzwania na profil | **1** — jednocześnie można prowadzić tylko jedno wyzwanie | `MAX_ACTIVE_PER_PLAYER` |
+| Otwarte wyzwania na profil | **2** — tyle pojedynków naraz może prowadzić jeden profil | `MAX_ACTIVE_PER_PLAYER` |
+| Otwarte wyzwania na profil NA JEDNYM BOSSIE | **1** — niezależnie od tego, z kim | `MAX_ACTIVE_PER_BOSS` |
 | Różnica rekordów wyzywający ↔ przeciwnik | **±20%** — poza przedziałem gracza nie da się wybrać | `MAX_RECORD_DIFF_RATIO` |
 | Zamknięte bez rezultatu (`declined`/`expired`) | kasowane po 90 dniach | `CLOSED_MAX_AGE_MS` |
+
+**Dwa limity naraz: 2 wyzwania na profil, ale tylko 1 na tym samym bossie**
+
+- **Slot zajmują:** wyzwania w toku (obojętnie po której stronie) oraz **wysłane** zaproszenia czekające na odpowiedź. **OTRZYMANE zaproszenia slotu NIE zajmują** — inaczej gracz, do którego przyszło więcej zaproszeń niż wynosi limit, nie mógłby przyjąć żadnego. Predykat slotu jest jeden (`_occupiesSlot`), wspólny dla `countOpenForPlayer` i `busyBossesFor`
+- ⚠️ **Skąd limit per boss:** `registerScore` dopisuje wynik do KAŻDEGO aktywnego wyzwania gracza na danym bossie. Bez tego limitu jeden screen z walki zaliczałby się do dwóch pojedynków jednocześnie — gracz zbierałby dwa wyzwania za jedno podejście. Limit 1 na bossa usuwa ten scenariusz u źródła, zamiast komplikować `registerScore`
+- **Kreator UKRYWA zajęte bossy** zamiast odbijać wybór przy potwierdzeniu: `_challengeBusyBosses` sumuje `busyBossesFor` obu stron (wyzywającego i wybranego przeciwnika), a lista pokazuje tylko resztę. Gdy nie zostanie żaden — `challengeNoBossesFree`
+- **Sprawdzane też PÓŹNIEJ**, bo stan może się zmienić po zbudowaniu listy: przy `chal_ok` (sesja żyje 15 min) → `challengeErrBossBusy` / `challengeErrOpponentBossBusy`, oraz przy przyjęciu zaproszenia (czeka do 24 h) → `challengeErrBossBusy`
+- **Komunikaty o wyczerpanym limicie ogólnym podstawiają liczbę przez `{limit}`** (`challengeErrLimit`, `challengeErrOpponentBusy`, `challengeErrAcceptLimit`) i są sformułowane bezosobowo („maksymalną liczbę otwartych wyzwań ({limit})"), więc zmiana stałej nie wymaga poprawiania odmiany w obu językach
+- **`hasOpenBetween` zostaje** mimo limitu per boss — łapie przypadek, którego ten nie obejmuje: OTRZYMANE (a więc niezajmujące slotu) zaproszenie od tej samej osoby na tego samego bossa. Daje też konkretniejszy komunikat (`challengeErrDuplicate`). Z tym samym przeciwnikiem na INNYM bossie wyzwanie jest dozwolone
 
 Statusy: `pending` (czeka na odpowiedź) · `active` (trwa) · `finished` (rozstrzygnięte, zwycięzca albo remis) · `declined` · `expired` (zaproszenie) · `unresolved` (72 h i kompletu nie zebrał NIKT) · `cancelled` (uczestnik usunął profil).
 

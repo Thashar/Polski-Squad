@@ -20,11 +20,21 @@ const CHALLENGE_TTL_MS = 72 * 60 * 60 * 1000;
  */
 const PENDING_SCORE_TTL_MS = 72 * 60 * 60 * 1000;
 /**
- * Ile wyzwań naraz może prowadzić jeden profil. Komunikaty `challengeErrLimit`
- * i `challengeErrAcceptLimit` są napisane pod wartość 1 — zmiana tej stałej
- * wymaga przepisania ich w obu językach.
+ * Ile wyzwań naraz może prowadzić jeden profil.
+ *
+ * Komunikaty o wyczerpanym limicie (`challengeErrLimit`, `challengeErrOpponentBusy`,
+ * `challengeErrAcceptLimit`) podstawiają tę wartość przez `{limit}` i są sformułowane
+ * bezosobowo („maksymalną liczbę otwartych wyzwań ({limit})"), więc zmiana stałej nie
+ * wymaga już poprawiania odmiany w obu językach.
  */
-const MAX_ACTIVE_PER_PLAYER = 1;
+const MAX_ACTIVE_PER_PLAYER = 2;
+/**
+ * Ile wyzwań naraz może prowadzić jeden profil NA TYM SAMYM BOSSIE — niezależnie od tego,
+ * z kim. Bez tego limitu jeden screen z walki liczyłby się do kilku pojedynków naraz
+ * (`registerScore` dopisuje wynik do KAŻDEGO aktywnego wyzwania na danym bossie), więc
+ * gracz zbierałby dwa pojedynki za jedno podejście.
+ */
+const MAX_ACTIVE_PER_BOSS = 1;
 /**
  * Maksymalna różnica rekordów między wyzywającym a wyzywanym (±20%). Pojedynek ma być
  * wyrównany — bez tego dowolny gracz mógł wyzwać lidera rankingu (albo odwrotnie),
@@ -294,15 +304,43 @@ class ChallengeService {
      * WYSŁANE zaproszenia czekające na odpowiedź.
      *
      * ⚠️ OTRZYMANE zaproszenia slotu NIE zajmują — dopóki gracz ich nie przyjmie,
-     * niczego nie prowadzi. Przy limicie 1 liczenie ich blokowałoby gracza, który
-     * dostał dwa zaproszenia od różnych osób: nie mógłby przyjąć ŻADNEGO, bo już
-     * samo posiadanie drugiego zaproszenia wypełniałoby limit.
+     * niczego nie prowadzi. Liczenie ich blokowałoby gracza, do którego przyszło
+     * zaproszeń więcej niż wynosi limit: nie mógłby przyjąć ŻADNEGO, bo samo ich
+     * posiadanie wypełniałoby pulę.
      */
     async countOpenForPlayer(playerKey) {
-        return (await this.getForPlayer(playerKey)).filter(c =>
-            c.status === 'active' ||
-            (c.status === 'pending' && c.challenger?.playerKey === playerKey)
-        ).length;
+        return (await this.getForPlayer(playerKey)).filter(c => this._occupiesSlot(c, playerKey)).length;
+    }
+
+    /**
+     * Czy to wyzwanie zajmuje graczowi slot: toczy się (obojętnie po której stronie) albo
+     * jest WYSŁANYM przez niego zaproszeniem. Wspólne dla limitu ogólnego i per boss.
+     */
+    _occupiesSlot(challenge, playerKey) {
+        return challenge.status === 'active'
+            || (challenge.status === 'pending' && challenge.challenger?.playerKey === playerKey);
+    }
+
+    /**
+     * Bossowie, na których profil ma już zajęty slot (te same zasady co `countOpenForPlayer`,
+     * tylko pogrupowane po bossie). Używane przez kreator do ukrycia bossów, na których
+     * pojedynek i tak by nie przeszedł.
+     *
+     * @returns {Promise<Set<string>>} nazwy bossów MAŁYMI LITERAMI
+     */
+    async busyBossesFor(playerKey) {
+        const counts = new Map();
+        for (const c of await this.getForPlayer(playerKey)) {
+            if (!this._occupiesSlot(c, playerKey)) continue;
+            const boss = String(c.boss || '').toLowerCase();
+            counts.set(boss, (counts.get(boss) || 0) + 1);
+        }
+        return new Set([...counts].filter(([, n]) => n >= MAX_ACTIVE_PER_BOSS).map(([boss]) => boss));
+    }
+
+    /** Czy profil wyczerpał już limit wyzwań na tym konkretnym bossie */
+    async hasOpenOnBoss(playerKey, boss) {
+        return (await this.busyBossesFor(playerKey)).has(String(boss || '').toLowerCase());
     }
 
     /** Czy między tymi profilami toczy się już wyzwanie na tym bossie */
@@ -322,6 +360,8 @@ class ChallengeService {
     }
 
     get maxActivePerPlayer() { return MAX_ACTIVE_PER_PLAYER; }
+    /** Ile wyzwań naraz na jednym bossie (1 — jeden wynik nie ma zasilać dwóch pojedynków) */
+    get maxActivePerBoss() { return MAX_ACTIVE_PER_BOSS; }
     get scoresPerSide() { return SCORES_PER_SIDE; }
     /** Dopuszczalna różnica rekordów jako ułamek (0.2 = ±20%) */
     get maxRecordDiffRatio() { return MAX_RECORD_DIFF_RATIO; }
@@ -937,3 +977,4 @@ class ChallengeService {
 module.exports = ChallengeService;
 module.exports.SCORES_PER_SIDE = SCORES_PER_SIDE;
 module.exports.MAX_ACTIVE_PER_PLAYER = MAX_ACTIVE_PER_PLAYER;
+module.exports.MAX_ACTIVE_PER_BOSS = MAX_ACTIVE_PER_BOSS;
