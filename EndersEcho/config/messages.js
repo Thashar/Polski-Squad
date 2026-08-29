@@ -528,6 +528,9 @@ const pol = {
     challengeErrLimit: '❌ Masz już maksymalną liczbę otwartych wyzwań ({limit}). Zakończ któreś, zanim rzucisz kolejne.',
     challengeErrOpponentBusy: '❌ **{name}** prowadzi już maksymalną liczbę wyzwań ({limit}). Spróbuj ponownie, gdy któreś zakończy.',
     challengeErrDuplicate: '❌ Masz już otwarte wyzwanie z tym graczem na bossie **{boss}**.',
+    challengeErrBossBusy: '❌ Prowadzisz już wyzwanie na bossie **{boss}** — na jednym bossie może toczyć się tylko jedno naraz.',
+    challengeErrOpponentBossBusy: '❌ **{name}** prowadzi już wyzwanie na bossie **{boss}** — na jednym bossie może toczyć się tylko jedno naraz. Wybierz innego bossa.',
+    challengeNoBossesFree: '❌ Nie ma bossa, na którym moglibyście się teraz zmierzyć — na każdym Ty albo **{name}** macie już otwarte wyzwanie.',
     challengeErrDmClosed: '❌ Gracz **{opponent}** nie odbiera wiadomości od bota — nie można rzucić mu wyzwania.',
     challengeSent: '✅ Wyzwanie wysłane do gracza **{opponent}** (boss **{boss}**). Masz **24 godziny** na jego odpowiedź.',
 
@@ -1136,6 +1139,9 @@ const eng = {
     challengeErrLimit: '❌ You already have the maximum number of open challenges ({limit}). Finish one before starting another.',
     challengeErrOpponentBusy: '❌ **{name}** already has the maximum number of open challenges ({limit}). Try again once one of them is finished.',
     challengeErrDuplicate: '❌ You already have an open challenge with this player on boss **{boss}**.',
+    challengeErrBossBusy: '❌ You already have a challenge running on boss **{boss}** — only one at a time is allowed per boss.',
+    challengeErrOpponentBossBusy: '❌ **{name}** already has a challenge running on boss **{boss}** — only one at a time is allowed per boss. Pick another boss.',
+    challengeNoBossesFree: '❌ There is no boss you could duel on right now — on every one of them either you or **{name}** already has an open challenge.',
     challengeErrDmClosed: '❌ **{opponent}** does not accept messages from the bot — they cannot be challenged.',
     challengeSent: '✅ Challenge sent to **{opponent}** (boss **{boss}**). They have **24 hours** to respond.',
 

@@ -16917,13 +16917,41 @@ class InteractionHandler {
         await this._renderChallengeBossPicker(interaction, 0);
     }
 
+    /**
+     * Bossy, na których pojedynek nie może się odbyć: zajęte przez wyzywającego ALBO przez
+     * wybranego przeciwnika (limit 1 wyzwanie na bossa na profil).
+     * @returns {Promise<Set<string>>} nazwy MAŁYMI LITERAMI
+     */
+    async _challengeBusyBosses(interaction, session) {
+        const challengerKey = this._mainPlayerKey(interaction.user.id);
+        const [mine, theirs] = await Promise.all([
+            this.challengeService.busyBossesFor(challengerKey),
+            session?.playerKey
+                ? this.challengeService.busyBossesFor(session.playerKey)
+                : Promise.resolve(new Set()),
+        ]);
+        return new Set([...mine, ...theirs]);
+    }
+
     /** Lista bossów (25/stronę — nazw bywa więcej niż limit select menu) */
     async _renderChallengeBossPicker(interaction, page) {
         const msgs = this.msgs(interaction.guildId);
         const session = this._getChallengeSession(interaction.user.id);
-        const bosses = this._getAllEnglishBossNames();
-        if (bosses.length === 0) {
+        const allBosses = this._getAllEnglishBossNames();
+        if (allBosses.length === 0) {
             await this._challengeWizardError(interaction, msgs.challengeNoBosses);
+            return;
+        }
+
+        // Na jednym bossie może toczyć się tylko JEDNO wyzwanie na profil, więc bossy zajęte
+        // po którejkolwiek stronie w ogóle nie trafiają na listę — lepiej ich nie pokazywać,
+        // niż odbijać wybór komunikatem dopiero przy potwierdzeniu
+        const busy = await this._challengeBusyBosses(interaction, session);
+        const bosses = allBosses.filter(b => !busy.has(b.toLowerCase()));
+        if (bosses.length === 0) {
+            await this._challengeWizardError(interaction, formatMessage(msgs.challengeNoBossesFree, {
+                name: session?.playerName || '',
+            }));
             return;
         }
         const PAGE_SIZE = 25;
@@ -17039,6 +17067,16 @@ class InteractionHandler {
         }
         if (await this.challengeService.hasOpenBetween(challengerKey, opponentKey, session.boss)) {
             return void await done(formatMessage(msgs.challengeErrDuplicate, { boss: session.boss }));
+        }
+        // Jeden boss = jedno wyzwanie na profil. Lista bossów już to filtruje, ale sesja żyje
+        // 15 minut — w tym czasie któraś ze stron mogła zająć tego bossa innym pojedynkiem
+        if (await this.challengeService.hasOpenOnBoss(challengerKey, session.boss)) {
+            return void await done(formatMessage(msgs.challengeErrBossBusy, { boss: session.boss }));
+        }
+        if (await this.challengeService.hasOpenOnBoss(opponentKey, session.boss)) {
+            return void await done(formatMessage(msgs.challengeErrOpponentBossBusy, {
+                name: session.playerName, boss: session.boss,
+            }));
         }
 
         const challengerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
@@ -17165,6 +17203,15 @@ class InteractionHandler {
             if (open >= limit) {
                 await interaction.reply({
                     content: formatMessage(msgs.challengeErrAcceptLimit, { limit }),
+                    flags: ['Ephemeral'],
+                });
+                return;
+            }
+            // Zaproszenie mogło czekać do 24 h — w tym czasie przyjmujący mógł zająć tego
+            // bossa innym pojedynkiem, a na jednego bossa przypada jedno wyzwanie
+            if (await this.challengeService.hasOpenOnBoss(challenge.opponent.playerKey, challenge.boss)) {
+                await interaction.reply({
+                    content: formatMessage(msgs.challengeErrBossBusy, { boss: challenge.boss }),
                     flags: ['Ephemeral'],
                 });
                 return;
@@ -17314,8 +17361,10 @@ class InteractionHandler {
      * wyzwania widać rzutem oka, bez czytania treści.
      *
      * Licznik na ikonie bierzemy z NAJDALEJ zaawansowanego wpisu (`notices`, w razie braku
-     * `duplicates`) — przy limicie 3 wyzwań naraz jeden wynik potrafi zasilić kilka z nich,
-     * a pierścień pokazuje wtedy to najbliższe kompletu. Treść wylicza wszystkie.
+     * `duplicates`). Przy limicie 1 wyzwania na bossa wpis jest normalnie jeden — `registerScore`
+     * dopisuje wynik tylko do wyzwań na TYM bossie. Kilka wpisów mogą dać co najwyżej dane
+     * sprzed wprowadzenia tego limitu; wtedy pierścień pokazuje najbliższe kompletu,
+     * a treść i tak wylicza wszystkie.
      *
      * @returns {Promise<{embed: EmbedBuilder, buffer: Buffer|null, name: string}|null>}
      */
