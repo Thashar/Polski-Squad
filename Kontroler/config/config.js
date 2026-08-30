@@ -164,8 +164,9 @@ module.exports = {
         scheduleHour: 22,
         scheduleMinute: 0,
 
-        // Liczba zwycięzców na klan w jednym cotygodniowym losowaniu
-        winnersCount: 3,
+        // Liczba zwycięzców na klan w jednym cotygodniowym losowaniu.
+        // Gdy w puli (po wykluczeniach) jest mniej osób, `drawWeighted` zwróci ich tylu, ilu jest
+        winnersCount: 6,
 
         // Role wykluczone z WYGRYWANIA (lista ID w env, rozdzielona przecinkami).
         // UWAGA: osoby z tymi rolami NADAL liczą się do średniej progresu ("oczekiwany standard"),
