@@ -60,7 +60,11 @@ module.exports = {
         // Kanał z przyciskiem „Chcę dołączyć do klanu" dla osób już obecnych na serwerze
         joinClan: process.env.REKRUTER_JOIN_CLAN_CHANNEL || '1209283124765265970',
         main: process.env.REKRUTER_MAIN_CHANNEL || '1170323972173340744',
-        boost: process.env.REKRUTER_BOOST_BONUS_CHANNEL || '1384597663378440363'
+        boost: process.env.REKRUTER_BOOST_BONUS_CHANNEL || '1384597663378440363',
+        // Archiwum rozmów rekrutacyjnych AI - pełny zapis wraz ze zdjęciami.
+        // Bez tej zmiennej archiwum jest wyłączone. Kanał widzi komplet danych
+        // kandydata, więc trzymaj go poza zasięgiem zwykłych użytkowników.
+        interviewLog: process.env.REKRUTER_INTERVIEW_LOG_CHANNEL || null
     },
     roles: {
         notPolish: process.env.NOT_POLISH_ROLE,

@@ -13,6 +13,7 @@ const MemberCacheService = require('./services/memberCacheService');
 const ClanRoleChangeService = require('./services/clanRoleChangeService');
 const NotificationPreferencesService = require('./services/notificationPreferencesService');
 const AIInterviewService = require('./services/aiInterviewService');
+const InterviewLogService = require('./services/interviewLogService');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { getCacheOptions } = require('../utils/discordCache');
@@ -25,6 +26,7 @@ const memberCacheService = new MemberCacheService(config);
 const notificationPreferencesService = new NotificationPreferencesService();
 const clanRoleChangeService = new ClanRoleChangeService(config, notificationPreferencesService);
 const aiInterviewService = new AIInterviewService(config);
+const interviewLogService = new InterviewLogService(config);
 
 const client = new Client({
     ...getCacheOptions(),
@@ -56,6 +58,7 @@ const sharedState = {
     pendingOtherPurposeFinish,
     notificationPreferencesService,
     aiInterviewService,
+    interviewLogService,
     client,
     config
 };
@@ -84,7 +87,9 @@ const mapyRekrutacji = [
     userStates, userInfo, nicknameRequests, userEphemeralReplies,
     pendingQualifications, userImages, pendingOtherPurposeFinish,
     // Historie rozmów z AI - też kluczowane po userId i też zostawałyby w pamięci
-    aiInterviewService.rozmowy
+    aiInterviewService.rozmowy,
+    // Otwarte archiwa rozmów (wątki na kanale logów) - ta sama historia
+    interviewLogService.sesje
 ];
 
 // userId -> kiedy sprzątacz zobaczył go po raz pierwszy

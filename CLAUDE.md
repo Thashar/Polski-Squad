@@ -873,6 +873,9 @@ REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5
 REKRUTER_AI_INTERVIEW_EFFORT=low
 REKRUTER_AI_INTERVIEW_MAX_TURNS=40
 REKRUTER_AI_INTERVIEW_HISTORY=30
+# Archiwum rozmów rekrutacyjnych — pełny zapis ze zdjęciami na osobnym kanale (opcjonalne,
+# brak zmiennej = wyłączone; kanał widzi komplet danych kandydata, więc tylko dla administracji)
+REKRUTER_INTERVIEW_LOG_CHANNEL=channel_id
 # Przekazywanie wiadomości (robot2) - lista user ID rozdzielona przecinkami
 ROBOT=user_id_1,user_id_2
 

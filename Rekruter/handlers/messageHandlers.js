@@ -455,8 +455,11 @@ async function handleAiInterviewMessage(msg, state, config, client) {
   const zalacznik = msg.attachments.first();
   const tekst     = msg.content?.trim();
 
+  const archiwum = state.interviewLogService;
+
   if (!zalacznik && !tekst) {
     await safeDeleteMessage(msg);
+    archiwum?.wpisSystemowy(userId, 'Kandydat wysłał pustą wiadomość.');
     await serwis.pokazOdpowiedz(
       userId,
       serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewEmptyMessage),
@@ -468,6 +471,7 @@ async function handleAiInterviewMessage(msg, state, config, client) {
 
   if (zalacznik && !zalacznik.contentType?.startsWith('image/')) {
     await safeDeleteMessage(msg);
+    archiwum?.wpisSystemowy(userId, `Kandydat wysłał załącznik, który nie jest obrazem (${zalacznik.contentType || 'nieznany typ'}).`);
     await serwis.pokazOdpowiedz(
       userId,
       serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewInvalidImage),
@@ -498,6 +502,15 @@ async function handleAiInterviewMessage(msg, state, config, client) {
 
       const analiza = await serwis.przeanalizujZdjecie(userId, imgPath, state);
 
+      // Podpis pod zdjęciem nie trafia do modelu (analizowany jest sam obraz),
+      // ale w archiwum ma być komplet tego, co kandydat wysłał
+      if (tekst) archiwum?.wpisSystemowy(userId, `Podpis pod zdjęciem (model go nie dostaje): „${tekst}”`);
+
+      // ⚠️ Zdjęcie Core Stock jest kasowane z dysku kilka linii niżej, więc kopię do
+      // archiwum trzeba pobrać TERAZ. `await` obejmuje wyłącznie odczyt pliku do bufora
+      // - sam upload leci kolejką serwisu, żeby nie opóźniał odpowiedzi rekrutera
+      if (archiwum) await archiwum.wpisZdjecie(userId, imgPath, analiza.opis);
+
       if (analiza.typ === 'ekwipunek') {
         // Ten screen ląduje w podsumowaniu na kanale klanowym - zostawiamy go na dysku
         const poprzedni = state.userImages.get(userId);
@@ -510,10 +523,12 @@ async function handleAiInterviewMessage(msg, state, config, client) {
       wynik = await serwis.wiadomoscSystemowa(userId, analiza.opis, state, '📷 *przesłano zdjęcie*');
     } else {
       await safeDeleteMessage(msg);
+      archiwum?.wpisKandydata(userId, tekst);
       wynik = await serwis.wiadomoscUzytkownika(userId, tekst, state);
     }
   } catch (error) {
     logger.error(`[AI_WYWIAD] ❌ Błąd tury rozmowy dla ${msg.author.username}: ${error.message}`);
+    archiwum?.wpisSystemowy(userId, `Błąd tury rozmowy: ${error.message}`);
     await serwis.pokazOdpowiedz(
       userId,
       serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewError),
@@ -526,8 +541,11 @@ async function handleAiInterviewMessage(msg, state, config, client) {
   if (!wynik) {
     // Rozmowa zniknęła z pamięci (restart bota albo sprzątanie) - kończymy po cichu
     state.userStates.delete(userId);
+    await archiwum?.zakonczZPodsumowaniem(userId, '⚠️ Rozmowa przepadła z pamięci bota (restart albo sprzątanie).');
     return;
   }
+
+  archiwum?.wpisBota(userId, wynik.tekst);
 
   await serwis.pokazOdpowiedz(userId, serwis.zbudujTranskrypcje(userId), state, kanal);
 
@@ -535,6 +553,7 @@ async function handleAiInterviewMessage(msg, state, config, client) {
     logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
     serwis.zakonczRozmowe(userId);
     state.userStates.delete(userId);
+    await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - przekroczony limit tur.', state.userInfo.get(userId));
     return;
   }
 
@@ -558,6 +577,12 @@ async function finalizujRekrutacjeAI(msg, state, config, client) {
 
   state.aiInterviewService.zakonczRozmowe(userId);
   state.userStates.delete(userId);
+
+  await state.interviewLogService?.zakonczZPodsumowaniem(
+    userId,
+    info ? '✅ Rozmowa zakończona - zebrano komplet danych.' : '❌ Rozmowa zakończona, ale karta kandydata przepadła.',
+    info
+  );
 
   if (!info) {
     logger.error('[AI_WYWIAD] ❌ Brak danych kandydata przy finalizacji');
