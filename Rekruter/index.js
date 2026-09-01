@@ -16,6 +16,7 @@ const AIInterviewService = require('./services/aiInterviewService');
 const InterviewLogService = require('./services/interviewLogService');
 const AIOCRService = require('./services/aiOcrService');
 const OffTopicService = require('./services/offTopicService');
+const InterviewThreadService = require('./services/interviewThreadService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -42,6 +43,8 @@ const aiInterviewService = new AIInterviewService(config, llmAdapter, aiOcrServi
 const interviewLogService = new InterviewLogService(config);
 // Trwały licznik rozmów przerwanych za odbieganie od tematu (przeżywa restart bota)
 const offTopicService = new OffTopicService();
+// Prywatne wątki rozmów rekrutacyjnych - rozmowa zamiast efemerycznej odpowiedzi
+const interviewThreadService = new InterviewThreadService();
 
 const client = new Client({
     ...getCacheOptions(),
@@ -76,6 +79,7 @@ const sharedState = {
     aiOcrService,
     interviewLogService,
     offTopicService,
+    interviewThreadService,
     client,
     config
 };
@@ -351,6 +355,13 @@ client.once(Events.ClientReady, async () => {
 
         // Porzucone rekrutacje (mapy w pamięci + zdjęcia w temp/) kasowane po 30 dniach
         uruchomSprzatanieRekrutacji();
+
+        // ⚠️ Po restarcie żadna rozmowa nie jest już w toku (stan żyje wyłącznie w pamięci),
+        // więc każdy zastany wątek rekrutacyjny to śmieć po poprzednim uruchomieniu
+        await interviewThreadService.posprzataj([
+            client.channels.cache.get(config.channels.recruitment),
+            client.channels.cache.get(config.channels.joinClan),
+        ]);
 
         const channel = client.channels.cache.get(config.channels.recruitment);
         if (channel) {

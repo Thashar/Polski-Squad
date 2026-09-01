@@ -189,12 +189,45 @@ Bot musi mieć uprawnienie **Wyrzucanie członków** i rolę wyżej niż kandyda
 maksymalnie jedno emoji na wiadomość, **pogrubienie** na kluczowej rzeczy w danej wiadomości
 (nazwa ekranu, ścieżka w grze, zakres liczb) — jedno, dwa miejsca, nigdy całe zdania.
 
-**Prezentacja w Discordzie:** rozmowa toczy się w jednej efemerycznej odpowiedzi, edytowanej po każdej
-turze i pokazującej **transkrypcję ostatnich 6 wypowiedzi** (bot: `<:PepeBizensik:1278014731113857037>`,
-kandydat: `<:G_SSJCommon:1268828660509573203>` — stałe `EMOJI_BOTA` / `EMOJI_UZYTKOWNIKA` w serwisie) (wiadomości kandydata są kasowane z kanału,
-więc bez transkrypcji widziałby tylko ostatnie zdanie bota). Token interakcji Discorda żyje 15 minut —
-gdy edycja przestaje działać, bot pisze na kanale z pingiem i kasuje tę wiadomość po 2 minutach,
-żeby rozmowa nie urwała się w ciszy.
+### Prezentacja: prywatny wątek, nie efemeryczna odpowiedź
+
+**Plik:** `services/interviewThreadService.js`
+
+Kliknięcie przycisku zakłada **prywatny wątek** (`PrivateThread`, `invitable: false`) na kanale
+rekrutacyjnym i wprowadza do niego kandydata. Rozmowa toczy się tam zwykłymi wiadomościami —
+nic nie jest kasowane, obie strony widzą historię. Odpowiedź na kliknięcie zostaje efemeryczna,
+ale jest już tylko wskazaniem drogi do wątku.
+
+Wcześniej rozmowa mieszkała w jednej efemerycznej odpowiedzi edytowanej po każdej turze:
+token interakcji żył 15 minut, wiadomości kandydata trzeba było kasować, a żeby cokolwiek było
+widać, bot doklejał sklejoną transkrypcję ostatnich sześciu wypowiedzi. W wątku żadna z tych
+protez nie jest potrzebna — `zbudujTranskrypcje`, `rozmowa.log` i emoji transkrypcji zniknęły.
+
+- ⚠️ **`deferReply` PRZED założeniem wątku.** Discord daje 3 sekundy na pierwszą odpowiedź,
+  a założenie wątku i dodanie kandydata to dwa żądania do API — bez defer token potrafi wygasnąć
+- ⚠️ **Routing po `threadId` ze stanu kandydata** (`userStates.threadId`), nie po nazwie ani autorze:
+  wiadomość z cudzego wątku niczego nie podejmie. Wiadomość na samym kanale w trakcie rozmowy
+  jest kasowana jak każda inna
+- **Nie udało się założyć wątku** (brak uprawnienia, kanał innego typu) → kandydat dostaje
+  `aiInterviewNoThread` i rekrutacja nie startuje. Nie ma cichego powrotu do efemeryczej ścieżki:
+  dwie równoległe drogi znaczyłyby dwa razy więcej kodu do utrzymania
+- **Adapter dla kodu po rozmowie:** do `userEphemeralReplies` trafia obiekt z metodą `editReply`,
+  która pisze w wątku (pierwsze wywołanie wysyła wiadomość, kolejne ją edytują). Dzięki temu
+  pytanie o zmianę nicku i komunikaty postępu OCR działają **bez żadnych zmian** w swoim kodzie.
+  Wypowiedź rozmowy zeruje zapamiętaną wiadomość statusową, żeby kolejny `editReply` trafił
+  POD rozmowę, a nie przerabiał coś, co przewinęło się wyżej
+- ⚠️ **Przyciski zmiany nicku dostały `deferUpdate()`** — odpowiedź idzie przez edycję innej
+  wiadomości, więc bez potwierdzenia Discord oznaczał samo kliknięcie jako nieudane
+- **Kasowanie wątku** (15 s zwłoki, żeby kandydat przeczytał ostatnią wiadomość) na każdej ścieżce
+  wyjścia: zakończona rekrutacja (obie — klanowa i „inny cel"), limit tur, odbieganie od tematu,
+  błąd startu, utrata rozmowy z pamięci, ponowne kliknięcie przycisku
+- ⚠️ **Sprzątanie po restarcie** (`posprzataj`, wołane w `ClientReady`): stan rekrutacji żyje
+  wyłącznie w pamięci, więc po restarcie żadna rozmowa nie jest już w toku i **każdy zastany wątek
+  z prefiksem `rekrutacja-` to śmieć**. Bez tego porzucone wątki zostawałyby na kanale na zawsze
+- **Trwały ślad rozmowy jest w archiwum** (`interviewLogService`) — wątek znika, zapis zostaje
+
+Bot potrzebuje na kanale rekrutacyjnym uprawnień: **Tworzenie wątków prywatnych**,
+**Pisanie w wątkach** i **Zarządzanie wątkami** (kasowanie).
 
 ### Archiwum rozmów na osobnym kanale (`REKRUTER_INTERVIEW_LOG_CHANNEL`)
 

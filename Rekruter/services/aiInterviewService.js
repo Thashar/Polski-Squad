@@ -191,11 +191,6 @@ const KONIEC_PRZY = 3;
 const MAKS_TOKENOW_ODPOWIEDZI = 1024;
 
 const MAKS_ITERACJI_NARZEDZI = 4;
-const LIMIT_ZNAKOW_DISCORD = 1900;
-
-// Emoji przy wypowiedziach w transkrypcji rozmowy
-const EMOJI_BOTA = '<:PepeBizensik:1278014731113857037>';
-const EMOJI_UZYTKOWNIKA = '<:G_SSJCommon:1268828660509573203>';
 
 class AIInterviewService {
     /**
@@ -252,7 +247,6 @@ class AIInterviewService {
 
         this.rozmowy.set(userId, {
             historia: [this._tekst('user', otwarcie)],
-            log: [],
             tury: 0,
             zakonczona: false,
             // Odbiegnięcia od tematu POD RZĄD - zerowane przy każdym postępie rozmowy
@@ -273,21 +267,19 @@ class AIInterviewService {
         if (!rozmowa) return null;
 
         rozmowa.historia.push(this._tekst('user', tekst));
-        rozmowa.log.push({ kto: 'uzytkownik', tekst });
 
         return this.wykonajTure(userId, state);
     }
 
     /**
      * Dokłada informację od bota (np. wynik analizy zdjęcia) i zwraca odpowiedź rekrutera.
-     * Kandydat treści systemowej nie widzi — w transkrypcji pojawia się `wpisDoLogu`.
+     * Kandydat treści systemowej nie widzi — w wątku pojawia się dopiero odpowiedź modelu.
      */
-    async wiadomoscSystemowa(userId, tekst, state, wpisDoLogu = null) {
+    async wiadomoscSystemowa(userId, tekst, state) {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) return null;
 
         rozmowa.historia.push(this._tekst('user', `[SYSTEM] ${tekst}`));
-        if (wpisDoLogu) rozmowa.log.push({ kto: 'uzytkownik', tekst: wpisDoLogu });
 
         return this.wykonajTure(userId, state);
     }
@@ -363,7 +355,6 @@ class AIInterviewService {
             // Wywiad domknięty - nie ma po co pytać modelu jeszcze raz, mamy tekst pożegnania
             if (pozegnanie) {
                 const tekst = [...teksty, pozegnanie].filter(Boolean).join('\n\n');
-                rozmowa.log.push({ kto: 'bot', tekst });
                 rozmowa.zakonczona = true;
                 return { tekst, zakonczone: true };
             }
@@ -389,7 +380,6 @@ class AIInterviewService {
 
         const tekst = teksty.join('\n\n')
             || 'Napisz proszę jeszcze raz — coś mi się zacięło.';
-        rozmowa.log.push({ kto: 'bot', tekst });
 
         // Trzecie odbiegnięcie z rzędu - pokazujemy pożegnanie modelu i zamykamy rozmowę.
         // `powod` rozróżnia to od przerwania limitem tur: tylko za off-topic rośnie
@@ -776,62 +766,20 @@ ${brakuje.length
     /* ---------------------------------------------------------------------- */
 
     /**
-     * Buduje treść efemerycznej wiadomości: kilka ostatnich wypowiedzi rozmowy.
+     * Wypowiedź rekrutera — zwykła wiadomość w prywatnym wątku rozmowy.
      *
-     * Wiadomości kandydata są kasowane z kanału (prywatność), więc bez tej transkrypcji
-     * widziałby wyłącznie ostatnie zdanie bota i tracił kontekst.
+     * Wcześniej rozmowa mieszkała w efemerycznej odpowiedzi edytowanej po każdej turze:
+     * token interakcji żył 15 minut, wiadomości kandydata trzeba było kasować, a żeby
+     * cokolwiek było widać, bot doklejał sklejoną transkrypcję ostatnich wypowiedzi.
+     * W wątku nic z tego nie jest potrzebne — historia jest tam po prostu widoczna.
      */
-    zbudujTranskrypcje(userId, stopka = null) {
-        const rozmowa = this.rozmowy.get(userId);
-        if (!rozmowa) return stopka || '';
-
-        // Podwójna spacja - przy emoji serwerowym pojedyncza wygląda w Discordzie na sklejoną z tekstem
-        const wpisy = rozmowa.log.slice(-6).map(wpis =>
-            wpis.kto === 'bot'
-                ? `${EMOJI_BOTA}  ${wpis.tekst}`
-                : `${EMOJI_UZYTKOWNIKA}  ${wpis.tekst}`
-        );
-        if (stopka) wpisy.push(stopka);
-
-        let tresc = wpisy.join('\n\n');
-        while (tresc.length > LIMIT_ZNAKOW_DISCORD && wpisy.length > 1) {
-            wpisy.shift();
-            tresc = wpisy.join('\n\n');
-        }
-
-        return tresc.slice(0, LIMIT_ZNAKOW_DISCORD);
-    }
-
-    /**
-     * Pokazuje treść kandydatowi.
-     *
-     * Token interakcji Discorda żyje 15 minut — przy dłuższej rozmowie edycja
-     * efemerycznej odpowiedzi zaczyna się wywalać. Wtedy piszemy na kanale
-     * i kasujemy wiadomość po dwóch minutach, żeby rozmowa nie urwała się w ciszy.
-     */
-    async pokazOdpowiedz(userId, tresc, state, kanal = null) {
-        const interakcja = state.userEphemeralReplies.get(userId);
-
-        if (interakcja) {
-            try {
-                await interakcja.editReply({ content: tresc, components: [], files: [] });
-                return true;
-            } catch (error) {
-                logger.warn(`[AI_WYWIAD] Nie udało się zaktualizować odpowiedzi efemerycznej (${error.message}) - piszę na kanale`);
-                state.userEphemeralReplies.delete(userId);
-            }
-        }
-
-        if (!kanal) return false;
-
-        try {
-            const wiadomosc = await kanal.send({ content: `<@${userId}>\n${tresc}`.slice(0, 2000) });
-            setTimeout(() => wiadomosc.delete().catch(() => {}), 120_000);
-            return true;
-        } catch (error) {
-            logger.error(`[AI_WYWIAD] Nie udało się wysłać wiadomości na kanał: ${error.message}`);
+    async pokazOdpowiedz(userId, tresc, state) {
+        const watki = state.interviewThreadService;
+        if (!watki) {
+            logger.error('[AI_WYWIAD] Brak interviewThreadService - nie mam gdzie wysłać wiadomości');
             return false;
         }
+        return watki.wyslij(userId, tresc);
     }
 }
 
