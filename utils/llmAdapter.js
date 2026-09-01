@@ -30,6 +30,20 @@
  *   });
  *   // result = { content, usage: {inputTokens, outputTokens, thoughtTokens},
  *   //           provider, model, durationMs, traceId }
+ *
+ * Rozmowa wieloturowa z narzędziami (function calling) — zamiast `parts` podaj
+ * `contents` (pełna historia w formacie Gemini) plus opcjonalnie `systemInstruction`
+ * i `tools`. Wywołania narzędzi wracają w `result.functionCalls`:
+ *
+ *   const result = await adapter.generate({
+ *       provider: 'gemini',
+ *       model:    'gemini-2.5-flash-lite',
+ *       systemInstruction: 'Jesteś rekruterem…',
+ *       contents: [ { role: 'user',  parts: [{ text: 'cześć' }] },
+ *                   { role: 'model', parts: [{ text: 'hej' }] } ],
+ *       tools:    [ { functionDeclarations: [ … ] } ],
+ *   });
+ *   // result.functionCalls = [ { name, args }, … ]  (pusta tablica gdy model nic nie wywołał)
  */
 
 const { trace, SpanStatusCode } = require('@opentelemetry/api');
@@ -78,21 +92,27 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
     /**
      * Wywołanie Gemini (multimodal). Zwraca znormalizowany payload.
      */
-    async function callGemini({ model, parts, maxOutputTokens, temperature, safetySettings, meta }) {
+    async function callGemini({
+        model, parts, contents, systemInstruction, tools, toolConfig,
+        maxOutputTokens, temperature, safetySettings, meta,
+    }) {
         const client = getGemini();
         const generationConfig = { maxOutputTokens };
         // temperature podawana jawnie (np. 0 dla OCR) - bez tego Gemini używa domyślnej 1.0,
         // co przy zadaniach odczytu daje niedeterministyczne odpowiedzi (raz lista, raz odmowa)
         if (typeof temperature === 'number') generationConfig.temperature = temperature;
 
-        const generative = client.getGenerativeModel({
-            model,
-            generationConfig,
-            safetySettings,
-        });
+        const opcjeModelu = { model, generationConfig, safetySettings };
+        if (systemInstruction) opcjeModelu.systemInstruction = systemInstruction;
+        if (tools)             opcjeModelu.tools = tools;
+        if (toolConfig)        opcjeModelu.toolConfig = toolConfig;
 
+        const generative = client.getGenerativeModel(opcjeModelu);
+
+        // `contents` = pełna historia rozmowy; `parts` = pojedyncza tura (OCR i streszczenia).
+        // Zachowane obok siebie, bo wywołania OCR podają wyłącznie `parts`
         const result = await generative.generateContent({
-            contents: [{ role: 'user', parts }],
+            contents: contents || [{ role: 'user', parts }],
         });
 
         const feedback = result.response?.promptFeedback;
@@ -121,8 +141,22 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
         }
 
         const usage = result.response.usageMetadata || {};
+
+        // ⚠️ Tekst składamy z części kandydata, nie przez `response.text()`. Gdy model
+        // odpowiada samym wywołaniem narzędzia, helper potrafi ostrzegać albo rzucić —
+        // a dla nas tura bez tekstu jest normalna (rozmowa z function callingiem)
+        const czesci = candidate.content?.parts || [];
+        const tekst = czesci
+            .filter(czesc => typeof czesc.text === 'string')
+            .map(czesc => czesc.text)
+            .join('');
+        const wywolaniaNarzedzi = czesci
+            .filter(czesc => czesc.functionCall)
+            .map(czesc => czesc.functionCall);
+
         return {
-            content: result.response.text(),
+            content: tekst,
+            functionCalls: wywolaniaNarzedzi,
             inputTokens:  usage.promptTokenCount     || 0,
             outputTokens: usage.candidatesTokenCount || 0,
             thoughtTokens: usage.thoughtsTokenCount  || 0,
@@ -165,7 +199,11 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
         provider,
         model,
         parts,
-        messages,        // alternatywa dla parts (chat completions)
+        contents,         // pełna historia rozmowy (alternatywa dla parts)
+        messages,         // alias `contents` — zachowany dla zgodności wywołań
+        systemInstruction,
+        tools,            // deklaracje funkcji (function calling)
+        toolConfig,
         maxOutputTokens,
         temperature,      // opcjonalna - gdy pominięta, provider używa własnej domyślnej
         safetySettings,
@@ -206,12 +244,17 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
             // input.value — serializujemy messages/parts. Dla obrazów w inlineData
             // zastępujemy base64 placeholderem, żeby nie wrzucać MB-ów do Langfuse.
             try {
-                const inputSerializable = (messages || parts || []).map(redactInlineData);
+                const inputSerializable = (contents || messages || parts || []).map(redactInlineData);
                 span.setAttribute('input.value', JSON.stringify(inputSerializable));
             } catch (_) { /* cicho — atrybut jest pomocniczy */ }
 
             try {
-                const raw = await driver({ model, parts, messages, maxOutputTokens, temperature, safetySettings, meta });
+                const raw = await driver({
+                    model, parts,
+                    contents: contents || messages,
+                    systemInstruction, tools, toolConfig,
+                    maxOutputTokens, temperature, safetySettings, meta,
+                });
                 const durationMs = Date.now() - startedAt;
 
                 span.setAttribute('llm.usage.prompt_tokens',     raw.inputTokens);
@@ -232,6 +275,8 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
                 const traceId = span.spanContext()?.traceId || null;
                 return {
                     content:      raw.content,
+                    // Pusta tablica gdy model nic nie wywołał — wołający nie musi sprawdzać undefined
+                    functionCalls: raw.functionCalls || [],
                     usage: {
                         inputTokens:   raw.inputTokens,
                         outputTokens:  raw.outputTokens,
@@ -265,6 +310,11 @@ function createLlmAdapter({ botSlug, tracerName, logger, apiKey } = {}) {
  */
 function redactInlineData(part) {
     if (!part || typeof part !== 'object') return part;
+    // Wpis historii (`{ role, parts }`) — schodzimy poziom niżej, inaczej obrazek
+    // wysłany w rozmowie trafiłby do atrybutu spana w całości
+    if (Array.isArray(part.parts)) {
+        return { ...part, parts: part.parts.map(redactInlineData) };
+    }
     if (part.inlineData && typeof part.inlineData.data === 'string') {
         const { mimeType, data } = part.inlineData;
         return {

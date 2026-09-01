@@ -17,7 +17,6 @@ const {
   initializeOCR
 } = require('../services/ocrService');
 
-const AIOCRService = require('../services/aiOcrService');
 
 // Zwłoka przed skasowaniem wiadomości spoza rekrutacji - patrz `safeDeleteMessage`
 const OPOZNIENIE_KASOWANIA_MS = 1_000;
@@ -185,8 +184,7 @@ async function handleCoreStockImage(msg, state, config) {
   await safeDeleteMessage(msg);
 
   try {
-    const aiOcrService = new AIOCRService(config);
-    const result = await aiOcrService.analyzeCoreStockImage(imgPath);
+    const result = await state.aiOcrService.analyzeCoreStockImage(imgPath);
 
     // Usuń plik tymczasowy
     try { const fs = require('fs').promises; await fs.unlink(imgPath); } catch {/* pomijamy */}
@@ -331,8 +329,7 @@ async function handleImageInput(msg, state, config, client) {
       state.userEphemeralReplies
     );
     try {
-      const aiOcrService = new AIOCRService(config);
-      stats = await aiOcrService.analyzeRecruitmentImage(imgPath);
+      stats = await state.aiOcrService.analyzeRecruitmentImage(imgPath);
     } catch (aiError) {
       // Jeśli AI OCR zawiedzie, fallback na tradycyjny OCR
       await updateUserEphemeralReply(

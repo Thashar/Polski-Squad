@@ -1,6 +1,5 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const { HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const AIOCRService = require('./aiOcrService');
 const { extractOptimizedStatsFromImage } = require('./ocrService');
 
 const logger = createBotLogger('Rekruter');
@@ -17,8 +16,12 @@ const logger = createBotLogger('Rekruter');
  * ⚠️ Nick w grze, atak i Core Stock pochodzą WYŁĄCZNIE z OCR zdjęć — AI nie ma
  * narzędzia do ich zapisania z tekstu. Inaczej kandydat mógłby je po prostu podać.
  *
- * Tryb włącza się zmienną REKRUTER_AI_INTERVIEW=true. Gdy jest wyłączony albo brakuje
- * ANTHROPIC_API_KEY, bot zachowuje się dokładnie tak jak dotąd (przyciski + kroki).
+ * Tryb włącza się zmienną REKRUTER_AI_INTERVIEW=true. Gdy jest wyłączony, brakuje
+ * REKRUTER_GOOGLE_AI_API_KEY albo llmAdapter nie został wstrzyknięty, bot zachowuje się
+ * dokładnie tak jak dotąd (przyciski + kroki).
+ *
+ * Model: Google Gemini przez wspólny `utils/llmAdapter.js` — ten sam wrapper co OCR
+ * pozostałych botów, więc każda tura rozmowy trafia do Langfuse jako osobny span.
  */
 
 const PROMPT_SYSTEMOWY = `Jesteś rekruterem polskiego klanu z gry Survivor.io — "Polski Squad" — i rozmawiasz na Discordzie z osobą, która właśnie weszła na serwer. Prowadzisz z nią krótką rozmowę i po drodze zbierasz dane potrzebne do przydzielenia jej do odpowiedniego klanu.
@@ -72,24 +75,30 @@ Jeśli rozmowa schodzi na inny temat, odpowiedz krótko i wróć do rzeczy. Gdy 
 
 Gdy masz komplet danych, wywołaj zakoncz_wywiad z krótkim, ciepłym pożegnaniem.`;
 
+/**
+ * Deklaracje narzędzi w formacie Gemini (`functionDeclarations`).
+ *
+ * ⚠️ Typy pól podajemy WIELKIMI literami ('OBJECT', 'STRING', 'INTEGER') — tego oczekuje
+ * schemat Gemini. Zakresy wartości opisujemy słownie, a twardą walidację robi bot
+ * (`_zapiszDane`): model potrafi minąć się z opisem, więc granice i tak sprawdzamy u siebie.
+ */
 const NARZEDZIA = [
     {
         name: 'zapisz_dane',
         description: 'Zapisuje w karcie kandydata dane, które padły w rozmowie. Wywołaj natychmiast, gdy ustalisz cel wizyty, gdy rozmówca poda punkty z Lunar Mine Expedition albo gdy powie, skąd się o nas dowiedział — nie zbieraj tego w pamięci do końca rozmowy. Możesz podać jedno pole albo kilka naraz. W odpowiedzi dostaniesz listę tego, co jeszcze zostało do ustalenia.',
-        input_schema: {
-            type: 'object',
+        parameters: {
+            type: 'OBJECT',
             properties: {
                 cel: {
-                    type: 'string',
-                    enum: ['szukam_klanu', 'inny_cel'],
-                    description: 'Cel wizyty. "szukam_klanu" gdy osoba chce dołączyć do jednego z naszych klanów, "inny_cel" gdy ma już swój klan lub przyszła po prostu do polskiej społeczności.'
+                    type: 'STRING',
+                    description: 'Cel wizyty. Dokładnie jedna z dwóch wartości: "szukam_klanu" gdy osoba chce dołączyć do jednego z naszych klanów, albo "inny_cel" gdy ma już swój klan lub przyszła po prostu do polskiej społeczności.'
                 },
                 punktyLunar: {
-                    type: 'integer',
+                    type: 'INTEGER',
                     description: 'Punkty uzyskane w I fazie ostatniej Lunar Mine Expedition, liczba od 0 do 9999.'
                 },
                 skadWiesz: {
-                    type: 'string',
+                    type: 'STRING',
                     description: 'Skąd kandydat dowiedział się o serwerze - krótko, kilka słów, własnymi słowami na podstawie jego odpowiedzi.'
                 }
             },
@@ -99,11 +108,11 @@ const NARZEDZIA = [
     {
         name: 'zakoncz_wywiad',
         description: 'Kończy rozmowę rekrutacyjną. Wywołaj dopiero wtedy, gdy masz komplet danych — bot to sprawdza i odmówi zakończenia, jeśli czegoś brakuje, podając czego. Po zakończeniu bot sam przydzieli kandydata do klanu i wyśle podsumowanie, więc nie zapowiadaj wyniku.',
-        input_schema: {
-            type: 'object',
+        parameters: {
+            type: 'OBJECT',
             properties: {
                 pozegnanie: {
-                    type: 'string',
+                    type: 'STRING',
                     description: 'Krótkie pożegnanie dla kandydata (maksymalnie 400 znaków), które zobaczy jako ostatnią wiadomość rozmowy.'
                 }
             },
@@ -112,8 +121,26 @@ const NARZEDZIA = [
     }
 ];
 
-// Modele przyjmujące output_config.effort. Starsze (np. claude-3-haiku) odrzucą je błędem 400
-const MODELE_Z_EFFORT = /(opus-(5|4-[5-8])|sonnet-(5|4-6)|fable-5|mythos-5)/;
+/** Gemini oczekuje narzędzi opakowanych w `functionDeclarations` */
+const NARZEDZIA_GEMINI = [{ functionDeclarations: NARZEDZIA }];
+
+/**
+ * Filtry bezpieczeństwa wyłączone — tak samo jak w OCR pozostałych botów.
+ * Rozmowa rekrutacyjna bywa dosadna (gracze piszą, jak piszą), a zablokowana
+ * odpowiedź zrywałaby rekrutację w połowie.
+ */
+const USTAWIENIA_BEZPIECZENSTWA = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT,        threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,       threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+];
+
+/** Wersja promptu systemowego — trafia na span w Langfuse (A/B modeli i promptów) */
+const WERSJA_PROMPTU = 'v1';
+
+/** Limit odpowiedzi jednej tury; rozmowa ma być krótka, a narzędzia nie potrzebują miejsca */
+const MAKS_TOKENOW_ODPOWIEDZI = 1024;
 
 const MAKS_ITERACJI_NARZEDZI = 4;
 const LIMIT_ZNAKOW_DISCORD = 1900;
@@ -123,22 +150,37 @@ const EMOJI_BOTA = '<:PepeBizensik:1278014731113857037>';
 const EMOJI_UZYTKOWNIKA = '<:G_SSJCommon:1268828660509573203>';
 
 class AIInterviewService {
-    constructor(config) {
+    /**
+     * @param {Object} config
+     * @param {{ generate: Function }} llmAdapter — wspólny wrapper z utils/llmAdapter.js
+     * @param {Object} aiOcrService — ten sam serwis OCR co reszta rekrutacji
+     */
+    constructor(config, llmAdapter = null, aiOcrService = null) {
         this.config = config;
         this.ustawienia = config.aiInterview || {};
-        this.apiKey = process.env.ANTHROPIC_API_KEY;
-        this.enabled = this.ustawienia.enabled === true && !!this.apiKey;
+        this.adapter = llmAdapter;
+        this.ocr = aiOcrService;
+        this.apiKey = config.ocr?.googleAiApiKey || null;
+        this.model = this.ustawienia.model;
+        this.enabled = this.ustawienia.enabled === true && !!this.apiKey && !!llmAdapter;
 
-        // userId -> { messages, log, tury, zakonczona }
+        // userId -> { historia, log, tury, zakonczona }
         this.rozmowy = new Map();
 
-        if (this.ustawienia.enabled && !this.apiKey) {
-            logger.warn('⚠️ Rozmowa rekrutacyjna AI wyłączona - brak ANTHROPIC_API_KEY');
-        } else if (this.enabled) {
-            this.client = new Anthropic({ apiKey: this.apiKey });
-            this.model = this.ustawienia.model;
+        if (!this.ustawienia.enabled) {
+            // Tryb po prostu wyłączony - bez ostrzeżenia, to domyślny stan
+        } else if (!this.apiKey) {
+            logger.warn('⚠️ Rozmowa rekrutacyjna AI wyłączona - brak REKRUTER_GOOGLE_AI_API_KEY');
+        } else if (!llmAdapter) {
+            logger.warn('⚠️ Rozmowa rekrutacyjna AI wyłączona - brak llmAdapter (DI) w konstruktorze');
+        } else {
             logger.success(`✅ Rozmowa rekrutacyjna AI aktywna - model: ${this.model}`);
         }
+    }
+
+    /** Wpis historii w formacie Gemini */
+    _tekst(rola, tresc) {
+        return { role: rola, parts: [{ text: tresc }] };
     }
 
     czyAktywny() {
@@ -161,7 +203,7 @@ class AIInterviewService {
             : '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty. Na sam koniec rozmowy, gdy zbierzesz już wszystko inne, zapytaj jeszcze skąd się o nas dowiedział.';
 
         this.rozmowy.set(userId, {
-            messages: [{ role: 'user', content: otwarcie }],
+            historia: [this._tekst('user', otwarcie)],
             log: [],
             tury: 0,
             zakonczona: false,
@@ -180,7 +222,7 @@ class AIInterviewService {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) return null;
 
-        rozmowa.messages.push({ role: 'user', content: tekst });
+        rozmowa.historia.push(this._tekst('user', tekst));
         rozmowa.log.push({ kto: 'uzytkownik', tekst });
 
         return this.wykonajTure(userId, state);
@@ -194,7 +236,7 @@ class AIInterviewService {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) return null;
 
-        rozmowa.messages.push({ role: 'user', content: `[SYSTEM] ${tekst}` });
+        rozmowa.historia.push(this._tekst('user', `[SYSTEM] ${tekst}`));
         if (wpisDoLogu) rozmowa.log.push({ kto: 'uzytkownik', tekst: wpisDoLogu });
 
         return this.wykonajTure(userId, state);
@@ -223,8 +265,6 @@ class AIInterviewService {
             };
         }
 
-        this._przytnijHistorie(rozmowa);
-
         // ⚠️ Teksty KUMULUJEMY przez całą turę, a nie nadpisujemy przy każdej iteracji.
         // Model zwykle pisze wiadomość do kandydata RAZEM z wywołaniem narzędzia
         // ("Super, wrzuć screena Core Stock" + zapisz_dane), a po tool_result kończy turę
@@ -235,34 +275,44 @@ class AIInterviewService {
 
         for (let iteracja = 0; iteracja < MAKS_ITERACJI_NARZEDZI; iteracja++) {
             const odpowiedz = await this._zapytajModel(rozmowa);
-            rozmowa.messages.push({ role: 'assistant', content: odpowiedz.content });
+            const wywolania = odpowiedz.functionCalls || [];
 
-            teksty.push(...this._wyciagnijTeksty(odpowiedz));
+            // Turę modelu odtwarzamy w historii tak, jak ją oddał: najpierw tekst,
+            // potem wywołania narzędzi. Gemini wymaga, żeby functionResponse odpowiadał
+            // na functionCall stojący w poprzedniej turze modelu
+            const czesciModelu = [];
+            if (odpowiedz.content) czesciModelu.push({ text: odpowiedz.content });
+            for (const wywolanie of wywolania) czesciModelu.push({ functionCall: wywolanie });
+            if (czesciModelu.length > 0) {
+                rozmowa.historia.push({ role: 'model', parts: czesciModelu });
+            }
 
-            if (odpowiedz.stop_reason !== 'tool_use') {
+            if (odpowiedz.content) teksty.push(odpowiedz.content.trim());
+
+            if (wywolania.length === 0) {
                 return this._zwrocOdpowiedz(rozmowa, teksty);
             }
 
-            const wywolania = odpowiedz.content.filter(blok => blok.type === 'tool_use');
-            const wyniki = [];
+            const odpowiedziNarzedzi = [];
             let pozegnanie = null;
 
             for (const wywolanie of wywolania) {
                 const wynik = this._wykonajNarzedzie(userId, wywolanie, state);
-                wyniki.push({
-                    type: 'tool_result',
-                    tool_use_id: wywolanie.id,
-                    content: JSON.stringify(wynik.odpowiedz),
-                    is_error: wynik.blad === true
+                odpowiedziNarzedzi.push({
+                    functionResponse: {
+                        name: wywolanie.name,
+                        // Gemini oczekuje OBIEKTU, nie napisu - inaczej odrzuca turę
+                        response: wynik.odpowiedz,
+                    }
                 });
                 if (wynik.pozegnanie) pozegnanie = wynik.pozegnanie;
             }
 
-            rozmowa.messages.push({ role: 'user', content: wyniki });
+            rozmowa.historia.push({ role: 'user', parts: odpowiedziNarzedzi });
 
             // Wywiad domknięty - nie ma po co pytać modelu jeszcze raz, mamy tekst pożegnania
             if (pozegnanie) {
-                const tekst = [...teksty, pozegnanie].join('\n\n');
+                const tekst = [...teksty, pozegnanie].filter(Boolean).join('\n\n');
                 rozmowa.log.push({ kto: 'bot', tekst });
                 rozmowa.zakonczona = true;
                 return { tekst, zakonczone: true };
@@ -271,13 +321,6 @@ class AIInterviewService {
 
         // Model zapętlił się na narzędziach - oddajemy to, co zdążył napisać
         return this._zwrocOdpowiedz(rozmowa, teksty);
-    }
-
-    _wyciagnijTeksty(odpowiedz) {
-        return odpowiedz.content
-            .filter(blok => blok.type === 'text')
-            .map(blok => blok.text.trim())
-            .filter(Boolean);
     }
 
     /**
@@ -301,63 +344,73 @@ class AIInterviewService {
     }
 
     async _wymuszonaOdpowiedz(rozmowa) {
-        rozmowa.messages.push({
-            role: 'user',
-            content: '[SYSTEM] Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego — bez wywoływania narzędzi.'
-        });
+        rozmowa.historia.push(this._tekst(
+            'user',
+            '[SYSTEM] Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego — bez wywoływania narzędzi.'
+        ));
 
         try {
             const odpowiedz = await this._zapytajModel(rozmowa);
-            rozmowa.messages.push({ role: 'assistant', content: odpowiedz.content });
-            return this._wyciagnijTeksty(odpowiedz).join('\n\n') || null;
+            if (odpowiedz.content) {
+                rozmowa.historia.push(this._tekst('model', odpowiedz.content));
+            }
+            return odpowiedz.content?.trim() || null;
         } catch (error) {
             logger.error(`[AI_WYWIAD] Nie udało się dopytać modelu o wiadomość: ${error.message}`);
             return null;
         }
     }
 
+    /**
+     * Jedno zapytanie do Gemini przez wspólny adapter.
+     *
+     * @returns {Promise<{content: string, functionCalls: Array<{name: string, args: object}>}>}
+     */
     async _zapytajModel(rozmowa) {
-        const zapytanie = {
+        this._przytnijHistorie(rozmowa);
+
+        return this.adapter.generate({
+            provider: 'gemini',
             model: this.model,
-            max_tokens: 4096,
-            // Prefiks (narzędzia + prompt systemowy) jest niezmienny, więc cache'uje się
-            // między turami i między kandydatami
-            system: [{
-                type: 'text',
-                text: PROMPT_SYSTEMOWY,
-                cache_control: { type: 'ephemeral' }
-            }],
-            tools: NARZEDZIA,
-            messages: rozmowa.messages
-        };
-
-        // Niski effort - to zwykła rozmowa, a nie zadanie wymagające głębokiego myślenia.
-        // Myślenia NIE wyłączamy: przy wyłączonym modele potrafią wypisać wywołanie
-        // narzędzia jako zwykły tekst, przez co dane nigdy się nie zapisują
-        if (MODELE_Z_EFFORT.test(this.model)) {
-            zapytanie.output_config = { effort: this.ustawienia.effort || 'low' };
-        }
-
-        return this.client.messages.create(zapytanie);
+            systemInstruction: PROMPT_SYSTEMOWY,
+            contents: rozmowa.historia,
+            tools: NARZEDZIA_GEMINI,
+            maxOutputTokens: MAKS_TOKENOW_ODPOWIEDZI,
+            safetySettings: USTAWIENIA_BEZPIECZENSTWA,
+            meta: {
+                operationType: 'recruitment.interview',
+                step: 'tura',
+                promptName: 'rekruter-wywiad',
+                promptVersion: WERSJA_PROMPTU,
+            },
+        });
     }
 
     /**
      * Przycina historię, pilnując żeby nie urwać jej w środku pary
-     * tool_use / tool_result (API odrzuca taki niesparowany ogon).
+     * functionCall / functionResponse — Gemini odrzuca odpowiedź narzędzia,
+     * której wywołanie nie stoi w poprzedniej turze modelu.
      */
     _przytnijHistorie(rozmowa) {
         const limit = this.ustawienia.historyLimit || 30;
-        if (rozmowa.messages.length <= limit) return;
+        if (rozmowa.historia.length <= limit) return;
 
-        let od = rozmowa.messages.length - limit;
-        while (od > 0 && !this._czyBezpiecznyPoczatek(rozmowa.messages[od])) od++;
-        if (od >= rozmowa.messages.length) return;
+        let od = rozmowa.historia.length - limit;
+        while (od > 0 && !this._czyBezpiecznyPoczatek(rozmowa.historia[od])) od++;
+        if (od >= rozmowa.historia.length) return;
 
-        rozmowa.messages = rozmowa.messages.slice(od);
+        rozmowa.historia = rozmowa.historia.slice(od);
     }
 
-    _czyBezpiecznyPoczatek(wiadomosc) {
-        return wiadomosc.role === 'user' && typeof wiadomosc.content === 'string';
+    /**
+     * Historia może zaczynać się wyłącznie od zwykłej wiadomości kandydata.
+     * Wpis z `functionResponse` też ma rolę `user`, ale bez poprzedzającego
+     * `functionCall` jest dla Gemini niesparowanym ogonem.
+     */
+    _czyBezpiecznyPoczatek(wpis) {
+        return wpis.role === 'user'
+            && Array.isArray(wpis.parts)
+            && wpis.parts.every(czesc => typeof czesc.text === 'string');
     }
 
     /* ---------------------------------------------------------------------- */
@@ -370,8 +423,11 @@ class AIInterviewService {
             return { blad: true, odpowiedz: { blad: 'Brak karty kandydata - rozmowa wygasła.' } };
         }
 
+        // Gemini podaje argumenty wywołania w polu `args`
+        const argumenty = wywolanie.args || {};
+
         if (wywolanie.name === 'zapisz_dane') {
-            return this._zapiszDane(info, wywolanie.input || {}, this._czyPytacOZrodlo(userId));
+            return this._zapiszDane(info, argumenty, this._czyPytacOZrodlo(userId));
         }
 
         if (wywolanie.name === 'zakoncz_wywiad') {
@@ -385,7 +441,7 @@ class AIInterviewService {
                     }
                 };
             }
-            const pozegnanie = (wywolanie.input?.pozegnanie || 'Dzięki! To wszystko, resztą zajmuje się już bot.')
+            const pozegnanie = (argumenty.pozegnanie || 'Dzięki! To wszystko, resztą zajmuje się już bot.')
                 .slice(0, 400);
             logger.info(`[AI_WYWIAD] ✅ Zebrano komplet danych dla ${info.username}`);
             return { odpowiedz: { status: 'zakonczono' }, pozegnanie };
@@ -485,9 +541,9 @@ class AIInterviewService {
         const szukaKlanu = info.purpose !== 'Przyszedłem w innym celu';
 
         // 1. Core Stock - próbujemy tylko dopóki go nie mamy
-        if (szukaKlanu && !info.coreStock && this.apiKey) {
+        if (szukaKlanu && !info.coreStock && this.ocr) {
             try {
-                const wynik = await new AIOCRService(this.config).analyzeCoreStockImage(sciezkaObrazu);
+                const wynik = await this.ocr.analyzeCoreStockImage(sciezkaObrazu);
                 if (wynik.isValid) {
                     info.coreStock = wynik.items;
                     const pozycje = Object.entries(wynik.items)
@@ -530,9 +586,9 @@ class AIInterviewService {
     }
 
     async _odczytajEkwipunek(sciezkaObrazu, userId, state) {
-        if (this.config.ocr.useAI) {
+        if (this.ocr && this.config.ocr.useAI) {
             try {
-                return await new AIOCRService(this.config).analyzeRecruitmentImage(sciezkaObrazu);
+                return await this.ocr.analyzeRecruitmentImage(sciezkaObrazu);
             } catch (error) {
                 logger.warn(`[AI_WYWIAD] AI OCR niedostępny (${error.message}) - fallback na Tesseract`);
             }

@@ -108,12 +108,12 @@ module.exports = {
     // Wyłączona domyślnie - bez tej zmiennej bot działa dokładnie jak dotąd.
     aiInterview: {
         enabled: process.env.REKRUTER_AI_INTERVIEW === 'true',
-        model: process.env.REKRUTER_AI_INTERVIEW_MODEL || 'claude-opus-5',
-        // low wystarcza do prowadzenia rozmowy i mocno skraca czas odpowiedzi
-        effort: process.env.REKRUTER_AI_INTERVIEW_EFFORT || 'low',
+        // Google Gemini - ten sam provider co OCR; osobna zmienna, bo rozmowa może
+        // potrzebować mocniejszego modelu niż odczyt zrzutów ekranu
+        model: process.env.REKRUTER_GOOGLE_AI_INTERVIEW_MODEL || 'gemini-2.5-flash-lite',
         // Bezpiecznik przed rozmową bez końca (jedna tura = jedna wiadomość kandydata)
         maxTurns: parseInt(process.env.REKRUTER_AI_INTERVIEW_MAX_TURNS || '40', 10),
-        // Ile wiadomości trafia do kontekstu modelu
+        // Ile wpisów historii trafia do kontekstu modelu
         historyLimit: parseInt(process.env.REKRUTER_AI_INTERVIEW_HISTORY || '30', 10)
     },
 
@@ -121,8 +121,13 @@ module.exports = {
     ocr: {
         tempDir: path.join(__dirname, '../temp'),
 
-        // AI OCR - używa Anthropic API (Claude Vision) zamiast Tesseract
+        // AI OCR - Google Gemini zamiast Tesseract
         useAI: process.env.USE_AI_OCR === 'true',
+
+        // Klucz wspólny dla OCR i rozmowy rekrutacyjnej; `GOOGLE_AI_API_KEY` jako
+        // wspólny fallback, tak jak w llmAdapter
+        googleAiApiKey: process.env.REKRUTER_GOOGLE_AI_API_KEY || process.env.GOOGLE_AI_API_KEY || null,
+        googleAiModel: process.env.REKRUTER_GOOGLE_AI_MODEL || 'gemini-2.5-flash-lite',
 
         // Zapisywanie przetworzonych obrazów
         saveProcessedImages: false,

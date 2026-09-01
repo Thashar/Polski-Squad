@@ -2,7 +2,7 @@
 
 > ### ⚠️ SILNIK OCR NA PRODUKCJI: WYŁĄCZNIE AI — NIE TESSERACT
 >
-> **Na serwerze produkcyjnym cały OCR obsługuje AI (`Anthropic Claude Vision`). Tesseract NIE jest używany.**
+> **Na serwerze produkcyjnym cały OCR obsługuje AI (`Google Gemini`). Tesseract NIE jest używany.**
 >
 > Skąd bierze się pomyłka: kod Tesseract nadal istnieje w `services/ocrService.js` (jest tam
 > `require('tesseract.js')`) jako ścieżka zapasowa, a przełącznik `USE_AI_OCR` domyślnie jest
@@ -61,7 +61,7 @@ wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283
 
 Alternatywa dla ankiety z przyciskami: zamiast sztywnych kroków kandydat prowadzi **swobodną rozmowę
 z rekruterem-AI**, który po drodze wyciąga te same dane. Przełącznik jest niezależny — bez
-`REKRUTER_AI_INTERVIEW=true` (albo bez `ANTHROPIC_API_KEY`) bot działa dokładnie jak dotąd, cała
+`REKRUTER_AI_INTERVIEW=true` (albo bez `REKRUTER_GOOGLE_AI_API_KEY`) bot działa dokładnie jak dotąd, cała
 klasyczna ścieżka zostaje nietknięta w kodzie.
 
 **Plik:** `services/aiInterviewService.js`
@@ -95,11 +95,17 @@ podsumowania jako pole **📣 Skąd o nas wie**.
 przyjmuje wyłącznie cel, punkty i źródło. Gdyby AI mogło zapisać nick albo atak z tekstu, kandydat
 podałby dowolne wartości i ominął OCR.
 
-**Narzędzia (tool use):**
+**Narzędzia (function calling Gemini — `functionDeclarations`):**
 - `zapisz_dane` — cel / punkty / źródło; waliduje zakresy po stronie bota i **zwraca modelowi listę
   tego, czego jeszcze brakuje** (dzięki temu model wie, o co pytać dalej, bez dopisywania stanu do promptu)
 - `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
   czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"
+- ⚠️ **Typy w schemacie pisane WIELKIMI literami** (`OBJECT`, `STRING`, `INTEGER`) — tego oczekuje Gemini.
+  Zakresy wartości opisujemy słownie, a twardą walidację robi bot (`_zapiszDane`): model potrafi minąć się
+  z opisem, więc granice sprawdzamy u siebie
+- ⚠️ **`functionResponse.response` musi być OBIEKTEM**, nie napisem — Gemini odrzuca turę z napisem
+- ⚠️ **Przycinanie historii nie może rozerwać pary `functionCall`/`functionResponse`** — `_przytnijHistorie`
+  odcina zawsze do zwykłej wiadomości kandydata (`_czyBezpiecznyPoczatek`)
 
 **Rozpoznawanie zdjęć bez pytania modelu:** typ screena wynika z tego, czego brakuje —
 najpierw próba Core Stock (jeśli kandydat szuka klanu i jeszcze go nie ma), potem ekran postaci.
@@ -108,15 +114,16 @@ zostaje w `temp/` (`ai_<timestamp>_<userId>.png`, trafia do embeda podsumowania)
 jest kasowane od razu po odczycie.
 
 **Ustawienia zapytania do API:**
-- Model domyślnie `claude-opus-5`, nadpisywalny przez `REKRUTER_AI_INTERVIEW_MODEL`
-- `output_config.effort` (domyślnie `low`) wysyłany **tylko dla modeli, które go obsługują** — starsze
-  (np. `claude-3-haiku`) odrzuciłyby to błędem 400
-- **Myślenie zostaje włączone.** Przy wyłączonym modele potrafią wypisać wywołanie narzędzia jako
-  zwykły tekst — tura kończy się „sukcesem", a dane nigdy się nie zapisują. Kosztem sterujemy
-  poziomem `effort`, nie wyłączaniem myślenia
-- Brak `temperature` — nowsze modele odrzucają ten parametr
-- **Prompt caching:** prompt systemowy i definicje narzędzi są niezmienne i oznaczone
-  `cache_control: ephemeral`, więc prefiks cache'uje się między turami i między kandydatami
+- **Provider: Google Gemini przez wspólny `utils/llmAdapter.js`** — ten sam wrapper co OCR w Stalkerze,
+  EndersEcho i Kontrolerze, więc każda tura rozmowy jest osobnym spanem w Langfuse
+  (`operation.type = recruitment.interview`, `llm.prompt.name = rekruter-wywiad`)
+- Model domyślnie `gemini-2.5-flash-lite`, nadpisywalny przez `REKRUTER_GOOGLE_AI_INTERVIEW_MODEL`
+  (osobna zmienna od OCR — rozmowa może potrzebować mocniejszego modelu niż odczyt zrzutów)
+- **Filtry bezpieczeństwa wyłączone** (`BLOCK_NONE` na wszystkich czterech kategoriach) — tak samo jak
+  w OCR pozostałych botów. Gracze piszą, jak piszą, a zablokowana odpowiedź zrywałaby rekrutację w połowie
+- `maxOutputTokens` 1024 na turę — rozmowa ma być krótka, a wywołania narzędzi nie potrzebują miejsca
+- **Bez `temperature`** — rozmowa ma brzmieć naturalnie, więc zostaje domyślna wartość Gemini
+  (OCR jest odwrotnie: tam jawne `temperature: 0`)
 
 **Bezpieczniki:**
 - **Teksty z całej tury są kumulowane, nie nadpisywane.** Model zwykle pisze wiadomość do kandydata
@@ -197,18 +204,24 @@ od nowa przyciskiem na kanale. Mapa jest podpięta pod `uruchomSprzatanieRekruta
 - Brak pliku lub brak wpisu dla guildId → Clan0 z ostrzeżeniem w logu
 
 **OCR - Dwa tryby (zdjęcie postaci):**
+
+⚠️ **Serwis AI OCR powstaje RAZ, w `index.js`, i jedzie przez `sharedState.aiOcrService`.** Wcześniej
+każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR aktywny" w logu).
+
 1. **Tradycyjny:** `services/ocrService.js` - Tesseract (PL+EN), preprocessing Sharp, ekstrakcja nick+atak
-2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Anthropic API (Claude Vision), dwuetapowa analiza przez AI
+2. **AI OCR (opcjonalny):** `services/aiOcrService.js` - Google Gemini przez `utils/llmAdapter.js`, dwuetapowa analiza przez AI
    - Włączany przez `USE_AI_OCR=true` w .env
-   - Używa tego samego modelu co Stalker AI Chat (domyślnie: Claude 3 Haiku)
+   - Model z `REKRUTER_GOOGLE_AI_MODEL` (domyślnie `gemini-2.5-flash-lite`), `temperature: 0` dla powtarzalności odczytu
+   - Ponowienie 3× co 3 s przy błędach przejściowych (429/500/503, zerwane połączenie). **Odrzucenie przez filtr
+     treści (`semantic`) NIE jest ponawiane** — powtórzy się tak samo, więc nie ma po co czekać
    - Dwuetapowa walidacja (dwa osobne requesty do API):
-     - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (50 tokenów)
+     - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (200 tokenów)
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
-     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (500 tokenów)
+     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (800 tokenów)
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
 
 **Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`
-   - Wymagany `ANTHROPIC_API_KEY` (niezależnie od `USE_AI_OCR`)
+   - Wymagany `REKRUTER_GOOGLE_AI_API_KEY` (niezależnie od `USE_AI_OCR` — Core Stock nie ma ścieżki zapasowej na Tesseract)
    - Prompt AI wyciąga JSON `{"Relic Core": N, "Transmute Core": N, ...}` (6 typów)
    - Walidacja: tylko dozwolone nazwy przedmiotów, wartości >= 0
    - Błędy: `NOT_CORE_STOCK` (złe zdjęcie), `NO_ITEMS_FOUND`, `NO_JSON_IN_RESPONSE`
@@ -225,7 +238,7 @@ od nowa przyciskiem na kanale. Mapa jest podpięta pod `uruchomSprzatanieRekruta
 **Komendy:** `/ocr-debug`, `/nick`, `/powiadomienia [uzytkownik]`
 - `/powiadomienia` - tylko admin, globalny toggle (włącza/wyłącza dla WSZYSTKICH)
 - `/powiadomienia uzytkownik:@user` - tylko admin, toggle dla konkretnego użytkownika
-**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), ANTHROPIC_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
+**Env:** TOKEN, kanały (RECRUITMENT, CLAN0-2, MAIN_CLAN, WELCOME), role (CLAN0-2, MAIN_CLAN, VERIFIED, NOT_POLISH), USE_AI_OCR (opcjonalne), REKRUTER_GOOGLE_AI_API_KEY (opcjonalne), ROBOT (opcjonalne, lista user ID rozdzielona przecinkami)
 
 **Przekazywanie wiadomości (Robot2):**
 - Użytkownicy z ID w `ROBOT` mogą pisać priv do bota, a wiadomości są przekazywane 1:1 na kanał z env `ROBOT2_FORWARD_CHANNEL`
@@ -260,15 +273,14 @@ MAIN_CLAN_ROLE=role_id
 
 # AI OCR (opcjonalne)
 USE_AI_OCR=false
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
-ANTHROPIC_MODEL=claude-3-haiku-20240307
+REKRUTER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx   # fallback: GOOGLE_AI_API_KEY
+REKRUTER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite    # model OCR zdjęć
 
 # Rozmowa rekrutacyjna z AI (opcjonalne, niezależne od USE_AI_OCR)
 # true = po kliknięciu "Oczywiście, że tak!" startuje swobodna rozmowa zamiast ankiety z przyciskami
-# Wymaga ANTHROPIC_API_KEY - bez niego tryb sam się wyłącza z ostrzeżeniem w logu
+# Wymaga REKRUTER_GOOGLE_AI_API_KEY - bez niego tryb sam się wyłącza z ostrzeżeniem w logu
 REKRUTER_AI_INTERVIEW=false
-REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5   # domyślnie claude-opus-5
-REKRUTER_AI_INTERVIEW_EFFORT=low            # low | medium | high (tylko modele 4.5+)
+REKRUTER_GOOGLE_AI_INTERVIEW_MODEL=gemini-2.5-flash-lite   # model prowadzący rozmowę
 REKRUTER_AI_INTERVIEW_MAX_TURNS=40          # limit wiadomości kandydata w jednej rozmowie
 REKRUTER_AI_INTERVIEW_HISTORY=30            # ile wiadomości trafia do kontekstu modelu
 

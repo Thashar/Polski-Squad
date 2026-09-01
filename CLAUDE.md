@@ -771,6 +771,9 @@ Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i re
 > Cztery boty robią OCR (**Stalker**, **EndersEcho**, **Kontroler**, **Rekruter**) i **wszystkie
 > na produkcji używają wyłącznie modeli AI** (Gemini Vision / Claude Vision). Tesseract nie jest używany.
 >
+> W Rekruterze na Gemini jedzie zarówno OCR, jak i rozmowa rekrutacyjna — Anthropic nie jest tam
+> używany w ogóle (pozostałe boty z AI Chatem nadal korzystają z Anthropic).
+>
 > **Dlaczego łatwo się pomylić:** w Stalkerze, EndersEcho i Rekruterze `services/ocrService.js` nadal
 > zawiera `require('tesseract.js')` jako ścieżkę zapasową, a przełączniki (`USE_STALKER_AI_OCR`,
 > `USE_ENDERSECHO_AI_OCR`, `USE_AI_OCR`) są domyślnie **wyłączone** i lokalny `.env` ich nie ustawia.
@@ -781,7 +784,7 @@ Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i re
 
 **Każdy bot ma własną szczegółową dokumentację:**
 
-1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + AI), kwalifikacja klanów, opcjonalna rozmowa rekrutacyjna z AI (`REKRUTER_AI_INTERVIEW`)
+1. **[Rekruter Bot](Rekruter/CLAUDE.md)** - System rekrutacji z OCR (Tesseract + Gemini), kwalifikacja klanów, opcjonalna rozmowa rekrutacyjna z AI na Gemini (`REKRUTER_AI_INTERVIEW`)
 2. **[Szkolenia Bot](Szkolenia/CLAUDE.md)** - Wątki treningowe z przypomnieniami, auto-zamykanie po 7 dniach
 3. **[Stalker Bot](Stalker/CLAUDE.md)** - 8 systemów (kary OCR, punkty, urlopy, dekoder, fazy, AI Chat, broadcast, tracking)
 4. **[Muteusz Bot](Muteusz/CLAUDE.md)** - Auto-moderacja, cache mediów, zarządzanie rolami, chaos mode
@@ -863,14 +866,13 @@ CLAN1_ROLE=role_id
 CLAN2_ROLE=role_id
 MAIN_CLAN_ROLE=role_id
 WAITING_ROOM_CHANNEL=poczekalnia
-# AI OCR (opcjonalne)
+# AI OCR Google Gemini (opcjonalne) — klucz wspólny dla OCR i rozmowy rekrutacyjnej
 USE_AI_OCR=false
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxxxxxxxxxx
-ANTHROPIC_MODEL=claude-3-haiku-20240307
+REKRUTER_GOOGLE_AI_API_KEY=AIzaSy-xxxxxxxxxxxxx   # fallback: GOOGLE_AI_API_KEY
+REKRUTER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 # Rozmowa rekrutacyjna prowadzona przez AI zamiast ankiety z przyciskami (opcjonalne)
 REKRUTER_AI_INTERVIEW=false
-REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5
-REKRUTER_AI_INTERVIEW_EFFORT=low
+REKRUTER_GOOGLE_AI_INTERVIEW_MODEL=gemini-2.5-flash-lite
 REKRUTER_AI_INTERVIEW_MAX_TURNS=40
 REKRUTER_AI_INTERVIEW_HISTORY=30
 # Archiwum rozmów rekrutacyjnych — pełny zapis ze zdjęciami na osobnym kanale (opcjonalne,
