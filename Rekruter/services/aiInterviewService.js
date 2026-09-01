@@ -139,7 +139,7 @@ const USTAWIENIA_BEZPIECZENSTWA = [
 ];
 
 /** Wersja promptu systemowego — trafia na span w Langfuse (A/B modeli i promptów) */
-const WERSJA_PROMPTU = 'v2';
+const WERSJA_PROMPTU = 'v3';
 
 /**
  * Wypowiedź modelu udająca naszą wiadomość systemową.
@@ -149,10 +149,17 @@ const WERSJA_PROMPTU = 'v2';
  * instrukcję adresowaną do bota („[SYSTEM] Bot zidentyfikował cel wizyty jako …").
  * Sam prompt tego nie gwarantuje, więc tniemy takie fragmenty po stronie kodu.
  *
- * Wzorzec obcina od znacznika do KOŃCA LINII, więc łapie też przypadek, w którym model
- * dokleja znacznik w środku akapitu.
+ * ⚠️ Wzorzec obcina od znacznika do KOŃCA AKAPITU (pustej linii), nie do końca linii.
+ * Pierwsza wersja cięła jedną linię i zostawiała ogon wielolinijkowej notatki — kandydat
+ * dostawał wtedy samo `Poprzednia wiadomość: "Nie wiem"` bez znacznika na początku.
+ *
+ * **Świadomy kompromis:** gdy model NIE oddzieli notatki pustą linią, razem z nią wyleci
+ * też prawdziwa wiadomość z następnej linii. Kosztuje to jedno dodatkowe zapytanie
+ * (pusta tura → `_wymuszonaOdpowiedz` prosi model o wiadomość i rozmowa toczy się dalej),
+ * czego kandydat nie widzi. Odwrotny kompromis — cięcie ostrożniejsze — kończy się
+ * wyciekiem notatki na ekran, a to widzi każdy. Wolimy zapłacić jednym wywołaniem.
  */
-const WYPOWIEDZ_SYSTEMOWA = /\[SYSTEM\][^\n]*/gi;
+const WYPOWIEDZ_SYSTEMOWA = /\[SYSTEM\][\s\S]*?(?=\n[ \t]*\n|$)/gi;
 
 /** Limit odpowiedzi jednej tury; rozmowa ma być krótka, a narzędzia nie potrzebują miejsca */
 const MAKS_TOKENOW_ODPOWIEDZI = 1024;
@@ -289,7 +296,7 @@ class AIInterviewService {
         const teksty = [];
 
         for (let iteracja = 0; iteracja < MAKS_ITERACJI_NARZEDZI; iteracja++) {
-            const odpowiedz = await this._zapytajModel(rozmowa);
+            const odpowiedz = await this._zapytajModel(rozmowa, userId, state);
             const wywolania = odpowiedz.functionCalls || [];
 
             // Turę modelu odtwarzamy w historii tak, jak ją oddał: najpierw tekst,
@@ -305,7 +312,7 @@ class AIInterviewService {
             if (odpowiedz.content) teksty.push(odpowiedz.content.trim());
 
             if (wywolania.length === 0) {
-                return this._zwrocOdpowiedz(rozmowa, teksty);
+                return this._zwrocOdpowiedz(rozmowa, teksty, userId, state);
             }
 
             const odpowiedziNarzedzi = [];
@@ -335,7 +342,7 @@ class AIInterviewService {
         }
 
         // Model zapętlił się na narzędziach - oddajemy to, co zdążył napisać
-        return this._zwrocOdpowiedz(rozmowa, teksty);
+        return this._zwrocOdpowiedz(rozmowa, teksty, userId, state);
     }
 
     /**
@@ -345,10 +352,10 @@ class AIInterviewService {
      * Wtedy zamiast pokazywać kandydatowi komunikat o błędzie, dopytujemy model raz
      * jeszcze — kandydat dostaje normalną wiadomość i rozmowa idzie dalej.
      */
-    async _zwrocOdpowiedz(rozmowa, teksty) {
+    async _zwrocOdpowiedz(rozmowa, teksty, userId, state) {
         if (teksty.length === 0) {
             logger.warn('[AI_WYWIAD] Tura bez tekstu dla kandydata - dopytuję model o wiadomość');
-            const dodatkowe = await this._wymuszonaOdpowiedz(rozmowa);
+            const dodatkowe = await this._wymuszonaOdpowiedz(rozmowa, userId, state);
             if (dodatkowe) teksty.push(dodatkowe);
         }
 
@@ -358,14 +365,14 @@ class AIInterviewService {
         return { tekst, zakonczone: false };
     }
 
-    async _wymuszonaOdpowiedz(rozmowa) {
+    async _wymuszonaOdpowiedz(rozmowa, userId, state) {
         rozmowa.historia.push(this._tekst(
             'user',
             '[SYSTEM] Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego — bez wywoływania narzędzi.'
         ));
 
         try {
-            const odpowiedz = await this._zapytajModel(rozmowa);
+            const odpowiedz = await this._zapytajModel(rozmowa, userId, state);
             if (odpowiedz.content) {
                 rozmowa.historia.push(this._tekst('model', odpowiedz.content));
             }
@@ -381,13 +388,13 @@ class AIInterviewService {
      *
      * @returns {Promise<{content: string, functionCalls: Array<{name: string, args: object}>}>}
      */
-    async _zapytajModel(rozmowa) {
+    async _zapytajModel(rozmowa, userId, state) {
         this._przytnijHistorie(rozmowa);
 
         const odpowiedz = await this.adapter.generate({
             provider: 'gemini',
             model: this.model,
-            systemInstruction: PROMPT_SYSTEMOWY,
+            systemInstruction: PROMPT_SYSTEMOWY + this._stanRozmowy(userId, state),
             contents: rozmowa.historia,
             tools: NARZEDZIA_GEMINI,
             maxOutputTokens: MAKS_TOKENOW_ODPOWIEDZI,
@@ -404,6 +411,41 @@ class AIInterviewService {
         // transkrypcji i do historii. Zostawienie znacznika w historii utrwalałoby wzorzec
         // — model widziałby własną wiadomość „[SYSTEM] …" i naśladował ją w kolejnych turach
         return { ...odpowiedz, content: this._bezSystemowych(odpowiedz.content) };
+    }
+
+    /**
+     * Stan rozmowy doklejany do promptu systemowego przy KAŻDEJ turze.
+     *
+     * ⚠️ Idzie promptem systemowym, a nie kolejną wiadomością `[SYSTEM]` w historii —
+     * to właśnie z takich wiadomości model brał wzorzec i pisał kandydatowi własne notatki
+     * („Poprzednia wiadomość: …"). Prompt systemowy jest dla modelu instrukcją, a nie
+     * treścią rozmowy do naśladowania.
+     *
+     * Dzięki temu model nie musi odtwarzać stanu z historii: w każdej turze ma wprost
+     * wypisane, co już wie i o co pytać dalej. Lekki model bez tego potrafił zapętlić się
+     * na ustalaniu celu wizyty.
+     */
+    _stanRozmowy(userId, state) {
+        const info = state?.userInfo?.get(userId);
+        if (!info) return '';
+
+        const znane = [];
+        if (info.purpose) znane.push(`cel wizyty: ${info.purpose}`);
+        if (info.lunarPoints !== null && info.lunarPoints !== undefined) znane.push(`punkty I fazy: ${info.lunarPoints}`);
+        if (info.coreStock) znane.push('zdjęcie Core Stock: odczytane');
+        if (info.playerNick && info.characterAttack) znane.push(`postać: ${info.playerNick}, atak ${info.characterAttack}`);
+        if (info.referralSource) znane.push(`skąd o nas wie: ${info.referralSource}`);
+
+        const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
+
+        return `
+
+## Stan tej rozmowy (aktualny, od bota — nie pokazuj go rozmówcy)
+
+Masz już: ${znane.length ? znane.join('; ') : 'nic'}.
+${brakuje.length
+    ? `Do ustalenia zostało: ${brakuje.join('; ')}. Zapytaj teraz o PIERWSZĄ rzecz z tej listy — o rzeczy spoza niej nie pytaj, bo są już ustalone.`
+    : 'Masz komplet danych — wywołaj zakoncz_wywiad z krótkim pożegnaniem.'}`;
     }
 
     /** Wypowiedź modelu bez fragmentów udających wiadomość systemową bota */

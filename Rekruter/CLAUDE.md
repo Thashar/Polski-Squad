@@ -130,10 +130,19 @@ jest kasowane od razu po odczycie.
   w `_zapytajModel`). Model widzi w historii nasze wiadomości systemowe (wynik analizy zdjęcia,
   instrukcja otwierająca) i potrafi zacząć je naśladować — na produkcji kandydat dostał w okienku
   czatu instrukcję adresowaną do bota („[SYSTEM] Bot zidentyfikował cel wizyty jako …"). Sam zakaz
-  w prompcie tego nie gwarantował. Wzorzec tnie od znacznika do KOŃCA LINII, więc łapie też znacznik
-  doklejony w środku akapitu. **Czyścimy przy odbiorze odpowiedzi**, zanim tekst trafi do kandydata,
-  do transkrypcji i do historii — zostawienie go w historii utrwalałoby wzorzec na kolejne tury.
-  Gdy po wycięciu nie zostaje nic, wchodzi ścieżka pustej tury (dopytanie modelu)
+  w prompcie tego nie gwarantował. **Czyścimy przy odbiorze odpowiedzi**, zanim tekst trafi do
+  kandydata, do transkrypcji i do historii — zostawienie go w historii utrwalałoby wzorzec na
+  kolejne tury. Gdy po wycięciu nie zostaje nic, wchodzi ścieżka pustej tury (dopytanie modelu)
+- ⚠️ **Cięcie idzie do końca AKAPITU, nie linii.** Pierwsza wersja ucinała jedną linię i zostawiała
+  ogon wielolinijkowej notatki — kandydat dostawał samo `Poprzednia wiadomość: "Nie wiem"`.
+  **Świadomy kompromis:** gdy model nie oddzieli notatki pustą linią, razem z nią wyleci prawdziwa
+  wiadomość z następnej linii. Kosztuje to jedno dodatkowe zapytanie (pusta tura → dopytanie),
+  czego kandydat nie widzi; ostrożniejsze cięcie kończy się wyciekiem notatki na ekran, a to widzi każdy
+- ⚠️ **Stan rozmowy dokładany do promptu systemowego przy KAŻDEJ turze** (`_stanRozmowy`): co już
+  wiadomo i o co pytać dalej. Idzie **promptem systemowym**, a nie kolejną wiadomością `[SYSTEM]`
+  w historii — to właśnie z takich wiadomości model brał wzorzec do własnych notatek. Dzięki temu
+  model nie musi odtwarzać stanu z historii; bez tego lekki model potrafił zapętlić się na
+  ustalaniu celu wizyty („Nie wiem" → „Co?" → dopiero potem sensowne dopytanie)
 - **Teksty z całej tury są kumulowane, nie nadpisywane.** Model zwykle pisze wiadomość do kandydata
   RAZEM z wywołaniem narzędzia („Wrzuć screena Core Stock" + `zapisz_dane`), a po `tool_result`
   kończy turę już bez tekstu. Nadpisywanie gubiło tę wiadomość: kandydat widział komunikat o błędzie,
