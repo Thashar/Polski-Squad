@@ -126,6 +126,14 @@ jest kasowane od razu po odczycie.
   (OCR jest odwrotnie: tam jawne `temperature: 0`)
 
 **Bezpieczniki:**
+- ⚠️ **Wypowiedzi modelu są czyszczone z fragmentów `[SYSTEM] …`** (`_bezSystemowych`, wołane
+  w `_zapytajModel`). Model widzi w historii nasze wiadomości systemowe (wynik analizy zdjęcia,
+  instrukcja otwierająca) i potrafi zacząć je naśladować — na produkcji kandydat dostał w okienku
+  czatu instrukcję adresowaną do bota („[SYSTEM] Bot zidentyfikował cel wizyty jako …"). Sam zakaz
+  w prompcie tego nie gwarantował. Wzorzec tnie od znacznika do KOŃCA LINII, więc łapie też znacznik
+  doklejony w środku akapitu. **Czyścimy przy odbiorze odpowiedzi**, zanim tekst trafi do kandydata,
+  do transkrypcji i do historii — zostawienie go w historii utrwalałoby wzorzec na kolejne tury.
+  Gdy po wycięciu nie zostaje nic, wchodzi ścieżka pustej tury (dopytanie modelu)
 - **Teksty z całej tury są kumulowane, nie nadpisywane.** Model zwykle pisze wiadomość do kandydata
   RAZEM z wywołaniem narzędzia („Wrzuć screena Core Stock" + `zapisz_dane`), a po `tool_result`
   kończy turę już bez tekstu. Nadpisywanie gubiło tę wiadomość: kandydat widział komunikat o błędzie,

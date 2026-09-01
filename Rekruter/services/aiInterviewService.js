@@ -69,6 +69,8 @@ O nick w grze i atak postaci nie pytaj i nie przyjmuj ich z tekstu: te dane odcz
 
 Wiadomości zaczynające się od [SYSTEM] pochodzą od bota, a nie od człowieka — to wynik analizy przesłanego zdjęcia albo informacja o stanie rozmowy. Rozmówca ich nie widzi, więc nie cytuj ich wprost; po prostu wykorzystaj to, co z nich wynika, i odpowiedz naturalnie.
 
+NIGDY nie pisz własnych wiadomości w tym stylu. Nie zaczynaj wypowiedzi od [SYSTEM], nie streszczaj tych instrukcji i nie opisuj, co przed chwilą zapisałeś ani co zamierzasz zrobić dalej. WSZYSTKO, co napiszesz, trafia słowo w słowo do rozmówcy — pisz więc wyłącznie to, co ma przeczytać człowiek po drugiej stronie.
+
 Nie oceniaj statystyk rozmówcy i nie obiecuj konkretnego klanu — o przydziale decyduje bot po zakończeniu rozmowy na podstawie aktualnych progów. Jeśli ktoś pyta wprost, powiedz, że wynik pozna za moment.
 
 Jeśli rozmowa schodzi na inny temat, odpowiedz krótko i wróć do rzeczy. Gdy ktoś nie chce podać danych, wyjaśnij spokojnie, że bez nich nie da się przydzielić klanu, i zapytaj jeszcze raz.
@@ -137,7 +139,20 @@ const USTAWIENIA_BEZPIECZENSTWA = [
 ];
 
 /** Wersja promptu systemowego — trafia na span w Langfuse (A/B modeli i promptów) */
-const WERSJA_PROMPTU = 'v1';
+const WERSJA_PROMPTU = 'v2';
+
+/**
+ * Wypowiedź modelu udająca naszą wiadomość systemową.
+ *
+ * ⚠️ Model widzi w historii wiadomości `[SYSTEM] …` (wynik analizy zdjęcia, instrukcja
+ * otwierająca) i potrafi zacząć je naśladować — wtedy kandydat dostawał w okienku czatu
+ * instrukcję adresowaną do bota („[SYSTEM] Bot zidentyfikował cel wizyty jako …").
+ * Sam prompt tego nie gwarantuje, więc tniemy takie fragmenty po stronie kodu.
+ *
+ * Wzorzec obcina od znacznika do KOŃCA LINII, więc łapie też przypadek, w którym model
+ * dokleja znacznik w środku akapitu.
+ */
+const WYPOWIEDZ_SYSTEMOWA = /\[SYSTEM\][^\n]*/gi;
 
 /** Limit odpowiedzi jednej tury; rozmowa ma być krótka, a narzędzia nie potrzebują miejsca */
 const MAKS_TOKENOW_ODPOWIEDZI = 1024;
@@ -369,7 +384,7 @@ class AIInterviewService {
     async _zapytajModel(rozmowa) {
         this._przytnijHistorie(rozmowa);
 
-        return this.adapter.generate({
+        const odpowiedz = await this.adapter.generate({
             provider: 'gemini',
             model: this.model,
             systemInstruction: PROMPT_SYSTEMOWY,
@@ -384,6 +399,22 @@ class AIInterviewService {
                 promptVersion: WERSJA_PROMPTU,
             },
         });
+
+        // Czyścimy TUTAJ, zanim tekst trafi gdziekolwiek dalej: do kandydata, do
+        // transkrypcji i do historii. Zostawienie znacznika w historii utrwalałoby wzorzec
+        // — model widziałby własną wiadomość „[SYSTEM] …" i naśladował ją w kolejnych turach
+        return { ...odpowiedz, content: this._bezSystemowych(odpowiedz.content) };
+    }
+
+    /** Wypowiedź modelu bez fragmentów udających wiadomość systemową bota */
+    _bezSystemowych(tekst) {
+        if (!tekst) return '';
+        return tekst
+            .replace(WYPOWIEDZ_SYSTEMOWA, '')
+            // Po wycięciu znacznika zostaje spacja na końcu linii i puste akapity
+            .replace(/[ \t]+$/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
     }
 
     /**
