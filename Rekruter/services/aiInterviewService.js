@@ -75,6 +75,8 @@ Nie oceniaj statystyk rozmówcy i nie obiecuj konkretnego klanu — o przydziale
 
 Jeśli rozmowa schodzi na inny temat, odpowiedz krótko i wróć do rzeczy. Gdy ktoś nie chce podać danych, wyjaśnij spokojnie, że bez nich nie da się przydzielić klanu, i zapytaj jeszcze raz.
 
+Za każdym razem, gdy wiadomość rozmówcy nie posuwa rekrutacji do przodu — zmienia temat, jest żartem, prowokacją albo uporczywym unikaniem odpowiedzi — wywołaj narzędzie oznacz_odbieganie i zastosuj instrukcję, którą dostaniesz w odpowiedzi. Pytania o samą rekrutację i o grę (gdzie znaleźć dany ekran, co to za statystyka) NIE są odbieganiem od tematu — na nie po prostu odpowiadaj.
+
 Gdy masz komplet danych, wywołaj zakoncz_wywiad z krótkim, ciepłym pożegnaniem.`;
 
 /**
@@ -102,6 +104,20 @@ const NARZEDZIA = [
                 skadWiesz: {
                     type: 'STRING',
                     description: 'Skąd kandydat dowiedział się o serwerze - krótko, kilka słów, własnymi słowami na podstawie jego odpowiedzi.'
+                }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'oznacz_odbieganie',
+        description: 'Wywołaj, gdy ostatnia wiadomość rozmówcy NIE posuwa rekrutacji do przodu: zmienia temat, żartuje, prowokuje albo uparcie nie odpowiada na zadane pytanie. NIE wywołuj, gdy ktoś dopytuje o coś związanego z rekrutacją albo z grą — pytanie o to, gdzie znaleźć dany ekran, jest normalną częścią rozmowy. W odpowiedzi dostaniesz instrukcję, jak zareagować; zastosuj ją dokładnie.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                powod: {
+                    type: 'STRING',
+                    description: 'Czego dotyczyła wiadomość rozmówcy - jedno krótkie zdanie, do logu bota.'
                 }
             },
             required: []
@@ -139,7 +155,7 @@ const USTAWIENIA_BEZPIECZENSTWA = [
 ];
 
 /** Wersja promptu systemowego — trafia na span w Langfuse (A/B modeli i promptów) */
-const WERSJA_PROMPTU = 'v3';
+const WERSJA_PROMPTU = 'v4';
 
 /**
  * Wypowiedź modelu udająca naszą wiadomość systemową.
@@ -160,6 +176,16 @@ const WERSJA_PROMPTU = 'v3';
  * wyciekiem notatki na ekran, a to widzi każdy. Wolimy zapłacić jednym wywołaniem.
  */
 const WYPOWIEDZ_SYSTEMOWA = /\[SYSTEM\][\s\S]*?(?=\n[ \t]*\n|$)/gi;
+
+/**
+ * Odbieganie od tematu: przy którym z rzędu bot upomina, a przy którym kończy rozmowę.
+ *
+ * ⚠️ Liczą się odbiegnięcia POD RZĄD. Gdy rozmowa ruszy do przodu (zapisane dane albo
+ * odczytane zdjęcie), licznik wraca do zera — karzemy uporczywe zmienianie tematu,
+ * nie jeden żart po drodze.
+ */
+const UPOMNIENIE_PRZY = 2;
+const KONIEC_PRZY = 3;
 
 /** Limit odpowiedzi jednej tury; rozmowa ma być krótka, a narzędzia nie potrzebują miejsca */
 const MAKS_TOKENOW_ODPOWIEDZI = 1024;
@@ -229,6 +255,8 @@ class AIInterviewService {
             log: [],
             tury: 0,
             zakonczona: false,
+            // Odbiegnięcia od tematu POD RZĄD - zerowane przy każdym postępie rozmowy
+            odbiegniecia: 0,
             // O źródło pytamy tylko przy rekrutacji od zera - osoba klikająca przycisk
             // „Chcę dołączyć do klanu” jest na serwerze od dawna, więc pytanie nie ma sensu
             pytajOZrodlo: opcje.celUstalony !== true
@@ -362,6 +390,14 @@ class AIInterviewService {
         const tekst = teksty.join('\n\n')
             || 'Napisz proszę jeszcze raz — coś mi się zacięło.';
         rozmowa.log.push({ kto: 'bot', tekst });
+
+        // Trzecie odbiegnięcie z rzędu - pokazujemy pożegnanie modelu i zamykamy rozmowę.
+        // `powod` rozróżnia to od przerwania limitem tur: tylko za off-topic rośnie
+        // trwały licznik, po którym kandydat wylatuje z serwera
+        if (rozmowa.przerwacOffTopic) {
+            return { tekst, zakonczone: false, przerwane: true, powod: 'off_topic' };
+        }
+
         return { tekst, zakonczone: false };
     }
 
@@ -438,11 +474,16 @@ class AIInterviewService {
 
         const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
 
+        const odbiegniecia = this.rozmowy.get(userId)?.odbiegniecia || 0;
+        const ostrzezenie = odbiegniecia > 0
+            ? `\nWiadomości nie na temat pod rząd: ${odbiegniecia} (przy ${KONIEC_PRZY} rozmowa zostaje zamknięta).`
+            : '';
+
         return `
 
 ## Stan tej rozmowy (aktualny, od bota — nie pokazuj go rozmówcy)
 
-Masz już: ${znane.length ? znane.join('; ') : 'nic'}.
+Masz już: ${znane.length ? znane.join('; ') : 'nic'}.${ostrzezenie}
 ${brakuje.length
     ? `Do ustalenia zostało: ${brakuje.join('; ')}. Zapytaj teraz o PIERWSZĄ rzecz z tej listy — o rzeczy spoza niej nie pytaj, bo są już ustalone.`
     : 'Masz komplet danych — wywołaj zakoncz_wywiad z krótkim pożegnaniem.'}`;
@@ -500,7 +541,14 @@ ${brakuje.length
         const argumenty = wywolanie.args || {};
 
         if (wywolanie.name === 'zapisz_dane') {
-            return this._zapiszDane(info, argumenty, this._czyPytacOZrodlo(userId));
+            const wynik = this._zapiszDane(info, argumenty, this._czyPytacOZrodlo(userId));
+            // Cokolwiek udało się zapisać = rozmowa ruszyła do przodu
+            if (wynik.odpowiedz?.zapisano?.length > 0) this.wyzerujOdbiegania(userId);
+            return wynik;
+        }
+
+        if (wywolanie.name === 'oznacz_odbieganie') {
+            return this._oznaczOdbieganie(userId, info, argumenty);
         }
 
         if (wywolanie.name === 'zakoncz_wywiad') {
@@ -521,6 +569,58 @@ ${brakuje.length
         }
 
         return { blad: true, odpowiedz: { blad: `Nieznane narzędzie: ${wywolanie.name}` } };
+    }
+
+    /**
+     * Kolejna wiadomość nie na temat.
+     *
+     * Politykę trzyma bot, nie model: model wyłącznie sygnalizuje, że rozmówca odbiegł,
+     * a wracającą instrukcją sterujemy tym, co ma napisać. Dzięki temu progi da się
+     * zmienić w jednym miejscu, bez przepisywania promptu.
+     */
+    _oznaczOdbieganie(userId, info, argumenty) {
+        const rozmowa = this.rozmowy.get(userId);
+        if (!rozmowa) {
+            return { blad: true, odpowiedz: { blad: 'Rozmowa wygasła.' } };
+        }
+
+        rozmowa.odbiegniecia += 1;
+        const licznik = rozmowa.odbiegniecia;
+        const powod = String(argumenty.powod || '').slice(0, 200);
+        logger.info(`[AI_WYWIAD] ${info.username}: odbieganie od tematu ${licznik}/${KONIEC_PRZY}${powod ? ` (${powod})` : ''}`);
+
+        if (licznik >= KONIEC_PRZY) {
+            // Sam tekst pożegnania pisze model - my tylko zamykamy rozmowę po tej turze
+            rozmowa.przerwacOffTopic = true;
+            return {
+                odpowiedz: {
+                    odbiegniecia: licznik,
+                    instrukcja: 'To trzecia taka wiadomość z rzędu. Napisz krótkie, spokojne pożegnanie — rozmowa zostaje zamknięta. Nie zadawaj już żadnych pytań i nie proponuj kolejnej szansy.'
+                }
+            };
+        }
+
+        if (licznik >= UPOMNIENIE_PRZY) {
+            return {
+                odpowiedz: {
+                    odbiegniecia: licznik,
+                    instrukcja: 'Odpowiedz jednym zdaniem, a potem UPRZEDŹ wprost: jeśli kolejna wiadomość znowu nie będzie na temat, będziesz musiał zakończyć rozmowę. Na koniec powtórz pytanie, na które czekasz.'
+                }
+            };
+        }
+
+        return {
+            odpowiedz: {
+                odbiegniecia: licznik,
+                instrukcja: 'Odpowiedz krótko, jednym zdaniem, i od razu wróć do pytania, na które czekasz. Jeszcze nie ostrzegaj.'
+            }
+        };
+    }
+
+    /** Rozmowa ruszyła do przodu — licznik odbiegnięć wraca do zera */
+    wyzerujOdbiegania(userId) {
+        const rozmowa = this.rozmowy.get(userId);
+        if (rozmowa) rozmowa.odbiegniecia = 0;
     }
 
     _zapiszDane(info, wejscie, pytajOZrodlo = false) {
@@ -619,6 +719,7 @@ ${brakuje.length
                 const wynik = await this.ocr.analyzeCoreStockImage(sciezkaObrazu);
                 if (wynik.isValid) {
                     info.coreStock = wynik.items;
+                    this.wyzerujOdbiegania(userId);
                     const pozycje = Object.entries(wynik.items)
                         .map(([nazwa, ilosc]) => `${nazwa}: ${ilosc}`)
                         .join(', ');
@@ -638,6 +739,7 @@ ${brakuje.length
             try {
                 const stats = await this._odczytajEkwipunek(sciezkaObrazu, userId, state);
                 if (stats?.isValidEquipment) {
+                    this.wyzerujOdbiegania(userId);
                     info.characterAttack = stats.characterAttack ?? null;
                     info.playerNick = stats.playerNick ?? 'Nieznany';
                     logger.info(`[AI_WYWIAD] Odczytano postać dla ${info.username}: ${info.playerNick} / ${info.characterAttack}`);

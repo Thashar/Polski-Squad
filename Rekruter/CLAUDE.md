@@ -125,6 +125,36 @@ jest kasowane od razu po odczycie.
 - **Bez `temperature`** — rozmowa ma brzmieć naturalnie, więc zostaje domyślna wartość Gemini
   (OCR jest odwrotnie: tam jawne `temperature: 0`)
 
+### Odbieganie od tematu — upomnienie, przerwanie, wyrzucenie
+
+Model sygnalizuje narzędziem `oznacz_odbieganie`, że wiadomość kandydata nie posuwa rekrutacji
+(zmiana tematu, żart, prowokacja, uporczywe unikanie odpowiedzi). **Politykę trzyma bot, nie model** —
+wracająca instrukcja mówi modelowi, co ma napisać, więc progi zmienia się w jednym miejscu:
+
+| Które z rzędu | Co robi bot | Stała |
+|---|---|---|
+| 1. | krótka odpowiedź i powrót do pytania, bez ostrzegania | — |
+| 2. | model **uprzedza wprost**, że kolejna taka wiadomość zakończy rozmowę | `UPOMNIENIE_PRZY` |
+| 3. | model żegna się, rozmowa zostaje zamknięta (`przerwane`, `powod: 'off_topic'`) | `KONIEC_PRZY` |
+
+- **Liczą się odbiegnięcia POD RZĄD.** Każdy postęp zeruje licznik: zapisane dane (`zapisz_dane`
+  z niepustym `zapisano`) albo odczytane zdjęcie (Core Stock lub postać). Karzemy uporczywe
+  zmienianie tematu, nie jeden żart po drodze
+- Pytania o rekrutację i o grę (gdzie znaleźć dany ekran) **nie są** odbieganiem — prompt mówi to wprost
+- Licznik rozmowy siedzi w pamięci (`rozmowa.odbiegniecia`), a stan trafia do bloku „Stan tej rozmowy",
+  więc model wie, ile już było
+
+**Trwały licznik przerwań i wyrzucenie z serwera:** `services/offTopicService.js`,
+plik `data/offtopic.json` (przez `jsonStore`). Liczy przerwane rozmowy **na osobę**, nie na rozmowę —
+przeżywa restart bota i ponowne kliknięcie przycisku, bo inaczej wystarczyłoby zacząć rekrutację
+od nowa, żeby wyzerować konto. **Po trzecim przerwaniu (`PRZERWANIA_DO_KICKA`) kandydat jest
+wyrzucany z serwera**, a licznik startuje od zera — kick zamyka cykl, zamiast skazywać osobę,
+która wróci, na wyrzucenie po pierwszej kolejnej wpadce.
+
+⚠️ **Nieudany kick nie wywraca rekrutacji** — brak uprawnienia albo wyższa rola kandydata kończy się
+wpisem w logu i w archiwum (`⚠️ … NIE udało się wyrzucić`), a rozmowa i tak jest już zamknięta.
+Bot musi mieć uprawnienie **Wyrzucanie członków** i rolę wyżej niż kandydat.
+
 **Bezpieczniki:**
 - ⚠️ **Wypowiedzi modelu są czyszczone z fragmentów `[SYSTEM] …`** (`_bezSystemowych`, wołane
   w `_zapytajModel`). Model widzi w historii nasze wiadomości systemowe (wynik analizy zdjęcia,

@@ -15,6 +15,7 @@ const NotificationPreferencesService = require('./services/notificationPreferenc
 const AIInterviewService = require('./services/aiInterviewService');
 const InterviewLogService = require('./services/interviewLogService');
 const AIOCRService = require('./services/aiOcrService');
+const OffTopicService = require('./services/offTopicService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
@@ -39,6 +40,8 @@ const llmAdapter = createLlmAdapter({
 const aiOcrService = new AIOCRService(config, llmAdapter);
 const aiInterviewService = new AIInterviewService(config, llmAdapter, aiOcrService);
 const interviewLogService = new InterviewLogService(config);
+// Trwały licznik rozmów przerwanych za odbieganie od tematu (przeżywa restart bota)
+const offTopicService = new OffTopicService();
 
 const client = new Client({
     ...getCacheOptions(),
@@ -72,6 +75,7 @@ const sharedState = {
     aiInterviewService,
     aiOcrService,
     interviewLogService,
+    offTopicService,
     client,
     config
 };

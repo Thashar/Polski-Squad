@@ -547,16 +547,74 @@ async function handleAiInterviewMessage(msg, state, config, client) {
   await serwis.pokazOdpowiedz(userId, serwis.zbudujTranskrypcje(userId), state, kanal);
 
   if (wynik.przerwane) {
-    logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
     serwis.zakonczRozmowe(userId);
     state.userStates.delete(userId);
-    await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - przekroczony limit tur.', state.userInfo.get(userId));
+
+    if (wynik.powod === 'off_topic') {
+      await zakonczZaOdbieganie(msg, state, archiwum);
+    } else {
+      logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
+      await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - przekroczony limit tur.', state.userInfo.get(userId));
+    }
     return;
   }
 
   if (wynik.zakonczone) {
     await finalizujRekrutacjeAI(msg, state, config, client);
   }
+}
+
+/**
+ * Domyka rozmowę przerwaną za uporczywe odbieganie od tematu.
+ *
+ * Trwały licznik (`offTopicService`) liczy TAKIE przerwania na osobę, nie na rozmowę —
+ * przeżywa restart bota i ponowne kliknięcie przycisku, bo inaczej wystarczyłoby zacząć
+ * rekrutację od nowa, żeby wyzerować konto. Po trzecim przerwaniu kandydat wylatuje
+ * z serwera, a licznik startuje od zera: kick zamyka cykl, zamiast skazywać kogoś,
+ * kto wróci, na wyrzucenie po pierwszej kolejnej wpadce.
+ */
+async function zakonczZaOdbieganie(msg, state, archiwum) {
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+
+  const userId = msg.author.id;
+  const serwisOffTopic = state.offTopicService;
+
+  if (!serwisOffTopic) {
+    logger.warn('[OFF_TOPIC] Brak offTopicService - przerwanie nie zostanie policzone');
+    await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - odbieganie od tematu.', state.userInfo.get(userId));
+    return;
+  }
+
+  const { przerwania, kick } = await serwisOffTopic.zanotujPrzerwanie(userId, msg.author.username);
+  const licznik = `${przerwania}/${serwisOffTopic.przerwaniaDoKicka}`;
+
+  logger.warn(`[OFF_TOPIC] Rozmowa z ${msg.author.username} przerwana - odbieganie od tematu (${licznik})`);
+
+  if (!kick) {
+    await archiwum?.zakonczZPodsumowaniem(
+      userId,
+      `⏹️ Rozmowa przerwana - odbieganie od tematu (${licznik}).`,
+      state.userInfo.get(userId)
+    );
+    return;
+  }
+
+  // Próg wyrzucenia. Kick może się nie udać (hierarchia ról, brak uprawnienia) -
+  // wtedy zostaje wpis w logu i archiwum, a rekrutacja i tak jest już zamknięta
+  let opis = `🥾 Rozmowa przerwana po raz ${przerwania} - kandydat wyrzucony z serwera.`;
+  try {
+    if (!msg.member) throw new Error('brak obiektu członka serwera');
+    if (!msg.member.kickable) throw new Error('bot nie może wyrzucić tego użytkownika (hierarchia ról lub brak uprawnienia)');
+
+    await msg.member.kick(`Rekrutacja przerwana ${przerwania} razy - uporczywe odbieganie od tematu`);
+    logger.warn(`[OFF_TOPIC] ${msg.author.username} wyrzucony z serwera po ${przerwania} przerwanych rozmowach`);
+  } catch (error) {
+    opis = `⚠️ Rozmowa przerwana po raz ${przerwania}, ale NIE udało się wyrzucić kandydata: ${error.message}`;
+    logger.error(`[OFF_TOPIC] Nie udało się wyrzucić ${msg.author.username}: ${error.message}`);
+  }
+
+  await archiwum?.zakonczZPodsumowaniem(userId, opis, state.userInfo.get(userId));
 }
 
 /**
