@@ -14,6 +14,8 @@ const ClanRoleChangeService = require('./services/clanRoleChangeService');
 const NotificationPreferencesService = require('./services/notificationPreferencesService');
 const AIInterviewService = require('./services/aiInterviewService');
 const InterviewLogService = require('./services/interviewLogService');
+const AIOCRService = require('./services/aiOcrService');
+const { createLlmAdapter } = require('../utils/llmAdapter');
 const { initializeOCR } = require('./services/ocrService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const { getCacheOptions } = require('../utils/discordCache');
@@ -25,7 +27,17 @@ const memberNotificationService = new MemberNotificationService(config);
 const memberCacheService = new MemberCacheService(config);
 const notificationPreferencesService = new NotificationPreferencesService();
 const clanRoleChangeService = new ClanRoleChangeService(config, notificationPreferencesService);
-const aiInterviewService = new AIInterviewService(config);
+// Wspólny wrapper Gemini - OCR i rozmowa rekrutacyjna jadą przez niego, więc
+// oba rodzaje zapytań widać w Langfuse pod jednym botem
+const llmAdapter = createLlmAdapter({
+    botSlug: 'rekruter',
+    tracerName: 'rekruter-bot',
+    apiKey: config.ocr.googleAiApiKey,
+});
+
+// JEDNA instancja OCR na cały bot - wcześniej powstawała przy każdym zrzucie ekranu
+const aiOcrService = new AIOCRService(config, llmAdapter);
+const aiInterviewService = new AIInterviewService(config, llmAdapter, aiOcrService);
 const interviewLogService = new InterviewLogService(config);
 
 const client = new Client({
@@ -58,6 +70,7 @@ const sharedState = {
     pendingOtherPurposeFinish,
     notificationPreferencesService,
     aiInterviewService,
+    aiOcrService,
     interviewLogService,
     client,
     config
