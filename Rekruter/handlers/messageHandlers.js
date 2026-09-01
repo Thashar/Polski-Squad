@@ -93,6 +93,18 @@ async function handleMessage(
     }
   }
 
+  // Rozmowa rekrutacyjna toczy się w prywatnym wątku - wiadomość stamtąd omija całą
+  // logikę kanałów rekrutacyjnych (kasowanie, kroki klasycznej ankiety) i idzie prosto
+  // do obsługi rozmowy. Liczy się WYŁĄCZNIE wątek zapisany w stanie tego kandydata,
+  // więc pisanie w cudzym wątku niczego nie podejmie
+  const stanWatku = state.userStates.get(message.author.id);
+  if (message.channel.isThread?.() ) {
+    if (stanWatku?.step === 'ai_interview' && stanWatku.threadId === message.channel.id) {
+      await handleAiInterviewMessage(message, state, config, client);
+    }
+    return;
+  }
+
   // Oba kanały rekrutacyjne działają tak samo: wszystko, co nie jest częścią trwającej
   // rekrutacji, jest kasowane (gałąź `default` poniżej)
   const kanalyRekrutacyjne = [RECRUIT_CHANNEL_ID, config.channels.joinClan].filter(Boolean);
@@ -129,7 +141,9 @@ async function handleMessage(
       break;
 
     case 'ai_interview':
-      await handleAiInterviewMessage(message, state, config, client);
+      // Rozmowa toczy się w wątku, więc na kanale nie ma czego podejmować - wiadomość
+      // kasujemy jak każdą inną niezwiązaną z krokiem rekrutacji
+      await safeDeleteMessage(message, OPOZNIENIE_KASOWANIA_MS);
       break;
 
     default:
@@ -455,35 +469,19 @@ async function handleAiInterviewMessage(msg, state, config, client) {
   const archiwum = state.interviewLogService;
 
   if (!zalacznik && !tekst) {
-    await safeDeleteMessage(msg);
     archiwum?.wpisSystemowy(userId, 'Kandydat wysłał pustą wiadomość.');
-    await serwis.pokazOdpowiedz(
-      userId,
-      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewEmptyMessage),
-      state,
-      kanal
-    );
+    await serwis.pokazOdpowiedz(userId, config.messages.aiInterviewEmptyMessage, state);
     return;
   }
 
   if (zalacznik && !zalacznik.contentType?.startsWith('image/')) {
-    await safeDeleteMessage(msg);
     archiwum?.wpisSystemowy(userId, `Kandydat wysłał załącznik, który nie jest obrazem (${zalacznik.contentType || 'nieznany typ'}).`);
-    await serwis.pokazOdpowiedz(
-      userId,
-      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewInvalidImage),
-      state,
-      kanal
-    );
+    await serwis.pokazOdpowiedz(userId, config.messages.aiInterviewInvalidImage, state);
     return;
   }
 
-  await serwis.pokazOdpowiedz(
-    userId,
-    serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewThinking),
-    state,
-    kanal
-  );
+  // „rekruter pisze" - w wątku widać to jak w normalnej rozmowie
+  await kanal.sendTyping().catch(() => {});
 
   let wynik;
 
@@ -495,7 +493,6 @@ async function handleAiInterviewMessage(msg, state, config, client) {
         `ai_${Date.now()}_${userId}.png`
       );
       await downloadImage(zalacznik.url, imgPath);
-      await safeDeleteMessage(msg);
 
       const analiza = await serwis.przeanalizujZdjecie(userId, imgPath, state);
 
@@ -517,21 +514,15 @@ async function handleAiInterviewMessage(msg, state, config, client) {
         await usunPlik(imgPath);
       }
 
-      wynik = await serwis.wiadomoscSystemowa(userId, analiza.opis, state, '📷 *przesłano zdjęcie*');
+      wynik = await serwis.wiadomoscSystemowa(userId, analiza.opis, state);
     } else {
-      await safeDeleteMessage(msg);
       archiwum?.wpisKandydata(userId, tekst);
       wynik = await serwis.wiadomoscUzytkownika(userId, tekst, state);
     }
   } catch (error) {
     logger.error(`[AI_WYWIAD] ❌ Błąd tury rozmowy dla ${msg.author.username}: ${error.message}`);
     archiwum?.wpisSystemowy(userId, `Błąd tury rozmowy: ${error.message}`);
-    await serwis.pokazOdpowiedz(
-      userId,
-      serwis.zbudujTranskrypcje(userId, config.messages.aiInterviewError),
-      state,
-      kanal
-    );
+    await serwis.pokazOdpowiedz(userId, config.messages.aiInterviewError, state);
     return;
   }
 
@@ -539,24 +530,84 @@ async function handleAiInterviewMessage(msg, state, config, client) {
     // Rozmowa zniknęła z pamięci (restart bota albo sprzątanie) - kończymy po cichu
     state.userStates.delete(userId);
     await archiwum?.zakonczZPodsumowaniem(userId, '⚠️ Rozmowa przepadła z pamięci bota (restart albo sprzątanie).');
+    await state.interviewThreadService?.usun(userId);
     return;
   }
 
   archiwum?.wpisBota(userId, wynik.tekst);
 
-  await serwis.pokazOdpowiedz(userId, serwis.zbudujTranskrypcje(userId), state, kanal);
+  await serwis.pokazOdpowiedz(userId, wynik.tekst, state);
 
   if (wynik.przerwane) {
-    logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
     serwis.zakonczRozmowe(userId);
     state.userStates.delete(userId);
-    await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - przekroczony limit tur.', state.userInfo.get(userId));
+
+    if (wynik.powod === 'off_topic') {
+      await zakonczZaOdbieganie(msg, state, archiwum);
+    } else {
+      logger.warn(`[AI_WYWIAD] Rozmowa z ${msg.author.username} przerwana - limit tur`);
+      await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - przekroczony limit tur.', state.userInfo.get(userId));
+    }
+    await state.interviewThreadService?.usun(userId);
     return;
   }
 
   if (wynik.zakonczone) {
     await finalizujRekrutacjeAI(msg, state, config, client);
   }
+}
+
+/**
+ * Domyka rozmowę przerwaną za uporczywe odbieganie od tematu.
+ *
+ * Trwały licznik (`offTopicService`) liczy TAKIE przerwania na osobę, nie na rozmowę —
+ * przeżywa restart bota i ponowne kliknięcie przycisku, bo inaczej wystarczyłoby zacząć
+ * rekrutację od nowa, żeby wyzerować konto. Po trzecim przerwaniu kandydat wylatuje
+ * z serwera, a licznik startuje od zera: kick zamyka cykl, zamiast skazywać kogoś,
+ * kto wróci, na wyrzucenie po pierwszej kolejnej wpadce.
+ */
+async function zakonczZaOdbieganie(msg, state, archiwum) {
+  const { createBotLogger } = require('../../utils/consoleLogger');
+  const logger = createBotLogger('Rekruter');
+
+  const userId = msg.author.id;
+  const serwisOffTopic = state.offTopicService;
+
+  if (!serwisOffTopic) {
+    logger.warn('[OFF_TOPIC] Brak offTopicService - przerwanie nie zostanie policzone');
+    await archiwum?.zakonczZPodsumowaniem(userId, '⏹️ Rozmowa przerwana - odbieganie od tematu.', state.userInfo.get(userId));
+    return;
+  }
+
+  const { przerwania, kick } = await serwisOffTopic.zanotujPrzerwanie(userId, msg.author.username);
+  const licznik = `${przerwania}/${serwisOffTopic.przerwaniaDoKicka}`;
+
+  logger.warn(`[OFF_TOPIC] Rozmowa z ${msg.author.username} przerwana - odbieganie od tematu (${licznik})`);
+
+  if (!kick) {
+    await archiwum?.zakonczZPodsumowaniem(
+      userId,
+      `⏹️ Rozmowa przerwana - odbieganie od tematu (${licznik}).`,
+      state.userInfo.get(userId)
+    );
+    return;
+  }
+
+  // Próg wyrzucenia. Kick może się nie udać (hierarchia ról, brak uprawnienia) -
+  // wtedy zostaje wpis w logu i archiwum, a rekrutacja i tak jest już zamknięta
+  let opis = `🥾 Rozmowa przerwana po raz ${przerwania} - kandydat wyrzucony z serwera.`;
+  try {
+    if (!msg.member) throw new Error('brak obiektu członka serwera');
+    if (!msg.member.kickable) throw new Error('bot nie może wyrzucić tego użytkownika (hierarchia ról lub brak uprawnienia)');
+
+    await msg.member.kick(`Rekrutacja przerwana ${przerwania} razy - uporczywe odbieganie od tematu`);
+    logger.warn(`[OFF_TOPIC] ${msg.author.username} wyrzucony z serwera po ${przerwania} przerwanych rozmowach`);
+  } catch (error) {
+    opis = `⚠️ Rozmowa przerwana po raz ${przerwania}, ale NIE udało się wyrzucić kandydata: ${error.message}`;
+    logger.error(`[OFF_TOPIC] Nie udało się wyrzucić ${msg.author.username}: ${error.message}`);
+  }
+
+  await archiwum?.zakonczZPodsumowaniem(userId, opis, state.userInfo.get(userId));
 }
 
 /**
@@ -583,6 +634,7 @@ async function finalizujRekrutacjeAI(msg, state, config, client) {
 
   if (!info) {
     logger.error('[AI_WYWIAD] ❌ Brak danych kandydata przy finalizacji');
+    await state.interviewThreadService?.usun(userId);
     return;
   }
 

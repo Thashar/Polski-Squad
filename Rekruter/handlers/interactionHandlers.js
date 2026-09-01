@@ -103,6 +103,11 @@ async function handleInteraction(interaction, state, config, client) {
 
 /* ----------------------------- przyciski nicku ---------------------------- */
 async function handleNicknameButtons(interaction, state, client) {
+  // ⚠️ Potwierdzenie kliknięcia. Cała odpowiedź idzie przez `updateUserEphemeralReply`,
+  // czyli edycję INNEJ wiadomości - bez tego Discord po trzech sekundach oznacza samo
+  // kliknięcie jako nieudane, mimo że bot poprawnie wykonuje pracę
+  await interaction.deferUpdate().catch(() => {});
+
   const {
     nicknameRequests,
     pendingQualifications,
@@ -245,6 +250,7 @@ async function handleJoinClanStart(interaction, state, config) {
   // Ponowne kliknięcie zaczyna rekrutację od nowa - poprzednia rozmowa idzie do kosza
   state.aiInterviewService?.zakonczRozmowe(userId);
   await state.interviewLogService?.zakonczZPodsumowaniem(userId, '🔄 Kandydat zaczął rekrutację od nowa.');
+  await state.interviewThreadService?.usun(userId, { natychmiast: true });
 
   state.userInfo.set(userId, {
     username:        interaction.user.username,
@@ -288,14 +294,32 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
   const logger = createBotLogger('Rekruter');
   const userId = interaction.user.id;
 
-  // channelId - rekrutacja toczy się wyłącznie na kanale, na którym kliknięto przycisk
-  state.userStates.set(userId, { step: 'ai_interview', channelId: interaction.channelId });
+  // ⚠️ Defer NAJPIERW: Discord daje 3 sekundy na pierwszą odpowiedź, a założenie wątku
+  // i dodanie do niego kandydata to dwa żądania do API - bez tego token potrafi wygasnąć
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  await interaction.reply({
-    content: config.messages.aiInterviewStart,
-    flags: MessageFlags.Ephemeral
+  // Rozmowa toczy się w prywatnym wątku - kandydat pisze normalnie, nic nie jest kasowane,
+  // a 15-minutowy limit tokenu interakcji przestaje cokolwiek ograniczać
+  const watek = await state.interviewThreadService.utworz(interaction.channel, interaction.user);
+
+  if (!watek) {
+    logger.error(`[AI_WYWIAD] ❌ Nie udało się założyć wątku dla ${interaction.user.username}`);
+    await interaction.editReply({ content: config.messages.aiInterviewNoThread });
+    return;
+  }
+
+  // threadId - tylko wiadomości z TEGO wątku podejmują rozmowę
+  state.userStates.set(userId, {
+    step: 'ai_interview',
+    channelId: interaction.channelId,
+    threadId: watek.id
   });
-  state.userEphemeralReplies.set(userId, interaction);
+
+  // Odpowiedź na kliknięcie zostaje efemeryczna - to tylko wskazanie drogi do wątku.
+  // Dalsza rekrutacja (pytanie o nick, postęp OCR) idzie przez adapter piszący w wątku,
+  // więc kod po rozmowie nie musi wiedzieć, że rozmawiamy gdzie indziej
+  await interaction.editReply({ content: `${config.messages.aiInterviewStart}\n${watek}` });
+  state.userEphemeralReplies.set(userId, state.interviewThreadService.adapterOdpowiedzi(userId));
 
   // Archiwum otwieramy PRZED pierwszą turą - inaczej powitanie rekrutera nie miałoby
   // gdzie trafić i zapis rozmowy zaczynałby się od drugiej wypowiedzi
@@ -303,13 +327,10 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
 
   try {
     const wynik = await state.aiInterviewService.rozpocznij(userId, state, opcje);
-    if (wynik?.tekst) state.interviewLogService?.wpisBota(userId, wynik.tekst);
-    await state.aiInterviewService.pokazOdpowiedz(
-      userId,
-      state.aiInterviewService.zbudujTranskrypcje(userId),
-      state,
-      interaction.channel
-    );
+    if (wynik?.tekst) {
+      state.interviewLogService?.wpisBota(userId, wynik.tekst);
+      await state.aiInterviewService.pokazOdpowiedz(userId, wynik.tekst, state);
+    }
     logger.info(`[AI_WYWIAD] Rozpoczęto rozmowę z ${interaction.user.username}`);
     if (!wynik) logger.warn(`[AI_WYWIAD] Brak odpowiedzi startowej dla ${interaction.user.username}`);
   } catch (error) {
@@ -317,12 +338,8 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
     state.userStates.delete(userId);
     state.aiInterviewService.zakonczRozmowe(userId);
     await state.interviewLogService?.zakonczZPodsumowaniem(userId, '❌ Nie udało się rozpocząć rozmowy (błąd API).');
-    await state.aiInterviewService.pokazOdpowiedz(
-      userId,
-      config.messages.aiInterviewError,
-      state,
-      interaction.channel
-    );
+    await state.aiInterviewService.pokazOdpowiedz(userId, config.messages.aiInterviewError, state);
+    await state.interviewThreadService.usun(userId);
   }
 }
 
