@@ -37,7 +37,13 @@ Jeśli szuka klanu, potrzebujesz trzech rzeczy:
 
 Jeśli przyszła w innym celu, wystarczy samo zdjęcie postaci z ekwipunkiem.
 
-Czasem dochodzi jeszcze jedno pytanie: skąd kandydat się o nas dowiedział. Zadaj je **dopiero na sam koniec**, kiedy masz już wszystko inne — i tylko wtedy, gdy bot wymienia je wśród brakujących danych. Odpowiedź zapisz narzędziem zapisz_dane w polu skadWiesz, streszczoną w kilku słowach ("od znajomego z gry", "z wyszukiwarki", "z czatu klanowego").
+Czasem dochodzi jeszcze jedno pytanie: skąd kandydat się o nas dowiedział. Zadaj je **dopiero na sam koniec**, jako ostatnią rzecz przed pożegnaniem, kiedy masz już wszystko inne — i tylko wtedy, gdy bot wymienia je wśród brakujących danych. Nie zapowiadaj go wcześniej i nie wymieniaj w planie: to pytanie na koniec rozmowy, nie punkt ankiety. Odpowiedź zapisz narzędziem zapisz_dane w polu skadWiesz, streszczoną w kilku słowach ("od znajomego z gry", "z wyszukiwarki", "z czatu klanowego").
+
+## Plan zaraz po ustaleniu celu
+
+Gdy już wiesz, po co kandydat przyszedł, **najpierw powiedz mu, co go czeka**, a dopiero potem pytaj. Wypisz krótką listę — dwa albo trzy punkty, każdy w jednej linii — z tym, czego będziesz potrzebować po kolei, i dopiero pod nią poproś o pierwszą rzecz z listy. Dzięki temu rozmówca wie, ile to potrwa, zamiast odpowiadać na pytania w ciemno.
+
+Plan wymienia wyłącznie dane do zebrania. Nie zapowiadaj w nim pytania o to, skąd nas zna, i nie tłumacz, co dzieje się po Twojej stronie.
 
 ## Pierwsza wiadomość
 
@@ -75,7 +81,14 @@ Nie oceniaj statystyk rozmówcy i nie obiecuj konkretnego klanu — o przydziale
 
 Jeśli rozmowa schodzi na inny temat, odpowiedz krótko i wróć do rzeczy. Gdy ktoś nie chce podać danych, wyjaśnij spokojnie, że bez nich nie da się przydzielić klanu, i zapytaj jeszcze raz.
 
-Za każdym razem, gdy wiadomość rozmówcy nie posuwa rekrutacji do przodu — zmienia temat, jest żartem, prowokacją albo uporczywym unikaniem odpowiedzi — wywołaj narzędzie oznacz_odbieganie i zastosuj instrukcję, którą dostaniesz w odpowiedzi. Pytania o samą rekrutację i o grę (gdzie znaleźć dany ekran, co to za statystyka) NIE są odbieganiem od tematu — na nie po prostu odpowiadaj.
+## Wiadomości, które nie posuwają rekrutacji
+
+Każdą wiadomość rozmówcy, po której rekrutacja **nie ruszyła do przodu** — czyli nie przybyło żadnej z danych, których szukasz — musisz zaklasyfikować jednym z dwóch narzędzi. To nie jest opcjonalne: bez wywołania któregoś z nich bot sam uzna taką turę za odbieganie od tematu.
+
+- oznacz_na_temat — gdy rozmówca **współpracuje**, choć nic jeszcze nie podał: pyta o rekrutację albo o grę (gdzie znaleźć dany ekran, co to za statystyka), prosi o powtórzenie, mówi, że zaraz wyśle zdjęcie, albo wita się w pierwszej wiadomości.
+- oznacz_odbieganie — gdy wiadomość **nie jest odpowiedzią na Twoje pytanie**: zmienia temat, jest żartem albo prowokacją, ucieka w ogólniki ("nie wiem", "a po co ci to", "poteń zobaczymy") albo powtarza to samo, zamiast podać to, o co prosisz.
+
+Rozstrzyga jedno pytanie: czy to jest **rzeczowa odpowiedź na to, o co właśnie zapytałeś**. Jeśli tak — idziesz dalej i nie wywołujesz niczego. Jeśli nie, a rozmówca mimo to współpracuje — oznacz_na_temat. Jeśli nie i nie widać współpracy — oznacz_odbieganie. W obu przypadkach zastosuj instrukcję, którą dostaniesz w odpowiedzi.
 
 Gdy masz komplet danych, wywołaj zakoncz_wywiad z krótkim, ciepłym pożegnaniem.`;
 
@@ -110,8 +123,22 @@ const NARZEDZIA = [
         }
     },
     {
+        name: 'oznacz_na_temat',
+        description: 'Wywołaj, gdy wiadomość rozmówcy nie wniosła żadnej z szukanych danych, ale JEST na temat i widać współpracę: pyta o rekrutację albo o grę, prosi o powtórzenie, zapowiada że zaraz wyśle zdjęcie, wita się. Bez tego wywołania bot uzna turę bez postępu za odbieganie od tematu, więc nie pomijaj go w takich sytuacjach. NIE używaj go do usprawiedliwiania żartów, zmiany tematu ani unikania odpowiedzi — od tego jest oznacz_odbieganie.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                powod: {
+                    type: 'STRING',
+                    description: 'Czego dotyczyła wiadomość - kilka słów, do logu bota.'
+                }
+            },
+            required: []
+        }
+    },
+    {
         name: 'oznacz_odbieganie',
-        description: 'Wywołaj, gdy ostatnia wiadomość rozmówcy NIE posuwa rekrutacji do przodu: zmienia temat, żartuje, prowokuje albo uparcie nie odpowiada na zadane pytanie. NIE wywołuj, gdy ktoś dopytuje o coś związanego z rekrutacją albo z grą — pytanie o to, gdzie znaleźć dany ekran, jest normalną częścią rozmowy. W odpowiedzi dostaniesz instrukcję, jak zareagować; zastosuj ją dokładnie.',
+        description: 'Wywołaj, gdy ostatnia wiadomość rozmówcy NIE jest rzeczową odpowiedzią na zadane pytanie: zmienia temat, żartuje, prowokuje, ucieka w ogólniki albo powtarza to samo zamiast podać to, o co prosisz. NIE wywołuj, gdy ktoś dopytuje o coś związanego z rekrutacją albo z grą — pytanie o to, gdzie znaleźć dany ekran, jest normalną częścią rozmowy i oznacza się je narzędziem oznacz_na_temat. W odpowiedzi dostaniesz instrukcję, jak zareagować; zastosuj ją dokładnie.',
         parameters: {
             type: 'OBJECT',
             properties: {
@@ -155,7 +182,7 @@ const USTAWIENIA_BEZPIECZENSTWA = [
 ];
 
 /** Wersja promptu systemowego — trafia na span w Langfuse (A/B modeli i promptów) */
-const WERSJA_PROMPTU = 'v4';
+const WERSJA_PROMPTU = 'v5';
 
 /**
  * Wypowiedź modelu udająca naszą wiadomość systemową.
@@ -184,6 +211,9 @@ const WYPOWIEDZ_SYSTEMOWA = /\[SYSTEM\][\s\S]*?(?=\n[ \t]*\n|$)/gi;
  * odczytane zdjęcie), licznik wraca do zera — karzemy uporczywe zmienianie tematu,
  * nie jeden żart po drodze.
  */
+/** Pozycja listy braków, o którą pytamy jako o OSTATNIĄ – patrz `_brakujaceDane` i `_instrukcjaBrakow` */
+const BRAK_ZRODLO = 'skąd kandydat dowiedział się o serwerze';
+
 const UPOMNIENIE_PRZY = 2;
 const KONIEC_PRZY = 3;
 
@@ -242,7 +272,7 @@ class AIInterviewService {
      */
     async rozpocznij(userId, state, opcje = {}) {
         const otwarcie = opcje.celUstalony
-            ? '[SYSTEM] Kandydat jest już na serwerze i kliknął przycisk "Chcę dołączyć do klanu". Cel wizyty jest więc znany i ZAPISANY - nie pytaj o niego i nie wywołuj zapisz_dane z celem. Nie pytaj też, skąd się o nas dowiedział - jest u nas od dawna. To Twoja pierwsza wiadomość: przedstaw się jako bot rekrutacyjny Polskiego Squadu, powiedz krótko, że zbierzesz kilka informacji do dobrania klanu, i od razu poproś o pierwszą rzecz z listy.'
+            ? '[SYSTEM] Kandydat jest już na serwerze i kliknął przycisk "Chcę dołączyć do klanu". Cel wizyty jest więc znany i ZAPISANY - nie pytaj o niego i nie wywołuj zapisz_dane z celem. Nie pytaj też, skąd się o nas dowiedział - jest u nas od dawna. To Twoja pierwsza wiadomość: przedstaw się jako bot rekrutacyjny Polskiego Squadu, wypisz krótką listę tego, czego będziesz potrzebować po kolei, i dopiero pod nią poproś o pierwszą rzecz z tej listy.'
             : '[SYSTEM] Kandydat potwierdził przyciskiem, że jest Polakiem, i wszedł do rozmowy rekrutacyjnej. To Twoja pierwsza wiadomość - przedstaw się jako bot rekrutacyjny Polskiego Squadu i zapytaj o cel wizyty. Na sam koniec rozmowy, gdy zbierzesz już wszystko inne, zapytaj jeszcze skąd się o nas dowiedział.';
 
         this.rozmowy.set(userId, {
@@ -268,7 +298,10 @@ class AIInterviewService {
 
         rozmowa.historia.push(this._tekst('user', tekst));
 
-        return this.wykonajTure(userId, state);
+        // Tylko tury napisane przez kandydata podlegają regule „tura bez postępu = odbieganie".
+        // Tury systemowe (wynik analizy zdjęcia) są z niej wyłączone: kandydat, który wysłał
+        // nieczytelny screen, współpracuje – tylko mu nie wyszło.
+        return this.wykonajTure(userId, state, { odKandydata: true });
     }
 
     /**
@@ -293,9 +326,15 @@ class AIInterviewService {
      *
      * @returns {{tekst: string, zakonczone: boolean, przerwane?: boolean}}
      */
-    async wykonajTure(userId, state) {
+    async wykonajTure(userId, state, opcje = {}) {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) return null;
+
+        // Stan karty kandydata SPRZED tury – po turze porównujemy go z aktualnym
+        // i po tym poznajemy, czy rozmowa w ogóle ruszyła do przodu (`_domiarBezPostepu`)
+        rozmowa.odKandydata = opcje.odKandydata === true;
+        rozmowa.migawkaPrzed = this._migawkaPostepu(state?.userInfo?.get(userId));
+        rozmowa.oznaczoneWTurze = false;
 
         rozmowa.tury++;
         if (rozmowa.tury > (this.ustawienia.maxTurns || 40)) {
@@ -378,6 +417,13 @@ class AIInterviewService {
             if (dodatkowe) teksty.push(dodatkowe);
         }
 
+        // Tura kandydata, po której nic nie przybyło i której model sam nie zaklasyfikował.
+        // Przy upomnieniu i przy zamknięciu rozmowy tekst modelu jest PODMIENIANY: jego
+        // pierwotna odpowiedź nie zna jeszcze decyzji bota, więc doklejenie jej obok
+        // brzmiałoby jak dwie różne rozmowy naraz.
+        const podmiana = await this._domiarBezPostepu(rozmowa, userId, state);
+        if (podmiana) teksty = [podmiana];
+
         const tekst = teksty.join('\n\n')
             || 'Napisz proszę jeszcze raz — coś mi się zacięło.';
 
@@ -391,10 +437,10 @@ class AIInterviewService {
         return { tekst, zakonczone: false };
     }
 
-    async _wymuszonaOdpowiedz(rozmowa, userId, state) {
+    async _wymuszonaOdpowiedz(rozmowa, userId, state, instrukcja = null) {
         rozmowa.historia.push(this._tekst(
             'user',
-            '[SYSTEM] Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego — bez wywoływania narzędzi.'
+            `[SYSTEM] ${instrukcja || 'Poprzednia tura nie zawierała wiadomości dla kandydata, a on czeka na odpowiedź. Napisz teraz wiadomość do niego – bez wywoływania narzędzi.'}`
         ));
 
         try {
@@ -474,9 +520,27 @@ class AIInterviewService {
 ## Stan tej rozmowy (aktualny, od bota — nie pokazuj go rozmówcy)
 
 Masz już: ${znane.length ? znane.join('; ') : 'nic'}.${ostrzezenie}
-${brakuje.length
-    ? `Do ustalenia zostało: ${brakuje.join('; ')}. Zapytaj teraz o PIERWSZĄ rzecz z tej listy — o rzeczy spoza niej nie pytaj, bo są już ustalone.`
-    : 'Masz komplet danych — wywołaj zakoncz_wywiad z krótkim pożegnaniem.'}`;
+${this._instrukcjaBrakow(brakuje)}`;
+    }
+
+    /**
+     * Co model ma zrobić z listą braków – wydzielone, bo ostatnia pozycja rządzi się
+     * własnymi prawami: pytanie „skąd o nas wiesz" pada dopiero wtedy, gdy nie brakuje
+     * już niczego innego, i jest ostatnią rzeczą przed pożegnaniem.
+     */
+    _instrukcjaBrakow(brakuje) {
+        if (!brakuje.length) {
+            return 'Masz komplet danych — wywołaj zakoncz_wywiad z krótkim pożegnaniem.';
+        }
+
+        if (brakuje.length === 1 && brakuje[0] === BRAK_ZRODLO) {
+            return 'Zostało już tylko jedno: zapytaj teraz, skąd dowiedział się o Polskim Squadzie. '
+                + 'To ostatnie pytanie rozmowy — zapisz odpowiedź narzędziem zapisz_dane w polu skadWiesz, '
+                + 'a potem od razu zakończ rozmowę.';
+        }
+
+        return `Do ustalenia zostało: ${brakuje.join('; ')}. Zapytaj teraz o PIERWSZĄ rzecz z tej listy — `
+            + 'o rzeczy spoza niej nie pytaj, bo są już ustalone.';
     }
 
     /** Wypowiedź modelu bez fragmentów udających wiadomość systemową bota */
@@ -531,10 +595,19 @@ ${brakuje.length
         const argumenty = wywolanie.args || {};
 
         if (wywolanie.name === 'zapisz_dane') {
+            // Sama próba zapisu wystarczy, żeby tura nie poszła na konto odbiegania:
+            // kandydat, który podał punkty spoza zakresu, odpowiedział rzeczowo – tylko źle
+            const rozmowa = this.rozmowy.get(userId);
+            if (rozmowa) rozmowa.oznaczoneWTurze = true;
+
             const wynik = this._zapiszDane(info, argumenty, this._czyPytacOZrodlo(userId));
             // Cokolwiek udało się zapisać = rozmowa ruszyła do przodu
             if (wynik.odpowiedz?.zapisano?.length > 0) this.wyzerujOdbiegania(userId);
             return wynik;
+        }
+
+        if (wywolanie.name === 'oznacz_na_temat') {
+            return this._oznaczNaTemat(userId, info, argumenty);
         }
 
         if (wywolanie.name === 'oznacz_odbieganie') {
@@ -562,22 +635,51 @@ ${brakuje.length
     }
 
     /**
+     * Wiadomość bez nowych danych, ale na temat – pytanie o grę, prośba o powtórzenie,
+     * zapowiedź wysłania zdjęcia.
+     *
+     * Samo wywołanie niczego nie liczy: jego jedynym zadaniem jest **zdjęcie domniemania
+     * odbiegania** z tury, w której rekrutacja nie ruszyła do przodu (`_domiarBezPostepu`).
+     * Dlatego licznik odbiegnięć zostaje nietknięty – nie rośnie, ale też się nie zeruje:
+     * uprzejme pytanie w środku serii uników nie ma jej kasować.
+     */
+    _oznaczNaTemat(userId, info, argumenty) {
+        const rozmowa = this.rozmowy.get(userId);
+        if (!rozmowa) {
+            return { blad: true, odpowiedz: { blad: 'Rozmowa wygasła.' } };
+        }
+
+        rozmowa.oznaczoneWTurze = true;
+        const powod = String(argumenty.powod || '').slice(0, 200);
+        logger.info(`[AI_WYWIAD] ${info.username}: tura bez postępu, ale na temat${powod ? ` (${powod})` : ''}`);
+
+        return {
+            odpowiedz: {
+                status: 'ok',
+                instrukcja: 'Odpowiedz krótko na to, o co pyta, i od razu powtórz prośbę o rzecz, na którą czekasz.'
+            }
+        };
+    }
+
+    /**
      * Kolejna wiadomość nie na temat.
      *
      * Politykę trzyma bot, nie model: model wyłącznie sygnalizuje, że rozmówca odbiegł,
      * a wracającą instrukcją sterujemy tym, co ma napisać. Dzięki temu progi da się
      * zmienić w jednym miejscu, bez przepisywania promptu.
      */
-    _oznaczOdbieganie(userId, info, argumenty) {
+    _oznaczOdbieganie(userId, info, argumenty, automatyczne = false) {
         const rozmowa = this.rozmowy.get(userId);
         if (!rozmowa) {
             return { blad: true, odpowiedz: { blad: 'Rozmowa wygasła.' } };
         }
 
         rozmowa.odbiegniecia += 1;
+        rozmowa.oznaczoneWTurze = true;
         const licznik = rozmowa.odbiegniecia;
         const powod = String(argumenty.powod || '').slice(0, 200);
-        logger.info(`[AI_WYWIAD] ${info.username}: odbieganie od tematu ${licznik}/${KONIEC_PRZY}${powod ? ` (${powod})` : ''}`);
+        const zrodlo = automatyczne ? 'bot' : 'model';
+        logger.info(`[AI_WYWIAD] ${info.username}: odbieganie od tematu ${licznik}/${KONIEC_PRZY} [${zrodlo}]${powod ? ` (${powod})` : ''}`);
 
         if (licznik >= KONIEC_PRZY) {
             // Sam tekst pożegnania pisze model - my tylko zamykamy rozmowę po tej turze
@@ -607,6 +709,86 @@ ${brakuje.length
         };
     }
 
+    /**
+     * Migawka tego, co bot wie o kandydacie – służy WYŁĄCZNIE do porównania „przed / po turze".
+     *
+     * Równe migawki = rozmowa stała w miejscu, czyli wiadomość kandydata nie była rzeczową
+     * odpowiedzią na zadane pytanie.
+     */
+    _migawkaPostepu(info) {
+        if (!info) return '';
+        return [
+            info.purpose || '',
+            info.lunarPoints ?? '',
+            info.coreStock ? 'core' : '',
+            info.playerNick || '',
+            info.characterAttack ?? '',
+            info.referralSource || '',
+        ].join('|');
+    }
+
+    /**
+     * Tura kandydata, po której nic nie przybyło – domiar polityki off-topic po stronie bota.
+     *
+     * ⚠️ **Domyślnie taka tura LICZY SIĘ jako odbieganie.** Model potrafił nie wywołać
+     * `oznacz_odbieganie` przez całą rozmowę i kandydat mielił bota w nieskończoność,
+     * odpowiadając „a po co ci to" na każde pytanie. Teraz to model musi tłumaczyć turę
+     * bez postępu – `oznacz_na_temat` gdy kandydat współpracuje, `oznacz_odbieganie` gdy nie.
+     * Milczenie modelu znaczy odbieganie, a nie brak zdania.
+     *
+     * Reguła dotyczy WYŁĄCZNIE tur napisanych przez kandydata. Tury systemowe (wynik OCR)
+     * są z niej wyłączone: nieczytelny screen to nieudana próba, nie zmiana tematu.
+     *
+     * @returns {Promise<string|null>} tekst, który ma ZASTĄPIĆ odpowiedź modelu, albo null
+     */
+    async _domiarBezPostepu(rozmowa, userId, state) {
+        if (!rozmowa.odKandydata || rozmowa.oznaczoneWTurze) return null;
+
+        const info = state?.userInfo?.get(userId);
+        if (!info) return null;
+        if (this._migawkaPostepu(info) !== rozmowa.migawkaPrzed) return null;
+
+        const wynik = this._oznaczOdbieganie(
+            userId,
+            info,
+            { powod: 'brak rzeczowej odpowiedzi – rozmowa nie ruszyła dalej' },
+            true
+        );
+        const licznik = wynik.odpowiedz?.odbiegniecia || 0;
+
+        // Pierwsze odbiegnięcie liczymy po cichu: instrukcja dla modelu brzmi wtedy „odpowiedz
+        // krótko i wróć do pytania", a to zwykle dokładnie to, co już napisał. Dopiero
+        // upomnienie i zamknięcie rozmowy wymagają innej treści, więc dopłacamy zapytanie
+        if (licznik < UPOMNIENIE_PRZY) return null;
+
+        const usuniety = this._usunOstatniTekstModelu(rozmowa);
+        const tekst = await this._wymuszonaOdpowiedz(rozmowa, userId, state, wynik.odpowiedz.instrukcja);
+
+        // Model nie odpowiedział (błąd API) – kandydat zobaczy jego pierwotną wiadomość,
+        // więc musi ona wrócić także do historii. Licznik odbiegnięcia zostaje naliczony:
+        // decyduje o nim zachowanie kandydata, nie to, czy udało się dopytać model
+        if (!tekst && usuniety) rozmowa.historia.push(usuniety);
+
+        return tekst;
+    }
+
+    /**
+     * Zdejmuje z historii ostatnią wypowiedź modelu, gdy jej tekst nie trafi do kandydata.
+     *
+     * Bez tego model widziałby w historii własną wiadomość, której rozmówca nigdy nie
+     * dostał – i budował na niej kolejne tury („jak pisałem wyżej").
+     *
+     * ⚠️ Ruszamy wyłącznie wpis z samym tekstem. Wpis z `functionCall` musi zostać, bo w
+     * następnej turze stoi przy nim `functionResponse`, a Gemini odrzuca osieroconą odpowiedź.
+     */
+    _usunOstatniTekstModelu(rozmowa) {
+        const ostatni = rozmowa.historia[rozmowa.historia.length - 1];
+        if (!ostatni || ostatni.role !== 'model') return null;
+        if (!Array.isArray(ostatni.parts)) return null;
+        if (!ostatni.parts.every(czesc => typeof czesc.text === 'string')) return null;
+        return rozmowa.historia.pop();
+    }
+
     /** Rozmowa ruszyła do przodu — licznik odbiegnięć wraca do zera */
     wyzerujOdbiegania(userId) {
         const rozmowa = this.rozmowy.get(userId);
@@ -617,12 +799,16 @@ ${brakuje.length
         const zapisane = [];
         const odrzucone = [];
 
+        let ustalonoCel = false;
+
         if (wejscie.cel === 'szukam_klanu') {
             info.purpose = 'Szukam klanu';
             zapisane.push('cel: szukam klanu');
+            ustalonoCel = true;
         } else if (wejscie.cel === 'inny_cel') {
             info.purpose = 'Przyszedłem w innym celu';
             zapisane.push('cel: inny');
+            ustalonoCel = true;
         }
 
         if (wejscie.punktyLunar !== undefined && wejscie.punktyLunar !== null) {
@@ -644,14 +830,38 @@ ${brakuje.length
             return { blad: true, odpowiedz: { blad: 'Nie podano żadnego pola do zapisania.' } };
         }
 
+        const brakuje = this._brakujaceDane(info, pytajOZrodlo);
+
         return {
             blad: odrzucone.length > 0 && zapisane.length === 0,
             odpowiedz: {
                 zapisano: zapisane,
                 odrzucono: odrzucone,
-                brakuje: this._brakujaceDane(info, pytajOZrodlo)
+                brakuje,
+                ...(ustalonoCel ? { instrukcja: this._instrukcjaPlanu(brakuje) } : {})
             }
         };
+    }
+
+    /**
+     * Plan ankiety, który rekruter przedstawia zaraz po ustaleniu ścieżki.
+     *
+     * Kandydat, który wie, o co zostanie zapytany, przestaje odpowiadać w ciemno – a bot
+     * przestaje wyglądać jak przesłuchanie bez końca. Treść planu bierzemy z listy braków,
+     * więc nie ma szansy rozłączyć się z tym, o co bot faktycznie poprosi.
+     *
+     * ⚠️ Pytanie „skąd o nas wiesz" w planie się NIE pojawia – pada dopiero na sam koniec,
+     * gdy reszta jest zebrana, więc zapowiadanie go tutaj tylko wydłużałoby listę.
+     */
+    _instrukcjaPlanu(brakuje) {
+        if (!brakuje.length) {
+            return 'Cel jest ustalony i nie potrzebujesz już nic więcej – przejdź do domknięcia rozmowy.';
+        }
+
+        return `Ścieżka jest ustalona. ZANIM o cokolwiek poprosisz, przedstaw krótki plan: wypisz `
+            + `w osobnych liniach, czego będziesz potrzebować po kolei (${brakuje.join('; ')}), `
+            + `i dopiero pod listą poproś o PIERWSZĄ pozycję z niej. Nie zapowiadaj pytania o to, `
+            + `skąd kandydat się o nas dowiedział – to pytanie pada dopiero na koniec rozmowy.`;
     }
 
     /**
@@ -674,7 +884,7 @@ ${brakuje.length
 
         // Pytanie na koniec - dopiero gdy reszta jest już zebrana
         if (pytajOZrodlo && brakuje.length === 0 && !info.referralSource) {
-            brakuje.push('skąd kandydat dowiedział się o serwerze');
+            brakuje.push(BRAK_ZRODLO);
         }
 
         return brakuje;

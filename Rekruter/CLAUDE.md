@@ -82,6 +82,13 @@ danych — propozycja zmiany nicku, przydział klanu, embed podsumowania — jes
 | `coreStock` | zdjęcie | OCR (`analyzeCoreStockImage`) |
 | `playerNick`, `characterAttack` | zdjęcie | OCR (`analyzeRecruitmentImage` lub Tesseract) |
 
+**Plan ankiety zaraz po ustaleniu ścieżki:** gdy `zapisz_dane` zapisze cel wizyty, odpowiedź narzędzia
+niesie dodatkowe pole `instrukcja` (`_instrukcjaPlanu`) — model ma najpierw wypisać kandydatowi
+w punktach, czego będzie potrzebować po kolei, a dopiero pod listą poprosić o pierwszą pozycję.
+**Treść planu bierze się z `_brakujaceDane()`**, więc nie ma szansy rozłączyć się z tym, o co bot
+faktycznie poprosi. Rozmowa z przycisku „Chcę dołączyć do klanu" nie przechodzi przez zapis celu,
+więc ten sam plan siedzi w jej instrukcji otwierającej (`rozpocznij`, wariant `celUstalony`).
+
 ⚠️ **Rozmowa NIE pyta o poziom trudności LME** (`lunarLevel`) — do kwalifikacji liczą się wyłącznie
 punkty z I fazy. Klasyczna ścieżka krokowa nadal go zbiera, więc pole w embedzie pojawia się tylko tam.
 
@@ -89,7 +96,10 @@ punkty z I fazy. Klasyczna ścieżka krokowa nadal go zbiera, więc pole w embed
 „Oczywiście, że tak!") i **dopiero po zebraniu całej reszty** — `_brakujaceDane()` dopisuje je do braków
 dopiero, gdy nic innego nie brakuje. Rozmowa z przycisku „Chcę dołączyć do klanu" go nie zadaje
 (flaga `pytajOZrodlo` na rozmowie), bo ta osoba jest na serwerze od dawna. Odpowiedź trafia do embeda
-podsumowania jako pole **📣 Skąd o nas wie**.
+podsumowania jako pole **📣 Skąd o nas wie**. Gdy zostaje już tylko ta pozycja, blok „Stan tej rozmowy"
+dostaje osobną instrukcję (`_instrukcjaBrakow`, stała `BRAK_ZRODLO`): zadaj to pytanie teraz i zaraz
+po odpowiedzi zamknij rozmowę. W planie ankiety pytanie się **nie pojawia** — nie jest danymi
+do zebrania, tylko ostatnią rzeczą przed pożegnaniem.
 
 ⚠️ **Nick, atak i Core Stock są celowo NIEDOSTĘPNE dla modelu jako narzędzie** — schemat `zapisz_dane`
 przyjmuje wyłącznie cel, punkty i źródło. Gdyby AI mogło zapisać nick albo atak z tekstu, kandydat
@@ -98,6 +108,8 @@ podałby dowolne wartości i ominął OCR.
 **Narzędzia (function calling Gemini — `functionDeclarations`):**
 - `zapisz_dane` — cel / punkty / źródło; waliduje zakresy po stronie bota i **zwraca modelowi listę
   tego, czego jeszcze brakuje** (dzięki temu model wie, o co pytać dalej, bez dopisywania stanu do promptu)
+- `oznacz_na_temat` / `oznacz_odbieganie` — klasyfikacja tury, w której nie przybyło żadnych danych;
+  patrz „Odbieganie od tematu" niżej
 - `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
   czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"
 - ⚠️ **Typy w schemacie pisane WIELKIMI literami** (`OBJECT`, `STRING`, `INTEGER`) — tego oczekuje Gemini.
@@ -127,9 +139,26 @@ jest kasowane od razu po odczycie.
 
 ### Odbieganie od tematu — upomnienie, przerwanie, wyrzucenie
 
-Model sygnalizuje narzędziem `oznacz_odbieganie`, że wiadomość kandydata nie posuwa rekrutacji
-(zmiana tematu, żart, prowokacja, uporczywe unikanie odpowiedzi). **Politykę trzyma bot, nie model** —
-wracająca instrukcja mówi modelowi, co ma napisać, więc progi zmienia się w jednym miejscu:
+⚠️ **Odbieganiem jest KAŻDA tura kandydata, po której rekrutacja nie ruszyła do przodu** — nie tylko
+ta, którą model raczył zgłosić. Miarą postępu jest migawka karty kandydata (`_migawkaPostepu`:
+cel, punkty, Core Stock, nick, atak, źródło) zdejmowana przed turą i porównywana po niej. Równe
+migawki = wiadomość nie była rzeczową odpowiedzią na zadane pytanie.
+
+Dlatego model musi **zaklasyfikować** każdą turę bez postępu jednym z dwóch narzędzi:
+
+| Narzędzie | Kiedy | Co robi bot |
+|---|---|---|
+| `oznacz_na_temat` | kandydat współpracuje, choć nic nie podał: pyta o grę albo o rekrutację, prosi o powtórzenie, zapowiada zdjęcie, wita się | nic nie liczy — licznik ani nie rośnie, ani się nie zeruje |
+| `oznacz_odbieganie` | zmiana tematu, żart, prowokacja, ucieczka w ogólniki, powtarzanie tego samego | podbija licznik i zwraca instrukcję z tabeli niżej |
+| — (brak wywołania) | model nie zaklasyfikował tury | **`_domiarBezPostepu` nalicza odbiegnięcie sam** |
+
+Milczenie modelu znaczy więc odbieganie, a nie brak zdania. Wcześniej było odwrotnie — model potrafił
+nie wywołać `oznacz_odbieganie` przez całą rozmowę, a kandydat odpowiadający „a po co ci to" na każde
+pytanie mielił bota do limitu tur. **Próba zapisu też wystarcza za klasyfikację**: punkty spoza zakresu
+0–9999 to rzeczowa, tylko nieudana odpowiedź, a nie zmiana tematu.
+
+**Politykę trzyma bot, nie model** — wracająca instrukcja mówi modelowi, co ma napisać, więc progi
+zmienia się w jednym miejscu:
 
 | Które z rzędu | Co robi bot | Stała |
 |---|---|---|
@@ -137,10 +166,21 @@ wracająca instrukcja mówi modelowi, co ma napisać, więc progi zmienia się w
 | 2. | model **uprzedza wprost**, że kolejna taka wiadomość zakończy rozmowę | `UPOMNIENIE_PRZY` |
 | 3. | model żegna się, rozmowa zostaje zamknięta (`przerwane`, `powod: 'off_topic'`) | `KONIEC_PRZY` |
 
+- ⚠️ **Pierwsze odbiegnięcie liczone jest po cichu** — instrukcja brzmi wtedy „odpowiedz krótko i wróć
+  do pytania", czyli dokładnie to, co model zwykle już napisał. Dopiero **upomnienie i zamknięcie
+  rozmowy PODMIENIAJĄ tekst modelu**: bot zdejmuje jego wypowiedź z historii (`_usunOstatniTekstModelu`,
+  tylko wpis z samym tekstem — wpisu z `functionCall` ruszyć nie wolno) i dopłaca jedno zapytanie
+  z instrukcją. Gdy to zapytanie padnie, pierwotna wypowiedź wraca do historii, a odbiegnięcie i tak
+  zostaje policzone — decyduje zachowanie kandydata, nie dostępność API
+- ⚠️ **Reguła dotyczy wyłącznie tur napisanych przez kandydata.** Tura systemowa (wynik OCR) jest z niej
+  wyłączona: nieczytelny screen to nieudana próba współpracy, nie zmiana tematu
 - **Liczą się odbiegnięcia POD RZĄD.** Każdy postęp zeruje licznik: zapisane dane (`zapisz_dane`
   z niepustym `zapisano`) albo odczytane zdjęcie (Core Stock lub postać). Karzemy uporczywe
   zmienianie tematu, nie jeden żart po drodze
-- Pytania o rekrutację i o grę (gdzie znaleźć dany ekran) **nie są** odbieganiem — prompt mówi to wprost
+- Pytania o rekrutację i o grę (gdzie znaleźć dany ekran) **nie są** odbieganiem — od tego jest
+  `oznacz_na_temat`. ⚠️ Model może tego narzędzia **nadużywać**, usprawiedliwiając nim każdą turę;
+  opis narzędzia i prompt mówią wprost, że nie służy do zasłaniania żartów i uników. Jeśli w praktyce
+  będzie inaczej, najprostszym progiem jest limit takich tur pod rząd
 - Licznik rozmowy siedzi w pamięci (`rozmowa.odbiegniecia`), a stan trafia do bloku „Stan tej rozmowy",
   więc model wie, ile już było
 
