@@ -244,6 +244,7 @@ async function handleJoinClanStart(interaction, state, config) {
 
   // Ponowne kliknięcie zaczyna rekrutację od nowa - poprzednia rozmowa idzie do kosza
   state.aiInterviewService?.zakonczRozmowe(userId);
+  await state.interviewLogService?.zakonczZPodsumowaniem(userId, '🔄 Kandydat zaczął rekrutację od nowa.');
 
   state.userInfo.set(userId, {
     username:        interaction.user.username,
@@ -296,8 +297,13 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
   });
   state.userEphemeralReplies.set(userId, interaction);
 
+  // Archiwum otwieramy PRZED pierwszą turą - inaczej powitanie rekrutera nie miałoby
+  // gdzie trafić i zapis rozmowy zaczynałby się od drugiej wypowiedzi
+  await state.interviewLogService?.rozpocznij(interaction.client, interaction.user, opcje);
+
   try {
     const wynik = await state.aiInterviewService.rozpocznij(userId, state, opcje);
+    if (wynik?.tekst) state.interviewLogService?.wpisBota(userId, wynik.tekst);
     await state.aiInterviewService.pokazOdpowiedz(
       userId,
       state.aiInterviewService.zbudujTranskrypcje(userId),
@@ -310,6 +316,7 @@ async function handleAiInterviewStart(interaction, state, config, opcje = {}) {
     logger.error(`[AI_WYWIAD] ❌ Nie udało się rozpocząć rozmowy: ${error.message}`);
     state.userStates.delete(userId);
     state.aiInterviewService.zakonczRozmowe(userId);
+    await state.interviewLogService?.zakonczZPodsumowaniem(userId, '❌ Nie udało się rozpocząć rozmowy (błąd API).');
     await state.aiInterviewService.pokazOdpowiedz(
       userId,
       config.messages.aiInterviewError,

@@ -142,6 +142,47 @@ więc bez transkrypcji widziałby tylko ostatnie zdanie bota). Token interakcji 
 gdy edycja przestaje działać, bot pisze na kanale z pingiem i kasuje tę wiadomość po 2 minutach,
 żeby rozmowa nie urwała się w ciszy.
 
+### Archiwum rozmów na osobnym kanale (`REKRUTER_INTERVIEW_LOG_CHANNEL`)
+
+**Plik:** `services/interviewLogService.js`
+
+Rozmowa toczy się w efemerycznej odpowiedzi widocznej WYŁĄCZNIE dla kandydata, a jego wiadomości
+i zdjęcia są kasowane z kanału zaraz po odczytaniu — po rekrutacji nie zostawał więc żaden ślad
+poza embedem podsumowania. Archiwum przepisuje cały przebieg na osobny kanał podany zmienną
+`REKRUTER_INTERVIEW_LOG_CHANNEL`. **Bez tej zmiennej serwis jest wyłączony**, a metody są puste —
+reszta rekrutacji działa bez zmian.
+
+⚠️ **Kanał zobaczy komplet danych kandydata** (treść rozmowy, nick, statystyki, zrzuty ekranu),
+więc trzymaj go poza zasięgiem zwykłych użytkowników.
+
+**Jeden wątek na rozmowę.** Start rekrutacji wysyła na kanał embed z kandydatem (wzmianka, tag, ID,
+sposób wejścia: rekrutacja od zera albo przycisk „Chcę dołączyć do klanu") i zakłada pod nim wątek,
+w którym ląduje reszta. Bez wątku wpisy kilku kandydatów przeplatałyby się na jednym kanale.
+Gdy wątku nie da się założyć (brak uprawnień, kanał innego typu), wpisy idą płasko na kanał.
+
+**Co trafia do archiwum:** każda wypowiedź rekrutera i kandydata (pełna, nie przycięta do sześciu
+ostatnich jak transkrypcja dla kandydata), każde przesłane zdjęcie jako załącznik razem z tym, co
+bot z niego odczytał, podpis pod zdjęciem (model go nie dostaje), puste wiadomości i załączniki
+niebędące obrazem, błędy tury oraz embed zamykający: powód zakończenia i komplet zebranych danych
+(cel, punkty I fazy, nick, atak, źródło, Core Stock).
+
+⚠️ **Zdjęcie Core Stock jest kasowane z dysku zaraz po odczycie**, więc `wpisZdjecie` czyta plik do
+bufora i dopiero potem kolejkuje wysyłkę — `await` po stronie handlera obejmuje wyłącznie odczyt,
+nie upload, żeby archiwum nie opóźniało odpowiedzi rekrutera.
+
+⚠️ **Wpisy jednej sesji idą przez łańcuch obietnic** (`sesja.kolejka`), bo kandydat potrafi wysłać
+dwie wiadomości pod rząd, a ich obsługa biegnie równolegle — bez kolejki wpisy zamieniałyby się
+miejscami. Błąd wysyłki jest łapany i nie zrywa łańcucha: archiwum może zgubić wpis, ale rekrutacja
+toczy się dalej.
+
+Wypowiedź dłuższa niż 1900 znaków jest dzielona — cięcie na końcu akapitu albo na spacji, ale tylko
+w końcówce kawałka (60% limitu). Bez tego warunku wypowiedź bez spacji ucinała się zaraz za emoji
+i pierwsza wiadomość miała kilkadziesiąt znaków.
+
+**Persistencja:** sesje archiwum (`interviewLogService.sesje`, klucz = userId) żyją w pamięci tak samo
+jak same rozmowy i są podpięte pod `uruchomSprzatanieRekrutacji()`. Restart bota przerywa rozmowę,
+więc otwarty wątek zostaje bez domknięcia — Discord archiwizuje go sam po dobie bezczynności.
+
 **Persistencja:** historie rozmów żyją wyłącznie w pamięci (`aiInterviewService.rozmowy`, klucz = userId),
 tak samo jak pozostałe mapy stanu rekrutacji — restart bota przerywa rozmowy w toku i kandydat zaczyna
 od nowa przyciskiem na kanale. Mapa jest podpięta pod `uruchomSprzatanieRekrutacji()` w `index.js`
@@ -230,6 +271,11 @@ REKRUTER_AI_INTERVIEW_MODEL=claude-opus-5   # domyślnie claude-opus-5
 REKRUTER_AI_INTERVIEW_EFFORT=low            # low | medium | high (tylko modele 4.5+)
 REKRUTER_AI_INTERVIEW_MAX_TURNS=40          # limit wiadomości kandydata w jednej rozmowie
 REKRUTER_AI_INTERVIEW_HISTORY=30            # ile wiadomości trafia do kontekstu modelu
+
+# Archiwum rozmów rekrutacyjnych (opcjonalne) - pełny zapis rozmowy wraz ze zdjęciami
+# Brak zmiennej = archiwum wyłączone. Kanał widzi komplet danych kandydata,
+# więc musi być dostępny wyłącznie dla administracji
+REKRUTER_INTERVIEW_LOG_CHANNEL=channel_id
 
 # Opcjonalne - z fallbackiem do wartości produkcyjnych
 REKRUTER_JOIN_CLAN_CHANNEL=channel_id     # Kanał z przyciskiem „Chcę dołączyć do klanu" (domyślnie 1209283124765265970)
