@@ -87,8 +87,10 @@ module.exports = {
         
         ownerOnly: 'Tylko właściciel wątku może użyć tych przycisków!',
         
+        // Samo pytanie - bez tłumaczenia się z timerów. Terminy (nieaktywność 7 dni,
+        // auto-zamknięcie po kolejnych 7) są sprawą bota, nie właściciela wątku
         inactiveReminder: (userId) =>
-            `<@${userId}> Twój wątek jest nieaktywny od 7 dni. Czy mogę go zamknąć?\nJeśli nie odpowiesz, wątek zostanie automatycznie zamknięty za kolejne 7 dni.`,
+            `<@${userId}> Czy mogę zamknąć Twój wątek?`,
 
         threadAlreadyOpen: (userId) =>
             `<@${userId}> Twój wątek jest wciąż otwarty. Możesz z niego korzystać.`,
