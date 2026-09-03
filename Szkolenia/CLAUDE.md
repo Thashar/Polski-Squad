@@ -2,6 +2,8 @@
 
 **Funkcjonalność:** Reakcja emoji N_SSS -> Prywatny wątek z instrukcjami treningowymi + AI Chat
 **Lifecycle:** Utworzenie -> pytanie o zamknięcie po 7 dniach nieaktywności -> automatyczne zamknięcie po 14 dniach (7 dni po pytaniu bez odpowiedzi). Kliknięcie "nie zamykaj" resetuje cały cykl od nowa.
+
+⚠️ **Treść pytania to samo pytanie** (`inactiveReminder`): `Czy mogę zamknąć Twój wątek?` plus dwa przyciski. **Nie dopisuj do niego terminów** — wcześniej komunikat tłumaczył się z timerów („nieaktywny od 7 dni", „zostanie zamknięty za kolejne 7 dni"), co dla właściciela wątku jest szumem: liczby są sprawą bota, a odpowiedź i tak sprowadza się do kliknięcia jednego z przycisków.
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 
 **Serwisy:**
