@@ -18,7 +18,7 @@ const SAFETY_SETTINGS_OFF = [
  */
 const PROMPT_VERSIONS = {
     'extract-data-eng':  'v4',
-    'compare-template':  'v6',
+    'compare-template':  'v5',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
@@ -458,11 +458,6 @@ CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
 - Liczb, wyników, jednostek (K/M/B/T/Q/Qi/Sx/Sp)
 
 Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
-
-KADR — sprawdź ZANIM ocenisz strukturę:
-Zdjęcie ma pokazywać CAŁY ekran wyników, nie jego fragment. Gdy jest to wycinek (kadr obcięty tak,
-że nie widać całego panelu z banerem i nazwą przeciwnika, albo brakuje tła z gameplayem)
-→ odpowiedz NOK, nawet jeśli same linie Best/Total są widoczne i wyglądają poprawnie.
 
 Format odpowiedzi:
 - Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
