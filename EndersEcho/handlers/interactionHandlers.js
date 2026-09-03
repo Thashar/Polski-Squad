@@ -13661,6 +13661,7 @@ class InteractionHandler {
             'NOT_SIMILAR': msgs.reportReasonNotSimilar,
             'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
             'BEST_EXCEEDS_TOTAL': msgs.reportReasonBestExceedsTotal,
+            'BOSS_NAME_UNREADABLE': msgs.reportReasonBossNameUnreadable,
         };
         return {
             text: reasonMap[reason] || `🟠 ${reason}`,
