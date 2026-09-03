@@ -36,8 +36,8 @@
         },
         {
           "name": "/clean",
-          "description": "Usuwa wiadomości na kanale (max 100, z filtrem użytkownika i czasu)",
-          "usage": "/clean [użytkownik:@user] [ilość:1-100] [czas:np. 2h30m]",
+          "description": "Usuwa wiadomości na kanale bez limitu ilości (z filtrem użytkownika i czasu)",
+          "usage": "/clean [użytkownik:@user] [ilość:dowolna] [czas:np. 2h30m, 7d]",
           "requiredPermission": "moderator"
         },
         {
