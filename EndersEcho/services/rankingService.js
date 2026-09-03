@@ -382,6 +382,10 @@ class RankingService {
      * @returns {number}
      */
     parseScoreValue(scoreText) {
+        // ⚠️ Wywołujący potrafi podać `null` — np. `aiResult.runScore`, gdy model nie odczytał
+        // wyniku pojedynczej walki. Bez tej bramki `null.toUpperCase()` wywracało CAŁY flow
+        // `/update` już PO wysłaniu embeda do admina: gracz nie dostawał ani wyniku, ani odrzutu
+        if (!scoreText || typeof scoreText !== 'string') return 0;
         const upperScore = scoreText.toUpperCase().trim();
         const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         if (!match) return 0;
@@ -426,6 +430,7 @@ class RankingService {
      * @returns {string}
      */
     getScoreUnit(scoreText) {
+        if (!scoreText || typeof scoreText !== 'string') return '';
         const upperScore = scoreText.toUpperCase().trim();
         const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         return match && match[2] ? match[2] : '';

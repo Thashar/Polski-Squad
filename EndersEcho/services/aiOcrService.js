@@ -17,12 +17,12 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v3',
-    'compare-template':  'v5',
+    'extract-data-eng':  'v4',
+    'compare-template':  'v6',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { correctBossNameFull } = require('../config/bossNames');
+const { correctBossNameFull, isUnreadableBossName } = require('../config/bossNames');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -126,6 +126,8 @@ NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
 NIE DODAWAJ cyfr których nie ma na ekranie.
 JEŻELI NIE MA TEKSTU NA EKRANIE ZWRÓĆ ZERO!
 ZAKAZ HALUCYNACJI, ZAKAZ WYMYŚLANIA LICZB!
+UWAGA: Jeżeli nazwy bossa NIE MA na obrazie albo jest nieczytelna — w pierwszej linii wpisz DOKŁADNIE: BRAK
+NIE TŁUMACZ SIĘ, NIE PISZ ZDAŃ. Pierwsza linia to sama nazwa bossa albo słowo BRAK.
 Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kolejności):
 <nazwa bossa>
 <wynik Best z jednostką>
@@ -166,9 +168,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
         }
 
         let rawBoss  = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
-        const { corrected: bossName, wasUnknown } = correctBossNameFull(rawBoss, this.bossAliasService);
-        if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
-        else if (wasUnknown) log.warn(`[AI OCR] Nieznana nazwa bossa: "${rawBoss}" — brak dopasowania`);
+        // Korekcja nazwy dopiero po walidacji wyniku (niżej) — zdanie od modelu zamiast nazwy
+        // nie ma być „nieznanym bossem" do zmapowania, tylko powodem odrzucenia screena
+        const bossUnreadable = isUnreadableBossName(rawBoss);
         let score    = lines[1].replace(/^wynik[:\s]*/i, '').replace(/^score[:\s]*/i, '').replace(/^best[:\s]*/i, '').trim();
 
         let total = null;
@@ -196,6 +198,19 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
             log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx/Sp) — odrzucam`);
             return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
         }
+
+        // Nazwa bossa nieodczytana — screen ODRZUCONY, a nie zapisany z bełkotem w polu bossa.
+        // Najczęstszy przypadek: wycinek screena bez górnej części panelu. Model odpowiada wtedy
+        // zdaniem ("Nie udało mi się zidentyfikować nazwy bossa..."), które wcześniej przechodziło
+        // dalej jako zwykła nieznana nazwa — z alertem aliasowym dla admina i wynikiem w rankingu.
+        if (bossUnreadable) {
+            log.warn(`[AI OCR] Nie odczytano nazwy bossa z linii: "${lines[0]}" — odrzucam screen`);
+            return { bossName: null, score: null, isValidVictory: false, error: 'BOSS_NAME_UNREADABLE' };
+        }
+
+        const { corrected: bossName, wasUnknown } = correctBossNameFull(rawBoss, this.bossAliasService);
+        if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
+        else if (wasUnknown) log.warn(`[AI OCR] Nieznana nazwa bossa: "${rawBoss}" — brak dopasowania`);
 
         // Wynik POJEDYNCZEJ WALKI (liczba nad linią „Best") — czwarta, OSTATNIA linia odpowiedzi.
         //
@@ -443,6 +458,11 @@ CZEGO NIE PORÓWNUJESZ (treść ZAWSZE się różni — to jest NORMALNE):
 - Liczb, wyników, jednostek (K/M/B/T/Q/Qi/Sx/Sp)
 
 Porównujesz TYLKO STRUKTURĘ layoutu: czy te same elementy UI (panel, baner, ikona, statystyki, żółty przycisk) są na swoich miejscach.
+
+KADR — sprawdź ZANIM ocenisz strukturę:
+Zdjęcie ma pokazywać CAŁY ekran wyników, nie jego fragment. Gdy jest to wycinek (kadr obcięty tak,
+że nie widać całego panelu z banerem i nazwą przeciwnika, albo brakuje tła z gameplayem)
+→ odpowiedz NOK, nawet jeśli same linie Best/Total są widoczne i wyglądają poprawnie.
 
 Format odpowiedzi:
 - Jeśli drugie zdjęcie pasuje do wzorca → odpowiedz TYLKO: OK
