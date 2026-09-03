@@ -13385,11 +13385,27 @@ class InteractionHandler {
                 }, interaction.client.guilds.cache.get(targetGuildId) ?? null, analyzeRevertRow, interaction.client);
             } catch {}
 
+            // Samo „Nie pobito rekordu" nie tłumaczy, DLACZEGO nie poszło ogłoszenie publiczne —
+            // a to pierwsze pytanie admina, który przed chwilą widział w raporcie niższy wynik.
+            // Dokładamy więc wpis, który zablokował zapis: rekord rankingowy profilu, a gdy go nie
+            // ma (wynik wszedł do rankingu, ale nie pobił bossa) — rekord tego bossa.
+            let analyzeResultText;
+            if (isNewRecord) {
+                analyzeResultText = targetMsgs.analyzeResultNewRecord;
+            } else if (isNewBossRecord) {
+                analyzeResultText = targetMsgs.analyzeResultBossRecord || '🎯 Nowy rekord na bossie!';
+            } else {
+                const blockingScore = currentScore?.score || previousBossRecord?.score || null;
+                analyzeResultText = blockingScore && targetMsgs.analyzeResultNoRecordCurrent
+                    ? formatMessage(targetMsgs.analyzeResultNoRecordCurrent, { current: blockingScore })
+                    : targetMsgs.analyzeResultNoRecord;
+            }
+
             const extraInfo = formatMessage(targetMsgs.analyzeResultSuccess, {
                 adminName,
                 bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
                 score: aiResult.score,
-                result: isNewRecord ? targetMsgs.analyzeResultNewRecord : (isNewBossRecord ? (targetMsgs.analyzeResultBossRecord || '🎯 Nowy rekord na bossie!') : targetMsgs.analyzeResultNoRecord),
+                result: analyzeResultText,
             });
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);
@@ -13694,11 +13710,16 @@ class InteractionHandler {
                 hour12: false
             });
 
-            // Pobierz aktualny rekord gracza
+            // Pobierz aktualny rekord PROFILU, którego dotyczy screen.
+            //
+            // ⚠️ Klucz to `playerKey`, NIE `interaction.user.id` — ranking jest kluczowany profilem.
+            // Przy profilu dodatkowym (`userId#2`) odczyt po samym `userId` pokazywał rekord profilu
+            // GŁÓWNEGO, więc raport kłamał: admin widział np. „330.2Sx", klikał „Analizuj" na wyniku
+            // 1361.8Sx i dostawał „Nie pobito rekordu", bo na profilu dodatkowym leżał już wyższy wpis.
             let currentRecordText = msgs.reportFieldNoRecord || '—';
             try {
                 const ranking = await this.rankingService.loadRanking(interaction.guildId);
-                const userRecord = ranking[interaction.user.id];
+                const userRecord = ranking[playerKey || interaction.user.id];
                 if (userRecord?.score) {
                     currentRecordText = userRecord.bossName
                         ? `${userRecord.score} (${userRecord.bossName})`
