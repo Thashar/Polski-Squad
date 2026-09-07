@@ -130,6 +130,19 @@ podałby dowolne wartości i ominął OCR.
   patrz „Odbieganie od tematu" niżej
 - `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
   czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"
+  - ⚠️ **To NIE jest jedyna droga do finalizacji.** Gdy komplet danych jest zebrany, a model narzędzia
+    nie wywołał, rekrutację domyka sam bot (`_domknijGdyKomplet` w `_zwrocOdpowiedz`), a za pożegnanie
+    służy to, co model napisał w tej turze. Powód: realny przypadek z produkcji — bot zebrał nick, atak,
+    Core Stock i punkty, napisał kandydatowi „To już wszystko, czego potrzebowałem. Zaraz zajmiemy się
+    przydzieleniem Cię do odpowiedniego klanu", **ale narzędzia nie wywołał**. Tura wróciła
+    z `zakonczone: false`, więc `finalizujRekrutacjeAI` nigdy nie ruszyło: wątek został otwarty, rola nie
+    została nadana, podsumowanie nie poszło na kanał rekrutacyjny. Z zewnątrz rozmowa wyglądała dobrze,
+    więc nikt się o tym nie dowiedział
+  - Ta sama zasada co przy odbieganiu od tematu: **politykę trzyma bot, nie to, czy model pamiętał
+    o narzędziu**. Narzędzie zostaje, bo pozwala modelowi napisać własne pożegnanie
+  - Sprawdzane **przed** `_domiarBezPostepu` — skoro nie brakuje już niczego, tura nie jest „bez postępu"
+    i nie ma za co karać; jest po prostu ostatnia
+  - Rozmowa zamykana za odbieganie (`przerwacOffTopic`) ma własną ścieżkę i **nie** jest finalizowana
 - ⚠️ **Typy w schemacie pisane WIELKIMI literami** (`OBJECT`, `STRING`, `INTEGER`) — tego oczekuje Gemini.
   Zakresy wartości opisujemy słownie, a twardą walidację robi bot (`_zapiszDane`): model potrafi minąć się
   z opisem, więc granice sprawdzamy u siebie

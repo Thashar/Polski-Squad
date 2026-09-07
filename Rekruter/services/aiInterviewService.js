@@ -420,6 +420,12 @@ class AIInterviewService {
             if (dodatkowe) teksty.push(dodatkowe);
         }
 
+        // Komplet danych domyka rekrutację NIEZALEŻNIE od tego, czy model wywołał narzędzie.
+        // Sprawdzane PRZED domiarem: skoro nie brakuje już niczego, tura nie jest „bez postępu"
+        // i nie ma za co karać — jest po prostu ostatnia.
+        const domkniete = this._domknijGdyKomplet(rozmowa, teksty, userId, state);
+        if (domkniete) return domkniete;
+
         // Tura kandydata, po której nic nie przybyło i której model sam nie zaklasyfikował.
         // Przy upomnieniu i przy zamknięciu rozmowy tekst modelu jest PODMIENIANY: jego
         // pierwotna odpowiedź nie zna jeszcze decyzji bota, więc doklejenie jej obok
@@ -438,6 +444,45 @@ class AIInterviewService {
         }
 
         return { tekst, zakonczone: false };
+    }
+
+    /**
+     * Domknięcie rekrutacji, gdy komplet danych jest zebrany, a model nie wywołał
+     * `zakoncz_wywiad`.
+     *
+     * ⚠️ **Milczenie modelu nie może blokować finalizacji.** Realny przypadek z produkcji:
+     * bot zebrał nick, atak, Core Stock i punkty Lunar Mine, po czym napisał kandydatowi
+     * „To już wszystko, czego potrzebowałem. Zaraz zajmiemy się przydzieleniem Cię do
+     * odpowiedniego klanu" — ale narzędzia nie wywołał. Tura wróciła z `zakonczone: false`,
+     * więc `finalizujRekrutacjeAI` nigdy nie ruszyło: wątek został otwarty, rola nie została
+     * nadana, podsumowanie nie poszło na kanał rekrutacyjny. Kandydat pożegnany, rekrutacja
+     * niedokończona — i nikt się o tym nie dowiaduje, bo z zewnątrz rozmowa wygląda dobrze.
+     *
+     * To ta sama zasada, co przy odbieganiu od tematu (`_domiarBezPostepu`): politykę trzyma
+     * bot, a nie to, czy model pamiętał o narzędziu. `zakoncz_wywiad` zostaje — pozwala
+     * modelowi napisać własne pożegnanie i sam sprawdza komplet danych — ale przestaje być
+     * JEDYNĄ drogą do finalizacji.
+     *
+     * Za pożegnanie służy to, co model napisał w tej turze; tekst zapasowy jest na wypadek
+     * tury zupełnie bez treści.
+     *
+     * @returns {{tekst: string, zakonczone: true}|null} wynik tury albo null, gdy nie domykamy
+     */
+    _domknijGdyKomplet(rozmowa, teksty, userId, state) {
+        // Rozmowa zamykana za odbieganie ma własną ścieżkę - tam finalizacji NIE ma
+        if (rozmowa.zakonczona || rozmowa.przerwacOffTopic) return null;
+
+        const info = state?.userInfo?.get(userId);
+        if (!info) return null;
+        if (this._brakujaceDane(info, this._czyPytacOZrodlo(userId)).length > 0) return null;
+
+        const tekst = teksty.join('\n\n').trim()
+            || 'Dzięki! To wszystko, czego potrzebowałem — resztą zajmuje się już bot.';
+
+        logger.info(`[AI_WYWIAD] ✅ Komplet danych dla ${info.username} - domykam rekrutację (model nie wywołał zakoncz_wywiad)`);
+        rozmowa.zakonczona = true;
+
+        return { tekst, zakonczone: true };
     }
 
     async _wymuszonaOdpowiedz(rozmowa, userId, state, instrukcja = null) {
