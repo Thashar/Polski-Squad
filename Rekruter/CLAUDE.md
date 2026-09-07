@@ -370,16 +370,38 @@ każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR akt
    - Ponowienie 3× co 3 s przy błędach przejściowych (429/500/503, zerwane połączenie). **Odrzucenie przez filtr
      treści (`semantic`) NIE jest ponawiane** — powtórzy się tak samo, więc nie ma po co czekać
    - Dwuetapowa walidacja (dwa osobne requesty do API):
-     - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (200 tokenów)
+     - **KROK 1 (pierwszy request, `sprawdz-ekwipunek` v2):** czy to w ogóle ekran postaci (200 tokenów)
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
-     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (800 tokenów)
+       - ⚠️ **Bramka pyta o DWA wyznaczniki naraz: napis „My Equipment" ALBO górny pasek statystyk
+         (ATK i HP z liczbami).** Sam napis nie wystarcza, bo bywa zasłonięty — nakładka
+         „Detailed Stats" przykrywa dolną połowę ekranu, a nick i ATK zostają nad nią doskonale
+         czytelne. Przy warunku wyłącznie na napis taki screen wracał jako `INVALID_SCREENSHOT`,
+         choć miał komplet potrzebnych danych
+       - ⚠️ **Odpowiedź to znacznik `FOUND` / `NOT_FOUND`, nie słowo po polsku** — patrz
+         `_czyWidacEkran()`, wspólne dla obu bramek (ekwipunek i Core Stock).
+         **Tu siedział błąd, przez który ekran postaci nie dawał się odczytać NIGDY:** prompt kazał
+         modelowi napisać „Znalezniono" (literówka), a kod sprawdzał `includes('znalezniono')`.
+         Model, piszący poprawną polszczyzną, odpowiadał „Znaleziono" — inny ciąg znaków, więc
+         warunek nie trafiał ani razu i każdy screen, także idealnie poprawny, kończył się
+         `INVALID_SCREENSHOT`. Bramka Core Stock miała tę samą frazę napisaną poprawnie i dlatego
+         działała — stąd mylący objaw „Core Stock czyta, ekwipunku nie". Angielski znacznik nie ma
+         odmiany ani ogonków, więc nie da się go „poprawić" po drodze. `NOT_FOUND` zawiera w sobie
+         `FOUND`, dlatego zaprzeczenie jest sprawdzane PIERWSZE
+     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 rozpoznał ekran postaci → wyciąga nick i atak (800 tokenów)
        - ⚠️ **Czyta z obrazu PRZEROBIONEGO na czarno-biały** (`_obrazBialyNaCzarnym`): biel zostaje bielą,
          każdy inny kolor staje się czernią. Nick i ATK są w grze białe na jaskrawym, kolorowym tle
          (pomarańczowy baner, grafika postaci, efekty) i model regularnie odbijał się od tego tła,
          zwracając „nie udało się nic odczytać" mimo poprawnego screena
-       - **Model DOSTAJE INFORMACJĘ o tej obróbce** w prompcie (`_promptOdczytuPostaci(true)`, wersja `v2`).
+       - **Model DOSTAJE INFORMACJĘ o tej obróbce** w prompcie (`_promptOdczytuPostaci(true)`, wersja `v3`).
          Bez tego widzi czarny prostokąt z białymi plamami, nie wie, czemu zniknęło tło i grafika,
          i sam dochodzi do wniosku, że screen jest nieczytelny
+       - ⚠️ **Wskazówki „gdzie patrzeć" są ROZDZIELONE na wariant czarno-biały i oryginał.** Wersja dla
+         obrazu po obróbce kierowała model wcześniej „nad zieloną linię progresu" i „na prawo od ikonki
+         mieczyka" — a zielony pasek i kolorowe ikony są po konwersji czarne, czyli nie istnieją. Model
+         szukał punktów odniesienia, których na SWOIM obrazie nie miał, i lądował na „nieczytelny screen".
+         Po obróbce zostają za to same napisy `ATK` i `HP` (białe) i to one są kotwicą
+       - Prompt jawnie odróżnia ATK od HP („druga, zwykle większa liczba — jej NIE podawaj") i prosi
+         o pełną liczbę bez skrótów `M`/`K` i bez separatorów tysięcy
        - ⚠️ **Próg bieli to DWA warunki naraz**: jasność (najciemniejszy kanał ≥ `BIEL_MIN_JASNOSC` = 200)
          **i** brak nasycenia (rozpiętość kanałów ≤ `BIEL_MAX_ROZPIETOSC` = 40). Sam próg jasności
          (`sharp().greyscale().threshold()`) przepuściłby nasycone jasne kolory — żółty `(255,255,0)` ma
@@ -390,12 +412,38 @@ każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR akt
          progi), KROK 2 jest ponawiany na ORYGINALE z promptem bez wzmianki o obróbce — czyli tak, jak
          działało to wcześniej. Gorzej niż przed zmianą być nie może, kosztem jest jedno dodatkowe zapytanie
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
+   - **Parsowanie odpowiedzi (`parseAIResponse` → `_wyluskajNickIAtak`)** jest odporne na to, że model
+     nie trzyma się formatu co do linii:
+     - Ogrodzenia ``` i puste linie są odsiewane
+     - **Atak = OSTATNIA linia, która po zdjęciu etykiety (`Atak:`, `ATK:`, …) jest samą liczbą**;
+       **nick = OSTATNIA linia przed nią, która liczbą nie jest** i nie kończy się dwukropkiem
+       (odsiew wiersza wstępu typu „Oto odczytane dane:")
+     - ⚠️ Wcześniej było sztywno `lines[0]` = nick, `lines[1]` = atak — jeden dorzucony wiersz wstępu
+       i poprawnie odczytany screen kończył się `PARSING_ERROR`
+     - Ścieżka zapasowa: gdy żadna linia nie jest czystą liczbą, brana jest druga linia i pierwsza
+       liczba z niej — czyli dokładnie stare zachowanie
+   - **Zakres akceptowanej wartości ATK: `ATAK_MIN` = 100 … `ATAK_MAX` = 1 000 000 000**
+     - ⚠️ Górny limit wynosił **10 000 000** i był miną z opóźnionym zapłonem: gracze dawno podeszli pod
+       ten pułap (realny screen z rekrutacji: ATK 3 438 580 przy HP 9 535 298). Odczyt powyżej progu NIE
+       jest korygowany, tylko wyrzucany jako `VALIDATION_FAILED` — najmocniejsi kandydaci odbijaliby się
+       od rekrutacji z komunikatem o nieczytelnym screenie
+     - Dolny próg zostaje — chroni przed wzięciem za atak numeru poziomu albo licznika energii
+     - ⚠️ **Ścieżka Tesseract (`services/ocrService.js`) wciąż ma limit 10 mln** w pięciu miejscach.
+       Nie jest używana na produkcji (patrz ramka na górze pliku), a tamtejsza heurystyka „bierz
+       największą liczbę w zakresie" przy podniesieniu limitu zaczęłaby łapać HP i złoto — zmiana
+       wymaga osobnego przemyślenia, nie samego przestawienia stałej
+   - **`_naLiczbeAtaku()` rozumie separatory tysięcy i skróty jednostek.** ⚠️ Kropka znaczy co innego
+     zależnie od kontekstu: „3.438.580" to separatory tysięcy (→ 3438580), a „3.44M" to ułamek
+     (→ 3 440 000). Poprzednia wersja kasowała `[\s,._]` bezwarunkowo i z „3.44M" robiła **344** —
+     czyli wartość poniżej progu, więc poprawny screen szedł do kosza
 
 **Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`
    - Wymagany `REKRUTER_GOOGLE_AI_API_KEY` (niezależnie od `USE_AI_OCR` — Core Stock nie ma ścieżki zapasowej na Tesseract)
    - **Dwuetapowo, tak samo jak ekran postaci:**
-     - **KROK 1** (`sprawdz-corestock`, 200 tokenów): czy na screenie w ogóle widnieje napis „Core Stock".
-       Brak → `NOT_CORE_STOCK` natychmiast, BEZ drugiego zapytania
+     - **KROK 1** (`sprawdz-corestock` **v2**, 200 tokenów): czy na screenie w ogóle widnieje napis „Core Stock".
+       Brak → `NOT_CORE_STOCK` natychmiast, BEZ drugiego zapytania. Idzie przez to samo
+       `_czyWidacEkran()` co bramka ekwipunku (znacznik `FOUND` / `NOT_FOUND`) — jedna implementacja,
+       więc literówka w jednej frazie nie może już rozjechać dwóch ścieżek
      - **KROK 2** (`odczytaj-corestock` **v2**, 800 tokenów): wyciągnięcie JSON-a `{"Relic Core": N, …}` (6 typów)
    - ⚠️ **KROK 1 powstał po realnym incydencie.** Bez niego model DOPISYWAŁ SOBIE zawartość Core Stock
      z zupełnie innego ekranu: kandydat poproszony o Core Stock wysłał „My Equipment" (siatka przedmiotów

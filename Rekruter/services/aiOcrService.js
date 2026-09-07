@@ -25,9 +25,9 @@ const USTAWIENIA_BEZPIECZENSTWA = [
  * Po każdej zmianie treści promptu BUMPNIJ wersję, żeby dało się porównać w Langfuse.
  */
 const WERSJE_PROMPTOW = {
-    'sprawdz-ekwipunek': 'v1',
-    'odczytaj-postac':   'v2',
-    'sprawdz-corestock': 'v1',
+    'sprawdz-ekwipunek': 'v2',
+    'odczytaj-postac':   'v3',
+    'sprawdz-corestock': 'v2',
     'odczytaj-corestock': 'v2',
 };
 
@@ -50,6 +50,27 @@ const TEMPERATURA_OCR = 0;
  */
 const BIEL_MIN_JASNOSC = 200;
 const BIEL_MAX_ROZPIETOSC = 40;
+
+/**
+ * Zakres, w którym wartość ATK uznajemy za wiarygodną.
+ *
+ * ⚠️ Górny limit wynosił 10 000 000 i był miną z opóźnionym zapłonem: gracze w Survivor.io
+ * dawno podeszli pod ten pułap (screen z rekrutacji: ATK 3 438 580 przy HP 9 535 298 — i to
+ * konto dalej rośnie). Odczyt powyżej progu NIE jest korygowany, tylko wyrzucany jako
+ * `VALIDATION_FAILED`, więc najmocniejsi kandydaci — ci, na których zależy najbardziej —
+ * odbijaliby się od rekrutacji z komunikatem o nieczytelnym screenie.
+ *
+ * Dolny próg zostaje: chroni przed wzięciem za atak numeru poziomu albo licznika energii.
+ */
+const ATAK_MIN = 100;
+const ATAK_MAX = 1000000000;
+
+/** Etykiety, którymi model bywa uprzejmy opisać wiersze odpowiedzi mimo prośby o goły format */
+const ETYKIETA_NICKU = /^(nick postaci|nick|postać|postac|gracz|player|name)\s*[:\-]?\s*/i;
+const ETYKIETA_ATAKU = /^(wartość ataku|wartosc ataku|atak|atk|attack|moc)\s*[:\-]?\s*/i;
+
+/** Linia będąca SAMĄ liczbą - z ewentualnymi separatorami tysięcy i skrótem jednostki */
+const WZORZEC_LICZBY = /^\d[\d\s.,'\u2019_]*[kKmMbB]?$/;
 
 /** Ile razy ponawiamy zapytanie przy błędzie przejściowym (429/5xx) */
 const PROBY = 3;
@@ -178,6 +199,42 @@ class AIOCRService {
     }
 
     /**
+     * Bramka „czy to na pewno TEN ekran" — jedno tanie zapytanie przed właściwym odczytem.
+     *
+     * ⚠️ Model odpowiada ZNACZNIKIEM `FOUND` / `NOT_FOUND`, a nie słowem po polsku, i to jest
+     * sedno poprawki. Bramka ekranu postaci kazała mu wcześniej napisać „Znalezniono"
+     * (literówka) i sprawdzała `includes('znalezniono')`. Model, piszący poprawną polszczyzną,
+     * odpowiadał „Znaleziono" — a to NIE JEST ten sam ciąg znaków. Warunek nie trafiał nigdy,
+     * więc KAŻDY screen postaci, także idealnie poprawny, kończył się `INVALID_SCREENSHOT`
+     * i bot w kółko prosił kandydata o to samo zdjęcie. Bramka Core Stock miała tę samą frazę
+     * napisaną poprawnie i dlatego działała — stąd objaw „Core Stock czyta, ekwipunku nie".
+     *
+     * Angielski znacznik nie ma odmiany ani ogonków, więc nie da się go „poprawić" po drodze.
+     *
+     * ⚠️ `NOT_FOUND` zawiera w sobie `FOUND`, dlatego negatywna odpowiedź jest sprawdzana PIERWSZA.
+     *
+     * @param {object} obraz część obrazu dla Gemini
+     * @param {string} pytanie opis ekranu, którego szukamy (kończy się znakiem zapytania)
+     * @param {object} meta metadane spanu dla Langfuse
+     * @returns {Promise<{widac: boolean, odpowiedz: string}>}
+     */
+    async _czyWidacEkran(obraz, pytanie, meta) {
+        const prompt = `${pytanie}
+Odpowiedz DOKŁADNIE jednym znacznikiem, bez żadnych dodatkowych słów ani wyjaśnień:
+FOUND — jeżeli tak.
+NOT_FOUND — jeżeli nie.
+Nie zgaduj i nie sugeruj się tym, że na obrazie są jakieś przedmioty albo liczby — liczy się WYŁĄCZNIE to, co faktycznie widać.`;
+
+        const odpowiedz = (await this._generuj([obraz, { text: prompt }], 200, meta)).trim();
+        const znormalizowana = odpowiedz.toUpperCase();
+
+        const zaprzeczenie = znormalizowana.includes('NOT_FOUND') || znormalizowana.includes('NOT FOUND');
+        const widac = !zaprzeczenie && znormalizowana.includes('FOUND');
+
+        return { widac, odpowiedz };
+    }
+
+    /**
      * Analizuje zdjęcie postaci z ekwipunkiem.
      * @param {string} imagePath - Ścieżka do obrazu
      * @returns {Promise<{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}>}
@@ -191,26 +248,30 @@ class AIOCRService {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
             const obraz = await this._obrazJakoCzesc(imagePath);
 
-            // === KROK 1: Sprawdź czy jest "My Equipment" ===
-            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "My Equipment"...`);
+            // === KROK 1: Czy to w ogóle ekran postaci? ===
+            //
+            // ⚠️ Bramka uznaje ekran za właściwy na DWA sposoby: po napisie „My Equipment"
+            // albo po górnym pasku statystyk (ATK + HP z liczbami). Sam napis nie wystarcza,
+            // bo bywa zasłonięty — nakładka „Detailed Stats" przykrywa dolną połowę ekranu,
+            // a nick i ATK zostają nad nią doskonale czytelne. Przy warunku wyłącznie na
+            // napis taki screen wracał jako `INVALID_SCREENSHOT`, choć miał komplet danych.
+            logger.info(`[AI OCR] KROK 1: Sprawdzam, czy to ekran postaci...`);
 
-            const promptSprawdzenia = `Znajdź na screenie napis "My Equipment", jeżeli znajdziesz napisz "Znalezniono", jeżeli nie znajdziesz napisz "Brak frazy".`;
-
-            const odpowiedzSprawdzenia = (await this._generuj(
-                [obraz, { text: promptSprawdzenia }],
-                200,
+            const { widac: toEkranPostaci, odpowiedz: odpowiedzSprawdzenia } = await this._czyWidacEkran(
+                obraz,
+                `To ma być zrzut ekranu z gry Survivor.io przedstawiający postać z ekwipunkiem. Czy widzisz na nim napis "My Equipment" ALBO górny pasek statystyk postaci, w którym obok skrótu "ATK" oraz obok "HP" stoją liczby?`,
                 {
                     operationType: 'ocr.analyze',
                     step: 'sprawdz-ekwipunek',
                     promptName: 'sprawdz-ekwipunek',
                     promptVersion: WERSJE_PROMPTOW['sprawdz-ekwipunek'],
                 }
-            )).trim();
+            );
 
             logger.info(`[AI OCR] KROK 1 - Odpowiedź: "${odpowiedzSprawdzenia}"`);
 
-            if (!odpowiedzSprawdzenia.toLowerCase().includes('znalezniono')) {
-                logger.warn(`[AI OCR] KROK 1 - Nie znaleziono "My Equipment", przerywam analizę`);
+            if (!toEkranPostaci) {
+                logger.warn(`[AI OCR] KROK 1 - To nie ekran postaci, przerywam analizę`);
                 return {
                     playerNick: null,
                     characterAttack: null,
@@ -220,7 +281,7 @@ class AIOCRService {
                 };
             }
 
-            logger.info(`[AI OCR] KROK 1 - "My Equipment" znaleznione, przechodzę do KROKU 2`);
+            logger.info(`[AI OCR] KROK 1 - Ekran postaci rozpoznany, przechodzę do KROKU 2`);
 
             // === KROK 2: Wyciągnij nick i atak ===
             // Czytamy z obrazu PRZEROBIONEGO na czarno-biały (biel zostaje bielą, reszta czernieje).
@@ -317,22 +378,20 @@ class AIOCRService {
             // „if this is not a Core Stock screenshot" jest przy takim otwarciu za słaba.
             logger.info(`[AI OCR - CoreStock] KROK 1: Sprawdzam obecność napisu "Core Stock"...`);
 
-            const promptSprawdzenia = `Znajdź na screenie napis "Core Stock". Jeżeli znajdziesz, napisz "Znaleziono". Jeżeli go nie ma, napisz "Brak frazy". Nie zgaduj i nie sugeruj się tym, że na obrazie są jakieś przedmioty albo liczby — liczy się WYŁĄCZNIE to, czy widnieje tam dokładnie ten napis.`;
-
-            const odpowiedzSprawdzenia = (await this._generuj(
-                [obraz, { text: promptSprawdzenia }],
-                200,
+            const { widac: toCoreStock, odpowiedz: odpowiedzSprawdzenia } = await this._czyWidacEkran(
+                obraz,
+                `Czy na tym zrzucie ekranu widnieje dokładnie napis "Core Stock"?`,
                 {
                     operationType: 'ocr.analyze',
                     step: 'sprawdz-corestock',
                     promptName: 'sprawdz-corestock',
                     promptVersion: WERSJE_PROMPTOW['sprawdz-corestock'],
                 }
-            )).trim();
+            );
 
             logger.info(`[AI OCR - CoreStock] KROK 1 - Odpowiedź: "${odpowiedzSprawdzenia}"`);
 
-            if (!odpowiedzSprawdzenia.toLowerCase().includes('znaleziono')) {
+            if (!toCoreStock) {
                 logger.warn(`[AI OCR - CoreStock] KROK 1 - Brak napisu "Core Stock" - to nie ten ekran, przerywam`);
                 return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
             }
@@ -394,11 +453,6 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
     }
 
     /**
-     * Parsuje odpowiedź modelu i wyciąga nick + atak
-     * @param {string} responseText - Odpowiedź AI
-     * @returns {{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}}
-     */
-    /**
      * Prompt odczytu ekranu postaci.
      *
      * ⚠️ Gdy `czarnoBialy === true`, model DOSTAJE INFORMACJĘ, że obraz został przerobiony
@@ -415,15 +469,104 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
 Obróbkę wykonano po to, żeby wydobyć BIAŁY tekst, który w grze jest napisany na jaskrawym, kolorowym tle. Wszystko, co widzisz na biało, to tekst i elementy interfejsu — reszta ekranu (tło, grafika postaci, kolorowe ikony i ramki) jest teraz czarna i możesz ją zignorować.`
             : `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem.`;
 
+        // ⚠️ Wskazówki „gdzie patrzeć" MUSZĄ pasować do obrazu, który model faktycznie dostaje.
+        // Wersja czarno-biała kierowała go wcześniej „nad zieloną linię progresu" i „na prawo od
+        // ikonki mieczyka" — a po konwersji biel-na-czerń zielony pasek i kolorowe ikony są już
+        // czarne, czyli nie istnieją. Model szukał punktów odniesienia, których na jego obrazie
+        // nie ma, i kończył na „nieczytelny screen". Po obróbce zostają za to same napisy
+        // „ATK" i „HP" (białe), więc to one są kotwicą.
+        const gdzieSzukac = czarnoBialy
+            ? `Nick postaci to PIERWSZY tekst od góry po lewej stronie, w pasku nad paskiem postępu poziomu. Na lewo od nicku jest awatar gracza — po obróbce zwykle biała plama bez znaczenia; nie doczytuj tam żadnych znaków.
+
+Wartość ataku to liczba stojąca bezpośrednio NA PRAWO od napisu "ATK". Dalej w prawo, na tym samym pasku, jest drugi napis "HP" z inną (zwykle większą) liczbą — jej NIE podawaj. Kolorowe ikony miecza i serca po obróbce zniknęły, więc kieruj się WYŁĄCZNIE samymi napisami "ATK" i "HP".`
+            : `Po lewej stronie na górze, nad zieloną linią progresu na szarym tle, znajduje się nick postaci napisany białą czcionką. Po lewej od nicku jest awatar gracza — nie halucynuj żadnych znaków w tym miejscu.
+
+Wartość ataku to liczba na prawo od ikonki mieczyka z napisem "ATK". Obok, przy ikonce serca z napisem "HP", stoi druga (zwykle większa) liczba — jej NIE podawaj.`;
+
         return `${wstep}
 
-Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci. Po lewej od nicku jest awatar gracza, nie halucynuj żadnych znaków w tym miejscu.
+${gdzieSzukac}
 
-Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
+Twoim zadaniem jest podać kompletny nick postaci, łącznie z prefiksem klanowym jeżeli występuje, oraz jej wartość ataku. Atak podaj jako pełną liczbę — bez skrótów typu "M" czy "K" i bez separatorów tysięcy.
+
+Odpowiedz DOKŁADNIE dwiema liniami, bez wstępu i bez komentarza:
 <nick postaci>
 <atak>`;
     }
 
+    /**
+     * Zamienia tekstową wartość ataku na liczbę.
+     *
+     * ⚠️ Kropka i przecinek znaczą co innego w zależności od tego, czy po liczbie stoi skrót
+     * jednostki. „3.438.580" to separatory tysięcy (→ 3438580), ale „3.44M" to już ułamek
+     * (→ 3 440 000). Poprzednia wersja kasowała `[\s,._]` bezwarunkowo i z „3.44M" robiła 344,
+     * czyli wartość poniżej progu — poprawny screen lądował jako `VALIDATION_FAILED`.
+     *
+     * Prompt prosi o pełną liczbę bez skrótów, ale model nie zawsze słucha, a odczyt zaniżony
+     * milion razy jest gorszy niż zaokrąglenie do drugiego miejsca po przecinku.
+     */
+    _naLiczbeAtaku(tekst) {
+        const dopasowanie = tekst.match(/(\d[\d\s.,'\u2019_]*?)\s*([kKmMbB])?$/);
+        if (!dopasowanie) return null;
+
+        const [, surowaLiczba, sufiks] = dopasowanie;
+        const mnoznik = { k: 1e3, m: 1e6, b: 1e9 }[sufiks?.toLowerCase()] ?? 1;
+
+        const liczba = mnoznik === 1
+            ? parseInt(surowaLiczba.replace(/[\s.,'\u2019_]/g, ''), 10)
+            : Math.round(parseFloat(surowaLiczba.replace(/[\s'\u2019_]/g, '').replace(',', '.')) * mnoznik);
+
+        return Number.isFinite(liczba) ? liczba : null;
+    }
+
+    /**
+     * Wyławia nick i atak z linii odpowiedzi modelu.
+     *
+     * ⚠️ Nie zakładamy już sztywno, że nick siedzi w `lines[0]`, a atak w `lines[1]`. Model
+     * potrafi dorzucić wiersz wstępu („Oto odczytane dane:") albo opisać wiersze etykietami —
+     * przy sztywnych indeksach każdy taki przypadek kończył się `PARSING_ERROR` mimo
+     * poprawnie odczytanego screena, a kandydat dostawał prośbę o kolejne zdjęcie.
+     *
+     * Atakiem jest OSTATNIA linia, która po zdjęciu etykiety zostaje samą liczbą; nickiem —
+     * OSTATNIA linia przed nią, która liczbą nie jest. Ostatnia, a nie pierwsza, właśnie
+     * ze względu na wiersz wstępu — przy „pierwszej" nickiem zostawało „Oto odczytane dane:".
+     * Z tego samego powodu odsiewamy linie kończące się dwukropkiem: zapowiedź, nie treść.
+     */
+    _wyluskajNickIAtak(lines) {
+        const rozbite = lines.map(l => ({
+            bezEtykietyNicku: l.replace(ETYKIETA_NICKU, '').trim(),
+            bezEtykietyAtaku: l.replace(ETYKIETA_ATAKU, '').trim(),
+        }));
+
+        let indeksAtaku = -1;
+        for (let i = rozbite.length - 1; i >= 0; i--) {
+            if (WZORZEC_LICZBY.test(rozbite[i].bezEtykietyAtaku)) {
+                indeksAtaku = i;
+                break;
+            }
+        }
+
+        // Ścieżka zapasowa: żadna linia nie jest czystą liczbą - bierzemy drugą i wyłuskujemy
+        // z niej pierwszą liczbę, czyli dokładnie tak, jak działało to wcześniej
+        const tekstAtaku = indeksAtaku >= 0
+            ? rozbite[indeksAtaku].bezEtykietyAtaku
+            : (rozbite[1]?.bezEtykietyAtaku ?? '');
+
+        const granicaNicku = indeksAtaku >= 0 ? indeksAtaku : rozbite.length;
+        const kandydaciNaNick = rozbite
+            .slice(0, granicaNicku)
+            .map(l => l.bezEtykietyNicku)
+            .filter(t => t.length > 0 && !t.endsWith(':') && !WZORZEC_LICZBY.test(t));
+        const nick = kandydaciNaNick.length ? kandydaciNaNick[kandydaciNaNick.length - 1] : null;
+
+        return { nick, atak: this._naLiczbeAtaku(tekstAtaku) };
+    }
+
+    /**
+     * Parsuje odpowiedź modelu i wyciąga nick + atak
+     * @param {string} responseText - Odpowiedź AI
+     * @returns {{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}}
+     */
     parseAIResponse(responseText) {
         const lowerResponse = responseText.toLowerCase();
 
@@ -452,8 +595,12 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
             }
         }
 
-        // Wyciągnij nick - pierwsza niepusta linia
-        const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        // Model lubi opakować odpowiedź w blok ``` - ogrodzenia odsiewamy razem z pustymi liniami
+        const lines = responseText
+            .trim()
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.startsWith('```'));
 
         if (lines.length < 2) {
             logger.warn(`[AI OCR] AI zwrócił za mało linii (${lines.length})`);
@@ -466,29 +613,13 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
             };
         }
 
-        // Pierwsza linia = nick (usuń potencjalne prefix "Nick:" lub podobne)
-        let playerNick = lines[0]
-            .replace(/^nick[:\s]*/i, '')
-            .replace(/^postać[:\s]*/i, '')
-            .replace(/^gracz[:\s]*/i, '')
-            .trim();
-
-        // Druga linia = atak (usuń potencjalne prefix "Atak:" lub podobne, oraz spacje i separatory)
-        let attackStr = lines[1]
-            .replace(/^atak[:\s]*/i, '')
-            .replace(/^atk[:\s]*/i, '')
-            .replace(/[\s,._]/g, '') // Usuń spacje, przecinki, kropki, podkreślniki
-            .trim();
-
-        // Parsuj atak
-        let characterAttack = null;
-        const attackMatch = attackStr.match(/\d+/);
-        if (attackMatch) {
-            characterAttack = parseInt(attackMatch[0]);
-        }
+        const { nick: playerNick, atak: characterAttack } = this._wyluskajNickIAtak(lines);
 
         // Walidacja
-        const isValid = playerNick && characterAttack && characterAttack >= 100 && characterAttack <= 10000000;
+        const atakWZakresie = characterAttack !== null
+            && characterAttack >= ATAK_MIN
+            && characterAttack <= ATAK_MAX;
+        const isValid = !!playerNick && atakWZakresie;
 
         if (!isValid) {
             logger.warn(`[AI OCR] Walidacja nie powiodła się - nick: "${playerNick}", atak: ${characterAttack}`);
@@ -500,7 +631,7 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
             confidence += 50;
             if (playerNick.length >= 4) confidence += 10;
         }
-        if (characterAttack && characterAttack >= 100 && characterAttack <= 10000000) {
+        if (atakWZakresie) {
             confidence += 40;
         }
 
