@@ -27,7 +27,8 @@ const USTAWIENIA_BEZPIECZENSTWA = [
 const WERSJE_PROMPTOW = {
     'sprawdz-ekwipunek': 'v1',
     'odczytaj-postac':   'v2',
-    'odczytaj-corestock': 'v1',
+    'sprawdz-corestock': 'v1',
+    'odczytaj-corestock': 'v2',
 };
 
 /** OCR ma być deterministyczny - bez tego Gemini raz czyta, raz odmawia */
@@ -303,10 +304,47 @@ class AIOCRService {
             logger.info(`[AI OCR - CoreStock] Rozpoczynam analizę: ${imagePath}`);
             const obraz = await this._obrazJakoCzesc(imagePath);
 
-            const prompt = `Analyze this Survivor.io screenshot showing the "Core Stock" inventory section.
-Extract all items visible in the list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
+            // === KROK 1: Czy na screenie w ogóle jest napis "Core Stock"? ===
+            //
+            // ⚠️ Bez tej bramki model DOPISYWAŁ SOBIE zawartość Core Stock z zupełnie innego
+            // ekranu. Realny przypadek z produkcji: kandydat poproszony o Core Stock wysłał
+            // „My Equipment" (siatka przedmiotów z ilościami — z daleka podobna), a bot
+            // odpowiedział „Super, dzięki za screen z Core Stock!" i zapisał wymyślone liczby.
+            // To nie jest kosmetyka: Core Stock decyduje o kwalifikacji do klanu.
+            //
+            // Sam prompt ekstrakcji tego nie łapał, bo ZAKŁADAŁ w pierwszym zdaniu, że screen
+            // jest właściwy („Analyze this screenshot showing the Core Stock section"), a furtka
+            // „if this is not a Core Stock screenshot" jest przy takim otwarciu za słaba.
+            logger.info(`[AI OCR - CoreStock] KROK 1: Sprawdzam obecność napisu "Core Stock"...`);
+
+            const promptSprawdzenia = `Znajdź na screenie napis "Core Stock". Jeżeli znajdziesz, napisz "Znaleziono". Jeżeli go nie ma, napisz "Brak frazy". Nie zgaduj i nie sugeruj się tym, że na obrazie są jakieś przedmioty albo liczby — liczy się WYŁĄCZNIE to, czy widnieje tam dokładnie ten napis.`;
+
+            const odpowiedzSprawdzenia = (await this._generuj(
+                [obraz, { text: promptSprawdzenia }],
+                200,
+                {
+                    operationType: 'ocr.analyze',
+                    step: 'sprawdz-corestock',
+                    promptName: 'sprawdz-corestock',
+                    promptVersion: WERSJE_PROMPTOW['sprawdz-corestock'],
+                }
+            )).trim();
+
+            logger.info(`[AI OCR - CoreStock] KROK 1 - Odpowiedź: "${odpowiedzSprawdzenia}"`);
+
+            if (!odpowiedzSprawdzenia.toLowerCase().includes('znaleziono')) {
+                logger.warn(`[AI OCR - CoreStock] KROK 1 - Brak napisu "Core Stock" - to nie ten ekran, przerywam`);
+                return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
+            }
+
+            // === KROK 2: Wyciągnij pozycje ===
+            logger.info(`[AI OCR - CoreStock] KROK 2: Wyciągam pozycje...`);
+
+            const prompt = `This is a screenshot from the game Survivor.io. It should show the "Core Stock" inventory section.
+Extract all items visible in the Core Stock list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
 Return ONLY a JSON object mapping item names to their total quantities, like this example:
 {"Transmute Core": 29, "Xeno Pet Core": 75, "Mount Core": 7, "Relic Core": 155, "Resonance Chip": 68, "Survivor Awakening Core": 131}
+Report ONLY items you can actually read in the Core Stock list. Do NOT invent items and do NOT infer them from other parts of the screen (equipment grids, gear icons, currencies).
 If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
 
             const odpowiedz = (await this._generuj(
