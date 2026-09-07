@@ -139,21 +139,38 @@ class InterviewLogService {
         return this._wpisz(userId, `${EMOJI_KANDYDATA}  **Kandydat:**\n${tekst}`);
     }
 
-    /** Zdarzenie po stronie bota: odczyt zdjęcia, błąd, przerwanie rozmowy */
+    /**
+     * Zdarzenie po stronie bota: odczyt zdjęcia, błąd, przerwanie rozmowy.
+     *
+     * ⚠️ NIE trafia na kanał — ląduje wyłącznie w logu bota. Wpisy `⚙️` to kuchnia bota
+     * (co odczytał ze zdjęcia, instrukcje dla modelu, błędy tury), a nie treść rozmowy.
+     * W zapisie czytało się to jak szum wtrącony między wypowiedzi rekrutera i kandydata,
+     * a przy każdym zdjęciu potrafiło zająć więcej miejsca niż sama rozmowa. Informacja
+     * nie ginie: pełna treść jest w logu, a odczytane dane w embedzie podsumowania.
+     *
+     * Metoda zostaje (zamiast kasowania wywołań), bo miejsca, które ją wołają, to nadal
+     * właściwe punkty zapisu — zmienia się tylko to, DOKĄD zapis idzie.
+     */
     wpisSystemowy(userId, tekst) {
-        return this._wpisz(userId, `⚙️ *${tekst}*`);
+        logger.info(`[ARCHIWUM] ⚙️ ${userId}: ${tekst}`);
     }
 
     /**
-     * Zdjęcie przesłane przez kandydata razem z tym, co bot z niego odczytał.
+     * Zdjęcie przesłane przez kandydata.
      *
      * ⚠️ Plik czytamy do bufora OD RAZU, a samą wysyłkę dokładamy do kolejki i NIE
      * oddajemy jej wołającemu. Zdjęcie Core Stock jest kasowane z dysku zaraz po
      * odczycie, więc wysyłka po ścieżce trafiłaby w pustkę – ale czekanie na upload
      * do Discorda opóźniałoby odpowiedź rekrutera. `await` po stronie wołającego
      * obejmuje więc wyłącznie odczyt pliku: tyle wystarczy, żeby bezpiecznie kasować.
+     *
+     * ⚠️ Opis analizy (co bot odczytał ze zdjęcia) NIE trafia już do archiwum. To jest
+     * instrukcja dla modelu — łącznie z poleceniami w rodzaju „poproś o zdjęcie ponownie
+     * i powiedz, który ekran ma pokazać". W zapisie rozmowy czytało się to jak szum,
+     * a i tak zaraz pod spodem widać, co rekruter faktycznie odpowiedział. Odczytane dane
+     * są w podsumowaniu na końcu archiwum, a pełna treść opisu zostaje w logu bota.
      */
-    async wpisZdjecie(userId, sciezkaObrazu, opisAnalizy) {
+    async wpisZdjecie(userId, sciezkaObrazu) {
         const sesja = this.sesje.get(userId);
         if (!sesja) return;
 
@@ -172,9 +189,6 @@ class InterviewLogService {
                 content: tresc,
                 files: bufor ? [new AttachmentBuilder(bufor, { name: nazwa })] : []
             });
-            if (opisAnalizy) {
-                await sesja.cel.send({ content: this._przytnij(`⚙️ *${opisAnalizy}*`) });
-            }
         });
     }
 
