@@ -135,6 +135,10 @@ podałby dowolne wartości i ominął OCR.
 
 **Rozpoznawanie zdjęć bez pytania modelu:** typ screena wynika z tego, czego brakuje —
 najpierw próba Core Stock (jeśli kandydat szuka klanu i jeszcze go nie ma), potem ekran postaci.
+Obie ścieżki mają własną bramkę na napis (`Core Stock` / `My Equipment`), więc zdjęcie wysłane
+NIE PO KOLEI nie zostanie wzięte za to, o które bot właśnie prosił — zostanie rozpoznane jako
+to, czym faktycznie jest, a brakująca rzecz będzie poproszona ponownie. Prompt rozmowy dokłada do
+tego zasadę: dziękuj wyłącznie za ten rodzaj zdjęcia, który wynika z wiadomości `[SYSTEM]`.
 Wynik wraca do rozmowy jako wiadomość `[SYSTEM] …`, której kandydat nie widzi. Screen postaci
 zostaje w `temp/` (`ai_<timestamp>_<userId>.png`, trafia do embeda podsumowania), zdjęcie Core Stock
 jest kasowane od razu po odczycie.
@@ -385,7 +389,18 @@ każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR akt
 
 **Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`
    - Wymagany `REKRUTER_GOOGLE_AI_API_KEY` (niezależnie od `USE_AI_OCR` — Core Stock nie ma ścieżki zapasowej na Tesseract)
-   - Prompt AI wyciąga JSON `{"Relic Core": N, "Transmute Core": N, ...}` (6 typów)
+   - **Dwuetapowo, tak samo jak ekran postaci:**
+     - **KROK 1** (`sprawdz-corestock`, 200 tokenów): czy na screenie w ogóle widnieje napis „Core Stock".
+       Brak → `NOT_CORE_STOCK` natychmiast, BEZ drugiego zapytania
+     - **KROK 2** (`odczytaj-corestock` **v2**, 800 tokenów): wyciągnięcie JSON-a `{"Relic Core": N, …}` (6 typów)
+   - ⚠️ **KROK 1 powstał po realnym incydencie.** Bez niego model DOPISYWAŁ SOBIE zawartość Core Stock
+     z zupełnie innego ekranu: kandydat poproszony o Core Stock wysłał „My Equipment" (siatka przedmiotów
+     z ilościami — z daleka podobna), bot odpowiedział „Super, dzięki za screen z Core Stock!" i zapisał
+     wymyślone liczby. To nie jest kosmetyka — **Core Stock decyduje o kwalifikacji do klanu**
+   - ⚠️ **Nie wystarczyła furtka w prompcie ekstrakcji.** Otwierał się zdaniem zakładającym, że screen jest
+     właściwy („Analyze this screenshot showing the Core Stock section"), więc „if this is not a Core Stock
+     screenshot" było przy takim wstępie za słabe. W v2 wstęp jest warunkowy („It should show…") i doszedł
+     zakaz zgadywania pozycji z innych części ekranu — ale to tylko wzmocnienie, bramką jest KROK 1
    - Walidacja: tylko dozwolone nazwy przedmiotów, wartości >= 0
    - Błędy: `NOT_CORE_STOCK` (złe zdjęcie), `NO_ITEMS_FOUND`, `NO_JSON_IN_RESPONSE`
    - Wyniki zapisywane w `state.userInfo.coreStock` (obiekt item→qty)
