@@ -194,8 +194,17 @@ zmienia się w jednym miejscu:
   tylko wpis z samym tekstem — wpisu z `functionCall` ruszyć nie wolno) i dopłaca jedno zapytanie
   z instrukcją. Gdy to zapytanie padnie, pierwotna wypowiedź wraca do historii, a odbiegnięcie i tak
   zostaje policzone — decyduje zachowanie kandydata, nie dostępność API
-- ⚠️ **Reguła dotyczy wyłącznie tur napisanych przez kandydata.** Tura systemowa (wynik OCR) jest z niej
-  wyłączona: nieczytelny screen to nieudana próba współpracy, nie zmiana tematu
+- ⚠️ **Nieodczytane zdjęcie TEŻ jest odbieganiem od tematu** (`przeanalizujZdjecie`, powód
+  `zdjęcie nie do odczytania - nie ten ekran`). Wcześniej tury systemowe (wynik OCR) były z polityki
+  off-topic zwolnione — „nieczytelny screen to nieudana próba, nie zmiana tematu" — i dawało to pętlę
+  bez wyjścia: kandydat trzy razy z rzędu wysyłał ekran „My Equipment" zamiast Core Stock, a bot trzy
+  razy grzecznie prosił o właściwy i prosiłby tak w nieskończoność. Uporczywe wysyłanie NIE TEGO
+  ekranu jest omijaniem prośby, nie pechem
+  - Przy trzeciej próbie z rzędu **prośba o kolejne zdjęcie znika z opisu** — kłóciłaby się
+    z instrukcją pożegnania („nie zadawaj już żadnych pytań")
+  - `_domiarBezPostepu` nadal dotyczy wyłącznie tur napisanych przez kandydata — nie dlatego, że
+    zdjęcia są zwolnione, tylko żeby ta sama tura nie została ukarana dwa razy. Wynik OCR rozlicza
+    się sam, zanim trafi do modelu: udany odczyt zeruje licznik, nieudany dokłada odbiegnięcie
 - **Liczą się odbiegnięcia POD RZĄD.** Każdy postęp zeruje licznik: zapisane dane (`zapisz_dane`
   z niepustym `zapisano`) albo odczytane zdjęcie (Core Stock lub postać). Karzemy uporczywe
   zmienianie tematu, nie jeden żart po drodze
@@ -205,6 +214,18 @@ zmienia się w jednym miejscu:
   będzie inaczej, najprostszym progiem jest limit takich tur pod rząd
 - Licznik rozmowy siedzi w pamięci (`rozmowa.odbiegniecia`), a stan trafia do bloku „Stan tej rozmowy",
   więc model wie, ile już było
+
+**⚠️ Ochrona przed odbiciem wiadomości kandydata** (`_wymuszonaOdpowiedz`): gdy tekst modelu jest — po
+zdjęciu wielkości liter, interpunkcji i zdwojonych spacji — identyczny z ostatnią wypowiedzią kandydata,
+jest **odrzucany i nie trafia do historii**; wywołujący sięga po swój tekst zapasowy. Realny przypadek
+z produkcji: kandydat podał punkty Lunar Mine („1"), a rekruter odpowiedział mu „1".
+- Odbicie zdarza się właśnie w `_wymuszonaOdpowiedz`, bo model dostaje samą instrukcję „napisz
+  wiadomość", bez świeżego pytania od kandydata, i najbliższą rzeczą do powtórzenia jest ostatnia replika
+- `_ostatniaWiadomoscKandydata()` pomija wpisy `[SYSTEM]` i odpowiedzi narzędzi — rola `user` w historii
+  niesie trzy różne rzeczy i liczą się tylko wypowiedzi kandydata
+- **Zwykłe tury nie są tak filtrowane.** Tam model odpowiada na świeżą wiadomość, więc odbicie jest dużo
+  mniej prawdopodobne, a jego tekst siedzi już w historii obok ewentualnego `functionCall` — wyrywanie
+  go groziłoby osieroceniem `functionResponse`, które Gemini odrzuca
 
 **Trwały licznik przerwań i wyrzucenie z serwera:** `services/offTopicService.js`,
 plik `data/offtopic.json` (przez `jsonStore`). Liczy przerwane rozmowy **na osobę**, nie na rozmowę —

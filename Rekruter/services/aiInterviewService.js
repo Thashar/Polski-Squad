@@ -300,9 +300,10 @@ class AIInterviewService {
 
         rozmowa.historia.push(this._tekst('user', tekst));
 
-        // Tylko tury napisane przez kandydata podlegają regule „tura bez postępu = odbieganie".
-        // Tury systemowe (wynik analizy zdjęcia) są z niej wyłączone: kandydat, który wysłał
-        // nieczytelny screen, współpracuje – tylko mu nie wyszło.
+        // Regule „tura bez postępu = odbieganie" (`_domiarBezPostepu`) podlegają tylko tury
+        // napisane przez kandydata. Tura systemowa niesie wynik OCR, a ten rozlicza się sam:
+        // udany odczyt zeruje licznik, nieudany dokłada odbiegnięcie — obie decyzje zapadają
+        // w `przeanalizujZdjecie`, zanim wynik w ogóle trafi do modelu.
         return this.wykonajTure(userId, state, { odKandydata: true });
     }
 
@@ -447,14 +448,59 @@ class AIInterviewService {
 
         try {
             const odpowiedz = await this._zapytajModel(rozmowa, userId, state);
-            if (odpowiedz.content) {
-                rozmowa.historia.push(this._tekst('model', odpowiedz.content));
+            const tresc = odpowiedz.content?.trim();
+            if (!tresc) return null;
+
+            // ⚠️ Model potrafi ODBIĆ wiadomość kandydata zamiast napisać własną. Realny
+            // przypadek z produkcji: kandydat podał punkty Lunar Mine („1"), a rekruter
+            // odpowiedział mu „1". Taka wiadomość nie niesie nic i dla kandydata wygląda
+            // jak awaria bota, więc traktujemy ją jak brak odpowiedzi — do historii nie
+            // trafia, a wywołujący sięgnie po swój tekst zapasowy.
+            //
+            // Odbicie zdarza się WŁAŚNIE tutaj, bo model dostaje samą instrukcję „napisz
+            // wiadomość", bez świeżego pytania od kandydata, i najbliższą rzeczą do
+            // powtórzenia jest ostatnia replika rozmówcy.
+            const ostatnia = this._ostatniaWiadomoscKandydata(rozmowa);
+            if (ostatnia && this._znormalizujDoPorownania(tresc) === this._znormalizujDoPorownania(ostatnia)) {
+                logger.warn(`[AI_WYWIAD] Model odbił wiadomość kandydata („${tresc.slice(0, 40)}") - pomijam odpowiedź`);
+                return null;
             }
-            return odpowiedz.content?.trim() || null;
+
+            rozmowa.historia.push(this._tekst('model', tresc));
+            return tresc;
         } catch (error) {
             logger.error(`[AI_WYWIAD] Nie udało się dopytać modelu o wiadomość: ${error.message}`);
             return null;
         }
+    }
+
+    /**
+     * Ostatnia wiadomość NAPISANA PRZEZ KANDYDATA.
+     *
+     * Rola `user` w historii niesie trzy różne rzeczy: wypowiedzi kandydata, wstrzykiwane
+     * przez bota wpisy `[SYSTEM]` (wynik OCR, instrukcje) oraz odpowiedzi narzędzi. Liczy
+     * się wyłącznie ta pierwsza grupa.
+     */
+    _ostatniaWiadomoscKandydata(rozmowa) {
+        for (let i = rozmowa.historia.length - 1; i >= 0; i--) {
+            const wpis = rozmowa.historia[i];
+            if (wpis.role !== 'user' || !Array.isArray(wpis.parts)) continue;
+
+            const tekst = wpis.parts
+                .map(czesc => czesc.text)
+                .filter(t => typeof t === 'string')
+                .join('\n')
+                .trim();
+
+            if (!tekst || tekst.startsWith('[SYSTEM]')) continue;
+            return tekst;
+        }
+        return null;
+    }
+
+    /** „Czy to to samo zdanie" — bez wielkości liter, interpunkcji i zdwojonych spacji */
+    _znormalizujDoPorownania(tekst) {
+        return tekst.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, ' ').trim();
     }
 
     /**
@@ -738,8 +784,9 @@ ${this._instrukcjaBrakow(brakuje)}`;
      * bez postępu – `oznacz_na_temat` gdy kandydat współpracuje, `oznacz_odbieganie` gdy nie.
      * Milczenie modelu znaczy odbieganie, a nie brak zdania.
      *
-     * Reguła dotyczy WYŁĄCZNIE tur napisanych przez kandydata. Tury systemowe (wynik OCR)
-     * są z niej wyłączone: nieczytelny screen to nieudana próba, nie zmiana tematu.
+     * Reguła dotyczy WYŁĄCZNIE tur napisanych przez kandydata — ale nie dlatego, że zdjęcia
+     * są z polityki off-topic zwolnione. Nie są: nieodczytane zdjęcie dokłada odbiegnięcie
+     * w `przeanalizujZdjecie`. Chodzi o to, żeby ta sama tura nie została ukarana dwa razy.
      *
      * @returns {Promise<string|null>} tekst, który ma ZASTĄPIĆ odpowiedź modelu, albo null
      */
@@ -955,10 +1002,36 @@ ${this._instrukcjaBrakow(brakuje)}`;
             }
         }
 
+        // ⚠️ Nieodczytane zdjęcie LICZY SIĘ jako odbieganie od tematu — dokładnie tak samo
+        // jak wiadomość nie na temat. Wcześniej tury systemowe (wynik OCR) były z tej reguły
+        // wyłączone, bo „nieczytelny screen to nieudana próba, nie zmiana tematu". W praktyce
+        // dało to pętlę bez wyjścia: kandydat trzy razy z rzędu wysyłał ten sam ekran
+        // „My Equipment" zamiast Core Stock, a bot trzy razy grzecznie prosił o właściwy
+        // i byłby tak prosił w nieskończoność. Uporczywe wysyłanie NIE TEGO ekranu jest
+        // omijaniem prośby, a nie pechem.
+        //
+        // Licznik zeruje się przy każdym udanym odczycie (`wyzerujOdbiegania` wyżej), więc
+        // karzemy uporczywość, nie pojedynczą pomyłkę: pierwsza próba to zwykła prośba
+        // o powtórkę, druga niesie ostrzeżenie, trzecia zamyka rozmowę.
         const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
+        const kara = this._oznaczOdbieganie(
+            userId,
+            info,
+            { powod: 'zdjęcie nie do odczytania - nie ten ekran' },
+            true
+        );
+        const licznik = kara.odpowiedz?.odbiegniecia || 0;
+        const instrukcja = kara.odpowiedz?.instrukcja || '';
+
+        // Przy zamknięciu rozmowy prośba o kolejne zdjęcie kłóciłaby się z instrukcją
+        // pożegnania („nie zadawaj już żadnych pytań"), więc wtedy jej nie doklejamy
+        const prosba = licznik >= KONIEC_PRZY
+            ? ''
+            : ` Wciąż brakuje: ${brakuje.join(', ') || 'nic'}. Poproś o zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać.`;
+
         return {
             typ: null,
-            opis: `Kandydat przesłał zdjęcie, ale nie udało się z niego nic odczytać — to najpewniej nie ten ekran albo screen jest nieczytelny. Wciąż brakuje: ${brakuje.join(', ') || 'nic'}. Poproś o zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać.`
+            opis: `Kandydat przesłał zdjęcie, ale nie udało się z niego nic odczytać — to najpewniej nie ten ekran albo screen jest nieczytelny.${prosba}${instrukcja ? ` ${instrukcja}` : ''}`
         };
     }
 
