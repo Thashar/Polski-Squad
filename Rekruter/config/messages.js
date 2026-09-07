@@ -3,6 +3,7 @@ module.exports = {
     notPolishDM: "Ten serwer jest tylko dla Polaków, jeśli pomyliłeś się w trakcie ankiety możesz wyjść z serwera i dołączyć jeszcze raz!\n\n# Polski Squad",
     purposeQuestion: "Co Cię do nas sprowadza?",
     aiInterviewStart: "💬 Rozmowa czeka na Ciebie tutaj:",
+    joinClanAlreadyInClan: "❌ Jesteś już w klanie ({klan}), więc rekrutacja nie jest Ci potrzebna.\n\nJeśli chcesz zmienić klan, napisz do moderatora — zmianę robi się bez przechodzenia rekrutacji od nowa.",
     aiInterviewNoThread: "❌ Nie udało się otworzyć rozmowy rekrutacyjnej. Napisz proszę do moderatora.",
     aiInterviewThinking: "💬 *rekruter pisze...*",
     aiInterviewError: "❌ Rekruter chwilowo nie odpowiada. Napisz jeszcze raz za moment — jeśli problem się powtórzy, daj znać moderatorowi.",

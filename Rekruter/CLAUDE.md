@@ -44,6 +44,20 @@ wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283
   ten wynika z samego przycisku. Z aktywnym trybem AI rusza rozmowa (model dostaje w otwarciu
   informację, że cel jest już zapisany i nie ma o niego pytać); bez trybu AI lecą klasyczne kroki
   od razu od `waiting_core_stock`
+- ⚠️ **Osoby z rolą klanową dostają odmowę** (`znajdzRoleKlanowa` + `joinClanAlreadyInClan`) — kto jest
+  już w klanie, ten nie ma czego rekrutować. Komunikat jest efemeryczny i podaje nazwę klanu, w którym
+  gracz siedzi, oraz kieruje po zmianę klanu do moderatora
+  - Liczą się WYŁĄCZNIE role klanowe (`mainClan`, `clan2`, `clan1`, `clan0`), **NIE role rekrutacyjne**
+    (`recruitRoles`). Rekrut jest w trakcie rekrutacji, a nie w klanie — odcięcie go od przycisku
+    zablokowałoby dokończenie własnego procesu
+  - Przy kilku rolach naraz w komunikacie pada NAJWYŻSZA (kolejność sprawdzania: Main → 2 → 1 → 0)
+  - Niewypełnione zmienne środowiskowe są odsiewane `filter(Boolean)`, więc serwer bez skonfigurowanych
+    ról klanowych nie blokuje nikogo
+  - ⚠️ **Guard stoi PRZED sprzątaniem poprzedniej rozmowy.** Blok „ponowne kliknięcie zaczyna od zera"
+    kasuje rozmowę, wątek i archiwum — odpalony przed sprawdzeniem uprawnień niszczyłby stan przy
+    kliknięciu, które i tak zostanie odrzucone
+  - Przycisku nie da się ukryć per użytkownik (jedna wspólna wiadomość na kanale), więc odmowa przy
+    kliknięciu jest jedyną drogą
 - **Ponowne kliknięcie zaczyna rekrutację od zera** (czyści kartę kandydata i porzuca poprzednią rozmowę)
 - Kanał działa dokładnie jak kanał rekrutacyjny: **wszystko, co nie jest częścią trwającej rekrutacji,
   jest kasowane** (gałąź `default` w `handleMessage`)
