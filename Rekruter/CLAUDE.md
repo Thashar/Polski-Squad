@@ -47,6 +47,10 @@ wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283
 - ⚠️ **Osoby z rolą klanową dostają odmowę** (`znajdzRoleKlanowa` + `joinClanAlreadyInClan`) — kto jest
   już w klanie, ten nie ma czego rekrutować. Komunikat jest efemeryczny i podaje nazwę klanu, w którym
   gracz siedzi, oraz kieruje po zmianę klanu do moderatora
+  - ⚠️ **Kadra jest wyjątkiem** (`czyAdminLubModerator`): administrator i moderator klikają mimo roli
+    klanowej. Muszą mieć jak przetestować flow rekrutacji na sobie, a przycisk to jedyne wejście,
+    którym się to robi. Uprawnienia: `Administrator` **lub** `ModerateMembers` — ta sama para co
+    w `Muteusz.isAdminOrModerator`, żeby „moderator" znaczyło w projekcie jedno i to samo
   - Liczą się WYŁĄCZNIE role klanowe (`mainClan`, `clan2`, `clan1`, `clan0`), **NIE role rekrutacyjne**
     (`recruitRoles`). Rekrut jest w trakcie rekrutacji, a nie w klanie — odcięcie go od przycisku
     zablokowałoby dokończenie własnego procesu
