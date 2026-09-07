@@ -287,11 +287,24 @@ sposób wejścia: rekrutacja od zera albo przycisk „Chcę dołączyć do klanu
 w którym ląduje reszta. Bez wątku wpisy kilku kandydatów przeplatałyby się na jednym kanale.
 Gdy wątku nie da się założyć (brak uprawnień, kanał innego typu), wpisy idą płasko na kanał.
 
-**Co trafia do archiwum:** każda wypowiedź rekrutera i kandydata (pełna, nie przycięta do sześciu
-ostatnich jak transkrypcja dla kandydata), każde przesłane zdjęcie jako załącznik razem z tym, co
-bot z niego odczytał, podpis pod zdjęciem (model go nie dostaje), puste wiadomości i załączniki
-niebędące obrazem, błędy tury oraz embed zamykający: powód zakończenia i komplet zebranych danych
-(cel, punkty I fazy, nick, atak, źródło, Core Stock).
+**Co trafia do archiwum:** wypowiedzi rekrutera i kandydata (pełne, nie przycięte do sześciu
+ostatnich jak transkrypcja dla kandydata), przesłane zdjęcia jako załączniki oraz embed zamykający:
+powód zakończenia i komplet zebranych danych (cel, punkty I fazy, nick, atak, źródło, Core Stock).
+Zapis czyta się jak rozmowę — nic poza nią.
+
+⚠️ **ŻADEN wpis `⚙️` nie trafia na kanał — wszystkie idą do logu bota.** Dotyczy to opisu analizy
+zdjęcia (`analiza.opis`), pustej wiadomości, złego typu załącznika, podpisu pod zdjęciem i błędu tury.
+To kuchnia bota, a nie treść rozmowy: opis analizy jest wprost instrukcją dla modelu („poproś o
+zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać"), a przy każdym zdjęciu potrafił zająć
+w zapisie więcej miejsca niż sama rozmowa.
+
+**Gdzie szukać tych informacji:** `wpisSystemowy()` pisze do logu (`[ARCHIWUM] ⚙️ {userId}: …`),
+opis analizy dodatkowo w `[AI_WYWIAD] Analiza zdjęcia: …`. Do modelu opis idzie jak dotąd, przez
+`wiadomoscSystemowa`. Odczytane dane są też w embedzie podsumowania na końcu archiwum.
+
+⚠️ **`wpisSystemowy()` została jako metoda, mimo że nie pisze już na kanał.** Miejsca, które ją
+wołają, to nadal właściwe punkty zapisu — zmienił się wyłącznie cel. Dokładając nowe zdarzenie
+techniczne, wołaj ją tak samo; nie dopisuj `⚙️` przez `_wpisz()`, bo wróci na kanał.
 
 ⚠️ **Zdjęcie Core Stock jest kasowane z dysku zaraz po odczycie**, więc `wpisZdjecie` czyta plik do
 bufora i dopiero potem kolejkuje wysyłkę — `await` po stronie handlera obejmuje wyłącznie odczyt,
@@ -338,6 +351,22 @@ każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR akt
      - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (200 tokenów)
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
      - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (800 tokenów)
+       - ⚠️ **Czyta z obrazu PRZEROBIONEGO na czarno-biały** (`_obrazBialyNaCzarnym`): biel zostaje bielą,
+         każdy inny kolor staje się czernią. Nick i ATK są w grze białe na jaskrawym, kolorowym tle
+         (pomarańczowy baner, grafika postaci, efekty) i model regularnie odbijał się od tego tła,
+         zwracając „nie udało się nic odczytać" mimo poprawnego screena
+       - **Model DOSTAJE INFORMACJĘ o tej obróbce** w prompcie (`_promptOdczytuPostaci(true)`, wersja `v2`).
+         Bez tego widzi czarny prostokąt z białymi plamami, nie wie, czemu zniknęło tło i grafika,
+         i sam dochodzi do wniosku, że screen jest nieczytelny
+       - ⚠️ **Próg bieli to DWA warunki naraz**: jasność (najciemniejszy kanał ≥ `BIEL_MIN_JASNOSC` = 200)
+         **i** brak nasycenia (rozpiętość kanałów ≤ `BIEL_MAX_ROZPIETOSC` = 40). Sam próg jasności
+         (`sharp().greyscale().threshold()`) przepuściłby nasycone jasne kolory — żółty `(255,255,0)` ma
+         luminancję ~226, więc wyszedłby na biało razem z tekstem i cała operacja straciłaby sens.
+         Strojąc progi myl się w GÓRĘ: za niski próg wybiela jasnoszare tła UI, a biały tekst na takim
+         tle znika zupełnie; za wysoki gubi najwyżej wygładzone krawędzie liter
+       - **Ścieżka zapasowa:** gdy z przerobionego obrazu nic nie wyszło (nietypowy motyw, źle dobrane
+         progi), KROK 2 jest ponawiany na ORYGINALE z promptem bez wzmianki o obróbce — czyli tak, jak
+         działało to wcześniej. Gorzej niż przed zmianą być nie może, kosztem jest jedno dodatkowe zapytanie
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
 
 **Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`

@@ -495,6 +495,9 @@ async function handleAiInterviewMessage(msg, state, config, client) {
       await downloadImage(zalacznik.url, imgPath);
 
       const analiza = await serwis.przeanalizujZdjecie(userId, imgPath, state);
+      // Opis idzie do modelu (`wiadomoscSystemowa` niżej), a do archiwum już nie —
+      // zostaje tutaj, żeby przy diagnozie dało się odtworzyć, co bot odczytał
+      logger.info(`[AI_WYWIAD] Analiza zdjęcia (${analiza.typ || 'brak odczytu'}): ${analiza.opis}`);
 
       // Podpis pod zdjęciem nie trafia do modelu (analizowany jest sam obraz),
       // ale w archiwum ma być komplet tego, co kandydat wysłał
@@ -503,7 +506,7 @@ async function handleAiInterviewMessage(msg, state, config, client) {
       // ⚠️ Zdjęcie Core Stock jest kasowane z dysku kilka linii niżej, więc kopię do
       // archiwum trzeba pobrać TERAZ. `await` obejmuje wyłącznie odczyt pliku do bufora
       // - sam upload leci kolejką serwisu, żeby nie opóźniał odpowiedzi rekrutera
-      if (archiwum) await archiwum.wpisZdjecie(userId, imgPath, analiza.opis);
+      if (archiwum) await archiwum.wpisZdjecie(userId, imgPath);
 
       if (analiza.typ === 'ekwipunek') {
         // Ten screen ląduje w podsumowaniu na kanale klanowym - zostawiamy go na dysku

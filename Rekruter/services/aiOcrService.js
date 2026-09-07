@@ -26,12 +26,29 @@ const USTAWIENIA_BEZPIECZENSTWA = [
  */
 const WERSJE_PROMPTOW = {
     'sprawdz-ekwipunek': 'v1',
-    'odczytaj-postac':   'v1',
+    'odczytaj-postac':   'v2',
     'odczytaj-corestock': 'v1',
 };
 
 /** OCR ma być deterministyczny - bez tego Gemini raz czyta, raz odmawia */
 const TEMPERATURA_OCR = 0;
+
+/**
+ * Progi rozpoznawania BIELI przy przygotowaniu screena postaci (patrz `_obrazBialyNaCzarnym`).
+ *
+ * ⚠️ Sama jasność NIE WYSTARCZY. Próg na skali szarości (`sharp().greyscale().threshold()`)
+ * przepuściłby też nasycone jasne kolory — żółty (255,255,0) ma jasność ~226, więc zrobiłby się
+ * biały razem z tekstem i cały zabieg straciłby sens. Dlatego piksel uznajemy za biały dopiero
+ * gdy jest JEDNOCZEŚNIE jasny (najciemniejszy kanał ≥ MIN_JASNOSC) i nienasycony
+ * (rozpiętość kanałów ≤ MAX_ROZPIETOSC).
+ *
+ * ⚠️ Przy strojeniu progów myl się w GÓRĘ, nie w dół. Za niski próg jasności wybiela także
+ * jasnoszare tła interfejsu — a biały tekst leżący na takim tle staje się wtedy biały na białym,
+ * czyli znika zupełnie. Za wysoki próg gubi najwyżej wygładzone krawędzie liter; rdzeń glifu
+ * zostaje i to modelowi wystarcza.
+ */
+const BIEL_MIN_JASNOSC = 200;
+const BIEL_MAX_ROZPIETOSC = 40;
 
 /** Ile razy ponawiamy zapytanie przy błędzie przejściowym (429/5xx) */
 const PROBY = 3;
@@ -112,6 +129,54 @@ class AIOCRService {
     }
 
     /**
+     * Zamienia screen na czysto czarno-biały: BIEL zostaje bielą, KAŻDY inny kolor staje się
+     * czernią. Używane wyłącznie do odczytu ekranu postaci.
+     *
+     * **Po co:** nick i wartość ATK są w grze napisane BIAŁĄ czcionką na jaskrawym, kolorowym
+     * tle (pomarańczowy baner, grafika postaci, efekty). Model gubił się w tym tle i zwracał
+     * „nic nie odczytano" mimo poprawnego screena. Po tej operacji na obrazie zostaje praktycznie
+     * sam biały tekst na czarnym tle.
+     *
+     * ⚠️ Robione RĘCZNIE na surowych pikselach, nie przez `sharp().greyscale().threshold()` —
+     * powód w komentarzu przy `BIEL_MIN_JASNOSC`. Zdjęcie z telefonu to kilkaset kilopikseli,
+     * więc jeden przebieg pętli jest nieodczuwalny.
+     *
+     * @returns {Promise<{czesc: object, udzialBieli: number}>} część dla Gemini + jaki procent
+     *   obrazu uznano za biel (do logu — skrajne wartości zdradzają źle dobrane progi)
+     */
+    async _obrazBialyNaCzarnym(sciezkaObrazu) {
+        const { data, info } = await sharp(sciezkaObrazu)
+            .removeAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const kanaly = info.channels;
+        let bialePiksele = 0;
+
+        for (let i = 0; i < data.length; i += kanaly) {
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            const min = Math.min(r, g, b);
+            const max = Math.max(r, g, b);
+            const biel = min >= BIEL_MIN_JASNOSC && (max - min) <= BIEL_MAX_ROZPIETOSC;
+            const wartosc = biel ? 255 : 0;
+            data[i] = wartosc;
+            data[i + 1] = wartosc;
+            data[i + 2] = wartosc;
+            if (biel) bialePiksele++;
+        }
+
+        const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: kanaly } })
+            .png()
+            .toBuffer();
+
+        const wszystkie = info.width * info.height;
+        return {
+            czesc: { inlineData: { data: png.toString('base64'), mimeType: 'image/png' } },
+            udzialBieli: wszystkie > 0 ? bialePiksele / wszystkie : 0,
+        };
+    }
+
+    /**
      * Analizuje zdjęcie postaci z ekwipunkiem.
      * @param {string} imagePath - Ścieżka do obrazu
      * @returns {Promise<{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}>}
@@ -157,30 +222,60 @@ class AIOCRService {
             logger.info(`[AI OCR] KROK 1 - "My Equipment" znaleznione, przechodzę do KROKU 2`);
 
             // === KROK 2: Wyciągnij nick i atak ===
-            logger.info(`[AI OCR] KROK 2: Wyciągam nick i atak...`);
+            // Czytamy z obrazu PRZEROBIONEGO na czarno-biały (biel zostaje bielą, reszta czernieje).
+            // Nick i ATK są w grze białe na jaskrawym, kolorowym tle — na oryginale model regularnie
+            // odbijał się od tego tła i zwracał „nic nie odczytano" mimo poprawnego screena.
+            logger.info(`[AI OCR] KROK 2: Wyciągam nick i atak (obraz biel-na-czerni)...`);
 
-            const promptOdczytu = `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci. Po lewej od nicku jest awatar gracza, nie halucynuj żadnych znaków w tym miejscu. 
+            let result;
+            try {
+                const { czesc: obrazBw, udzialBieli } = await this._obrazBialyNaCzarnym(imagePath);
+                logger.info(`[AI OCR] KROK 2 - Biel po konwersji: ${(udzialBieli * 100).toFixed(2)}% obrazu`);
 
-Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
-<nick postaci>
-<atak>`;
+                const odpowiedzOdczytu = await this._generuj(
+                    [obrazBw, { text: this._promptOdczytuPostaci(true) }],
+                    800,
+                    {
+                        operationType: 'ocr.analyze',
+                        step: 'odczytaj-postac',
+                        promptName: 'odczytaj-postac',
+                        promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
+                    }
+                );
 
-            const odpowiedzOdczytu = await this._generuj(
-                [obraz, { text: promptOdczytu }],
-                800,
-                {
-                    operationType: 'ocr.analyze',
-                    step: 'odczytaj-postac',
-                    promptName: 'odczytaj-postac',
-                    promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
-                }
-            );
+                logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini (biel-na-czerni):`);
+                logger.info(odpowiedzOdczytu);
 
-            logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini:`);
-            logger.info(odpowiedzOdczytu);
+                result = this.parseAIResponse(odpowiedzOdczytu);
+                logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
+            } catch (bladKonwersji) {
+                logger.warn(`[AI OCR] KROK 2 - Konwersja biel-na-czerni nie powiodła się: ${bladKonwersji.message}`);
+                result = null;
+            }
 
-            const result = this.parseAIResponse(odpowiedzOdczytu);
-            logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
+            // Ścieżka zapasowa: gdy z przerobionego obrazu nic nie wyszło (źle dobrane progi bieli,
+            // nietypowy motyw graficzny), próbujemy jeszcze raz na ORYGINALE — tak działało do tej
+            // pory, więc gorzej niż wcześniej być nie może
+            if (!result?.isValidEquipment) {
+                logger.warn(`[AI OCR] KROK 2 - Brak odczytu z obrazu biel-na-czerni, ponawiam na oryginale`);
+
+                const odpowiedzOryginal = await this._generuj(
+                    [obraz, { text: this._promptOdczytuPostaci(false) }],
+                    800,
+                    {
+                        operationType: 'ocr.analyze',
+                        step: 'odczytaj-postac-oryginal',
+                        promptName: 'odczytaj-postac',
+                        promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
+                    }
+                );
+
+                logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini (oryginał):`);
+                logger.info(odpowiedzOryginal);
+
+                result = this.parseAIResponse(odpowiedzOryginal);
+                logger.info(`[AI OCR] KROK 2 - Wynik parsowania (oryginał):`, result);
+            }
 
             return result;
 
@@ -265,6 +360,32 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
      * @param {string} responseText - Odpowiedź AI
      * @returns {{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}}
      */
+    /**
+     * Prompt odczytu ekranu postaci.
+     *
+     * ⚠️ Gdy `czarnoBialy === true`, model DOSTAJE INFORMACJĘ, że obraz został przerobiony
+     * (biel → biel, każdy inny kolor → czerń). Bez tego widzi czarny prostokąt z białymi
+     * plamami i nie wie, czemu zniknęły tło, grafika postaci i kolorowe ikony — a to
+     * prowadzi go wprost do odpowiedzi „nieczytelny screen".
+     *
+     * @param {boolean} czarnoBialy czy obraz przeszedł konwersję biel-na-czerni
+     */
+    _promptOdczytuPostaci(czarnoBialy) {
+        const wstep = czarnoBialy
+            ? `To jest zrzut ekranu z gry Survivor.io (ekran postaci z ekwipunkiem) PO CELOWEJ OBRÓBCE GRAFICZNEJ: każdy piksel, który był BIAŁY, pozostał biały, a KAŻDY inny kolor został zamieniony na czarny. Obraz jest więc czarno-biały i to jest zamierzone — nie jest uszkodzony ani nieczytelny.
+
+Obróbkę wykonano po to, żeby wydobyć BIAŁY tekst, który w grze jest napisany na jaskrawym, kolorowym tle. Wszystko, co widzisz na biało, to tekst i elementy interfejsu — reszta ekranu (tło, grafika postaci, kolorowe ikony i ramki) jest teraz czarna i możesz ją zignorować.`
+            : `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem.`;
+
+        return `${wstep}
+
+Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci. Po lewej od nicku jest awatar gracza, nie halucynuj żadnych znaków w tym miejscu.
+
+Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
+<nick postaci>
+<atak>`;
+    }
+
     parseAIResponse(responseText) {
         const lowerResponse = responseText.toLowerCase();
 
