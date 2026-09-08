@@ -190,6 +190,7 @@ Zasady:
 - Nie dodawaj informacji, których nie ma w poście ani na obrazach. Nie zgaduj.
 - Jeśli post to ogłoszenie/aktualizacja - wypunktuj najważniejsze zmiany.
 - Nagłówki poszczególnych sekcji newsa ZAWSZE pogrubiaj (Discord markdown: **Nagłówek sekcji**).
+- Nazwy własne z gry — wydarzenia, tryby, przedmioty, waluty, postacie, gildie — w oryginale są zwykle zapisane WIELKIMI LITERAMI albo Z Wielkich Liter. Takie nazwy zostaw DOKŁADNIE w oryginalnym brzmieniu, NIE tłumacz ich na polski, i ZAWSZE je pogrubiaj (np. **Lunar Mine Expedition**, **Transmute Core**, **Void Trial**). Polską odmianę rób na słowach dookoła nazwy, nie na samej nazwie: „nagrody z **Lunar Mine Expedition**", a nie „nagrody z Lunarnej Ekspedycji".
 - Streszczenie ma być kompletne, ale zwięzłe (bez lania wody).
 
 Treść posta (tekst):
@@ -229,7 +230,7 @@ Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w 
                         operationType: 'news.relay',
                         step: 'summarize-news',
                         promptName: 'news-relay-summary',
-                        promptVersion: 'v1',
+                        promptVersion: 'v2',
                     },
                 });
                 return result.content;
