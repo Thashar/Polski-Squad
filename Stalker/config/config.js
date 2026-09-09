@@ -230,6 +230,9 @@ module.exports = {
         indentRequirements: 1,   // dodatkowe wiersze (progi, uwagi o awansie)
         indentMembers: 3,        // Lider / Vice
 
+        // Emoji doklejane ZA wartością punktów 1 Fazy LME. Pusty ciąg = sama liczba
+        pointsEmoji: '<:M_Medal:1209754405373747260>',
+
         // Kreska zamykająca każdą wiadomość.
         //
         // ⚠️ Discord SKLEJA kolejne wiadomości tego samego autora w jeden blok — bez awatara

@@ -195,7 +195,8 @@ class ClanListService {
         // ⚠️ Wartość to suma TOP30 z bazy (`top30Sum`), ale w wiadomości dla graczy
         // nazywa się „Punkty 1 Fazy LME" — nazwa techniczna nie wyciekła do interfejsu
         if (top30 !== null && top30 !== undefined) {
-            linie.push(`▶ __Punkty 1 Fazy LME__: **${top30.toLocaleString('pl-PL')}**`);
+            const medal = this.ustawienia.pointsEmoji ? ` ${this.ustawienia.pointsEmoji}` : '';
+            linie.push(`▶ __Punkty 1 Fazy LME__: **${top30.toLocaleString('pl-PL')}**${medal}`);
         }
 
         // ⚠️ Dwa RÓŻNE wcięcia. Dodatkowe wymagania wiszą płycej niż blok Lider/Vice —
