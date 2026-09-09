@@ -15061,10 +15061,7 @@ async function handleClanListPanel(interaction, sharedState) {
 
         const dane = zapisane[clanKey] || {};
         const kierownictwo = clanListService.wyliczKierownictwo(members, clanKey);
-        const rolaKlanowa = config.targetRoles[clanKey];
-        const liczbaCzlonkow = rolaKlanowa
-            ? members.filter(m => m.roles.cache.has(rolaKlanowa)).size
-            : 0;
+        const liczbaCzlonkow = clanListService.policzCzlonkow(members, clanKey) ?? 0;
 
         const skonfigurowany = !!(dane.clanLevel && dane.expeditionLevel && dane.tier);
         const znacznik = skonfigurowany ? '✅' : '⚠️';
