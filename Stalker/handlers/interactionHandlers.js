@@ -15003,6 +15003,27 @@ async function generateClanProgressChart(clanProgressData, clanName) {
  * na serwerze, albo pustą zmienną w `.env`, i lepiej zobaczyć to tutaj niż w gotowej,
  * publicznej wiadomości.
  */
+/**
+ * Kto może konfigurować listę klanów: administrator serwera, moderator oraz **każdy Lider
+ * i Vice Lider** — zarówno klanu głównego, jak i akademii.
+ *
+ * ⚠️ Sprawdzane w DWÓCH miejscach (panel i zapis modala), a nie tylko przy kliknięciu
+ * przycisku. Panel jest efemeryczny, ale żyje w kliencie tak długo, jak długo wisi na
+ * ekranie — bez guardu przy zapisie osoba, której w międzyczasie zdjęto rolę, mogłaby
+ * jeszcze zatwierdzić modal otwarty wcześniej.
+ *
+ * Uprawnienie dotyczy WSZYSTKICH klanów, nie tylko własnego: kierownictwo Polskiego Squadu
+ * to wąska grupa, a rozbijanie tego na „każdy edytuje swój klan" wymagałoby dodatkowo
+ * filtrowania listy w selekcie i osobnego guardu przy modalu.
+ */
+function maDostepDoListyKlanow(member, config) {
+    if (member.permissions.has('Administrator')) return true;
+    if (hasPermission(member, config.allowedPunishRoles)) return true;
+
+    const kierownictwo = Object.values(config.leadershipRoles || {}).filter(Boolean);
+    return hasPermission(member, kierownictwo);
+}
+
 async function handleClanListPanel(interaction, sharedState) {
     const { config, clanListService } = sharedState;
 
@@ -15016,11 +15037,8 @@ async function handleClanListPanel(interaction, sharedState) {
         throw deferError;
     }
 
-    const isAdmin = interaction.member.permissions.has('Administrator');
-    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
-
-    if (!isAdmin && !hasPunishRole) {
-        await interaction.editReply({ content: '❌ Lista klanów jest dostępna tylko dla administratorów i moderatorów.' });
+    if (!maDostepDoListyKlanow(interaction.member, config)) {
+        await interaction.editReply({ content: '❌ Lista klanów jest dostępna dla administratorów, moderatorów oraz Liderów i Vice Liderów.' });
         return;
     }
 
@@ -15089,6 +15107,12 @@ async function handleClanListPanel(interaction, sharedState) {
 /** Wybór klanu → modal wypełniony obecnymi wartościami */
 async function handleClanListSelect(interaction, sharedState) {
     const { config, clanListService } = sharedState;
+
+    if (!maDostepDoListyKlanow(interaction.member, config)) {
+        await interaction.reply({ content: '❌ Nie masz już uprawnień do konfiguracji listy klanów.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
     const clanKey = interaction.values[0];
     const klan = config.clanList.clans[clanKey];
 
@@ -15134,6 +15158,11 @@ async function handleClanListModalSubmit(interaction, sharedState) {
 
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (!maDostepDoListyKlanow(interaction.member, config)) {
+            await interaction.editReply({ content: '❌ Nie masz już uprawnień do konfiguracji listy klanów.' });
+            return;
+        }
 
         const clanKey = interaction.customId.split('|')[1];
         const klan = config.clanList.clans[clanKey];
