@@ -224,6 +224,16 @@ module.exports = {
         // Discord zjada zwykłe spacje na początku linii, a emoji serwera zostaje.
         indentEmoji: '<:ZZ_Pusto:1209494954762829866>',
 
+        // Kreska zamykająca każdą wiadomość.
+        //
+        // ⚠️ Discord SKLEJA kolejne wiadomości tego samego autora w jeden blok — bez awatara
+        // i nagłówka między nimi — więc cztery posty o klanach czytały się jak jedna ściana
+        // tekstu. Zwykły markdown nie pomoże: `---` nie renderuje się w wiadomościach jako
+        // linia pozioma, więc kreskę rysujemy znakami Unicode.
+        //
+        // Pusty ciąg wyłącza separator.
+        separator: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+
         // Nagłówek wiadomości budujemy jako `${emoji}**${name}**${emoji} 🆔 ${gameId}`.
         //
         // ⚠️ Emoji trzymamy ODDZIELNIE od nazwy, choć `roleDisplayNames` wyżej ma je sklejone
