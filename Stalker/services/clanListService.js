@@ -12,8 +12,8 @@ const logger = createBotLogger('Stalker');
  * Podział obowiązków:
  * - **ustawiane ręcznie** (przycisk w panelu OCR → modal): poziom klanu, poziom trudności
  *   ekspedycji, tier, tekst wstępny i dodatkowe wiersze,
- * - **wyliczane automatycznie**: punkty TOP30 z bieżącego tygodnia Fazy 1 oraz skład
- *   Lider / Vice (z ról na serwerze).
+ * - **wyliczane automatycznie**: punkty z bieżącego tygodnia Fazy 1 LME (suma TOP30) oraz
+ *   skład Lider / Vice (z ról na serwerze).
  */
 
 const PLIK_DANYCH = path.join(__dirname, '../data/clan_list.json');
@@ -107,11 +107,15 @@ class ClanListService {
     /**
      * Skład kierowniczy klanu: `{ lider: [id], vice: [id] }`.
      *
-     * ⚠️ Main i akademie rozpoznaje się INACZEJ. Rola admina i vice-main należą wyłącznie
-     * do klanu głównego, więc wystarczy sama rola. Rola Lidera i Vice Lidera Akademii jest
-     * natomiast WSPÓLNA dla klanów 0/1/2 — dopiero przecięcie z rolą klanową mówi, o który
-     * klan chodzi. Bez tego przecięcia liderzy wszystkich trzech akademii wylądowaliby
-     * w każdej z trzech wiadomości.
+     * ⚠️ **Każdy Vice wymaga roli funkcyjnej ORAZ roli klanowej.** W akademiach rola Vice
+     * Lidera jest WSPÓLNA dla klanów 0/1/2, więc bez przecięcia z rolą klanową vice wszystkich
+     * trzech akademii wylądowaliby w każdej z trzech wiadomości. W klanie głównym przecięcie
+     * ma inny sens: odsiewa osobę, której została rola Vice Lidera Main, choć klan już
+     * opuściła — a taki wpis wisiałby w publicznej wiadomości rekrutacyjnej.
+     *
+     * ⚠️ **Lider klanu głównego jest wyjątkiem** — bierzemy samą rolę administratora serwera,
+     * bez wymagania roli klanowej. Administracja nie zawsze siedzi na roli klanowej, a rola
+     * admina i tak należy wyłącznie do klanu głównego.
      *
      * @param {Collection} members pobrani członkowie serwera (jedno pobranie na przebieg)
      */
@@ -135,7 +139,7 @@ class ClanListService {
         if (clanKey === 'main') {
             return {
                 lider: zbierz(role.adminMain, false),
-                vice: zbierz(role.viceMain, false)
+                vice: zbierz(role.viceMain, true)
             };
         }
 
@@ -187,10 +191,10 @@ class ClanListService {
         if (dane.expeditionLevel) linie.push(`▶ __Poziom Trudności Ekspedycji__: **${dane.expeditionLevel}**`);
         if (dane.tier)            linie.push(`▶ __Tier Klanu__: **${dane.tier}**`);
 
-        // Punkty to OSIĄGNIĘCIE, nie wymaganie - stąd 🏆 zamiast ▶, mimo że wiersz stoi
-        // w tym samym bloku, tuż pod tierem
+        // ⚠️ Wartość to suma TOP30 z bazy (`top30Sum`), ale w wiadomości dla graczy
+        // nazywa się „Punkty 1 Fazy LME" — nazwa techniczna nie wyciekła do interfejsu
         if (top30 !== null && top30 !== undefined) {
-            linie.push(`🏆 __Punkty TOP30__: **${top30.toLocaleString('pl-PL')}**`);
+            linie.push(`▶ __Punkty 1 Fazy LME__: **${top30.toLocaleString('pl-PL')}**`);
         }
 
         const wciecie = this._wciecie();
@@ -202,6 +206,13 @@ class ClanListService {
 
         for (const userId of kierownictwo.lider) linie.push(`${wciecie}╰┈➤Lider: <@${userId}>`);
         for (const userId of kierownictwo.vice)  linie.push(`${wciecie}╰┈➤Vice: <@${userId}>`);
+
+        // Kreska zamykająca — Discord skleja kolejne wiadomości tego samego autora w jeden
+        // blok, więc bez niej cztery posty czytają się jak jedna ściana tekstu
+        if (this.ustawienia.separator) {
+            linie.push('');
+            linie.push(this.ustawienia.separator);
+        }
 
         const tresc = linie.join('\n');
 
