@@ -955,6 +955,8 @@ async function handleSelectMenu(interaction, config, reminderService, sharedStat
         });
         // Wyślij publiczne wyniki
         await showClanProgress(interaction, selectedClan, sharedState);
+    } else if (interaction.customId === 'clan_list_select') {
+        await handleClanListSelect(interaction, sharedState);
     } else if (interaction.customId === 'wyniki_select_week') {
         await handleWynikiWeekSelect(interaction, sharedState);
     } else if (interaction.customId.startsWith('modyfikuj_select_clan|')) {
@@ -1591,6 +1593,11 @@ async function handleButton(interaction, sharedState) {
 
     if (interaction.customId === 'queue_cmd_player_raport') {
         await handlePlayerRaportCommand(interaction, sharedState);
+        return;
+    }
+
+    if (interaction.customId === 'queue_cmd_clan_list') {
+        await handleClanListPanel(interaction, sharedState);
         return;
     }
 
@@ -4012,6 +4019,10 @@ async function handleModalSubmit(interaction, sharedState) {
         await handleKalkulatorReturnModalSubmit(interaction, sharedState);
         return;
     }
+    if (interaction.customId.startsWith('clan_list_modal|')) {
+        await handleClanListModalSubmit(interaction, sharedState);
+        return;
+    }
     if (interaction.customId.startsWith('modyfikuj_modal_')) {
         await handleModyfikujModalSubmit(interaction, sharedState);
     } else if (interaction.customId.startsWith('dodaj_modal|')) {
@@ -4704,6 +4715,14 @@ async function handlePhase1FinalConfirmButton(interaction, sharedState) {
             .catch(err => logger.error('[THRESHOLDS] Błąd aktualizacji progów:', err.message));
         exportGloryProgress(interaction.guild, sharedState.databaseService, sharedState.config)
             .catch(err => logger.error('[GLORY] Błąd aktualizacji progresu Glory:', err.message));
+
+        // Świeże punkty TOP30 w liście klanów na kanale rekrutacyjnym (fire-and-forget).
+        // Odświeżamy WSZYSTKIE klany, nie tylko ten z sesji: wiadomości i tak są edytowane
+        // w miejscu, a jeden przebieg pobiera członków raz zamiast czterech razy
+        if (sharedState.clanListService?.enabled) {
+            sharedState.clanListService.odswiezWszystkie(interaction.guild)
+                .catch(err => logger.error('[CLAN_LIST] Błąd odświeżania po Fazie 1:', err.message));
+        }
 
         // Wyślij powiadomienie na kanał ostrzeżeń
         try {
@@ -14970,6 +14989,180 @@ async function generateClanProgressChart(clanProgressData, clanName) {
 </svg>`;
 
     return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// =====================================================================
+//  LISTA KLANÓW — konfiguracja wiadomości na kanale rekrutacyjnym
+// =====================================================================
+
+/**
+ * Panel: pokazuje wykryty skład klanów i pozwala wybrać, który skonfigurować.
+ *
+ * Podgląd składu nie jest ozdobnikiem — to jedyny moment, w którym widać, czy role
+ * kierownicze są ustawione poprawnie. Klan bez wykrytego lidera znaczy albo brak roli
+ * na serwerze, albo pustą zmienną w `.env`, i lepiej zobaczyć to tutaj niż w gotowej,
+ * publicznej wiadomości.
+ */
+async function handleClanListPanel(interaction, sharedState) {
+    const { config, clanListService } = sharedState;
+
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch (deferError) {
+        if (deferError.code === 10062) {
+            logger.warn('[CLAN_LIST] ⚠️ Interakcja wygasła przed deferReply');
+            return;
+        }
+        throw deferError;
+    }
+
+    const isAdmin = interaction.member.permissions.has('Administrator');
+    const hasPunishRole = hasPermission(interaction.member, config.allowedPunishRoles);
+
+    if (!isAdmin && !hasPunishRole) {
+        await interaction.editReply({ content: '❌ Lista klanów jest dostępna tylko dla administratorów i moderatorów.' });
+        return;
+    }
+
+    if (!clanListService?.enabled) {
+        await interaction.editReply({
+            content: '❌ Lista klanów jest wyłączona — brak zmiennej `STALKER_LME_CLAN_LIST_CHANNEL` w `.env`.'
+        });
+        return;
+    }
+
+    const members = await safeFetchMembers(interaction.guild, logger);
+    const zapisane = await clanListService.pobierzWszystkie();
+
+    const opis = [];
+    const opcje = [];
+
+    for (const clanKey of config.clanList.order) {
+        const klan = config.clanList.clans[clanKey];
+        if (!klan) continue;
+
+        const dane = zapisane[clanKey] || {};
+        const kierownictwo = clanListService.wyliczKierownictwo(members, clanKey);
+        const rolaKlanowa = config.targetRoles[clanKey];
+        const liczbaCzlonkow = rolaKlanowa
+            ? members.filter(m => m.roles.cache.has(rolaKlanowa)).size
+            : 0;
+
+        const skonfigurowany = !!(dane.clanLevel && dane.expeditionLevel && dane.tier);
+        const znacznik = skonfigurowany ? '✅' : '⚠️';
+
+        opis.push(
+            `${znacznik} **${klan.emoji} ${klan.name}** — członków: **${liczbaCzlonkow}**, ` +
+            `Lider: **${kierownictwo.lider.length}**, Vice: **${kierownictwo.vice.length}**` +
+            (skonfigurowany
+                ? `\n  Poziom **${dane.clanLevel}** · Ekspedycja **${dane.expeditionLevel}** · Tier **${dane.tier}**`
+                : '\n  _Dane nieustawione — wiadomość pokaże tylko to, co wyliczone_')
+        );
+
+        opcje.push(
+            new StringSelectMenuOptionBuilder()
+                .setLabel(`${klan.name}`.slice(0, 100))
+                .setDescription(skonfigurowany
+                    ? `Poziom ${dane.clanLevel} · Ekspedycja ${dane.expeditionLevel} · ${dane.tier}`.slice(0, 100)
+                    : 'Dane nieustawione')
+                .setValue(clanKey)
+                .setEmoji(klan.emoji)
+        );
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(0x5865F2)
+        .setTitle('📋 Lista klanów — konfiguracja')
+        .setDescription(opis.join('\n\n'))
+        .setFooter({ text: 'Punkty TOP30 i skład Lider/Vice aktualizują się same. Ustawiasz tylko poziomy, tier i teksty.' });
+
+    const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+            .setCustomId('clan_list_select')
+            .setPlaceholder('Wybierz klan do skonfigurowania')
+            .addOptions(opcje)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+}
+
+/** Wybór klanu → modal wypełniony obecnymi wartościami */
+async function handleClanListSelect(interaction, sharedState) {
+    const { config, clanListService } = sharedState;
+    const clanKey = interaction.values[0];
+    const klan = config.clanList.clans[clanKey];
+
+    if (!klan) {
+        await interaction.reply({ content: '❌ Nieznany klan.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    const dane = await clanListService.pobierzDane(clanKey);
+
+    // ⚠️ Modal Discorda przyjmuje NAJWYŻEJ 5 pól i dokładnie tyle tu jest.
+    // Dokładając kolejne (np. ID klanu w grze) trzeba coś usunąć albo rozbić na dwa kroki.
+    const modal = new ModalBuilder()
+        .setCustomId(`clan_list_modal|${clanKey}`)
+        .setTitle(`${klan.name}`.slice(0, 45));
+
+    const pole = (id, label, wartosc, wymagane, styl, placeholder, maxLength) => {
+        const input = new TextInputBuilder()
+            .setCustomId(id)
+            .setLabel(label)
+            .setStyle(styl)
+            .setRequired(wymagane)
+            .setMaxLength(maxLength);
+        if (placeholder) input.setPlaceholder(placeholder);
+        if (wartosc) input.setValue(String(wartosc));
+        return new ActionRowBuilder().addComponents(input);
+    };
+
+    modal.addComponents(
+        pole('clan_level', 'Poziom Klanu', dane.clanLevel, true, TextInputStyle.Short, 'np. 18', 20),
+        pole('expedition_level', 'Poziom Trudności Ekspedycji', dane.expeditionLevel, true, TextInputStyle.Short, 'np. 18', 20),
+        pole('tier', 'Tier Klanu', dane.tier, true, TextInputStyle.Short, 'np. Champion', 50),
+        pole('intro', 'Tekst wstępny (opcjonalny)', dane.intro, false, TextInputStyle.Paragraph, '(Klan for fun, jeżeli wybijasz się…)', 300),
+        pole('extra_lines', 'Dodatkowe wiersze (jeden na linię)', dane.extraLines, false, TextInputStyle.Paragraph, 'Min. 🏅: 100\nOptymalnie 🏆 700/tydzień', 500)
+    );
+
+    await interaction.showModal(modal);
+}
+
+/** Zapis danych z modala i natychmiastowa przebudowa wiadomości */
+async function handleClanListModalSubmit(interaction, sharedState) {
+    const { config, clanListService } = sharedState;
+
+    try {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        const clanKey = interaction.customId.split('|')[1];
+        const klan = config.clanList.clans[clanKey];
+        if (!klan) {
+            await interaction.editReply({ content: '❌ Nieznany klan.' });
+            return;
+        }
+
+        await clanListService.zapiszDane(clanKey, {
+            clanLevel: interaction.fields.getTextInputValue('clan_level').trim(),
+            expeditionLevel: interaction.fields.getTextInputValue('expedition_level').trim(),
+            tier: interaction.fields.getTextInputValue('tier').trim(),
+            intro: interaction.fields.getTextInputValue('intro').trim(),
+            extraLines: interaction.fields.getTextInputValue('extra_lines').trim()
+        });
+
+        const wynik = await clanListService.odswiezWszystkie(interaction.guild);
+
+        await interaction.editReply({
+            content: wynik.ok
+                ? `✅ Zapisano dane klanu **${klan.name}** i odświeżono ${wynik.zaktualizowane} wiadomości na kanale.`
+                : `⚠️ Dane klanu **${klan.name}** zapisane, ale nie udało się odświeżyć wiadomości (${wynik.powod}).`
+        });
+    } catch (error) {
+        logger.error(`[CLAN_LIST] Błąd zapisu danych klanu: ${error.message}`);
+        const tresc = '❌ Nie udało się zapisać danych klanu.';
+        if (interaction.deferred) await interaction.editReply({ content: tresc });
+        else await interaction.reply({ content: tresc, flags: MessageFlags.Ephemeral });
+    }
 }
 
 module.exports = {

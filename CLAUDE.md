@@ -865,6 +865,11 @@ CLAN0_ROLE=role_id
 CLAN1_ROLE=role_id
 CLAN2_ROLE=role_id
 MAIN_CLAN_ROLE=role_id
+# Role kierownicze (WYMAGANE przez Rekrutera). Czyta je też Stalker przy liście klanów —
+# ta sama rola Lidera/Vice obsługuje wszystkie trzy akademie, klan wskazuje rola klanowa
+LEADER_ROLE=role_id
+VICE_LEADER_ROLE=role_id
+VICE_LEADER_MAIN_ROLE=role_id
 WAITING_ROOM_CHANNEL=poczekalnia
 # AI OCR Google Gemini (opcjonalne) — klucz wspólny dla OCR i rozmowy rekrutacyjnej
 USE_AI_OCR=false
@@ -921,6 +926,12 @@ USE_STALKER_AI_OCR=false
 STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
 # News Relay (opcjonalne) - kanał z postami z innego serwera → polskie streszczenie na kanały klanów
 STALKER_LME_NEWS_CHANNEL_ID=channel_id
+# Lista klanów (opcjonalne) - automatyczne wiadomości o klanach na kanale z przyciskiem
+# „Chcę dołączyć do klanu" (ten sam kanał co REKRUTER_JOIN_CLAN_CHANNEL)
+STALKER_LME_CLAN_LIST_CHANNEL=channel_id
+# Rola administratora - Lider klanu głównego w liście klanów. Pozostałe role kierownicze
+# to te same zmienne co w Rekruterze: LEADER_ROLE, VICE_LEADER_ROLE, VICE_LEADER_MAIN_ROLE
+STALKER_LME_ADMIN_ROLE=role_id
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here
