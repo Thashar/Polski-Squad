@@ -107,6 +107,25 @@
 - **Włączanie:** aktywny gdy ustawiony `STALKER_LME_NEWS_CHANNEL_ID` ORAZ `STALKER_GOOGLE_AI_API_KEY` (`config.ocr.googleAiApiKey`). Brak kanału = funkcja wyłączona (log info przy starcie). **Nie używa `USE_STALKER_AI_OCR`** (to osobny przełącznik dla OCR wyników).
 - **Persistencja:** brak — relay działa na żywo (event-driven). Posty z okresu, gdy bot był offline, nie są przetwarzane (świadoma decyzja, jak przy monitorowaniu DM przypomnień).
 
+**Lista klanów** - `clanListService.js`: po jednej wiadomości bota na klan (main, 2, 1, 0) na kanale z przyciskiem „Chcę dołączyć do klanu". Zastępuje ręcznie edytowane posty.
+- **Kanał:** `STALKER_LME_CLAN_LIST_CHANNEL` — ten SAM kanał, na którym Rekruter trzyma przycisk (`REKRUTER_JOIN_CLAN_CHANNEL`). Stalker ma własną zmienną, bo boty nie współdzielą configu. Brak zmiennej = funkcja wyłączona.
+  - ⚠️ **Rekruter nie kasuje cudzych wiadomości** — `zadbajOPrzyciskDolaczenia()` szuka wyłącznie swojej wiadomości z `customId === 'join_clan_start'`, więc wiadomości Stalkera są tam bezpieczne.
+- **Podział danych:** ustawiane ręcznie (przycisk → modal): poziom klanu, poziom trudności ekspedycji, tier, tekst wstępny, dodatkowe wiersze. Wyliczane automatycznie: punkty TOP30 i skład Lider/Vice.
+- **Format wiadomości:** `# {emoji}**{nazwa}**{emoji} 🆔 {gameId}` → opcjonalny tekst wstępny → `## Informacje i wymagania:` → wiersze `▶ __…__: **…**` → `🏆 __Punkty TOP30__: **…**` → dodatkowe wiersze i blok Lider/Vice (`╰┈➤`).
+  - ⚠️ **Punkty mają znacznik 🏆, nie ▶** — to osiągnięcie klanu, a nie wymaganie wobec kandydata, mimo że wiersz stoi w tym samym bloku tuż pod tierem.
+  - ⚠️ **Wcięcie bloku Lider/Vice robi emoji `<:ZZ_Pusto:…>`** (`config.clanList.indentEmoji`), bo Discord zjada zwykłe spacje na początku linii.
+  - ⚠️ **Emoji klanu trzymane ODDZIELNIE od nazwy** w `config.clanList.clans` (`{emoji, name, gameId}`), choć `roleDisplayNames` ma je sklejone („🔥Polski Squad🔥"). W nagłówku pogrubiona jest sama nazwa, a emoji zostają poza pogrubieniem — z jednego stringa nie da się tego odtworzyć bez zgadywania, gdzie kończy się emoji.
+  - Brak danych Fazy 1 za bieżący tydzień → wiersz z punktami **znika**, zamiast pokazywać `0` (czytałoby się jak realny, fatalny wynik).
+- **Rozpoznawanie kierownictwa** (`config.leadershipRoles`): main bierze `STALKER_LME_ADMIN_ROLE` i `VICE_LEADER_MAIN_ROLE` wprost. ⚠️ **W akademiach rola Lidera/Vice jest WSPÓLNA** dla klanów 0/1/2, więc klan wskazuje dopiero **przecięcie** `LEADER_ROLE`/`VICE_LEADER_ROLE` z rolą klanową (`targetRoles`) — bez tego liderzy wszystkich trzech akademii trafiliby do każdej z trzech wiadomości.
+  - ⚠️ Trzy z tych zmiennych to te SAME, których używa Rekruter — nie dubluj ich pod nową nazwą, bo rozjadą się przy pierwszej zmianie roli na serwerze.
+- **⚠️ Wiadomość jest EDYTOWANA, nigdy wysyłana od nowa**, dopóki istnieje. `messageId` w `data/clan_list.json` (przez `jsonStore`), więc przeżywa restart. Powód: na tym kanale stoi też przycisk Rekrutera i ma być POD listą, a każda nowa wiadomość ląduje na końcu kanału — kasowanie i wysyłka od nowa przy każdym starcie przestawiałaby kolejność. Wysyłka rusza tylko gdy ID nie ma albo wiadomość zniknęła z kanału.
+- **Odświeżanie:** przy starcie bota, po zapisaniu wyników Fazy 1 (obok `exportClanThresholds`/`exportGloryProgress`) oraz na `guildMemberUpdate`.
+  - ⚠️ **Filtr `czyZmianaDotyczyKierownictwa` przy `guildMemberUpdate` jest konieczny, nie kosmetyczny** — zdarzenie leci przy KAŻDEJ zmianie nicku, awatara, boosta czy dowolnej roli, a bez filtra każde z nich przebudowywałoby cztery wiadomości i pobierało listę członków serwera.
+- **Konfiguracja:** przycisk „📋 Lista klanów" na panelu OCR (row4, obok raportu wypalenia) → embed ze składem klanów → select klanu → modal. Uprawnienia: administrator lub rola moderatora (`allowedPunishRoles`).
+  - Podgląd składu w embedzie (liczba członków, ilu wykrytych Liderów/Vice) to **jedyny moment, w którym widać, czy role kierownicze są ustawione poprawnie** — klan bez wykrytego lidera znaczy brak roli na serwerze albo pustą zmienną w `.env`.
+  - ⚠️ **Modal Discorda przyjmuje najwyżej 5 pól** i dokładnie tyle tam jest. Dokładając kolejne (np. ID klanu w grze) trzeba coś usunąć albo rozbić na dwa kroki.
+- ⚠️ **Przycisk trzeba dodać w DWÓCH miejscach** — panel OCR jest zdefiniowany dwukrotnie w `ocrService.js` (osobno dla edycji istniejącego embedu i dla wysyłki nowego).
+
 **Przypomnienia** - `reminderService.js`: DM z przyciskiem potwierdzenia, monitorowanie odpowiedzi DM (losowe polskie odpowiedzi, repost na kanały potwierdzenia), auto-cleanup po deadline
 
 **RemindCX (Boss CX)** - Przycisk 💎 RemindCX na panelu OCR (row1, obok Remind), tylko przycisk (brak komendy slash):
@@ -373,6 +392,16 @@ STALKER_GOOGLE_AI_MODEL=gemini-2.5-flash-lite
 # News Relay (opcjonalne) - kanał z postami z innego serwera do streszczania po polsku
 # Wymaga STALKER_GOOGLE_AI_API_KEY (Gemini Vision). Brak = funkcja wyłączona
 STALKER_LME_NEWS_CHANNEL_ID=channel_id
+
+# Lista klanów (opcjonalne) - automatyczne wiadomości o klanach na kanale rekrutacyjnym.
+# To ten SAM kanał, na którym Rekruter trzyma przycisk „Chcę dołączyć do klanu"
+# (REKRUTER_JOIN_CLAN_CHANNEL). Brak zmiennej = funkcja wyłączona
+STALKER_LME_CLAN_LIST_CHANNEL=channel_id
+# Rola administratora serwera - Lider klanu głównego w liście klanów
+STALKER_LME_ADMIN_ROLE=role_id
+# Pozostałe role kierownicze bierzemy z tych samych zmiennych co Rekruter:
+# LEADER_ROLE (Lider Akademii), VICE_LEADER_ROLE (Vice Lider Akademii),
+# VICE_LEADER_MAIN_ROLE (Vice Lider Main) - NIE dubluj ich pod nową nazwą
 
 ```
 

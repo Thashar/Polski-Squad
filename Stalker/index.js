@@ -112,6 +112,8 @@ const GiftcodeService = require('./services/giftcodeService');
 const giftcodeService = new GiftcodeService(config, logger);
 const NewsRelayService = require('./services/newsRelayService');
 const newsRelayService = new NewsRelayService(config, llmAdapter, logger);
+const ClanListService = require('./services/clanListService');
+const clanListService = new ClanListService(config, databaseService, phaseService);
 
 const GIFTCODE_CHANNEL_ID = '1191791557607690442';
 const GIFTCODE_REPORT_CHANNEL_ID = '1263240344871370804';
@@ -278,7 +280,8 @@ const sharedState = {
     phaseService,
     garyCombatIngestionService,
     kalkulatorEmbedService,
-    giftcodeService
+    giftcodeService,
+    clanListService
 };
 
 client.once(Events.ClientReady, async () => {
@@ -294,6 +297,13 @@ client.once(Events.ClientReady, async () => {
             .catch(err => logger.error(`[THRESHOLDS] Błąd eksportu progów przy starcie (${guild.name}):`, err.message));
         exportGloryProgress(guild, databaseService, config)
             .catch(err => logger.error(`[GLORY] Błąd eksportu progresu Glory przy starcie (${guild.name}):`, err.message));
+
+        // Lista klanów - wiadomości są EDYTOWANE (ID w data/clan_list.json), więc restart
+        // odświeża treść, a nie przestawia kolejność względem przycisku Rekrutera
+        if (clanListService.enabled) {
+            clanListService.odswiezWszystkie(guild)
+                .catch(err => logger.error(`[CLAN_LIST] Błąd odświeżania przy starcie (${guild.name}):`, err.message));
+        }
     }
 
     await ocrService.initializeOCR();
@@ -430,6 +440,26 @@ client.once(Events.ClientReady, async () => {
   } catch (error) {
     logger.error('❌ Błąd krytyczny podczas inicjalizacji Stalker:', error);
   }
+});
+
+/**
+ * Zmiana ról → odświeżenie składu Lider/Vice w liście klanów.
+ *
+ * ⚠️ Filtr `czyZmianaDotyczyKierownictwa` jest tu konieczny, a nie kosmetyczny:
+ * `guildMemberUpdate` leci przy KAŻDEJ zmianie nicku, awatara, boosta czy dowolnej innej
+ * roli, a bez filtra każde takie zdarzenie przebudowywałoby cztery wiadomości i pobierało
+ * listę członków serwera.
+ */
+client.on(Events.GuildMemberUpdate, async (staryCzlonek, nowyCzlonek) => {
+    try {
+        if (!clanListService.enabled) return;
+        if (!clanListService.czyZmianaDotyczyKierownictwa(staryCzlonek, nowyCzlonek)) return;
+
+        logger.info(`[CLAN_LIST] Zmiana ról u ${nowyCzlonek.user.username} - odświeżam listę klanów`);
+        await clanListService.odswiezWszystkie(nowyCzlonek.guild);
+    } catch (error) {
+        logger.error(`[CLAN_LIST] Błąd odświeżania po zmianie ról: ${error.message}`);
+    }
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
