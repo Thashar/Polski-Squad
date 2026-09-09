@@ -220,9 +220,15 @@ module.exports = {
         // wiadomości Stalkera są na tym kanale bezpieczne.
         channelId: process.env.STALKER_LME_CLAN_LIST_CHANNEL || null,
 
-        // Emoji wypełniające wcięcie przed „╰┈➤" w blokach Lider/Vice.
+        // Emoji wypełniające wcięcie przed „╰┈➤".
         // Discord zjada zwykłe spacje na początku linii, a emoji serwera zostaje.
         indentEmoji: '<:ZZ_Pusto:1209494954762829866>',
+
+        // Ile razy powtórzyć emoji wcięcia. ⚠️ Dwie RÓŻNE głębokości, bo dodatkowe wymagania
+        // i blok Lider/Vice stoją na innych poziomach zagnieżdżenia — jedna wspólna wartość
+        // wyrównałaby je do siebie i lista przestałaby się czytać jak drzewko.
+        indentRequirements: 1,   // dodatkowe wiersze (progi, uwagi o awansie)
+        indentMembers: 3,        // Lider / Vice
 
         // Kreska zamykająca każdą wiadomość.
         //

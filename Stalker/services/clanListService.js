@@ -159,9 +159,10 @@ class ClanListService {
      * Discord zjada zwykłe spacje na początku linii, więc wcięcie robimy emoji serwera —
      * dokładnie tak, jak w ręcznie pisanych postach, które ta funkcja zastępuje.
      */
-    _wciecie() {
+    _wciecie(ile) {
         const emoji = this.ustawienia.indentEmoji || '';
-        return emoji ? `${emoji} ${emoji}  ` : '';
+        if (!emoji || ile < 1) return '';
+        return `${Array(ile).fill(emoji).join(' ')}  `;
     }
 
     /**
@@ -197,15 +198,18 @@ class ClanListService {
             linie.push(`▶ __Punkty 1 Fazy LME__: **${top30.toLocaleString('pl-PL')}**`);
         }
 
-        const wciecie = this._wciecie();
+        // ⚠️ Dwa RÓŻNE wcięcia. Dodatkowe wymagania wiszą płycej niż blok Lider/Vice —
+        // wyrównanie ich do siebie spłaszcza drzewko i obie grupy zlewają się w jedną listę
+        const wciecieWymagan = this._wciecie(this.ustawienia.indentRequirements ?? 1);
+        const wciecieOsob = this._wciecie(this.ustawienia.indentMembers ?? 3);
 
-        // Dodatkowe wiersze (progi, uwagi o awansie) - wcięte tak samo jak blok Lider/Vice
+        // Dodatkowe wiersze (progi, uwagi o awansie)
         for (const wiersz of this._rozbijDodatkowe(dane.extraLines)) {
-            linie.push(`${wciecie}╰┈➤ ${wiersz}`);
+            linie.push(`${wciecieWymagan}╰┈➤ ${wiersz}`);
         }
 
-        for (const userId of kierownictwo.lider) linie.push(`${wciecie}╰┈➤Lider: <@${userId}>`);
-        for (const userId of kierownictwo.vice)  linie.push(`${wciecie}╰┈➤Vice: <@${userId}>`);
+        for (const userId of kierownictwo.lider) linie.push(`${wciecieOsob}╰┈➤Lider: <@${userId}>`);
+        for (const userId of kierownictwo.vice)  linie.push(`${wciecieOsob}╰┈➤Vice: <@${userId}>`);
 
         // Kreska zamykająca — Discord skleja kolejne wiadomości tego samego autora w jeden
         // blok, więc bez niej cztery posty czytają się jak jedna ściana tekstu
