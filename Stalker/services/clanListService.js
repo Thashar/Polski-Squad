@@ -149,6 +149,27 @@ class ClanListService {
         };
     }
 
+    /**
+     * Ilu graczy nosi rolę klanową danego klanu.
+     *
+     * Liczymy z tej samej kolekcji `members`, co skład kierowniczy — jedno pobranie na przebieg.
+     * Brak roli klanowej w konfiguracji daje `null`, a wiersz z liczbą członków znika: `0/40`
+     * czytałoby się jak pusty klan, choć znaczy tylko nieuzupełnioną zmienną w `.env`.
+     */
+    policzCzlonkow(members, clanKey) {
+        const rolaKlanowa = this.config.targetRoles?.[clanKey];
+        if (!rolaKlanowa) return null;
+
+        // Pętla, a nie `members.filter().size` — `filter` jest metodą `Collection` z discord.js,
+        // a `wyliczKierownictwo` obok iteruje tak samo. Dzięki temu obie metody przyjmują
+        // dowolną kolekcję [id, member], nie tylko tę jedną klasę
+        let liczba = 0;
+        for (const [, member] of members) {
+            if (member.roles.cache.has(rolaKlanowa)) liczba++;
+        }
+        return liczba;
+    }
+
     /* ------------------------------------------------------------------ */
     /*  BUDOWANIE TREŚCI                                                   */
     /* ------------------------------------------------------------------ */
@@ -173,7 +194,7 @@ class ClanListService {
      * @param {number|null} top30 punkty TOP30 albo null
      * @param {{lider: string[], vice: string[]}} kierownictwo
      */
-    zbudujTresc(clanKey, dane, top30, kierownictwo) {
+    zbudujTresc(clanKey, dane, top30, kierownictwo, liczbaCzlonkow = null) {
         const klan = this.ustawienia.clans?.[clanKey];
         if (!klan) return null;
 
@@ -197,6 +218,12 @@ class ClanListService {
         if (top30 !== null && top30 !== undefined) {
             const medal = this.ustawienia.pointsEmoji ? ` ${this.ustawienia.pointsEmoji}` : '';
             linie.push(`▶ __Punkty 1 Fazy LME__: **${top30.toLocaleString('pl-PL')}**${medal}`);
+        }
+
+        // Obłożenie klanu. Brak roli klanowej w configu daje `null` i wiersz znika - „0/40"
+        // czytałoby się jak pusty klan, a znaczyłoby tylko nieuzupełnioną zmienną w `.env`
+        if (liczbaCzlonkow !== null && liczbaCzlonkow !== undefined) {
+            linie.push(`▶ __Członkowie__: **${liczbaCzlonkow}/${this.ustawienia.maxMembers ?? 40}**`);
         }
 
         // ⚠️ Dwa RÓŻNE wcięcia. Dodatkowe wymagania wiszą płycej niż blok Lider/Vice —
@@ -306,7 +333,9 @@ class ClanListService {
         const top30 = await this.pobierzTop30(guild.id, clanKey);
         const kierownictwo = this.wyliczKierownictwo(members, clanKey);
 
-        const tresc = this.zbudujTresc(clanKey, dane, top30, kierownictwo);
+        const liczbaCzlonkow = this.policzCzlonkow(members, clanKey);
+
+        const tresc = this.zbudujTresc(clanKey, dane, top30, kierownictwo, liczbaCzlonkow);
         if (!tresc) {
             logger.warn(`[CLAN_LIST] Klan ${clanKey} nie ma wpisu w config.clanList.clans - pomijam`);
             return false;

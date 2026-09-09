@@ -233,6 +233,9 @@ module.exports = {
         // Emoji doklejane ZA wartością punktów 1 Fazy LME. Pusty ciąg = sama liczba
         pointsEmoji: '<:M_Medal:1209754405373747260>',
 
+        // Ile miejsc ma klan w grze - mianownik wiersza „Członkowie: xx/40"
+        maxMembers: 40,
+
         // Kreska zamykająca każdą wiadomość.
         //
         // ⚠️ Discord SKLEJA kolejne wiadomości tego samego autora w jeden blok — bez awatara
