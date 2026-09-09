@@ -41,6 +41,9 @@ class ClanListService {
         this.ustawienia = config.clanList || {};
         this.enabled = !!this.ustawienia.channelId;
 
+        // Łańcuch przebiegów odświeżania — patrz `odswiezWszystkie`
+        this._wTrakcie = null;
+
         if (!this.enabled) {
             logger.info('ℹ️ [CLAN_LIST] Wyłączona - brak STALKER_LME_CLAN_LIST_CHANNEL');
         }
@@ -232,10 +235,27 @@ class ClanListService {
      * bota przestawiałoby więc kolejność. `messageId` siedzi w JSON-ie, więc przeżywa restart;
      * wysyłka rusza tylko wtedy, gdy ID nie ma albo wiadomość zniknęła z kanału.
      *
+     * ⚠️ **Przebiegi są SERIALIZOWANE.** Odświeżenie wołają trzy niezależne wyzwalacze (start
+     * bota, zapis w modalu, `guildMemberUpdate`), a przy pierwszym uruchomieniu — gdy `messageId`
+     * jeszcze nie ma — dwa równoległe przebiegi zobaczyłyby pusty identyfikator i **każdy wysłałby
+     * własną wiadomość**, zostawiając na kanale duplikaty. Kolejne wywołanie czeka więc na
+     * poprzednie i widzi już zapisane ID.
+     *
      * @param {Guild} guild serwer
      * @returns {Promise<{ok: boolean, zaktualizowane: number, powod?: string}>}
      */
     async odswiezWszystkie(guild) {
+        // Błąd poprzedniego przebiegu nie może zablokować kolejnych, stąd `.catch`
+        const biezace = (this._wTrakcie ?? Promise.resolve())
+            .catch(() => {})
+            .then(() => this._odswiezWszystkieBezKolejki(guild));
+
+        this._wTrakcie = biezace;
+        return biezace;
+    }
+
+    /** Właściwy przebieg odświeżania — wołany wyłącznie przez `odswiezWszystkie` */
+    async _odswiezWszystkieBezKolejki(guild) {
         if (!this.enabled) return { ok: false, zaktualizowane: 0, powod: 'disabled' };
 
         let kanal;
