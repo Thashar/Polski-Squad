@@ -168,6 +168,7 @@ class InteractionHandler {
         this.recordRevertService = recordRevertService;
         this.webRankingSyncService = webRankingSyncService;
         this.broadcastReactionService = null; // ustawiany setterem z index.js
+        this.globalPositionHistoryService = null; // ustawiany setterem z index.js
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -6322,6 +6323,9 @@ class InteractionHandler {
         // to również historia przeciwnika. Uczestnik dostaje flagę `profileDeleted`, którą
         // warstwa wyświetlania tłumaczy na „Profil usunięty" w języku odbiorcy.
         await this._cancelChallengesForProfile(client, playerKey).catch(() => {});
+        // Historia pozycji globalnych znika razem z profilem — inaczej usunięty gracz
+        // dalej wisiałby w „Hall of Fame" miejsca #1
+        await this.globalPositionHistoryService?.removePlayer?.(playerKey).catch(() => {});
 
         // Rejestr przenumerowuje pozostałe profile (2→1, 3→2) i mówi, co przenieść
         const removal = await registry.removeProfile(userId, profileIndex);
@@ -6363,6 +6367,7 @@ class InteractionHandler {
         await this.recordRevertService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         await this.communityVerificationService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         await this.challengeService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
+        await this.globalPositionHistoryService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         gl.info(`👥 Przeniesiono dane profilu ${fromKey} → ${toKey}`);
     }
 
@@ -8051,6 +8056,16 @@ class InteractionHandler {
      */
     setPlayerOfTheDayService(service) {
         this.playerOfTheDayService = service;
+    }
+
+    /**
+     * Historia pozycji w rankingu globalnym — profil pokazuje z niej najwyższą pozycję gracza,
+     * a handler sprząta wpisy przy przenumerowaniu i usuwaniu profili.
+     * @param {Object} service - GlobalPositionHistoryService
+     */
+    setGlobalPositionHistoryService(service) {
+        this.globalPositionHistoryService = service;
+        this.profileService?.setPositionHistoryService?.(service);
     }
 
     /**

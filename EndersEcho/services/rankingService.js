@@ -19,6 +19,14 @@ class RankingService {
         this._sortedCache = new Map(); // guildId → Array
         // Cache globalnego rankingu — inwalidowany przy saveRanking
         this._globalCache = null; // Array | null
+        // Historia pozycji globalnych — ustawiana setterem z index.js (serwis powstaje później,
+        // bo sam potrzebuje rankingService do przeliczenia rankingu)
+        this.positionHistoryService = null;
+    }
+
+    /** @param {Object} service - GlobalPositionHistoryService */
+    setPositionHistoryService(service) {
+        this.positionHistoryService = service;
     }
 
     // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
@@ -107,6 +115,11 @@ class RankingService {
             this._sortedCache.delete(guildId);
             this._globalCache = null;
             await this.saveSharedRanking();
+            // Kolejność w rankingu globalnym mogła się zmienić — historia pozycji musi to
+            // odnotować OD RAZU, inaczej licznik „na tej pozycji od" doliczy graczowi czas
+            // spędzony na miejscu, którego już nie zajmuje. Bez await: zapis rankingu nie ma
+            // czekać na statystyki, a serwis i tak pilnuje pojedynczego przebiegu.
+            this.positionHistoryService?.sync().catch(() => {});
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
             throw error;

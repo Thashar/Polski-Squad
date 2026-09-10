@@ -235,6 +235,9 @@ const pol = {
     globalTop10Footer: 'Następny raport za 3 dni',
     globalTop10FooterBreak: 'Następny raport za 4 dni (przerwa)',
     globalTop10FooterNext: 'Następny raport za {days} dni',
+    globalTop10HoldingFor: '⏳ Na tej pozycji: {duration}',
+    globalTop10HoldingNew: '⏳ Nowa pozycja',
+    globalTop10Top1HallField: '⌛ Najdłużej na 1. miejscu',
 
     // Kamienie milowe — pełne setki unikatowych graczy
     milestoneTitleStandard: '🎉 Nowy Kamień Milowy: {count} Graczy!',
@@ -850,6 +853,9 @@ const eng = {
     globalTop10Footer: 'Next report in 3 days',
     globalTop10FooterBreak: 'Next report in 4 days (break)',
     globalTop10FooterNext: 'Next report in {days} days',
+    globalTop10HoldingFor: '⏳ Holding this spot for: {duration}',
+    globalTop10HoldingNew: '⏳ New position',
+    globalTop10Top1HallField: '⌛ Longest at 1st place',
 
     // Milestones — full hundreds of unique players
     milestoneTitleStandard: '🎉 New Milestone: {count} Players!',

@@ -4,8 +4,9 @@ const fs   = require('fs');
 const path = require('path');
 const { EmbedBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
+const { getOwnerId, getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
 const { formatMessage } = require('../utils/helpers');
+const GlobalPositionHistoryService = require('./globalPositionHistoryService');
 const store = require('../../utils/jsonStore');
 
 const logger = createBotLogger('EndersEcho');
@@ -39,11 +40,19 @@ class GlobalTop10Service {
         // Zbiorcze liczniki reakcji pod raportem — wstrzykiwane z index.js (setterem, bo
         // serwis powstaje wcześniej niż broadcastReactionService)
         this.broadcastReactionService = null;
+        // Historia pozycji globalnych — „na tej pozycji od" pod każdym graczem i Hall of Fame
+        // miejsca #1 pod raportem. Setterem, bo serwis powstaje po tym (potrzebuje rankingService).
+        this.positionHistoryService = null;
     }
 
     /** @param {Object} service - BroadcastReactionService */
     setBroadcastReactionService(service) {
         this.broadcastReactionService = service;
+    }
+
+    /** @param {Object} service - GlobalPositionHistoryService */
+    setPositionHistoryService(service) {
+        this.positionHistoryService = service;
     }
 
     setClient(client) {
@@ -204,6 +213,10 @@ class GlobalTop10Service {
         const bossName = await this._getMostFrequentBoss(10);
         const lastSnapshot = this._cfg.lastSnapshot || {};
 
+        // Historia pozycji musi znać DOKŁADNIE tę kolejność, którą za chwilę wyślemy —
+        // inaczej wiersz „na tej pozycji od" pokazałby czas liczony dla innego układu rankingu
+        await this.positionHistoryService?.sync(globalRanking).catch(() => {});
+
         // Zaktualizuj snapshot przed wysłaniem
         const newSnapshot = {};
         top10.forEach((p, i) => { newSnapshot[p.playerKey || p.userId] = i + 1; });
@@ -287,14 +300,18 @@ class GlobalTop10Service {
             const scoreStr  = player.score || this.rankingService.formatScore(player.scoreValue);
             const bossStr   = player.bossName || msgs.unknownBoss;
 
+            // Trzeci wiersz — jak długo gracz siedzi na tej pozycji
+            const holdLine = this._formatHoldLine(player.playerKey || player.userId, position, msgs);
+            const holdStr  = holdLine ? `> ${holdLine}\n` : '';
+
             if (position <= 3) {
                 // TOP 3 — blok z blockquote
                 lines += `\`${String(position).padStart(2, '0')}\` ${medals[i]}  **${displayName}**  ·  **${scoreStr}**\n`;
-                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
+                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n${holdStr}\n`;
             } else {
                 // 4–10 — dwie linie, zmiana pozycji w 2. wierszu
                 lines += `\`${String(position).padStart(2, '0')}\`  **${displayName}**  ·  **${scoreStr}**\n`;
-                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n\n`;
+                lines += `> ${changeStr}  ·  ${bossStr}  ·  *${shortDate}*${tagSuffix}\n${holdStr}\n`;
             }
         }
 
@@ -317,10 +334,67 @@ class GlobalTop10Service {
                 text: formatMessage(msgs.globalTop10FooterNext || 'Next report in {days} days', { days: nextIntervalDays }),
             });
 
+        // Hall of Fame miejsca #1 — na samym dole, pod bossem okresu
+        const hallField = await this._buildTop1HallField(msgs, client);
+        if (hallField) embed.addFields(hallField);
+
         const botIconUrl = this.client?.user?.displayAvatarURL({ size: 128 });
         if (botIconUrl) embed.setThumbnail(botIconUrl);
 
         return embed;
+    }
+
+    /**
+     * Wiersz „na tej pozycji od" pod graczem.
+     * Gdy historia nie zna jeszcze gracza (pierwszy raport po wdrożeniu, świeży wpis w rankingu)
+     * albo zapamiętana pozycja rozjechała się z tą wysyłaną — pokazujemy „nowa pozycja"
+     * zamiast czasu, który byłby po prostu nieprawdziwy.
+     * @returns {string|null} null = serwis historii niepodpięty, wiersz pomijany
+     */
+    _formatHoldLine(playerKey, position, msgs) {
+        if (!this.positionHistoryService) return null;
+        const stats = this.positionHistoryService.getPlayerStats(playerKey);
+        if (!stats || stats.position !== position || stats.holdMs === null) {
+            return msgs.globalTop10HoldingNew || '⏳ Nowa pozycja';
+        }
+        return formatMessage(msgs.globalTop10HoldingFor || '⏳ Na tej pozycji: {duration}', {
+            duration: GlobalPositionHistoryService.formatDuration(stats.holdMs),
+        });
+    }
+
+    /**
+     * Pole „Najdłużej na 1. miejscu" — TOP 3 wg łącznego czasu spędzonego na szczycie
+     * rankingu globalnego (również gracze, którzy dawno z niego zeszli).
+     * @returns {Promise<{name: string, value: string, inline: boolean}|null>}
+     */
+    async _buildTop1HallField(msgs, client) {
+        if (!this.positionHistoryService) return null;
+        const hall = this.positionHistoryService.getTop1Leaderboard(3);
+        if (hall.length === 0) return null;
+
+        const medals = ['🥇', '🥈', '🥉'];
+        const lines  = [];
+        for (let i = 0; i < hall.length; i++) {
+            const entry = hall[i];
+            let name = entry.username || `ID:${entry.playerKey}`;
+            try {
+                const guildObj = entry.guildId ? client?.guilds?.cache?.get(entry.guildId) : null;
+                if (guildObj) {
+                    const member = await guildObj.members.fetch(getOwnerId(entry.playerKey)).catch(() => null);
+                    if (member) name = member.displayName;
+                }
+            } catch { /* fallback na zapamiętany nick */ }
+            name = formatProfileDisplayName(name, entry.profileIndex);
+            // 👑 = gracz siedzi na szczycie w tej chwili, jego licznik wciąż rośnie
+            const crown = entry.isCurrent ? ' 👑' : '';
+            lines.push(`${medals[i]} **${name}**${crown}  ·  \`${GlobalPositionHistoryService.formatDuration(entry.totalMs)}\``);
+        }
+
+        return {
+            name:   msgs.globalTop10Top1HallField || '⌛ Najdłużej na 1. miejscu',
+            value:  lines.join('\n'),
+            inline: false,
+        };
     }
 
     /**
@@ -334,6 +408,9 @@ class GlobalTop10Service {
         );
         const top10    = globalRanking.slice(0, 10);
         const bossName = await this._getMostFrequentBoss(10);
+
+        // Podgląd też ma pokazywać prawdziwe czasy na pozycjach — same wskaźniki ▲▼ są udawane
+        await this.positionHistoryService?.sync(globalRanking).catch(() => {});
 
         // Losowy snapshot: każdy gracz dostaje "poprzednią" pozycję z zakresu 1–13
         // dając mix ▲ ▼ = i 🆕 (gdy brak wpisu)
