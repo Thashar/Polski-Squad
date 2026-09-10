@@ -399,8 +399,15 @@ class GlobalTop10Service {
 
     /**
      * Generuje embed TOP 10 na żądanie (komenda /generate).
-     * Używa losowego snapshootu żeby pokazać wszystkie typy wskaźników (▲▼=🆕).
-     * Nie aktualizuje snapshootu ani harmonogramu.
+     *
+     * Podgląd pokazuje PRAWDZIWY stan rankingu: wskaźniki ▲▼=🆕 liczone są względem
+     * snapshootu z OSTATNIEGO wysłanego raportu (`lastSnapshot`), a czasy „na tej pozycji od"
+     * wprost z historii pozycji. Wcześniej snapshot był losowany, żeby pokazać wszystkie typy
+     * wskaźników naraz — przez co podgląd nie odpowiadał na jedyne pytanie, po które się go
+     * otwiera: jak będzie wyglądał najbliższy raport.
+     *
+     * Nie aktualizuje snapshootu ani harmonogramu — kolejny cykliczny raport dalej porówna
+     * się z tym samym punktem odniesienia.
      */
     async buildOnDemandEmbed(msgs, client) {
         const globalRanking = await this.rankingService.getGlobalRanking(
@@ -409,24 +416,15 @@ class GlobalTop10Service {
         const top10    = globalRanking.slice(0, 10);
         const bossName = await this._getMostFrequentBoss(10);
 
-        // Podgląd też ma pokazywać prawdziwe czasy na pozycjach — same wskaźniki ▲▼ są udawane
+        // Czasy „na tej pozycji od" mają odpowiadać kolejności, którą podgląd właśnie pokazuje
         await this.positionHistoryService?.sync(globalRanking).catch(() => {});
 
-        // Losowy snapshot: każdy gracz dostaje "poprzednią" pozycję z zakresu 1–13
-        // dając mix ▲ ▼ = i 🆕 (gdy brak wpisu)
-        const fakeSnapshot = {};
-        const positions = Array.from({ length: 13 }, (_, i) => i + 1);
-        // tasuj Fisher-Yates
-        for (let i = positions.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [positions[i], positions[j]] = [positions[j], positions[i]];
-        }
-        top10.forEach((player, idx) => {
-            // ~20% graczy jako 🆕 (brak w snapshocie), reszta z losową poprzednią pozycją
-            if (Math.random() > 0.2) fakeSnapshot[player.playerKey || player.userId] = positions[idx];
-        });
+        // Punkt odniesienia ten sam co w cyklicznym raporcie. Gdy raport nie poszedł jeszcze
+        // ani razu (albo harmonogram dopiero ustawiono), snapshot jest pusty — wtedy wszyscy
+        // dostają 🆕 i to jest uczciwe: nie ma się do czego porównać.
+        const lastSnapshot = this._cfg?.lastSnapshot || {};
 
-        return this._buildTop10Embed(top10, fakeSnapshot, bossName, msgs, null, client);
+        return this._buildTop10Embed(top10, lastSnapshot, bossName, msgs, null, client);
     }
 
     // ── most frequent boss ─────────────────────────────────────────────────────
