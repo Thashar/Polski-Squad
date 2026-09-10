@@ -65,7 +65,22 @@
 const fs   = require('fs');
 const path = require('path');
 const { compareByScoreThenTimestamp, getProfileIndex } = require('./utils/helpers');
+const GlobalPositionHistoryService = require('./services/globalPositionHistoryService');
 const store = require('../utils/jsonStore');
+
+// Data graniczna licznika czasu na #1 — JEDNO źródło prawdy, wspólne z serwisem.
+// Gdyby backfill miał własną kopię tej daty, odtworzone wartości rozjechałyby się
+// z tym, co serwis dolicza na bieżąco.
+const { policzOdcinekTop1 } = GlobalPositionHistoryService;
+
+/**
+ * Wersja algorytmu odtwarzania. Podniesienie tej liczby sprawia, że backfill wykona się
+ * PONOWNIE (raz) na instalacjach, które przeszły już starszą wersję — inaczej zostałyby
+ * z wartościami policzonymi według nieaktualnych reguł.
+ *   1 → pierwsze wdrożenie
+ *   2 → czas na #1 liczony dopiero od `TOP1_COUNT_FROM` (1 maja 2026)
+ */
+const BACKFILL_VERSION = 2;
 
 const DATA_DIR   = path.join(__dirname, 'data');
 const GUILDS_DIR = path.join(DATA_DIR, 'guilds');
@@ -235,9 +250,10 @@ function summarize(segs) {
             best = seg.position;
             bestAt = seg.from;
         }
-        // Odcinek bieżący (ostatni) zostaje otwarty — dolicza go serwis przy odczycie
+        // Odcinek bieżący (ostatni) zostaje otwarty — dolicza go serwis przy odczycie.
+        // Liczy się wyłącznie część odcinka PO dacie granicznej (patrz `TOP1_COUNT_FROM`).
         if (seg.position === 1 && domkniety) {
-            top1Ms += Math.max(0, segs[i + 1].from - seg.from);
+            top1Ms += policzOdcinekTop1(seg.from, segs[i + 1].from);
         }
     }
 
@@ -321,8 +337,10 @@ async function apply({ ranking, wynik }, now = Date.now()) {
         };
     }
     merged.updatedAt   = new Date(now).toISOString();
-    // Znacznik jednorazowości — od tej chwili kolejne starty bota omijają backfill
-    merged.backfilledAt = new Date(now).toISOString();
+    // Znacznik jednorazowości — od tej chwili kolejne starty bota omijają backfill.
+    // `backfillVersion` pozwala wymusić JEDNO ponowne przeliczenie po zmianie reguł.
+    merged.backfilledAt    = new Date(now).toISOString();
+    merged.backfillVersion = BACKFILL_VERSION;
 
     // Kopia poprzedniego stanu — gdyby odtworzenie okazało się gorsze niż to, co było
     if (fs.existsSync(OUT_FILE)) {
@@ -351,7 +369,10 @@ async function runOnceAtStartup(logger) {
         if (!fs.existsSync(DATA_DIR)) return false;
 
         const existing = await store.getOrLoad(OUT_FILE, () => ({ players: {} }));
-        if (existing?.backfilledAt) return false; // już zrobione — cisza, to normalny stan
+        // Pominięcie tylko wtedy, gdy odtworzenie przeszło JUŻ W BIEŻĄCEJ wersji algorytmu.
+        // Wpis bez `backfillVersion` pochodzi z wersji 1 i wymaga jednego przeliczenia.
+        const zrobionaWersja = existing?.backfilledAt ? (existing.backfillVersion || 1) : 0;
+        if (zrobionaWersja >= BACKFILL_VERSION) return false; // cisza — to normalny stan
 
         const now = Date.now();
         const result = compute(now);
@@ -364,6 +385,7 @@ async function runOnceAtStartup(logger) {
                 players: existing?.players || {},
                 updatedAt: new Date(now).toISOString(),
                 backfilledAt: new Date(now).toISOString(),
+                backfillVersion: BACKFILL_VERSION,
             });
             return false;
         }
@@ -379,7 +401,10 @@ async function runOnceAtStartup(logger) {
             top1 ? `lider na #1 od ${formatDuration(now - Date.parse(top1.since))}` : null,
         ].filter(Boolean).join(', ');
 
-        logger.info(`🕓 Odtworzono historię pozycji globalnych (jednorazowo): ${szczegoly}`);
+        const etykieta = zrobionaWersja > 0
+            ? `przeliczono ponownie (v${zrobionaWersja} → v${BACKFILL_VERSION})`
+            : 'jednorazowo';
+        logger.info(`🕓 Odtworzono historię pozycji globalnych (${etykieta}): ${szczegoly}`);
         return true;
     } catch (err) {
         logger.warn(`⚠️ Nie udało się odtworzyć historii pozycji globalnych: ${err.message}`);

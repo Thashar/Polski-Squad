@@ -238,6 +238,7 @@ const pol = {
     globalTop10HoldingFor: '⏳ Na tej pozycji: {duration}',
     globalTop10HoldingNew: '⏳ Nowa pozycja',
     globalTop10Top1HallField: '⌛ Najdłużej na 1. miejscu',
+    globalTop10Top1HallSince: '-# Liczone od {date}',
 
     // Kamienie milowe — pełne setki unikatowych graczy
     milestoneTitleStandard: '🎉 Nowy Kamień Milowy: {count} Graczy!',
@@ -856,6 +857,7 @@ const eng = {
     globalTop10HoldingFor: '⏳ Holding this spot for: {duration}',
     globalTop10HoldingNew: '⏳ New position',
     globalTop10Top1HallField: '⌛ Longest at 1st place',
+    globalTop10Top1HallSince: '-# Counted since {date}',
 
     // Milestones — full hundreds of unique players
     milestoneTitleStandard: '🎉 New Milestone: {count} Players!',

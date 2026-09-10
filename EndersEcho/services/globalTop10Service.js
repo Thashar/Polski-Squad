@@ -335,7 +335,7 @@ class GlobalTop10Service {
             });
 
         // Hall of Fame miejsca #1 — na samym dole, pod bossem okresu
-        const hallField = await this._buildTop1HallField(msgs, client);
+        const hallField = await this._buildTop1HallField(msgs, client, guildTagMap);
         if (hallField) embed.addFields(hallField);
 
         const botIconUrl = this.client?.user?.displayAvatarURL({ size: 128 });
@@ -357,17 +357,20 @@ class GlobalTop10Service {
         if (!stats || stats.position !== position || stats.holdMs === null) {
             return msgs.globalTop10HoldingNew || '⏳ Nowa pozycja';
         }
+        // Czas w monospace — ten sam zapis co w polu „Najdłużej na 1. miejscu", żeby oba
+        // czasy w embedzie czytało się jako tę samą wielkość, a nie dwie różne rzeczy
         return formatMessage(msgs.globalTop10HoldingFor || '⏳ Na tej pozycji: {duration}', {
-            duration: GlobalPositionHistoryService.formatDuration(stats.holdMs),
+            duration: `\`${GlobalPositionHistoryService.formatDuration(stats.holdMs)}\``,
         });
     }
 
     /**
      * Pole „Najdłużej na 1. miejscu" — TOP 3 wg łącznego czasu spędzonego na szczycie
      * rankingu globalnego (również gracze, którzy dawno z niego zeszli).
+     * @param {Map<string, string|null>} guildTagMap - tagi serwerów, ten sam zestaw co w wierszach TOP 10
      * @returns {Promise<{name: string, value: string, inline: boolean}|null>}
      */
-    async _buildTop1HallField(msgs, client) {
+    async _buildTop1HallField(msgs, client, guildTagMap) {
         if (!this.positionHistoryService) return null;
         const hall = this.positionHistoryService.getTop1Leaderboard(3);
         if (hall.length === 0) return null;
@@ -387,12 +390,27 @@ class GlobalTop10Service {
             name = formatProfileDisplayName(name, entry.profileIndex);
             // 👑 = gracz siedzi na szczycie w tej chwili, jego licznik wciąż rośnie
             const crown = entry.isCurrent ? ' 👑' : '';
-            lines.push(`${medals[i]} **${name}**${crown}  ·  \`${GlobalPositionHistoryService.formatDuration(entry.totalMs)}\``);
+            // Tag serwera pochodzenia — ten sam zapis co w wierszach TOP 10 (składnia emoji
+            // rozbierana do samej nazwy). `guildId` bierzemy z historii, bo gracz mógł już
+            // z rankingu wypaść i nie ma go w wysyłanej dziesiątce.
+            const tag = guildTagMap?.get(entry.guildId);
+            const tagSuffix = tag ? `  ·  ${tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
+            lines.push(`${medals[i]} **${name}**${crown}${tagSuffix}  ·  \`${GlobalPositionHistoryService.formatDuration(entry.totalMs)}\``);
         }
+
+        // Bez tego przypisu liczby wyglądają na przypadkowe — gracz, który stał na szczycie
+        // przez pół roku, widzi u siebie kilka tygodni i nie ma jak się domyślić dlaczego
+        // Format ISO (RRRR-MM-DD), a nie lokalny: `01.05.2026` czyta się na serwerze
+        // angielskim jako 5 stycznia, a embed nie niesie ze sobą języka odbiorcy
+        const odKiedy = new Date(GlobalPositionHistoryService.TOP1_COUNT_FROM).toISOString().slice(0, 10);
+        const przypis = formatMessage(
+            msgs.globalTop10Top1HallSince || '-# Liczone od {date}',
+            { date: odKiedy }
+        );
 
         return {
             name:   msgs.globalTop10Top1HallField || '⌛ Najdłużej na 1. miejscu',
-            value:  lines.join('\n'),
+            value:  `${lines.join('\n')}\n${przypis}`,
             inline: false,
         };
     }
