@@ -812,16 +812,54 @@ ich odtworzyć, więc przy pierwszym `sync()` każdy gracz dostaje `since = tera
 pozycja. Miejsca wyświetlania są na to przygotowane: raport pokazuje wtedy `⏳ Nowa pozycja`, a profil
 po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
 
+### Jednorazowe odtworzenie historii wstecz — `backfill-position-history.js`
+
+Serwis zapisuje pozycje dopiero od swojego wdrożenia, więc przy pierwszym `sync()` wszyscy dostają
+`since = teraz` i raport pokazuje czas liczony od restartu bota. Skrypt `EndersEcho/backfill-position-history.js`
+liczy te wartości WSTECZ z historii wyników (`wyniki/*.json`), którą bot ma na dysku od dawna.
+
+```bash
+node EndersEcho/backfill-position-history.js          # PODGLĄD — nic nie zapisuje
+node EndersEcho/backfill-position-history.js --fix    # zapis
+```
+
+**Jak liczy:** buduje aktualny ranking globalny z `ranking.json` wszystkich serwerów (ta sama logika
+co `getGlobalRanking`), zbiera oś czasu wszystkich pobitych rekordów tych graczy, odtwarza ranking
+rekord po rekordzie i z przebiegu wyciąga `since`, `best`, `bestAt` i `top1Ms`.
+
+**⚠️ Bot musi być ZATRZYMANY.** `utils/jsonStore` trzyma plik w pamięci i przy najbliższym zapisie
+nadpisałby go swoją starszą wersją, kasując efekt skryptu.
+
+**Czego nie da się odtworzyć** (wynik jest przybliżeniem, i tak dużo lepszym niż „wszyscy od teraz"):
+- gracze USUNIĘCI z rankingu nie biorą udziału w odtwarzaniu, choć kiedyś zajmowali pozycje — historyczne
+  pozycje pozostałych bywają więc zaniżone. Włączenie ich zepsułoby coś gorszego: końcowa kolejność
+  nie zgadzałaby się z realnym rankingiem
+- wpisy historii z wynikiem WYŻSZYM niż aktualny rekord gracza są pomijane — rekordy tylko rosną, więc
+  taki wpis to ślad po cofniętym wyniku i nigdy legalnie nie stał
+- profil bez historii dostaje jeden zastępczy rekord z danych rankingu (wynik + data)
+- dokładność `top1Ms` zależy od gęstości rekordów — odcinek między dwoma rekordami liczony jest w całości
+
+**Bezpieczeństwo:** przed zapisem powstaje kopia `global_position_history.json.bak-{timestamp}`, a wynik
+jest SCALANY z istniejącym plikiem — `username`/`guildId` zostają, a wpisy graczy spoza aktualnego
+rankingu nie są ruszane. Rozjazd między odtworzoną a realną pozycją jest raportowany, a pozycja brana
+z rankingu (to on jest źródłem prawdy).
+
 **Wypadnięcie z rankingu** domyka odcinek na #1 i zeruje `position`/`since`, ale **zostawia `best` i
 `top1Ms`** — dorobek zostaje, gracz nadal może wisieć w Hall of Fame. Wpis znika dopiero przy usunięciu
 profilu (`removePlayer` z `_purgeProfileData`), a przy przenumerowaniu slotów jedzie za nim
 (`renamePlayerKey` z `_migratePlayerKey`).
 
+**Gdzie widać te dane:**
+- raport TOP 10 — wiersz „na tej pozycji od" pod każdym graczem + pole `⌛ Najdłużej na 1. miejscu`
+- `/profile` → zakładka Profil — wiersz `🏔️ Najwyższa pozycja` w polu `🌐 Pozycja Globalna`
+- **karta Gracza Dnia na stronie** — kafelek `Peak rank` (patrz niżej)
+
 **Wstrzykiwanie (`index.js`):** `rankingService.setPositionHistoryService(…)`,
 `globalTop10Service.setPositionHistoryService(…)`, `interactionHandler.setGlobalPositionHistoryService(…)`
-(ten ostatni przekazuje serwis dalej do `profileService`) — setterami, bo serwis powstaje PO
+(ten ostatni przekazuje serwis dalej do `profileService`) oraz `globalPositionHistoryService`
+w obiekcie zależności `PlayerOfTheDayService`. Trzy pierwsze setterami, bo serwis powstaje PO
 `rankingService` (potrzebuje go do przeliczenia rankingu), a konstruktor `InteractionHandler` ma już
-ponad trzydzieści argumentów pozycyjnych.
+ponad trzydzieści argumentów pozycyjnych; POTD dostaje go zwykłą zależnością, bo powstaje później.
 
 ---
 
@@ -1366,6 +1404,15 @@ adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie w
 Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** każdej ze stron, zrobione po przyjęciu wyzwania. Wyniki sumują się, wygrywa wyższa suma.
 
 **⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
+
+**Najwyższa pozycja w historii jedzie też na kartę Gracza Dnia** – `buildPayload` dokłada
+`peakGlobalRank` (z `getPlayerStats(playerKey).best`) i `peakGlobalDate` (data dzienna z `bestAt`),
+a strona rysuje z nich kafelek `Peak rank` z podpisem `reached {data}`. Gdy historia nie zna jeszcze
+gracza, oba pola idą jako `null` i **kafelka po prostu nie ma** — pod nickiem kogoś wyróżnionego nie
+rysujemy „–". Po stronie strony: `sanitizePotd` w `src/worker.js` (repo `thashar.dev`) przepuszcza
+oba pola, a `enders-echo/static/potd.js` je renderuje. Data przechodzi przez `shortDateY()`, który
+dokleja rok tylko wtedy, gdy nie jest bieżący — „reached 12.03" bez roku nic nie mówi przy pozycji
+sprzed kilku lat, a w obrębie bieżącego roku krótki format nie rozjeżdża się z resztą dat na karcie.
 
 **Bilans pojedynków jedzie też na stronę** – karta Gracza Dnia (`playerOfTheDayService.buildPayload`) dostaje pole `challenges` z `summarize()`: `settled` / `won` / `lost` / `draw`, i tylko wtedy, gdy cokolwiek się już rozstrzygnęło. **Same liczby** – nazwa przeciwnika, boss i daty pojedynków NIE opuszczają bota: drugi gracz nie ma jak wypisać się z cudzej karty, więc nie może się na niej znaleźć (opisane w sekcji 5a polityki prywatności na stronie).
 
