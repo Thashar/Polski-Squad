@@ -33,6 +33,7 @@ const GuildDataRetentionService = require('./services/guildDataRetentionService'
 const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
+const { runOnceAtStartup: odtworzHistoriePozycji } = require('./backfill-position-history');
 const GlobalTop10Service = require('./services/globalTop10Service');
 const GlobalPositionHistoryService = require('./services/globalPositionHistoryService');
 const MilestoneService = require('./services/milestoneService');
@@ -264,6 +265,12 @@ async function initializeBot() {
 
         // Historia pozycji globalnych — pierwszy odczyt stanu i zapis bieżącej kolejności.
         // Cykliczny sync to siatka bezpieczeństwa; normalnie odpala go zapis rankingu.
+        //
+        // ⚠️ Odtworzenie historii wstecz MUSI iść przed `load()`. Serwis zapisuje pozycje
+        // dopiero od swojego wdrożenia, więc bez tego pierwszy `sync()` ustawiłby wszystkim
+        // `since = teraz`. Wykonuje się dokładnie raz w życiu instalacji (znacznik
+        // `backfilledAt` w pliku) — kolejne starty przechodzą obok bez śladu w logu.
+        await odtworzHistoriePozycji(logger);
         globalPositionHistoryService.setClient(client);
         await globalPositionHistoryService.load();
         globalPositionHistoryService.sync().catch(() => {});

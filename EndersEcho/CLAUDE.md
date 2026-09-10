@@ -815,20 +815,50 @@ po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
 ### Jednorazowe odtworzenie historii wstecz — `backfill-position-history.js`
 
 Serwis zapisuje pozycje dopiero od swojego wdrożenia, więc przy pierwszym `sync()` wszyscy dostają
-`since = teraz` i raport pokazuje czas liczony od restartu bota. Skrypt `EndersEcho/backfill-position-history.js`
+`since = teraz` i raport pokazuje czas liczony od restartu bota. Moduł `EndersEcho/backfill-position-history.js`
 liczy te wartości WSTECZ z historii wyników (`wyniki/*.json`), którą bot ma na dysku od dawna.
+
+**Wykonuje się SAM, przy starcie bota** — `index.js` → `initializeBot()` woła
+`odtworzHistoriePozycji(logger)` (`runOnceAtStartup`) **PRZED** `globalPositionHistoryService.load()`.
+Kolejność jest istotna: serwis musi wczytać już odtworzony plik, inaczej jego `sync()` zapisałby
+`since = teraz` i backfill nie miałby czego poprawiać.
+
+**⚠️ DOKŁADNIE RAZ — i to jest kluczowe.** Po zapisie w pliku ląduje znacznik `backfilledAt`
+i każdy kolejny start bota go widzi i odpuszcza (bez śladu w logu). **Bez tego bezpiecznika każdy
+restart nadpisywałby PRAWDZIWE, narastające `since` wartościami odtworzonymi** — czyli kasowałby
+dokładnie te dane, dla których cały mechanizm powstał. Nie usuwaj tego warunku i nie „odświeżaj"
+backfillu cyklicznie. Świadome wymuszenie: skasuj `backfilledAt` z pliku albo uruchom z `--fix`.
+
+**Zapis idzie przez `utils/jsonStore`** (`store.set`), nie przez gołe `fs` — plik i pamięć podręczna
+muszą być zgodne od razu, inaczej serwis nadpisałby efekt swoją starszą kopią z pamięci.
+
+**Błąd nie zatrzymuje startu bota** — całość jest w `try/catch`, a niepowodzenie ląduje jako `warn`.
+To poprawka statystyk, nie warunek działania.
+
+**Ręczne uruchomienie jest OPCJONALNE** (dla kogoś, kto ma dostęp do konsoli i chce zobaczyć wynik
+przed startem bota):
 
 ```bash
 node EndersEcho/backfill-position-history.js          # PODGLĄD — nic nie zapisuje
-node EndersEcho/backfill-position-history.js --fix    # zapis
+node EndersEcho/backfill-position-history.js --fix    # zapis, także gdy backfill już był
 ```
+
+⚠️ Przy ręcznym uruchomieniu **bot musi być ZATRZYMANY** — trzyma plik w pamięci i przy najbliższym
+zapisie nadpisałby efekt. Tryb konsolowy kończy proces jawnie (`process.exit`), bo `consoleLogger`
+wciągany przez `jsonStore` trzyma dobowy `setInterval` i otwarty strumień pliku, przez co proces
+nigdy nie zakończyłby się sam.
 
 **Jak liczy:** buduje aktualny ranking globalny z `ranking.json` wszystkich serwerów (ta sama logika
 co `getGlobalRanking`), zbiera oś czasu wszystkich pobitych rekordów tych graczy, odtwarza ranking
 rekord po rekordzie i z przebiegu wyciąga `since`, `best`, `bestAt` i `top1Ms`.
 
-**⚠️ Bot musi być ZATRZYMANY.** `utils/jsonStore` trzyma plik w pamięci i przy najbliższym zapisie
-nadpisałby go swoją starszą wersją, kasując efekt skryptu.
+**⚠️ `top1Ms` obejmuje wyłącznie odcinki ZAMKNIĘTE** — ta sama umowa co w serwisie. Trwającą passę
+na #1 dolicza `_top1Total()` przy odczycie, a `sync()` domyka ją dopiero przy zejściu ze szczytu.
+Gdyby backfill zapisał tu również odcinek bieżący, lider miałby czas na #1 policzony DWA RAZY
+i Hall of Fame pokazywałby mu mniej więcej podwójny wynik.
+
+**Pusty ranking** (świeża instalacja) też stawia znacznik — nie ma czego odtwarzać, a gracze, którzy
+pojawią się później, naliczą swój czas na bieżąco.
 
 **Czego nie da się odtworzyć** (wynik jest przybliżeniem, i tak dużo lepszym niż „wszyscy od teraz"):
 - gracze USUNIĘCI z rankingu nie biorą udziału w odtwarzaniu, choć kiedyś zajmowali pozycje — historyczne
@@ -843,6 +873,9 @@ nadpisałby go swoją starszą wersją, kasując efekt skryptu.
 jest SCALANY z istniejącym plikiem — `username`/`guildId` zostają, a wpisy graczy spoza aktualnego
 rankingu nie są ruszane. Rozjazd między odtworzoną a realną pozycją jest raportowany, a pozycja brana
 z rankingu (to on jest źródłem prawdy).
+
+**Ślad w logu** (jedyny, przy pierwszym starcie po wdrożeniu):
+`🕓 Odtworzono historię pozycji globalnych (jednorazowo): N profili, M rekordów w osi czasu, …`
 
 **Wypadnięcie z rankingu** domyka odcinek na #1 i zeruje `position`/`since`, ale **zostawia `best` i
 `top1Ms`** — dorobek zostaje, gracz nadal może wisieć w Hall of Fame. Wpis znika dopiero przy usunięciu
