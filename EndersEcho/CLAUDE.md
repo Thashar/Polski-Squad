@@ -812,6 +812,38 @@ ich odtworzyć, więc przy pierwszym `sync()` każdy gracz dostaje `since = tera
 pozycja. Miejsca wyświetlania są na to przygotowane: raport pokazuje wtedy `⏳ Nowa pozycja`, a profil
 po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
 
+### Jednorazowe odtworzenie historii wstecz — `backfill-position-history.js`
+
+Serwis zapisuje pozycje dopiero od swojego wdrożenia, więc przy pierwszym `sync()` wszyscy dostają
+`since = teraz` i raport pokazuje czas liczony od restartu bota. Skrypt `EndersEcho/backfill-position-history.js`
+liczy te wartości WSTECZ z historii wyników (`wyniki/*.json`), którą bot ma na dysku od dawna.
+
+```bash
+node EndersEcho/backfill-position-history.js          # PODGLĄD — nic nie zapisuje
+node EndersEcho/backfill-position-history.js --fix    # zapis
+```
+
+**Jak liczy:** buduje aktualny ranking globalny z `ranking.json` wszystkich serwerów (ta sama logika
+co `getGlobalRanking`), zbiera oś czasu wszystkich pobitych rekordów tych graczy, odtwarza ranking
+rekord po rekordzie i z przebiegu wyciąga `since`, `best`, `bestAt` i `top1Ms`.
+
+**⚠️ Bot musi być ZATRZYMANY.** `utils/jsonStore` trzyma plik w pamięci i przy najbliższym zapisie
+nadpisałby go swoją starszą wersją, kasując efekt skryptu.
+
+**Czego nie da się odtworzyć** (wynik jest przybliżeniem, i tak dużo lepszym niż „wszyscy od teraz"):
+- gracze USUNIĘCI z rankingu nie biorą udziału w odtwarzaniu, choć kiedyś zajmowali pozycje — historyczne
+  pozycje pozostałych bywają więc zaniżone. Włączenie ich zepsułoby coś gorszego: końcowa kolejność
+  nie zgadzałaby się z realnym rankingiem
+- wpisy historii z wynikiem WYŻSZYM niż aktualny rekord gracza są pomijane — rekordy tylko rosną, więc
+  taki wpis to ślad po cofniętym wyniku i nigdy legalnie nie stał
+- profil bez historii dostaje jeden zastępczy rekord z danych rankingu (wynik + data)
+- dokładność `top1Ms` zależy od gęstości rekordów — odcinek między dwoma rekordami liczony jest w całości
+
+**Bezpieczeństwo:** przed zapisem powstaje kopia `global_position_history.json.bak-{timestamp}`, a wynik
+jest SCALANY z istniejącym plikiem — `username`/`guildId` zostają, a wpisy graczy spoza aktualnego
+rankingu nie są ruszane. Rozjazd między odtworzoną a realną pozycją jest raportowany, a pozycja brana
+z rankingu (to on jest źródłem prawdy).
+
 **Wypadnięcie z rankingu** domyka odcinek na #1 i zeruje `position`/`since`, ale **zostawia `best` i
 `top1Ms`** — dorobek zostaje, gracz nadal może wisieć w Hall of Fame. Wpis znika dopiero przy usunięciu
 profilu (`removePlayer` z `_purgeProfileData`), a przy przenumerowaniu slotów jedzie za nim
