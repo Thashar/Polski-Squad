@@ -224,11 +224,12 @@ module.exports = {
         // Discord zjada zwykłe spacje na początku linii, a emoji serwera zostaje.
         indentEmoji: '<:ZZ_Pusto:1209494954762829866>',
 
-        // Ile razy powtórzyć emoji wcięcia. ⚠️ Dwie RÓŻNE głębokości, bo dodatkowe wymagania
-        // i blok Lider/Vice stoją na innych poziomach zagnieżdżenia — jedna wspólna wartość
-        // wyrównałaby je do siebie i lista przestałaby się czytać jak drzewko.
+        // Ile razy powtórzyć emoji wcięcia. ⚠️ TRZY RÓŻNE głębokości — każdy poziom drzewka
+        // ma własną. Jedna wspólna wartość wyrównałaby je do siebie i lista przestałaby się
+        // czytać jak drzewko: wymagania stoją płycej niż kierownictwo, a Vice podlega Liderowi.
         indentRequirements: 1,   // dodatkowe wiersze (progi, uwagi o awansie)
-        indentMembers: 3,        // Lider / Vice
+        indentLeader: 3,         // Lider
+        indentVice: 4,           // Vice - o jeden poziom głębiej niż Lider
 
         // Emoji doklejane ZA wartością punktów 1 Fazy LME. Pusty ciąg = sama liczba
         pointsEmoji: '<:M_Medal:1209754405373747260>',

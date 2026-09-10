@@ -226,18 +226,20 @@ class ClanListService {
             linie.push(`▶ __Członkowie__: **${liczbaCzlonkow}/${this.ustawienia.maxMembers ?? 40}**`);
         }
 
-        // ⚠️ Dwa RÓŻNE wcięcia. Dodatkowe wymagania wiszą płycej niż blok Lider/Vice —
-        // wyrównanie ich do siebie spłaszcza drzewko i obie grupy zlewają się w jedną listę
+        // ⚠️ TRZY RÓŻNE wcięcia, po jednym na poziom drzewka: wymagania wiszą płycej niż
+        // kierownictwo, a Vice o jeden poziom głębiej niż Lider. Wyrównanie ich do siebie
+        // spłaszcza strukturę i wszystko zlewa się w jedną płaską listę
         const wciecieWymagan = this._wciecie(this.ustawienia.indentRequirements ?? 1);
-        const wciecieOsob = this._wciecie(this.ustawienia.indentMembers ?? 3);
+        const wciecieLidera = this._wciecie(this.ustawienia.indentLeader ?? 3);
+        const wciecieVice = this._wciecie(this.ustawienia.indentVice ?? 4);
 
         // Dodatkowe wiersze (progi, uwagi o awansie)
         for (const wiersz of this._rozbijDodatkowe(dane.extraLines)) {
             linie.push(`${wciecieWymagan}╰┈➤ ${wiersz}`);
         }
 
-        for (const userId of kierownictwo.lider) linie.push(`${wciecieOsob}╰┈➤Lider: <@${userId}>`);
-        for (const userId of kierownictwo.vice)  linie.push(`${wciecieOsob}╰┈➤Vice: <@${userId}>`);
+        for (const userId of kierownictwo.lider) linie.push(`${wciecieLidera}╰┈➤Lider: <@${userId}>`);
+        for (const userId of kierownictwo.vice)  linie.push(`${wciecieVice}╰┈➤Vice: <@${userId}>`);
 
         // Kreska zamykająca — Discord skleja kolejne wiadomości tego samego autora w jeden
         // blok, więc bez niej cztery posty czytają się jak jedna ściana tekstu
