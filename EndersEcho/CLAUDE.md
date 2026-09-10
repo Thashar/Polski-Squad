@@ -817,11 +817,17 @@ po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
 profilu (`removePlayer` z `_purgeProfileData`), a przy przenumerowaniu slotów jedzie za nim
 (`renamePlayerKey` z `_migratePlayerKey`).
 
+**Gdzie widać te dane:**
+- raport TOP 10 — wiersz „na tej pozycji od" pod każdym graczem + pole `⌛ Najdłużej na 1. miejscu`
+- `/profile` → zakładka Profil — wiersz `🏔️ Najwyższa pozycja` w polu `🌐 Pozycja Globalna`
+- **karta Gracza Dnia na stronie** — kafelek `Peak rank` (patrz niżej)
+
 **Wstrzykiwanie (`index.js`):** `rankingService.setPositionHistoryService(…)`,
 `globalTop10Service.setPositionHistoryService(…)`, `interactionHandler.setGlobalPositionHistoryService(…)`
-(ten ostatni przekazuje serwis dalej do `profileService`) — setterami, bo serwis powstaje PO
+(ten ostatni przekazuje serwis dalej do `profileService`) oraz `globalPositionHistoryService`
+w obiekcie zależności `PlayerOfTheDayService`. Trzy pierwsze setterami, bo serwis powstaje PO
 `rankingService` (potrzebuje go do przeliczenia rankingu), a konstruktor `InteractionHandler` ma już
-ponad trzydzieści argumentów pozycyjnych.
+ponad trzydzieści argumentów pozycyjnych; POTD dostaje go zwykłą zależnością, bo powstaje później.
 
 ---
 
@@ -1366,6 +1372,15 @@ adminPanelService.getMessageId(); // ID wiadomości panelu (null = jeszcze nie w
 Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** każdej ze stron, zrobione po przyjęciu wyzwania. Wyniki sumują się, wygrywa wyższa suma.
 
 **⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
+
+**Najwyższa pozycja w historii jedzie też na kartę Gracza Dnia** – `buildPayload` dokłada
+`peakGlobalRank` (z `getPlayerStats(playerKey).best`) i `peakGlobalDate` (data dzienna z `bestAt`),
+a strona rysuje z nich kafelek `Peak rank` z podpisem `reached {data}`. Gdy historia nie zna jeszcze
+gracza, oba pola idą jako `null` i **kafelka po prostu nie ma** — pod nickiem kogoś wyróżnionego nie
+rysujemy „–". Po stronie strony: `sanitizePotd` w `src/worker.js` (repo `thashar.dev`) przepuszcza
+oba pola, a `enders-echo/static/potd.js` je renderuje. Data przechodzi przez `shortDateY()`, który
+dokleja rok tylko wtedy, gdy nie jest bieżący — „reached 12.03" bez roku nic nie mówi przy pozycji
+sprzed kilku lat, a w obrębie bieżącego roku krótki format nie rozjeżdża się z resztą dat na karcie.
 
 **Bilans pojedynków jedzie też na stronę** – karta Gracza Dnia (`playerOfTheDayService.buildPayload`) dostaje pole `challenges` z `summarize()`: `settled` / `won` / `lost` / `draw`, i tylko wtedy, gdy cokolwiek się już rozstrzygnęło. **Same liczby** – nazwa przeciwnika, boss i daty pojedynków NIE opuszczają bota: drugi gracz nie ma jak wypisać się z cudzej karty, więc nie może się na niej znaleźć (opisane w sekcji 5a polityki prywatności na stronie).
 

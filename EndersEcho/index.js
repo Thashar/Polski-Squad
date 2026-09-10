@@ -157,6 +157,7 @@ const playerOfTheDayService = new PlayerOfTheDayService(config, logger, {
     achievementService,
     notificationService,
     challengeService,
+    globalPositionHistoryService,
 });
 const broadcastReactionService = new BroadcastReactionService(config, logger);
 const adminPanelService = new AdminPanelService(config.ranking.dataDir, config, {
