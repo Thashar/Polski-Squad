@@ -355,11 +355,11 @@ class GlobalTop10Service {
         if (!this.positionHistoryService) return null;
         const stats = this.positionHistoryService.getPlayerStats(playerKey);
         if (!stats || stats.position !== position || stats.holdMs === null) {
-            return msgs.globalTop10HoldingNew || '⏳ Nowa pozycja';
+            return msgs.globalTop10HoldingNew || 'Nowa pozycja';
         }
         // Czas w monospace — ten sam zapis co w polu „Najdłużej na 1. miejscu", żeby oba
         // czasy w embedzie czytało się jako tę samą wielkość, a nie dwie różne rzeczy
-        return formatMessage(msgs.globalTop10HoldingFor || '⏳ Na tej pozycji: {duration}', {
+        return formatMessage(msgs.globalTop10HoldingFor || '{duration} na tej pozycji', {
             duration: `\`${GlobalPositionHistoryService.formatDuration(stats.holdMs)}\``,
         });
     }

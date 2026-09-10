@@ -235,8 +235,8 @@ const pol = {
     globalTop10Footer: 'Następny raport za 3 dni',
     globalTop10FooterBreak: 'Następny raport za 4 dni (przerwa)',
     globalTop10FooterNext: 'Następny raport za {days} dni',
-    globalTop10HoldingFor: '⏳ Na tej pozycji: {duration}',
-    globalTop10HoldingNew: '⏳ Nowa pozycja',
+    globalTop10HoldingFor: '{duration} na tej pozycji',
+    globalTop10HoldingNew: 'Nowa pozycja',
     globalTop10Top1HallField: '⌛ Najdłużej na 1. miejscu',
     globalTop10Top1HallSince: '-# Liczone od {date}',
 
@@ -854,8 +854,8 @@ const eng = {
     globalTop10Footer: 'Next report in 3 days',
     globalTop10FooterBreak: 'Next report in 4 days (break)',
     globalTop10FooterNext: 'Next report in {days} days',
-    globalTop10HoldingFor: '⏳ Holding this spot for: {duration}',
-    globalTop10HoldingNew: '⏳ New position',
+    globalTop10HoldingFor: '{duration} on this spot',
+    globalTop10HoldingNew: 'New position',
     globalTop10Top1HallField: '⌛ Longest at 1st place',
     globalTop10Top1HallSince: '-# Counted since {date}',
 
