@@ -12,6 +12,28 @@ const logger = createBotLogger('EndersEcho');
 const SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
+ * Data, od której liczymy czas spędzony na miejscu #1 (pole „Najdłużej na 1. miejscu"
+ * pod raportem TOP 10). Wszystko wcześniejsze jest odcinane — również z odcinków, które
+ * tę datę przekraczają: liczy się wyłącznie ich część PO niej.
+ *
+ * ⚠️ To wartość dziedzinowa, nie techniczna — ustawiona świadomie na 1 maja 2026.
+ * Zmiana tej stałej zmienia wynik Hall of Fame wszystkim graczom naraz, więc nie ruszaj jej
+ * „przy okazji". Po zmianie trzeba też podnieść `BACKFILL_VERSION` w
+ * `backfill-position-history.js`, inaczej wartości odtworzone wstecz zostaną te stare.
+ */
+const TOP1_COUNT_FROM = Date.UTC(2026, 4, 1); // 1 maja 2026, 00:00 UTC
+
+/**
+ * Ile z odcinka na #1 wpada do licznika — czyli jego część po `TOP1_COUNT_FROM`.
+ * @param {number} od  początek odcinka (ms)
+ * @param {number} do  koniec odcinka (ms)
+ * @returns {number}
+ */
+function policzOdcinekTop1(od, do_) {
+    return Math.max(0, do_ - Math.max(od, TOP1_COUNT_FROM));
+}
+
+/**
  * Historia pozycji w rankingu GLOBALNYM (plik: data/global_position_history.json).
  *
  * Odpowiada na trzy pytania, na które sam ranking odpowiedzieć nie potrafi, bo zna wyłącznie
@@ -31,7 +53,7 @@ const SYNC_INTERVAL_MS = 10 * 60 * 1000;
  *   since,      // ISO — od kiedy trzyma `position`
  *   best,       // najwyższa pozycja w historii (liczbowo NAJMNIEJSZA)
  *   bestAt,     // ISO — kiedy `best` zostało osiągnięte po raz pierwszy
- *   top1Ms,     // ZAMKNIĘTE odcinki czasu na miejscu #1 (bieżący dolicza _top1Total)
+ *   top1Ms,     // ZAMKNIĘTE odcinki czasu na miejscu #1 od TOP1_COUNT_FROM (bieżący dolicza _top1Total)
  *   username,   // ostatni znany nick — gracz może wypaść z rankingu, a zostać w Hall of Fame
  *   guildId     // serwer źródłowy najlepszego wyniku, do pobrania nicku z Discorda
  * }
@@ -162,7 +184,7 @@ class GlobalPositionHistoryService {
                 if (rec.position !== position) {
                     // Domknij odcinek na miejscu #1, zanim gracz z niego zejdzie
                     if (rec.position === 1 && rec.since) {
-                        rec.top1Ms = (rec.top1Ms || 0) + Math.max(0, now - Date.parse(rec.since));
+                        rec.top1Ms = (rec.top1Ms || 0) + policzOdcinekTop1(Date.parse(rec.since), now);
                     }
                     rec.position = position;
                     rec.since    = nowIso;
@@ -182,7 +204,7 @@ class GlobalPositionHistoryService {
                 if (seen.has(key)) continue;
                 if (rec.position === null) continue;
                 if (rec.position === 1 && rec.since) {
-                    rec.top1Ms = (rec.top1Ms || 0) + Math.max(0, now - Date.parse(rec.since));
+                    rec.top1Ms = (rec.top1Ms || 0) + policzOdcinekTop1(Date.parse(rec.since), now);
                 }
                 rec.position = null;
                 rec.since    = null;
@@ -207,7 +229,7 @@ class GlobalPositionHistoryService {
      */
     _top1Total(rec) {
         let ms = rec?.top1Ms || 0;
-        if (rec?.position === 1 && rec.since) ms += Math.max(0, Date.now() - Date.parse(rec.since));
+        if (rec?.position === 1 && rec.since) ms += policzOdcinekTop1(Date.parse(rec.since), Date.now());
         return ms;
     }
 
@@ -295,5 +317,8 @@ class GlobalPositionHistoryService {
         return `${minutes}m`;
     }
 }
+
+GlobalPositionHistoryService.TOP1_COUNT_FROM = TOP1_COUNT_FROM;
+GlobalPositionHistoryService.policzOdcinekTop1 = policzOdcinekTop1;
 
 module.exports = GlobalPositionHistoryService;
