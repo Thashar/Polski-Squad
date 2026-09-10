@@ -73,7 +73,7 @@
 - **Rejestr profili** — `data/profiles.json`: `{ [userId]: { active, profiles: [{ index, label, createdAt, pendingDeleteAt? }] } }`
   - Gracz **bez wpisu w pliku** ma niejawnie jeden profil w slocie 1 — działa dokładnie jak przed wdrożeniem profili. Gdy wpis istnieje, lista `profiles` jest **jedynym źródłem prawdy** (slot 1 może w niej nie występować, jeśli został usunięty)
   - **Numery slotów są przesuwane po usunięciu** — skasowanie profilu 1 sprawia, że 2 staje się 1, a 3 staje się 2 (bez dziur w numeracji). Numer slotu jest częścią `playerKey`, więc `removeProfile` zwraca listę przesunięć `renumbered[{ fromIndex, toIndex, fromKey, toKey }]` (rosnąco — kolejny klucz docelowy jest zawsze wolny), a `_migratePlayerKey` przenosi po niej WSZYSTKIE dane profilu
-  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) sesje CV (`communityVerificationService.renamePlayerKey`) i wyzwania (`challengeService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
+  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) sesje CV (`communityVerificationService.renamePlayerKey`), wyzwania (`challengeService.renamePlayerKey`) i historię pozycji globalnych (`globalPositionHistoryService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
   - `active` = numer profilu **MAIN** (pinezka 📌). Gdy zapisany main już nie istnieje → fallback na pierwszy istniejący slot (`getMainIndex`)
   - Limit: `ENDERSECHO_MAX_PROFILES` (domyślnie 3, `config.profiles.maxPerUser`)
   - Etykiety (nick w grze) sanityzowane: usuwane markdown/wzmianki/`#`, max 24 znaki, unikalne w obrębie gracza
@@ -103,7 +103,7 @@
   - `🗑️ Usuń profil` → wybór profilu → **potwierdzenie z aktualnym rekordem tego konta** (`profileCmdDeleteRecord`: wynik, boss i data z rankingu globalnego, `_profileRecordSummary`) i informacją o 7-dniowym terminie → `prof_delete_confirm_{idx}` **tylko planuje** usunięcie (`pendingDeleteAt` w `profiles.json`)
   - Przez te 7 dni **nic nie znika** — profil działa normalnie (wynik w rankingu, `/update`, wykresy). Panel i `/profile` pokazują przy nim `⏳` z terminem (`<t:…:R>`)
   - **Odwołanie:** `↩️ Odwołaj usuwanie` (`prof_delete_cancel` → `prof_delete_cancel_do_{idx}`) albo ustawienie tego profilu mainem
-  - **Sweep** (`profileRegistryService.start(onDue)`, uruchamiany w `index.js` przez `interactionHandler.startProfileDeletionSweep(client)`): przy starcie bota i **co godzinę**; dla profili po terminie woła `_purgeProfileData`, które kasuje wpis rankingowy, rekordy bossów, historię, osiągnięcia i subskrypcje na WSZYSTKICH serwerach, aktualizuje role TOP, unieważnia przyciski cofnięcia (`by: 'profile_deleted'` → `🗑️ Profil usunięty`), usuwa profil z rejestru i **przenosi dane pozostałych profili na nowe numery** (`_migratePlayerKey`)
+  - **Sweep** (`profileRegistryService.start(onDue)`, uruchamiany w `index.js` przez `interactionHandler.startProfileDeletionSweep(client)`): przy starcie bota i **co godzinę**; dla profili po terminie woła `_purgeProfileData`, które kasuje wpis rankingowy, rekordy bossów, historię, osiągnięcia, subskrypcje i historię pozycji globalnych na WSZYSTKICH serwerach, aktualizuje role TOP, unieważnia przyciski cofnięcia (`by: 'profile_deleted'` → `🗑️ Profil usunięty`), usuwa profil z rejestru i **przenosi dane pozostałych profili na nowe numery** (`_migratePlayerKey`)
   - Sweep **ponawia próbę** przy następnym przebiegu, gdy kasowanie padnie (wpis zostaje w pliku). Jeśli w międzyczasie profil stał się mainem, `_purgeProfileData` przerywa (`isMain`)
   - **CustomIDs:** `prof_add` | `prof_switch` | `prof_switch_do_{idx}` | `prof_rename` | `prof_rename_do_{idx}` | `prof_delete` | `prof_delete_do_{idx}` | `prof_delete_confirm_{idx}` | `prof_delete_cancel` | `prof_delete_cancel_do_{idx}` | `prof_intro_ok` | `prof_intro_cancel` | `prof_modal_{add|addfirst|rename}_{idx}`
 - **Wybór profilu przy `/update` i `/test`** — `_runUpdateFlow` → `_handleUpdateProfileModal` → `_runUpdateAnalysis`:
@@ -252,6 +252,9 @@
      - **`setSchedule()` nie resetuje pozycji w cyklu, gdy data się nie zmienia** — samo otwarcie i zatwierdzenie modala z tą samą (prefilled) datą nie zeruje już `triggerCount`. Wcześniej każde zatwierdzenie modala (nawet bez zmiany daty, np. tylko żeby podejrzeć harmonogram) bezwarunkowo zerowało `triggerCount`, co po cichu przesuwało pozycję 4-dniowej przerwy względem realnego końca sezonu.
      - **Podana data może być w przeszłości** — traktowana jest jako punkt odniesienia (np. faktyczny, znany początek cyklu), a harmonogram (`setSchedule()`) sam przewija się wg wzorca 9×3 dni + 4 dni przerwy do najbliższego przyszłego terminu (`_stepOnce()` w pętli), **bez wysyłania** pominiętych po drodze raportów — pozwala to poprawnie zrekalibrować cykl po wykryciu rozjazdu, wpisując realną, znaną datę zamiast liczyć ręcznie następny przyszły termin. Potwierdzenie w panelu pokazuje realnie wyliczony najbliższy termin po przewinięciu.
      - **Format embeda:** TOP 3 — blok blockquote z paskiem postępu `█░` (% względem lidera) i kolorowym wskaźnikiem zmiany `▲/▼`; pozycje 4–10 — kompaktowa jednolinijkowa z tagiem serwera
+     - **Wiersz „na tej pozycji od" pod KAŻDYM graczem** (`_formatHoldLine`, klucze `globalTop10HoldingFor` / `globalTop10HoldingNew`): drugi wiersz blockquote z czasem, jaki gracz spędził na swojej obecnej pozycji (`12d 3h`, `5h 12m`, `44m`). Dane z `globalPositionHistoryService`. Gdy historia nie zna jeszcze gracza albo zapamiętana pozycja rozjechała się z wysyłaną — pokazujemy `⏳ Nowa pozycja` zamiast czasu, który byłby nieprawdziwy. Bez podpiętego serwisu wiersz jest po prostu pomijany
+     - **Pole `⌛ Najdłużej na 1. miejscu` na samym dole embeda** (`_buildTop1HallField`, klucz `globalTop10Top1HallField`): TOP 3 graczy wg **łącznego** czasu spędzonego na szczycie rankingu globalnego — również tych, którzy dawno z niego zeszli. `👑` przy nicku = gracz siedzi tam w tej chwili i jego licznik wciąż rośnie. Nick pobierany z Discorda po `guildId` zapamiętanym w historii, z zapasem na ostatni znany `username`. Pole nie powstaje, dopóki nikt nie ma na koncie czasu na #1
+     - **Historia pozycji synchronizowana PRZED zbudowaniem embeda** (`sync(globalRanking)` w `_sendReports` i `buildOnDemandEmbed`) — wiersz „na tej pozycji od" musi odpowiadać dokładnie tej kolejności, którą raport wysyła
      - **Komenda /generate (head admin):** `buildOnDemandEmbed()` — generuje ten sam embed bez aktualizacji snapshootu/harmonogramu i wysyła go na `allowedChannelId` serwera; widoczna tylko dla adminów (`setDefaultMemberPermissions(Administrator)`), wykonać może wyłącznie head admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
 
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
@@ -617,6 +620,7 @@
 - Wyświetla pełny profil gracza w 3 zakładkach (1 wiadomość ephemeral z przyciskami nawigacji)
 - Opcjonalny parametr `gracz` — fragment nicku do wyszukania; puste = własny profil
 - **Zakładka 👤 Profil (main):** rekord serwera (#pozycja / total), pozycja globalna, rola TOP, najlepszy wynik (score + boss + data), wycinek globalnego rankingu (gracz ±1), rankingi ról; na cudzym profilu dołącza pole 🔔 Obserwatorzy (liczba subskrybentów)
+  - **Pole `🌐 Pozycja Globalna` niesie też rekord życiowy:** druga linia `🏔️ Najwyższa pozycja: **#N** *(data)*` z `globalPositionHistoryService.getPlayerStats(playerKey).best`. Linia **nie pojawia się**, gdy historia nie zna jeszcze gracza — zamiast zmyślać wartość sprzed wdrożenia śledzenia pozycji, pole zostaje przy samej pozycji bieżącej. Serwis wstrzykiwany setterem (`profileService.setPositionHistoryService`, wołane z `interactionHandler.setGlobalPositionHistoryService`)
 - **Zakładka 🎯 Bossowie:** lista WSZYSTKICH znanych bossów (z `bossAliasService.getExtraEnglishNames()`), posortowana alfabetycznie, 15/stronę; ✅ z rekordem (score + data), — bez rekordu; paginacja gdy >15
 - **Zakładka 🏆 Osiągnięcia:** używa `achievementService.buildAchievementsViewGlobal/ForUserGlobal` — dane mergowane ze WSZYSTKICH serwerów; własny profil — z opisami osiągnięć; cudzy — bez opisów
 - **Szukaj gracza (🔍):** otwiera modal → wyszukiwanie cross-server w globalRanking → 1 trafienie: od razu profil; wiele: StringSelectMenu
@@ -755,6 +759,69 @@
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
 
+## Historia pozycji w rankingu globalnym
+
+**Plik serwisu:** `services/globalPositionHistoryService.js` · **Stan:** `data/global_position_history.json`
+
+Ranking zna wyłącznie stan „teraz", więc sam nie odpowie na trzy pytania: **od kiedy** gracz trzyma
+swoją pozycję (wiersz pod graczem w raporcie TOP 10), **kto najdłużej** okupował miejsce #1 (pole
+Hall of Fame pod raportem) i **jaka była najwyższa** pozycja gracza w historii (profil gracza).
+Ten serwis zapisuje te trzy rzeczy przy każdej zmianie kolejności.
+
+**Kształt wpisu** (klucz = `playerKey`, czyli PROFIL, nie osoba):
+
+```javascript
+playerKey -> {
+  position,   // aktualna pozycja globalna (null = wypadł z rankingu)
+  since,      // ISO — od kiedy trzyma `position`
+  best,       // najwyższa pozycja w historii (liczbowo NAJMNIEJSZA)
+  bestAt,     // ISO — kiedy `best` osiągnięte po raz pierwszy
+  top1Ms,     // ZAMKNIĘTE odcinki czasu na #1; trwający dolicza _top1Total() przy odczycie
+  username,   // ostatni znany nick — gracz może wypaść z rankingu, a zostać w Hall of Fame
+  guildId     // serwer źródłowy najlepszego wyniku, do pobrania nicku z Discorda
+}
+```
+
+**API:** `load()` · `sync(ranking?)` · `getPlayerStats(playerKey)` · `getTop1Leaderboard(limit)` ·
+`renamePlayerKey(old, new)` · `removePlayer(playerKey)` · `start()` / `stop()` ·
+`GlobalPositionHistoryService.formatDuration(ms)` (statyczna, format `12d 3h` / `5h 12m` / `44m` / `<1m`)
+
+**Kiedy leci `sync()`:**
+- **przy KAŻDYM `rankingService.saveRanking()`** — to jedyne miejsce, przez które przechodzi każda
+  zmiana rankingu (zapis wyniku, cofnięcie, usunięcie gracza, usunięcie profilu). Wołane bez `await`:
+  zapis rankingu nie ma czekać na statystyki, a serwis i tak pilnuje pojedynczego przebiegu
+  (`_syncInFlight`)
+- **cyklicznie co 10 minut** (`SYNC_INTERVAL_MS`, zatrzymywane w `stopBot()`) — siatka bezpieczeństwa
+  na wypadek ścieżki zmieniającej ranking z pominięciem `saveRanking`
+- **przed zbudowaniem raportu TOP 10** (`_sendReports`, `buildOnDemandEmbed`) — z gotowym rankingiem
+  jako argumentem, żeby wiersz „na tej pozycji od" opisywał dokładnie tę kolejność, którą raport wysyła
+
+**⚠️ Zakres serwerów MUSI być ten sam co w raporcie** (`_currentRanking()`): ranking globalny zawężony
+do serwerów, na których bot faktycznie jest (`client.guilds.cache`). Bez tego zawężenia serwis widziałby
+inną kolejność niż raport — wpisy serwerów, z których bota usunięto, przesuwałyby pozycje, a licznik
+czasu startowałby od zera przy każdej wysyłce. Stąd `setClient(client)` w `index.js`.
+
+**⚠️ Zapis na dysk TYLKO gdy coś się faktycznie zmieniło** (`changed`) — ranking bywa zapisywany często,
+a większość zapisów nie rusza kolejności. `sync()` zwraca `false`, gdy nie było czego zapisać.
+
+**⚠️ Czas liczony jest OD WDROŻENIA serwisu.** Wcześniejszych pozycji nikt nie zapisywał i nie da się
+ich odtworzyć, więc przy pierwszym `sync()` każdy gracz dostaje `since = teraz`, a `best` = jego bieżąca
+pozycja. Miejsca wyświetlania są na to przygotowane: raport pokazuje wtedy `⏳ Nowa pozycja`, a profil
+po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
+
+**Wypadnięcie z rankingu** domyka odcinek na #1 i zeruje `position`/`since`, ale **zostawia `best` i
+`top1Ms`** — dorobek zostaje, gracz nadal może wisieć w Hall of Fame. Wpis znika dopiero przy usunięciu
+profilu (`removePlayer` z `_purgeProfileData`), a przy przenumerowaniu slotów jedzie za nim
+(`renamePlayerKey` z `_migratePlayerKey`).
+
+**Wstrzykiwanie (`index.js`):** `rankingService.setPositionHistoryService(…)`,
+`globalTop10Service.setPositionHistoryService(…)`, `interactionHandler.setGlobalPositionHistoryService(…)`
+(ten ostatni przekazuje serwis dalej do `profileService`) — setterami, bo serwis powstaje PO
+`rankingService` (potrzebuje go do przeliczenia rankingu), a konstruktor `InteractionHandler` ma już
+ponad trzydzieści argumentów pozycyjnych.
+
+---
+
 ## Rankingi TOP 10 na stronie (endersecho.thashar.dev)
 
 **Plik:** `services/webRankingSyncService.js` · **Stan:** `data/web_sync.json` · **Odbiornik:** `POST /api/ee-rankings` w workerze repo `thashar.dev`
@@ -822,6 +889,7 @@ EndersEcho/data/
 ├── community_votes.json           # Sesje weryfikacji społeczności
 ├── profiles.json                  # Profile graczy (kilka kont w grze)
 ├── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
+├── global_position_history.json   # Historia pozycji w rankingu globalnym (od kiedy, najwyższa, czas na #1)
 └── challenges.json             # Wyzwania 1 vs 1 (/challenge) + wyniki czekające na zatwierdzenie bossa
 ```
 Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
@@ -954,7 +1022,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 
 ## Najlepsze Praktyki
 
-- **Persistencja przez `utils/jsonStore` (cache-first) — WSZYSTKIE pliki JSON bota:** `ranking.json`, `achievements.json`, `boss_records.json`, `role_rankings.json` i `wyniki/{playerKey}.json` per serwer, oraz `guild_configs.json`, `profiles.json`, `notifications.json`, `record_reverts.json`, `user_blocks.json`, `usage_limits.json`, `update_cooldowns.json`, `token_usage.json`, `testers.json`, `banned_guilds.json`, `community_votes.json`, `boss_aliases.json`, `admin_panel.json`, `command_usage.json`, `ocr_stats.json`, `web_sync.json`, `milestones.json`, `broadcast_reactions.json` i eksport `shared_data/endersecho_ranking.json`
+- **Persistencja przez `utils/jsonStore` (cache-first) — WSZYSTKIE pliki JSON bota:** `ranking.json`, `achievements.json`, `boss_records.json`, `role_rankings.json` i `wyniki/{playerKey}.json` per serwer, oraz `guild_configs.json`, `profiles.json`, `notifications.json`, `record_reverts.json`, `user_blocks.json`, `usage_limits.json`, `update_cooldowns.json`, `token_usage.json`, `testers.json`, `banned_guilds.json`, `community_votes.json`, `boss_aliases.json`, `admin_panel.json`, `command_usage.json`, `ocr_stats.json`, `web_sync.json`, `milestones.json`, `broadcast_reactions.json`, `global_position_history.json` i eksport `shared_data/endersecho_ranking.json`
   - Z dysku czytane **raz, przy pierwszym sięgnięciu** — `getGlobalRanking()` (37 wywołań), `getSortedPlayers()` (35) i `loadRanking()` (22) nie schodzą już na dysk przy każdym użyciu. Zapis atomowy (plik tymczasowy + rename) idzie jednocześnie do pliku i pamięci
   - **Własne cache serwisów zostają nietknięte** (`_rankingCache`, `_sortedCache`, `_globalCache` w `rankingService`, `playerIndexCache`) — to warstwa wyżej, trzymająca dane już znormalizowane i posortowane. Store zastępuje wyłącznie warstwę dostępu do pliku
     - **⚠️ Przy kasowaniu danych serwera sam `store.forget()` NIE wystarcza.** `loadRanking()` sprawdza najpierw `_rankingCache` i zwraca z niego dane, w ogóle nie sięgając do store'a — skasowany ranking dalej był więc oddawany z pamięci, a pierwszy `saveRanking()` zapisywał go z powrotem na dysk, wskrzeszając dane, które użytkownik kazał usunąć. Panel admina („Usuń dane serwera”) woła teraz `rankingService.invalidateGuildCache(guildId)` obok `store.forget(guildDataDir)`

@@ -34,6 +34,7 @@ const ScoreHistoryService = require('./services/scoreHistoryService');
 const dataMigration = require('./services/dataMigration');
 const { fixBossNamesInData } = require('./fix-boss-names');
 const GlobalTop10Service = require('./services/globalTop10Service');
+const GlobalPositionHistoryService = require('./services/globalPositionHistoryService');
 const MilestoneService = require('./services/milestoneService');
 const ProfileRegistryService = require('./services/profileRegistryService');
 const RecordRevertService = require('./services/recordRevertService');
@@ -129,6 +130,11 @@ const communityVerificationService = new CommunityVerificationService(config.ran
 const guildBanService = new GuildBanService(config.ranking.dataDir);
 const guildDataRetentionService = new GuildDataRetentionService(config.ranking.dataDir, guildConfigService);
 const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankingService, guildConfigService, config);
+// Historia pozycji w rankingu globalnym: od kiedy gracz trzyma pozycję, najwyższa pozycja
+// w historii i łączny czas na miejscu #1 (raport TOP 10 + profil gracza)
+const globalPositionHistoryService = new GlobalPositionHistoryService(config.ranking.dataDir, rankingService);
+rankingService.setPositionHistoryService(globalPositionHistoryService);
+globalTop10Service.setPositionHistoryService(globalPositionHistoryService);
 const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHistoryService, guildConfigService, config, chartService, rankingService);
 // Rejestr profili graczy (kilka kont w grze) — max 3 profile na użytkownika
 const profileRegistryService = new ProfileRegistryService(config.ranking.dataDir, config.profiles?.maxPerUser ?? 3);
@@ -184,6 +190,9 @@ interactionHandler.setChallengeService(challengeService);
 // Cykliczny raport Global TOP10 też idzie na wszystkie serwery naraz — jego reakcje
 // mają się sumować tak samo jak pod /info i ogłoszeniem nowego serwera
 globalTop10Service.setBroadcastReactionService(broadcastReactionService);
+// Profil gracza pokazuje najwyższą pozycję globalną w historii; handler dodatkowo sprząta
+// historię przy przenumerowaniu i usuwaniu profili
+interactionHandler.setGlobalPositionHistoryService(globalPositionHistoryService);
 
 /**
  * Inicjalizuje bota EndersEcho
@@ -251,6 +260,13 @@ async function initializeBot() {
         // Uruchom scheduler cyklicznych raportów TOP10 globalnego
         globalTop10Service.setClient(client);
         globalTop10Service.start();
+
+        // Historia pozycji globalnych — pierwszy odczyt stanu i zapis bieżącej kolejności.
+        // Cykliczny sync to siatka bezpieczeństwa; normalnie odpala go zapis rankingu.
+        globalPositionHistoryService.setClient(client);
+        await globalPositionHistoryService.load();
+        globalPositionHistoryService.sync().catch(() => {});
+        globalPositionHistoryService.start();
 
         // Wczytaj stan ostatnio ogłoszonego kamienia milowego (przyrost unikalnych graczy)
         milestoneService.setClient(client);
@@ -607,6 +623,7 @@ async function startBot() {
 async function stopBot() {
     if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
     globalTop10Service.stop();
+    globalPositionHistoryService.stop();
     webRankingSyncService.stopAutoSync();
     playerOfTheDayService.stop();
     broadcastReactionService.stop();
