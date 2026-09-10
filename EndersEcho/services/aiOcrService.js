@@ -300,6 +300,18 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
         const originalScore = score;
 
         if (unit) {
+            // Wyjątek: wzorzec "<5 cyfr>5Sx" — ta sama halucynacja "S"→"5" co niżej, tylko w części
+            // CAŁKOWITEJ. Total się kumuluje i nie przeskakuje na wyższą jednostkę, więc bywa
+            // 5-cyfrowy i BEZ części dziesiętnej — model czyta wtedy "S" jako "5", a jednostkę "Sx"
+            // i tak dokleja (real "15993Sx" → AI "159935Sx"). Zdublowaną "5" usuwamy, zamiast
+            // odrzucać cały screen jako FAKE_PHOTO.
+            // Bezpieczne: wartość z 6 cyframi przed jednostką i tak wyleciałaby linijkę niżej, a
+            // skorygowany wynik nadal przechodzi przez validateScoreAgainstTotal (Best ≤ Total).
+            if (/^S[xp]$/i.test(unit) && integerPart.length === 6 && !decimalPart && integerPart.endsWith('5')) {
+                const fixedInteger = integerPart.slice(0, -1);
+                log.info(`[AI OCR] normalizeScore: "${originalScore}" — halucynacja S→5 przed ${unit}, koryguję na "${fixedInteger}${unit}"`);
+                integerPart = fixedInteger;
+            }
             if (integerPart.length > 5) {
                 log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo cyfr przed jednostką (${integerPart.length} > 5) — odrzucam jako podróbkę`);
                 return null;
