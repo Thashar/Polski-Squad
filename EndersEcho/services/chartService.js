@@ -1000,6 +1000,35 @@ async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol
 
 
 /**
+ * Szacuje szerokość tekstu w pikselach dla pogrubionego Arial.
+ *
+ * SVG nie mierzy tekstu przed renderowaniem, a plakietka musi znać swój rozmiar, zanim
+ * powstanie. Płaska średnia „długość × stała" zawodzi w obie strony: `WWWW` wychodzi
+ * poza ramkę, a `iiii` dostaje absurdalnie szeroką plakietkę. Stąd podział znaków na
+ * klasy szerokości — przybliżenie z zapasem, bo lepiej o pikselach za dużo niż o jeden za mało.
+ *
+ * @param {string} tekst
+ * @param {number} fontSize
+ * @returns {number} szerokość w px
+ */
+function szerokoscTekstu(tekst, fontSize) {
+    const WASKIE = "iIjlt.,:;'!|`()[]{} ";
+    const SZEROKIE = 'mMWw@%';
+    let jednostki = 0;
+    for (const znak of String(tekst)) {
+        if (WASKIE.includes(znak)) jednostki += 0.34;
+        else if (SZEROKIE.includes(znak)) jednostki += 0.95;
+        else if (znak >= 'A' && znak <= 'Z') jednostki += 0.72;
+        else if (znak >= '0' && znak <= '9') jednostki += 0.62;
+        // Znaki spoza alfabetu łacińskiego (CJK, cyrylica, znaki ozdobne w nickach)
+        // bywają pełnej szerokości — traktujemy je jako szerokie, żeby nie uciąć ramki
+        else if (znak.charCodeAt(0) > 0x2000) jednostki += 1.0;
+        else jednostki += 0.58;
+    }
+    return jednostki * fontSize;
+}
+
+/**
  * Zwraca N kolorów, z których ŻADNE DWA nie są takie same.
  *
  * `PLAYER_PALETTE` ma 10 pozycji, a w oknie 84 dni przez TOP 10 potrafi przewinąć się
@@ -1089,13 +1118,13 @@ async function generateTop10PositionChart(reports, opts = {}) {
     // Kolor na gracza — bez powtórzeń, niezależnie od tego, ilu ich przewinęło się przez TOP 10
     const paleta = buildDistinctPalette(gracze.length);
 
-    const LEGEND_COLS = 3;
-    const LEGEND_ROW_H = 20;
-    const legendRows = Math.ceil(gracze.length / LEGEND_COLS);
-
+    // Bez legendy pod wykresem — gracza rozpoznaje się po plakietce z nickiem, która stoi
+    // wprost przy jego linii. Legenda dublowała tę informację, a przy kilkunastu graczach
+    // zajmowała więcej miejsca niż sam wykres.
     const W = 900;
-    const M = { top: 52, right: 28, bottom: 40 + legendRows * LEGEND_ROW_H, left: 46 };
-    const H = 420 + legendRows * LEGEND_ROW_H;
+    // Margines lewy i prawy taki sam: numery pozycji stoją po OBU stronach
+    const M = { top: 52, right: 46, bottom: 40, left: 46 };
+    const H = 420;
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
@@ -1106,11 +1135,14 @@ async function generateTop10PositionChart(reports, opts = {}) {
     // Oś Y odwrócona: 1 na górze, 10 na dole
     const toY = (pos) => M.top + ((pos - 1) / 9) * cH;
 
-    // Siatka pozioma + etykiety pozycji
-    const siatka = [1, 2, 3, 5, 10].map(pos => {
+    // Siatka pozioma — KAŻDA pozycja od 1 do 10, bez wyjątków, z numerem po obu stronach.
+    // Numer po prawej oszczędza wodzenia wzrokiem przez całą szerokość wykresu przy
+    // odczytywaniu pozycji z ostatnich ogłoszeń.
+    const siatka = Array.from({ length: 10 }, (_, i) => i + 1).map(pos => {
         const y = toY(pos);
         return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${(M.left + cW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
-    <text x="${(M.left - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="end">#${pos}</text>`;
+    <text x="${(M.left - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="end">#${pos}</text>
+    <text x="${(M.left + cW + 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="start">#${pos}</text>`;
     }).join('\n    ');
 
     // Etykiety dat na osi X — co któryś punkt, żeby się nie zlewały
@@ -1156,48 +1188,45 @@ async function generateTop10PositionChart(reports, opts = {}) {
         // Zbierane osobno, bo plakietki muszą lec NAD wszystkimi liniami: inaczej kreska
         // kolejnego gracza przecinałaby napis w poprzek.
         const nazwaGracza = nazwy.get(key) || key;
+        const tagRaw = opts.tags?.[serwery.get(key)] || null;
+        // Składnia emoji (`<:nazwa:id>`) rozbierana do samej nazwy — librsvg nie renderuje
+        // emoji, a surowy tag wypisałby na wykresie `<:cs:123456789>`
+        const tagGracza = tagRaw
+            ? stripEmoji(String(tagRaw).replace(/^<a?:([^:]+):\d+>$/, '$1')).trim().slice(0, 8)
+            : '';
         for (const odcinek of odcinki) {
             const start = odcinek[0];
-            if (start) etykietyStartu.push({ x: start.x, y: start.y, c, nazwa: nazwaGracza });
+            if (start) etykietyStartu.push({ x: start.x, y: start.y, c, nazwa: nazwaGracza, tag: tagGracza });
         }
 
         return `${sciezki}\n    ${kropki}`;
     }).join('\n    ');
 
-    // Plakietki startowe — wyśrodkowane NA punkcie pierwszego wystąpienia gracza
-    const START_H = 15;
-    const START_FS = 10;
+    // Plakietki startowe — wyśrodkowane NA punkcie pierwszego wystąpienia gracza.
+    // Rozmiary dobrane tak, żeby napis nigdy nie dotykał obramowania: wysokość z zapasem
+    // na wydłużenia dolne (g, j, y), szerokość z realnego pomiaru tekstu plus margines
+    // po obu stronach.
+    const START_FS = 11;
+    const START_H = 22;
+    const START_PAD = 10;
     const plakietki = etykietyStartu.map(e => {
-        const tekst = stripEmoji(String(e.nazwa)).trim().slice(0, 14) || '?';
+        // Tag klanu doklejany do nicku. Wcześniej stał w legendzie — po jej usunięciu
+        // plakietka jest jedynym miejscem, gdzie może się pojawić, a bez niego wykres
+        // przestałby pokazywać, z jakiego serwera jest gracz.
+        const nick = stripEmoji(String(e.nazwa)).trim().slice(0, 14) || '?';
+        const tekst = e.tag ? `${nick} · ${e.tag}` : nick;
         // Szerokość szacowana z długości tekstu — SVG nie mierzy tekstu przed renderowaniem,
         // a plakietka musi znać swój rozmiar, żeby dało się ją wyśrodkować i przyciąć do wykresu
-        const w = Math.max(26, tekst.length * 5.7 + 12);
+        const w = Math.max(30, szerokoscTekstu(tekst, START_FS) + START_PAD * 2);
         // Przy krawędziach plakietka wjechałaby poza obszar wykresu i zostałaby ucięta,
         // więc tam przestaje być idealnie wyśrodkowana — czytelność wygrywa z symetrią
         const x = Math.min(Math.max(e.x - w / 2, M.left), M.left + cW - w);
         const y = e.y - START_H / 2;
-        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${START_H}" rx="${(START_H / 2).toFixed(1)}" fill="#1E1F22" fill-opacity="0.92" stroke="${e.c}" stroke-width="1.5"/>
-    <text x="${(x + w / 2).toFixed(1)}" y="${(e.y + 3.5).toFixed(1)}" font-family="Arial,sans-serif" font-size="${START_FS}" font-weight="bold" fill="${e.c}" text-anchor="middle">${escapeXml(tekst)}</text>`;
-    }).join('\n    ');
-
-    // Legenda — wszyscy gracze z okna, w trzech kolumnach pod wykresem
-    const legendaY = M.top + cH + 34;
-    const kolW = cW / LEGEND_COLS;
-    const legenda = gracze.map((key, idx) => {
-        const c = paleta[idx];
-        const kol = idx % LEGEND_COLS;
-        const wiersz = Math.floor(idx / LEGEND_COLS);
-        const x = M.left + kol * kolW;
-        const y = legendaY + wiersz * LEGEND_ROW_H;
-        const nazwa = stripEmoji(nazwy.get(key) || key).trim().slice(0, 20) || '?';
-        // Tag klanu obok nicku — ten sam zestaw co w wierszach raportu. Składnia emoji
-        // (`<:nazwa:id>`) rozbierana do samej nazwy, bo librsvg nie renderuje emoji,
-        // a surowy tag wypisałby na wykresie `<:cs:123456789>`
-        const tagRaw = opts.tags?.[serwery.get(key)] || null;
-        const tag = tagRaw ? stripEmoji(String(tagRaw).replace(/^<a?:([^:]+):\d+>$/, '$1')).trim() : '';
-        const podpis = escapeXml(tag ? `${nazwa} · ${tag.slice(0, 10)}` : nazwa);
-        return `<circle cx="${(x + 5).toFixed(1)}" cy="${(y - 4).toFixed(1)}" r="4" fill="${c}"/>
-    <text x="${(x + 15).toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${podpis}</text>`;
+        // `dominant-baseline` bywa ignorowane przez librsvg, więc linia bazowa liczona ręcznie:
+        // środek plakietki plus ok. 1/3 wysokości znaku, co optycznie centruje wielkie litery
+        const baseline = e.y + START_FS * 0.34;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${START_H}" rx="${(START_H / 2).toFixed(1)}" fill="#1E1F22" fill-opacity="0.94" stroke="${e.c}" stroke-width="1.5"/>
+    <text x="${(x + w / 2).toFixed(1)}" y="${baseline.toFixed(1)}" font-family="Arial,sans-serif" font-size="${START_FS}" font-weight="bold" fill="${e.c}" text-anchor="middle">${escapeXml(tekst)}</text>`;
     }).join('\n    ');
 
     const tytul = escapeXml(stripEmoji(opts.title || CHART_LABELS[lang].top10PositionsTitle));
@@ -1213,7 +1242,6 @@ async function generateTop10PositionChart(reports, opts = {}) {
     ${linie}
     ${plakietki}
     ${osX}
-    ${legenda}
 </svg>`;
 
     try {
