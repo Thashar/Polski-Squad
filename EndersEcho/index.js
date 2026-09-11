@@ -43,7 +43,7 @@ const ChallengeService = require('./services/challengeService');
 const { BossAliasService } = require('./services/bossAliasService');
 const OcrStatsService = require('./services/ocrStatsService');
 const BossRecordService = require('./services/bossRecordService');
-const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart } = require('./services/chartService');
+const { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart, generateTop10PositionChart } = require('./services/chartService');
 const { createBotLogger } = require('../utils/consoleLogger');
 const KingBumChatService = require('./services/kingBumChatService');
 const { createLlmAdapter } = require('../utils/llmAdapter');
@@ -113,7 +113,7 @@ const bossAliasService = new BossAliasService();
 const ocrService = new OCRService(config);
 const aiOcrService = new AIOCRService(config, llmAdapter, bossAliasService);
 const scoreHistoryService = new ScoreHistoryService(config.ranking.dataDir);
-const chartService = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
+const chartService = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart, generateTop10PositionChart };
 const rankingService = new RankingService(config, scoreHistoryService);
 const guildLogger = new GuildLogger(config);
 const logService = new LogService(config, guildLogger);
@@ -136,6 +136,8 @@ const globalTop10Service = new GlobalTop10Service(config.ranking.dataDir, rankin
 const globalPositionHistoryService = new GlobalPositionHistoryService(config.ranking.dataDir, rankingService);
 rankingService.setPositionHistoryService(globalPositionHistoryService);
 globalTop10Service.setPositionHistoryService(globalPositionHistoryService);
+// Wykres zmian pozycji pod raportem TOP 10
+globalTop10Service.setChartService(chartService);
 const milestoneService = new MilestoneService(config.ranking.dataDir, scoreHistoryService, guildConfigService, config, chartService, rankingService);
 // Rejestr profili graczy (kilka kont w grze) — max 3 profile na użytkownika
 const profileRegistryService = new ProfileRegistryService(config.ranking.dataDir, config.profiles?.maxPerUser ?? 3);

@@ -354,6 +354,69 @@ async function apply({ ranking, wynik }, now = Date.now()) {
     return Object.keys(wynik).length;
 }
 
+// ── odtworzenie historii raportów TOP 10 (wykres zmian pozycji) ──────────────
+
+/**
+ * Odtwarza TOP 10 na zadane momenty w czasie — z tej samej historii wyników, z której
+ * liczone są pozycje. Karmi wykres zmian pozycji pod raportem, żeby nie był pusty przez
+ * pierwsze trzy miesiące po wdrożeniu.
+ *
+ * ⚠️ TO SAMO OGRANICZENIE CO PRZY POZYCJACH: biorą udział wyłącznie gracze obecni
+ * w AKTUALNYM rankingu. Kto od tamtej pory wypadł, nie pojawi się na wykresie, a pozostali
+ * mogą mieć pozycje zaniżone (stali wtedy niżej, niż wychodzi z odtworzenia). Punkty
+ * odtworzone niosą `reconstructed: true`, więc widać w danych, które są zgadywane,
+ * a które pochodzą z faktycznie wysłanego ogłoszenia.
+ *
+ * @param {Date[]} times momenty raportów (rosnąco)
+ * @returns {Array<{at, positions, names, guilds, reconstructed}>}
+ */
+function reconstructTop10At(times) {
+    if (!Array.isArray(times) || times.length === 0) return [];
+
+    const ranking = buildGlobalRanking();
+    if (ranking.length === 0) return [];
+
+    // Oś czasu rekordów — jak w replay(), ale interesuje nas stan na zadane momenty
+    const historie = new Map();
+    for (const p of ranking) {
+        const hist = historyFor(p.playerKey, p.scoreValue);
+        if (hist.length === 0 && p.timestamp) {
+            const t = new Date(p.timestamp).getTime();
+            if (Number.isFinite(t)) hist.push({ t, v: p.scoreValue });
+        }
+        historie.set(p.playerKey, hist);
+    }
+
+    const meta = new Map(ranking.map(p => [p.playerKey, p]));
+
+    return times.map(when => {
+        const t = when.getTime();
+
+        // Najlepszy wynik każdego gracza NA TEN MOMENT
+        const stan = [];
+        for (const [playerKey, hist] of historie) {
+            let best = null;
+            for (const h of hist) {
+                if (h.t > t) break;           // hist jest posortowana rosnąco
+                if (!best || h.v > best.v) best = h;
+            }
+            if (!best) continue;              // wtedy jeszcze nie miał żadnego wyniku
+            stan.push({ playerKey, scoreValue: best.v, timestamp: new Date(best.t).toISOString() });
+        }
+
+        stan.sort(compareByScoreThenTimestamp);
+
+        const entry = { at: when.toISOString(), positions: {}, names: {}, guilds: {}, reconstructed: true };
+        stan.slice(0, 10).forEach((e, i) => {
+            entry.positions[e.playerKey] = i + 1;
+            const m = meta.get(e.playerKey);
+            if (m?.username) entry.names[e.playerKey] = m.username;
+            if (m?.sourceGuildId) entry.guilds[e.playerKey] = m.sourceGuildId;
+        });
+        return entry;
+    }).filter(e => Object.keys(e.positions).length > 0);
+}
+
 // ── wejście automatyczne (start bota) ─────────────────────────────────────────
 
 /**
@@ -484,7 +547,7 @@ function zakonczKonsole(code) {
     process.exit(code);
 }
 
-module.exports = { runOnceAtStartup, compute, apply, formatDuration };
+module.exports = { runOnceAtStartup, compute, apply, formatDuration, reconstructTop10At };
 
 if (require.main === module) {
     main()

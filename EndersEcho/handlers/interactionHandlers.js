@@ -948,8 +948,9 @@ class InteractionHandler {
 
         try {
             const msgs  = this.msgs(interaction.guildId);
-            const embed = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
-            await interaction.editReply({ embeds: [embed] });
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
+            const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
+            await interaction.editReply({ embeds: [embed], files });
         } catch (err) {
             logger.error(`[/generate] Błąd: ${err.message}`);
             await interaction.editReply({ content: '❌ Błąd podczas generowania TOP 10.' });
@@ -3665,8 +3666,9 @@ class InteractionHandler {
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const embed = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
-            await interaction.editReply({ content: '📢 Podgląd raportu TOP10 (wskaźniki zmian są symulowane):', embeds: [embed] });
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
+            const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
+            await interaction.editReply({ content: '📢 Podgląd raportu TOP10:', embeds: [embed], files });
         } catch (err) {
             await interaction.editReply({ content: `❌ Błąd generowania podglądu: ${err.message}` });
         }
