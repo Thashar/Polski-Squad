@@ -1000,6 +1000,46 @@ async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol
 
 
 /**
+ * Zwraca N kolorów, z których ŻADNE DWA nie są takie same.
+ *
+ * `PLAYER_PALETTE` ma 10 pozycji, a w oknie 84 dni przez TOP 10 potrafi przewinąć się
+ * znacznie więcej graczy — `idx % długość` dawałby wtedy dwie linie w tym samym kolorze,
+ * czyli legendę, z której nie da się nic odczytać.
+ *
+ * Do dziesięciu graczy bierzemy gotową paletę (dobrana pod ciemne tło). Powyżej generujemy
+ * cały zestaw od nowa: odcienie rozłożone równo po kole barw, z naprzemienną jasnością —
+ * sąsiednie linie różnią się wtedy nie tylko odcieniem, ale i tonem, co ratuje czytelność
+ * przy dużej liczbie graczy.
+ * @param {number} n
+ * @returns {string[]}
+ */
+function buildDistinctPalette(n) {
+    if (n <= PLAYER_PALETTE.length) return PLAYER_PALETTE.slice(0, n);
+
+    const out = [];
+    for (let i = 0; i < n; i++) {
+        const h = Math.round((i * 360) / n);
+        const l = i % 2 === 0 ? 62 : 74;   // naprzemiennie: ciemniejszy / jaśniejszy
+        const sat = i % 3 === 0 ? 68 : 58;
+        out.push(hslToHex(h, sat, l));
+    }
+    return out;
+}
+
+/** HSL → #rrggbb (librsvg rozumie hsl(), ale hex jest spójny z resztą palet w pliku) */
+function hslToHex(h, s, l) {
+    const sN = s / 100;
+    const lN = l / 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = sN * Math.min(lN, 1 - lN);
+    const f = (n) => {
+        const val = lN - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return Math.round(255 * val).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/**
  * Wykres zmian pozycji w globalnym TOP 10 w czasie.
  *
  * Jeden punkt na osi X = jedno wysłane ogłoszenie TOP 10 (nie jeden dzień) — odstępy między
@@ -1014,6 +1054,7 @@ async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol
  * @param {Object} opts
  * @param {string} [opts.title]   tytuł wykresu
  * @param {string} [opts.lang]    'pol' | 'eng' — język podpisów wypalanych w bitmapę
+ * @param {Object<string,string>} [opts.tags] guildId → tag klanu, dopisywany w legendzie obok nicku
  * @returns {Promise<Buffer|null>} null, gdy nie ma czego rysować (mniej niż 2 raporty)
  */
 async function generateTop10PositionChart(reports, opts = {}) {
@@ -1032,16 +1073,21 @@ async function generateTop10PositionChart(reports, opts = {}) {
     // a nie kolejności alfabetycznej czy przypadkowej.
     const ostatniaPozycja = new Map();
     const nazwy = new Map();
+    const serwery = new Map();
     for (const r of punkty) {
         for (const [key, pos] of Object.entries(r.positions)) {
             ostatniaPozycja.set(key, pos);
             if (r.names && r.names[key]) nazwy.set(key, r.names[key]);
+            if (r.guilds && r.guilds[key]) serwery.set(key, r.guilds[key]);
         }
     }
     const gracze = Array.from(ostatniaPozycja.keys())
         .sort((a, b) => ostatniaPozycja.get(a) - ostatniaPozycja.get(b));
 
     if (gracze.length === 0) return null;
+
+    // Kolor na gracza — bez powtórzeń, niezależnie od tego, ilu ich przewinęło się przez TOP 10
+    const paleta = buildDistinctPalette(gracze.length);
 
     const LEGEND_COLS = 3;
     const LEGEND_ROW_H = 20;
@@ -1078,7 +1124,7 @@ async function generateTop10PositionChart(reports, opts = {}) {
 
     // Linie graczy — przerwa tam, gdzie gracz wypadł z dziesiątki
     const linie = gracze.map((key, idx) => {
-        const c = PLAYER_PALETTE[idx % PLAYER_PALETTE.length];
+        const c = paleta[idx];
 
         // Tniemy serię na ciągłe odcinki; pojedynczy punkt rysujemy samą kropką
         const odcinki = [];
@@ -1110,14 +1156,20 @@ async function generateTop10PositionChart(reports, opts = {}) {
     const legendaY = M.top + cH + 34;
     const kolW = cW / LEGEND_COLS;
     const legenda = gracze.map((key, idx) => {
-        const c = PLAYER_PALETTE[idx % PLAYER_PALETTE.length];
+        const c = paleta[idx];
         const kol = idx % LEGEND_COLS;
         const wiersz = Math.floor(idx / LEGEND_COLS);
         const x = M.left + kol * kolW;
         const y = legendaY + wiersz * LEGEND_ROW_H;
-        const nazwa = escapeXml(stripEmoji(nazwy.get(key) || key).slice(0, 26) || '?');
+        const nazwa = stripEmoji(nazwy.get(key) || key).trim().slice(0, 20) || '?';
+        // Tag klanu obok nicku — ten sam zestaw co w wierszach raportu. Składnia emoji
+        // (`<:nazwa:id>`) rozbierana do samej nazwy, bo librsvg nie renderuje emoji,
+        // a surowy tag wypisałby na wykresie `<:cs:123456789>`
+        const tagRaw = opts.tags?.[serwery.get(key)] || null;
+        const tag = tagRaw ? stripEmoji(String(tagRaw).replace(/^<a?:([^:]+):\d+>$/, '$1')).trim() : '';
+        const podpis = escapeXml(tag ? `${nazwa} · ${tag.slice(0, 10)}` : nazwa);
         return `<circle cx="${(x + 5).toFixed(1)}" cy="${(y - 4).toFixed(1)}" r="4" fill="${c}"/>
-    <text x="${(x + 15).toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${nazwa}</text>`;
+    <text x="${(x + 15).toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${podpis}</text>`;
     }).join('\n    ');
 
     const tytul = escapeXml(stripEmoji(opts.title || CHART_LABELS[lang].top10PositionsTitle));

@@ -948,7 +948,7 @@ class InteractionHandler {
 
         try {
             const msgs  = this.msgs(interaction.guildId);
-            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client, this._chartLang(interaction.guildId));
             const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
             await interaction.editReply({ embeds: [embed], files });
         } catch (err) {
@@ -3666,7 +3666,7 @@ class InteractionHandler {
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client, this._chartLang(interaction.guildId));
             const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
             await interaction.editReply({ content: '📢 Podgląd raportu TOP10:', embeds: [embed], files });
         } catch (err) {

@@ -325,8 +325,8 @@ class GlobalTop10Service {
             return null;
         });
 
-        // Wykres rysujemy RAZ, bufor idzie na wszystkie serwery
-        const wykres = await this._buildPositionChart(historia).catch(() => null);
+        // Wykres renderowany raz NA JĘZYK (podpisy są wypalane w bitmapę), nie raz na serwer
+        const wykresDla = this._chartPerLang(historia);
 
         const sent = [], failed = [];
         const sentMessages = [];
@@ -342,7 +342,8 @@ class GlobalTop10Service {
                 );
 
                 // AttachmentBuilder budowany osobno na każdą wysyłkę — jednego nie da się
-                // wysłać dwa razy, a ten sam wykres leci na każdy serwer
+                // wysłać dwa razy, a ten sam bufor leci na wszystkie serwery danego języka
+                const wykres = await wykresDla(guildCfg.lang);
                 const files = wykres ? [new AttachmentBuilder(wykres, { name: CHART_FILE })] : [];
                 if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
 
@@ -504,11 +505,32 @@ class GlobalTop10Service {
         if (!Array.isArray(reports) || reports.length < 2) return null;
 
         try {
-            return await this.chartService.generateTop10PositionChart(reports, { lang });
+            const tags = Object.fromEntries(
+                this.config.getAllGuilds().filter(g => g.tag).map(g => [g.id, g.tag])
+            );
+            return await this.chartService.generateTop10PositionChart(reports, { lang, tags });
         } catch (err) {
             logger.warn(`[GlobalTop10] Nie udało się wygenerować wykresu pozycji: ${err.message}`);
             return null;
         }
+    }
+
+    /**
+     * Wykres per JĘZYK, z buforowaniem na czas jednej wysyłki.
+     *
+     * ⚠️ Tytuł i podtytuł są WYPALANE W BITMAPĘ, więc jeden obrazek nie obsłuży obu języków —
+     * serwer angielski dostałby polskie podpisy. Renderujemy więc osobno dla `pol` i `eng`,
+     * ale tylko raz na język: przy kilkunastu serwerach to dwa renderowania zamiast kilkunastu.
+     * @param {Array} historia
+     * @returns {(lang: string) => Promise<Buffer|null>}
+     */
+    _chartPerLang(historia) {
+        const cache = new Map();
+        return async (lang) => {
+            const key = lang === 'eng' ? 'eng' : 'pol';
+            if (!cache.has(key)) cache.set(key, await this._buildPositionChart(historia, key).catch(() => null));
+            return cache.get(key);
+        };
     }
 
     /**
@@ -594,7 +616,7 @@ class GlobalTop10Service {
      * Nie aktualizuje snapshootu ani harmonogramu — kolejny cykliczny raport dalej porówna
      * się z tym samym punktem odniesienia.
      */
-    async buildOnDemandEmbed(msgs, client) {
+    async buildOnDemandEmbed(msgs, client, lang = 'pol') {
         const globalRanking = await this.rankingService.getGlobalRanking(
             new Set(client.guilds.cache.keys())
         );
@@ -613,7 +635,7 @@ class GlobalTop10Service {
 
         // Podgląd pokazuje ten sam wykres co realny raport — ale go NIE dopisuje do historii,
         // bo nie jest ogłoszeniem i nie może dołożyć punktu na osi
-        const wykres = await this._buildPositionChart(null).catch(() => null);
+        const wykres = await this._buildPositionChart(null, lang).catch(() => null);
         if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
 
         return { embed, chart: wykres, chartFile: CHART_FILE };
