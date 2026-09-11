@@ -325,8 +325,8 @@ class GlobalTop10Service {
             return null;
         });
 
-        // Wykres renderowany raz NA JĘZYK (podpisy są wypalane w bitmapę), nie raz na serwer
-        const wykresDla = this._chartPerLang(historia);
+        // Wykres renderowany RAZ na całą wysyłkę — w bitmapie nie ma tekstu zależnego od języka
+        const wykresDla = this._chartOnce(historia);
 
         const sent = [], failed = [];
         const sentMessages = [];
@@ -342,8 +342,8 @@ class GlobalTop10Service {
                 );
 
                 // AttachmentBuilder budowany osobno na każdą wysyłkę — jednego nie da się
-                // wysłać dwa razy, a ten sam bufor leci na wszystkie serwery danego języka
-                const wykres = await wykresDla(guildCfg.lang);
+                // wysłać dwa razy, a ten sam bufor leci na wszystkie serwery
+                const wykres = await wykresDla();
                 const files = wykres ? [new AttachmentBuilder(wykres, { name: CHART_FILE })] : [];
                 if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
 
@@ -496,10 +496,9 @@ class GlobalTop10Service {
      * Zwraca null, gdy wykres nie ma sensu (brak generatora, mniej niż dwa raporty)
      * albo gdy renderowanie padnie — embed idzie wtedy bez obrazka, bez błędu dla graczy.
      * @param {Array|null} historia
-     * @param {string} [lang] język podpisów wypalanych w bitmapę
      * @returns {Promise<Buffer|null>}
      */
-    async _buildPositionChart(historia, lang = 'pol') {
+    async _buildPositionChart(historia) {
         if (!this.chartService?.generateTop10PositionChart) return null;
         const reports = historia || await this._loadHistory();
         if (!Array.isArray(reports) || reports.length < 2) return null;
@@ -508,7 +507,7 @@ class GlobalTop10Service {
             const tags = Object.fromEntries(
                 this.config.getAllGuilds().filter(g => g.tag).map(g => [g.id, g.tag])
             );
-            return await this.chartService.generateTop10PositionChart(reports, { lang, tags });
+            return await this.chartService.generateTop10PositionChart(reports, { tags });
         } catch (err) {
             logger.warn(`[GlobalTop10] Nie udało się wygenerować wykresu pozycji: ${err.message}`);
             return null;
@@ -516,20 +515,20 @@ class GlobalTop10Service {
     }
 
     /**
-     * Wykres per JĘZYK, z buforowaniem na czas jednej wysyłki.
+     * Wykres renderowany RAZ na całą wysyłkę, buforowany na czas jednego raportu.
      *
-     * ⚠️ Tytuł i podtytuł są WYPALANE W BITMAPĘ, więc jeden obrazek nie obsłuży obu języków —
-     * serwer angielski dostałby polskie podpisy. Renderujemy więc osobno dla `pol` i `eng`,
-     * ale tylko raz na język: przy kilkunastu serwerach to dwa renderowania zamiast kilkunastu.
+     * Odkąd nad wykresem nie ma nagłówka, w bitmapie nie zostaje ANI JEDEN tekst zależny
+     * od języka (nicki, tagi i daty są takie same wszędzie), więc jeden obrazek obsługuje
+     * wszystkie serwery — wcześniej to samo renderowało się osobno dla `pol` i `eng`.
+     * Dokładając do wykresu jakikolwiek podpis, trzeba wrócić do renderu na język.
      * @param {Array} historia
-     * @returns {(lang: string) => Promise<Buffer|null>}
+     * @returns {() => Promise<Buffer|null>}
      */
-    _chartPerLang(historia) {
-        const cache = new Map();
-        return async (lang) => {
-            const key = lang === 'eng' ? 'eng' : 'pol';
-            if (!cache.has(key)) cache.set(key, await this._buildPositionChart(historia, key).catch(() => null));
-            return cache.get(key);
+    _chartOnce(historia) {
+        let bufor;
+        return async () => {
+            if (bufor === undefined) bufor = await this._buildPositionChart(historia).catch(() => null);
+            return bufor;
         };
     }
 
@@ -616,7 +615,7 @@ class GlobalTop10Service {
      * Nie aktualizuje snapshootu ani harmonogramu — kolejny cykliczny raport dalej porówna
      * się z tym samym punktem odniesienia.
      */
-    async buildOnDemandEmbed(msgs, client, lang = 'pol') {
+    async buildOnDemandEmbed(msgs, client) {
         const globalRanking = await this.rankingService.getGlobalRanking(
             new Set(client.guilds.cache.keys())
         );
@@ -635,7 +634,7 @@ class GlobalTop10Service {
 
         // Podgląd pokazuje ten sam wykres co realny raport — ale go NIE dopisuje do historii,
         // bo nie jest ogłoszeniem i nie może dołożyć punktu na osi
-        const wykres = await this._buildPositionChart(null, lang).catch(() => null);
+        const wykres = await this._buildPositionChart(null).catch(() => null);
         if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
 
         return { embed, chart: wykres, chartFile: CHART_FILE };

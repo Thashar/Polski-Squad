@@ -68,13 +68,11 @@ const CHART_LABELS = {
         archiveZone: 'max / mies.',
         recentZone: 'ostatnie 3 mies.',
         players: 'graczy',
-        top10PositionsTitle: 'Zmiany pozycji w TOP 10',
     },
     eng: {
         archiveZone: 'max / month',
         recentZone: 'last 3 months',
         players: 'players',
-        top10PositionsTitle: 'TOP 10 position changes',
     },
 };
 
@@ -1078,15 +1076,15 @@ function hslToHex(h, s, l) {
  *
  * @param {Array<{at: string, positions: Object<string, number>, names?: Object<string,string>}>} reports
  *        historia raportów, rosnąco po dacie
+ * Wykres nie ma nagłówka ani żadnego innego tekstu zależnego od języka — nicki, tagi i daty
+ * wyglądają tak samo wszędzie, więc jeden render obsługuje wszystkie serwery.
+ *
  * @param {Object} opts
- * @param {string} [opts.title]   tytuł wykresu
- * @param {string} [opts.lang]    'pol' | 'eng' — język podpisów wypalanych w bitmapę
- * @param {Object<string,string>} [opts.tags] guildId → tag klanu, dopisywany w legendzie obok nicku
+ * @param {Object<string,string>} [opts.tags] guildId → tag klanu, dopisywany na plakietce obok nicku
  * @returns {Promise<Buffer|null>} null, gdy nie ma czego rysować (mniej niż 2 raporty)
  */
 async function generateTop10PositionChart(reports, opts = {}) {
     const sharp = require('sharp');
-    const lang = normLang(opts.lang);
 
     const punkty = (Array.isArray(reports) ? reports : [])
         .filter(r => r && r.at && r.positions && Object.keys(r.positions).length > 0)
@@ -1160,8 +1158,10 @@ async function generateTop10PositionChart(reports, opts = {}) {
     const pasKoncowy = pasPlakietek(ostatniIdx);
 
     // Zaokrąglone w górę, żeby szerokość obrazka pozostała liczbą całkowitą
+    // Górny margines tylko na plakietkę pozycji #1 (sięga pół wysokości ponad linię) —
+    // nagłówka nad wykresem nie ma, embed i tak niesie własny tytuł
     const M = {
-        top: 44,
+        top: 26,
         bottom: 44,
         left: ODSTEP_NUMEROW + Math.ceil(pasStartowy),
         right: ODSTEP_NUMEROW + Math.ceil(pasKoncowy),
@@ -1266,11 +1266,8 @@ async function generateTop10PositionChart(reports, opts = {}) {
     <text x="${(x + w / 2).toFixed(1)}" y="${baseline.toFixed(1)}" font-family="Arial,sans-serif" font-size="${START_FS}" font-weight="bold" fill="${e.c}" text-anchor="middle">${escapeXml(e.tekst)}</text>`;
     }).join('\n    ');
 
-    const tytul = escapeXml(stripEmoji(opts.title || CHART_LABELS[lang].top10PositionsTitle));
-
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <rect width="${W}" height="${H}" fill="#1E1F22"/>
-    <text x="12" y="26" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="#F2F3F5">${tytul}</text>
     ${siatka}
     ${linie}
     ${plakietki}
