@@ -1150,11 +1150,16 @@ async function generateTop10PositionChart(reports, opts = {}) {
             .map(pt => `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="${c}" stroke="#1E1F22" stroke-width="1"/>`)
             .join('\n    ');
 
-        // Plakietka z nickiem w punkcie, w którym gracz POJAWIA SIĘ na wykresie.
-        // Zbierana osobno, bo musi lec NAD wszystkimi liniami — inaczej kreska kolejnego
-        // gracza przecinałaby napis w poprzek i nie dałoby się go odczytać.
-        const start = odcinki[0]?.[0];
-        if (start) etykietyStartu.push({ x: start.x, y: start.y, c, nazwa: nazwy.get(key) || key });
+        // Plakietka z nickiem na początku KAŻDEGO odcinka, nie tylko pierwszego.
+        // Gracz, który wypadł z dziesiątki i wrócił, zaczyna nową linię w innym miejscu
+        // wykresu — bez powtórzonego nicku czytelnik nie ma jak skojarzyć jej z poprzednią.
+        // Zbierane osobno, bo plakietki muszą lec NAD wszystkimi liniami: inaczej kreska
+        // kolejnego gracza przecinałaby napis w poprzek.
+        const nazwaGracza = nazwy.get(key) || key;
+        for (const odcinek of odcinki) {
+            const start = odcinek[0];
+            if (start) etykietyStartu.push({ x: start.x, y: start.y, c, nazwa: nazwaGracza });
+        }
 
         return `${sciezki}\n    ${kropki}`;
     }).join('\n    ');
