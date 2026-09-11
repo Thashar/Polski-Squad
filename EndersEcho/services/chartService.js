@@ -1147,13 +1147,25 @@ async function generateTop10PositionChart(reports, opts = {}) {
     // przykrywały początek każdej linii, czyli dokładnie to, co miały opisywać — a przy
     // pełnej dziesiątce to dziesięć plakietek naraz. Szerokość obrazka rośnie o ten pas,
     // więc sam wykres nie traci ani piksela.
-    const LEWY_ODSTEP = 46;  // pas na numery pozycji przy lewej krawędzi obrazka
-    const pasStartowy = Math.max(0, ...gracze
-        .filter(key => punkty[0].positions[key] != null)
+    // To samo dzieje się przy OSTATNIM raporcie, tyle że po drugiej stronie: plakietka leży
+    // na prawo od wykresu i dotyka punktu końcowego lewą krawędzią. Prawa strona wykresu to
+    // stan na dziś, czyli to, po co czytelnik najczęściej tu zagląda — bez nicku musiałby
+    // wodzić wzrokiem przez cały wykres do plakietki startowej
+    const ODSTEP_NUMEROW = 46;  // pas na numery pozycji przy krawędziach obrazka
+    const ostatniIdx = punkty.length - 1;
+    const pasPlakietek = (idx) => Math.max(0, ...gracze
+        .filter(key => punkty[idx].positions[key] != null)
         .map(key => szerokoscPlakietki(tekstPlakietki.get(key))));
+    const pasStartowy = pasPlakietek(0);
+    const pasKoncowy = pasPlakietek(ostatniIdx);
 
     // Zaokrąglone w górę, żeby szerokość obrazka pozostała liczbą całkowitą
-    const M = { top: 44, right: 46, bottom: 44, left: LEWY_ODSTEP + Math.ceil(pasStartowy) };
+    const M = {
+        top: 44,
+        bottom: 44,
+        left: ODSTEP_NUMEROW + Math.ceil(pasStartowy),
+        right: ODSTEP_NUMEROW + Math.ceil(pasKoncowy),
+    };
     const cW = 808;
     const W = M.left + cW + M.right;
     const H = 420;
@@ -1168,13 +1180,13 @@ async function generateTop10PositionChart(reports, opts = {}) {
 
     // Siatka pozioma — KAŻDA pozycja od 1 do 10, bez wyjątków, z numerem po obu stronach.
     // Numer po prawej oszczędza wodzenia wzrokiem przez całą szerokość wykresu przy
-    // odczytywaniu pozycji z ostatnich ogłoszeń. Numer po lewej stoi przy krawędzi OBRAZKA,
-    // nie przy siatce — między nim a wykresem leży pas plakietek startowych
+    // odczytywaniu pozycji z ostatnich ogłoszeń. OBA numery stoją przy krawędziach OBRAZKA,
+    // nie przy siatce — między nimi a wykresem leżą pasy plakietek
     const siatka = Array.from({ length: 10 }, (_, i) => i + 1).map(pos => {
         const y = toY(pos);
         return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${(M.left + cW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
     <text x="12" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="start">#${pos}</text>
-    <text x="${(M.left + cW + 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="start">#${pos}</text>`;
+    <text x="${W - 12}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="end">#${pos}</text>`;
     }).join('\n    ');
 
     // Etykiety dat na osi X — co któryś punkt, żeby się nie zlewały. Odsunięte od siatki
@@ -1223,7 +1235,15 @@ async function generateTop10PositionChart(reports, opts = {}) {
         // kolejnego gracza przecinałaby napis w poprzek.
         for (const odcinek of odcinki) {
             const start = odcinek[0];
-            if (start) etykietyStartu.push({ x: start.x, y: start.y, c, tekst: tekstPlakietki.get(key), przedWykresem: start.i === 0 });
+            const koniec = odcinek[odcinek.length - 1];
+            // Odcinek zaczynający się w OSTATNIM raporcie (samotny punkt na prawym skraju)
+            // nie dostaje etykiety startowej — plakietka końcowa stanęłaby dokładnie na niej
+            if (start && start.i !== ostatniIdx) {
+                etykietyStartu.push({ x: start.x, y: start.y, c, tekst: tekstPlakietki.get(key), przedWykresem: start.i === 0 });
+            }
+            if (koniec && koniec.i === ostatniIdx) {
+                etykietyStartu.push({ x: koniec.x, y: koniec.y, c, tekst: tekstPlakietki.get(key), poWykresie: true });
+            }
         }
 
         return `${sciezki}\n    ${kropki}`;
@@ -1232,10 +1252,11 @@ async function generateTop10PositionChart(reports, opts = {}) {
     const plakietki = etykietyStartu.map(e => {
         const w = szerokoscPlakietki(e.tekst);
         // Start w pierwszym raporcie → plakietka w całości na lewo od wykresu, dosunięta
-        // prawą krawędzią do punktu. Wejście w trakcie → jak dotąd: wyśrodkowana na punkcie,
-        // a przy prawej krawędzi dosuwana do obszaru, bo czytelność wygrywa z symetrią
-        const x = e.przedWykresem
-            ? e.x - w
+        // prawą krawędzią do punktu. Koniec w ostatnim raporcie → lustrzanie, na prawo od
+        // wykresu, dosunięta lewą krawędzią. Wejście w trakcie → jak dotąd: wyśrodkowana
+        // na punkcie, przy krawędziach dosuwana do obszaru (czytelność nad symetrią)
+        const x = e.przedWykresem ? e.x - w
+            : e.poWykresie ? e.x
             : Math.min(Math.max(e.x - w / 2, M.left), M.left + cW - w);
         const y = e.y - START_H / 2;
         // `dominant-baseline` bywa ignorowane przez librsvg, więc linia bazowa liczona ręcznie:
