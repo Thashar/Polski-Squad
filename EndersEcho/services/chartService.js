@@ -1123,6 +1123,7 @@ async function generateTop10PositionChart(reports, opts = {}) {
     }).filter(Boolean).join('\n    ');
 
     // Linie graczy — przerwa tam, gdzie gracz wypadł z dziesiątki
+    const etykietyStartu = [];
     const linie = gracze.map((key, idx) => {
         const c = paleta[idx];
 
@@ -1149,7 +1150,29 @@ async function generateTop10PositionChart(reports, opts = {}) {
             .map(pt => `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="${c}" stroke="#1E1F22" stroke-width="1"/>`)
             .join('\n    ');
 
+        // Plakietka z nickiem w punkcie, w którym gracz POJAWIA SIĘ na wykresie.
+        // Zbierana osobno, bo musi lec NAD wszystkimi liniami — inaczej kreska kolejnego
+        // gracza przecinałaby napis w poprzek i nie dałoby się go odczytać.
+        const start = odcinki[0]?.[0];
+        if (start) etykietyStartu.push({ x: start.x, y: start.y, c, nazwa: nazwy.get(key) || key });
+
         return `${sciezki}\n    ${kropki}`;
+    }).join('\n    ');
+
+    // Plakietki startowe — wyśrodkowane NA punkcie pierwszego wystąpienia gracza
+    const START_H = 15;
+    const START_FS = 10;
+    const plakietki = etykietyStartu.map(e => {
+        const tekst = stripEmoji(String(e.nazwa)).trim().slice(0, 14) || '?';
+        // Szerokość szacowana z długości tekstu — SVG nie mierzy tekstu przed renderowaniem,
+        // a plakietka musi znać swój rozmiar, żeby dało się ją wyśrodkować i przyciąć do wykresu
+        const w = Math.max(26, tekst.length * 5.7 + 12);
+        // Przy krawędziach plakietka wjechałaby poza obszar wykresu i zostałaby ucięta,
+        // więc tam przestaje być idealnie wyśrodkowana — czytelność wygrywa z symetrią
+        const x = Math.min(Math.max(e.x - w / 2, M.left), M.left + cW - w);
+        const y = e.y - START_H / 2;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${START_H}" rx="${(START_H / 2).toFixed(1)}" fill="#1E1F22" fill-opacity="0.92" stroke="${e.c}" stroke-width="1.5"/>
+    <text x="${(x + w / 2).toFixed(1)}" y="${(e.y + 3.5).toFixed(1)}" font-family="Arial,sans-serif" font-size="${START_FS}" font-weight="bold" fill="${e.c}" text-anchor="middle">${escapeXml(tekst)}</text>`;
     }).join('\n    ');
 
     // Legenda — wszyscy gracze z okna, w trzech kolumnach pod wykresem
@@ -1183,6 +1206,7 @@ async function generateTop10PositionChart(reports, opts = {}) {
     <text x="${M.left}" y="42" font-family="Arial,sans-serif" font-size="11" fill="#8A8E94">${podtytul}</text>
     ${siatka}
     ${linie}
+    ${plakietki}
     ${osX}
     ${legenda}
 </svg>`;
