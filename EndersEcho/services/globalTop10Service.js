@@ -2,7 +2,7 @@
 
 const fs   = require('fs');
 const path = require('path');
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, AttachmentBuilder } = require('discord.js');
 const { createBotLogger } = require('../../utils/consoleLogger');
 const { getOwnerId, getProfileIndex, formatProfileDisplayName } = require('../utils/helpers');
 const { formatMessage } = require('../utils/helpers');
@@ -20,6 +20,13 @@ const BREAK_INTERVAL_MS  = 4 * 24 * 60 * 60 * 1000;  // 4 dni
 
 const CHECK_INTERVAL_MS  = 60_000; // sprawdzaj co minutę
 
+/** Ile dni wstecz obejmuje wykres zmian pozycji pod raportem. */
+const CHART_WINDOW_DAYS = 84;
+/** Nazwa załącznika z wykresem — ta sama w embedzie i w AttachmentBuilder. */
+const CHART_FILE = 'top10_positions.png';
+/** Twardy limit wpisów historii — 84 dni to ok. 25 raportów, reszta to zapas. */
+const MAX_HISTORY_REPORTS = 40;
+
 class GlobalTop10Service {
     /**
      * @param {string} dataDir                ścieżka do EndersEcho/data/
@@ -35,6 +42,10 @@ class GlobalTop10Service {
         this.config           = config;
         this.client           = null;
         this._configFile      = path.join(dataDir, 'global_top10_config.json');
+        // Historia wysłanych raportów — jeden wpis na ogłoszenie, źródło wykresu zmian pozycji.
+        // Konfiguracja trzyma wyłącznie OSTATNI snapshot, więc bez tego pliku nie da się
+        // narysować niczego wstecz.
+        this._historyFile     = path.join(dataDir, 'global_top10_history.json');
         this._cfg             = null;
         this._timer           = null;
         // Zbiorcze liczniki reakcji pod raportem — wstrzykiwane z index.js (setterem, bo
@@ -43,6 +54,14 @@ class GlobalTop10Service {
         // Historia pozycji globalnych — „na tej pozycji od" pod każdym graczem i Hall of Fame
         // miejsca #1 pod raportem. Setterem, bo serwis powstaje po tym (potrzebuje rankingService).
         this.positionHistoryService = null;
+        // Generator wykresu zmian pozycji — setterem, bo chartService jest zwykłym modułem
+        // funkcji, a serwis ma działać także bez niego (wykres jest dodatkiem, nie warunkiem)
+        this.chartService = null;
+    }
+
+    /** @param {Object} service - chartService (generateTop10PositionChart) */
+    setChartService(service) {
+        this.chartService = service;
     }
 
     /** @param {Object} service - BroadcastReactionService */
@@ -81,6 +100,81 @@ class GlobalTop10Service {
 
     getConfig() {
         return { ...this._cfg };
+    }
+
+    // ── historia ogłoszeń (źródło wykresu zmian pozycji) ──────────────────────
+
+    /**
+     * Wczytuje historię wysłanych raportów.
+     * @returns {Promise<Array<{at: string, positions: Object, names: Object, guilds: Object, reconstructed?: boolean}>>}
+     */
+    async _loadHistory() {
+        try {
+            const data = await store.getOrLoad(this._historyFile, () => ({ reports: [] }));
+            return Array.isArray(data?.reports) ? data.reports : [];
+        } catch {
+            return [];
+        }
+    }
+
+    /**
+     * Dopisuje jeden raport do historii i przycina ją do okna wykresu.
+     *
+     * ⚠️ Zapisujemy też NICKI i serwery, nie same pozycje. Gracz może zniknąć z rankingu
+     * albo skasować profil, a wykres sprzed dwóch miesięcy ma nadal wiedzieć, kogo rysuje —
+     * odtworzenie nazwy z bieżącego rankingu dałoby dla takiej osoby puste miejsce w legendzie.
+     */
+    async _appendHistory(top10, at = new Date()) {
+        const reports = await this._loadHistory();
+
+        const entry = { at: at.toISOString(), positions: {}, names: {}, guilds: {} };
+        top10.forEach((p, i) => {
+            const key = p.playerKey || p.userId;
+            entry.positions[key] = i + 1;
+            if (p.username) entry.names[key] = p.username;
+            if (p.sourceGuildId) entry.guilds[key] = p.sourceGuildId;
+        });
+
+        // Wpis o tym samym znaczniku czasu zastępuje poprzedni — ponowne odtworzenie
+        // historii nie ma mnożyć punktów na osi
+        const bez = reports.filter(r => r.at !== entry.at);
+        bez.push(entry);
+        bez.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+        const granica = Date.now() - CHART_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+        const przyciete = bez.filter(r => Date.parse(r.at) >= granica).slice(-MAX_HISTORY_REPORTS);
+
+        await store.set(this._historyFile, { reports: przyciete });
+        return przyciete;
+    }
+
+    /**
+     * Terminy WCZEŚNIEJSZYCH raportów, odtworzone wstecz z harmonogramu.
+     *
+     * Harmonogram jest deterministyczny (9 raportów co 3 dni, potem 4 dni przerwy), więc
+     * z `nextTrigger` i `triggerCount` da się cofnąć krok po kroku. ⚠️ Działa tylko dopóki
+     * harmonogram nie był po drodze przestawiany — `setSchedule()` zeruje `triggerCount`,
+     * a wtedy cofanie odtworzy terminy, których nigdy nie było.
+     * @param {number} ile ile terminów wstecz
+     * @returns {Date[]} rosnąco
+     */
+    _pastReportTimes(ile) {
+        if (!this._cfg?.nextTrigger) return [];
+
+        const out = [];
+        let t = new Date(this._cfg.nextTrigger).getTime();
+        let numer = this._cfg.triggerCount || 0;
+
+        for (let i = 0; i < ile && numer > 0; i++) {
+            // `_stepOnce` dodało interwał liczony na numerze raportu, który właśnie poszedł
+            const interwal = numer % CYCLE_LEN === 0 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
+            t -= interwal;
+            numer -= 1;
+            if (t <= 0) break;
+            out.push(new Date(t));
+        }
+
+        return out.reverse();
     }
 
     // ── schedule management ────────────────────────────────────────────────────
@@ -154,6 +248,8 @@ class GlobalTop10Service {
 
     start() {
         this._load();
+        // Zasianie historii wstecz — bez await, start bota nie ma na to czekać
+        this._seedHistoryOnce().catch(() => {});
         this._timer = setInterval(() => this._tick(), CHECK_INTERVAL_MS);
         logger.info(`[GlobalTop10] Scheduler uruchomiony (${this._cfg.enabled ? `następny: ${this._cfg.nextTrigger}` : 'wyłączony'})`);
     }
@@ -223,6 +319,15 @@ class GlobalTop10Service {
         this._cfg.lastSnapshot = newSnapshot;
         this._save();
 
+        // Dopisz ten raport do historii — to ona, a nie snapshot, żywi wykres zmian pozycji
+        const historia = await this._appendHistory(top10).catch(err => {
+            logger.warn(`[GlobalTop10] Nie udało się zapisać historii raportu: ${err.message}`);
+            return null;
+        });
+
+        // Wykres rysujemy RAZ, bufor idzie na wszystkie serwery
+        const wykres = await this._buildPositionChart(historia).catch(() => null);
+
         const sent = [], failed = [];
         const sentMessages = [];
 
@@ -236,7 +341,12 @@ class GlobalTop10Service {
                     top10, lastSnapshot, bossName, msgs, guildCfg, this.client
                 );
 
-                const msg = await channel.send({ embeds: [embed] });
+                // AttachmentBuilder budowany osobno na każdą wysyłkę — jednego nie da się
+                // wysłać dwa razy, a ten sam wykres leci na każdy serwer
+                const files = wykres ? [new AttachmentBuilder(wykres, { name: CHART_FILE })] : [];
+                if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
+
+                const msg = await channel.send({ embeds: [embed], files });
                 sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: msg.id });
                 sent.push(guildCfg.tag || guildCfg.id);
             } catch (err) {
@@ -298,7 +408,9 @@ class GlobalTop10Service {
             const shortDate = `${date.getDate().toString().padStart(2, '0')}.${(date.getMonth() + 1).toString().padStart(2, '0')}`;
             const tagSuffix = tag ? `  ·  ${tag.replace(/^<a?:([^:]+):\d+>$/, '$1')}` : '';
             const scoreStr  = player.score || this.rankingService.formatScore(player.scoreValue);
-            const bossStr   = player.bossName || msgs.unknownBoss;
+            // Nazwa bossa w monospace — odcina ją od reszty wiersza, w którym sąsiaduje
+            // ze wskaźnikiem zmiany, datą i tagiem serwera
+            const bossStr   = `\`${player.bossName || msgs.unknownBoss}\``;
 
             // Trzeci wiersz — jak długo gracz siedzi na tej pozycji
             const holdLine = this._formatHoldLine(player.playerKey || player.userId, position, msgs);
@@ -342,6 +454,61 @@ class GlobalTop10Service {
         if (botIconUrl) embed.setThumbnail(botIconUrl);
 
         return embed;
+    }
+
+    /**
+     * Zasiewa historię raportów wstecz — JEDNORAZOWO, gdy plik jest jeszcze pusty.
+     *
+     * Bez tego wykres byłby pusty przez pierwsze ~3 miesiące po wdrożeniu (potrzebuje dwóch
+     * ogłoszeń, a te idą co 3 dni). Terminy bierzemy z harmonogramu (`_pastReportTimes`),
+     * a pozycje z odtworzenia historii wyników.
+     *
+     * ⚠️ Punkty odtworzone są PRZYBLIŻENIEM — nie biorą udziału gracze, którzy od tamtej pory
+     * wypadli z rankingu. Prawdziwe ogłoszenia dopisywane od teraz są dokładne i z czasem
+     * wypchną odtworzone poza okno wykresu.
+     */
+    async _seedHistoryOnce() {
+        try {
+            const istniejaca = await this._loadHistory();
+            if (istniejaca.length > 0) return false; // już jest z czego rysować
+
+            const ile = Math.ceil(CHART_WINDOW_DAYS / 3);
+            const terminy = this._pastReportTimes(ile)
+                .filter(d => d.getTime() >= Date.now() - CHART_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+            if (terminy.length < 2) return false;
+
+            const { reconstructTop10At } = require('../backfill-position-history');
+            const punkty = reconstructTop10At(terminy);
+            if (punkty.length < 2) return false;
+
+            await store.set(this._historyFile, { reports: punkty.slice(-MAX_HISTORY_REPORTS) });
+            logger.info(`[GlobalTop10] Odtworzono historię ${punkty.length} raportów do wykresu zmian pozycji (wartości przybliżone)`);
+            return true;
+        } catch (err) {
+            logger.warn(`[GlobalTop10] Nie udało się odtworzyć historii raportów: ${err.message}`);
+            return false;
+        }
+    }
+
+    /**
+     * Buduje wykres zmian pozycji z historii raportów.
+     * Zwraca null, gdy wykres nie ma sensu (brak generatora, mniej niż dwa raporty)
+     * albo gdy renderowanie padnie — embed idzie wtedy bez obrazka, bez błędu dla graczy.
+     * @param {Array|null} historia
+     * @param {string} [lang] język podpisów wypalanych w bitmapę
+     * @returns {Promise<Buffer|null>}
+     */
+    async _buildPositionChart(historia, lang = 'pol') {
+        if (!this.chartService?.generateTop10PositionChart) return null;
+        const reports = historia || await this._loadHistory();
+        if (!Array.isArray(reports) || reports.length < 2) return null;
+
+        try {
+            return await this.chartService.generateTop10PositionChart(reports, { lang });
+        } catch (err) {
+            logger.warn(`[GlobalTop10] Nie udało się wygenerować wykresu pozycji: ${err.message}`);
+            return null;
+        }
     }
 
     /**
@@ -442,7 +609,14 @@ class GlobalTop10Service {
         // dostają 🆕 i to jest uczciwe: nie ma się do czego porównać.
         const lastSnapshot = this._cfg?.lastSnapshot || {};
 
-        return this._buildTop10Embed(top10, lastSnapshot, bossName, msgs, null, client);
+        const embed = await this._buildTop10Embed(top10, lastSnapshot, bossName, msgs, null, client);
+
+        // Podgląd pokazuje ten sam wykres co realny raport — ale go NIE dopisuje do historii,
+        // bo nie jest ogłoszeniem i nie może dołożyć punktu na osi
+        const wykres = await this._buildPositionChart(null).catch(() => null);
+        if (wykres) embed.setImage(`attachment://${CHART_FILE}`);
+
+        return { embed, chart: wykres, chartFile: CHART_FILE };
     }
 
     // ── most frequent boss ─────────────────────────────────────────────────────

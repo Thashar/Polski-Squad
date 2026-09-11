@@ -68,11 +68,15 @@ const CHART_LABELS = {
         archiveZone: 'max / mies.',
         recentZone: 'ostatnie 3 mies.',
         players: 'graczy',
+        top10PositionsTitle: 'Zmiany pozycji w TOP 10',
+        top10PositionsReports: 'ogłoszeń · 1 punkt = 1 raport',
     },
     eng: {
         archiveZone: 'max / month',
         recentZone: 'last 3 months',
         players: 'players',
+        top10PositionsTitle: 'TOP 10 position changes',
+        top10PositionsReports: 'reports · 1 point = 1 report',
     },
 };
 
@@ -994,4 +998,149 @@ async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
+
+/**
+ * Wykres zmian pozycji w globalnym TOP 10 w czasie.
+ *
+ * Jeden punkt na osi X = jedno wysłane ogłoszenie TOP 10 (nie jeden dzień) — odstępy między
+ * raportami są nierówne (3 dni, po dziewiątym 4), a wykres pokazuje RYWALIZACJĘ, nie kalendarz.
+ * Oś Y to pozycja 1–10, odwrócona: miejsce 1 na górze, bo tak czyta się ranking.
+ *
+ * Gracz, który w danym raporcie wypadł poza dziesiątkę, ma w tym miejscu PRZERWĘ w linii —
+ * ciągła kreska sugerowałaby, że gdzieś tam był, a nie wiemy gdzie (dane niosą tylko TOP 10).
+ *
+ * @param {Array<{at: string, positions: Object<string, number>, names?: Object<string,string>}>} reports
+ *        historia raportów, rosnąco po dacie
+ * @param {Object} opts
+ * @param {string} [opts.title]   tytuł wykresu
+ * @param {string} [opts.lang]    'pol' | 'eng' — język podpisów wypalanych w bitmapę
+ * @returns {Promise<Buffer|null>} null, gdy nie ma czego rysować (mniej niż 2 raporty)
+ */
+async function generateTop10PositionChart(reports, opts = {}) {
+    const sharp = require('sharp');
+    const lang = normLang(opts.lang);
+
+    const punkty = (Array.isArray(reports) ? reports : [])
+        .filter(r => r && r.at && r.positions && Object.keys(r.positions).length > 0)
+        .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+    // Jeden punkt to jeszcze nie zmiana — wykres z jedną kolumną niczego nie pokazuje
+    if (punkty.length < 2) return null;
+
+    // Gracze: wszyscy, którzy pojawili się w TOP 10 w oknie wykresu.
+    // Kolejność legendy wg OSTATNIEJ znanej pozycji — czytelnik szuka w niej bieżącej czołówki,
+    // a nie kolejności alfabetycznej czy przypadkowej.
+    const ostatniaPozycja = new Map();
+    const nazwy = new Map();
+    for (const r of punkty) {
+        for (const [key, pos] of Object.entries(r.positions)) {
+            ostatniaPozycja.set(key, pos);
+            if (r.names && r.names[key]) nazwy.set(key, r.names[key]);
+        }
+    }
+    const gracze = Array.from(ostatniaPozycja.keys())
+        .sort((a, b) => ostatniaPozycja.get(a) - ostatniaPozycja.get(b));
+
+    if (gracze.length === 0) return null;
+
+    const LEGEND_COLS = 3;
+    const LEGEND_ROW_H = 20;
+    const legendRows = Math.ceil(gracze.length / LEGEND_COLS);
+
+    const W = 900;
+    const M = { top: 52, right: 28, bottom: 40 + legendRows * LEGEND_ROW_H, left: 46 };
+    const H = 420 + legendRows * LEGEND_ROW_H;
+    const cW = W - M.left - M.right;
+    const cH = H - M.top - M.bottom;
+
+    // Oś X: równe odstępy między raportami (indeks, nie czas) — patrz opis funkcji
+    const toX = (i) => punkty.length === 1
+        ? M.left + cW / 2
+        : M.left + (i / (punkty.length - 1)) * cW;
+    // Oś Y odwrócona: 1 na górze, 10 na dole
+    const toY = (pos) => M.top + ((pos - 1) / 9) * cH;
+
+    // Siatka pozioma + etykiety pozycji
+    const siatka = [1, 2, 3, 5, 10].map(pos => {
+        const y = toY(pos);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${(M.left + cW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="${(M.left - 10).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="end">#${pos}</text>`;
+    }).join('\n    ');
+
+    // Etykiety dat na osi X — co któryś punkt, żeby się nie zlewały
+    const krok = Math.max(1, Math.ceil(punkty.length / 8));
+    const osX = punkty.map((r, i) => {
+        if (i % krok !== 0 && i !== punkty.length - 1) return '';
+        const d = new Date(r.at);
+        const etykieta = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        return `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 18).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="middle">${etykieta}</text>`;
+    }).filter(Boolean).join('\n    ');
+
+    // Linie graczy — przerwa tam, gdzie gracz wypadł z dziesiątki
+    const linie = gracze.map((key, idx) => {
+        const c = PLAYER_PALETTE[idx % PLAYER_PALETTE.length];
+
+        // Tniemy serię na ciągłe odcinki; pojedynczy punkt rysujemy samą kropką
+        const odcinki = [];
+        let biezacy = [];
+        punkty.forEach((r, i) => {
+            const pos = r.positions[key];
+            if (pos == null) {
+                if (biezacy.length) odcinki.push(biezacy);
+                biezacy = [];
+                return;
+            }
+            biezacy.push({ x: toX(i), y: toY(pos) });
+        });
+        if (biezacy.length) odcinki.push(biezacy);
+
+        const sciezki = odcinki
+            .filter(o => o.length >= 2)
+            .map(o => `<polyline points="${o.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`)
+            .join('\n    ');
+
+        const kropki = odcinki.flat()
+            .map(pt => `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="${c}" stroke="#1E1F22" stroke-width="1"/>`)
+            .join('\n    ');
+
+        return `${sciezki}\n    ${kropki}`;
+    }).join('\n    ');
+
+    // Legenda — wszyscy gracze z okna, w trzech kolumnach pod wykresem
+    const legendaY = M.top + cH + 34;
+    const kolW = cW / LEGEND_COLS;
+    const legenda = gracze.map((key, idx) => {
+        const c = PLAYER_PALETTE[idx % PLAYER_PALETTE.length];
+        const kol = idx % LEGEND_COLS;
+        const wiersz = Math.floor(idx / LEGEND_COLS);
+        const x = M.left + kol * kolW;
+        const y = legendaY + wiersz * LEGEND_ROW_H;
+        const nazwa = escapeXml(stripEmoji(nazwy.get(key) || key).slice(0, 26) || '?');
+        return `<circle cx="${(x + 5).toFixed(1)}" cy="${(y - 4).toFixed(1)}" r="4" fill="${c}"/>
+    <text x="${(x + 15).toFixed(1)}" y="${y.toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#B5BAC1">${nazwa}</text>`;
+    }).join('\n    ');
+
+    const tytul = escapeXml(stripEmoji(opts.title || CHART_LABELS[lang].top10PositionsTitle));
+    const podtytul = escapeXml(
+        `${punkty.length} ${CHART_LABELS[lang].top10PositionsReports}`
+    );
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="#1E1F22"/>
+    <text x="${M.left}" y="26" font-family="Arial,sans-serif" font-size="16" font-weight="bold" fill="#F2F3F5">${tytul}</text>
+    <text x="${M.left}" y="42" font-family="Arial,sans-serif" font-size="11" fill="#8A8E94">${podtytul}</text>
+    ${siatka}
+    ${linie}
+    ${osX}
+    ${legenda}
+</svg>`;
+
+    try {
+        return await sharp(Buffer.from(svg)).png().toBuffer();
+    } catch (error) {
+        logger.warn(`Nie udało się wygenerować wykresu pozycji TOP 10: ${error.message}`);
+        return null;
+    }
+}
+
+module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart, generateTop10PositionChart };
