@@ -3,19 +3,33 @@
  *
  * Discord Gateway ma limit dla opcode 8 (REQUEST_GUILD_MEMBERS):
  * - Max 120 requestów na 60 sekund
- * - Przekroczenie powoduje GatewayRateLimitError
+ * - Limit obowiązuje POŁĄCZENIE gateway, a nie serwer Discord
  *
  * Ten moduł zapewnia:
- * - 30-sekundowy cooldown między fetch dla tego samego serwera
- * - Automatyczny fallback do cache jeśli fetch w toku
+ * - 30-sekundowy cooldown między fetch dla tej samej pary (bot, serwer)
+ * - Doczekanie trwającego fetcha zamiast zwracania cache w trakcie zapełniania
  * - Intelligent logging wszystkich operacji
  */
 
 const { createBotLogger } = require('./consoleLogger');
 const defaultLogger = createBotLogger('GuildThrottle');
 
-const membersFetchThrottle = new Map(); // guildId -> { lastFetch: timestamp, isInProgress: boolean }
-const MEMBERS_FETCH_COOLDOWN = 30000; // 30 sekund między fetch dla tego samego guild
+// `${clientId}:${guildId}` -> { lastFetch: timestamp, promise: Promise|null }
+const membersFetchThrottle = new Map();
+const MEMBERS_FETCH_COOLDOWN = 30000; // 30 sekund między fetch dla tej samej pary (bot, serwer)
+
+/**
+ * ⚠️ Klucz MUSI zawierać ID bota, nie tylko serwer.
+ *
+ * Wszystkie 9 botów żyje w JEDNYM procesie, więc mapa jest wspólna, ale każdy bot ma
+ * własne połączenie gateway i własny `guild.members.cache`. Klucz po samym `guildId`
+ * sprawiał, że bot, który trafił w cooldown założony przez INNEGO bota, dostawał swój
+ * własny — przy starcie praktycznie pusty — cache. Bez żadnego wyjątku w logu: progi
+ * klanowe wychodziły `null`, a rankingi ról gubiły graczy.
+ */
+function throttleKey(guild) {
+    return `${guild.client?.user?.id || 'unknown'}:${guild.id}`;
+}
 
 /**
  * Bezpieczne pobranie członków serwera z throttlingiem
@@ -27,36 +41,43 @@ const MEMBERS_FETCH_COOLDOWN = 30000; // 30 sekund między fetch dla tego samego
 async function safeFetchMembers(guild, logger = null, force = false) {
     // Jeśli logger nie został przekazany, użyj domyślnego
     const log = logger || defaultLogger;
-    const guildId = guild.id;
+    const key = throttleKey(guild);
     const now = Date.now();
-    const throttleData = membersFetchThrottle.get(guildId);
+    const throttleData = membersFetchThrottle.get(key);
 
-    // Jeśli fetch już jest w toku, poczekaj i użyj cache
-    if (throttleData && throttleData.isInProgress) {
-        return guild.members.cache;
+    // Fetch tego samego bota już trwa — doczekaj jego wyniku.
+    // Zwracany wcześniej `guild.members.cache` był w tym momencie kolekcją W TRAKCIE
+    // zapełniania, więc wywołujący dostawał niekompletną listę członków
+    if (throttleData?.promise) {
+        return throttleData.promise;
     }
 
-    // Jeśli ostatni fetch był niedawno i nie wymuszamy, użyj cache
+    // Jeśli ostatni fetch był niedawno i nie wymuszamy, użyj cache (już kompletnego)
     if (!force && throttleData && (now - throttleData.lastFetch) < MEMBERS_FETCH_COOLDOWN) {
         return guild.members.cache;
     }
 
-    // Wykonaj fetch
+    log.info(`🔄 Pobieram członków guild ${guild.name}...`);
+
+    const promise = (async () => {
+        try {
+            const members = await guild.members.fetch();
+            log.info(`✅ Pobrano ${members.size} członków dla guild ${guild.name}`);
+            return members;
+        } catch (error) {
+            log.error(`❌ Błąd pobierania członków guild ${guild.name}:`, error);
+            // Fallback do cache
+            return guild.members.cache;
+        }
+    })();
+
+    membersFetchThrottle.set(key, { lastFetch: now, promise });
+
     try {
-        log.info(`🔄 Pobieram członków guild ${guild.name}...`);
-        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: true });
-
-        const members = await guild.members.fetch();
-
-        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: false });
-        log.info(`✅ Pobrano ${members.size} członków dla guild ${guild.name}`);
-
-        return members;
-    } catch (error) {
-        membersFetchThrottle.set(guildId, { lastFetch: now, isInProgress: false });
-        log.error(`❌ Błąd pobierania członków guild ${guild.name}:`, error);
-        // Fallback do cache
-        return guild.members.cache;
+        return await promise;
+    } finally {
+        // Cooldown liczony od ZAKOŃCZENIA pobierania
+        membersFetchThrottle.set(key, { lastFetch: Date.now(), promise: null });
     }
 }
 

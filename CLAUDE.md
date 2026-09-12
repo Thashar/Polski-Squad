@@ -764,6 +764,20 @@ Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i re
 
 **⚠️ Czego NIE wolno ograniczać:** `GuildMemberManager` i `UserManager`. Kod w wielu miejscach polega na `role.members` i `guild.members.cache` (rankingi ról TOP, progi klanowe, listy klanowiczów w OCR). Przycięcie tych kolekcji dałoby **ciche błędy** — brakujących graczy w rankingach, bez żadnego wyjątku w logu.
 
+---
+
+### 9. Throttling Pobierania Członków
+
+**Plik:** `utils/guildMembersThrottle.js` — `safeFetchMembers(guild, logger, force)`, używany przez Stalkera, Konklawe i pozostałe boty sięgające po pełną listę członków.
+
+Chroni przed rate limitem Gateway dla opcode 8 (REQUEST_GUILD_MEMBERS): 30 s cooldownu, po którym zwracany jest gotowy `guild.members.cache` zamiast kolejnego pobierania.
+
+**⚠️ Klucz to para (bot, serwer), nie sam serwer.** Mapa throttlingu jest jedna na proces, czyli wspólna dla wszystkich 9 botów, ale `guild.members.cache` ma każdy bot własny. Przy kluczu po samym `guildId` bot, który trafiał w cooldown założony przez INNEGO bota, dostawał swój własny cache — przy starcie praktycznie pusty. Limit opcode 8 obowiązuje pojedyncze połączenie gateway, a każdy bot ma własne, więc wspólny cooldown i tak niczego nie chronił.
+
+**⚠️ Trwające pobieranie jest DOCZEKIWANE.** Wcześniej równoległy wywołujący dostawał `guild.members.cache` w trakcie zapełniania, czyli niekompletną listę.
+
+**Skutek obu rzeczy jest ZAWSZE cichy** — nie ma wyjątku ani pustego wyniku, jest po prostu za mało członków. Realny przykład z produkcji: `clanThresholdsExportService` zapisał progi klanowe jako `null`, przez co Rekruter przez dwie doby wysyłał każdego kandydata do Clan0, niezależnie od punktów. Kod liczący cokolwiek po `members` musi zakładać, że pusty wynik bywa artefaktem, a nie prawdą o serwerze.
+
 ## Szczegóły Botów
 
 > ### ⚠️ OCR W CAŁYM PROJEKCIE DZIAŁA NA AI, NIE NA TESSERACT
