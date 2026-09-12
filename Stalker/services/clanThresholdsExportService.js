@@ -64,6 +64,19 @@ async function exportClanThresholds(guild, databaseService, config) {
             existing = await store.getOrLoad(SHARED_DATA_PATH, () => ({}));
         } catch { /* plik nie istnieje — zaczynamy od zera */ }
 
+        // ⚠️ `null` NIE nadpisuje działającego progu.
+        // Pusta lista wyników znaczy albo „klan naprawdę nie ma graczy z wynikami", albo
+        // „nie dostaliśmy pełnej listy członków" (np. cache w trakcie zapełniania przy starcie).
+        // Drugiego przypadku nie odróżnimy tutaj, a jego skutek jest dotkliwy: Rekruter z progami
+        // `null` wysyła KAŻDEGO kandydata do Clan0. Stary próg jest zawsze lepszy niż żaden
+        const poprzednie = existing[guild.id] || {};
+        for (const clanKey of Object.keys(thresholds)) {
+            if (thresholds[clanKey] === null && typeof poprzednie[clanKey] === 'number') {
+                logger.warn(`[THRESHOLDS] ⚠️ Klan ${clanKey}: brak członków z wynikami (pobrano ${members.size} członków) — zostawiam poprzedni próg ${poprzednie[clanKey]}`);
+                thresholds[clanKey] = poprzednie[clanKey];
+            }
+        }
+
         existing[guild.id] = { ...thresholds, updatedAt: new Date().toISOString() };
 
         await store.set(SHARED_DATA_PATH, existing);
