@@ -61,8 +61,20 @@ module.exports = {
     
     clean: {
         requiredPermission: 'ModerateMembers',
-        maxMessages: 100,
-        maxMinutes: 1000
+        // BEZ limitu liczby wiadomości i zakresu czasu — pobieranie stronicuje po 100
+        // (limit Discord API na jedno żądanie), a kasowanie idzie porcjami po 100.
+        maxMessages: null,
+        maxMinutes: null,
+        // Ile wiadomości wolno przeczesać w poszukiwaniu pasujących. To bezpiecznik przed
+        // przeglądaniem całego kanału, gdy filtr użytkownika prawie nic nie łapie — NIE limit
+        // kasowania. Po jego osiągnięciu komenda mówi wprost, że trzeba ją powtórzyć.
+        scanLimit: 50000,
+        bulkChunkSize: 100,
+        // Przerwa między pojedynczymi usunięciami wiadomości starszych niż 14 dni
+        // (bulkDelete ich nie przyjmuje), żeby nie wpaść w rate limit kanału
+        oldMessageDelayMs: 1100,
+        // Kanał kompaktowego logu czyszczenia; brak = ten sam co log usuniętych wiadomości
+        logChannelId: null
     },
     
     mute: {

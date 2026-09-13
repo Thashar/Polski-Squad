@@ -17,12 +17,12 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v3',
+    'extract-data-eng':  'v4',
     'compare-template':  'v5',
 };
 const sharp = require('sharp');
 const { createBotLogger } = require('../../utils/consoleLogger');
-const { correctBossNameFull } = require('../config/bossNames');
+const { correctBossNameFull, isUnreadableBossName } = require('../config/bossNames');
 
 const logger = createBotLogger('EndersEcho');
 
@@ -126,6 +126,8 @@ NIE DODAWAJ przecinków ani kropek których nie ma na obrazie.
 NIE DODAWAJ cyfr których nie ma na ekranie.
 JEŻELI NIE MA TEKSTU NA EKRANIE ZWRÓĆ ZERO!
 ZAKAZ HALUCYNACJI, ZAKAZ WYMYŚLANIA LICZB!
+UWAGA: Jeżeli nazwy bossa NIE MA na obrazie albo jest nieczytelna — w pierwszej linii wpisz DOKŁADNIE: BRAK
+NIE TŁUMACZ SIĘ, NIE PISZ ZDAŃ. Pierwsza linia to sama nazwa bossa albo słowo BRAK.
 Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kolejności):
 <nazwa bossa>
 <wynik Best z jednostką>
@@ -166,9 +168,9 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
         }
 
         let rawBoss  = lines[0].replace(/^boss[:\s]*/i, '').replace(/^nazwa[:\s]*bossa[:\s]*/i, '').trim();
-        const { corrected: bossName, wasUnknown } = correctBossNameFull(rawBoss, this.bossAliasService);
-        if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
-        else if (wasUnknown) log.warn(`[AI OCR] Nieznana nazwa bossa: "${rawBoss}" — brak dopasowania`);
+        // Korekcja nazwy dopiero po walidacji wyniku (niżej) — zdanie od modelu zamiast nazwy
+        // nie ma być „nieznanym bossem" do zmapowania, tylko powodem odrzucenia screena
+        const bossUnreadable = isUnreadableBossName(rawBoss);
         let score    = lines[1].replace(/^wynik[:\s]*/i, '').replace(/^score[:\s]*/i, '').replace(/^best[:\s]*/i, '').trim();
 
         let total = null;
@@ -196,6 +198,19 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
             log.warn(`[AI OCR] Wynik "${score}" nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx/Sp) — odrzucam`);
             return { bossName: null, score: null, isValidVictory: false, error: 'INVALID_SCORE_FORMAT' };
         }
+
+        // Nazwa bossa nieodczytana — screen ODRZUCONY, a nie zapisany z bełkotem w polu bossa.
+        // Najczęstszy przypadek: wycinek screena bez górnej części panelu. Model odpowiada wtedy
+        // zdaniem ("Nie udało mi się zidentyfikować nazwy bossa..."), które wcześniej przechodziło
+        // dalej jako zwykła nieznana nazwa — z alertem aliasowym dla admina i wynikiem w rankingu.
+        if (bossUnreadable) {
+            log.warn(`[AI OCR] Nie odczytano nazwy bossa z linii: "${lines[0]}" — odrzucam screen`);
+            return { bossName: null, score: null, isValidVictory: false, error: 'BOSS_NAME_UNREADABLE' };
+        }
+
+        const { corrected: bossName, wasUnknown } = correctBossNameFull(rawBoss, this.bossAliasService);
+        if (bossName !== rawBoss) log.info(`[AI OCR] Korekcja nazwy bossa: "${rawBoss}" → "${bossName}"`);
+        else if (wasUnknown) log.warn(`[AI OCR] Nieznana nazwa bossa: "${rawBoss}" — brak dopasowania`);
 
         // Wynik POJEDYNCZEJ WALKI (liczba nad linią „Best") — czwarta, OSTATNIA linia odpowiedzi.
         //
@@ -285,6 +300,18 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
         const originalScore = score;
 
         if (unit) {
+            // Wyjątek: wzorzec "<5 cyfr>5Sx" — ta sama halucynacja "S"→"5" co niżej, tylko w części
+            // CAŁKOWITEJ. Total się kumuluje i nie przeskakuje na wyższą jednostkę, więc bywa
+            // 5-cyfrowy i BEZ części dziesiętnej — model czyta wtedy "S" jako "5", a jednostkę "Sx"
+            // i tak dokleja (real "15993Sx" → AI "159935Sx"). Zdublowaną "5" usuwamy, zamiast
+            // odrzucać cały screen jako FAKE_PHOTO.
+            // Bezpieczne: wartość z 6 cyframi przed jednostką i tak wyleciałaby linijkę niżej, a
+            // skorygowany wynik nadal przechodzi przez validateScoreAgainstTotal (Best ≤ Total).
+            if (/^S[xp]$/i.test(unit) && integerPart.length === 6 && !decimalPart && integerPart.endsWith('5')) {
+                const fixedInteger = integerPart.slice(0, -1);
+                log.info(`[AI OCR] normalizeScore: "${originalScore}" — halucynacja S→5 przed ${unit}, koryguję na "${fixedInteger}${unit}"`);
+                integerPart = fixedInteger;
+            }
             if (integerPart.length > 5) {
                 log.warn(`[AI OCR] normalizeScore: "${originalScore}" za dużo cyfr przed jednostką (${integerPart.length} > 5) — odrzucam jako podróbkę`);
                 return null;

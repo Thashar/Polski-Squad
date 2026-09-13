@@ -203,6 +203,83 @@ module.exports = {
     newsRelay: {
         // Kanał, na który przychodzą posty z innego serwera (webhook/follow/bot). Brak = funkcja wyłączona
         sourceChannelId: process.env.STALKER_LME_NEWS_CHANNEL_ID || null
+    },
+
+    // ===================================================================
+    //  LISTA KLANÓW - automatyczne wiadomości na kanale z przyciskiem
+    //  „Chcę dołączyć do klanu"
+    // ===================================================================
+
+    clanList: {
+        // ⚠️ To ten SAM kanał, na którym Rekruter trzyma przycisk „Chcę dołączyć do klanu"
+        // (`REKRUTER_JOIN_CLAN_CHANNEL`). Stalker ma własną zmienną, bo boty nie współdzielą
+        // configu. Brak zmiennej = funkcja wyłączona.
+        //
+        // ⚠️ Rekruter przy starcie szuka WYŁĄCZNIE swojej wiadomości z przyciskiem
+        // (`zadbajOPrzyciskDolaczenia` w Rekruter/index.js) i nie kasuje cudzych, więc
+        // wiadomości Stalkera są na tym kanale bezpieczne.
+        channelId: process.env.STALKER_LME_CLAN_LIST_CHANNEL || null,
+
+        // Emoji wypełniające wcięcie przed „╰┈➤".
+        // Discord zjada zwykłe spacje na początku linii, a emoji serwera zostaje.
+        indentEmoji: '<:ZZ_Pusto:1209494954762829866>',
+
+        // Ile razy powtórzyć emoji wcięcia. ⚠️ TRZY RÓŻNE głębokości — każdy poziom drzewka
+        // ma własną. Jedna wspólna wartość wyrównałaby je do siebie i lista przestałaby się
+        // czytać jak drzewko: wymagania stoją płycej niż kierownictwo, a Vice podlega Liderowi.
+        indentRequirements: 1,   // dodatkowe wiersze (progi, uwagi o awansie)
+        indentLeader: 3,         // Lider
+        indentVice: 4,           // Vice - o jeden poziom głębiej niż Lider
+
+        // Emoji doklejane ZA wartością punktów 1 Fazy LME. Pusty ciąg = sama liczba
+        pointsEmoji: '<:M_Medal:1209754405373747260>',
+
+        // Ile miejsc ma klan w grze - mianownik wiersza „Członkowie: xx/40"
+        maxMembers: 40,
+
+        // Kreska zamykająca każdą wiadomość.
+        //
+        // ⚠️ Discord SKLEJA kolejne wiadomości tego samego autora w jeden blok — bez awatara
+        // i nagłówka między nimi — więc cztery posty o klanach czytały się jak jedna ściana
+        // tekstu. Zwykły markdown nie pomoże: `---` nie renderuje się w wiadomościach jako
+        // linia pozioma, więc kreskę rysujemy znakami Unicode.
+        //
+        // Pusty ciąg wyłącza separator.
+        separator: '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+
+        // Nagłówek wiadomości budujemy jako `${emoji}**${name}**${emoji} 🆔 ${gameId}`.
+        //
+        // ⚠️ Emoji trzymamy ODDZIELNIE od nazwy, choć `roleDisplayNames` wyżej ma je sklejone
+        // („🔥Polski Squad🔥"). Powód: w nagłówku pogrubiona jest sama nazwa, a emoji zostają
+        // poza pogrubieniem — z jednego stringa nie da się tego odtworzyć bez zgadywania,
+        // gdzie kończy się emoji.
+        //
+        // `gameId` to ID klanu w grze; te same wartości są w Rekruterze i Garym.
+        clans: {
+            'main': { emoji: '🔥', name: 'Polski Squad',  gameId: 42578  },
+            '2':    { emoji: '💥', name: 'PolskiSquad²',  gameId: 202226 },
+            '1':    { emoji: '⚡', name: 'PolskiSquad¹',  gameId: 125634 },
+            '0':    { emoji: '🎮', name: 'PolskiSquad⁰',  gameId: 11616  }
+        },
+
+        // Kolejność wiadomości na kanale - od najmocniejszego klanu w dół
+        order: ['main', '2', '1', '0']
+    },
+
+    // Role kierownicze - do automatycznego składu Lider/Vice w liście klanów.
+    //
+    // ⚠️ Trzy z nich to te SAME zmienne, których używa Rekruter (`LEADER_ROLE`,
+    // `VICE_LEADER_ROLE`, `VICE_LEADER_MAIN_ROLE`) - nie dubluj ich pod nową nazwą,
+    // bo rozjadą się przy pierwszej zmianie roli na serwerze.
+    //
+    // Rozpoznawanie: main bierze rolę admina i vice-main WPROST, natomiast w akademiach
+    // rola Lidera/Vice jest WSPÓLNA dla wszystkich trzech, więc klan wskazuje dopiero
+    // przecięcie z rolą klanową (`targetRoles`).
+    leadershipRoles: {
+        adminMain:     process.env.STALKER_LME_ADMIN_ROLE || null,
+        viceMain:      process.env.VICE_LEADER_MAIN_ROLE  || null,
+        leaderAcademy: process.env.LEADER_ROLE            || null,
+        viceAcademy:   process.env.VICE_LEADER_ROLE       || null
     }
 };
 

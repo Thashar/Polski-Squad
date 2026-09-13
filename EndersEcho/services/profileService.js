@@ -18,6 +18,13 @@ class ProfileService {
         this._guildConfigService   = services.guildConfigService;
         this._profileRegistry      = services.profileRegistryService || null;
         this._dataDir              = services.dataDir || null;
+        // Historia pozycji globalnych — wstrzykiwana setterem z index.js przez handler
+        this._positionHistory      = null;
+    }
+
+    /** @param {Object} service - GlobalPositionHistoryService */
+    setPositionHistoryService(service) {
+        this._positionHistory = service;
     }
 
     /**
@@ -52,6 +59,9 @@ class ProfileService {
         const globalIdx    = globalRanking.findIndex(p => (p.playerKey || p.userId) === targetPlayerKey);
         const globalRecord = globalIdx !== -1 ? globalRanking[globalIdx] : null;
         const globalPosition = globalIdx !== -1 ? globalIdx + 1 : null;
+
+        // Najwyższa pozycja globalna w historii (od wdrożenia śledzenia pozycji)
+        const globalPosStats = this._positionHistory?.getPlayerStats(targetPlayerKey) || null;
 
         // Wycinek globalnego rankingu (gracz ±1)
         const snippetPlayers = [];
@@ -176,6 +186,8 @@ class ProfileService {
             globalRecord,
             globalPosition,
             globalTotal: globalRanking.length,
+            globalBestPosition: globalPosStats?.best ?? null,
+            globalBestAt:       globalPosStats?.bestAt ?? null,
             snippetPlayers,
             topRoleName,
             rolePositions,
@@ -221,6 +233,20 @@ class ProfileService {
             ? rolePositions.map(r => `${r.roleName}: **#${r.position}** / ${r.total}`).join('\n')
             : '—';
 
+        // Pozycja globalna + rekord życiowy. Najwyższa pozycja liczona jest od wdrożenia
+        // śledzenia pozycji — wcześniejszych nikt nie zapisywał, więc gracz bez wpisu w historii
+        // po prostu nie dostaje tego wiersza (zamiast zmyślonej wartości).
+        let globalValue = globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—';
+        if (data.globalBestPosition) {
+            const bestDate = data.globalBestAt
+                ? new Date(data.globalBestAt).toLocaleDateString(isPol ? 'pl-PL' : 'en-GB', {
+                    timeZone: 'Europe/Warsaw', day: '2-digit', month: '2-digit', year: 'numeric',
+                })
+                : null;
+            const datePart = bestDate ? ` *(${bestDate})*` : '';
+            globalValue += `\n🏔️ ${t('Najwyższa pozycja', 'Highest position')}: **#${data.globalBestPosition}**${datePart}`;
+        }
+
         const rec = serverRecord || data.globalRecord;
         const scoreValue = rec
             ? (() => {
@@ -239,7 +265,7 @@ class ProfileService {
             { name: t('🏰 Pozycja na serwerze',    '🏰 Server Position'),    value: serverPosition !== null ? `**#${serverPosition}** / ${serverTotal}` : '—',         inline: false },
             { name: t('🏅 Rankingi Ról',           '🏅 Role Rankings'),      value: roleValue,                                                                          inline: false },
             { name: t('📊 Najlepszy Wynik',         '📊 Best Score'),         value: scoreValue,                                                                         inline: false },
-            { name: t('🌐 Pozycja Globalna',        '🌐 Global Position'),    value: globalPosition !== null ? `**#${globalPosition}** / ${globalTotal}` : '—',         inline: false }
+            { name: t('🌐 Pozycja Globalna',        '🌐 Global Position'),    value: globalValue,                                                                        inline: false }
         );
 
         // Lista profili gracza — widać, że wszystkie wyniki należą do tej samej osoby

@@ -235,6 +235,10 @@ const pol = {
     globalTop10Footer: 'Następny raport za 3 dni',
     globalTop10FooterBreak: 'Następny raport za 4 dni (przerwa)',
     globalTop10FooterNext: 'Następny raport za {days} dni',
+    globalTop10HoldingFor: '{duration} na tej pozycji',
+    globalTop10HoldingNew: 'Nowa pozycja',
+    globalTop10Top1HallField: '⌛ Najdłużej na 1. miejscu',
+    globalTop10Top1HallSince: '-# Liczone od {date}',
 
     // Kamienie milowe — pełne setki unikatowych graczy
     milestoneTitleStandard: '🎉 Nowy Kamień Milowy: {count} Graczy!',
@@ -372,6 +376,7 @@ const pol = {
     reportReasonNotSimilar: '🟡 Zdjęcie nie pasuje do wzorca (komenda /update)',
     reportReasonInvalidScoreFormat: '🟠 Odczytany wynik nie posiada prawidłowej jednostki (K/M/B/T/Q/Qi/Sx/Sp)',
     reportReasonBestExceedsTotal: '🔴 Odczytany Best przekracza wartość Total',
+    reportReasonBossNameUnreadable: '🟠 Nie udało się odczytać nazwy bossa — wyślij pełny zrzut ekranu z widoczną nazwą przeciwnika',
     reportBtnApprove: 'Zatwierdź',
     reportBtnBlock: 'Zablokuj użytkownika',
     reportBtnAnalyze: 'Analizuj',
@@ -395,6 +400,7 @@ const pol = {
     analyzeResultNewRecord: '🏆 Nowy rekord!',
     analyzeResultBossRecord: '🎯 Nowy rekord na bossie!',
     analyzeResultNoRecord: 'Nie pobito rekordu',
+    analyzeResultNoRecordCurrent: 'Nie pobito rekordu (aktualny rekord profilu: **{current}**)',
     analyzeResultUnknown: 'nieznany',
     analyzeManualAnnouncement: '<@{userId}> Twój wynik został zweryfikowany manualnie przez administratora **{adminName}**.',
     analyzeFailNoRecordMessage: '❌ **{userName}** nie pobił rekordu',
@@ -848,6 +854,10 @@ const eng = {
     globalTop10Footer: 'Next report in 3 days',
     globalTop10FooterBreak: 'Next report in 4 days (break)',
     globalTop10FooterNext: 'Next report in {days} days',
+    globalTop10HoldingFor: '{duration} on this spot',
+    globalTop10HoldingNew: 'New position',
+    globalTop10Top1HallField: '⌛ Longest at 1st place',
+    globalTop10Top1HallSince: '-# Counted since {date}',
 
     // Milestones — full hundreds of unique players
     milestoneTitleStandard: '🎉 New Milestone: {count} Players!',
@@ -985,6 +995,7 @@ const eng = {
     reportReasonNotSimilar: '🟡 Image does not match the template (/update)',
     reportReasonInvalidScoreFormat: '🟠 Extracted score has no valid unit (K/M/B/T/Q/Qi/Sx/Sp)',
     reportReasonBestExceedsTotal: '🔴 Extracted Best exceeds Total value',
+    reportReasonBossNameUnreadable: '🟠 Boss name could not be read — send the full screenshot with the enemy name visible',
     reportBtnApprove: 'Approve',
     reportBtnBlock: 'Block User',
     reportBtnAnalyze: 'Analyze',
@@ -1008,6 +1019,7 @@ const eng = {
     analyzeResultNewRecord: '🏆 New record!',
     analyzeResultBossRecord: '🎯 New boss record!',
     analyzeResultNoRecord: 'No record broken',
+    analyzeResultNoRecordCurrent: 'No record broken (profile\'s current record: **{current}**)',
     analyzeResultUnknown: 'unknown',
     analyzeManualAnnouncement: '<@{userId}> Your score was manually verified by administrator **{adminName}**.',
     analyzeFailNoRecordMessage: '❌ **{userName}** did not beat the record',

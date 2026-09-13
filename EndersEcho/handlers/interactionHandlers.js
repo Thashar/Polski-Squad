@@ -168,6 +168,7 @@ class InteractionHandler {
         this.recordRevertService = recordRevertService;
         this.webRankingSyncService = webRankingSyncService;
         this.broadcastReactionService = null; // ustawiany setterem z index.js
+        this.globalPositionHistoryService = null; // ustawiany setterem z index.js
         this.profileService = new ProfileService({
             rankingService,
             bossRecordService,
@@ -947,8 +948,9 @@ class InteractionHandler {
 
         try {
             const msgs  = this.msgs(interaction.guildId);
-            const embed = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
-            await interaction.editReply({ embeds: [embed] });
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(msgs, interaction.client);
+            const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
+            await interaction.editReply({ embeds: [embed], files });
         } catch (err) {
             logger.error(`[/generate] Błąd: ${err.message}`);
             await interaction.editReply({ content: '❌ Błąd podczas generowania TOP 10.' });
@@ -3837,8 +3839,9 @@ class InteractionHandler {
         }
         await interaction.deferReply({ flags: ['Ephemeral'] });
         try {
-            const embed = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
-            await interaction.editReply({ content: '📢 Podgląd raportu TOP10 (wskaźniki zmian są symulowane):', embeds: [embed] });
+            const { embed, chart, chartFile } = await this.globalTop10Service.buildOnDemandEmbed(this.msgs(interaction.guildId), interaction.client);
+            const files = chart ? [new AttachmentBuilder(chart, { name: chartFile })] : [];
+            await interaction.editReply({ content: '📢 Podgląd raportu TOP10:', embeds: [embed], files });
         } catch (err) {
             await interaction.editReply({ content: `❌ Błąd generowania podglądu: ${err.message}` });
         }
@@ -6495,6 +6498,9 @@ class InteractionHandler {
         // to również historia przeciwnika. Uczestnik dostaje flagę `profileDeleted`, którą
         // warstwa wyświetlania tłumaczy na „Profil usunięty" w języku odbiorcy.
         await this._cancelChallengesForProfile(client, playerKey).catch(() => {});
+        // Historia pozycji globalnych znika razem z profilem — inaczej usunięty gracz
+        // dalej wisiałby w „Hall of Fame" miejsca #1
+        await this.globalPositionHistoryService?.removePlayer?.(playerKey).catch(() => {});
 
         // Rejestr przenumerowuje pozostałe profile (2→1, 3→2) i mówi, co przenieść
         const removal = await registry.removeProfile(userId, profileIndex);
@@ -6536,6 +6542,7 @@ class InteractionHandler {
         await this.recordRevertService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         await this.communityVerificationService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         await this.challengeService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
+        await this.globalPositionHistoryService?.renamePlayerKey?.(fromKey, toKey).catch(() => {});
         gl.info(`👥 Przeniesiono dane profilu ${fromKey} → ${toKey}`);
     }
 
@@ -8226,6 +8233,16 @@ class InteractionHandler {
      */
     setPlayerOfTheDayService(service) {
         this.playerOfTheDayService = service;
+    }
+
+    /**
+     * Historia pozycji w rankingu globalnym — profil pokazuje z niej najwyższą pozycję gracza,
+     * a handler sprząta wpisy przy przenumerowaniu i usuwaniu profili.
+     * @param {Object} service - GlobalPositionHistoryService
+     */
+    setGlobalPositionHistoryService(service) {
+        this.globalPositionHistoryService = service;
+        this.profileService?.setPositionHistoryService?.(service);
     }
 
     /**
@@ -13581,11 +13598,27 @@ class InteractionHandler {
                 }, interaction.client.guilds.cache.get(targetGuildId) ?? null, analyzeRevertRow, interaction.client);
             } catch {}
 
+            // Samo „Nie pobito rekordu" nie tłumaczy, DLACZEGO nie poszło ogłoszenie publiczne —
+            // a to pierwsze pytanie admina, który przed chwilą widział w raporcie niższy wynik.
+            // Dokładamy więc wpis, który zablokował zapis: rekord rankingowy profilu, a gdy go nie
+            // ma (wynik wszedł do rankingu, ale nie pobił bossa) — rekord tego bossa.
+            let analyzeResultText;
+            if (isNewRecord) {
+                analyzeResultText = targetMsgs.analyzeResultNewRecord;
+            } else if (isNewBossRecord) {
+                analyzeResultText = targetMsgs.analyzeResultBossRecord || '🎯 Nowy rekord na bossie!';
+            } else {
+                const blockingScore = currentScore?.score || previousBossRecord?.score || null;
+                analyzeResultText = blockingScore && targetMsgs.analyzeResultNoRecordCurrent
+                    ? formatMessage(targetMsgs.analyzeResultNoRecordCurrent, { current: blockingScore })
+                    : targetMsgs.analyzeResultNoRecord;
+            }
+
             const extraInfo = formatMessage(targetMsgs.analyzeResultSuccess, {
                 adminName,
                 bossName: aiResult.bossName || targetMsgs.analyzeResultUnknown,
                 score: aiResult.score,
-                result: isNewRecord ? targetMsgs.analyzeResultNewRecord : (isNewBossRecord ? (targetMsgs.analyzeResultBossRecord || '🎯 Nowy rekord na bossie!') : targetMsgs.analyzeResultNoRecord),
+                result: analyzeResultText,
             });
             await applyToCurrentMsg(extraInfo);
             await applyToOtherMsg(extraInfo);
@@ -13857,6 +13890,7 @@ class InteractionHandler {
             'NOT_SIMILAR': msgs.reportReasonNotSimilar,
             'INVALID_SCORE_FORMAT': msgs.reportReasonInvalidScoreFormat,
             'BEST_EXCEEDS_TOTAL': msgs.reportReasonBestExceedsTotal,
+            'BOSS_NAME_UNREADABLE': msgs.reportReasonBossNameUnreadable,
         };
         return {
             text: reasonMap[reason] || `🟠 ${reason}`,
@@ -13889,11 +13923,16 @@ class InteractionHandler {
                 hour12: false
             });
 
-            // Pobierz aktualny rekord gracza
+            // Pobierz aktualny rekord PROFILU, którego dotyczy screen.
+            //
+            // ⚠️ Klucz to `playerKey`, NIE `interaction.user.id` — ranking jest kluczowany profilem.
+            // Przy profilu dodatkowym (`userId#2`) odczyt po samym `userId` pokazywał rekord profilu
+            // GŁÓWNEGO, więc raport kłamał: admin widział np. „330.2Sx", klikał „Analizuj" na wyniku
+            // 1361.8Sx i dostawał „Nie pobito rekordu", bo na profilu dodatkowym leżał już wyższy wpis.
             let currentRecordText = msgs.reportFieldNoRecord || '—';
             try {
                 const ranking = await this.rankingService.loadRanking(interaction.guildId);
-                const userRecord = ranking[interaction.user.id];
+                const userRecord = ranking[playerKey || interaction.user.id];
                 if (userRecord?.score) {
                     currentRecordText = userRecord.bossName
                         ? `${userRecord.score} (${userRecord.bossName})`

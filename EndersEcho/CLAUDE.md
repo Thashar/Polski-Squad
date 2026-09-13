@@ -73,7 +73,7 @@
 - **Rejestr profili** — `data/profiles.json`: `{ [userId]: { active, profiles: [{ index, label, createdAt, pendingDeleteAt? }] } }`
   - Gracz **bez wpisu w pliku** ma niejawnie jeden profil w slocie 1 — działa dokładnie jak przed wdrożeniem profili. Gdy wpis istnieje, lista `profiles` jest **jedynym źródłem prawdy** (slot 1 może w niej nie występować, jeśli został usunięty)
   - **Numery slotów są przesuwane po usunięciu** — skasowanie profilu 1 sprawia, że 2 staje się 1, a 3 staje się 2 (bez dziur w numeracji). Numer slotu jest częścią `playerKey`, więc `removeProfile` zwraca listę przesunięć `renumbered[{ fromIndex, toIndex, fromKey, toKey }]` (rosnąco — kolejny klucz docelowy jest zawsze wolny), a `_migratePlayerKey` przenosi po niej WSZYSTKIE dane profilu
-  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) sesje CV (`communityVerificationService.renamePlayerKey`) i wyzwania (`challengeService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
+  - **Migracja danych przy przesunięciu** (`_migratePlayerKey(fromKey, toKey, guildIds, gl)`) obejmuje: `ranking.json`, `boss_records.json`, `achievements.json`, `wyniki/{playerKey}.json` (rename pliku, scalanie chronologiczne gdy cel istnieje), subskrypcje (`renameTargetPlayerKey`), sesje cofnięcia (`recordRevertService.renamePlayerKey` — sesje + mapa `latest`) sesje CV (`communityVerificationService.renamePlayerKey`), wyzwania (`challengeService.renamePlayerKey`) i historię pozycji globalnych (`globalPositionHistoryService.renamePlayerKey`). **Dodając nowy magazyn kluczowany `playerKey` trzeba dopisać go do tej listy** — inaczej dane osierocą się przy pierwszym usunięciu profilu
   - `active` = numer profilu **MAIN** (pinezka 📌). Gdy zapisany main już nie istnieje → fallback na pierwszy istniejący slot (`getMainIndex`)
   - Limit: `ENDERSECHO_MAX_PROFILES` (domyślnie 3, `config.profiles.maxPerUser`)
   - Etykiety (nick w grze) sanityzowane: usuwane markdown/wzmianki/`#`, max 24 znaki, unikalne w obrębie gracza
@@ -103,7 +103,7 @@
   - `🗑️ Usuń profil` → wybór profilu → **potwierdzenie z aktualnym rekordem tego konta** (`profileCmdDeleteRecord`: wynik, boss i data z rankingu globalnego, `_profileRecordSummary`) i informacją o 7-dniowym terminie → `prof_delete_confirm_{idx}` **tylko planuje** usunięcie (`pendingDeleteAt` w `profiles.json`)
   - Przez te 7 dni **nic nie znika** — profil działa normalnie (wynik w rankingu, `/update`, wykresy). Panel i `/profile` pokazują przy nim `⏳` z terminem (`<t:…:R>`)
   - **Odwołanie:** `↩️ Odwołaj usuwanie` (`prof_delete_cancel` → `prof_delete_cancel_do_{idx}`) albo ustawienie tego profilu mainem
-  - **Sweep** (`profileRegistryService.start(onDue)`, uruchamiany w `index.js` przez `interactionHandler.startProfileDeletionSweep(client)`): przy starcie bota i **co godzinę**; dla profili po terminie woła `_purgeProfileData`, które kasuje wpis rankingowy, rekordy bossów, historię, osiągnięcia i subskrypcje na WSZYSTKICH serwerach, aktualizuje role TOP, unieważnia przyciski cofnięcia (`by: 'profile_deleted'` → `🗑️ Profil usunięty`), usuwa profil z rejestru i **przenosi dane pozostałych profili na nowe numery** (`_migratePlayerKey`)
+  - **Sweep** (`profileRegistryService.start(onDue)`, uruchamiany w `index.js` przez `interactionHandler.startProfileDeletionSweep(client)`): przy starcie bota i **co godzinę**; dla profili po terminie woła `_purgeProfileData`, które kasuje wpis rankingowy, rekordy bossów, historię, osiągnięcia, subskrypcje i historię pozycji globalnych na WSZYSTKICH serwerach, aktualizuje role TOP, unieważnia przyciski cofnięcia (`by: 'profile_deleted'` → `🗑️ Profil usunięty`), usuwa profil z rejestru i **przenosi dane pozostałych profili na nowe numery** (`_migratePlayerKey`)
   - Sweep **ponawia próbę** przy następnym przebiegu, gdy kasowanie padnie (wpis zostaje w pliku). Jeśli w międzyczasie profil stał się mainem, `_purgeProfileData` przerywa (`isMain`)
   - **CustomIDs:** `prof_add` | `prof_switch` | `prof_switch_do_{idx}` | `prof_rename` | `prof_rename_do_{idx}` | `prof_delete` | `prof_delete_do_{idx}` | `prof_delete_confirm_{idx}` | `prof_delete_cancel` | `prof_delete_cancel_do_{idx}` | `prof_intro_ok` | `prof_intro_cancel` | `prof_modal_{add|addfirst|rename}_{idx}`
 - **Wybór profilu przy `/update` i `/test`** — `_runUpdateFlow` → `_handleUpdateProfileModal` → `_runUpdateAnalysis`:
@@ -128,6 +128,7 @@
   - Statystyki historii (`getActivePlayersStats`, `getAllUsersFirstEntries`, `getGuildPlayerCounts`) agregują po właścicielu (`getOwnerId(nazwaPliku)`); Centrum Dowodzenia pokazuje `N (M profili)` gdy profile istnieją
   - **Dodając nowy licznik graczy** przepuść listę przez `countPeople()` / `getOwnerId` — inaczej gracz z drugim kontem podbija statystyki
 - **Ręczna analiza admina:** raport odrzuconego screena niesie profil w stopce (`pk:{playerKey}`, tylko dla profili dodatkowych); `_handleAnalyzeConfirmed` czyta go i zapisuje wynik na właściwym profilu (stare raporty bez `pk:` → profil główny)
+  - ⚠️ **Pole `📊 Aktualny rekord` w raporcie czyta ranking po `playerKey`, nie po `userId`.** Ranking jest kluczowany profilem, więc odczyt po samym `userId` pokazywał przy profilu dodatkowym rekord profilu GŁÓWNEGO. Raport kłamał wtedy w sposób, który wygląda na awarię czego innego: admin widział np. `330.2Sx`, klikał `Analizuj` na wyniku `1361.8Sx` i dostawał „Nie pobito rekordu" bez ogłoszenia publicznego — bo na profilu dodatkowym leżał już wyższy wpis
 - **Eksport `shared_data/endersecho_ranking.json`:** `players[]` zawiera **jeden wpis na osobę** (najlepszy profil) — Stalker czyta `find(p => p.userId === …)` i `players.length`, więc widzi osoby i nie zawyża liczby graczy; pełna lista profili w nowym polu `profiles[]` (z `playerKey`, `profileIndex`)
 
 **Cofanie rekordu (przycisk gracza + przycisk admina)** — `recordRevertService.js`:
@@ -158,8 +159,14 @@
        - **KROK 2:** Sprawdza autentyczność zdjęcia (10 tokenów)
        - **KROK 3:** Wyciąga nazwę bossa, wynik (Best), Total i **wynik pojedynczej walki** — liczbę nad linią „Best" (500 tokenów). Best zasila ranking i rekordy bossów, wynik walki wyłącznie wyzwania (`/challenge`) — patrz „System Wyzwań 1 vs 1"
      - **Walidacja score vs Total:** Jeśli odczytany Best > Total → automatyczna korekta
+     - **Walidacja NAZWY BOSSA** (`isUnreadableBossName` w `config/bossNames.js`, wołane w `parseAIResponse`): pierwsza linia odpowiedzi musi być NAZWĄ, a nie zdaniem. Odrzucane (`error: 'BOSS_NAME_UNREADABLE'`, `isValidVictory: false`) są: frazy odmowy modelu (`nie udało`, `nie zident`, `cannot`, `unable to`…), znaki zastępcze (`BRAK`, `unknown`, `N/A`, `0`, `-`), tekst dłuższy niż 48 znaków albo 6 słów oraz wieloczłonowy tekst zakończony kropką. Prompt (`extract-data-eng` **v4**) każe modelowi w takiej sytuacji wpisać samo `BRAK` zamiast tłumaczyć się zdaniem
+       - **Dlaczego to odrzucenie, a nie „nieznany boss":** wcześniej całe zdanie (`"Nie udało mi się zidentyfikować nazwy bossa na zrzucie ekranu."`) przechodziło jako zwykła nieznana nazwa — wynik trafiał do rankingu z bełkotem w polu bossa, admin dostawał alert „Wykryto nieznaną nazwę bossa" z propozycją dopisania tego zdania jako aliasu, a screen NIE trafiał do odrzuconych. Typowa przyczyna: gracz wysłał **wycinek** zrzutu, bez górnej części panelu z nazwą przeciwnika
+       - Odrzucenie idzie standardową ścieżką `!isValidVictory` → raport na kanał odrzuconych (`_sendInvalidScreenReport`) + `createNoRecordEmbeds` dla gracza z powodem `reportReasonBossNameUnreadable`
+       - **Kolejność sprawdzeń:** nazwa bossa weryfikowana PO walidacji wyniku (Total → Best → `BEST_EXCEEDS_TOTAL` → `INVALID_SCORE_FORMAT`), żeby podrobiony wynik nadal dawał `FAKE_PHOTO`. `correctBossNameFull` wołane dopiero po przejściu tej bramki — bełkot nie ma być „nieznaną nazwą" do zmapowania
+     - ⚠️ **NIE dokładaj do promptu wzorca (`compare-template`) reguły odrzucającej „wycinki" / obcięty kadr.** Próbowano tego (sekcja `KADR`, v6) i **wycofano po jednym dniu na produkcji**: model zaczął odrzucać ZWYKŁE zrzuty z telefonu jako poucinane (`NOK: The top part of the victory banner is cut off`), bo pionowy screen z gry z natury obcina tło gameplayu na górze i dole. Prompt wrócił do **v5**. Nieodczytaną nazwę bossa łapie walidacja opisana wyżej (`BOSS_NAME_UNREADABLE`) — i to jest właściwe miejsce na ten warunek, bo działa na ODCZYCIE, a nie na ocenie kadru
      - **Walidacja długości cyfr** (`normalizeScore` w `aiOcrService.js`): jeśli wynik z jednostką (K/M/B/T/Q/Qi/Sx/Sp) ma więcej niż 5 cyfr przed jednostką LUB za dużo miejsc po przecinku → wynik **odrzucany jako podróbka** (`error: 'FAKE_PHOTO'`, `score: null`), NIE obcinany. Wcześniej funkcja obcinała nadmiarowe cyfry (`substring(0, 5)`), co potrafiło zaniżyć poprawnie odczytany wynik (np. AI poprawnie odczytało `213769Q`, obcięcie zamieniało go w błędny `21376Q` i wynik fałszywie nie bił rekordu)
        - **Wyjątek halucynacji `S→5` przed `Sx`** (dotyczy Best i Total): wzorzec `<int>.<cyfra>5Sx` (2 cyfry po przecinku, druga = `5`, jednostka `Sx`, gdy część całkowita ma ≥2 cyfry) NIE jest odrzucany — to klasyczna halucynacja AI, gdzie litera `S` została odczytana jako `5`, a jednostkę `Sx` model i tak dokleił (np. real `169.8Sx` → AI `169.85Sx`). W tym przypadku zdublowana `5` jest usuwana i wynik korygowany do `<int>.<cyfra>Sx` (`169.85Sx` → `169.8Sx`) zamiast `FAKE_PHOTO`. Bezpieczne: legalny wynik z 2 cyframi po przecinku jest możliwy tylko przy 1 cyfrze całkowitej (`maxDec=2`), więc taki przypadek nigdy nie wchodzi w ten blok. Wzorce z inną drugą cyfrą (`169.83Sx`) lub inną jednostką (`169.85Qi`) nadal odrzucane
+       - **Wyjątek halucynacji `S→5` w części CAŁKOWITEJ** (dotyczy Best i Total): wzorzec `<5 cyfr>5Sx` / `<5 cyfr>5Sp` (dokładnie 6 cyfr przed jednostką, ostatnia = `5`, BRAK części dziesiętnej) NIE jest odrzucany — ta sama halucynacja co wyżej, tylko bez przecinka: `Total` kumuluje się i nie przeskakuje na wyższą jednostkę, więc bywa 5-cyfrowy bez miejsc po przecinku, a model czyta `S` jako `5` i mimo to dokleja jednostkę `Sx` (real `15993Sx` → AI `159935Sx`). Zdublowana `5` jest usuwana (`159935Sx` → `15993Sx`) zamiast `FAKE_PHOTO`. Bezpieczne: taka wartość i tak zostałaby odrzucona przez limit 5 cyfr, a skorygowany wynik nadal przechodzi przez `validateScoreAgainstTotal` (Best ≤ Total). Inna ostatnia cyfra (`159933Sx`), inna jednostka (`159935Qi`), 7+ cyfr (`1234565Sx`) lub obecna część dziesiętna — nadal odrzucane
      - Zalety: 100% pewność walidacji, fallback na tradycyjny OCR
    - **Komenda /update (wszyscy, wymaga AI OCR):** Używa `analyzeTestImage()` — weryfikacja wzorcem + ekstrakcja:
      - **KROK 1:** Porównanie z wzorcem `files/Wzór.jpg` — jeden request z dwoma obrazami (10 tokenów) — **10 retry** przy błędzie API (429/500/503), delay cappowany na 10s
@@ -244,8 +251,34 @@
      - **Wpisywana data/godzina to czas Europe/Warsaw** (`_warsawToUtc()` w `interactionHandlers.js`) — konwertowana na poprawny instant UTC z uwzględnieniem CET/CEST (trik: sformatuj instant-potraktowany-jako-UTC w strefie Warsaw, porównaj z oczekiwanym zegarem, skoryguj o różnicę). Wcześniej kod naiwnie doklejał `Z` (traktując wpisaną godzinę jako UTC) i wyświetlał wynik przez lokalne gettery `Date` (`getHours()` itp.) zależne od strefy czasowej procesu bota — dawało to błędny, przesunięty czas w potwierdzeniu panelu (np. wpisane 18:00 pokazywało się jako 14:00 przy serwerze w innej strefie). Wyświetlanie („Początek cyklu”, „Najbliższy kolejny raport”, prefill przy ponownym otwarciu modala) idzie teraz przez `_fmtWarsaw()`, spójnie z `fmtTs()` używanym w Centrum Dowodzenia.
      - **`setSchedule()` nie resetuje pozycji w cyklu, gdy data się nie zmienia** — samo otwarcie i zatwierdzenie modala z tą samą (prefilled) datą nie zeruje już `triggerCount`. Wcześniej każde zatwierdzenie modala (nawet bez zmiany daty, np. tylko żeby podejrzeć harmonogram) bezwarunkowo zerowało `triggerCount`, co po cichu przesuwało pozycję 4-dniowej przerwy względem realnego końca sezonu.
      - **Podana data może być w przeszłości** — traktowana jest jako punkt odniesienia (np. faktyczny, znany początek cyklu), a harmonogram (`setSchedule()`) sam przewija się wg wzorca 9×3 dni + 4 dni przerwy do najbliższego przyszłego terminu (`_stepOnce()` w pętli), **bez wysyłania** pominiętych po drodze raportów — pozwala to poprawnie zrekalibrować cykl po wykryciu rozjazdu, wpisując realną, znaną datę zamiast liczyć ręcznie następny przyszły termin. Potwierdzenie w panelu pokazuje realnie wyliczony najbliższy termin po przewinięciu.
-     - **Format embeda:** TOP 3 — blok blockquote z paskiem postępu `█░` (% względem lidera) i kolorowym wskaźnikiem zmiany `▲/▼`; pozycje 4–10 — kompaktowa jednolinijkowa z tagiem serwera
-     - **Komenda /generate (head admin):** `buildOnDemandEmbed()` — generuje ten sam embed bez aktualizacji snapshootu/harmonogramu i wysyła go na `allowedChannelId` serwera; widoczna tylko dla adminów (`setDefaultMemberPermissions(Administrator)`), wykonać może wyłącznie head admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
+     - **Format embeda:** TOP 3 — blok blockquote z paskiem postępu `█░` (% względem lidera) i kolorowym wskaźnikiem zmiany `▲/▼`; pozycje 4–10 — kompaktowa jednolinijkowa z tagiem serwera. **Nazwa bossa w monospace** — odcina ją od reszty wiersza, w którym sąsiaduje ze wskaźnikiem zmiany, datą i tagiem serwera
+     - **📈 Wykres zmian pozycji na dole embeda** (`setImage`, załącznik `top10_positions.png`): jak czołówka przetasowała się w czasie. **Jeden punkt osi X = jedno wysłane ogłoszenie**, nie jeden dzień — odstępy między raportami są nierówne (3 dni, po dziewiątym 4), a wykres pokazuje rywalizację, nie kalendarz. Oś Y odwrócona (miejsce 1 na górze). Okno: **84 dni** (`CHART_WINDOW_DAYS`). Rysowani są **wszyscy** gracze, którzy w tym oknie byli w TOP 10, w kolejności ostatniej znanej pozycji. **BEZ nagłówka nad wykresem** — ani tytułu, ani podpisu „N ogłoszeń · 1 punkt = 1 raport". Embed raportu niesie własny tytuł, a podpis powtarzał to, co widać na osi; oba zabierały pas nad pierwszą pozycją. Odzyskane piksele poszły na wysokość wykresu (`M.top` 44 → 26, obszar 332 → 350 px)
+       - **Plakietka z nickiem i tagiem klanu na początku KAŻDEGO odcinka linii** (`Nick · PS`), w kolorze linii gracza. ⚠️ **Nie tylko przy pierwszym wejściu**: gracz, który wypadł z dziesiątki i wrócił, zaczyna nową linię w innym miejscu wykresu — bez powtórzonego nicku czytelnik nie ma jak skojarzyć jej z poprzednią. Trzy odcinki = trzy plakietki
+         - **⚠️ Odcinek zaczynający się w PIERWSZYM raporcie dostaje plakietkę POZA obszarem wykresu**, na lewo od niego, dosuniętą prawą krawędzią do punktu startu (`przedWykresem` → `x = punkt − szerokość`). Wyśrodkowana na punkcie przykrywała początek linii, czyli dokładnie to, co miała opisywać — a w pierwszym raporcie startuje **cała dziesiątka naraz**, więc lewa część wykresu znikała pod dziesięcioma plakietkami. **Plakietki odcinków zaczynających się w środku wykresu zostają wyśrodkowane na punkcie**, jak dotąd
+         - **⚠️ Odcinek kończący się w OSTATNIM raporcie dostaje plakietkę lustrzanie**, na prawo od wykresu, dosuniętą lewą krawędzią do punktu końcowego (`poWykresie` → `x = punkt`). Prawa strona wykresu to stan na dziś, czyli to, po co czytelnik najczęściej tu zagląda — bez nicku przy końcu linii musiałby wodzić wzrokiem przez całą szerokość do plakietki startowej. Gracz obecny od pierwszego do ostatniego raportu ma więc **dwie** plakietki: jedną przed wykresem, drugą za nim
+         - **Samotny punkt na prawym skraju nie dostaje dwóch plakietek naraz**: gdy odcinek zaczyna się i kończy w ostatnim raporcie, etykieta startowa jest pomijana (`start.i !== ostatniIdx`) — końcowa stanęłaby dokładnie na niej
+         - **Obrazek rośnie o oba pasy, wykres nie traci ani piksela**: obszar rysowania ma stałe `cW = 808` px, a `W = M.left + cW + M.right`, gdzie `M.left = 46 + ceil(najszersza plakietka startowa)`, a `M.right = 46 + ceil(najszersza plakietka końcowa)`. Przy typowych nickach daje to ok. 1200–1300 px szerokości. `ceil` pilnuje, żeby `width` obrazka pozostało liczbą całkowitą
+         - **Rozmiar liczony z RZECZYWISTEGO tekstu** (`szerokoscTekstu`), nie z „długość × stała". SVG nie mierzy tekstu przed renderowaniem, a płaska średnia zawodzi w obie strony: `WWWW` wychodziło poza ramkę, `iiii` dostawało absurdalnie szeroką plakietkę. Znaki dzielone na klasy szerokości (wąskie `iIjlt.`, szerokie `mMWw@%`, wielkie litery, cyfry, znaki spoza łacinki jako pełnej szerokości), z zapasem — lepiej o piksel za dużo niż o jeden za mało
+         - Wysokość 22 px przy foncie 11 px i margines **10 px z każdej strony**, żeby napis nigdy nie dotykał obramowania. Linia bazowa liczona ręcznie (`+ fontSize × 0.34`), bo `dominant-baseline` bywa ignorowane przez librsvg Renderowana **PO wszystkich liniach**: gdyby szła razem z nimi, kreska kolejnego gracza przecinałaby napis w poprzek. Szerokość szacowana z długości tekstu (SVG nie mierzy tekstu przed renderowaniem), nick przycinany do 14 znaków, a przy krawędziach plakietka jest **dosuwana do obszaru wykresu** — przestaje być wtedy idealnie wyśrodkowana, bo czytelność wygrywa z symetrią
+       - **Gracz poza dziesiątką = PRZERWA w linii**, nie kreska do zera. Dane niosą wyłącznie TOP 10, więc nie wiemy, gdzie wtedy był — ciągła linia by to zmyślała. Samotny punkt (jeden raport między przerwami) dostaje samą kropkę, bez odcinka
+       - **Renderowany RAZ na całą wysyłkę** (`_chartOnce` — jeden bufor na czas jednego raportu), nie raz na serwer i już nie raz na język. ⚠️ **Odkąd nie ma nagłówka, w bitmapie nie zostaje ANI JEDEN tekst zależny od języka** — nicki, tagi i daty (`DD.MM`) wyglądają tak samo wszędzie, więc jeden obrazek obsługuje serwery `pol` i `eng`. Wcześniej `_chartPerLang` renderował dwa razy to samo. **Dokładając do wykresu jakikolwiek podpis, trzeba wrócić do renderu per język** (wzorzec jak w `milestoneService`), inaczej serwer angielski dostanie polskie napisy. `AttachmentBuilder` budowany osobno na każdą wysyłkę (jednego nie da się wysłać dwa razy)
+       - **Kolor na gracza, BEZ POWTÓRZEŃ** (`buildDistinctPalette`): do 10 graczy kurowana `PLAYER_PALETTE` (dobrana pod ciemne tło), powyżej — cały zestaw generowany od nowa, odcienie rozłożone równo po kole barw z naprzemienną jasnością i nasyceniem. ⚠️ `idx % PLAYER_PALETTE.length` dawałby przy >10 graczach dwie linie w tym samym kolorze, czyli legendę, z której nic nie da się odczytać — a przez okno 84 dni potrafi przewinąć się znacznie więcej niż dziesięć osób. Sprawdzone dla n = 1…60: zero kolizji
+       - **BEZ legendy pod wykresem.** Gracza rozpoznaje się po plakietce stojącej wprost przy jego linii; legenda dublowała tę informację, a przy kilkunastu graczach zajmowała więcej miejsca niż sam wykres. Tag klanu (`opts.tags`, guildId → tag) przeniósł się w związku z tym na plakietkę — `guildId` bierzemy z historii raportu, a składnia emoji (`<:nazwa:id>`) jest rozbierana do samej nazwy, bo librsvg nie renderuje emoji i wypisałby `<:cs:123456789>`
+       - **Numery pozycji #1…#10 po OBU stronach wykresu, wszystkie bez wyjątku** (wcześniej tylko 1, 2, 3, 5, 10 po lewej). Numer po prawej oszczędza wodzenia wzrokiem przez całą szerokość przy odczytywaniu pozycji z ostatnich ogłoszeń. ⚠️ **OBA numery stoją przy krawędziach OBRAZKA (`x = 12` i `x = W − 12`), nie przy siatce** — między nimi a wykresem leżą pasy plakietek, więc postawione tuż przy osi zniknęłyby pod nimi. Do najdalej wysuniętej plakietki zostaje po ok. 14 px odstępu z każdej strony
+       - **Daty na osi X odsunięte o 28 px pod siatkę** (wcześniej 18). Plakietka gracza z pozycji #10 sięga pół swojej wysokości poniżej ostatniej linii siatki i przykrywała datę pod sobą
+       - Brak wykresu (mniej niż 2 raporty w historii, błąd renderowania, brak `chartService`) **nie blokuje raportu** — embed idzie bez obrazka
+     - **Historia raportów — `data/global_top10_history.json`** (`_appendHistory`, `_loadHistory`): jeden wpis na ogłoszenie z pozycjami, **nickami i serwerami**. ⚠️ Nicki zapisujemy razem z pozycjami, bo gracz może zniknąć z rankingu albo skasować profil, a wykres sprzed dwóch miesięcy ma nadal wiedzieć, kogo rysuje — odtworzenie nazwy z bieżącego rankingu dałoby dla takiej osoby puste miejsce w legendzie. Konfiguracja (`lastSnapshot`) trzyma wyłącznie OSTATNI raport, więc bez tego pliku nie da się narysować niczego wstecz. Historia przycinana do okna 84 dni i `MAX_HISTORY_REPORTS`
+       - **Zasianie wstecz przy starcie** (`_seedHistoryOnce`, jednorazowo gdy plik pusty): terminy z harmonogramu (`_pastReportTimes` — cofanie po deterministycznym wzorcu 9×3 dni + 4), pozycje z `reconstructTop10At` w `backfill-position-history.js`. Bez tego wykres byłby pusty przez pierwsze ~3 miesiące po wdrożeniu. ⚠️ **Punkty odtworzone są PRZYBLIŻENIEM** (`reconstructed: true`): nie biorą udziału gracze, którzy od tamtej pory wypadli z rankingu, a `_pastReportTimes` odtworzy błędne terminy, jeśli harmonogram był po drodze przestawiany (`setSchedule` zeruje `triggerCount`). Prawdziwe ogłoszenia dopisywane od teraz są dokładne i z czasem wypchną odtworzone poza okno
+     - **Wiersz „na tej pozycji od" pod KAŻDYM graczem** (`_formatHoldLine`, klucze `globalTop10HoldingFor` / `globalTop10HoldingNew`): drugi wiersz blockquote z czasem, jaki gracz spędził na swojej obecnej pozycji (`12d 3h`, `5h 12m`, `44m`), **w monospace — ten sam zapis co w polu „Najdłużej na 1. miejscu"**, żeby oba czasy w embedzie czytało się jako tę samą wielkość, a nie dwie różne rzeczy. Układ: **najpierw czas, potem opis** (`` `12d 3h` na tej pozycji `` / `` `12d 3h` on this spot ``), **bez emoji na początku** — klepsydra i etykieta z dwukropkiem odpychały liczbę na koniec wiersza, a to ona jest tu treścią. Wariant bez danych to samo `Nowa pozycja` / `New position`, również bez emoji, żeby oba stany wyglądały jak ten sam wiersz. Dane z `globalPositionHistoryService`. Gdy historia nie zna jeszcze gracza albo zapamiętana pozycja rozjechała się z wysyłaną — pokazujemy `⏳ Nowa pozycja` zamiast czasu, który byłby nieprawdziwy. Bez podpiętego serwisu wiersz jest po prostu pomijany
+     - **Pole `⌛ Najdłużej na 1. miejscu` na samym dole embeda** (`_buildTop1HallField`, klucz `globalTop10Top1HallField`): TOP 3 graczy wg **łącznego** czasu spędzonego na szczycie rankingu globalnego — również tych, którzy dawno z niego zeszli. `👑` przy nicku = gracz siedzi tam w tej chwili i jego licznik wciąż rośnie. Nick pobierany z Discorda po `guildId` zapamiętanym w historii, z zapasem na ostatni znany `username`; obok nicku **tag serwera pochodzenia**, tą samą składnią co w wierszach TOP 10 (`guildTagMap` przekazywana z `_buildTop10Embed`, `guildId` z historii — gracz mógł już wypaść z rankingu i nie ma go w wysyłanej dziesiątce). Pole nie powstaje, dopóki nikt nie ma na koncie czasu na #1
+     - **⏳ CZAS NA #1 LICZONY DOPIERO OD 1 MAJA 2026** (`TOP1_COUNT_FROM` w `globalPositionHistoryService.js`). Odcinki wcześniejsze nie liczą się wcale, a odcinek przechodzący przez tę datę liczy się **wyłącznie w części po niej**. Pod listą stoi przypis `-# Liczone od 2026-05-01` (klucz `globalTop10Top1HallSince`) — bez niego liczby wyglądają na przypadkowe: gracz, który stał na szczycie pół roku, widzi u siebie kilka tygodni i nie ma jak się domyślić dlaczego. **Data w formacie ISO**, nie lokalnym: `01.05.2026` czyta się na serwerze angielskim jako 5 stycznia, a embed nie niesie ze sobą języka odbiorcy
+       - Przycinanie robi jedna funkcja `policzOdcinekTop1(od, do)` w serwisie, używana w **trzech** miejscach: domknięcie odcinka przy zmianie pozycji, domknięcie przy wypadnięciu z rankingu i doliczenie trwającej passy w `_top1Total()`. Backfill importuje ją z serwisu — **nie duplikuj daty granicznej**, inaczej wartości odtworzone wstecz rozjadą się z tym, co serwis dolicza na bieżąco
+       - Zmiana `TOP1_COUNT_FROM` wymaga podniesienia `BACKFILL_VERSION` w `backfill-position-history.js`, inaczej wartości policzone wstecz zostaną te stare
+     - **Historia pozycji synchronizowana PRZED zbudowaniem embeda** (`sync(globalRanking)` w `_sendReports` i `buildOnDemandEmbed`) — wiersz „na tej pozycji od" musi odpowiadać dokładnie tej kolejności, którą raport wysyła
+     - **Komenda /generate (head admin):** `buildOnDemandEmbed(msgs, client)` — **zwraca `{ embed, chart, chartFile }`**, nie sam embed (wykres jest załącznikiem, więc wywołujący musi zbudować `AttachmentBuilder`). Parametru `lang` już nie ma: wykres nie niesie tekstu zależnego od języka, więc `_chartLang(guildId)` przy tym wywołaniu był zbędny (pozostałe wykresy nadal go używają). Generuje ten sam embed bez aktualizacji snapshootu/harmonogramu i wysyła go na `allowedChannelId` serwera; widoczna tylko dla adminów (`setDefaultMemberPermissions(Administrator)`), wykonać może wyłącznie head admin (`ENDERSECHO_BLOCK_OCR_USER_IDS`)
+       - **Podgląd pokazuje PRAWDZIWY stan, nic nie jest udawane:** wskaźniki ▲▼=🆕 liczone są względem `lastSnapshot`, czyli tego samego punktu odniesienia co najbliższy cykliczny raport, a czasy „na tej pozycji od" wprost z historii pozycji. ⚠️ **Wcześniej snapshot był LOSOWANY** (tasowane pozycje 1–13, ~20% graczy jako 🆕), żeby podgląd pokazał wszystkie typy wskaźników naraz — przez co nie odpowiadał na jedyne pytanie, po które się go otwiera: jak będzie wyglądał najbliższy raport. Nie przywracaj losowania „dla demonstracji"
+       - Gdy raport nie poszedł jeszcze ani razu, `lastSnapshot` jest pusty i wszyscy dostają 🆕 — nie ma się do czego porównać, więc to jedyna uczciwa odpowiedź
+       - Snapshot **nie jest nadpisywany** przez podgląd, więc kolejny cykliczny raport porówna się z tym samym punktem odniesienia
 
 4. **Paginacja + Wybór Rankingu** - `interactionHandlers.js`:
    - `/ranking` → ephemeral z przyciskami: `[NazwaSerwera1]`, `[NazwaSerwera2]`, `[🌐 Global]`
@@ -611,6 +644,7 @@
 - Wyświetla pełny profil gracza w 3 zakładkach (1 wiadomość ephemeral z przyciskami nawigacji)
 - Opcjonalny parametr `gracz` — fragment nicku do wyszukania; puste = własny profil
 - **Zakładka 👤 Profil (main):** rekord serwera (#pozycja / total), pozycja globalna, rola TOP, najlepszy wynik (score + boss + data), wycinek globalnego rankingu (gracz ±1), rankingi ról; na cudzym profilu dołącza pole 🔔 Obserwatorzy (liczba subskrybentów)
+  - **Pole `🌐 Pozycja Globalna` niesie też rekord życiowy:** druga linia `🏔️ Najwyższa pozycja: **#N** *(data)*` z `globalPositionHistoryService.getPlayerStats(playerKey).best`. Linia **nie pojawia się**, gdy historia nie zna jeszcze gracza — zamiast zmyślać wartość sprzed wdrożenia śledzenia pozycji, pole zostaje przy samej pozycji bieżącej. Serwis wstrzykiwany setterem (`profileService.setPositionHistoryService`, wołane z `interactionHandler.setGlobalPositionHistoryService`)
 - **Zakładka 🎯 Bossowie:** lista WSZYSTKICH znanych bossów (z `bossAliasService.getExtraEnglishNames()`), posortowana alfabetycznie, 15/stronę; ✅ z rekordem (score + data), — bez rekordu; paginacja gdy >15
 - **Zakładka 🏆 Osiągnięcia:** używa `achievementService.buildAchievementsViewGlobal/ForUserGlobal` — dane mergowane ze WSZYSTKICH serwerów; własny profil — z opisami osiągnięć; cudzy — bez opisów
 - **Szukaj gracza (🔍):** otwiera modal → wyszukiwanie cross-server w globalRanking → 1 trafienie: od razu profil; wiele: StringSelectMenu
@@ -697,6 +731,7 @@
 - Footer globalnego raportu: `uid:{userId}|gid:{guildId}`
 - Footer per-guild raportu: `ref:{globalMsgId}|uid:{userId}|gid:{guildId}`
 - Gdy admin klika przycisk na per-guild embeddzie → globalny raport aktualizowany (pole akcji + usunięcie przycisków)
+- **Brak ogłoszenia publicznego po analizie to NIE jest awaria, gdy w akcji widnieje „Nie pobito rekordu".** Ogłoszenie bramkuje `analyzeChangedData = isNewRecord || isNewBossRecord`; gdy wynik nie pobił ani rekordu profilu, ani rekordu bossa, nie ma czego ogłaszać. Najczęstsze przyczyny: ten sam screen analizowany po raz drugi (duplikat raportu — `updateBossRecord` odrzuca też wynik RÓWNY, warunek `scoreValue <= existingValue`) albo wynik już wcześniej zapisany. Żeby nie trzeba było tego zgadywać, komunikat akcji dokłada wpis, który zablokował zapis (`analyzeResultNoRecordCurrent` → `Nie pobito rekordu (aktualny rekord profilu: **X**)`)
 - Przycisk **Analizuj** (`ee_analyze_`) dostępny dla raportu `NOT_SIMILAR` — pobiera obraz z `embed.image.url` (CDN URL), nie z `message.attachments`; uruchamia pełny flow OCR i zapisuje wynik dla docelowego użytkownika. Obsługuje wszystkie 3 przypadki: nowy rekord globalny (złoty embed), nowy rekord bossa bez globalnego (teal embed 0x1ABC9C + publiczne ogłoszenie), brak rekordu (info). Aktualizuje też `bossRecordService` i osiągnięcia per-boss.
   - **Gdy analiza AI zawiedzie** (`!aiResult.isValidVictory || !aiResult.score`) — ephemeral z potwierdzeniem dla admina używa `rankingService.createNoRecordEmbeds` (patrz niżej). Wiadomość raportu (`origMsg`) nadal aktualizowana starym sposobem (`_buildActionEmbeds` + `analyzeResultFail` jako tekst pola akcji) — zmiana dotyczy WYŁĄCZNIE ephemerala admina.
 - Przycisk **🚫 Zablokuj analizę admina** (`ee_analyze_block_{userId}_{guildId}` → `_handleAnalyzeBlock`) — head admin odbiera adminowi serwera możliwość ręcznego uratowania konkretnego screena:
@@ -708,7 +743,7 @@
   - Klucze: `reportBtnBlockAnalyze`, `reportAnalyzeBlockedDone`, `reportAnalyzeBlockedNoTarget`, `reportAnalyzeBlockedField`, `reportAnalyzeBlockedBy` (pol + eng)
 - **Helper `_disableButtonsByPrefix(msg, prefixes)`** — przebudowuje rzędy, wyłączając wyłącznie przyciski o podanym prefiksie customId; **etykiety i style pozostałych zostają nietknięte**, bo raport dzieli kilka niezależnych akcji (Zatwierdź / Zablokuj / Analizuj / Cofnij). Zwraca `false` i **nie edytuje wiadomości**, gdy nie ma czego wyłączać (przycisk już nieaktywny) albo gdy w rzędzie jest select menu (`ButtonBuilder.from()` by na nim wybuchł)
 - Metody pomocnicze: `_parseReportFooter(text)` i `_updateGlobalReportMsg(client, globalMsgId, guildId, action, admin, extra)`
-- **Mapowanie powodu odrzucenia:** `_mapRejectionReason(reason, msgs)` — zwraca `{ text, color }` na podstawie kodu (`FAKE_PHOTO`, `INVALID_SCREENSHOT`, `NO_REQUIRED_WORDS`, `NOT_SIMILAR`, `INVALID_SCORE_FORMAT`, `BEST_EXCEEDS_TOTAL`); kolor: czerwony (`0xFF0000`) dla `FAKE_PHOTO`, pomarańczowy (`0xFF8C00`) dla reszty. Współdzielone przez raport admina (`_sendInvalidScreenReport`) i ephemeral gracza (`createNoRecordEmbeds`).
+- **Mapowanie powodu odrzucenia:** `_mapRejectionReason(reason, msgs)` — zwraca `{ text, color }` na podstawie kodu (`FAKE_PHOTO`, `INVALID_SCREENSHOT`, `NO_REQUIRED_WORDS`, `NOT_SIMILAR`, `INVALID_SCORE_FORMAT`, `BEST_EXCEEDS_TOTAL`, `BOSS_NAME_UNREADABLE`); kolor: czerwony (`0xFF0000`) dla `FAKE_PHOTO`, pomarańczowy (`0xFF8C00`) dla reszty. Współdzielone przez raport admina (`_sendInvalidScreenReport`) i ephemeral gracza (`createNoRecordEmbeds`).
 
 **`rankingService.createNoRecordEmbeds` — standard 2-embedowy dla „brak rekordu" (odrzucenie LUB zaakceptowany, nierekordowy wynik):**
 - **Embed 1** — konwencja identyczna z Embedem 1 stosu ogłoszenia rekordu: `author` = nick gracza + jego avatar w `iconURL`, `thumbnail` = ten sam avatar, opis = `analyzeFailNoRecordMessage` („❌ **{userName}** nie pobił rekordu"). BRAK Embedów 2/3 ze stosu rekordu (global/boss) — nic nie zostało pobite.
@@ -747,6 +782,149 @@
 - Wymaga konfiguracji + bot channel: `/update`, `/ranking`, `/profile`, `/challenge`
 - Panel Admina (tryb Admin): Administrator Discord lub moderator gry → usuń gracza, odblokuj, tokeny
 - Panel Admina (tryb Head Admin): `ENDERSECHO_BLOCK_OCR_USER_IDS` → wszystko + info, OCR toggle, limit
+
+## Historia pozycji w rankingu globalnym
+
+**Plik serwisu:** `services/globalPositionHistoryService.js` · **Stan:** `data/global_position_history.json`
+
+Ranking zna wyłącznie stan „teraz", więc sam nie odpowie na trzy pytania: **od kiedy** gracz trzyma
+swoją pozycję (wiersz pod graczem w raporcie TOP 10), **kto najdłużej** okupował miejsce #1 (pole
+Hall of Fame pod raportem) i **jaka była najwyższa** pozycja gracza w historii (profil gracza).
+Ten serwis zapisuje te trzy rzeczy przy każdej zmianie kolejności.
+
+**Kształt wpisu** (klucz = `playerKey`, czyli PROFIL, nie osoba):
+
+```javascript
+playerKey -> {
+  position,   // aktualna pozycja globalna (null = wypadł z rankingu)
+  since,      // ISO — od kiedy trzyma `position`
+  best,       // najwyższa pozycja w historii (liczbowo NAJMNIEJSZA)
+  bestAt,     // ISO — kiedy `best` osiągnięte po raz pierwszy
+  top1Ms,     // ZAMKNIĘTE odcinki czasu na #1; trwający dolicza _top1Total() przy odczycie
+  username,   // ostatni znany nick — gracz może wypaść z rankingu, a zostać w Hall of Fame
+  guildId     // serwer źródłowy najlepszego wyniku, do pobrania nicku z Discorda
+}
+```
+
+**API:** `load()` · `sync(ranking?)` · `getPlayerStats(playerKey)` · `getTop1Leaderboard(limit)` ·
+`renamePlayerKey(old, new)` · `removePlayer(playerKey)` · `start()` / `stop()` ·
+`GlobalPositionHistoryService.formatDuration(ms)` (statyczna, format `12d 3h` / `5h 12m` / `44m` / `<1m`)
+
+**Kiedy leci `sync()`:**
+- **przy KAŻDYM `rankingService.saveRanking()`** — to jedyne miejsce, przez które przechodzi każda
+  zmiana rankingu (zapis wyniku, cofnięcie, usunięcie gracza, usunięcie profilu). Wołane bez `await`:
+  zapis rankingu nie ma czekać na statystyki, a serwis i tak pilnuje pojedynczego przebiegu
+  (`_syncInFlight`)
+- **cyklicznie co 10 minut** (`SYNC_INTERVAL_MS`, zatrzymywane w `stopBot()`) — siatka bezpieczeństwa
+  na wypadek ścieżki zmieniającej ranking z pominięciem `saveRanking`
+- **przed zbudowaniem raportu TOP 10** (`_sendReports`, `buildOnDemandEmbed`) — z gotowym rankingiem
+  jako argumentem, żeby wiersz „na tej pozycji od" opisywał dokładnie tę kolejność, którą raport wysyła
+
+**⚠️ Zakres serwerów MUSI być ten sam co w raporcie** (`_currentRanking()`): ranking globalny zawężony
+do serwerów, na których bot faktycznie jest (`client.guilds.cache`). Bez tego zawężenia serwis widziałby
+inną kolejność niż raport — wpisy serwerów, z których bota usunięto, przesuwałyby pozycje, a licznik
+czasu startowałby od zera przy każdej wysyłce. Stąd `setClient(client)` w `index.js`.
+
+**⚠️ Zapis na dysk TYLKO gdy coś się faktycznie zmieniło** (`changed`) — ranking bywa zapisywany często,
+a większość zapisów nie rusza kolejności. `sync()` zwraca `false`, gdy nie było czego zapisać.
+
+**⚠️ Czas liczony jest OD WDROŻENIA serwisu.** Wcześniejszych pozycji nikt nie zapisywał i nie da się
+ich odtworzyć, więc przy pierwszym `sync()` każdy gracz dostaje `since = teraz`, a `best` = jego bieżąca
+pozycja. Miejsca wyświetlania są na to przygotowane: raport pokazuje wtedy `⏳ Nowa pozycja`, a profil
+po prostu pomija wiersz `🏔️ Najwyższa pozycja`.
+
+### Jednorazowe odtworzenie historii wstecz — `backfill-position-history.js`
+
+Serwis zapisuje pozycje dopiero od swojego wdrożenia, więc przy pierwszym `sync()` wszyscy dostają
+`since = teraz` i raport pokazuje czas liczony od restartu bota. Moduł `EndersEcho/backfill-position-history.js`
+liczy te wartości WSTECZ z historii wyników (`wyniki/*.json`), którą bot ma na dysku od dawna.
+
+**Wykonuje się SAM, przy starcie bota** — `index.js` → `initializeBot()` woła
+`odtworzHistoriePozycji(logger)` (`runOnceAtStartup`) **PRZED** `globalPositionHistoryService.load()`.
+Kolejność jest istotna: serwis musi wczytać już odtworzony plik, inaczej jego `sync()` zapisałby
+`since = teraz` i backfill nie miałby czego poprawiać.
+
+**⚠️ DOKŁADNIE RAZ — i to jest kluczowe.** Po zapisie w pliku ląduje znacznik `backfilledAt`
+i każdy kolejny start bota go widzi i odpuszcza (bez śladu w logu). **Bez tego bezpiecznika każdy
+restart nadpisywałby PRAWDZIWE, narastające `since` wartościami odtworzonymi** — czyli kasowałby
+dokładnie te dane, dla których cały mechanizm powstał. Nie usuwaj tego warunku i nie „odświeżaj"
+backfillu cyklicznie. Świadome wymuszenie: skasuj `backfilledAt` z pliku albo uruchom z `--fix`.
+
+**Zapis idzie przez `utils/jsonStore`** (`store.set`), nie przez gołe `fs` — plik i pamięć podręczna
+muszą być zgodne od razu, inaczej serwis nadpisałby efekt swoją starszą kopią z pamięci.
+
+**Błąd nie zatrzymuje startu bota** — całość jest w `try/catch`, a niepowodzenie ląduje jako `warn`.
+To poprawka statystyk, nie warunek działania.
+
+**Ręczne uruchomienie jest OPCJONALNE** (dla kogoś, kto ma dostęp do konsoli i chce zobaczyć wynik
+przed startem bota):
+
+```bash
+node EndersEcho/backfill-position-history.js          # PODGLĄD — nic nie zapisuje
+node EndersEcho/backfill-position-history.js --fix    # zapis, także gdy backfill już był
+```
+
+⚠️ Przy ręcznym uruchomieniu **bot musi być ZATRZYMANY** — trzyma plik w pamięci i przy najbliższym
+zapisie nadpisałby efekt. Tryb konsolowy kończy proces jawnie (`process.exit`), bo `consoleLogger`
+wciągany przez `jsonStore` trzyma dobowy `setInterval` i otwarty strumień pliku, przez co proces
+nigdy nie zakończyłby się sam.
+
+**Jak liczy:** buduje aktualny ranking globalny z `ranking.json` wszystkich serwerów (ta sama logika
+co `getGlobalRanking`), zbiera oś czasu wszystkich pobitych rekordów tych graczy, odtwarza ranking
+rekord po rekordzie i z przebiegu wyciąga `since`, `best`, `bestAt` i `top1Ms`.
+
+**⚠️ `top1Ms` obejmuje wyłącznie odcinki ZAMKNIĘTE** — ta sama umowa co w serwisie. Trwającą passę
+na #1 dolicza `_top1Total()` przy odczycie, a `sync()` domyka ją dopiero przy zejściu ze szczytu.
+Gdyby backfill zapisał tu również odcinek bieżący, lider miałby czas na #1 policzony DWA RAZY
+i Hall of Fame pokazywałby mu mniej więcej podwójny wynik.
+
+**⚠️ `BACKFILL_VERSION` — wymuszenie JEDNEGO ponownego przeliczenia.** Pominięcie startu zależy nie
+od samej obecności `backfilledAt`, tylko od tego, czy zapisana `backfillVersion` dorównuje bieżącej
+(wpis bez tego pola = wersja 1). Podniesienie stałej sprawia, że instalacje, które przeszły starszą
+wersję, przeliczą się raz według nowych reguł — inaczej zostałyby z wartościami policzonymi według
+nieaktualnych. Log mówi wtedy `przeliczono ponownie (v1 → v2)` zamiast `jednorazowo`.
+Koszt ponownego przeliczenia: `since` wraca do wartości odtworzonej z historii, więc traci się
+ewentualną korektę, którą żywy `sync()` zapisał z powodu niewidocznego w historii (np. usunięcie
+innego gracza z rankingu przesunęło pozycje). To wąski przypadek i świadomie zaakceptowany.
+
+**Pusty ranking** (świeża instalacja) też stawia znacznik — nie ma czego odtwarzać, a gracze, którzy
+pojawią się później, naliczą swój czas na bieżąco.
+
+**Czego nie da się odtworzyć** (wynik jest przybliżeniem, i tak dużo lepszym niż „wszyscy od teraz"):
+- gracze USUNIĘCI z rankingu nie biorą udziału w odtwarzaniu, choć kiedyś zajmowali pozycje — historyczne
+  pozycje pozostałych bywają więc zaniżone. Włączenie ich zepsułoby coś gorszego: końcowa kolejność
+  nie zgadzałaby się z realnym rankingiem
+- wpisy historii z wynikiem WYŻSZYM niż aktualny rekord gracza są pomijane — rekordy tylko rosną, więc
+  taki wpis to ślad po cofniętym wyniku i nigdy legalnie nie stał
+- profil bez historii dostaje jeden zastępczy rekord z danych rankingu (wynik + data)
+- dokładność `top1Ms` zależy od gęstości rekordów — odcinek między dwoma rekordami liczony jest w całości
+
+**Bezpieczeństwo:** przed zapisem powstaje kopia `global_position_history.json.bak-{timestamp}`, a wynik
+jest SCALANY z istniejącym plikiem — `username`/`guildId` zostają, a wpisy graczy spoza aktualnego
+rankingu nie są ruszane. Rozjazd między odtworzoną a realną pozycją jest raportowany, a pozycja brana
+z rankingu (to on jest źródłem prawdy).
+
+**Ślad w logu** (jedyny, przy pierwszym starcie po wdrożeniu):
+`🕓 Odtworzono historię pozycji globalnych (jednorazowo): N profili, M rekordów w osi czasu, …`
+
+**Wypadnięcie z rankingu** domyka odcinek na #1 i zeruje `position`/`since`, ale **zostawia `best` i
+`top1Ms`** — dorobek zostaje, gracz nadal może wisieć w Hall of Fame. Wpis znika dopiero przy usunięciu
+profilu (`removePlayer` z `_purgeProfileData`), a przy przenumerowaniu slotów jedzie za nim
+(`renamePlayerKey` z `_migratePlayerKey`).
+
+**Gdzie widać te dane:**
+- raport TOP 10 — wiersz „na tej pozycji od" pod każdym graczem + pole `⌛ Najdłużej na 1. miejscu`
+- `/profile` → zakładka Profil — wiersz `🏔️ Najwyższa pozycja` w polu `🌐 Pozycja Globalna`
+- **karta Gracza Dnia na stronie** — kafelek `Peak rank` (patrz niżej)
+
+**Wstrzykiwanie (`index.js`):** `rankingService.setPositionHistoryService(…)`,
+`globalTop10Service.setPositionHistoryService(…)`, `interactionHandler.setGlobalPositionHistoryService(…)`
+(ten ostatni przekazuje serwis dalej do `profileService`) oraz `globalPositionHistoryService`
+w obiekcie zależności `PlayerOfTheDayService`. Trzy pierwsze setterami, bo serwis powstaje PO
+`rankingService` (potrzebuje go do przeliczenia rankingu), a konstruktor `InteractionHandler` ma już
+ponad trzydzieści argumentów pozycyjnych; POTD dostaje go zwykłą zależnością, bo powstaje później.
+
+---
 
 ## Rankingi TOP 10 na stronie (endersecho.thashar.dev)
 
@@ -815,6 +993,8 @@ EndersEcho/data/
 ├── community_votes.json           # Sesje weryfikacji społeczności
 ├── profiles.json                  # Profile graczy (kilka kont w grze)
 ├── record_reverts.json            # Sesje cofnięcia rekordu (przycisk gracza + admina)
+├── global_position_history.json   # Historia pozycji w rankingu globalnym (od kiedy, najwyższa, czas na #1)
+├── global_top10_history.json      # Historia wysłanych raportów TOP 10 (źródło wykresu zmian pozycji)
 └── challenges.json             # Wyzwania 1 vs 1 (/challenge) + wyniki czekające na zatwierdzenie bossa
 ```
 Format wpisu historii gracza (`wyniki/{userId}.json`): tablica `[{ score, scoreValue, timestamp, bossName }, ...]`
@@ -947,7 +1127,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com   # opcjonalne (default: cloud)
 
 ## Najlepsze Praktyki
 
-- **Persistencja przez `utils/jsonStore` (cache-first) — WSZYSTKIE pliki JSON bota:** `ranking.json`, `achievements.json`, `boss_records.json`, `role_rankings.json` i `wyniki/{playerKey}.json` per serwer, oraz `guild_configs.json`, `profiles.json`, `notifications.json`, `record_reverts.json`, `user_blocks.json`, `usage_limits.json`, `update_cooldowns.json`, `token_usage.json`, `testers.json`, `banned_guilds.json`, `community_votes.json`, `boss_aliases.json`, `admin_panel.json`, `command_usage.json`, `ocr_stats.json`, `web_sync.json`, `milestones.json`, `broadcast_reactions.json` i eksport `shared_data/endersecho_ranking.json`
+- **Persistencja przez `utils/jsonStore` (cache-first) — WSZYSTKIE pliki JSON bota:** `ranking.json`, `achievements.json`, `boss_records.json`, `role_rankings.json` i `wyniki/{playerKey}.json` per serwer, oraz `guild_configs.json`, `profiles.json`, `notifications.json`, `record_reverts.json`, `user_blocks.json`, `usage_limits.json`, `update_cooldowns.json`, `token_usage.json`, `testers.json`, `banned_guilds.json`, `community_votes.json`, `boss_aliases.json`, `admin_panel.json`, `command_usage.json`, `ocr_stats.json`, `web_sync.json`, `milestones.json`, `broadcast_reactions.json`, `global_position_history.json` i eksport `shared_data/endersecho_ranking.json`
   - Z dysku czytane **raz, przy pierwszym sięgnięciu** — `getGlobalRanking()` (37 wywołań), `getSortedPlayers()` (35) i `loadRanking()` (22) nie schodzą już na dysk przy każdym użyciu. Zapis atomowy (plik tymczasowy + rename) idzie jednocześnie do pliku i pamięci
   - **Własne cache serwisów zostają nietknięte** (`_rankingCache`, `_sortedCache`, `_globalCache` w `rankingService`, `playerIndexCache`) — to warstwa wyżej, trzymająca dane już znormalizowane i posortowane. Store zastępuje wyłącznie warstwę dostępu do pliku
     - **⚠️ Przy kasowaniu danych serwera sam `store.forget()` NIE wystarcza.** `loadRanking()` sprawdza najpierw `_rankingCache` i zwraca z niego dane, w ogóle nie sięgając do store'a — skasowany ranking dalej był więc oddawany z pamięci, a pierwszy `saveRanking()` zapisywał go z powrotem na dysk, wskrzeszając dane, które użytkownik kazał usunąć. Panel admina („Usuń dane serwera”) woła teraz `rankingService.invalidateGuildCache(guildId)` obok `store.forget(guildDataDir)`
@@ -1290,6 +1470,15 @@ Pojedynek dwóch graczy na wybranym bossie: liczą się **3 kolejne wyniki** ka�
 
 **⚠️ Uczestnikiem jest PROFIL (`playerKey`), nie osoba** — wyzywający startuje ze swojego **maina** (`_mainPlayerKey`), przeciwnika wybiera z rankingu wskazanego serwera (lista pokazuje profile ze znacznikami `②`/`③`).
 
+**Najwyższa pozycja w historii jedzie też na kartę Gracza Dnia** – `buildPayload` dokłada
+`peakGlobalRank` (z `getPlayerStats(playerKey).best`) i `peakGlobalDate` (data dzienna z `bestAt`),
+a strona rysuje z nich kafelek `Peak rank` z podpisem `reached {data}`. Gdy historia nie zna jeszcze
+gracza, oba pola idą jako `null` i **kafelka po prostu nie ma** — pod nickiem kogoś wyróżnionego nie
+rysujemy „–". Po stronie strony: `sanitizePotd` w `src/worker.js` (repo `thashar.dev`) przepuszcza
+oba pola, a `enders-echo/static/potd.js` je renderuje. Data przechodzi przez `shortDateY()`, który
+dokleja rok tylko wtedy, gdy nie jest bieżący — „reached 12.03" bez roku nic nie mówi przy pozycji
+sprzed kilku lat, a w obrębie bieżącego roku krótki format nie rozjeżdża się z resztą dat na karcie.
+
 **Bilans pojedynków jedzie też na stronę** – karta Gracza Dnia (`playerOfTheDayService.buildPayload`) dostaje pole `challenges` z `summarize()`: `settled` / `won` / `lost` / `draw`, i tylko wtedy, gdy cokolwiek się już rozstrzygnęło. **Same liczby** – nazwa przeciwnika, boss i daty pojedynków NIE opuszczają bota: drugi gracz nie ma jak wypisać się z cudzej karty, więc nie może się na niej znaleźć (opisane w sekcji 5a polityki prywatności na stronie).
 
 **Komenda `/challenge` jest dostępna dla KAŻDEGO gracza** — bez `setDefaultMemberPermissions` i bez bramki head admina. Routing zwykły, jak `/update` i `/ranking`: wymaga skonfigurowanego serwera **i kanału bota** (`isAllowedChannel`).
@@ -1395,6 +1584,7 @@ Ekran wyników ma trzy liczby: **wynik tej walki** (nad linią „Best"), **Best
 
 - Wartość czyta `aiOcrService._extractData` jako **CZWARTĄ, OSTATNIĄ linię** odpowiedzi AI (`PROMPT_VERSIONS['extract-data-eng'] = 'v3'`). ⚠️ **Stoi na końcu, choć na ekranie jest nad „Best", i to jest ZAMIERZONE** — gdyby weszła w środek, model gubiący jedną linię przesunąłby indeksy i `score` (Best) dostałby cudzą wartość, czyli ranking zapisałby zły rekord po cichu. Na końcu brak linii oznacza tylko brak wyniku walki; boss, Best i Total zostają nietknięte
 - **Walidacja:** ta sama `normalizeScore` i ten sam wzorzec jednostki co dla Besta, plus `runScore <= Best` i `runScore <= Total` — jedna walka nie może przebić rekordu ani sumy, więc przekroczenie oznacza pomyłkę modelu i wartość jest odrzucana (`runScore: null`), a nie zapisywana
+- ⚠️ **`rankingService.parseScoreValue()` i `getScoreUnit()` przyjmują `null`** (zwracają `0` / `''`). Bez tej bramki `parseScoreValue(aiResult.runScore)` — liczone w argumentach `_registerChallengeScore`, a więc PRZED wejściem do metody i jej własną obsługą pustego wyniku — wywracało cały flow `/update` (`Cannot read properties of null (reading 'toUpperCase')`) już po wysłaniu embeda do admina: gracz nie dostawał ani wyniku, ani informacji o odrzuceniu
 - **Brak `runScore` NIE odrzuca screena** — ranking dostaje Besta jak zawsze, a wyzwanie po prostu nic nie zalicza. `_registerChallengeScore` zwraca wtedy `noRunScore: true` i gracz widzi żółty embed `challengeNoticeNoRunScore` z prośbą o ponowne wrzucenie. **Komunikat leci tylko wtedy, gdy gracz faktycznie ma pojedynek na tym bossie** (przy nierozpoznanym bossie — jakikolwiek pojedynek w toku, bo nie ma po czym dopasować nazwy); inaczej byłby to szum dla kogoś, kogo wyzwania nie dotyczą
 - ⚠️ **Nigdy nie podstawiaj `bestScore` jako zapasu, gdy `runScore` jest puste** — to dokładnie ten błąd, dla którego czytamy tę czwartą wartość
 

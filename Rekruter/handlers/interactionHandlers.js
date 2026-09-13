@@ -235,6 +235,47 @@ async function handleYesPolish(interaction, state, config) {
 
 /* --------------------------- przycisk „Chcę dołączyć do klanu” ----------- */
 /**
+ * Rola klanowa klikającego albo `null`, gdy żadnej nie ma.
+ *
+ * ⚠️ Liczą się WYŁĄCZNIE role klanowe (`mainClan`, `clan2`, `clan1`, `clan0`) — NIE role
+ * rekrutacyjne (`recruitRoles`). Rekrut jest w trakcie rekrutacji, a nie w klanie, więc
+ * odcięcie go od przycisku zablokowałoby dokończenie własnego procesu.
+ *
+ * Niewypełnione zmienne środowiskowe dają `undefined` w konfiguracji — `filter(Boolean)`
+ * je odsiewa. Serwer bez skonfigurowanych ról klanowych nie blokuje więc nikogo.
+ *
+ * @returns {import('discord.js').Role|null}
+ */
+function znajdzRoleKlanowa(member, config) {
+  if (!member?.roles?.cache) return null;
+
+  const idRolKlanowych = [
+    config.roles.mainClan,
+    config.roles.clan2,
+    config.roles.clan1,
+    config.roles.clan0
+  ].filter(Boolean);
+
+  for (const idRoli of idRolKlanowych) {
+    const rola = member.roles.cache.get(idRoli);
+    if (rola) return rola;
+  }
+  return null;
+}
+
+/**
+ * Czy klikający jest administratorem albo moderatorem.
+ *
+ * Kadra przechodzi rekrutację mimo roli klanowej — musi mieć jak przetestować flow rekrutacji
+ * na sobie, a to jedyne wejście, którym da się to zrobić. Ta sama para uprawnień co w Muteuszu
+ * (`isAdminOrModerator`), żeby „moderator" znaczyło w projekcie jedno i to samo.
+ */
+function czyAdminLubModerator(member) {
+  if (!member?.permissions) return false;
+  return member.permissions.has('Administrator') || member.permissions.has('ModerateMembers');
+}
+
+/**
  * Wejście do rekrutacji dla osób, które są już na serwerze.
  *
  * Cel wizyty jest znany z samego kliknięcia, więc rozmowa startuje od pytania
@@ -246,6 +287,27 @@ async function handleJoinClanStart(interaction, state, config) {
   const { createBotLogger } = require('../../utils/consoleLogger');
   const logger = createBotLogger('Rekruter');
   const userId = interaction.user.id;
+
+  // Kto ma rolę klanową, ten jest już w klanie — rekrutacja nie ma dla niego sensu.
+  //
+  // ⚠️ Guard MUSI stać PRZED sprzątaniem poprzedniej rozmowy (kilka linii niżej). Tamten
+  // blok kasuje trwającą rozmowę, wątek i archiwum kandydata — odpalony przed sprawdzeniem
+  // uprawnień niszczyłby cudzy stan przy kliknięciu, które i tak zostanie odrzucone.
+  const rolaKlanowa = znajdzRoleKlanowa(interaction.member, config);
+  const kadra = czyAdminLubModerator(interaction.member);
+
+  if (rolaKlanowa && !kadra) {
+    logger.info(`[DOLACZ_DO_KLANU] ${interaction.user.username} ma już rolę klanową "${rolaKlanowa.name}" - odmawiam rekrutacji`);
+    await interaction.reply({
+      content: config.messages.joinClanAlreadyInClan.replace('{klan}', rolaKlanowa.name),
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  if (rolaKlanowa && kadra) {
+    logger.info(`[DOLACZ_DO_KLANU] ${interaction.user.username} ma rolę klanową "${rolaKlanowa.name}", ale jest w kadrze - przepuszczam`);
+  }
 
   // Ponowne kliknięcie zaczyna rekrutację od nowa - poprzednia rozmowa idzie do kosza
   state.aiInterviewService?.zakonczRozmowe(userId);

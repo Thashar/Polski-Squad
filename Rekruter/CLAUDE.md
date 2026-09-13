@@ -44,6 +44,24 @@ wracają po przerwie). Kanał: `REKRUTER_JOIN_CLAN_CHANNEL` (domyślnie `1209283
   ten wynika z samego przycisku. Z aktywnym trybem AI rusza rozmowa (model dostaje w otwarciu
   informację, że cel jest już zapisany i nie ma o niego pytać); bez trybu AI lecą klasyczne kroki
   od razu od `waiting_core_stock`
+- ⚠️ **Osoby z rolą klanową dostają odmowę** (`znajdzRoleKlanowa` + `joinClanAlreadyInClan`) — kto jest
+  już w klanie, ten nie ma czego rekrutować. Komunikat jest efemeryczny i podaje nazwę klanu, w którym
+  gracz siedzi, oraz kieruje po zmianę klanu do moderatora
+  - ⚠️ **Kadra jest wyjątkiem** (`czyAdminLubModerator`): administrator i moderator klikają mimo roli
+    klanowej. Muszą mieć jak przetestować flow rekrutacji na sobie, a przycisk to jedyne wejście,
+    którym się to robi. Uprawnienia: `Administrator` **lub** `ModerateMembers` — ta sama para co
+    w `Muteusz.isAdminOrModerator`, żeby „moderator" znaczyło w projekcie jedno i to samo
+  - Liczą się WYŁĄCZNIE role klanowe (`mainClan`, `clan2`, `clan1`, `clan0`), **NIE role rekrutacyjne**
+    (`recruitRoles`). Rekrut jest w trakcie rekrutacji, a nie w klanie — odcięcie go od przycisku
+    zablokowałoby dokończenie własnego procesu
+  - Przy kilku rolach naraz w komunikacie pada NAJWYŻSZA (kolejność sprawdzania: Main → 2 → 1 → 0)
+  - Niewypełnione zmienne środowiskowe są odsiewane `filter(Boolean)`, więc serwer bez skonfigurowanych
+    ról klanowych nie blokuje nikogo
+  - ⚠️ **Guard stoi PRZED sprzątaniem poprzedniej rozmowy.** Blok „ponowne kliknięcie zaczyna od zera"
+    kasuje rozmowę, wątek i archiwum — odpalony przed sprawdzeniem uprawnień niszczyłby stan przy
+    kliknięciu, które i tak zostanie odrzucone
+  - Przycisku nie da się ukryć per użytkownik (jedna wspólna wiadomość na kanale), więc odmowa przy
+    kliknięciu jest jedyną drogą
 - **Ponowne kliknięcie zaczyna rekrutację od zera** (czyści kartę kandydata i porzuca poprzednią rozmowę)
 - Kanał działa dokładnie jak kanał rekrutacyjny: **wszystko, co nie jest częścią trwającej rekrutacji,
   jest kasowane** (gałąź `default` w `handleMessage`)
@@ -112,6 +130,19 @@ podałby dowolne wartości i ominął OCR.
   patrz „Odbieganie od tematu" niżej
 - `zakoncz_wywiad` — bot **sam sprawdza komplet danych** i odrzuca wywołanie z listą braków, jeśli
   czegoś brakuje. Model nie może zakończyć rekrutacji „na słowo"
+  - ⚠️ **To NIE jest jedyna droga do finalizacji.** Gdy komplet danych jest zebrany, a model narzędzia
+    nie wywołał, rekrutację domyka sam bot (`_domknijGdyKomplet` w `_zwrocOdpowiedz`), a za pożegnanie
+    służy to, co model napisał w tej turze. Powód: realny przypadek z produkcji — bot zebrał nick, atak,
+    Core Stock i punkty, napisał kandydatowi „To już wszystko, czego potrzebowałem. Zaraz zajmiemy się
+    przydzieleniem Cię do odpowiedniego klanu", **ale narzędzia nie wywołał**. Tura wróciła
+    z `zakonczone: false`, więc `finalizujRekrutacjeAI` nigdy nie ruszyło: wątek został otwarty, rola nie
+    została nadana, podsumowanie nie poszło na kanał rekrutacyjny. Z zewnątrz rozmowa wyglądała dobrze,
+    więc nikt się o tym nie dowiedział
+  - Ta sama zasada co przy odbieganiu od tematu: **politykę trzyma bot, nie to, czy model pamiętał
+    o narzędziu**. Narzędzie zostaje, bo pozwala modelowi napisać własne pożegnanie
+  - Sprawdzane **przed** `_domiarBezPostepu` — skoro nie brakuje już niczego, tura nie jest „bez postępu"
+    i nie ma za co karać; jest po prostu ostatnia
+  - Rozmowa zamykana za odbieganie (`przerwacOffTopic`) ma własną ścieżkę i **nie** jest finalizowana
 - ⚠️ **Typy w schemacie pisane WIELKIMI literami** (`OBJECT`, `STRING`, `INTEGER`) — tego oczekuje Gemini.
   Zakresy wartości opisujemy słownie, a twardą walidację robi bot (`_zapiszDane`): model potrafi minąć się
   z opisem, więc granice sprawdzamy u siebie
@@ -121,6 +152,10 @@ podałby dowolne wartości i ominął OCR.
 
 **Rozpoznawanie zdjęć bez pytania modelu:** typ screena wynika z tego, czego brakuje —
 najpierw próba Core Stock (jeśli kandydat szuka klanu i jeszcze go nie ma), potem ekran postaci.
+Obie ścieżki mają własną bramkę na napis (`Core Stock` / `My Equipment`), więc zdjęcie wysłane
+NIE PO KOLEI nie zostanie wzięte za to, o które bot właśnie prosił — zostanie rozpoznane jako
+to, czym faktycznie jest, a brakująca rzecz będzie poproszona ponownie. Prompt rozmowy dokłada do
+tego zasadę: dziękuj wyłącznie za ten rodzaj zdjęcia, który wynika z wiadomości `[SYSTEM]`.
 Wynik wraca do rozmowy jako wiadomość `[SYSTEM] …`, której kandydat nie widzi. Screen postaci
 zostaje w `temp/` (`ai_<timestamp>_<userId>.png`, trafia do embeda podsumowania), zdjęcie Core Stock
 jest kasowane od razu po odczycie.
@@ -172,8 +207,17 @@ zmienia się w jednym miejscu:
   tylko wpis z samym tekstem — wpisu z `functionCall` ruszyć nie wolno) i dopłaca jedno zapytanie
   z instrukcją. Gdy to zapytanie padnie, pierwotna wypowiedź wraca do historii, a odbiegnięcie i tak
   zostaje policzone — decyduje zachowanie kandydata, nie dostępność API
-- ⚠️ **Reguła dotyczy wyłącznie tur napisanych przez kandydata.** Tura systemowa (wynik OCR) jest z niej
-  wyłączona: nieczytelny screen to nieudana próba współpracy, nie zmiana tematu
+- ⚠️ **Nieodczytane zdjęcie TEŻ jest odbieganiem od tematu** (`przeanalizujZdjecie`, powód
+  `zdjęcie nie do odczytania - nie ten ekran`). Wcześniej tury systemowe (wynik OCR) były z polityki
+  off-topic zwolnione — „nieczytelny screen to nieudana próba, nie zmiana tematu" — i dawało to pętlę
+  bez wyjścia: kandydat trzy razy z rzędu wysyłał ekran „My Equipment" zamiast Core Stock, a bot trzy
+  razy grzecznie prosił o właściwy i prosiłby tak w nieskończoność. Uporczywe wysyłanie NIE TEGO
+  ekranu jest omijaniem prośby, nie pechem
+  - Przy trzeciej próbie z rzędu **prośba o kolejne zdjęcie znika z opisu** — kłóciłaby się
+    z instrukcją pożegnania („nie zadawaj już żadnych pytań")
+  - `_domiarBezPostepu` nadal dotyczy wyłącznie tur napisanych przez kandydata — nie dlatego, że
+    zdjęcia są zwolnione, tylko żeby ta sama tura nie została ukarana dwa razy. Wynik OCR rozlicza
+    się sam, zanim trafi do modelu: udany odczyt zeruje licznik, nieudany dokłada odbiegnięcie
 - **Liczą się odbiegnięcia POD RZĄD.** Każdy postęp zeruje licznik: zapisane dane (`zapisz_dane`
   z niepustym `zapisano`) albo odczytane zdjęcie (Core Stock lub postać). Karzemy uporczywe
   zmienianie tematu, nie jeden żart po drodze
@@ -183,6 +227,18 @@ zmienia się w jednym miejscu:
   będzie inaczej, najprostszym progiem jest limit takich tur pod rząd
 - Licznik rozmowy siedzi w pamięci (`rozmowa.odbiegniecia`), a stan trafia do bloku „Stan tej rozmowy",
   więc model wie, ile już było
+
+**⚠️ Ochrona przed odbiciem wiadomości kandydata** (`_wymuszonaOdpowiedz`): gdy tekst modelu jest — po
+zdjęciu wielkości liter, interpunkcji i zdwojonych spacji — identyczny z ostatnią wypowiedzią kandydata,
+jest **odrzucany i nie trafia do historii**; wywołujący sięga po swój tekst zapasowy. Realny przypadek
+z produkcji: kandydat podał punkty Lunar Mine („1"), a rekruter odpowiedział mu „1".
+- Odbicie zdarza się właśnie w `_wymuszonaOdpowiedz`, bo model dostaje samą instrukcję „napisz
+  wiadomość", bez świeżego pytania od kandydata, i najbliższą rzeczą do powtórzenia jest ostatnia replika
+- `_ostatniaWiadomoscKandydata()` pomija wpisy `[SYSTEM]` i odpowiedzi narzędzi — rola `user` w historii
+  niesie trzy różne rzeczy i liczą się tylko wypowiedzi kandydata
+- **Zwykłe tury nie są tak filtrowane.** Tam model odpowiada na świeżą wiadomość, więc odbicie jest dużo
+  mniej prawdopodobne, a jego tekst siedzi już w historii obok ewentualnego `functionCall` — wyrywanie
+  go groziłoby osieroceniem `functionResponse`, które Gemini odrzuca
 
 **Trwały licznik przerwań i wyrzucenie z serwera:** `services/offTopicService.js`,
 plik `data/offtopic.json` (przez `jsonStore`). Liczy przerwane rozmowy **na osobę**, nie na rozmowę —
@@ -287,11 +343,24 @@ sposób wejścia: rekrutacja od zera albo przycisk „Chcę dołączyć do klanu
 w którym ląduje reszta. Bez wątku wpisy kilku kandydatów przeplatałyby się na jednym kanale.
 Gdy wątku nie da się założyć (brak uprawnień, kanał innego typu), wpisy idą płasko na kanał.
 
-**Co trafia do archiwum:** każda wypowiedź rekrutera i kandydata (pełna, nie przycięta do sześciu
-ostatnich jak transkrypcja dla kandydata), każde przesłane zdjęcie jako załącznik razem z tym, co
-bot z niego odczytał, podpis pod zdjęciem (model go nie dostaje), puste wiadomości i załączniki
-niebędące obrazem, błędy tury oraz embed zamykający: powód zakończenia i komplet zebranych danych
-(cel, punkty I fazy, nick, atak, źródło, Core Stock).
+**Co trafia do archiwum:** wypowiedzi rekrutera i kandydata (pełne, nie przycięte do sześciu
+ostatnich jak transkrypcja dla kandydata), przesłane zdjęcia jako załączniki oraz embed zamykający:
+powód zakończenia i komplet zebranych danych (cel, punkty I fazy, nick, atak, źródło, Core Stock).
+Zapis czyta się jak rozmowę — nic poza nią.
+
+⚠️ **ŻADEN wpis `⚙️` nie trafia na kanał — wszystkie idą do logu bota.** Dotyczy to opisu analizy
+zdjęcia (`analiza.opis`), pustej wiadomości, złego typu załącznika, podpisu pod zdjęciem i błędu tury.
+To kuchnia bota, a nie treść rozmowy: opis analizy jest wprost instrukcją dla modelu („poproś o
+zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać"), a przy każdym zdjęciu potrafił zająć
+w zapisie więcej miejsca niż sama rozmowa.
+
+**Gdzie szukać tych informacji:** `wpisSystemowy()` pisze do logu (`[ARCHIWUM] ⚙️ {userId}: …`),
+opis analizy dodatkowo w `[AI_WYWIAD] Analiza zdjęcia: …`. Do modelu opis idzie jak dotąd, przez
+`wiadomoscSystemowa`. Odczytane dane są też w embedzie podsumowania na końcu archiwum.
+
+⚠️ **`wpisSystemowy()` została jako metoda, mimo że nie pisze już na kanał.** Miejsca, które ją
+wołają, to nadal właściwe punkty zapisu — zmienił się wyłącznie cel. Dokładając nowe zdarzenie
+techniczne, wołaj ją tak samo; nie dopisuj `⚙️` przez `_wpisz()`, bo wróci na kanał.
 
 ⚠️ **Zdjęcie Core Stock jest kasowane z dysku zaraz po odczycie**, więc `wpisZdjecie` czyta plik do
 bufora i dopiero potem kolejkuje wysyłkę — `await` po stronie handlera obejmuje wyłącznie odczyt,
@@ -335,14 +404,89 @@ każdy zrzut ekranu tworzył nową instancję (a więc i nowy wpis „AI OCR akt
    - Ponowienie 3× co 3 s przy błędach przejściowych (429/500/503, zerwane połączenie). **Odrzucenie przez filtr
      treści (`semantic`) NIE jest ponawiane** — powtórzy się tak samo, więc nie ma po co czekać
    - Dwuetapowa walidacja (dwa osobne requesty do API):
-     - **KROK 1 (pierwszy request):** Sprawdza czy jest "My Equipment" (200 tokenów)
+     - **KROK 1 (pierwszy request, `sprawdz-ekwipunek` v2):** czy to w ogóle ekran postaci (200 tokenów)
        - Jeśli NIE - natychmiast zwraca błąd, NIE wysyła drugiego requestu
-     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 znalazł "My Equipment" → wyciąga nick i atak (800 tokenów)
+       - ⚠️ **Bramka pyta o DWA wyznaczniki naraz: napis „My Equipment" ALBO górny pasek statystyk
+         (ATK i HP z liczbami).** Sam napis nie wystarcza, bo bywa zasłonięty — nakładka
+         „Detailed Stats" przykrywa dolną połowę ekranu, a nick i ATK zostają nad nią doskonale
+         czytelne. Przy warunku wyłącznie na napis taki screen wracał jako `INVALID_SCREENSHOT`,
+         choć miał komplet potrzebnych danych
+       - ⚠️ **Odpowiedź to znacznik `FOUND` / `NOT_FOUND`, nie słowo po polsku** — patrz
+         `_czyWidacEkran()`, wspólne dla obu bramek (ekwipunek i Core Stock).
+         **Tu siedział błąd, przez który ekran postaci nie dawał się odczytać NIGDY:** prompt kazał
+         modelowi napisać „Znalezniono" (literówka), a kod sprawdzał `includes('znalezniono')`.
+         Model, piszący poprawną polszczyzną, odpowiadał „Znaleziono" — inny ciąg znaków, więc
+         warunek nie trafiał ani razu i każdy screen, także idealnie poprawny, kończył się
+         `INVALID_SCREENSHOT`. Bramka Core Stock miała tę samą frazę napisaną poprawnie i dlatego
+         działała — stąd mylący objaw „Core Stock czyta, ekwipunku nie". Angielski znacznik nie ma
+         odmiany ani ogonków, więc nie da się go „poprawić" po drodze. `NOT_FOUND` zawiera w sobie
+         `FOUND`, dlatego zaprzeczenie jest sprawdzane PIERWSZE
+     - **KROK 2 (drugi request):** Tylko jeśli KROK 1 rozpoznał ekran postaci → wyciąga nick i atak (800 tokenów)
+       - ⚠️ **Czyta z obrazu PRZEROBIONEGO na czarno-biały** (`_obrazBialyNaCzarnym`): biel zostaje bielą,
+         każdy inny kolor staje się czernią. Nick i ATK są w grze białe na jaskrawym, kolorowym tle
+         (pomarańczowy baner, grafika postaci, efekty) i model regularnie odbijał się od tego tła,
+         zwracając „nie udało się nic odczytać" mimo poprawnego screena
+       - **Model DOSTAJE INFORMACJĘ o tej obróbce** w prompcie (`_promptOdczytuPostaci(true)`, wersja `v3`).
+         Bez tego widzi czarny prostokąt z białymi plamami, nie wie, czemu zniknęło tło i grafika,
+         i sam dochodzi do wniosku, że screen jest nieczytelny
+       - ⚠️ **Wskazówki „gdzie patrzeć" są ROZDZIELONE na wariant czarno-biały i oryginał.** Wersja dla
+         obrazu po obróbce kierowała model wcześniej „nad zieloną linię progresu" i „na prawo od ikonki
+         mieczyka" — a zielony pasek i kolorowe ikony są po konwersji czarne, czyli nie istnieją. Model
+         szukał punktów odniesienia, których na SWOIM obrazie nie miał, i lądował na „nieczytelny screen".
+         Po obróbce zostają za to same napisy `ATK` i `HP` (białe) i to one są kotwicą
+       - Prompt jawnie odróżnia ATK od HP („druga, zwykle większa liczba — jej NIE podawaj") i prosi
+         o pełną liczbę bez skrótów `M`/`K` i bez separatorów tysięcy
+       - ⚠️ **Próg bieli to DWA warunki naraz**: jasność (najciemniejszy kanał ≥ `BIEL_MIN_JASNOSC` = 200)
+         **i** brak nasycenia (rozpiętość kanałów ≤ `BIEL_MAX_ROZPIETOSC` = 40). Sam próg jasności
+         (`sharp().greyscale().threshold()`) przepuściłby nasycone jasne kolory — żółty `(255,255,0)` ma
+         luminancję ~226, więc wyszedłby na biało razem z tekstem i cała operacja straciłaby sens.
+         Strojąc progi myl się w GÓRĘ: za niski próg wybiela jasnoszare tła UI, a biały tekst na takim
+         tle znika zupełnie; za wysoki gubi najwyżej wygładzone krawędzie liter
+       - **Ścieżka zapasowa:** gdy z przerobionego obrazu nic nie wyszło (nietypowy motyw, źle dobrane
+         progi), KROK 2 jest ponawiany na ORYGINALE z promptem bez wzmianki o obróbce — czyli tak, jak
+         działało to wcześniej. Gorzej niż przed zmianą być nie może, kosztem jest jedno dodatkowe zapytanie
    - Zalety: 100% pewność walidacji, oszczędność tokenów przy złych screenach, niemożliwe fałszywe pozytywy
+   - **Parsowanie odpowiedzi (`parseAIResponse` → `_wyluskajNickIAtak`)** jest odporne na to, że model
+     nie trzyma się formatu co do linii:
+     - Ogrodzenia ``` i puste linie są odsiewane
+     - **Atak = OSTATNIA linia, która po zdjęciu etykiety (`Atak:`, `ATK:`, …) jest samą liczbą**;
+       **nick = OSTATNIA linia przed nią, która liczbą nie jest** i nie kończy się dwukropkiem
+       (odsiew wiersza wstępu typu „Oto odczytane dane:")
+     - ⚠️ Wcześniej było sztywno `lines[0]` = nick, `lines[1]` = atak — jeden dorzucony wiersz wstępu
+       i poprawnie odczytany screen kończył się `PARSING_ERROR`
+     - Ścieżka zapasowa: gdy żadna linia nie jest czystą liczbą, brana jest druga linia i pierwsza
+       liczba z niej — czyli dokładnie stare zachowanie
+   - **Zakres akceptowanej wartości ATK: `ATAK_MIN` = 100 … `ATAK_MAX` = 1 000 000 000**
+     - ⚠️ Górny limit wynosił **10 000 000** i był miną z opóźnionym zapłonem: gracze dawno podeszli pod
+       ten pułap (realny screen z rekrutacji: ATK 3 438 580 przy HP 9 535 298). Odczyt powyżej progu NIE
+       jest korygowany, tylko wyrzucany jako `VALIDATION_FAILED` — najmocniejsi kandydaci odbijaliby się
+       od rekrutacji z komunikatem o nieczytelnym screenie
+     - Dolny próg zostaje — chroni przed wzięciem za atak numeru poziomu albo licznika energii
+     - ⚠️ **Ścieżka Tesseract (`services/ocrService.js`) wciąż ma limit 10 mln** w pięciu miejscach.
+       Nie jest używana na produkcji (patrz ramka na górze pliku), a tamtejsza heurystyka „bierz
+       największą liczbę w zakresie" przy podniesieniu limitu zaczęłaby łapać HP i złoto — zmiana
+       wymaga osobnego przemyślenia, nie samego przestawienia stałej
+   - **`_naLiczbeAtaku()` rozumie separatory tysięcy i skróty jednostek.** ⚠️ Kropka znaczy co innego
+     zależnie od kontekstu: „3.438.580" to separatory tysięcy (→ 3438580), a „3.44M" to ułamek
+     (→ 3 440 000). Poprzednia wersja kasowała `[\s,._]` bezwarunkowo i z „3.44M" robiła **344** —
+     czyli wartość poniżej progu, więc poprawny screen szedł do kosza
 
 **Skanowanie Core Stock:** `services/aiOcrService.js` → `analyzeCoreStockImage(imagePath)`
    - Wymagany `REKRUTER_GOOGLE_AI_API_KEY` (niezależnie od `USE_AI_OCR` — Core Stock nie ma ścieżki zapasowej na Tesseract)
-   - Prompt AI wyciąga JSON `{"Relic Core": N, "Transmute Core": N, ...}` (6 typów)
+   - **Dwuetapowo, tak samo jak ekran postaci:**
+     - **KROK 1** (`sprawdz-corestock` **v2**, 200 tokenów): czy na screenie w ogóle widnieje napis „Core Stock".
+       Brak → `NOT_CORE_STOCK` natychmiast, BEZ drugiego zapytania. Idzie przez to samo
+       `_czyWidacEkran()` co bramka ekwipunku (znacznik `FOUND` / `NOT_FOUND`) — jedna implementacja,
+       więc literówka w jednej frazie nie może już rozjechać dwóch ścieżek
+     - **KROK 2** (`odczytaj-corestock` **v2**, 800 tokenów): wyciągnięcie JSON-a `{"Relic Core": N, …}` (6 typów)
+   - ⚠️ **KROK 1 powstał po realnym incydencie.** Bez niego model DOPISYWAŁ SOBIE zawartość Core Stock
+     z zupełnie innego ekranu: kandydat poproszony o Core Stock wysłał „My Equipment" (siatka przedmiotów
+     z ilościami — z daleka podobna), bot odpowiedział „Super, dzięki za screen z Core Stock!" i zapisał
+     wymyślone liczby. To nie jest kosmetyka — **Core Stock decyduje o kwalifikacji do klanu**
+   - ⚠️ **Nie wystarczyła furtka w prompcie ekstrakcji.** Otwierał się zdaniem zakładającym, że screen jest
+     właściwy („Analyze this screenshot showing the Core Stock section"), więc „if this is not a Core Stock
+     screenshot" było przy takim wstępie za słabe. W v2 wstęp jest warunkowy („It should show…") i doszedł
+     zakaz zgadywania pozycji z innych części ekranu — ale to tylko wzmocnienie, bramką jest KROK 1
    - Walidacja: tylko dozwolone nazwy przedmiotów, wartości >= 0
    - Błędy: `NOT_CORE_STOCK` (złe zdjęcie), `NO_ITEMS_FOUND`, `NO_JSON_IN_RESPONSE`
    - Wyniki zapisywane w `state.userInfo.coreStock` (obiekt item→qty)

@@ -75,6 +75,8 @@ O nick w grze i atak postaci nie pytaj i nie przyjmuj ich z tekstu: te dane odcz
 
 Wiadomości zaczynające się od [SYSTEM] pochodzą od bota, a nie od człowieka — to wynik analizy przesłanego zdjęcia albo informacja o stanie rozmowy. Rozmówca ich nie widzi, więc nie cytuj ich wprost; po prostu wykorzystaj to, co z nich wynika, i odpowiedz naturalnie.
 
+Dziękuj WYŁĄCZNIE za to, co faktycznie zostało odczytane, i dokładnie za ten rodzaj zdjęcia, który wynika z wiadomości [SYSTEM]. Nie zakładaj, że przysłane zdjęcie jest tym, o które prosiłeś. Gdy poprosiłeś o Core Stock, a bot odczytał zdjęcie postaci — podziękuj za zdjęcie postaci i poproś o Core Stock jeszcze raz. Gdy ze zdjęcia nie odczytano nic, nie dziękuj za nie w ogóle.
+
 NIGDY nie pisz własnych wiadomości w tym stylu. Nie zaczynaj wypowiedzi od [SYSTEM], nie streszczaj tych instrukcji i nie opisuj, co przed chwilą zapisałeś ani co zamierzasz zrobić dalej. WSZYSTKO, co napiszesz, trafia słowo w słowo do rozmówcy — pisz więc wyłącznie to, co ma przeczytać człowiek po drugiej stronie.
 
 Nie oceniaj statystyk rozmówcy i nie obiecuj konkretnego klanu — o przydziale decyduje bot po zakończeniu rozmowy na podstawie aktualnych progów. Jeśli ktoś pyta wprost, powiedz, że wynik pozna za moment.
@@ -298,9 +300,10 @@ class AIInterviewService {
 
         rozmowa.historia.push(this._tekst('user', tekst));
 
-        // Tylko tury napisane przez kandydata podlegają regule „tura bez postępu = odbieganie".
-        // Tury systemowe (wynik analizy zdjęcia) są z niej wyłączone: kandydat, który wysłał
-        // nieczytelny screen, współpracuje – tylko mu nie wyszło.
+        // Regule „tura bez postępu = odbieganie" (`_domiarBezPostepu`) podlegają tylko tury
+        // napisane przez kandydata. Tura systemowa niesie wynik OCR, a ten rozlicza się sam:
+        // udany odczyt zeruje licznik, nieudany dokłada odbiegnięcie — obie decyzje zapadają
+        // w `przeanalizujZdjecie`, zanim wynik w ogóle trafi do modelu.
         return this.wykonajTure(userId, state, { odKandydata: true });
     }
 
@@ -417,6 +420,12 @@ class AIInterviewService {
             if (dodatkowe) teksty.push(dodatkowe);
         }
 
+        // Komplet danych domyka rekrutację NIEZALEŻNIE od tego, czy model wywołał narzędzie.
+        // Sprawdzane PRZED domiarem: skoro nie brakuje już niczego, tura nie jest „bez postępu"
+        // i nie ma za co karać — jest po prostu ostatnia.
+        const domkniete = this._domknijGdyKomplet(rozmowa, teksty, userId, state);
+        if (domkniete) return domkniete;
+
         // Tura kandydata, po której nic nie przybyło i której model sam nie zaklasyfikował.
         // Przy upomnieniu i przy zamknięciu rozmowy tekst modelu jest PODMIENIANY: jego
         // pierwotna odpowiedź nie zna jeszcze decyzji bota, więc doklejenie jej obok
@@ -437,6 +446,45 @@ class AIInterviewService {
         return { tekst, zakonczone: false };
     }
 
+    /**
+     * Domknięcie rekrutacji, gdy komplet danych jest zebrany, a model nie wywołał
+     * `zakoncz_wywiad`.
+     *
+     * ⚠️ **Milczenie modelu nie może blokować finalizacji.** Realny przypadek z produkcji:
+     * bot zebrał nick, atak, Core Stock i punkty Lunar Mine, po czym napisał kandydatowi
+     * „To już wszystko, czego potrzebowałem. Zaraz zajmiemy się przydzieleniem Cię do
+     * odpowiedniego klanu" — ale narzędzia nie wywołał. Tura wróciła z `zakonczone: false`,
+     * więc `finalizujRekrutacjeAI` nigdy nie ruszyło: wątek został otwarty, rola nie została
+     * nadana, podsumowanie nie poszło na kanał rekrutacyjny. Kandydat pożegnany, rekrutacja
+     * niedokończona — i nikt się o tym nie dowiaduje, bo z zewnątrz rozmowa wygląda dobrze.
+     *
+     * To ta sama zasada, co przy odbieganiu od tematu (`_domiarBezPostepu`): politykę trzyma
+     * bot, a nie to, czy model pamiętał o narzędziu. `zakoncz_wywiad` zostaje — pozwala
+     * modelowi napisać własne pożegnanie i sam sprawdza komplet danych — ale przestaje być
+     * JEDYNĄ drogą do finalizacji.
+     *
+     * Za pożegnanie służy to, co model napisał w tej turze; tekst zapasowy jest na wypadek
+     * tury zupełnie bez treści.
+     *
+     * @returns {{tekst: string, zakonczone: true}|null} wynik tury albo null, gdy nie domykamy
+     */
+    _domknijGdyKomplet(rozmowa, teksty, userId, state) {
+        // Rozmowa zamykana za odbieganie ma własną ścieżkę - tam finalizacji NIE ma
+        if (rozmowa.zakonczona || rozmowa.przerwacOffTopic) return null;
+
+        const info = state?.userInfo?.get(userId);
+        if (!info) return null;
+        if (this._brakujaceDane(info, this._czyPytacOZrodlo(userId)).length > 0) return null;
+
+        const tekst = teksty.join('\n\n').trim()
+            || 'Dzięki! To wszystko, czego potrzebowałem — resztą zajmuje się już bot.';
+
+        logger.info(`[AI_WYWIAD] ✅ Komplet danych dla ${info.username} - domykam rekrutację (model nie wywołał zakoncz_wywiad)`);
+        rozmowa.zakonczona = true;
+
+        return { tekst, zakonczone: true };
+    }
+
     async _wymuszonaOdpowiedz(rozmowa, userId, state, instrukcja = null) {
         rozmowa.historia.push(this._tekst(
             'user',
@@ -445,14 +493,59 @@ class AIInterviewService {
 
         try {
             const odpowiedz = await this._zapytajModel(rozmowa, userId, state);
-            if (odpowiedz.content) {
-                rozmowa.historia.push(this._tekst('model', odpowiedz.content));
+            const tresc = odpowiedz.content?.trim();
+            if (!tresc) return null;
+
+            // ⚠️ Model potrafi ODBIĆ wiadomość kandydata zamiast napisać własną. Realny
+            // przypadek z produkcji: kandydat podał punkty Lunar Mine („1"), a rekruter
+            // odpowiedział mu „1". Taka wiadomość nie niesie nic i dla kandydata wygląda
+            // jak awaria bota, więc traktujemy ją jak brak odpowiedzi — do historii nie
+            // trafia, a wywołujący sięgnie po swój tekst zapasowy.
+            //
+            // Odbicie zdarza się WŁAŚNIE tutaj, bo model dostaje samą instrukcję „napisz
+            // wiadomość", bez świeżego pytania od kandydata, i najbliższą rzeczą do
+            // powtórzenia jest ostatnia replika rozmówcy.
+            const ostatnia = this._ostatniaWiadomoscKandydata(rozmowa);
+            if (ostatnia && this._znormalizujDoPorownania(tresc) === this._znormalizujDoPorownania(ostatnia)) {
+                logger.warn(`[AI_WYWIAD] Model odbił wiadomość kandydata („${tresc.slice(0, 40)}") - pomijam odpowiedź`);
+                return null;
             }
-            return odpowiedz.content?.trim() || null;
+
+            rozmowa.historia.push(this._tekst('model', tresc));
+            return tresc;
         } catch (error) {
             logger.error(`[AI_WYWIAD] Nie udało się dopytać modelu o wiadomość: ${error.message}`);
             return null;
         }
+    }
+
+    /**
+     * Ostatnia wiadomość NAPISANA PRZEZ KANDYDATA.
+     *
+     * Rola `user` w historii niesie trzy różne rzeczy: wypowiedzi kandydata, wstrzykiwane
+     * przez bota wpisy `[SYSTEM]` (wynik OCR, instrukcje) oraz odpowiedzi narzędzi. Liczy
+     * się wyłącznie ta pierwsza grupa.
+     */
+    _ostatniaWiadomoscKandydata(rozmowa) {
+        for (let i = rozmowa.historia.length - 1; i >= 0; i--) {
+            const wpis = rozmowa.historia[i];
+            if (wpis.role !== 'user' || !Array.isArray(wpis.parts)) continue;
+
+            const tekst = wpis.parts
+                .map(czesc => czesc.text)
+                .filter(t => typeof t === 'string')
+                .join('\n')
+                .trim();
+
+            if (!tekst || tekst.startsWith('[SYSTEM]')) continue;
+            return tekst;
+        }
+        return null;
+    }
+
+    /** „Czy to to samo zdanie" — bez wielkości liter, interpunkcji i zdwojonych spacji */
+    _znormalizujDoPorownania(tekst) {
+        return tekst.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, ' ').trim();
     }
 
     /**
@@ -736,8 +829,9 @@ ${this._instrukcjaBrakow(brakuje)}`;
      * bez postępu – `oznacz_na_temat` gdy kandydat współpracuje, `oznacz_odbieganie` gdy nie.
      * Milczenie modelu znaczy odbieganie, a nie brak zdania.
      *
-     * Reguła dotyczy WYŁĄCZNIE tur napisanych przez kandydata. Tury systemowe (wynik OCR)
-     * są z niej wyłączone: nieczytelny screen to nieudana próba, nie zmiana tematu.
+     * Reguła dotyczy WYŁĄCZNIE tur napisanych przez kandydata — ale nie dlatego, że zdjęcia
+     * są z polityki off-topic zwolnione. Nie są: nieodczytane zdjęcie dokłada odbiegnięcie
+     * w `przeanalizujZdjecie`. Chodzi o to, żeby ta sama tura nie została ukarana dwa razy.
      *
      * @returns {Promise<string|null>} tekst, który ma ZASTĄPIĆ odpowiedź modelu, albo null
      */
@@ -953,10 +1047,36 @@ ${this._instrukcjaBrakow(brakuje)}`;
             }
         }
 
+        // ⚠️ Nieodczytane zdjęcie LICZY SIĘ jako odbieganie od tematu — dokładnie tak samo
+        // jak wiadomość nie na temat. Wcześniej tury systemowe (wynik OCR) były z tej reguły
+        // wyłączone, bo „nieczytelny screen to nieudana próba, nie zmiana tematu". W praktyce
+        // dało to pętlę bez wyjścia: kandydat trzy razy z rzędu wysyłał ten sam ekran
+        // „My Equipment" zamiast Core Stock, a bot trzy razy grzecznie prosił o właściwy
+        // i byłby tak prosił w nieskończoność. Uporczywe wysyłanie NIE TEGO ekranu jest
+        // omijaniem prośby, a nie pechem.
+        //
+        // Licznik zeruje się przy każdym udanym odczycie (`wyzerujOdbiegania` wyżej), więc
+        // karzemy uporczywość, nie pojedynczą pomyłkę: pierwsza próba to zwykła prośba
+        // o powtórkę, druga niesie ostrzeżenie, trzecia zamyka rozmowę.
         const brakuje = this._brakujaceDane(info, this._czyPytacOZrodlo(userId));
+        const kara = this._oznaczOdbieganie(
+            userId,
+            info,
+            { powod: 'zdjęcie nie do odczytania - nie ten ekran' },
+            true
+        );
+        const licznik = kara.odpowiedz?.odbiegniecia || 0;
+        const instrukcja = kara.odpowiedz?.instrukcja || '';
+
+        // Przy zamknięciu rozmowy prośba o kolejne zdjęcie kłóciłaby się z instrukcją
+        // pożegnania („nie zadawaj już żadnych pytań"), więc wtedy jej nie doklejamy
+        const prosba = licznik >= KONIEC_PRZY
+            ? ''
+            : ` Wciąż brakuje: ${brakuje.join(', ') || 'nic'}. Poproś o zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać.`;
+
         return {
             typ: null,
-            opis: `Kandydat przesłał zdjęcie, ale nie udało się z niego nic odczytać — to najpewniej nie ten ekran albo screen jest nieczytelny. Wciąż brakuje: ${brakuje.join(', ') || 'nic'}. Poproś o zdjęcie ponownie i powiedz dokładnie, który ekran ma pokazać.`
+            opis: `Kandydat przesłał zdjęcie, ale nie udało się z niego nic odczytać — to najpewniej nie ten ekran albo screen jest nieczytelny.${prosba}${instrukcja ? ` ${instrukcja}` : ''}`
         };
     }
 

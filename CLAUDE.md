@@ -764,6 +764,20 @@ Domyślnie discord.js trzyma bez ograniczeń m.in. użytkowników, presence i re
 
 **⚠️ Czego NIE wolno ograniczać:** `GuildMemberManager` i `UserManager`. Kod w wielu miejscach polega na `role.members` i `guild.members.cache` (rankingi ról TOP, progi klanowe, listy klanowiczów w OCR). Przycięcie tych kolekcji dałoby **ciche błędy** — brakujących graczy w rankingach, bez żadnego wyjątku w logu.
 
+---
+
+### 9. Throttling Pobierania Członków
+
+**Plik:** `utils/guildMembersThrottle.js` — `safeFetchMembers(guild, logger, force)`, używany przez Stalkera, Konklawe i pozostałe boty sięgające po pełną listę członków.
+
+Chroni przed rate limitem Gateway dla opcode 8 (REQUEST_GUILD_MEMBERS): 30 s cooldownu, po którym zwracany jest gotowy `guild.members.cache` zamiast kolejnego pobierania.
+
+**⚠️ Klucz to para (bot, serwer), nie sam serwer.** Mapa throttlingu jest jedna na proces, czyli wspólna dla wszystkich 9 botów, ale `guild.members.cache` ma każdy bot własny. Przy kluczu po samym `guildId` bot, który trafiał w cooldown założony przez INNEGO bota, dostawał swój własny cache — przy starcie praktycznie pusty. Limit opcode 8 obowiązuje pojedyncze połączenie gateway, a każdy bot ma własne, więc wspólny cooldown i tak niczego nie chronił.
+
+**⚠️ Trwające pobieranie jest DOCZEKIWANE.** Wcześniej równoległy wywołujący dostawał `guild.members.cache` w trakcie zapełniania, czyli niekompletną listę.
+
+**Skutek obu rzeczy jest ZAWSZE cichy** — nie ma wyjątku ani pustego wyniku, jest po prostu za mało członków. Realny przykład z produkcji: `clanThresholdsExportService` zapisał progi klanowe jako `null`, przez co Rekruter przez dwie doby wysyłał każdego kandydata do Clan0, niezależnie od punktów. Kod liczący cokolwiek po `members` musi zakładać, że pusty wynik bywa artefaktem, a nie prawdą o serwerze.
+
 ## Szczegóły Botów
 
 > ### ⚠️ OCR W CAŁYM PROJEKCIE DZIAŁA NA AI, NIE NA TESSERACT
@@ -865,6 +879,11 @@ CLAN0_ROLE=role_id
 CLAN1_ROLE=role_id
 CLAN2_ROLE=role_id
 MAIN_CLAN_ROLE=role_id
+# Role kierownicze (WYMAGANE przez Rekrutera). Czyta je też Stalker przy liście klanów —
+# ta sama rola Lidera/Vice obsługuje wszystkie trzy akademie, klan wskazuje rola klanowa
+LEADER_ROLE=role_id
+VICE_LEADER_ROLE=role_id
+VICE_LEADER_MAIN_ROLE=role_id
 WAITING_ROOM_CHANNEL=poczekalnia
 # AI OCR Google Gemini (opcjonalne) — klucz wspólny dla OCR i rozmowy rekrutacyjnej
 USE_AI_OCR=false
@@ -921,6 +940,12 @@ USE_STALKER_AI_OCR=false
 STALKER_LME_AI_OCR_MODEL=claude-3-haiku-20240307
 # News Relay (opcjonalne) - kanał z postami z innego serwera → polskie streszczenie na kanały klanów
 STALKER_LME_NEWS_CHANNEL_ID=channel_id
+# Lista klanów (opcjonalne) - automatyczne wiadomości o klanach na kanale z przyciskiem
+# „Chcę dołączyć do klanu" (ten sam kanał co REKRUTER_JOIN_CLAN_CHANNEL)
+STALKER_LME_CLAN_LIST_CHANNEL=channel_id
+# Rola administratora - Lider klanu głównego w liście klanów. Pozostałe role kierownicze
+# to te same zmienne co w Rekruterze: LEADER_ROLE, VICE_LEADER_ROLE, VICE_LEADER_MAIN_ROLE
+STALKER_LME_ADMIN_ROLE=role_id
 
 # ===== MUTEUSZ BOT =====
 MUTEUSZ_TOKEN=bot_token_here

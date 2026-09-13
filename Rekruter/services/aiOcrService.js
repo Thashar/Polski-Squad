@@ -25,13 +25,52 @@ const USTAWIENIA_BEZPIECZENSTWA = [
  * Po każdej zmianie treści promptu BUMPNIJ wersję, żeby dało się porównać w Langfuse.
  */
 const WERSJE_PROMPTOW = {
-    'sprawdz-ekwipunek': 'v1',
-    'odczytaj-postac':   'v1',
-    'odczytaj-corestock': 'v1',
+    'sprawdz-ekwipunek': 'v2',
+    'odczytaj-postac':   'v3',
+    'sprawdz-corestock': 'v2',
+    'odczytaj-corestock': 'v2',
 };
 
 /** OCR ma być deterministyczny - bez tego Gemini raz czyta, raz odmawia */
 const TEMPERATURA_OCR = 0;
+
+/**
+ * Progi rozpoznawania BIELI przy przygotowaniu screena postaci (patrz `_obrazBialyNaCzarnym`).
+ *
+ * ⚠️ Sama jasność NIE WYSTARCZY. Próg na skali szarości (`sharp().greyscale().threshold()`)
+ * przepuściłby też nasycone jasne kolory — żółty (255,255,0) ma jasność ~226, więc zrobiłby się
+ * biały razem z tekstem i cały zabieg straciłby sens. Dlatego piksel uznajemy za biały dopiero
+ * gdy jest JEDNOCZEŚNIE jasny (najciemniejszy kanał ≥ MIN_JASNOSC) i nienasycony
+ * (rozpiętość kanałów ≤ MAX_ROZPIETOSC).
+ *
+ * ⚠️ Przy strojeniu progów myl się w GÓRĘ, nie w dół. Za niski próg jasności wybiela także
+ * jasnoszare tła interfejsu — a biały tekst leżący na takim tle staje się wtedy biały na białym,
+ * czyli znika zupełnie. Za wysoki próg gubi najwyżej wygładzone krawędzie liter; rdzeń glifu
+ * zostaje i to modelowi wystarcza.
+ */
+const BIEL_MIN_JASNOSC = 200;
+const BIEL_MAX_ROZPIETOSC = 40;
+
+/**
+ * Zakres, w którym wartość ATK uznajemy za wiarygodną.
+ *
+ * ⚠️ Górny limit wynosił 10 000 000 i był miną z opóźnionym zapłonem: gracze w Survivor.io
+ * dawno podeszli pod ten pułap (screen z rekrutacji: ATK 3 438 580 przy HP 9 535 298 — i to
+ * konto dalej rośnie). Odczyt powyżej progu NIE jest korygowany, tylko wyrzucany jako
+ * `VALIDATION_FAILED`, więc najmocniejsi kandydaci — ci, na których zależy najbardziej —
+ * odbijaliby się od rekrutacji z komunikatem o nieczytelnym screenie.
+ *
+ * Dolny próg zostaje: chroni przed wzięciem za atak numeru poziomu albo licznika energii.
+ */
+const ATAK_MIN = 100;
+const ATAK_MAX = 1000000000;
+
+/** Etykiety, którymi model bywa uprzejmy opisać wiersze odpowiedzi mimo prośby o goły format */
+const ETYKIETA_NICKU = /^(nick postaci|nick|postać|postac|gracz|player|name)\s*[:\-]?\s*/i;
+const ETYKIETA_ATAKU = /^(wartość ataku|wartosc ataku|atak|atk|attack|moc)\s*[:\-]?\s*/i;
+
+/** Linia będąca SAMĄ liczbą - z ewentualnymi separatorami tysięcy i skrótem jednostki */
+const WZORZEC_LICZBY = /^\d[\d\s.,'\u2019_]*[kKmMbB]?$/;
 
 /** Ile razy ponawiamy zapytanie przy błędzie przejściowym (429/5xx) */
 const PROBY = 3;
@@ -112,6 +151,90 @@ class AIOCRService {
     }
 
     /**
+     * Zamienia screen na czysto czarno-biały: BIEL zostaje bielą, KAŻDY inny kolor staje się
+     * czernią. Używane wyłącznie do odczytu ekranu postaci.
+     *
+     * **Po co:** nick i wartość ATK są w grze napisane BIAŁĄ czcionką na jaskrawym, kolorowym
+     * tle (pomarańczowy baner, grafika postaci, efekty). Model gubił się w tym tle i zwracał
+     * „nic nie odczytano" mimo poprawnego screena. Po tej operacji na obrazie zostaje praktycznie
+     * sam biały tekst na czarnym tle.
+     *
+     * ⚠️ Robione RĘCZNIE na surowych pikselach, nie przez `sharp().greyscale().threshold()` —
+     * powód w komentarzu przy `BIEL_MIN_JASNOSC`. Zdjęcie z telefonu to kilkaset kilopikseli,
+     * więc jeden przebieg pętli jest nieodczuwalny.
+     *
+     * @returns {Promise<{czesc: object, udzialBieli: number}>} część dla Gemini + jaki procent
+     *   obrazu uznano za biel (do logu — skrajne wartości zdradzają źle dobrane progi)
+     */
+    async _obrazBialyNaCzarnym(sciezkaObrazu) {
+        const { data, info } = await sharp(sciezkaObrazu)
+            .removeAlpha()
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+        const kanaly = info.channels;
+        let bialePiksele = 0;
+
+        for (let i = 0; i < data.length; i += kanaly) {
+            const r = data[i], g = data[i + 1], b = data[i + 2];
+            const min = Math.min(r, g, b);
+            const max = Math.max(r, g, b);
+            const biel = min >= BIEL_MIN_JASNOSC && (max - min) <= BIEL_MAX_ROZPIETOSC;
+            const wartosc = biel ? 255 : 0;
+            data[i] = wartosc;
+            data[i + 1] = wartosc;
+            data[i + 2] = wartosc;
+            if (biel) bialePiksele++;
+        }
+
+        const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: kanaly } })
+            .png()
+            .toBuffer();
+
+        const wszystkie = info.width * info.height;
+        return {
+            czesc: { inlineData: { data: png.toString('base64'), mimeType: 'image/png' } },
+            udzialBieli: wszystkie > 0 ? bialePiksele / wszystkie : 0,
+        };
+    }
+
+    /**
+     * Bramka „czy to na pewno TEN ekran" — jedno tanie zapytanie przed właściwym odczytem.
+     *
+     * ⚠️ Model odpowiada ZNACZNIKIEM `FOUND` / `NOT_FOUND`, a nie słowem po polsku, i to jest
+     * sedno poprawki. Bramka ekranu postaci kazała mu wcześniej napisać „Znalezniono"
+     * (literówka) i sprawdzała `includes('znalezniono')`. Model, piszący poprawną polszczyzną,
+     * odpowiadał „Znaleziono" — a to NIE JEST ten sam ciąg znaków. Warunek nie trafiał nigdy,
+     * więc KAŻDY screen postaci, także idealnie poprawny, kończył się `INVALID_SCREENSHOT`
+     * i bot w kółko prosił kandydata o to samo zdjęcie. Bramka Core Stock miała tę samą frazę
+     * napisaną poprawnie i dlatego działała — stąd objaw „Core Stock czyta, ekwipunku nie".
+     *
+     * Angielski znacznik nie ma odmiany ani ogonków, więc nie da się go „poprawić" po drodze.
+     *
+     * ⚠️ `NOT_FOUND` zawiera w sobie `FOUND`, dlatego negatywna odpowiedź jest sprawdzana PIERWSZA.
+     *
+     * @param {object} obraz część obrazu dla Gemini
+     * @param {string} pytanie opis ekranu, którego szukamy (kończy się znakiem zapytania)
+     * @param {object} meta metadane spanu dla Langfuse
+     * @returns {Promise<{widac: boolean, odpowiedz: string}>}
+     */
+    async _czyWidacEkran(obraz, pytanie, meta) {
+        const prompt = `${pytanie}
+Odpowiedz DOKŁADNIE jednym znacznikiem, bez żadnych dodatkowych słów ani wyjaśnień:
+FOUND — jeżeli tak.
+NOT_FOUND — jeżeli nie.
+Nie zgaduj i nie sugeruj się tym, że na obrazie są jakieś przedmioty albo liczby — liczy się WYŁĄCZNIE to, co faktycznie widać.`;
+
+        const odpowiedz = (await this._generuj([obraz, { text: prompt }], 200, meta)).trim();
+        const znormalizowana = odpowiedz.toUpperCase();
+
+        const zaprzeczenie = znormalizowana.includes('NOT_FOUND') || znormalizowana.includes('NOT FOUND');
+        const widac = !zaprzeczenie && znormalizowana.includes('FOUND');
+
+        return { widac, odpowiedz };
+    }
+
+    /**
      * Analizuje zdjęcie postaci z ekwipunkiem.
      * @param {string} imagePath - Ścieżka do obrazu
      * @returns {Promise<{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}>}
@@ -125,26 +248,30 @@ class AIOCRService {
             logger.info(`[AI OCR] Rozpoczynam analizę obrazu: ${imagePath}`);
             const obraz = await this._obrazJakoCzesc(imagePath);
 
-            // === KROK 1: Sprawdź czy jest "My Equipment" ===
-            logger.info(`[AI OCR] KROK 1: Sprawdzam obecność "My Equipment"...`);
+            // === KROK 1: Czy to w ogóle ekran postaci? ===
+            //
+            // ⚠️ Bramka uznaje ekran za właściwy na DWA sposoby: po napisie „My Equipment"
+            // albo po górnym pasku statystyk (ATK + HP z liczbami). Sam napis nie wystarcza,
+            // bo bywa zasłonięty — nakładka „Detailed Stats" przykrywa dolną połowę ekranu,
+            // a nick i ATK zostają nad nią doskonale czytelne. Przy warunku wyłącznie na
+            // napis taki screen wracał jako `INVALID_SCREENSHOT`, choć miał komplet danych.
+            logger.info(`[AI OCR] KROK 1: Sprawdzam, czy to ekran postaci...`);
 
-            const promptSprawdzenia = `Znajdź na screenie napis "My Equipment", jeżeli znajdziesz napisz "Znalezniono", jeżeli nie znajdziesz napisz "Brak frazy".`;
-
-            const odpowiedzSprawdzenia = (await this._generuj(
-                [obraz, { text: promptSprawdzenia }],
-                200,
+            const { widac: toEkranPostaci, odpowiedz: odpowiedzSprawdzenia } = await this._czyWidacEkran(
+                obraz,
+                `To ma być zrzut ekranu z gry Survivor.io przedstawiający postać z ekwipunkiem. Czy widzisz na nim napis "My Equipment" ALBO górny pasek statystyk postaci, w którym obok skrótu "ATK" oraz obok "HP" stoją liczby?`,
                 {
                     operationType: 'ocr.analyze',
                     step: 'sprawdz-ekwipunek',
                     promptName: 'sprawdz-ekwipunek',
                     promptVersion: WERSJE_PROMPTOW['sprawdz-ekwipunek'],
                 }
-            )).trim();
+            );
 
             logger.info(`[AI OCR] KROK 1 - Odpowiedź: "${odpowiedzSprawdzenia}"`);
 
-            if (!odpowiedzSprawdzenia.toLowerCase().includes('znalezniono')) {
-                logger.warn(`[AI OCR] KROK 1 - Nie znaleziono "My Equipment", przerywam analizę`);
+            if (!toEkranPostaci) {
+                logger.warn(`[AI OCR] KROK 1 - To nie ekran postaci, przerywam analizę`);
                 return {
                     playerNick: null,
                     characterAttack: null,
@@ -154,33 +281,63 @@ class AIOCRService {
                 };
             }
 
-            logger.info(`[AI OCR] KROK 1 - "My Equipment" znaleznione, przechodzę do KROKU 2`);
+            logger.info(`[AI OCR] KROK 1 - Ekran postaci rozpoznany, przechodzę do KROKU 2`);
 
             // === KROK 2: Wyciągnij nick i atak ===
-            logger.info(`[AI OCR] KROK 2: Wyciągam nick i atak...`);
+            // Czytamy z obrazu PRZEROBIONEGO na czarno-biały (biel zostaje bielą, reszta czernieje).
+            // Nick i ATK są w grze białe na jaskrawym, kolorowym tle — na oryginale model regularnie
+            // odbijał się od tego tła i zwracał „nic nie odczytano" mimo poprawnego screena.
+            logger.info(`[AI OCR] KROK 2: Wyciągam nick i atak (obraz biel-na-czerni)...`);
 
-            const promptOdczytu = `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem. Po lewej stronie na górze, nad zieloną linią progresu na szarym tle znajduje się nick postaci napisany białą czcionką, natomiast po prawej od ikonki mieczyka z napisem ATK znajduje się atak postaci. Po lewej od nicku jest awatar gracza, nie halucynuj żadnych znaków w tym miejscu. 
+            let result;
+            try {
+                const { czesc: obrazBw, udzialBieli } = await this._obrazBialyNaCzarnym(imagePath);
+                logger.info(`[AI OCR] KROK 2 - Biel po konwersji: ${(udzialBieli * 100).toFixed(2)}% obrazu`);
 
-Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżeli występuje oraz jej wartość ataku. Przedstaw dane w formacie:
-<nick postaci>
-<atak>`;
+                const odpowiedzOdczytu = await this._generuj(
+                    [obrazBw, { text: this._promptOdczytuPostaci(true) }],
+                    800,
+                    {
+                        operationType: 'ocr.analyze',
+                        step: 'odczytaj-postac',
+                        promptName: 'odczytaj-postac',
+                        promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
+                    }
+                );
 
-            const odpowiedzOdczytu = await this._generuj(
-                [obraz, { text: promptOdczytu }],
-                800,
-                {
-                    operationType: 'ocr.analyze',
-                    step: 'odczytaj-postac',
-                    promptName: 'odczytaj-postac',
-                    promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
-                }
-            );
+                logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini (biel-na-czerni):`);
+                logger.info(odpowiedzOdczytu);
 
-            logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini:`);
-            logger.info(odpowiedzOdczytu);
+                result = this.parseAIResponse(odpowiedzOdczytu);
+                logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
+            } catch (bladKonwersji) {
+                logger.warn(`[AI OCR] KROK 2 - Konwersja biel-na-czerni nie powiodła się: ${bladKonwersji.message}`);
+                result = null;
+            }
 
-            const result = this.parseAIResponse(odpowiedzOdczytu);
-            logger.info(`[AI OCR] KROK 2 - Wynik parsowania:`, result);
+            // Ścieżka zapasowa: gdy z przerobionego obrazu nic nie wyszło (źle dobrane progi bieli,
+            // nietypowy motyw graficzny), próbujemy jeszcze raz na ORYGINALE — tak działało do tej
+            // pory, więc gorzej niż wcześniej być nie może
+            if (!result?.isValidEquipment) {
+                logger.warn(`[AI OCR] KROK 2 - Brak odczytu z obrazu biel-na-czerni, ponawiam na oryginale`);
+
+                const odpowiedzOryginal = await this._generuj(
+                    [obraz, { text: this._promptOdczytuPostaci(false) }],
+                    800,
+                    {
+                        operationType: 'ocr.analyze',
+                        step: 'odczytaj-postac-oryginal',
+                        promptName: 'odczytaj-postac',
+                        promptVersion: WERSJE_PROMPTOW['odczytaj-postac'],
+                    }
+                );
+
+                logger.info(`[AI OCR] KROK 2 - Odpowiedź Gemini (oryginał):`);
+                logger.info(odpowiedzOryginal);
+
+                result = this.parseAIResponse(odpowiedzOryginal);
+                logger.info(`[AI OCR] KROK 2 - Wynik parsowania (oryginał):`, result);
+            }
 
             return result;
 
@@ -208,10 +365,45 @@ Twoim zadaniem jest znaleźć kompletny nick postaci łącznie z prefixem jeżel
             logger.info(`[AI OCR - CoreStock] Rozpoczynam analizę: ${imagePath}`);
             const obraz = await this._obrazJakoCzesc(imagePath);
 
-            const prompt = `Analyze this Survivor.io screenshot showing the "Core Stock" inventory section.
-Extract all items visible in the list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
+            // === KROK 1: Czy na screenie w ogóle jest napis "Core Stock"? ===
+            //
+            // ⚠️ Bez tej bramki model DOPISYWAŁ SOBIE zawartość Core Stock z zupełnie innego
+            // ekranu. Realny przypadek z produkcji: kandydat poproszony o Core Stock wysłał
+            // „My Equipment" (siatka przedmiotów z ilościami — z daleka podobna), a bot
+            // odpowiedział „Super, dzięki za screen z Core Stock!" i zapisał wymyślone liczby.
+            // To nie jest kosmetyka: Core Stock decyduje o kwalifikacji do klanu.
+            //
+            // Sam prompt ekstrakcji tego nie łapał, bo ZAKŁADAŁ w pierwszym zdaniu, że screen
+            // jest właściwy („Analyze this screenshot showing the Core Stock section"), a furtka
+            // „if this is not a Core Stock screenshot" jest przy takim otwarciu za słaba.
+            logger.info(`[AI OCR - CoreStock] KROK 1: Sprawdzam obecność napisu "Core Stock"...`);
+
+            const { widac: toCoreStock, odpowiedz: odpowiedzSprawdzenia } = await this._czyWidacEkran(
+                obraz,
+                `Czy na tym zrzucie ekranu widnieje dokładnie napis "Core Stock"?`,
+                {
+                    operationType: 'ocr.analyze',
+                    step: 'sprawdz-corestock',
+                    promptName: 'sprawdz-corestock',
+                    promptVersion: WERSJE_PROMPTOW['sprawdz-corestock'],
+                }
+            );
+
+            logger.info(`[AI OCR - CoreStock] KROK 1 - Odpowiedź: "${odpowiedzSprawdzenia}"`);
+
+            if (!toCoreStock) {
+                logger.warn(`[AI OCR - CoreStock] KROK 1 - Brak napisu "Core Stock" - to nie ten ekran, przerywam`);
+                return { items: {}, isValid: false, error: 'NOT_CORE_STOCK' };
+            }
+
+            // === KROK 2: Wyciągnij pozycje ===
+            logger.info(`[AI OCR - CoreStock] KROK 2: Wyciągam pozycje...`);
+
+            const prompt = `This is a screenshot from the game Survivor.io. It should show the "Core Stock" inventory section.
+Extract all items visible in the Core Stock list. For each item, return its name and the first number before the slash (the "All" total quantity, NOT the "Available" quantity after the slash).
 Return ONLY a JSON object mapping item names to their total quantities, like this example:
 {"Transmute Core": 29, "Xeno Pet Core": 75, "Mount Core": 7, "Relic Core": 155, "Resonance Chip": 68, "Survivor Awakening Core": 131}
+Report ONLY items you can actually read in the Core Stock list. Do NOT invent items and do NOT infer them from other parts of the screen (equipment grids, gear icons, currencies).
 If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
 
             const odpowiedz = (await this._generuj(
@@ -261,6 +453,116 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
     }
 
     /**
+     * Prompt odczytu ekranu postaci.
+     *
+     * ⚠️ Gdy `czarnoBialy === true`, model DOSTAJE INFORMACJĘ, że obraz został przerobiony
+     * (biel → biel, każdy inny kolor → czerń). Bez tego widzi czarny prostokąt z białymi
+     * plamami i nie wie, czemu zniknęły tło, grafika postaci i kolorowe ikony — a to
+     * prowadzi go wprost do odpowiedzi „nieczytelny screen".
+     *
+     * @param {boolean} czarnoBialy czy obraz przeszedł konwersję biel-na-czerni
+     */
+    _promptOdczytuPostaci(czarnoBialy) {
+        const wstep = czarnoBialy
+            ? `To jest zrzut ekranu z gry Survivor.io (ekran postaci z ekwipunkiem) PO CELOWEJ OBRÓBCE GRAFICZNEJ: każdy piksel, który był BIAŁY, pozostał biały, a KAŻDY inny kolor został zamieniony na czarny. Obraz jest więc czarno-biały i to jest zamierzone — nie jest uszkodzony ani nieczytelny.
+
+Obróbkę wykonano po to, żeby wydobyć BIAŁY tekst, który w grze jest napisany na jaskrawym, kolorowym tle. Wszystko, co widzisz na biało, to tekst i elementy interfejsu — reszta ekranu (tło, grafika postaci, kolorowe ikony i ramki) jest teraz czarna i możesz ją zignorować.`
+            : `Na zdjęciu powinien być ekran z gry Survivor.io na którym przedstawiona jest postać z ekwipunkiem.`;
+
+        // ⚠️ Wskazówki „gdzie patrzeć" MUSZĄ pasować do obrazu, który model faktycznie dostaje.
+        // Wersja czarno-biała kierowała go wcześniej „nad zieloną linię progresu" i „na prawo od
+        // ikonki mieczyka" — a po konwersji biel-na-czerń zielony pasek i kolorowe ikony są już
+        // czarne, czyli nie istnieją. Model szukał punktów odniesienia, których na jego obrazie
+        // nie ma, i kończył na „nieczytelny screen". Po obróbce zostają za to same napisy
+        // „ATK" i „HP" (białe), więc to one są kotwicą.
+        const gdzieSzukac = czarnoBialy
+            ? `Nick postaci to PIERWSZY tekst od góry po lewej stronie, w pasku nad paskiem postępu poziomu. Na lewo od nicku jest awatar gracza — po obróbce zwykle biała plama bez znaczenia; nie doczytuj tam żadnych znaków.
+
+Wartość ataku to liczba stojąca bezpośrednio NA PRAWO od napisu "ATK". Dalej w prawo, na tym samym pasku, jest drugi napis "HP" z inną (zwykle większą) liczbą — jej NIE podawaj. Kolorowe ikony miecza i serca po obróbce zniknęły, więc kieruj się WYŁĄCZNIE samymi napisami "ATK" i "HP".`
+            : `Po lewej stronie na górze, nad zieloną linią progresu na szarym tle, znajduje się nick postaci napisany białą czcionką. Po lewej od nicku jest awatar gracza — nie halucynuj żadnych znaków w tym miejscu.
+
+Wartość ataku to liczba na prawo od ikonki mieczyka z napisem "ATK". Obok, przy ikonce serca z napisem "HP", stoi druga (zwykle większa) liczba — jej NIE podawaj.`;
+
+        return `${wstep}
+
+${gdzieSzukac}
+
+Twoim zadaniem jest podać kompletny nick postaci, łącznie z prefiksem klanowym jeżeli występuje, oraz jej wartość ataku. Atak podaj jako pełną liczbę — bez skrótów typu "M" czy "K" i bez separatorów tysięcy.
+
+Odpowiedz DOKŁADNIE dwiema liniami, bez wstępu i bez komentarza:
+<nick postaci>
+<atak>`;
+    }
+
+    /**
+     * Zamienia tekstową wartość ataku na liczbę.
+     *
+     * ⚠️ Kropka i przecinek znaczą co innego w zależności od tego, czy po liczbie stoi skrót
+     * jednostki. „3.438.580" to separatory tysięcy (→ 3438580), ale „3.44M" to już ułamek
+     * (→ 3 440 000). Poprzednia wersja kasowała `[\s,._]` bezwarunkowo i z „3.44M" robiła 344,
+     * czyli wartość poniżej progu — poprawny screen lądował jako `VALIDATION_FAILED`.
+     *
+     * Prompt prosi o pełną liczbę bez skrótów, ale model nie zawsze słucha, a odczyt zaniżony
+     * milion razy jest gorszy niż zaokrąglenie do drugiego miejsca po przecinku.
+     */
+    _naLiczbeAtaku(tekst) {
+        const dopasowanie = tekst.match(/(\d[\d\s.,'\u2019_]*?)\s*([kKmMbB])?$/);
+        if (!dopasowanie) return null;
+
+        const [, surowaLiczba, sufiks] = dopasowanie;
+        const mnoznik = { k: 1e3, m: 1e6, b: 1e9 }[sufiks?.toLowerCase()] ?? 1;
+
+        const liczba = mnoznik === 1
+            ? parseInt(surowaLiczba.replace(/[\s.,'\u2019_]/g, ''), 10)
+            : Math.round(parseFloat(surowaLiczba.replace(/[\s'\u2019_]/g, '').replace(',', '.')) * mnoznik);
+
+        return Number.isFinite(liczba) ? liczba : null;
+    }
+
+    /**
+     * Wyławia nick i atak z linii odpowiedzi modelu.
+     *
+     * ⚠️ Nie zakładamy już sztywno, że nick siedzi w `lines[0]`, a atak w `lines[1]`. Model
+     * potrafi dorzucić wiersz wstępu („Oto odczytane dane:") albo opisać wiersze etykietami —
+     * przy sztywnych indeksach każdy taki przypadek kończył się `PARSING_ERROR` mimo
+     * poprawnie odczytanego screena, a kandydat dostawał prośbę o kolejne zdjęcie.
+     *
+     * Atakiem jest OSTATNIA linia, która po zdjęciu etykiety zostaje samą liczbą; nickiem —
+     * OSTATNIA linia przed nią, która liczbą nie jest. Ostatnia, a nie pierwsza, właśnie
+     * ze względu na wiersz wstępu — przy „pierwszej" nickiem zostawało „Oto odczytane dane:".
+     * Z tego samego powodu odsiewamy linie kończące się dwukropkiem: zapowiedź, nie treść.
+     */
+    _wyluskajNickIAtak(lines) {
+        const rozbite = lines.map(l => ({
+            bezEtykietyNicku: l.replace(ETYKIETA_NICKU, '').trim(),
+            bezEtykietyAtaku: l.replace(ETYKIETA_ATAKU, '').trim(),
+        }));
+
+        let indeksAtaku = -1;
+        for (let i = rozbite.length - 1; i >= 0; i--) {
+            if (WZORZEC_LICZBY.test(rozbite[i].bezEtykietyAtaku)) {
+                indeksAtaku = i;
+                break;
+            }
+        }
+
+        // Ścieżka zapasowa: żadna linia nie jest czystą liczbą - bierzemy drugą i wyłuskujemy
+        // z niej pierwszą liczbę, czyli dokładnie tak, jak działało to wcześniej
+        const tekstAtaku = indeksAtaku >= 0
+            ? rozbite[indeksAtaku].bezEtykietyAtaku
+            : (rozbite[1]?.bezEtykietyAtaku ?? '');
+
+        const granicaNicku = indeksAtaku >= 0 ? indeksAtaku : rozbite.length;
+        const kandydaciNaNick = rozbite
+            .slice(0, granicaNicku)
+            .map(l => l.bezEtykietyNicku)
+            .filter(t => t.length > 0 && !t.endsWith(':') && !WZORZEC_LICZBY.test(t));
+        const nick = kandydaciNaNick.length ? kandydaciNaNick[kandydaciNaNick.length - 1] : null;
+
+        return { nick, atak: this._naLiczbeAtaku(tekstAtaku) };
+    }
+
+    /**
      * Parsuje odpowiedź modelu i wyciąga nick + atak
      * @param {string} responseText - Odpowiedź AI
      * @returns {{playerNick: string|null, characterAttack: number|null, confidence: number, isValidEquipment: boolean, error?: string}}
@@ -293,8 +595,12 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
             }
         }
 
-        // Wyciągnij nick - pierwsza niepusta linia
-        const lines = responseText.trim().split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        // Model lubi opakować odpowiedź w blok ``` - ogrodzenia odsiewamy razem z pustymi liniami
+        const lines = responseText
+            .trim()
+            .split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0 && !l.startsWith('```'));
 
         if (lines.length < 2) {
             logger.warn(`[AI OCR] AI zwrócił za mało linii (${lines.length})`);
@@ -307,29 +613,13 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
             };
         }
 
-        // Pierwsza linia = nick (usuń potencjalne prefix "Nick:" lub podobne)
-        let playerNick = lines[0]
-            .replace(/^nick[:\s]*/i, '')
-            .replace(/^postać[:\s]*/i, '')
-            .replace(/^gracz[:\s]*/i, '')
-            .trim();
-
-        // Druga linia = atak (usuń potencjalne prefix "Atak:" lub podobne, oraz spacje i separatory)
-        let attackStr = lines[1]
-            .replace(/^atak[:\s]*/i, '')
-            .replace(/^atk[:\s]*/i, '')
-            .replace(/[\s,._]/g, '') // Usuń spacje, przecinki, kropki, podkreślniki
-            .trim();
-
-        // Parsuj atak
-        let characterAttack = null;
-        const attackMatch = attackStr.match(/\d+/);
-        if (attackMatch) {
-            characterAttack = parseInt(attackMatch[0]);
-        }
+        const { nick: playerNick, atak: characterAttack } = this._wyluskajNickIAtak(lines);
 
         // Walidacja
-        const isValid = playerNick && characterAttack && characterAttack >= 100 && characterAttack <= 10000000;
+        const atakWZakresie = characterAttack !== null
+            && characterAttack >= ATAK_MIN
+            && characterAttack <= ATAK_MAX;
+        const isValid = !!playerNick && atakWZakresie;
 
         if (!isValid) {
             logger.warn(`[AI OCR] Walidacja nie powiodła się - nick: "${playerNick}", atak: ${characterAttack}`);
@@ -341,7 +631,7 @@ If this is not a Core Stock screenshot, return: {"error": "not_core_stock"}`;
             confidence += 50;
             if (playerNick.length >= 4) confidence += 10;
         }
-        if (characterAttack && characterAttack >= 100 && characterAttack <= 10000000) {
+        if (atakWZakresie) {
             confidence += 40;
         }
 

@@ -1438,6 +1438,12 @@ class OCRService {
                 .setEmoji('🔍')
                 .setStyle(ButtonStyle.Danger);
 
+            const clanListButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_list')
+                .setLabel('Lista klanów')
+                .setEmoji('📋')
+                .setStyle(ButtonStyle.Secondary);
+
             const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, remindCxButton, punishButton);
 
@@ -1448,7 +1454,7 @@ class OCRService {
                 .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
 
             const row4 = new ActionRowBuilder()
-                .addComponents(wdupieButton, leaveQueueButton);
+                .addComponents(wdupieButton, clanListButton, leaveQueueButton);
 
             if (this.queueMessageId) {
                 try {
@@ -1687,6 +1693,12 @@ class OCRService {
                 .setEmoji('🔍')
                 .setStyle(ButtonStyle.Danger);
 
+            const clanListButton = new ButtonBuilder()
+                .setCustomId('queue_cmd_clan_list')
+                .setLabel('Lista klanów')
+                .setEmoji('📋')
+                .setStyle(ButtonStyle.Secondary);
+
             const row1 = new ActionRowBuilder()
                 .addComponents(faza1Button, faza2Button, remindButton, remindCxButton, punishButton);
 
@@ -1697,7 +1709,7 @@ class OCRService {
                 .addComponents(clanStatusButton, clanProgresButton, wynikiButton);
 
             const row4 = new ActionRowBuilder()
-                .addComponents(wdupieButton, leaveQueueButton);
+                .addComponents(wdupieButton, clanListButton, leaveQueueButton);
 
             if (queueMessage) {
                 // Zaktualizuj istniejący embed

@@ -1,5 +1,31 @@
 'use strict';
 
+// ── Rozpoznawanie „nazwy bossa", która nazwą bossa nie jest ──────────────────────────
+// Prawdziwe nazwy to najwyżej kilka słów; dłuższy tekst to prawie zawsze zdanie od modelu.
+const BOSS_NAME_MAX_LENGTH = 48;
+const BOSS_NAME_MAX_WORDS = 6;
+
+// Wartości, którymi model sygnalizuje brak nazwy na obrazie
+const BOSS_NAME_PLACEHOLDERS = ['brak', 'brak nazwy', 'unknown', 'n/a', 'na', 'none', 'null', 'nieznany', '-', '--', '?', '0'];
+
+// Frazy odmowy/niepewności — nigdy nie są nazwą bossa
+const BOSS_NAME_REFUSAL_PATTERNS = [
+    /nie\s+uda/i,
+    /nie\s+zident/i,
+    /nie\s+rozpozna/i,
+    /nie\s+widz/i,
+    /nie\s+mog/i,
+    /nie\s+jestem\s+w\s+stanie/i,
+    /nie\s+ma\s+nazwy/i,
+    /nieczyteln/i,
+    /unable\s+to/i,
+    /cannot\s/i,
+    /can'?t\s/i,
+    /not\s+(visible|readable|found|identified|recognized)/i,
+    /no\s+boss/i,
+    /unreadable/i,
+];
+
 function levenshtein(a, b) {
     const m = a.length, n = b.length;
     const dp = [];
@@ -65,10 +91,44 @@ function correctBossNameFull(raw, bossAliasService = null) {
 }
 
 /**
+ * Czy odczytany tekst NIE JEST nazwą bossa.
+ *
+ * Model potrafi zamiast nazwy zwrócić całe zdanie ("Nie udało mi się zidentyfikować nazwy
+ * bossa na zrzucie ekranu.") — a takie zdanie przechodziło dalej jako zwykła nieznana nazwa:
+ * wynik lądował w rankingu z bełkotem w polu bossa, a admin dostawał alert
+ * „Wykryto nieznaną nazwę bossa" z propozycją dopisania tego zdania jako aliasu.
+ * Zamiast tego screen ma zostać ODRZUCONY.
+ *
+ * ⚠️ Świadomie odsiewamy też same znaki zastępcze ("brak", "N/A", "0") — to sygnał,
+ * że nazwy na obrazie nie ma, a nie nazwa bossa.
+ *
+ * @param {string} raw surowa pierwsza linia odpowiedzi modelu
+ * @returns {boolean}
+ */
+function isUnreadableBossName(raw) {
+    if (!raw || typeof raw !== 'string') return true;
+
+    const trimmed = raw.trim();
+    if (!trimmed) return true;
+
+    const bezKropki = trimmed.toLowerCase().replace(/[.!?]+$/, '').trim();
+    if (BOSS_NAME_PLACEHOLDERS.includes(bezKropki)) return true;
+
+    // Nazwa bossa to kilka słów, nie zdanie
+    if (trimmed.length > BOSS_NAME_MAX_LENGTH) return true;
+    if (trimmed.split(/\s+/).length > BOSS_NAME_MAX_WORDS) return true;
+
+    // Kropka/wykrzyknik na końcu wieloczłonowego tekstu = wypowiedź modelu, nie nazwa
+    if (/[.!?]$/.test(trimmed) && /\s/.test(trimmed)) return true;
+
+    return BOSS_NAME_REFUSAL_PATTERNS.some(re => re.test(trimmed));
+}
+
+/**
  * Uproszczona wersja bez aliasów — zachowana dla kompatybilności wstecznej.
  */
 function correctBossName(raw) {
     return correctBossNameFull(raw, null).corrected;
 }
 
-module.exports = { correctBossName, correctBossNameFull };
+module.exports = { correctBossName, correctBossNameFull, isUnreadableBossName };

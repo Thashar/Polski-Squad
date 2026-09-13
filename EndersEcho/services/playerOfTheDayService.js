@@ -14,7 +14,8 @@ const store = require('../../utils/jsonStore');
  *
  * CO JEDZIE NA STRONĘ: nazwa wyświetlana zapisana przy wyniku (ta sama, która
  * stoi już w rankingach TOP 10), serwer i tag, najlepszy wynik z bossem i datą
- * DZIENNĄ, pozycje, liczniki (rekordy, bossowie, osiągnięcia, obserwatorzy),
+ * DZIENNĄ, pozycje (bieżąca oraz NAJWYŻSZA W HISTORII wraz z datą dzienną jej
+ * osiągnięcia), liczniki (rekordy, bossowie, osiągnięcia, obserwatorzy),
  * historia wyników do wykresu, tabela rekordów bossów i BILANS WYZWAŃ 1 vs 1
  * (same liczby: rozstrzygnięte pojedynki, wygrane, przegrane, remisy).
  *
@@ -74,7 +75,7 @@ class PlayerOfTheDayService {
      * @param {Object} logger
      * @param {Object} deps - { rankingService, guildConfigService, scoreHistoryService,
      *                          bossRecordService, achievementService, notificationService,
-     *                          challengeService }
+     *                          challengeService, globalPositionHistoryService }
      */
     constructor(config, logger, deps = {}) {
         this.config = config;
@@ -86,6 +87,7 @@ class PlayerOfTheDayService {
         this.achievementService = deps.achievementService || null;
         this.notificationService = deps.notificationService || null;
         this.challengeService = deps.challengeService || null;
+        this.globalPositionHistoryService = deps.globalPositionHistoryService || null;
 
         this.token = process.env.ENDERSECHO_WEB_SYNC_TOKEN || null;
         // Osobny adres jest opcjonalny — domyślnie bierzemy ten od rankingów
@@ -399,6 +401,13 @@ class PlayerOfTheDayService {
             ? { settled, won: chal.won, lost: chal.lost, draw: chal.draw }
             : null;
 
+        // Najwyższa pozycja globalna w historii. Dane zbierane są od wdrożenia
+        // śledzenia pozycji, więc dla gracza bez wpisu pole jedzie jako null —
+        // strona nie rysuje wtedy kafelka, zamiast podawać wartość, której nikt
+        // nie zmierzył. Data DZIENNA, jak wszystkie pozostałe na karcie.
+        const posStats = this.globalPositionHistoryService?.getPlayerStats(playerKey) || null;
+        const peakGlobalRank = posStats?.best ?? null;
+
         const bosses = Object.entries(bossRecords)
             .sort((a, b) => (b[1].scoreValue || 0) - (a[1].scoreValue || 0))
             .slice(0, MAX_BOSS_ROWS)
@@ -421,6 +430,8 @@ class PlayerOfTheDayService {
             serverRank: serverIdx !== -1 ? serverIdx + 1 : null,
             globalRank: globalIdx !== -1 ? globalIdx + 1 : null,
             globalTotal: globalRanking.length || null,
+            peakGlobalRank,
+            peakGlobalDate: peakGlobalRank != null ? (posStats.bestAt || null) : null,
             records: history.length || 0,
             bosses: Object.keys(bossRecords).length || 0,
             achievements: achievements.length || 0,

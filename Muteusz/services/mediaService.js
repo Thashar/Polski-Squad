@@ -22,6 +22,26 @@ class MediaService {
         this._pobieraniaWToku = 0;
         this._bajtyWPamieci = 0;
         this._kolejkaOczekujacych = [];
+
+        // ID wiadomości kasowanych właśnie przez /clean. Komenda ma własny, KOMPAKTOWY log
+        // (jeden embed na całą operację), więc log pojedynczych usunięć musi je pominąć —
+        // inaczej wyczyszczenie 300 wiadomości wysłałoby 300 embedów obok podsumowania.
+        // Dotyczy wyłącznie wiadomości starszych niż 14 dni: tylko one lecą pojedynczym
+        // `delete()`, a więc tylko one wywołują event MessageDelete (bulkDelete emituje
+        // MessageDeleteBulk, którego nikt nie nasłuchuje).
+        this._cleanedMessageIds = new Set();
+    }
+
+    /**
+     * Zgłasza ID wiadomości kasowanych przez /clean, żeby `handleDeletedMessage` je pominął.
+     * Wpisy wygasają po 10 minutach — event i tak przychodzi w ciągu sekund, a bez wygasania
+     * zbiór rósłby przez cały czas życia procesu.
+     */
+    markMessagesAsCleaned(messageIds) {
+        for (const id of messageIds) {
+            this._cleanedMessageIds.add(id);
+            setTimeout(() => this._cleanedMessageIds.delete(id), 10 * 60 * 1000).unref?.();
+        }
     }
 
     /**
@@ -450,6 +470,12 @@ class MediaService {
      */
     async handleDeletedMessage(deletedMessage, client) {
         if (!this.config.deletedMessageLogs?.enabled) {
+            return;
+        }
+
+        // Wiadomość kasowana przez /clean — trafi do kompaktowego logu tej komendy
+        if (this._cleanedMessageIds.has(deletedMessage.id)) {
+            this._cleanedMessageIds.delete(deletedMessage.id);
             return;
         }
         

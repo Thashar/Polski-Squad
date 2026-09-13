@@ -22,6 +22,16 @@ class InteractionHandler {
         this.reportStatsService.initialize().catch(err => logger.error(`❌ Błąd inicjalizacji ReportStatsService: ${err.message}`));
         // Kompleksowe narzędzie przywracania danych z backupu (/restore-backup)
         this.restoreBackupHandler = new RestoreBackupHandler(config, logService);
+        // Wstrzykiwany setterem, nie kolejnym parametrem pozycyjnym — konstruktor ma ich już sześć
+        this.mediaService = null;
+    }
+
+    /**
+     * Wstrzyknięcie MediaService — /clean zgłasza mu ID kasowanych wiadomości, żeby log
+     * pojedynczych usunięć nie zdublował kompaktowego podsumowania czyszczenia.
+     */
+    setMediaService(mediaService) {
+        this.mediaService = mediaService;
     }
 
     /**
@@ -86,14 +96,13 @@ class InteractionHandler {
                 )
                 .addIntegerOption(option =>
                     option.setName('ilość')
-                        .setDescription('Ilość wiadomości do usunięcia (max 100)')
+                        .setDescription('Ilość wiadomości do usunięcia (bez limitu)')
                         .setRequired(false)
                         .setMinValue(1)
-                        .setMaxValue(100)
                 )
                 .addStringOption(option =>
                     option.setName('czas')
-                        .setDescription('Czas wstecz w formacie np. 2h30m (max 16h 40m)')
+                        .setDescription('Czas wstecz w formacie np. 2h30m lub 7d (bez limitu)')
                         .setRequired(false)
                 ),
             
@@ -1069,10 +1078,13 @@ class InteractionHandler {
         const amount = interaction.options.getInteger('ilość');
         const timeString = interaction.options.getString('czas');
 
-        // Parse time format for clean command
+        // Parse time format for clean command.
+        // ⚠️ `maxMinutes: null` = BEZ górnego limitu. `parseTimeFormat` domyślnie tnie po limicie
+        // mute (7 dni), a /clean nie ma z mute nic wspólnego — kasowanie nie jest karą na czas.
         let minutes = null;
+        let timeLabel = null;
         if (timeString) {
-            const parsedTime = this.parseTimeFormat(timeString);
+            const parsedTime = this.parseTimeFormat(timeString, this.config.clean.maxMinutes ?? null);
             if (parsedTime.error) {
                 await interaction.reply({
                     content: `❌ Nieprawidłowy format czasu: ${parsedTime.error}\nPrzykład poprawnego formatu: 2h30m (2 godziny, 30 minut)`,
@@ -1081,50 +1093,74 @@ class InteractionHandler {
                 return;
             }
             minutes = parsedTime.minutes;
-            
-            // Sprawdź limit (1000 minut = 16h 40m)
-            if (minutes > 1000) {
-                await interaction.reply({
-                    content: `❌ Maksymalny czas to 16h 40m (1000 minut)`,
-                    flags: MessageFlags.Ephemeral
-                });
-                return;
-            }
+            timeLabel = parsedTime.formatted;
+        }
+
+        if (!amount && !minutes) {
+            await interaction.reply({
+                content: "❌ Musisz podać przynajmniej jeden parametr (ilość lub czas)!",
+                flags: MessageFlags.Ephemeral
+            });
+            return;
         }
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
-            let deletedCount = 0;
+            const cutoffTime = minutes ? new Date(Date.now() - (minutes * 60 * 1000)) : null;
 
-            // Określ typ operacji na podstawie podanych parametrów
-            if (user && amount) {
-                // Nick + ilość = usuń ilość wiadomości dla danego nicku
-                deletedCount = await this.cleanUserMessages(interaction, user, amount);
-            } else if (user && minutes) {
-                // Nick + czas = usuń wiadomości dla danego nicku w określonym czasie
-                deletedCount = await this.cleanUserMessagesByTime(interaction, user, minutes);
-            } else if (amount) {
-                // Sama ilość = usuń wstecz wiadomości na kanale
-                deletedCount = await this.cleanLatestMessages(interaction, amount);
-            } else if (minutes) {
-                // Sam czas = usuń wszystkie wiadomości w określonym czasie
-                deletedCount = await this.cleanMessagesByTime(interaction, minutes);
-            } else {
-                await interaction.editReply({ content: "❌ Musisz podać przynajmniej jeden parametr (ilość lub czas)!" });
+            // Postęp odświeżany nie częściej niż co 2 s — bez tego długie czyszczenie
+            // zasypywałoby Discorda edycjami odpowiedzi i wpadło w rate limit
+            let lastProgressAt = 0;
+            const onProgress = async (info) => {
+                const now = Date.now();
+                if (now - lastProgressAt < 2000) return;
+                lastProgressAt = now;
+                const text = info.phase === 'scan'
+                    ? `🔎 Przeszukiwanie kanału… (sprawdzono ${info.scanned}, pasuje ${info.matched})`
+                    : `🗑️ Usuwanie… (${info.done}/${info.total})`;
+                await interaction.editReply({ content: text }).catch(() => {});
+            };
+
+            await interaction.editReply({ content: '🔎 Przeszukiwanie kanału…' });
+
+            const { messages: toDelete, scanned, hitScanLimit } = await this.collectMessagesToClean(
+                interaction.channel,
+                { amount: amount || null, cutoffTime, userId: user?.id || null, onProgress }
+            );
+
+            if (toDelete.length === 0) {
+                const emptyNote = hitScanLimit
+                    ? `${this.config.messages.cleanNoMessages}\nℹ️ Przeszukano ${scanned} wiadomości (limit bezpieczeństwa) — nic nie pasowało do filtru.`
+                    : this.config.messages.cleanNoMessages;
+                await interaction.editReply({ content: emptyNote });
                 return;
             }
 
+            const { deleted, singleDeleted, failed } = await this.deleteCollectedMessages(
+                interaction.channel, toDelete, onProgress
+            );
+            const deletedCount = deleted.length;
+
             if (deletedCount > 0) {
+                await this.logCleanedMessages(interaction, deleted, {
+                    user, amount, timeLabel, singleDeleted, failed
+                });
+
                 const successMessage = formatMessage(this.config.messages.cleanSuccess, {
                     count: deletedCount
                 });
-                await interaction.editReply({ content: successMessage });
-                
+                const extras = [];
+                if (failed > 0) extras.push(`⚠️ nie udało się usunąć: ${failed}`);
+                if (hitScanLimit) extras.push(`ℹ️ przeszukano ${scanned} wiadomości (limit bezpieczeństwa) — uruchom ponownie, by kontynuować`);
+                const detailedMessage = extras.length ? `${successMessage}\n${extras.join('\n')}` : successMessage;
+
+                await interaction.editReply({ content: detailedMessage });
+
                 // Publiczne powiadomienie o sukcesie
                 await interaction.followUp({ content: successMessage });
-                
-                const timeInfo = timeString ? ` (${this.parseTimeFormat(timeString).formatted} wstecz)` : '';
+
+                const timeInfo = timeLabel ? ` (${timeLabel} wstecz)` : '';
                 await this.logService.logMessage('success', `Usunięto ${deletedCount} wiadomości na kanale ${interaction.channel.name}${timeInfo}`, interaction);
             } else {
                 await interaction.editReply({ content: this.config.messages.cleanNoMessages });
@@ -1140,119 +1176,200 @@ class InteractionHandler {
     }
 
     /**
-     * Usuwa ostatnie wiadomości na kanale
-     * @param {CommandInteraction} interaction - Interakcja komendy
-     * @param {number} amount - Ilość wiadomości do usunięcia
-     * @returns {number} Ilość usuniętych wiadomości
+     * Zbiera wiadomości do usunięcia, stronicując po 100 (limit Discord API na jedno pobranie).
+     *
+     * ⚠️ To `limit: 100` w `messages.fetch` było ŹRÓDŁEM dawnego ograniczenia komendy — jedno
+     * pobranie i tyle. Teraz pobieramy w pętli, przesuwając się kursorem `before`, więc liczba
+     * wiadomości jest ograniczona wyłącznie zawartością kanału.
+     *
+     * @param {TextChannel} channel
+     * @param {{ amount: number|null, cutoffTime: Date|null, userId: string|null, onProgress: Function|null }} opts
+     * @returns {Promise<{ messages: Array, scanned: number, hitScanLimit: boolean }>}
      */
-    async cleanLatestMessages(interaction, amount) {
-        const messages = await interaction.channel.messages.fetch({ 
-            limit: Math.min(amount, this.config.clean.maxMessages) 
-        });
+    async collectMessagesToClean(channel, { amount = null, cutoffTime = null, userId = null, onProgress = null } = {}) {
+        const collected = [];
+        // Bezpiecznik przed przeczesywaniem kanału bez końca, gdy filtr (użytkownik) prawie nic nie
+        // łapie. NIE jest to limit kasowania — ile pasuje w przeskanowanym zakresie, tyle leci.
+        const scanLimit = this.config.clean.scanLimit || 50000;
+        let before = null;
+        let scanned = 0;
+        let hitScanLimit = false;
 
-        if (messages.size === 0) {
-            return 0;
-        }
+        while (true) {
+            const batch = await channel.messages.fetch({ limit: 100, ...(before ? { before } : {}) });
+            if (batch.size === 0) break;
 
-        try {
-            await interaction.channel.bulkDelete(messages, true);
-            return messages.size;
-        } catch (error) {
-            if (error.code === 50034) {
-                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
-                return 0;
+            scanned += batch.size;
+            before = batch.last().id;
+
+            for (const msg of batch.values()) {
+                if (cutoffTime && msg.createdAt < cutoffTime) continue;
+                if (userId && msg.author?.id !== userId) continue;
+                collected.push(msg);
+                if (amount && collected.length >= amount) break;
             }
-            throw error;
+
+            if (amount && collected.length >= amount) break;
+            // Wiadomości przychodzą od najnowszej — gdy najstarsza w paczce wypadła poza okno
+            // czasu, dalej będą już same starsze i nie ma po co pobierać kolejnych stron
+            if (cutoffTime && batch.last().createdAt < cutoffTime) break;
+            if (batch.size < 100) break;
+            if (scanned >= scanLimit) { hitScanLimit = true; break; }
+
+            if (onProgress) await onProgress({ phase: 'scan', scanned, matched: collected.length });
         }
+
+        return { messages: collected, scanned, hitScanLimit };
     }
 
     /**
-     * Usuwa wiadomości konkretnego użytkownika
-     * @param {CommandInteraction} interaction - Interakcja komendy
-     * @param {User} user - Użytkownik, którego wiadomości usunąć
-     * @param {number} amount - Ilość wiadomości do usunięcia
-     * @returns {number} Ilość usuniętych wiadomości
+     * Usuwa zebrane wiadomości: masowo porcjami po 100, a starsze niż 14 dni pojedynczo.
+     *
+     * ⚠️ Granicy 14 dni NIE DA SIĘ obejść — `bulkDelete` odrzuca starsze wiadomości po stronie
+     * Discorda (błąd 50034). Dlatego stare lecą pojedynczym `msg.delete()`: działa, ale wolno,
+     * więc każda taka wiadomość dostaje krótką przerwę, żeby nie wpaść w rate limit kanału.
+     *
+     * @returns {Promise<{ deleted: Array, bulkDeleted: number, singleDeleted: number, failed: number }>}
      */
-    async cleanUserMessages(interaction, user, amount) {
-        const messages = await interaction.channel.messages.fetch({ limit: 100 });
-        const userMessages = messages.filter(msg => msg.author.id === user.id);
+    async deleteCollectedMessages(channel, messages, onProgress = null) {
+        const chunkSize = this.config.clean.bulkChunkSize || 100;
+        const bulkCutoff = Date.now() - (14 * 24 * 60 * 60 * 1000);
+        const fresh = messages.filter(m => m.createdTimestamp > bulkCutoff);
+        const old = messages.filter(m => m.createdTimestamp <= bulkCutoff);
 
-        if (userMessages.size === 0) {
-            return 0;
-        }
+        // Tylko pojedyncze kasowanie wywołuje event MessageDelete (bulkDelete emituje
+        // MessageDeleteBulk, którego nikt nie nasłuchuje), więc zgłaszamy WYŁĄCZNIE `old`.
+        // Zgłaszanie wszystkiego zakładałoby timer wygaśnięcia na każdą wiadomość — przy
+        // czyszczeniu kilku tysięcy byłyby to tysiące zbędnych timerów.
+        if (old.length > 0) this.mediaService?.markMessagesAsCleaned?.(old.map(m => m.id));
 
-        const messagesToDelete = userMessages.first(Math.min(amount, this.config.clean.maxMessages));
-        
-        try {
-            await interaction.channel.bulkDelete(messagesToDelete, true);
-            return messagesToDelete.length;
-        } catch (error) {
-            if (error.code === 50034) {
-                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
-                return 0;
+        const deleted = [];
+        let bulkDeleted = 0;
+        let singleDeleted = 0;
+        let failed = 0;
+
+        for (let i = 0; i < fresh.length; i += chunkSize) {
+            const chunk = fresh.slice(i, i + chunkSize);
+            try {
+                const removed = await channel.bulkDelete(chunk, true);
+                bulkDeleted += removed.size;
+                for (const msg of removed.values()) deleted.push(msg);
+            } catch (error) {
+                failed += chunk.length;
+                logger.warn(`[/clean] Błąd masowego usuwania porcji ${chunk.length} wiadomości: ${error.message}`);
             }
-            throw error;
+            if (onProgress) await onProgress({ phase: 'delete', done: bulkDeleted + singleDeleted, total: messages.length });
         }
+
+        const delayMs = this.config.clean.oldMessageDelayMs ?? 1100;
+        for (const msg of old) {
+            try {
+                await msg.delete();
+                singleDeleted++;
+                deleted.push(msg);
+            } catch (error) {
+                failed++;
+                logger.warn(`[/clean] Nie udało się usunąć wiadomości ${msg.id}: ${error.message}`);
+            }
+            if (delayMs > 0) await new Promise(r => setTimeout(r, delayMs));
+            if (onProgress) await onProgress({ phase: 'delete', done: bulkDeleted + singleDeleted, total: messages.length });
+        }
+
+        return { deleted, bulkDeleted, singleDeleted, failed };
     }
 
     /**
-     * Usuwa wiadomości z określonego czasu
-     * @param {CommandInteraction} interaction - Interakcja komendy
-     * @param {number} minutes - Ilość minut wstecz
-     * @returns {number} Ilość usuniętych wiadomości
+     * Kompaktowy log usuniętych wiadomości na kanale logów kasowania.
+     *
+     * ⚠️ Osobny format, NIE embed-na-wiadomość jak `mediaService.handleDeletedMessage`. Tamten
+     * wysyła jeden embed na wiadomość, co przy `/clean` kasującym setki pozycji oznaczałoby setki
+     * wiadomości i natychmiastowy rate limit. Tu leci jeden embed podsumowania, a pełna treść
+     * wszystkich pozycji idzie w załączonym pliku `.txt` — dzięki temu nic nie ginie ani nie jest
+     * ucinane limitem 4096 znaków opisu embeda.
      */
-    async cleanMessagesByTime(interaction, minutes) {
-        const timeLimit = Math.min(minutes, this.config.clean.maxMinutes);
-        const cutoffTime = new Date(Date.now() - (timeLimit * 60 * 1000));
-        
-        const messages = await interaction.channel.messages.fetch({ limit: 100 });
-        const recentMessages = messages.filter(msg => msg.createdAt >= cutoffTime);
+    async logCleanedMessages(interaction, deletedMessages, stats) {
+        const logChannelId = this.config.clean.logChannelId
+            || this.config.deletedMessageLogs?.logChannelId;
+        if (!logChannelId || deletedMessages.length === 0) return;
 
-        if (recentMessages.size === 0) {
-            return 0;
+        const logChannel = interaction.client.channels.cache.get(logChannelId);
+        if (!logChannel) {
+            logger.warn(`[/clean] Kanał logów ${logChannelId} niedostępny — pomijam log usuniętych wiadomości`);
+            return;
+        }
+
+        // Od najstarszej do najnowszej — czyta się jak zapis rozmowy, a nie odwrotnie
+        const sorted = [...deletedMessages].sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+        const lineFor = (msg) => {
+            const time = new Date(msg.createdTimestamp).toLocaleString('pl-PL', {
+                timeZone: 'Europe/Warsaw',
+                day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false
+            });
+            const author = msg.member?.displayName || msg.author?.username || 'Nieznany';
+            const attachments = msg.attachments?.size ? ` [załączniki: ${msg.attachments.size}]` : '';
+            const content = (msg.content || '').replace(/\s+/g, ' ').trim();
+            return `[${time}] ${author}: ${content || '(brak treści)'}${attachments}`;
+        };
+
+        const allLines = sorted.map(lineFor);
+
+        // Podgląd w embedzie — tyle, ile mieści się w opisie; komplet i tak jest w pliku
+        const preview = [];
+        let previewLen = 0;
+        for (const line of allLines) {
+            const short = line.length > 180 ? `${line.slice(0, 177)}...` : line;
+            if (previewLen + short.length + 1 > 3800) break;
+            preview.push(short);
+            previewLen += short.length + 1;
+        }
+        const hiddenCount = allLines.length - preview.length;
+
+        const filterParts = [];
+        if (stats.user) filterParts.push(`użytkownik: ${stats.user.tag || stats.user.username}`);
+        if (stats.timeLabel) filterParts.push(`czas: ${stats.timeLabel} wstecz`);
+        if (stats.amount) filterParts.push(`ilość: ${stats.amount}`);
+
+        const embed = new EmbedBuilder()
+            .setTitle('🧹 Czyszczenie kanału (/clean)')
+            .setColor(0xFF0000)
+            .addFields(
+                { name: '📺 Kanał', value: `<#${interaction.channel.id}>`, inline: true },
+                { name: '🚮 Wykonał', value: `${interaction.member?.displayName || interaction.user.username} (${interaction.user.tag})`, inline: true },
+                { name: '🗑️ Usunięto', value: `${deletedMessages.length}`, inline: true }
+            )
+            .setDescription(preview.length
+                ? `\`\`\`\n${preview.join('\n').slice(0, 4000)}\n\`\`\`${hiddenCount > 0 ? `\n*…i ${hiddenCount} więcej — pełna lista w załączniku*` : ''}`
+                : '*Brak treści do wyświetlenia*')
+            .setTimestamp();
+
+        if (filterParts.length) {
+            embed.addFields({ name: '🔎 Filtr', value: filterParts.join(' · '), inline: false });
+        }
+        if (stats.singleDeleted > 0) {
+            embed.addFields({ name: '🕰️ Starsze niż 14 dni', value: `${stats.singleDeleted} (usunięte pojedynczo)`, inline: true });
+        }
+        if (stats.failed > 0) {
+            embed.addFields({ name: '⚠️ Nieudane', value: `${stats.failed}`, inline: true });
+        }
+
+        const payload = { embeds: [embed] };
+        // Plik dokładamy dopiero gdy embed nie pomieścił wszystkiego — przy paru wiadomościach
+        // załącznik byłby tylko hałasem
+        if (hiddenCount > 0) {
+            const header = `Czyszczenie kanału #${interaction.channel.name} przez ${interaction.user.tag}\n`
+                + `Usunięto: ${deletedMessages.length}${filterParts.length ? ` | Filtr: ${filterParts.join(' · ')}` : ''}\n`
+                + `${'='.repeat(60)}\n`;
+            payload.files = [{
+                attachment: Buffer.from(header + allLines.join('\n'), 'utf8'),
+                name: `clean_${(interaction.channel.name || 'kanal').replace(/[^\w-]/g, '_').slice(0, 40)}_${Date.now()}.txt`
+            }];
         }
 
         try {
-            await interaction.channel.bulkDelete(recentMessages, true);
-            return recentMessages.size;
+            await logChannel.send(payload);
         } catch (error) {
-            if (error.code === 50034) {
-                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
-                return 0;
-            }
-            throw error;
-        }
-    }
-
-    /**
-     * Usuwa wiadomości konkretnego użytkownika z określonego czasu
-     * @param {CommandInteraction} interaction - Interakcja komendy
-     * @param {User} user - Użytkownik, którego wiadomości usunąć
-     * @param {number} minutes - Ilość minut wstecz
-     * @returns {number} Ilość usuniętych wiadomości
-     */
-    async cleanUserMessagesByTime(interaction, user, minutes) {
-        const timeLimit = Math.min(minutes, this.config.clean.maxMinutes);
-        const cutoffTime = new Date(Date.now() - (timeLimit * 60 * 1000));
-        
-        const messages = await interaction.channel.messages.fetch({ limit: 100 });
-        const userMessages = messages.filter(msg => 
-            msg.author.id === user.id && msg.createdAt >= cutoffTime
-        );
-
-        if (userMessages.size === 0) {
-            return 0;
-        }
-
-        try {
-            await interaction.channel.bulkDelete(userMessages, true);
-            return userMessages.size;
-        } catch (error) {
-            if (error.code === 50034) {
-                await interaction.editReply({ content: this.config.messages.cleanBulkDeleteFailed });
-                return 0;
-            }
-            throw error;
+            logger.warn(`[/clean] Nie udało się wysłać logu usuniętych wiadomości: ${error.message}`);
         }
     }
 
@@ -2305,7 +2422,7 @@ class InteractionHandler {
      * @param {string} timeString - String z czasem do sparsowania
      * @returns {Object} - {minutes: number, error: string|null, formatted: string}
      */
-    parseTimeFormat(timeString) {
+    parseTimeFormat(timeString, maxMinutesOverride = undefined) {
         if (!timeString || typeof timeString !== 'string') {
             return { error: 'Nie podano czasu' };
         }
@@ -2345,10 +2462,14 @@ class InteractionHandler {
             return { error: 'Nie wykryto żadnego czasu w podanym formacie' };
         }
         
-        // Sprawdź limit (7 dni = 10080 minut)
-        const maxMinutes = this.config.mute.maxTimeMinutes;
-        if (totalMinutes > maxMinutes) {
-            return { error: `Maksymalny czas mute to ${this.formatTimeDisplay(maxMinutes)}` };
+        // Limit domyślnie z konfiguracji mute (7 dni). `maxMinutesOverride === null` znosi go
+        // całkowicie — korzysta z tego /clean, gdzie czas to zakres przeszukiwania kanału,
+        // a nie długość kary, więc ograniczanie go limitem mute nie miało sensu.
+        const maxMinutes = maxMinutesOverride === undefined
+            ? this.config.mute.maxTimeMinutes
+            : maxMinutesOverride;
+        if (maxMinutes !== null && totalMinutes > maxMinutes) {
+            return { error: `Maksymalny czas to ${this.formatTimeDisplay(maxMinutes)}` };
         }
         
         const formatted = this.formatTimeDisplay(totalMinutes);

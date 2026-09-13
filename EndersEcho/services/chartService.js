@@ -994,4 +994,292 @@ async function generateGuildComparisonChart(guildScores, chartTitle, lang = 'pol
     return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
-module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart };
+
+/**
+ * Szacuje szerokość tekstu w pikselach dla pogrubionego Arial.
+ *
+ * SVG nie mierzy tekstu przed renderowaniem, a plakietka musi znać swój rozmiar, zanim
+ * powstanie. Płaska średnia „długość × stała" zawodzi w obie strony: `WWWW` wychodzi
+ * poza ramkę, a `iiii` dostaje absurdalnie szeroką plakietkę. Stąd podział znaków na
+ * klasy szerokości — przybliżenie z zapasem, bo lepiej o pikselach za dużo niż o jeden za mało.
+ *
+ * @param {string} tekst
+ * @param {number} fontSize
+ * @returns {number} szerokość w px
+ */
+function szerokoscTekstu(tekst, fontSize) {
+    const WASKIE = "iIjlt.,:;'!|`()[]{} ";
+    const SZEROKIE = 'mMWw@%';
+    let jednostki = 0;
+    for (const znak of String(tekst)) {
+        if (WASKIE.includes(znak)) jednostki += 0.34;
+        else if (SZEROKIE.includes(znak)) jednostki += 0.95;
+        else if (znak >= 'A' && znak <= 'Z') jednostki += 0.72;
+        else if (znak >= '0' && znak <= '9') jednostki += 0.62;
+        // Znaki spoza alfabetu łacińskiego (CJK, cyrylica, znaki ozdobne w nickach)
+        // bywają pełnej szerokości — traktujemy je jako szerokie, żeby nie uciąć ramki
+        else if (znak.charCodeAt(0) > 0x2000) jednostki += 1.0;
+        else jednostki += 0.58;
+    }
+    return jednostki * fontSize;
+}
+
+/**
+ * Zwraca N kolorów, z których ŻADNE DWA nie są takie same.
+ *
+ * `PLAYER_PALETTE` ma 10 pozycji, a w oknie 84 dni przez TOP 10 potrafi przewinąć się
+ * znacznie więcej graczy — `idx % długość` dawałby wtedy dwie linie w tym samym kolorze,
+ * czyli legendę, z której nie da się nic odczytać.
+ *
+ * Do dziesięciu graczy bierzemy gotową paletę (dobrana pod ciemne tło). Powyżej generujemy
+ * cały zestaw od nowa: odcienie rozłożone równo po kole barw, z naprzemienną jasnością —
+ * sąsiednie linie różnią się wtedy nie tylko odcieniem, ale i tonem, co ratuje czytelność
+ * przy dużej liczbie graczy.
+ * @param {number} n
+ * @returns {string[]}
+ */
+function buildDistinctPalette(n) {
+    if (n <= PLAYER_PALETTE.length) return PLAYER_PALETTE.slice(0, n);
+
+    const out = [];
+    for (let i = 0; i < n; i++) {
+        const h = Math.round((i * 360) / n);
+        const l = i % 2 === 0 ? 62 : 74;   // naprzemiennie: ciemniejszy / jaśniejszy
+        const sat = i % 3 === 0 ? 68 : 58;
+        out.push(hslToHex(h, sat, l));
+    }
+    return out;
+}
+
+/** HSL → #rrggbb (librsvg rozumie hsl(), ale hex jest spójny z resztą palet w pliku) */
+function hslToHex(h, s, l) {
+    const sN = s / 100;
+    const lN = l / 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = sN * Math.min(lN, 1 - lN);
+    const f = (n) => {
+        const val = lN - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+        return Math.round(255 * val).toString(16).padStart(2, '0');
+    };
+    return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/**
+ * Wykres zmian pozycji w globalnym TOP 10 w czasie.
+ *
+ * Jeden punkt na osi X = jedno wysłane ogłoszenie TOP 10 (nie jeden dzień) — odstępy między
+ * raportami są nierówne (3 dni, po dziewiątym 4), a wykres pokazuje RYWALIZACJĘ, nie kalendarz.
+ * Oś Y to pozycja 1–10, odwrócona: miejsce 1 na górze, bo tak czyta się ranking.
+ *
+ * Gracz, który w danym raporcie wypadł poza dziesiątkę, ma w tym miejscu PRZERWĘ w linii —
+ * ciągła kreska sugerowałaby, że gdzieś tam był, a nie wiemy gdzie (dane niosą tylko TOP 10).
+ *
+ * @param {Array<{at: string, positions: Object<string, number>, names?: Object<string,string>}>} reports
+ *        historia raportów, rosnąco po dacie
+ * Wykres nie ma nagłówka ani żadnego innego tekstu zależnego od języka — nicki, tagi i daty
+ * wyglądają tak samo wszędzie, więc jeden render obsługuje wszystkie serwery.
+ *
+ * @param {Object} opts
+ * @param {Object<string,string>} [opts.tags] guildId → tag klanu, dopisywany na plakietce obok nicku
+ * @returns {Promise<Buffer|null>} null, gdy nie ma czego rysować (mniej niż 2 raporty)
+ */
+async function generateTop10PositionChart(reports, opts = {}) {
+    const sharp = require('sharp');
+
+    const punkty = (Array.isArray(reports) ? reports : [])
+        .filter(r => r && r.at && r.positions && Object.keys(r.positions).length > 0)
+        .sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+
+    // Jeden punkt to jeszcze nie zmiana — wykres z jedną kolumną niczego nie pokazuje
+    if (punkty.length < 2) return null;
+
+    // Gracze: wszyscy, którzy pojawili się w TOP 10 w oknie wykresu.
+    // Kolejność legendy wg OSTATNIEJ znanej pozycji — czytelnik szuka w niej bieżącej czołówki,
+    // a nie kolejności alfabetycznej czy przypadkowej.
+    const ostatniaPozycja = new Map();
+    const nazwy = new Map();
+    const serwery = new Map();
+    for (const r of punkty) {
+        for (const [key, pos] of Object.entries(r.positions)) {
+            ostatniaPozycja.set(key, pos);
+            if (r.names && r.names[key]) nazwy.set(key, r.names[key]);
+            if (r.guilds && r.guilds[key]) serwery.set(key, r.guilds[key]);
+        }
+    }
+    const gracze = Array.from(ostatniaPozycja.keys())
+        .sort((a, b) => ostatniaPozycja.get(a) - ostatniaPozycja.get(b));
+
+    if (gracze.length === 0) return null;
+
+    // Kolor na gracza — bez powtórzeń, niezależnie od tego, ilu ich przewinęło się przez TOP 10
+    const paleta = buildDistinctPalette(gracze.length);
+
+    // Plakietki: rozmiary dobrane tak, żeby napis nigdy nie dotykał obramowania — wysokość
+    // z zapasem na wydłużenia dolne (g, j, y), szerokość z realnego pomiaru tekstu plus
+    // margines po obu stronach
+    const START_FS = 11;
+    const START_H = 22;
+    const START_PAD = 10;
+
+    // Tag klanu doklejany do nicku. Wcześniej stał w legendzie — po jej usunięciu plakietka
+    // jest jedynym miejscem, gdzie może się pojawić. Składnia emoji (`<:nazwa:id>`) rozbierana
+    // do samej nazwy, bo librsvg nie renderuje emoji i wypisałby `<:cs:123456789>`
+    const tekstPlakietki = new Map();
+    for (const key of gracze) {
+        const nick = stripEmoji(String(nazwy.get(key) || key)).trim().slice(0, 14) || '?';
+        const tagRaw = opts.tags?.[serwery.get(key)] || null;
+        const tag = tagRaw
+            ? stripEmoji(String(tagRaw).replace(/^<a?:([^:]+):\d+>$/, '$1')).trim().slice(0, 8)
+            : '';
+        tekstPlakietki.set(key, tag ? `${nick} · ${tag}` : nick);
+    }
+    // SVG nie mierzy tekstu przed renderowaniem, więc plakietka musi oszacować swój rozmiar sama
+    const szerokoscPlakietki = (tekst) => Math.max(30, szerokoscTekstu(tekst, START_FS) + START_PAD * 2);
+
+    // Bez legendy pod wykresem — gracza rozpoznaje się po plakietce z nickiem, która stoi
+    // wprost przy jego linii. Legenda dublowała tę informację, a przy kilkunastu graczach
+    // zajmowała więcej miejsca niż sam wykres.
+    //
+    // Plakietki graczy obecnych już w PIERWSZYM raporcie leżą POZA obszarem wykresu, na lewo
+    // od niego, i dotykają punktu startowego prawą krawędzią. Wyśrodkowane na punkcie
+    // przykrywały początek każdej linii, czyli dokładnie to, co miały opisywać — a przy
+    // pełnej dziesiątce to dziesięć plakietek naraz. Szerokość obrazka rośnie o ten pas,
+    // więc sam wykres nie traci ani piksela.
+    // To samo dzieje się przy OSTATNIM raporcie, tyle że po drugiej stronie: plakietka leży
+    // na prawo od wykresu i dotyka punktu końcowego lewą krawędzią. Prawa strona wykresu to
+    // stan na dziś, czyli to, po co czytelnik najczęściej tu zagląda — bez nicku musiałby
+    // wodzić wzrokiem przez cały wykres do plakietki startowej
+    const ODSTEP_NUMEROW = 46;  // pas na numery pozycji przy krawędziach obrazka
+    const ostatniIdx = punkty.length - 1;
+    const pasPlakietek = (idx) => Math.max(0, ...gracze
+        .filter(key => punkty[idx].positions[key] != null)
+        .map(key => szerokoscPlakietki(tekstPlakietki.get(key))));
+    const pasStartowy = pasPlakietek(0);
+    const pasKoncowy = pasPlakietek(ostatniIdx);
+
+    // Zaokrąglone w górę, żeby szerokość obrazka pozostała liczbą całkowitą
+    // Górny margines tylko na plakietkę pozycji #1 (sięga pół wysokości ponad linię) —
+    // nagłówka nad wykresem nie ma, embed i tak niesie własny tytuł
+    const M = {
+        top: 26,
+        bottom: 44,
+        left: ODSTEP_NUMEROW + Math.ceil(pasStartowy),
+        right: ODSTEP_NUMEROW + Math.ceil(pasKoncowy),
+    };
+    const cW = 808;
+    const W = M.left + cW + M.right;
+    const H = 420;
+    const cH = H - M.top - M.bottom;
+
+    // Oś X: równe odstępy między raportami (indeks, nie czas) — patrz opis funkcji
+    const toX = (i) => punkty.length === 1
+        ? M.left + cW / 2
+        : M.left + (i / (punkty.length - 1)) * cW;
+    // Oś Y odwrócona: 1 na górze, 10 na dole
+    const toY = (pos) => M.top + ((pos - 1) / 9) * cH;
+
+    // Siatka pozioma — KAŻDA pozycja od 1 do 10, bez wyjątków, z numerem po obu stronach.
+    // Numer po prawej oszczędza wodzenia wzrokiem przez całą szerokość wykresu przy
+    // odczytywaniu pozycji z ostatnich ogłoszeń. OBA numery stoją przy krawędziach OBRAZKA,
+    // nie przy siatce — między nimi a wykresem leżą pasy plakietek
+    const siatka = Array.from({ length: 10 }, (_, i) => i + 1).map(pos => {
+        const y = toY(pos);
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${(M.left + cW).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#2B2D31" stroke-width="1" stroke-dasharray="3,4"/>
+    <text x="12" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="start">#${pos}</text>
+    <text x="${W - 12}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="11" fill="#5C5F66" text-anchor="end">#${pos}</text>`;
+    }).join('\n    ');
+
+    // Etykiety dat na osi X — co któryś punkt, żeby się nie zlewały. Odsunięte od siatki
+    // na tyle, żeby plakietka gracza z pozycji #10 (sięga pół wysokości poniżej linii)
+    // ich nie przykrywała
+    const krok = Math.max(1, Math.ceil(punkty.length / 8));
+    const osX = punkty.map((r, i) => {
+        if (i % krok !== 0 && i !== punkty.length - 1) return '';
+        const d = new Date(r.at);
+        const etykieta = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+        return `<text x="${toX(i).toFixed(1)}" y="${(M.top + cH + 28).toFixed(1)}" font-family="Arial,sans-serif" font-size="10" fill="#5C5F66" text-anchor="middle">${etykieta}</text>`;
+    }).filter(Boolean).join('\n    ');
+
+    // Linie graczy — przerwa tam, gdzie gracz wypadł z dziesiątki
+    const etykietyStartu = [];
+    const linie = gracze.map((key, idx) => {
+        const c = paleta[idx];
+
+        // Tniemy serię na ciągłe odcinki; pojedynczy punkt rysujemy samą kropką
+        const odcinki = [];
+        let biezacy = [];
+        punkty.forEach((r, i) => {
+            const pos = r.positions[key];
+            if (pos == null) {
+                if (biezacy.length) odcinki.push(biezacy);
+                biezacy = [];
+                return;
+            }
+            biezacy.push({ x: toX(i), y: toY(pos), i });
+        });
+        if (biezacy.length) odcinki.push(biezacy);
+
+        const sciezki = odcinki
+            .filter(o => o.length >= 2)
+            .map(o => `<polyline points="${o.map(pt => `${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>`)
+            .join('\n    ');
+
+        const kropki = odcinki.flat()
+            .map(pt => `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="${c}" stroke="#1E1F22" stroke-width="1"/>`)
+            .join('\n    ');
+
+        // Plakietka z nickiem na początku KAŻDEGO odcinka, nie tylko pierwszego.
+        // Gracz, który wypadł z dziesiątki i wrócił, zaczyna nową linię w innym miejscu
+        // wykresu — bez powtórzonego nicku czytelnik nie ma jak skojarzyć jej z poprzednią.
+        // Zbierane osobno, bo plakietki muszą lec NAD wszystkimi liniami: inaczej kreska
+        // kolejnego gracza przecinałaby napis w poprzek.
+        for (const odcinek of odcinki) {
+            const start = odcinek[0];
+            const koniec = odcinek[odcinek.length - 1];
+            // Odcinek zaczynający się w OSTATNIM raporcie (samotny punkt na prawym skraju)
+            // nie dostaje etykiety startowej — plakietka końcowa stanęłaby dokładnie na niej
+            if (start && start.i !== ostatniIdx) {
+                etykietyStartu.push({ x: start.x, y: start.y, c, tekst: tekstPlakietki.get(key), przedWykresem: start.i === 0 });
+            }
+            if (koniec && koniec.i === ostatniIdx) {
+                etykietyStartu.push({ x: koniec.x, y: koniec.y, c, tekst: tekstPlakietki.get(key), poWykresie: true });
+            }
+        }
+
+        return `${sciezki}\n    ${kropki}`;
+    }).join('\n    ');
+
+    const plakietki = etykietyStartu.map(e => {
+        const w = szerokoscPlakietki(e.tekst);
+        // Start w pierwszym raporcie → plakietka w całości na lewo od wykresu, dosunięta
+        // prawą krawędzią do punktu. Koniec w ostatnim raporcie → lustrzanie, na prawo od
+        // wykresu, dosunięta lewą krawędzią. Wejście w trakcie → jak dotąd: wyśrodkowana
+        // na punkcie, przy krawędziach dosuwana do obszaru (czytelność nad symetrią)
+        const x = e.przedWykresem ? e.x - w
+            : e.poWykresie ? e.x
+            : Math.min(Math.max(e.x - w / 2, M.left), M.left + cW - w);
+        const y = e.y - START_H / 2;
+        // `dominant-baseline` bywa ignorowane przez librsvg, więc linia bazowa liczona ręcznie:
+        // środek plakietki plus ok. 1/3 wysokości znaku, co optycznie centruje wielkie litery
+        const baseline = e.y + START_FS * 0.34;
+        return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${START_H}" rx="${(START_H / 2).toFixed(1)}" fill="#1E1F22" fill-opacity="0.94" stroke="${e.c}" stroke-width="1.5"/>
+    <text x="${(x + w / 2).toFixed(1)}" y="${baseline.toFixed(1)}" font-family="Arial,sans-serif" font-size="${START_FS}" font-weight="bold" fill="${e.c}" text-anchor="middle">${escapeXml(e.tekst)}</text>`;
+    }).join('\n    ');
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="#1E1F22"/>
+    ${siatka}
+    ${linie}
+    ${plakietki}
+    ${osX}
+</svg>`;
+
+    try {
+        return await sharp(Buffer.from(svg)).png().toBuffer();
+    } catch (error) {
+        logger.warn(`Nie udało się wygenerować wykresu pozycji TOP 10: ${error.message}`);
+        return null;
+    }
+}
+
+module.exports = { generateScoreHistoryChart, generateGlobalPlayerGrowthChart, generatePerServerGrowthChart, generatePlayersProgressChart, generateGuildComparisonChart, generateTop10PositionChart };

@@ -19,6 +19,14 @@ class RankingService {
         this._sortedCache = new Map(); // guildId → Array
         // Cache globalnego rankingu — inwalidowany przy saveRanking
         this._globalCache = null; // Array | null
+        // Historia pozycji globalnych — ustawiana setterem z index.js (serwis powstaje później,
+        // bo sam potrzebuje rankingService do przeliczenia rankingu)
+        this.positionHistoryService = null;
+    }
+
+    /** @param {Object} service - GlobalPositionHistoryService */
+    setPositionHistoryService(service) {
+        this.positionHistoryService = service;
     }
 
     // Serializuje operacje dla danego guildId — następna zaczyna się dopiero gdy poprzednia skończy.
@@ -107,6 +115,11 @@ class RankingService {
             this._sortedCache.delete(guildId);
             this._globalCache = null;
             await this.saveSharedRanking();
+            // Kolejność w rankingu globalnym mogła się zmienić — historia pozycji musi to
+            // odnotować OD RAZU, inaczej licznik „na tej pozycji od" doliczy graczowi czas
+            // spędzony na miejscu, którego już nie zajmuje. Bez await: zapis rankingu nie ma
+            // czekać na statystyki, a serwis i tak pilnuje pojedynczego przebiegu.
+            this.positionHistoryService?.sync().catch(() => {});
         } catch (error) {
             logger.error('Błąd zapisu rankingu:', error);
             throw error;
@@ -382,6 +395,10 @@ class RankingService {
      * @returns {number}
      */
     parseScoreValue(scoreText) {
+        // ⚠️ Wywołujący potrafi podać `null` — np. `aiResult.runScore`, gdy model nie odczytał
+        // wyniku pojedynczej walki. Bez tej bramki `null.toUpperCase()` wywracało CAŁY flow
+        // `/update` już PO wysłaniu embeda do admina: gracz nie dostawał ani wyniku, ani odrzutu
+        if (!scoreText || typeof scoreText !== 'string') return 0;
         const upperScore = scoreText.toUpperCase().trim();
         const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         if (!match) return 0;
@@ -426,6 +443,7 @@ class RankingService {
      * @returns {string}
      */
     getScoreUnit(scoreText) {
+        if (!scoreText || typeof scoreText !== 'string') return '';
         const upperScore = scoreText.toUpperCase().trim();
         const match = upperScore.match(/^(\d+(?:\.\d+)?)(SP|QI|SX|[KMBTQ])?$/);
         return match && match[2] ? match[2] : '';
