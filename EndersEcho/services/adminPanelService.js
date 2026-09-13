@@ -1073,6 +1073,7 @@ class AdminPanelService {
         const toolsRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('cc_unconfigured').setEmoji('⚠️').setLabel('Nieskonfigurowane').setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('cc_diag_server').setEmoji('🔍').setLabel('Diagnostyka serwera').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('cc_server_config').setEmoji('🧾').setLabel('Konfiguracja serwera').setStyle(ButtonStyle.Secondary),
         );
 
         return [paginationRow, actionsRow, toolsRow];

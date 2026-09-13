@@ -3656,6 +3656,179 @@ class InteractionHandler {
         await interaction.editReply({ content: null, embeds: [embed], components: [] });
     }
 
+    // ── CC: Podgląd konfiguracji serwera ─────────────────────────────────────
+    /**
+     * Lista WSZYSTKICH skonfigurowanych serwerów — także tych, z których bot już wyszedł.
+     * Konfiguracja takiego serwera nadal istnieje (do 30 dni retencji), a head admin
+     * chce ją zobaczyć właśnie wtedy, gdy nie da się jej sprawdzić z poziomu serwera.
+     */
+    _ccConfiguredServersAll(interaction) {
+        const cfgSvc = this.guildConfigService;
+        const servers = [];
+        for (const guildId of cfgSvc.getAllConfiguredGuildIds()) {
+            const cfg = cfgSvc.getConfig(guildId);
+            const g = interaction.client.guilds.cache.get(guildId);
+            servers.push({
+                id: guildId,
+                name: cfg?.guildName || g?.name || guildId,
+                hint: g ? `${g.memberCount} członków` : '⚪ bot nieobecny',
+            });
+        }
+        return servers.sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    async _handleCcServerConfig(interaction, page = 0) {
+        if (!this._isHeadAdmin(interaction.user.id)) {
+            await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+            return;
+        }
+        const servers = this._ccConfiguredServersAll(interaction);
+        if (servers.length === 0) {
+            await interaction.reply({ content: '❌ Brak skonfigurowanych serwerów.', flags: ['Ephemeral'] });
+            return;
+        }
+        const payload = {
+            content: '🧾 Konfiguracja serwera — wybierz serwer:',
+            embeds: [],
+            components: this._buildServerPickerRows({
+                servers,
+                page,
+                selectId: 'cc_srvcfg_sel',
+                pagePrefix: 'cc_srvcfg_pg',
+                placeholder: 'Wybierz serwer',
+            }),
+        };
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(payload);
+        } else {
+            await interaction.reply({ ...payload, flags: ['Ephemeral'] });
+        }
+    }
+
+    async _handleCcServerConfigSelect(interaction) {
+        const guildId = interaction.values[0];
+        const cfg = this.guildConfigService.getConfig(guildId);
+        if (!cfg) {
+            await interaction.update({ content: '❌ Serwer nie ma zapisanej konfiguracji.', components: [] });
+            return;
+        }
+        await interaction.deferUpdate();
+        const embed = await this._buildServerConfigEmbed(guildId, cfg, interaction.client);
+        await interaction.editReply({
+            content: null,
+            embeds: [embed],
+            components: [new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('cc_srvcfg_pg_0').setEmoji('◀️').setLabel('Inny serwer').setStyle(ButtonStyle.Secondary),
+            )],
+        });
+    }
+
+    /**
+     * Zrzut wpisu z guild_configs.json dla jednego serwera. Embed ląduje na kanale
+     * Centrum Dowodzenia (inny serwer niż ten, którego dotyczy), więc wzmianki
+     * `<#id>` / `<@&id>` wyrenderowałyby się jako „nieznany kanał" — nazwy
+     * rozwiązywane są ręcznie z cache, z ID w zapasie.
+     */
+    async _buildServerConfigEmbed(guildId, cfg, client) {
+        const guild = client.guilds.cache.get(guildId) || null;
+        const chName = (id) => {
+            if (!id) return '—';
+            const ch = client.channels.cache.get(id);
+            return ch ? `#${ch.name} (\`${id}\`)` : `\`${id}\` (nie znaleziono)`;
+        };
+        const roleName = (id) => {
+            if (!id) return '—';
+            const r = guild?.roles.cache.get(id);
+            return r ? `@${r.name} (\`${id}\`)` : `\`${id}\` (nie znaleziono)`;
+        };
+        const userName = (id, fallback = null) => {
+            if (!id) return '—';
+            const m = guild?.members.cache.get(id);
+            const name = m?.displayName || client.users.cache.get(id)?.username || fallback;
+            return name ? `${name} (\`${id}\`)` : `\`${id}\``;
+        };
+        const yesNo = (v) => v ? '✅ Włączone' : '❌ Wyłączone';
+        const fmtDate = (iso) => {
+            const d = iso ? new Date(iso) : null;
+            return d && !isNaN(d) ? this._fmtWarsaw(d) : '—';
+        };
+
+        // Role TOP — stary i nowy format
+        let tiers = cfg.topRoles?.tiers;
+        if (!tiers && cfg.topRoles) {
+            tiers = [];
+            const legacy = [['top1', 1, 1], ['top2', 2, 2], ['top3', 3, 3], ['top4to10', 4, 10], ['top11to30', 11, 30]];
+            for (const [key, from, to] of legacy) {
+                if (cfg.topRoles[key]) tiers.push({ from, to, roleId: cfg.topRoles[key] });
+            }
+        }
+        let topRolesValue;
+        if (!tiers || tiers.length === 0) {
+            topRolesValue = '❌ Brak progów';
+        } else {
+            topRolesValue = tiers.map(tier => {
+                const range = tier.from === tier.to ? `${tier.from}` : `${tier.from}–${tier.to}`;
+                return `• Próg ${range}: ${roleName(tier.roleId)}`;
+            }).join('\n');
+            if (cfg.topRoles?.disabled) topRolesValue = `⏸️ Wyłączone (progi zachowane)\n${topRolesValue}`;
+        }
+
+        // Rankingi ról — osobny plik per serwer
+        let roleRankingsValue = '—';
+        try {
+            const list = await this.roleRankingConfigService?.loadRoleRankings(guildId);
+            if (Array.isArray(list) && list.length > 0) {
+                roleRankingsValue = list.map(r => `• ${roleName(r.roleId) === '—' ? r.roleName : roleName(r.roleId)}`).join('\n');
+            }
+        } catch { /* brak pliku = brak rankingów */ }
+
+        const ocrBlocked = cfg.ocrBlocked || [];
+        const ocrValue = [
+            `/update: ${ocrBlocked.includes('update') ? '🔴 zablokowane' : '🟢 włączone'}`,
+            `/test: ${ocrBlocked.includes('test') ? '🔴 zablokowane' : '🟢 włączone'}`,
+        ].join('\n');
+
+        const cv = cfg.communityVerification;
+        const cvValue = cv?.enabled
+            ? `✅ Włączona\nPróg zgłoszeń: **${cv.threshold ?? 5}**\nKanał zgłoszeń: ${chName(cv.rejectedChannelId)}`
+            : '❌ Wyłączona';
+
+        const mods = Array.isArray(cfg.moderators) ? cfg.moderators : [];
+        const modsValue = mods.length > 0 ? mods.map(m => `• ${userName(m.userId)}`).join('\n') : '—';
+
+        const configuredBy = cfg.configuredBy
+            ? `${userName(cfg.configuredBy.userId, cfg.configuredBy.username)}\n${fmtDate(cfg.configuredBy.configuredAt)}`
+            : (cfg.importedFromEnv ? '📥 Import z .env' : '—');
+
+        const flags = [];
+        if (cfg.importedFromEnv) flags.push('📥 zaimportowany z .env');
+        flags.push(cfg.newServerAnnounced ? '📣 ogłoszony w rywalizacji' : '🔕 jeszcze nieogłoszony');
+        if (this.guildBanService?.isBanned(guildId)) flags.push('🚫 zbanowany');
+        if (!guild) flags.push('⚪ bot nieobecny na serwerze');
+
+        const cap = (v) => String(v).length > 1024 ? String(v).slice(0, 1021) + '…' : String(v);
+        const embed = new EmbedBuilder()
+            .setColor(0xEB459E)
+            .setTitle(`🧾 Konfiguracja — ${cfg.guildName || guild?.name || guildId}`)
+            .setDescription(`ID: \`${guildId}\`${guild ? ` · ${guild.memberCount} członków` : ''}\n${flags.join(' · ')}`)
+            .addFields(
+                { name: '📺 Kanał bota', value: cap(chName(cfg.allowedChannelId)), inline: true },
+                { name: '📋 Kanał raportów', value: cap(chName(cfg.invalidReportChannelId)), inline: true },
+                { name: '🌐 Język / Tag', value: `${cfg.lang || 'pol'} / ${cfg.tag || '—'}`, inline: true },
+                { name: '🤖 OCR', value: ocrValue, inline: true },
+                { name: '📢 Raporty Global TOP10', value: yesNo(cfg.globalTopNotifications !== false), inline: true },
+                { name: '💫 Auto-reakcja', value: cfg.autoReactionEmoji || '❌ Wyłączona', inline: true },
+                { name: '🏅 Role TOP', value: cap(topRolesValue) },
+                { name: '🎖️ Rankingi ról', value: cap(roleRankingsValue) },
+                { name: '⚠️ Weryfikacja społeczności', value: cap(cvValue) },
+                { name: '👮 Moderatorzy gry', value: cap(modsValue) },
+                { name: '⚙️ Skonfigurował', value: cap(configuredBy) },
+            )
+            .setTimestamp();
+        if (guild?.iconURL()) embed.setThumbnail(guild.iconURL({ size: 128 }));
+        return embed;
+    }
+
     // ── CC: Podgląd raportu TOP10 na żądanie ─────────────────────────────────
     async _handleCcTop10Preview(interaction) {
         if (!this._isHeadAdmin(interaction.user.id)) {
@@ -7985,6 +8158,8 @@ class InteractionHandler {
         if (customId === 'cc_kick_no') return 'CC: Kicknij bota — anulowano';
         if (customId.startsWith('cc_kick_pg_')) return 'CC: Kicknij bota — paginacja';
         if (customId.startsWith('cc_diag_pg_')) return 'CC: Diagnostyka — paginacja';
+        if (customId === 'cc_server_config') return 'CC: Konfiguracja serwera';
+        if (customId.startsWith('cc_srvcfg_pg_')) return 'CC: Konfiguracja serwera — paginacja';
         if (customId.startsWith('cc_roles_pg_')) return 'CC: Przetwórz role — paginacja';
         if (customId.startsWith('cfg_ocr_en_')) return 'Włącz OCR /update (powiadomienie o konfiguracji)';
         if (customId === 'cc_top10_preview') return 'CC: Podgląd TOP10';
@@ -8903,6 +9078,15 @@ class InteractionHandler {
                 await this._handleCcDiagServer(interaction, parseInt(customId.replace('cc_diag_pg_', ''), 10) || 0);
                 return;
             }
+            if (customId.startsWith('cc_srvcfg_pg_')) {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await interaction.deferUpdate();
+                await this._handleCcServerConfig(interaction, parseInt(customId.replace('cc_srvcfg_pg_', ''), 10) || 0);
+                return;
+            }
             if (customId.startsWith('cc_roles_pg_')) {
                 await interaction.deferUpdate();
                 await this._handleCcActionRoles(interaction, parseInt(customId.replace('cc_roles_pg_', ''), 10) || 0);
@@ -8918,6 +9102,10 @@ class InteractionHandler {
             }
             if (customId === 'cc_diag_server') {
                 await this._handleCcDiagServer(interaction);
+                return;
+            }
+            if (customId === 'cc_server_config') {
+                await this._handleCcServerConfig(interaction);
                 return;
             }
             if (customId === 'cc_top10_preview') {
@@ -11312,6 +11500,14 @@ class InteractionHandler {
                     return;
                 }
                 await this._handleCcDiagSelect(interaction);
+                return;
+            }
+            if (customId === 'cc_srvcfg_sel') {
+                if (!this._isHeadAdmin(interaction.user.id)) {
+                    await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
+                    return;
+                }
+                await this._handleCcServerConfigSelect(interaction);
                 return;
             }
 
