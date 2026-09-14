@@ -15730,6 +15730,51 @@ class InteractionHandler {
             }
         }
 
+        // --- Komendy slash ---
+        // ⚠️ Komendy slash NIE zależą od uprawnień roli bota — decyduje o nich scope OAuth
+        // `applications.commands`, nadawany raz, przy zapraszaniu bota. Bot zaproszony samym
+        // scope'em `bot` jest na liście członków, pisze, reaguje i przechodzi CAŁĄ resztę tej
+        // diagnostyki na zielono, a mimo to nie ma na serwerze ANI JEDNEJ komendy. Żadna flaga
+        // uprawnień tego nie pokaże, więc pytamy API wprost, co jest zarejestrowane.
+        lines.push('');
+        lines.push(t('⌨️ **Komendy slash**', '⌨️ **Slash Commands**'));
+        try {
+            const restDiag = new REST().setToken(this.config.token);
+            const zarejestrowane = await restDiag.get(
+                Routes.applicationGuildCommands(this.config.clientId, guildId)
+            );
+            const nazwy = Array.isArray(zarejestrowane) ? zarejestrowane.map(c => `/${c.name}`) : [];
+            if (nazwy.length > 0) {
+                lines.push(t(
+                    `✅ Zarejestrowane (${nazwy.length}): ${nazwy.join(', ')}`,
+                    `✅ Registered (${nazwy.length}): ${nazwy.join(', ')}`));
+                lines.push(t(
+                    '└ ℹ️ Jeśli mimo to nie widać ich w polu czatu: Ustawienia serwera → Integracje → Ender\'s Echo — tam admin serwera może odebrać dostęp do komend rolom lub kanałom.',
+                    '└ ℹ️ If they still do not show up in the message box: Server Settings → Integrations → Ender\'s Echo — a server admin can restrict commands per role or channel there.'));
+            } else {
+                addIssue(t(
+                    '❌ Serwer nie ma zarejestrowanej ANI JEDNEJ komendy',
+                    '❌ The server has NO registered commands at all'));
+                lines.push(t(
+                    '└ Rejestracja leci przy starcie bota i przy dołączeniu na serwer. Restart bota zarejestruje komendy dla wszystkich serwerów, na których jest.',
+                    '└ Registration runs at bot startup and when the bot joins a server. Restarting the bot registers commands for every server it is on.'));
+            }
+        } catch (err) {
+            const kod = err?.status ?? err?.rawError?.code ?? err?.code;
+            if (kod === 403 || kod === 50001) {
+                addIssue(t(
+                    '❌ Discord nie pozwala rejestrować komend na tym serwerze (brak scope `applications.commands`)',
+                    '❌ Discord refuses command registration on this server (missing `applications.commands` scope)'));
+                lines.push(t(
+                    '└ To NIE jest uprawnienie roli — tej zgody nie da się nadać z ustawień serwera. Bota trzeba zaprosić PONOWNIE linkiem zawierającym `scope=bot%20applications.commands`; wchodzi wtedy na swoją dotychczasową rolę, nic nie traci i nie trzeba go wyrzucać.',
+                    '└ This is NOT a role permission — it cannot be granted from server settings. The bot must be re-invited with a link containing `scope=bot%20applications.commands`; it keeps its existing role and data, and does not need to be kicked first.'));
+            } else {
+                addIssue(t(
+                    `❌ Nie udało się sprawdzić komend (${kod ?? '?'}: ${err?.message || 'brak szczegółów'})`,
+                    `❌ Could not check commands (${kod ?? '?'}: ${err?.message || 'no details'})`));
+            }
+        }
+
         // --- Intenty ---
         lines.push('');
         lines.push(t('🔧 **Intenty klienta**', '🔧 **Client Intents**'));
