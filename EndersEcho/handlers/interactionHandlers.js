@@ -18,6 +18,37 @@ const logger = createBotLogger('EndersEcho');
 const BCR_WINDOW_MS = 5000;
 const BCR_MAX_CLICKS = 5;
 const BCR_PENALTY_MS = 15 * 60 * 1000;
+
+// Ikony do wyboru w `/info` (miniatura embeda). To DOKŁADNIE te trzy obrazki, których
+// używa ostatni embed ogłoszenia rekordu — „Analiza zgłoszenia" w `rankingService
+// .createRecordEmbeds()`. Etykiety opisują to, CO WIDAĆ na obrazku, a nie rolę, jaką
+// pełni w tamtym embedzie: w `/info` ta sama grafika trafia nad zupełnie inną treść.
+// ⚠️ URL-e muszą zostać identyczne jak tam (z `animated=true` dla dwóch animowanych),
+// inaczej ta sama ikona wygląda w ogłoszeniu i w `/info` inaczej.
+const INFO_ICONS = [
+    {
+        value: 'megafon',
+        emoji: '📢',
+        pol: 'Megafon — ogłoszenie',
+        eng: 'Megaphone — announcement',
+        url: 'https://cdn.discordapp.com/emojis/1297532628395622440.webp?size=128&animated=true',
+    },
+    {
+        value: 'ostrzezenie',
+        emoji: '⚠️',
+        pol: 'Trójkąt ostrzegawczy — uwaga',
+        eng: 'Warning triangle — caution',
+        url: 'https://cdn.discordapp.com/emojis/1522939660278435993.webp?size=128',
+    },
+    {
+        value: 'potwierdzenie',
+        emoji: '✅',
+        pol: 'Odznaka z ptaszkiem — potwierdzenie',
+        eng: 'Check badge — confirmation',
+        url: 'https://cdn.discordapp.com/emojis/1297531523477540894.webp?size=128&animated=true',
+    },
+];
+const INFO_ICON_NONE = 'brak';
 const path = require('path');
 
 const OPERATIONS_TYPE = 'ocr.analyze';
@@ -11348,6 +11379,10 @@ class InteractionHandler {
             if (customId === 'chal_pl')  { await this._handleChallengePlayerSelect(interaction); return; }
             if (customId === 'chal_boss') { await this._handleChallengeBossSelect(interaction); return; }
 
+            // Ikona embeda /info — podgląd jest efemeryczny, więc widzi go wyłącznie
+            // autor wiadomości; wystarczy sprawdzenie, czy ma żywą sesję
+            if (customId === 'info_icon') { await this._handleInfoIconSelect(interaction); return; }
+
             if (customId === 'boss_cfg_add_alias_sel') {
                 if (!this._isHeadAdmin(interaction.user.id)) {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
@@ -12117,21 +12152,17 @@ class InteractionHandler {
      */
     _buildInfoModal(prefill = {}, guildId = null) {
         const tM = guildId ? this._panelT(guildId) : (p, _e) => p;
-        const titleInput = new TextInputBuilder()
-            .setCustomId('embedTitle')
-            .setLabel(tM('Tytuł (opcjonalnie)', 'Title (optional)'))
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder(tM('Tytuł wiadomości', 'Message title'))
-            .setRequired(false)
-            .setMaxLength(256);
-        if (prefill.title) titleInput.setValue(prefill.title);
 
+        // ⚠️ Oba opisy są OPCJONALNE, bo pusty opis to teraz decyzja „nie wysyłaj na
+        // serwery w tym języku" (patrz `_handleInfoSend`). Przy `setRequired(true)`
+        // Discord nie pozwoliłby nawet zamknąć modala bez wypełnienia obu pól.
+        // Walidację „przynajmniej jeden" robi submit modala.
         const descPolInput = new TextInputBuilder()
             .setCustomId('embedDescriptionPol')
             .setLabel('Opis (serwery polskie)')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Treść wiadomości po polsku...')
-            .setRequired(true)
+            .setPlaceholder('Pusty = nie wysyłaj na serwery polskie')
+            .setRequired(false)
             .setMaxLength(4000);
         if (prefill.descriptionPol) descPolInput.setValue(prefill.descriptionPol);
 
@@ -12139,18 +12170,10 @@ class InteractionHandler {
             .setCustomId('embedDescriptionEng')
             .setLabel('Description (English servers)')
             .setStyle(TextInputStyle.Paragraph)
-            .setPlaceholder('Message content in English...')
-            .setRequired(true)
+            .setPlaceholder('Empty = do not send to English servers')
+            .setRequired(false)
             .setMaxLength(4000);
         if (prefill.descriptionEng) descEngInput.setValue(prefill.descriptionEng);
-
-        const iconInput = new TextInputBuilder()
-            .setCustomId('embedIcon')
-            .setLabel(tM('Ikona URL (opcjonalnie)', 'Icon URL (optional)'))
-            .setStyle(TextInputStyle.Short)
-            .setPlaceholder('https://...')
-            .setRequired(false);
-        if (prefill.icon) iconInput.setValue(prefill.icon);
 
         const imageInput = new TextInputBuilder()
             .setCustomId('embedImage')
@@ -12160,21 +12183,29 @@ class InteractionHandler {
             .setRequired(false);
         if (prefill.image) imageInput.setValue(prefill.image);
 
+        // Ikony nie ma w modalu — Discord ma w nim wyłącznie pola tekstowe, więc
+        // wybór z listy siedzi w select menu pod podglądem (`info_icon`)
         return new ModalBuilder()
             .setCustomId('info_modal')
             .setTitle(tM('Nowa wiadomość informacyjna', 'New Info Message'))
             .addComponents(
-                new ActionRowBuilder().addComponents(titleInput),
                 new ActionRowBuilder().addComponents(descPolInput),
                 new ActionRowBuilder().addComponents(descEngInput),
-                new ActionRowBuilder().addComponents(iconInput),
                 new ActionRowBuilder().addComponents(imageInput)
             );
     }
 
     /**
+     * URL miniatury dla zapisanego klucza ikony (`null` = bez ikony).
+     */
+    _infoIconUrl(iconKey) {
+        if (!iconKey || iconKey === INFO_ICON_NONE) return null;
+        return INFO_ICONS.find(i => i.value === iconKey)?.url || null;
+    }
+
+    /**
      * Buduje czerwony embed na podstawie danych sesji.
-     * @param {{ title?: string, descriptionPol: string, descriptionEng: string, icon?: string, image?: string }} data
+     * @param {{ descriptionPol?: string, descriptionEng?: string, iconKey?: string, image?: string }} data
      * @param {User} user
      * @param {string} description - konkretna treść do wstawienia (pol lub eng)
      */
@@ -12183,8 +12214,8 @@ class InteractionHandler {
             .setColor(0xFF0000)
             .setDescription(description)
             .setAuthor({ name: user.displayName, iconURL: user.displayAvatarURL() });
-        if (data.title) embed.setTitle(data.title);
-        if (data.icon) embed.setThumbnail(data.icon);
+        const iconUrl = this._infoIconUrl(data.iconKey);
+        if (iconUrl) embed.setThumbnail(iconUrl);
         if (data.image) embed.setImage(data.image);
         return embed;
     }
@@ -12230,30 +12261,145 @@ class InteractionHandler {
             return;
         }
 
-        const title = interaction.fields.getTextInputValue('embedTitle').trim() || null;
         const descriptionPol = interaction.fields.getTextInputValue('embedDescriptionPol').trim();
         const descriptionEng = interaction.fields.getTextInputValue('embedDescriptionEng').trim();
-        const icon = interaction.fields.getTextInputValue('embedIcon').trim() || null;
         const image = interaction.fields.getTextInputValue('embedImage').trim() || null;
+        const tInfo = this._panelT(interaction.guildId);
 
-        const data = { title, descriptionPol, descriptionEng, icon, image, user: interaction.user };
+        // Oba opisy puste = nie ma czego wysłać na ŻADEN serwer. Sesji wtedy nie
+        // zapisujemy, żeby „Edytuj" nie wracało z pustką jako prefillem.
+        if (!descriptionPol && !descriptionEng) {
+            await interaction.reply({
+                content: tInfo(
+                    '❌ Wypełnij opis polski, angielski albo oba — pusta wiadomość nie poleci na żaden serwer.',
+                    '❌ Fill in the Polish description, the English one, or both — an empty message goes nowhere.'),
+                flags: ['Ephemeral']
+            });
+            return;
+        }
+
+        const poprzednia = this._infoSessions.get(interaction.user.id) || {};
+        const data = {
+            descriptionPol,
+            descriptionEng,
+            image,
+            // Ikona żyje poza modalem (select pod podglądem), więc „Edytuj" nie może jej zgubić
+            iconKey: poprzednia.iconKey || null,
+            user: interaction.user,
+        };
         this._setInfoSession(interaction.user.id, data);
 
-        const embedPol = this._buildInfoEmbed(data, interaction.user, descriptionPol);
-        const embedEng = this._buildInfoEmbed(data, interaction.user, descriptionEng);
-        const tInfo = this._panelT(interaction.guildId);
+        await interaction.reply({ ...this._buildInfoPreview(data, interaction.guildId), flags: ['Ephemeral'] });
+    }
+
+    /**
+     * Rozkład serwerów-odbiorców dla danej treści: ile dostanie wiadomość, a ile
+     * zostanie pominiętych przez brak opisu w SWOIM języku.
+     */
+    _infoTargets(data) {
+        const liczby = { pol: 0, eng: 0, pominietePol: 0, pominieteEng: 0 };
+        for (const guildCfg of this.config.getAllGuilds()) {
+            const lang = guildCfg.lang || 'pol';
+            if (lang === 'pol') {
+                if (data.descriptionPol) liczby.pol++; else liczby.pominietePol++;
+            } else {
+                if (data.descriptionEng) liczby.eng++; else liczby.pominieteEng++;
+            }
+        }
+        return liczby;
+    }
+
+    /**
+     * Wiersz wyboru ikony embeda. Ikona jest częścią podglądu, a nie modala, bo modal
+     * Discorda przyjmuje wyłącznie pola tekstowe — listy wyboru w nim nie ma.
+     */
+    _buildInfoIconRow(data, guildId) {
+        const tInfo = this._panelT(guildId);
+        const wybrana = data.iconKey || INFO_ICON_NONE;
+        const select = new StringSelectMenuBuilder()
+            .setCustomId('info_icon')
+            .setPlaceholder(tInfo('🖼️ Ikona embeda', '🖼️ Embed icon'))
+            .addOptions(
+                new StringSelectMenuOptionBuilder()
+                    .setValue(INFO_ICON_NONE)
+                    .setLabel(tInfo('Bez ikony', 'No icon'))
+                    .setEmoji('🚫')
+                    .setDefault(wybrana === INFO_ICON_NONE),
+                ...INFO_ICONS.map(ikona => new StringSelectMenuOptionBuilder()
+                    .setValue(ikona.value)
+                    .setLabel(tInfo(ikona.pol, ikona.eng))
+                    .setEmoji(ikona.emoji)
+                    .setDefault(wybrana === ikona.value))
+            );
+        return new ActionRowBuilder().addComponents(select);
+    }
+
+    /**
+     * Podgląd wiadomości `/info` — wspólny dla submitu modala i zmiany ikony,
+     * żeby obie ścieżki pokazywały dokładnie to samo.
+     * @returns {{content: string, embeds: EmbedBuilder[], components: ActionRowBuilder[]}}
+     */
+    _buildInfoPreview(data, guildId) {
+        const tInfo = this._panelT(guildId);
+        const { pol, eng, pominietePol, pominieteEng } = this._infoTargets(data);
+
+        // Podgląd pokazuje WYŁĄCZNIE wersje, które faktycznie polecą — pusty embed
+        // w podglądzie sugerowałby, że gdzieś zostanie wysłana pusta wiadomość
+        const embeds = [];
+        const opisy = [];
+        if (data.descriptionPol) {
+            embeds.push(this._buildInfoEmbed(data, data.user, data.descriptionPol));
+            opisy.push(`🇵🇱 **${tInfo('Podgląd PL', 'PL preview')}** — ${pol} ${tInfo('serwer(ów)', 'server(s)')}`);
+        }
+        if (data.descriptionEng) {
+            embeds.push(this._buildInfoEmbed(data, data.user, data.descriptionEng));
+            opisy.push(`🇬🇧 **${tInfo('Podgląd ENG', 'EN preview')}** — ${eng} ${tInfo('serwer(ów)', 'server(s)')}`);
+        }
+
+        const linie = [
+            tInfo(
+                `**Podgląd** — wiadomość poleci na **${pol + eng}** serwer(ów):`,
+                `**Preview** — the message will be sent to **${pol + eng}** server(s):`),
+            opisy.join(' • '),
+        ];
+        if (pominietePol > 0) {
+            linie.push(tInfo(
+                `⏭️ Pominięte: **${pominietePol}** serwer(ów) polskich — brak opisu po polsku`,
+                `⏭️ Skipped: **${pominietePol}** Polish server(s) — no Polish description`));
+        }
+        if (pominieteEng > 0) {
+            linie.push(tInfo(
+                `⏭️ Pominięte: **${pominieteEng}** serwer(ów) angielskich — brak opisu po angielsku`,
+                `⏭️ Skipped: **${pominieteEng}** English server(s) — no English description`));
+        }
+
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('info_send').setLabel(tInfo('Wyślij', 'Send')).setStyle(ButtonStyle.Success),
             new ButtonBuilder().setCustomId('info_edit').setLabel(tInfo('Edytuj', 'Edit')).setStyle(ButtonStyle.Secondary),
             new ButtonBuilder().setCustomId('info_cancel').setLabel(tInfo('Anuluj', 'Cancel')).setStyle(ButtonStyle.Danger)
         );
 
-        await interaction.reply({
-            content: `${formatMessage(msgs.infoPreview, { count: this.config.getAllGuilds().length })}\n${tInfo('🇵🇱 **Podgląd PL** (powyżej) • 🇬🇧 **Podgląd ENG** (poniżej)', '🇵🇱 **PL Preview** (above) • 🇬🇧 **EN Preview** (below)')}`,
-            embeds: [embedPol, embedEng],
-            components: [row],
-            flags: ['Ephemeral']
-        });
+        return {
+            content: linie.join('\n'),
+            embeds,
+            components: [this._buildInfoIconRow(data, guildId), row],
+        };
+    }
+
+    /**
+     * Zmiana ikony embeda pod podglądem — przelicza podgląd bez otwierania modala.
+     */
+    async _handleInfoIconSelect(interaction) {
+        const data = this._infoSessions.get(interaction.user.id);
+        if (!data) {
+            const msgs = this.msgs(interaction.guildId);
+            await interaction.update({ content: msgs.infoSessionExpired, embeds: [], components: [] });
+            return;
+        }
+        const wybor = interaction.values[0];
+        data.iconKey = wybor === INFO_ICON_NONE ? null : wybor;
+        this._setInfoSession(interaction.user.id, data);
+        await interaction.update(this._buildInfoPreview(data, interaction.guildId));
     }
 
     /**
@@ -12490,6 +12636,16 @@ class InteractionHandler {
             const guildObj = interaction.client.guilds.cache.get(guildCfg.id);
             const guildLabel = guildObj?.name || guildCfg.tag || guildCfg.id;
             const lang = guildCfg.lang || 'pol';
+            const description = lang === 'pol' ? data.descriptionPol : data.descriptionEng;
+
+            // Brak opisu w języku serwera = świadoma decyzja nadawcy, nie błąd.
+            // Serwer trafia do raportu jako pominięty (bez DM do właściciela) —
+            // inaczej „wysłano 4/9" nie zgadzałoby się z liczbą serwerów i wyglądało
+            // jak awaria.
+            if (!description) {
+                results.push({ label: guildLabel, id: guildCfg.id, status: 'skipped', lang, guildObj });
+                continue;
+            }
 
             // Serwer zostaje w konfiguracji także wtedy, gdy bot z niego wyleciał.
             // Wcześniej znikał z raportu bez słowa i „wysłano 8/9" nie miało jak się
@@ -12527,7 +12683,6 @@ class InteractionHandler {
                     });
                     continue;
                 }
-                const description = lang === 'pol' ? data.descriptionPol : data.descriptionEng;
                 const embed = this._buildInfoEmbed(data, data.user, description);
                 const sent = await channel.send({ embeds: [embed] });
                 sentMessages.push({ guildId: guildCfg.id, channelId: channel.id, messageId: sent.id });
@@ -12576,6 +12731,7 @@ class InteractionHandler {
 
         const sent = results.filter(r => r.status === 'ok').length;
         const failed = results.filter(r => r.status === 'error').length;
+        const skipped = results.filter(r => r.status === 'skipped').length;
 
         const color = failed === 0 ? 0x00aa00
             : sent === 0 ? 0xcc0000
@@ -12587,6 +12743,7 @@ class InteractionHandler {
         const summaryParts = [];
         if (sent > 0) summaryParts.push(`✅ ${isPol ? 'Wysłano' : 'Sent'}: **${sent}**`);
         if (failed > 0) summaryParts.push(`❌ ${isPol ? 'Błędy' : 'Errors'}: **${failed}**`);
+        if (skipped > 0) summaryParts.push(`⏭️ ${isPol ? 'Pominięto' : 'Skipped'}: **${skipped}**`);
 
         const reportEmbed = new EmbedBuilder()
             .setTitle(isPol ? '📋 Raport wysyłania /info' : '📋 /info delivery report')
@@ -12598,6 +12755,10 @@ class InteractionHandler {
             let value;
             if (r.status === 'ok') {
                 value = isPol ? '✅ Wysłano pomyślnie' : '✅ Sent successfully';
+            } else if (r.status === 'skipped') {
+                value = r.lang === 'pol'
+                    ? (isPol ? '⏭️ Pominięty — brak opisu po polsku' : '⏭️ Skipped — no Polish description')
+                    : (isPol ? '⏭️ Pominięty — brak opisu po angielsku' : '⏭️ Skipped — no English description');
             } else {
                 value = `❌ ${isPol ? r.error.pol : r.error.eng}`;
                 const fix = isPol ? r.error.fix_pol : r.error.fix_eng;
