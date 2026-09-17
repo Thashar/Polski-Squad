@@ -332,8 +332,9 @@ Bot potrzebuje na kanale rekrutacyjnym uprawnień: **Tworzenie wątków prywatny
 Rozmowa toczy się w efemerycznej odpowiedzi widocznej WYŁĄCZNIE dla kandydata, a jego wiadomości
 i zdjęcia są kasowane z kanału zaraz po odczytaniu — po rekrutacji nie zostawał więc żaden ślad
 poza embedem podsumowania. Archiwum przepisuje cały przebieg na osobny kanał podany zmienną
-`REKRUTER_INTERVIEW_LOG_CHANNEL`. **Bez tej zmiennej serwis jest wyłączony**, a metody są puste —
-reszta rekrutacji działa bez zmian.
+`REKRUTER_INTERVIEW_LOG_CHANNEL`. **Bez tej zmiennej serwis jest wyłączony**, a metody są puste –
+reszta rekrutacji działa bez zmian. Stan widać przy starcie: `📝 Archiwum rozmów rekrutacyjnych
+aktywne - kanał …` albo `⚠️ … WYŁĄCZONE - brak REKRUTER_INTERVIEW_LOG_CHANNEL`.
 
 ⚠️ **Kanał zobaczy komplet danych kandydata** (treść rozmowy, nick, statystyki, zrzuty ekranu),
 więc trzymaj go poza zasięgiem zwykłych użytkowników.
@@ -342,6 +343,14 @@ więc trzymaj go poza zasięgiem zwykłych użytkowników.
 sposób wejścia: rekrutacja od zera albo przycisk „Chcę dołączyć do klanu") i zakłada pod nim wątek,
 w którym ląduje reszta. Bez wątku wpisy kilku kandydatów przeplatałyby się na jednym kanale.
 Gdy wątku nie da się założyć (brak uprawnień, kanał innego typu), wpisy idą płasko na kanał.
+
+**Diagnostyka „jest embed, nie ma wątku":** założenie wątku loguje `[ARCHIWUM] Założono wątek
+archiwum dla {user} ({id})`, niepowodzenie – `[ARCHIWUM] Nie udało się założyć wątku (…)`, a każdy
+nieudany wpis – `[ARCHIWUM] ❌ Błąd zapisu wpisu`. Jeśli w logu jest ID wątku, a na kanale go nie
+ma, wątek został skasowany PO utworzeniu (dziennik audytu serwera) albo klient Discorda nie odświeżył
+karty pod wiadomością (`Ctrl+R`). Rekruter sam nigdy nie kasuje wątków archiwum – sprzątanie po
+restarcie (`interviewThreadService.posprzataj`) dotyczy tylko kanałów rekrutacyjnych i prefiksu
+wątku kandydata.
 
 **Co trafia do archiwum:** wypowiedzi rekrutera i kandydata (pełne, nie przycięte do sześciu
 ostatnich jak transkrypcja dla kandydata), przesłane zdjęcia jako załączniki oraz embed zamykający:

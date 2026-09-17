@@ -44,6 +44,10 @@ class InterviewLogService {
 
         if (this.enabled) {
             logger.info(`📝 Archiwum rozmów rekrutacyjnych aktywne - kanał ${this.channelId}`);
+        } else {
+            // Wyłączone archiwum nie zostawia żadnego śladu w trakcie rozmowy - bez tej
+            // linii brak wpisów na kanale wyglądał identycznie jak awaria
+            logger.warn('📝 Archiwum rozmów rekrutacyjnych WYŁĄCZONE - brak REKRUTER_INTERVIEW_LOG_CHANNEL');
         }
     }
 
@@ -103,6 +107,9 @@ class InterviewLogService {
                         name: this._nazwaWatku(user),
                         autoArchiveDuration: AUTO_ARCHIWIZACJA_MIN
                     });
+                    // ID w logu pozwala odróżnić "wątek nigdy nie powstał" od "powstał
+                    // i ktoś go skasował" - bez tego oba przypadki wyglądają tak samo
+                    logger.info(`[ARCHIWUM] Założono wątek archiwum dla ${user.username} (${cel.id})`);
                 } catch (error) {
                     logger.warn(`[ARCHIWUM] Nie udało się założyć wątku (${error.message}) - piszę na kanale`);
                 }
