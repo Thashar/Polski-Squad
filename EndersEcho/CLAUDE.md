@@ -372,7 +372,7 @@
    - **Zużycie tokenów (admin/head admin):** embed ze statystykami AI per serwer. Admin = swój serwer, Head Admin = wszystkie + breakdown
    - **AI OCR on/off (head admin):** modal wyszukiwania nazwy serwera → jeśli 1 wynik: bezpośrednio toggle, jeśli wiele: lista → toggle per komenda. Stan w `guild_configs.json` przez `OcrBlockService`
    - **Ustaw limity (head admin):** modal z 2 polami — cooldown (np. `5m`, `1h`) i limit dzienny (liczba). Persistencja: `data/usage_limits.json`, `data/update_cooldowns.json`
-   - **Wyślij Info (head admin):** modal → podgląd PL+ENG → wyślij na wszystkie serwery. `_infoSessions` Map (RAM)
+   - **Wyślij Info (head admin):** modal (opis PL, opis ENG, obraz) → podgląd + wybór ikony z listy → wyślij na wszystkie serwery; pusty opis w danym języku pomija serwery w tym języku. `_infoSessions` Map (RAM)
    - **Zbanuj serwer (head admin):** **lista wszystkich serwerów bota** (25/stronę, przyciski zakresów liter `panel_ban_page_` + `◀️/▶️`) → potwierdzenie → bot wychodzi z serwera + ID zapisywane w `data/banned_guilds.json`. Odblokowanie przez listę zbanowanych. Check w `guildCreate` — bot natychmiast wychodzi, jeśli serwer jest na liście. `GuildBanService`.
      - **⚠️ Wcześniej był tu modal z wyszukiwarką po fragmencie nazwy** — trzeba było znać nazwę, a wyniki i tak lądowały w `slice(0, 25)`. Lista pokazuje komplet i przewija się alfabetycznie tą samą normalizacją co `/challenge` (`_buildRangeButtons`, `_compareSortNames`)
      - Źródłem jest `client.guilds.cache`, **nie** `config.getAllGuilds()` — zbanować da się także serwer, którego nikt nie skonfigurował (a zwykle właśnie takie się banuje). Serwery już zbanowane są odfiltrowane
@@ -445,8 +445,10 @@
 - Używa `updateTopRoles` (diff-based) — zmienia tylko graczy, których rola jest niezgodna z rankingiem
 
 **📢 Wyślij Info** (Head Admin):
-- Otwiera modal z 4 polami: Tytuł, Opis PL, Opis ENG, Ikona URL, Obraz URL
-- Podgląd embeda + przyciski Wyślij / Edytuj / Anuluj (przetłumaczone przez `tInfo = this._panelT`)
+- Otwiera modal z **3 polami**: Opis PL, Opis ENG, Obraz URL. Tytuł embeda nie istnieje — treść idzie w opisie
+- **Oba opisy są opcjonalne, a pusty opis to decyzja „nie wysyłaj na serwery w tym języku"** (`setRequired(false)` jest tu konieczne: przy `true` Discord nie pozwoliłby zamknąć modala z jednym pustym polem). `_handleInfoSend` porównuje `guildCfg.lang` z treścią: serwer `pol` bez opisu polskiego i serwer `eng` bez angielskiego dostają status `skipped` — trafiają do raportu jako **⏭️ Pominięty**, BEZ DM do właściciela, bo to nie awaria, tylko wybór nadawcy. Oba pola puste odbija walidacja w submicie modala (sesja nie jest wtedy zapisywana, żeby „Edytuj" nie wróciło z pustką)
+- **Ikona embeda (miniatura) wybierana z listy, nie wpisywana URL-em** — select `info_icon` pod podglądem, bo modal Discorda przyjmuje wyłącznie pola tekstowe. Opcje w stałej `INFO_ICONS` + „Bez ikony": **Megafon — ogłoszenie**, **Trójkąt ostrzegawczy — uwaga**, **Odznaka z ptaszkiem — potwierdzenie**. ⚠️ To DOKŁADNIE te trzy obrazki (z identycznymi URL-ami, `animated=true` włącznie), których używa ostatni embed ogłoszenia rekordu — „Analiza zgłoszenia" w `rankingService.createRecordEmbeds()`. Etykiety opisują to, **co widać na obrazku**, a nie rolę pełnioną w tamtym embedzie: w `/info` ta sama grafika trafia nad zupełnie inną treść. Wybór żyje w sesji jako `iconKey` (nie URL), więc przeżywa „Edytuj" i podmianę URL-i w jednym miejscu
+- Podgląd (`_buildInfoPreview`, wspólny dla submitu modala i zmiany ikony) pokazuje **tylko te wersje, które faktycznie polecą**, licznik serwerów per język i liczbę pominiętych; pod nim select ikony + przyciski Wyślij / Edytuj / Anuluj (przetłumaczone przez `tInfo = this._panelT`)
 - Wysyła na `allowedChannelId` każdego serwera w odpowiednim języku
 - Dostęp: `ENDERSECHO_BLOCK_OCR_USER_IDS` (ta sama zmienna co Head Admin)
 
@@ -509,13 +511,13 @@
 | `cc_action_tokens` | Zużycie tokenów globalnie (ephemeral, head admin) |
 | `cc_action_cmd_usage` | Użycia komend globalnie (ephemeral, head admin) |
 | `cc_action_ocr_stats` | Success Rate z licznikami (w tym „🔁 Wzorzec OK za 2. razem" — % podwójnych weryfikacji wzorca zaliczonych za drugim razem) + przycisk reset (ephemeral, head admin) |
-| `panel_info` | Otwórz modal /info (head admin) |
+| `panel_info` | Otwórz modal /info — opis PL, opis ENG, obraz; ikona wybierana z listy pod podglądem (head admin) |
 | `panel_tester` | Pokaż listę testerów + przyciski Dodaj/Usuń (head admin) |
 | `panel_tester_add` | Otwórz modal wpisania ID użytkownika |
 | `panel_tester_add_modal` | Modal dodawania (pole `tester_user_id`) |
 | `panel_tester_remove` | Pokaż StringSelectMenu z testerami |
 | `panel_tester_remove_select` | StringSelectMenu — wybór testera do usunięcia |
-| `panel_diagnostics` | Raport uprawnień bota: serwer, kanał bota, realny test dostarczenia `/info` (embed próbny wysyłany i kasowany), kanały raportów, hierarchia ról TOP, intenty — dostępny w `/configure` gdy wszystkie kroki ukończone (każdy admin) |
+| `panel_diagnostics` | Raport uprawnień bota: serwer, kanał bota, realny test dostarczenia `/info` (embed próbny wysyłany i kasowany), kanały raportów, hierarchia ról TOP, **komendy slash**, intenty — dostępny w `/configure` gdy wszystkie kroki ukończone (każdy admin) |
 | `panel_player_growth` | Statystyki przyrostu unikalnych graczy globalnie + wykres (head admin, ephemeral) |
 | `panel_cmd_usage` | Użycia komend — admin widzi swój serwer, head admin globalnie; dane w `data/command_usage.json` |
 | `panel_ban_server` | Panel zbanowania serwera (head admin) |
@@ -695,6 +697,7 @@
   - **🧪 Realny test dostarczenia (`📨 Rozgłoszenia /info`)** — diagnostyka wysyła na kanał bota embed próbny i od razu go kasuje, czyli wykonuje DOKŁADNIE operację `/info`. Rachunek uprawnień liczony z nakładek to nie to samo, co zgoda Discorda (typ kanału, stan wątku, dostęp aplikacji do zasobu), więc ptaszek postawiony wyłącznie na jego podstawie potrafił kłamać — ten test nie ma jak. Błąd raportowany jest z kodem i treścią z API. W tej samej sekcji: czy serwer w ogóle jest na liście odbiorców (`config.getAllGuilds()`) — serwer bez ukończonego `/configure` był wcześniej pomijany przez `/info` po cichu.
   - **Uprawnienia zależne od funkcji nie są już zgłaszane jako błędy**, gdy funkcja jest wyłączona: `ManageRoles` (brak skonfigurowanych ról TOP), `AddReactions` (auto-reakcja wyłączona), `UseExternalEmojis` (auto-reakcja bez emotki customowej) → ℹ️ „brak, ale nieużywane" zamiast ❌. Wcześniej zapalały nagłówek „Wykryto problemy" przy komplecie sprawnych funkcji i przykrywały to, co naprawdę nie działa.
   - **Wątki:** dla wątku sprawdzane jest `SendMessagesInThreads` zamiast `SendMessages` (Discord sprawdza osobną flagę, a uprawnienia wątku liczy się z kanału-rodzica — `SendMessages` potrafi być zielone przy wysyłce lecącej na `Missing Access`) oraz stan `locked` (❌) i `archived` (ℹ️ — wysyłka odarchiwizuje).
+  - **⌨️ Sekcja `Komendy slash`** — `rest.get(Routes.applicationGuildCommands(clientId, guildId))`, czyli pytanie do API, co REALNIE jest zarejestrowane na tym serwerze. ⚠️ **Komendy slash nie zależą od żadnego uprawnienia roli, tylko od scope OAuth `applications.commands` nadanego przy zapraszaniu bota.** Bot zaproszony samym scope'em `bot` siedzi na liście członków, pisze, reaguje i przechodzi CAŁĄ resztę diagnostyki na zielono, a mimo to nie ma tam ani jednej komendy — objaw wygląda jak „inne boty mają komendy, nasz nie". Rejestracja zwraca wtedy 403/50001, co do tej pory lądowało wyłącznie w logu (`registerSlashCommands` łapie błąd per serwer), więc admin serwera nie miał tego jak zobaczyć. Trzy stany raportu: komendy są (lista nazw + podpowiedź o Ustawienia serwera → Integracje, gdzie admin może odebrać dostęp rolom/kanałom), pusta lista (rejestracja nie przeszła — restart bota ją powtarza) oraz 403/50001 (brak scope — bota trzeba zaprosić PONOWNIE linkiem ze `scope=bot%20applications.commands`, wchodzi na dotychczasową rolę i nic nie traci)
   - **Obie ścieżki wywołania (`panel_diagnostics`, `cc_diag_sel`) robią `deferUpdate()` przed budowaniem embeda** — komplet odpytań API plus wiadomość próbna nie mieści się w 3-sekundowym oknie na odpowiedź (błąd `10062`).
   - W `_handleInfoSend` nieudana wysyłka loguje dodatkowo twarde fakty (`[/info] Diagnoza …`): `guildId` kanału kontra id serwera, typ kanału, czy da się na niego wysłać i pełną listę uprawnień bota. Serwer, z którego bota usunięto, nie znika już z raportu po cichu — trafia do niego jako błąd „Bota nie ma na tym serwerze".
 - Opis informuje o istnieniu `/manage` do zarządzania panelem admina

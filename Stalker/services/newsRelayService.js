@@ -187,6 +187,7 @@ Zasady:
 - Zachowaj WSZYSTKIE konkretne informacje: liczby, daty, godziny, nazwy, zmiany, instrukcje, nagrody, wymagania, statystyki widoczne na screenach.
 - Daty, godziny i czas trwania wydarzeń KOPIUJ DOKŁADNIE w takiej samej formie, w jakiej występują w oryginale (ten sam format, te same wartości). NIE przepisuj ich na schemat "od <data> do <data>" ani nie zmieniaj układu.
 - NIGDY nie używaj placeholderów ani nawiasów w stylu "[data i godzina]", "[data]", "[godzina]". Jeśli konkretnej daty/godziny nie ma w poście ani na obrazach — po prostu pomiń tę informację, nie wstawiaj zastępczego tekstu.
+- Znaczniki czasu Discorda — zapis \`<t:1234567890>\` albo \`<t:1234567890:X>\`, gdzie X to jedna litera (t, T, d, D, f, F, R) — PRZEPISUJ ZNAK W ZNAK, razem z nawiasami ostrokątnymi, tą samą liczbą i tą samą literą. NIE tłumacz ich, NIE zamieniaj na słowną datę ani godzinę, NIE dopisuj przy nich własnego wyjaśnienia i NIE zmieniaj litery po dwukropku. Discord sam renderuje je w strefie czasowej czytelnika — przepisane jako zwykły tekst przestają działać.
 - Nie dodawaj informacji, których nie ma w poście ani na obrazach. Nie zgaduj.
 - Jeśli post to ogłoszenie/aktualizacja - wypunktuj najważniejsze zmiany.
 - Nagłówki poszczególnych sekcji newsa ZAWSZE pogrubiaj (Discord markdown: **Nagłówek sekcji**).
@@ -230,7 +231,7 @@ Zwróć wynik WYŁĄCZNIE jako obiekt JSON (bez bloków kodu, bez komentarzy) w 
                         operationType: 'news.relay',
                         step: 'summarize-news',
                         promptName: 'news-relay-summary',
-                        promptVersion: 'v2',
+                        promptVersion: 'v3',
                     },
                 });
                 return result.content;

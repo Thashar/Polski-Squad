@@ -355,7 +355,6 @@ const pol = {
     blockUserTimePlaceholder: 'Zostaw puste dla blokady permanentnej',
 
     // /info
-    infoPreview: '**Podgląd** — wiadomość zostanie wysłana na **{count}** serwer(ów):',
     infoSessionExpired: 'Sesja wygasła. Użyj `/info` ponownie.',
 
     // Brak konfiguracji
@@ -974,7 +973,6 @@ const eng = {
     blockUserTimePlaceholder: 'Leave empty for permanent block',
 
     // /info
-    infoPreview: '**Preview** — message will be sent to **{count}** server(s):',
     infoSessionExpired: 'Session expired. Use `/info` again.',
 
     // Not configured
