@@ -265,12 +265,15 @@ module.exports = {
             jackpotChance: 0.01,
             // Jackpot nadaje wypowiedzi "dziką kartę" — dodatkowy, gwarantowany tekst w najbliższej ankiecie MVP tygodnia
             wildcardOnJackpot: true,
-            // Szanse efektów (pojedynczy los, progi skumulowane): jackpot ~1% → textreply ~9% → korona ~60% → pieczęć ~30% (reszta)
-            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (~9%)
+            // Szanse efektów (pojedynczy los, progi skumulowane): jackpot 1% → textreply 9% → pieczęć 15% → korona 25% → NIC (reszta, 50%)
+            // Reszta puli to brak efektu – post jest mimo to zapamiętany w dedupie (jeden post = jeden los)
+            // Szansa na prostą odpowiedź tekstową ze "znakiem jakości" (9%)
             textReplyChance: 0.09,
-            // Szansa na koronę 👑 w nicku na 1h (~60%)
-            crownChance: 0.60,
-            // Emoji "pieczęci" dodawane pod docenionym postem (pieczęć = reszta puli, ~30%)
+            // Szansa na pieczęć (reakcje-stemple pod postem, 15%)
+            stampChance: 0.15,
+            // Szansa na koronę 👑 w nicku na 1h (25%)
+            crownChance: 0.25,
+            // Emoji "pieczęci" dodawane pod docenionym postem
             // Customowe emoji serwerowe KEKW — format <a:nazwa:id> (animowane) / <:nazwa:id> (statyczne)
             stampEmojis: [
                 '<a:z_Kekw7:1481671554843803648>',

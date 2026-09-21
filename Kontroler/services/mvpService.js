@@ -783,21 +783,25 @@ class MvpService {
             this.recordApproval(fullMessage.id, { mvpUserId: user.id, authorId: author.id, effect: 'pending' });
 
             // Losowanie efektu wg stałych szans (pojedynczy los, progi skumulowane):
-            //  jackpot ~1% → textreply ~9% → korona ~60% → pieczęć ~30% (reszta, zawsze domyka do 100%).
+            //  jackpot 1% → textreply 9% → pieczęć 15% → korona 25% → NIC (reszta, 50%).
+            //  Brak efektu też zużywa los tego posta (dedup) – ponowna reakcja nic nie zmienia.
             //  Embed i dzika karta są zarezerwowane WYŁĄCZNIE dla jackpota.
             const jackpotChance = ac.jackpotChance ?? 0.01;
             const textReplyChance = ac.textReplyChance ?? 0.09;
-            const crownChance = ac.crownChance ?? 0.60;
+            const stampChance = ac.stampChance ?? 0.15;
+            const crownChance = ac.crownChance ?? 0.25;
             const roll = Math.random();
             let effect;
             if (roll < jackpotChance) {
                 effect = 'jackpot';
             } else if (roll < jackpotChance + textReplyChance) {
                 effect = 'textreply';
-            } else if (roll < jackpotChance + textReplyChance + crownChance) {
+            } else if (roll < jackpotChance + textReplyChance + stampChance) {
+                effect = 'stamp';
+            } else if (roll < jackpotChance + textReplyChance + stampChance + crownChance) {
                 effect = 'crown';
             } else {
-                effect = 'stamp';
+                effect = 'none';
             }
 
             const mvpName = mvpMember.displayName || user.username;
@@ -842,6 +846,8 @@ class MvpService {
     }
 
     async runApprovalEffect(effect, ctx) {
+        // Pusty los (reszta puli) – nic się nie dzieje, post został już zapamiętany w dedupie
+        if (effect === 'none') return;
         if (effect === 'jackpot') {
             await this.effectStamp(ctx);
             await this.effectCrown(ctx);

@@ -211,7 +211,9 @@ class NicknameManagerService {
             .replace(/^Uśpiony /, '')
             .replace(/^Oszołomiony /, '')
             .replace(/^Upadły /, '')
-            .replace(/^Piekielny /, '');
+            .replace(/^Piekielny /, '')
+            // Korona MVP (Kontroler) — gdyby wpis o niej przepadł, nie może stać się „oryginałem"
+            .replace(/^👑 /, '');
     }
 
     /** Efekty użytkownika, które jeszcze nie wygasły (bez efektów bezterminowych odfiltrowanych). */
@@ -226,9 +228,12 @@ class NicknameManagerService {
      * @returns {string|null} null = przywróć nick główny (brak nicku serwerowego)
      */
     _zlozNick(wpis, efekty) {
-        // Gdy użytkownik nie miał nicku serwerowego, bazą jest jego nazwa użytkownika —
-        // inaczej z prefiksu powstałby sam prefix ("Przeklęty" zamiast "Przeklęty Janusz")
-        const bazowy = wpis.originalNickname ?? wpis.username ?? '';
+        // Gdy użytkownik nie miał nicku serwerowego, bazą jest jego globalna nazwa wyświetlana
+        // (to ją widać na serwerze), a dopiero w ostateczności nazwa użytkownika — inaczej
+        // z prefiksu powstałby sam prefix ("Przeklęty" zamiast "Przeklęty Janusz").
+        // ⚠️ Wcześniej brany był `username`, przez co osoba „Janusz" bez nicku serwerowego
+        // dostawała na godzinę „👑 janusz_1337" — wyglądało to jak podmiana nicku na nazwę konta
+        const bazowy = wpis.originalNickname ?? wpis.globalName ?? wpis.username ?? '';
 
         if (efekty.length === 0) {
             return wpis.wasUsingMainNick ? null : (wpis.originalNickname ?? null);
@@ -249,15 +254,87 @@ class NicknameManagerService {
     }
 
     /**
+     * Zdejmuje z nicku prefiksy podanych efektów (w dowolnej kolejności) oraz znane
+     * prefiksy Konklawe. Zwraca „gołą" bazę albo null, gdy nick był pusty.
+     */
+    _zdejmijPrefiksy(nick, efekty) {
+        if (nick === null || nick === undefined) return null;
+
+        const prefiksy = efekty.filter(e => e.prefix).map(e => String(e.prefix).trim()).filter(Boolean);
+        let baza = nick;
+        let zmiana = true;
+        while (zmiana && baza) {
+            zmiana = false;
+            for (const p of prefiksy) {
+                if (baza.startsWith(`${p} `)) {
+                    baza = baza.slice(p.length + 1);
+                    zmiana = true;
+                }
+            }
+            const czysty = this.getCleanNickname(baza);
+            if (czysty !== baza) {
+                baza = czysty;
+                zmiana = true;
+            }
+        }
+        baza = baza.trim();
+        return baza.length > 0 ? baza : null;
+    }
+
+    /**
+     * Wykrywa, że nick został zmieniony POZA managerem w trakcie trwania efektów
+     * (użytkownik sam go poprawił, moderator zmienił, Rekruter nadał nick z gry) i w takim
+     * wypadku przyjmuje nowy nick jako bazę do przywrócenia.
+     *
+     * ⚠️ Bez tego wygaśnięcie efektu przywracało ZDJĘCIE nicku sprzed efektu, kasując
+     * wszystko, co zmieniono w międzyczasie. Najboleśniejszy przypadek: ktoś bez nicku
+     * serwerowego dostał koronę, w trakcie godziny ustawił sobie nick — a po wygaśnięciu
+     * manager robił `setNickname(null)` i nick znikał, zostawiając nazwę konta Discord.
+     *
+     * @param {Object[]} efektyPrzed efekty sprzed zmiany, z której wynika przeliczenie —
+     *                               ich prefiksy trzeba umieć zdjąć z aktualnego nicku
+     */
+    _przyjmijZewnetrznaZmiane(wpis, member, efektyPrzed) {
+        const aktualny = member.nickname ?? null;
+        // Stan sprzed zmiany bez filtrowania po czasie — timer odpala dokładnie w chwili
+        // wygaśnięcia, więc efekt, który właśnie zdejmujemy, wciąż siedzi w nicku
+        const oczekiwany = this._zlozNick(wpis, efektyPrzed);
+
+        // Nick jest dokładnie taki, jaki sami ustawiliśmy (albo jaki złożyłby manager) — bez zmian
+        if (aktualny === oczekiwany) return false;
+
+        // Podmiana całości (flaga) ustawiona ręcznie przez bota — z niej nie odczytamy bazy
+        if (aktualny !== null && efektyPrzed.some(e => e.replaceWith && String(e.replaceWith).substring(0, MAX_DLUGOSC_NICKU) === aktualny)) {
+            return false;
+        }
+
+        const nowaBaza = this._zdejmijPrefiksy(aktualny, efektyPrzed);
+        const staraBaza = wpis.wasUsingMainNick ? null : (wpis.originalNickname ?? null);
+        if (nowaBaza === staraBaza) return false;
+
+        // Nick z prefiksem mógł zostać przycięty do 32 znaków — wtedy baza to skrócony oryginał, nie zmiana
+        if (nowaBaza !== null && staraBaza !== null && staraBaza.startsWith(nowaBaza) && String(oczekiwany ?? '').length >= MAX_DLUGOSC_NICKU) {
+            return false;
+        }
+
+        logger.info(`✏️ Nick ${member.user.tag} zmieniono poza managerem ("${staraBaza ?? '[nick główny]'}" → "${nowaBaza ?? '[nick główny]'}") — przyjmuję nowy jako bazowy`);
+        wpis.originalNickname = nowaBaza;
+        wpis.wasUsingMainNick = nowaBaza === null;
+        return true;
+    }
+
+    /**
      * Ustawia nick wynikający z aktualnego zestawu efektów. Gdy efektów już nie ma —
      * przywraca oryginał i kasuje wpis.
+     *
+     * @param {Object[]|null} efektyPrzed lista efektów SPRZED zmiany (do wykrycia, czy nick
+     *                                    zmieniono poza managerem); null = pomiń wykrywanie
      */
-    async _przeliczNick(userId, guild) {
+    async _przeliczNick(userId, guild, efektyPrzed = null) {
         const wpis = this.activeEffects.get(userId);
         if (!wpis) return false;
 
         const efekty = this._aktywneEfekty(userId);
-        const docelowy = this._zlozNick(wpis, efekty);
 
         try {
             const member = await guild.members.fetch(userId);
@@ -271,7 +348,17 @@ class NicknameManagerService {
                 return false;
             }
 
-            await member.setNickname(docelowy);
+            if (Array.isArray(efektyPrzed)) {
+                this._przyjmijZewnetrznaZmiane(wpis, member, efektyPrzed);
+            }
+
+            const docelowy = this._zlozNick(wpis, efekty);
+
+            if ((member.nickname ?? null) === docelowy) {
+                logger.info(`⏭️ Nick ${member.user.tag} już zgodny z efektami — bez zmiany`);
+            } else {
+                await member.setNickname(docelowy);
+            }
 
             if (efekty.length === 0) {
                 this._anulujTimeryUzytkownika(userId);
@@ -403,6 +490,9 @@ class NicknameManagerService {
                 wasUsingMainNick: originalNickname === null,
                 guildId: member.guild.id,
                 username: member.user.username,
+                // Globalna nazwa wyświetlana konta – to JĄ widać na serwerze, gdy nie ma nicku
+                // serwerowego, więc to ona jest bazą dla prefiksów (nie `username`)
+                globalName: member.user.globalName ?? null,
                 effects: []
             };
             this.activeEffects.set(userId, wpis);
@@ -440,13 +530,18 @@ class NicknameManagerService {
         const efektPrefix = prefix || metadata.prefix || null;
         const czasTrwania = (durationMs === null || durationMs === undefined) ? Infinity : durationMs;
 
+        // Stan sprzed nałożenia — do wykrycia, czy nick zmieniono ręcznie od poprzedniego efektu.
+        // Przy PIERWSZYM efekcie oryginał jest dopiero robiony ze świeżego nicku, więc nie ma czego porównywać
+        const wpisPrzed = this.activeEffects.get(userId);
+        const efektyPrzed = wpisPrzed ? [...wpisPrzed.effects] : null;
+
         const efekt = await this.saveOriginalNickname(userId, effectType, member, czasTrwania, {
             prefix: efektPrefix,
             replaceWith: metadata.replaceWith ?? metadata.flagEmoji ?? null,
             appliedBy: metadata.appliedBy ?? null
         });
 
-        await this._przeliczNick(userId, member.guild);
+        await this._przeliczNick(userId, member.guild, efektyPrzed);
         logger.info(`✅ Nałożono efekt ${effectType} na ${member.user.tag}`);
 
         if (efekt.expiresAt !== null) {
@@ -503,6 +598,7 @@ class NicknameManagerService {
         const wpis = this.activeEffects.get(userId);
         if (!wpis) return false;
 
+        const efektyPrzed = [...wpis.effects];
         const przed = wpis.effects.length;
         wpis.effects = wpis.effects.filter(e => e.id !== effectId);
         if (wpis.effects.length === przed) return false;
@@ -511,7 +607,7 @@ class NicknameManagerService {
         await this.persistActiveEffects();
 
         if (!guild) return true;
-        return this._przeliczNick(userId, guild);
+        return this._przeliczNick(userId, guild, efektyPrzed);
     }
 
     /** Zdejmuje wszystkie efekty danego typu i przelicza nick. */
@@ -522,12 +618,13 @@ class NicknameManagerService {
         const doZdjecia = wpis.effects.filter(e => e.effectType === effectType);
         if (doZdjecia.length === 0) return false;
 
+        const efektyPrzed = [...wpis.effects];
         for (const efekt of doZdjecia) this._anulujTimer(this._kluczTimera(userId, efekt.id));
         wpis.effects = wpis.effects.filter(e => e.effectType !== effectType);
         await this.persistActiveEffects();
 
         if (!guild) return true;
-        return this._przeliczNick(userId, guild);
+        return this._przeliczNick(userId, guild, efektyPrzed);
     }
 
     /**
@@ -540,11 +637,12 @@ class NicknameManagerService {
             return false;
         }
 
+        const efektyPrzed = [...wpis.effects];
         this._anulujTimeryUzytkownika(userId);
         wpis.effects = [];
         await this.persistActiveEffects();
 
-        return this._przeliczNick(userId, guild);
+        return this._przeliczNick(userId, guild, efektyPrzed);
     }
 
     async removeAllUserEffects(userId, guild) {
@@ -633,8 +731,9 @@ class NicknameManagerService {
                 }
 
                 if (wygasle.length > 0) {
+                    const efektyPrzed = [...wpis.effects];
                     wpis.effects = trwajace;
-                    const ok = await this._przeliczNick(userId, guild);
+                    const ok = await this._przeliczNick(userId, guild, efektyPrzed);
                     if (ok) przywrocone += wygasle.length;
                     else bledy++;
                 }

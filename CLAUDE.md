@@ -322,6 +322,7 @@ userId -> {
   originalNickname,   // nick sprzed PIERWSZEGO efektu (null = używał nicku głównego)
   wasUsingMainNick,
   guildId, username,
+  globalName,         // globalna nazwa wyświetlana konta – baza dla prefiksów, gdy nie ma nicku serwerowego
   effects: [ { id, effectType, prefix, replaceWith, appliedAt, expiresAt, appliedBy } ]
 }
 ```
@@ -331,6 +332,15 @@ userId -> {
 - Przy kilku aktywnych efektach prefiksy nakładają się w kolejności nałożenia, a `replaceWith`
   wygrywa z prefiksami. Zdjęcie jednego efektu **przelicza** nick z oryginału i tych, które zostały
 - **Stary kształt pliku jest migrowany w locie** (`_zmigrujWpis`), więc wdrożenie nie gubi danych
+- **Baza dla osoby bez nicku serwerowego to `globalName`, nie `username`.** Wcześniej „Janusz" (konto
+  `janusz_1337`) dostawał na godzinę `👑 janusz_1337` – wyglądało to jak podmiana nicku na nazwę konta
+- **Nick zmieniony poza managerem w trakcie efektu NIE jest kasowany przy wygaśnięciu.** Każde
+  przeliczenie (`_przeliczNick`) dostaje listę efektów SPRZED zmiany i porównuje aktualny nick z tym,
+  co manager sam złożył. Gdy się różnią (użytkownik/moderator/Rekruter zmienił nick w międzyczasie),
+  `_przyjmijZewnetrznaZmiane` zdejmuje z aktualnego nicku prefiksy efektów i przyjmuje resztę jako nową
+  bazę. Wcześniej wygaśnięcie przywracało ZDJĘCIE sprzed efektu – najboleśniej dla osoby bez nicku
+  serwerowego, która ustawiła go sobie w trakcie korony: po godzinie `setNickname(null)` kasował
+  nick i zostawała nazwa konta Discord. Nick przycięty do 32 znaków przez prefiks nie liczy się jako zmiana
 
 #### Typy Efektów
 
