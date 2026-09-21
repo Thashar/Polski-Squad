@@ -17,7 +17,7 @@ const SAFETY_SETTINGS_OFF = [
  * Stary trace z 'v1' zostaje w Langfuse do porównania — nie trać historii.
  */
 const PROMPT_VERSIONS = {
-    'extract-data-eng':  'v4',
+    'extract-data-eng':  'v5',
     'compare-template':  'v5',
 };
 const sharp = require('sharp');
@@ -111,7 +111,9 @@ class AIOCRService {
     }
 
     async _extractData(base64Image, mediaType, telemetryMeta, onRetry = null) {
-        const prompt = `To jest screen z wynikami z gry mobilnej. Odczytaj z niego cztery wartości:
+        const prompt = `To jest screen z wynikami z gry mobilnej.
+Poprawny screen ma u góry panelu baner z napisem "Victory". Jeżeli na obrazie nie ma napisu "Victory", odpowiedz DOKŁADNIE jedną linią: BRAK VICTORY
+Odczytaj z niego cztery wartości:
 1. Nazwa bossa — widoczna jako nazwa postaci/przeciwnika na ekranie wyników
 2. Wynik TEJ WALKI — duża liczba z jednostką wypisana BEZPOŚREDNIO NAD linią "Best". To rezultat pojedynczej, właśnie zakończonej walki
 3. Wynik Best — liczba z jednostką (np. 123.4M), oznaczona jako "Best" na ekranie
@@ -132,7 +134,8 @@ Odpowiedz WYŁĄCZNIE w tym formacie (4 linie, nic więcej, DOKŁADNIE w tej kol
 <nazwa bossa>
 <wynik Best z jednostką>
 <wynik Total z jednostką>
-<wynik TEJ WALKI z jednostką — ten NAD linią "Best">`;
+<wynik TEJ WALKI z jednostką — ten NAD linią "Best">
+Bez napisu "Victory" – tylko jedna linia: BRAK VICTORY`;
 
         const res = await this._generateContent([
             { inlineData: { data: base64Image, mimeType: mediaType } },
