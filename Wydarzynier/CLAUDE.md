@@ -80,7 +80,7 @@
 **System Przypomnień i Eventów (skopiowane z STAR bota):**
 5. **Przypomnienia** - `przypomnieniaMenedzer.js`: Szablony (text/embed) + Zaplanowane przypomnienia z interwałami (1s-28d lub "ee")
 6. **Eventy** - `eventMenedzer.js`: Dodawanie eventów z nazwą, czasem rozpoczęcia i interwałem powtarzania
-7. **Panel Kontrolny** - `tablicaMenedzer.js`: Interaktywna tablica z embeddami przypomnień, auto-update co 1min, przyciski zarządzania
+7. **Panel Kontrolny** - `tablicaMenedzer.js`: jedna wiadomość-panel (bez indywidualnych embedów przypomnień) z przyciskami zarządzania. **Brak cyklicznego auto-update** (wyłączony w kwietniu 2026) – panel odświeża się wyłącznie przy zdarzeniach: operacje ręczne i jednorazowe przypomnienia → `ensureControlPanel()` (kasuje i wysyła panel na dół), wyzwolenie cyklicznego przypomnienia oraz wyzwolenie/wygaśnięcie eventu w `harmonogram.js` → `updateControlPanel()` (edycja w miejscu). ⚠️ `updateEmbed()`/`createEmbed()` to pozostałości po indywidualnych embedach – `updateEmbed` nic nie robi, nie używaj go do odświeżania panelu
 
 **Funkcjonalność Przypomnień:**
 - **Szablony:** Tworzenie szablonów wiadomości (tekst lub embed) z nazwą, treścią, ikoną i obrazem

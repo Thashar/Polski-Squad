@@ -80,10 +80,12 @@ class Harmonogram {
                     await this.tablicaMenedzer.ensureControlPanel();
                     this.logger.info(`Wyzwolono jednorazowe przypomnienie: ${sch.id} - usunięto scheduled i embed (szablon zachowany)`);
                 } else {
-                    // Cykliczne - zaktualizuj następne wyzwolenie i embed tablicy
+                    // Cykliczne - zaktualizuj następne wyzwolenie i odśwież panel kontrolny W MIEJSCU
+                    // (edycja, bez przenoszenia na dół). ⚠️ Dawniej wołane tu `updateEmbed()` jest pustą
+                    // funkcją po usunięciu indywidualnych embedów, a cykliczne odświeżanie panelu wyłączono,
+                    // więc po wyzwoleniu panel pokazywał już miniony termin („4 minuty temu")
                     await this.przypomnieniaMenedzer.updateNextTrigger(sch.id);
-                    const updatedScheduled = this.przypomnieniaMenedzer.getScheduledWithTemplate(sch.id);
-                    await this.tablicaMenedzer.updateEmbed(updatedScheduled);
+                    await this.tablicaMenedzer.updateControlPanel();
                     this.logger.info(`Wyzwolono cykliczne przypomnienie: ${sch.id}`);
                 }
             }
@@ -200,9 +202,10 @@ class Harmonogram {
             }
         }
 
-        // Zaktualizuj listę eventów jeśli cokolwiek się zmieniło
+        // Zaktualizuj listę eventów i licznik eventów w panelu, jeśli cokolwiek się zmieniło
         if (anyTriggered) {
             await this.listaEventowMenedzer.ensureEventsList();
+            await this.tablicaMenedzer.updateControlPanel();
         }
     }
 
