@@ -879,7 +879,7 @@ CLAN0_ROLE=role_id
 CLAN1_ROLE=role_id
 CLAN2_ROLE=role_id
 MAIN_CLAN_ROLE=role_id
-# Role kierownicze (WYMAGANE przez Rekrutera). Czyta je też Stalker przy liście klanów —
+# Role kierownicze (WYMAGANE przez Rekrutera). Czyta je też Stalker przy liście klanów i Kontroler (/glory-reroll dla liderów) —
 # ta sama rola Lidera/Vice obsługuje wszystkie trzy akademie, klan wskazuje rola klanowa
 LEADER_ROLE=role_id
 VICE_LEADER_ROLE=role_id

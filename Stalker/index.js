@@ -388,11 +388,11 @@ client.once(Events.ClientReady, async () => {
         }
     });
 
-    // Czyszczenie punktów karnych (poniedziałek o północy)
+    // Czyszczenie punktów karnych (piątek o północy, czyli sobota 00:00 – tuż po piątkowym losowaniu Glory)
     await zarejestrujZadanie({
         id: 'stalker:czyszczenie-punktow',
         opis: 'Tygodniowe czyszczenie punktów karnych',
-        wyrazenie: '0 0 * * 1',
+        wyrazenie: '0 0 * * 6',
         strefa: config.timezone,
         logger,
         zadanie: async () => {

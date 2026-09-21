@@ -183,6 +183,15 @@ module.exports = {
             .map(s => s.trim())
             .filter(Boolean),
 
+        // Role liderów klanów uprawnione do `/glory-reroll` (poza administratorami).
+        // Te SAME zmienne, których używają Rekruter i Stalker: `LEADER_ROLE` to wspólna rola
+        // Lidera trzech akademii (klan wskazuje dopiero rola klanowa), `STALKER_LME_ADMIN_ROLE`
+        // to Lider klanu głównego. Lider dostaje do wyboru wyłącznie klan(y), których rolę ma sam.
+        leaderRoles: [
+            process.env.LEADER_ROLE,
+            process.env.STALKER_LME_ADMIN_ROLE
+        ].filter(Boolean),
+
         // Klany: klucz eksportu Stalkera (0/1/2/main) → rola (ping), kanał ogłoszenia (env), nazwa
         // UWAGA: mapowanie kanałów na klany należy zweryfikować przez env KONTROLER_GLORY_CHANNEL_*
         clans: {
@@ -261,7 +270,7 @@ module.exports = {
             textReplyChance: 0.09,
             // Szansa na koronę 👑 w nicku na 1h (~60%)
             crownChance: 0.60,
-            // Emoji "pieczęci" dodawane pod docenionym postem (pieczęć = reszta puli, ~60%)
+            // Emoji "pieczęci" dodawane pod docenionym postem (pieczęć = reszta puli, ~30%)
             // Customowe emoji serwerowe KEKW — format <a:nazwa:id> (animowane) / <:nazwa:id> (statyczne)
             stampEmojis: [
                 '<a:z_Kekw7:1481671554843803648>',

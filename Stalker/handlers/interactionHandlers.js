@@ -694,14 +694,11 @@ async function handlePunishmentCommand(interaction, config, databaseService, pun
         }
         
         
-        // Następne usuwanie punktów
-        const nextMonday = new Date();
-        nextMonday.setDate(nextMonday.getDate() + (7 - nextMonday.getDay()) % 7);
-        if (nextMonday.getDay() !== 1) {
-            nextMonday.setDate(nextMonday.getDate() + 1);
-        }
-        nextMonday.setHours(0, 0, 0, 0);
-        const nextRemovalText = `${nextMonday.toLocaleDateString('pl-PL')} o 00:00`;
+        // Następne usuwanie punktów – piątek o północy (sobota 00:00, cron `0 0 * * 6` w index.js)
+        const nextSaturday = new Date();
+        nextSaturday.setDate(nextSaturday.getDate() + ((6 - nextSaturday.getDay() + 7) % 7 || 7));
+        nextSaturday.setHours(0, 0, 0, 0);
+        const nextRemovalText = `${nextSaturday.toLocaleDateString('pl-PL')} o 00:00`;
         
         // Kanał ostrzeżeń
         const warningChannelId = config.warningChannels[roleId];
@@ -9202,7 +9199,18 @@ async function showPlayerProgress(interaction, selectedPlayer, ownerId, sharedSt
         const resultsText = resultsLines.join('\n');
 
         // Stwórz ranking all-time i znajdź pozycję gracza (po userId)
-        const allTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
+        const fullAllTimeRanking = await createAllTimeRanking(interaction.guild.id, databaseService, last54Weeks);
+
+        // Przyciski nawigacji prowadzą tylko do graczy z AKTUALNĄ rolą klanową – osoby, które
+        // opuściły klan/serwer, zostają w danych historycznych, ale znikają z sąsiadów.
+        // Sam oglądany gracz zostaje na liście (nawet bez roli), żeby dało się wyznaczyć jego sąsiadów.
+        await safeFetchMembers(interaction.guild, logger);
+        const clanRoleIds = Object.values(config.targetRoles);
+        const maAktualnaRoleKlanowa = (id) => {
+            const member = interaction.guild.members.cache.get(id);
+            return !!member && clanRoleIds.some(roleId => member.roles.cache.has(roleId));
+        };
+        const allTimeRanking = fullAllTimeRanking.filter(p => p.userId === userId || maAktualnaRoleKlanowa(p.userId));
         const currentPlayerIndex = allTimeRanking.findIndex(p => p.userId === userId);
 
         // Gracze sąsiedzi w rankingu (lepszy i gorszy)

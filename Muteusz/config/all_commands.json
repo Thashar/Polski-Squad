@@ -324,9 +324,9 @@
         },
         {
           "name": "/glory-reroll",
-          "description": "Dobiera dodatkowego zwycięzcę loterii Glory dla wybranego klanu (system awaryjny)",
-          "usage": "/glory-reroll klan:[main/0/1/2]",
-          "requiredPermission": "administrator"
+          "description": "Dobiera dodatkowego zwycięzcę loterii Glory dla klanu wybranego z listy (system awaryjny). Administrator widzi wszystkie klany, lider klanu tylko swój",
+          "usage": "/glory-reroll",
+          "requiredPermission": "special_role"
         },
         {
           "name": "/glory-test",

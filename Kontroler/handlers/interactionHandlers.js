@@ -81,6 +81,9 @@ async function handleInteraction(interaction, config, lotteryService = null) {
                 case 'lottery_reroll_select':
                     await handleRerollLotterySelect(interaction, config, lotteryService);
                     break;
+                case 'glory_reroll_select':
+                    await handleGloryRerollSelect(interaction, config);
+                    break;
                 default:
                     await interaction.reply({ content: 'Nieznane menu wyboru!', flags: MessageFlags.Ephemeral });
             }
@@ -1342,20 +1345,11 @@ async function registerSlashCommands(client, config) {
             .setName('mvp')
             .setDescription('Ranking zdobywców tytułu MVP tygodnia (najlepszy tekst na serwerze)'),
 
+        // Bez `setDefaultMemberPermissions` – dostęp mają też liderzy klanów (rola z `config.glory.leaderRoles`),
+        // a Discord nie pozwala domyślnie ograniczyć komendy do roli. Uprawnienia sprawdza handler.
         new SlashCommandBuilder()
             .setName('glory-reroll')
-            .setDescription('Dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (system awaryjny)')
-            .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-            .addStringOption(option =>
-                option.setName('klan')
-                    .setDescription('Klan, dla którego dobrać dodatkowego zwycięzcę')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'Polski Squad (main)', value: 'main' },
-                        { name: 'PolskiSquad⁰', value: '0' },
-                        { name: 'PolskiSquad¹', value: '1' },
-                        { name: 'PolskiSquad²', value: '2' }
-                    )),
+            .setDescription('Dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (system awaryjny)'),
 
         new SlashCommandBuilder()
             .setName('glory-test')
@@ -1428,33 +1422,101 @@ async function handleMvpCommand(interaction, config) {
 }
 
 /**
- * Obsługuje komendę /glory-reroll — dobiera dodatkowego zwycięzcę Glory dla wybranego klanu (admin)
+ * Ustala, dla których klanów użytkownik może dobrać zwycięzcę Glory.
+ * Administrator → wszystkie klany. Lider (rola z `config.glory.leaderRoles`) → tylko klany,
+ * których rolę klanową sam posiada. Zwraca `null`, gdy użytkownik nie ma dostępu do komendy.
+ */
+function getGloryRerollAllowedClans(member, config) {
+    const clanKeys = Object.keys(config.glory.clans);
+
+    if (member.permissions.has('Administrator')) {
+        return clanKeys;
+    }
+
+    const isLeader = (config.glory.leaderRoles || []).some(roleId => member.roles.cache.has(roleId));
+    if (!isLeader) {
+        return null;
+    }
+
+    return clanKeys.filter(key => member.roles.cache.has(config.glory.clans[key].roleId));
+}
+
+/**
+ * Obsługuje komendę /glory-reroll — pokazuje listę klanów do wyboru (admin: wszystkie, lider: własny klan).
+ * Samo dobranie zwycięzcy wykonuje `handleGloryRerollSelect` po wyborze z listy.
  */
 async function handleGloryRerollCommand(interaction, config) {
-    if (!interaction.member.permissions.has('Administrator')) {
+    const allowedClans = getGloryRerollAllowedClans(interaction.member, config);
+
+    if (allowedClans === null) {
         await interaction.reply({
-            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator**',
+            content: '❌ Nie masz uprawnień do używania tej komendy. Wymagane: **Administrator** lub rola **Lidera klanu**',
             flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (allowedClans.length === 0) {
+        await interaction.reply({
+            content: '❌ Masz rolę Lidera, ale nie masz żadnej roli klanowej – nie da się ustalić, dla którego klanu dobrać zwycięzcę.',
+            flags: MessageFlags.Ephemeral
+        });
+        return;
+    }
+
+    if (!interaction.client.gloryService) {
+        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', flags: MessageFlags.Ephemeral });
+        return;
+    }
+
+    const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('glory_reroll_select')
+        .setPlaceholder('Wybierz klan do dobrania zwycięzcy Glory')
+        .addOptions(allowedClans.map(key => ({
+            label: config.glory.clans[key].displayName,
+            value: key
+        })));
+
+    await interaction.reply({
+        content: '🔄 **Reroll Glory** – wybierz klan, dla którego dobrać dodatkowego zwycięzcę:',
+        components: [new ActionRowBuilder().addComponents(selectMenu)],
+        flags: MessageFlags.Ephemeral
+    });
+}
+
+/**
+ * Obsługuje wybór klanu z listy /glory-reroll — dobiera dodatkowego zwycięzcę Glory.
+ * Uprawnienia i dostępne klany są sprawdzane PONOWNIE (lista mogła zostać wygenerowana
+ * przed zmianą ról użytkownika).
+ */
+async function handleGloryRerollSelect(interaction, config) {
+    const allowedClans = getGloryRerollAllowedClans(interaction.member, config);
+    const clanKey = interaction.values[0];
+
+    if (!allowedClans || !allowedClans.includes(clanKey)) {
+        await interaction.update({
+            content: '❌ Nie masz uprawnień do dobrania zwycięzcy dla tego klanu.',
+            components: []
         });
         return;
     }
 
     const gloryService = interaction.client.gloryService;
     if (!gloryService) {
-        await interaction.reply({ content: '❌ Serwis loterii Glory jest niedostępny.', flags: MessageFlags.Ephemeral });
+        await interaction.update({ content: '❌ Serwis loterii Glory jest niedostępny.', components: [] });
         return;
     }
 
-    const clanKey = interaction.options.getString('klan');
     const clanCfg = config.glory.clans[clanKey];
     const clanName = clanCfg ? clanCfg.displayName : clanKey;
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.update({ content: `⏳ Dobieram dodatkowego zwycięzcę Glory dla **${clanName}**...`, components: [] });
 
     try {
         const result = await gloryService.reroll(clanKey);
 
         if (result.success) {
+            logger.info(`🔄 /glory-reroll: ${interaction.user.tag} dobrał zwycięzcę dla klanu ${clanKey}: ${result.winner.userId}`);
             await interaction.editReply({
                 content: `✅ Dobrano dodatkowego zwycięzcę Glory dla **${clanName}**: <@${result.winner.userId}> (progres ${result.winner.progress}). Ogłoszenie wysłano na kanał klanu.`
             });

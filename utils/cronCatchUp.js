@@ -17,7 +17,7 @@ const PLIK_STANU = path.join(__dirname, '../shared_data/cron_last_run.json');
  * `node-cron` odpala zadanie WYŁĄCZNIE wtedy, gdy proces akurat działa. Gdy bot był
  * wyłączony o zaplanowanej godzinie (restart hostingu, deploy, pętla crashy), zadanie
  * po prostu nie wykonuje się w tym cyklu — bez wyjątku, bez wpisu w logu, bez żadnego
- * śladu. W praktyce znikały przez to m.in. poniedziałkowe czyszczenie punktów karnych
+ * śladu. W praktyce znikały przez to m.in. cotygodniowe czyszczenie punktów karnych
  * i codzienne wyłączanie przycisków potwierdzeń.
  *
  * Ten moduł zapamiętuje moment ostatniego wykonania każdego zadania i przy starcie
