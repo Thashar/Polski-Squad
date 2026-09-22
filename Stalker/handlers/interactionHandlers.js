@@ -4,6 +4,7 @@ const { createBotLogger } = require('../../utils/consoleLogger');
 const { safeFetchMembers } = require('../../utils/guildMembersThrottle');
 const { exportClanThresholds } = require('../services/clanThresholdsExportService');
 const { exportGloryProgress } = require('../services/gloryProgressExportService');
+const { obliczTrend, obliczTrendRolling, formatujTempo } = require('../utils/trend');
 const fs = require('fs').promises;
 const store = require('../../utils/jsonStore');
 
@@ -9470,21 +9471,13 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
                 }
                 m.engagementFactor = (progWeeks / (data.length - 1)) * 100;
             }
-            if (m.monthlyProgress !== null && data.length >= 5) {
-                // Trend: progres ostatnich 4 tygodni vs średni progres na 4 tygodnie z okna 12 tygodni
-                const allNonZero = data.filter(d => d.score > 0);
-                if (allNonZero.length >= 13) {
-                    const progress4 = allNonZero[0].score - allNonZero[4].score;
-                    const progress12 = allNonZero[0].score - allNonZero[12].score;
-                    m.trendRatio = progress4 > 0
-                        ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
-                        : 0;
-                    if (m.trendRatio >= 1.5)      { m.trendDescription = 'Gwałtownie rosnący'; m.trendIcon = '🚀'; }
-                    else if (m.trendRatio > 1.1)  { m.trendDescription = 'Rosnący';            m.trendIcon = '↗️'; }
-                    else if (m.trendRatio >= 0.9) { m.trendDescription = 'Constans';           m.trendIcon = '⚖️'; }
-                    else if (m.trendRatio > 0.5)  { m.trendDescription = 'Malejący';           m.trendIcon = '↘️'; }
-                    else                          { m.trendDescription = 'Gwałtownie malejący'; m.trendIcon = '🪦'; }
-                }
+            // Trend: tempo (pkt/tydz.) z okna 4 tygodni vs okna 12 tygodni — `utils/trend.js`
+            const trend = obliczTrend(data);
+            if (trend) {
+                m.trendRatio = trend.trendScore;
+                m.trendDescription = trend.opis;
+                m.trendIcon = trend.ikona;
+                m.trend = trend;
             }
             return m;
         }
@@ -9782,7 +9775,12 @@ async function handlePlayerCompareCommand(interaction, sharedState) {
             f += `🔷 **Kwartał:** ${fmtProgress(m.quarterlyProgress, m.quarterlyPercent)}\n`;
             f += `🎯 **Best:** ${m.bestScore.toLocaleString('pl-PL')}\n`;
             f += `\n`;
-            f += `📈 **Trend:** ${m.trendDescription ? `${m.trendIcon || ''} ${m.trendDescription}` : 'Brak'}\n`;
+            // Tempa doklejone w tej samej linii — pole embeda ma limit 1024 znaków,
+            // a osobna linia dla każdego z dwóch graczy potrafiła go przekroczyć
+            const tempoKrotko = m.trend
+                ? ` *(${m.trend.tempoOstatnie >= 0 ? '+' : ''}${m.trend.tempoOstatnie.toFixed(1)} vs ${m.trend.tempoBazowe >= 0 ? '+' : ''}${m.trend.tempoBazowe.toFixed(1)} pkt/tydz.)*`
+                : '';
+            f += `📈 **Trend:** ${m.trendDescription ? `${m.trendIcon || ''} ${m.trendDescription}${tempoKrotko}` : 'Brak'}\n`;
             f += `\n`;
             f += `🎯 **Rzetelność:** ${fmtCoeff(coeff.wyjebanieFactor)}\n`;
             f += `💪 **Zaangażowanie:** ${fmtCoeff(m.engagementFactor)}\n`;
@@ -10446,26 +10444,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             }
         }
 
-        // Oblicz Trend — identyczna formuła co wykres (ostatni punkt allPlayerData, pełna historia)
-        let trendRatio = null;
-        let trendDescription = null;
-        let trendIcon = null;
-
-        const chronologicalAll = [...allPlayerData].reverse().filter(d => d.score > 0);
-        if (chronologicalAll.length >= 13) {
-            const lastIdx = chronologicalAll.length - 1;
-            const progress4 = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 4].score;
-            const progress12 = chronologicalAll[lastIdx].score - chronologicalAll[lastIdx - 12].score;
-            trendRatio = progress4 > 0
-                ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
-                : 0;
-
-            if (trendRatio >= 1.5)      { trendDescription = 'Gwałtownie rosnący'; trendIcon = '🚀'; }
-            else if (trendRatio > 1.1)  { trendDescription = 'Rosnący';            trendIcon = '↗️'; }
-            else if (trendRatio >= 0.9) { trendDescription = 'Constans';           trendIcon = '⚖️'; }
-            else if (trendRatio > 0.5)  { trendDescription = 'Malejący';           trendIcon = '↘️'; }
-            else                        { trendDescription = 'Gwałtownie malejący'; trendIcon = '🪦'; }
-        }
+        // Oblicz Trend — wspólna formuła dla WSZYSTKICH komend (`utils/trend.js`):
+        // porównanie tempa (pkt/tydz.) z okna 4 tygodni i 12 tygodni
+        const trend = obliczTrend(allPlayerData);
+        const trendDescription = trend ? trend.opis : null;
+        const trendIcon = trend ? trend.ikona : null;
 
         // Oblicz TOP3 MVP - tygodnie gdzie gracz był w TOP3 progresu
         const mvpWeeks = [];
@@ -10898,9 +10881,11 @@ async function handlePlayerStatusCommand(interaction, sharedState) {
             : 'brak';
         description += `🏆 **Glory:** ${gloryStars}\n`;
 
-        // Sekcja 6: Trend — nagłówek z nazwą trendu, wykres jako obraz na samym dole
-        if (trendIcon !== null && trendDescription !== null) {
-            description += `\n### 💨 TREND — ${trendDescription} ${trendIcon}\n`;
+        // Sekcja 6: Trend — nagłówek z nazwą trendu, pod nim konkretne tempa
+        // (sama etykieta jest nieweryfikowalna), wykres jako obraz na samym dole
+        if (trend) {
+            description += `\n### 💨 TREND — ${trend.opis} ${trend.ikona}\n`;
+            description += `${formatujTempo(trend)}\n`;
         }
 
         // Stwórz embed z pełnym description
@@ -13580,22 +13565,22 @@ async function analyzePlayerForRaport(userId, member, clanKey, allWeeks, databas
     }
 
     // === 4. Oblicz trend ===
+    //
+    // ⚠️ Raport liczył trend WŁASNYM wzorem — `monthlyProgress / (quarterlyProgress / 3)` —
+    // czyli ODWROTNOŚCIĄ tego, czego używał `/player-status`. Ten sam gracz bywał przez to
+    // „Gwałtownie rosnący" w jednej komendzie i „Gwałtownie malejący" w drugiej. Do tego
+    // przy OBU progresach ujemnych iloraz wychodził dodatni (np. -30 / (-90/3) = 1.0),
+    // więc gracz cofający się nie zapalał żadnej flagi. Teraz wspólna funkcja z `utils/trend.js`.
 
-    let trendRatio = null;
+    const trend = obliczTrend(playerProgressData);
 
-    // Trend wymagany jest tylko gdy mamy zarówno progres miesięczny jak i kwartalny
-    if (monthlyProgress !== null && quarterlyProgress !== null) {
-        // Mając oba progresy, mamy na pewno >= 13 tygodni
-        const monthlyValue = monthlyProgress;
-        const longerTermValue = quarterlyProgress / 3;
-
-        if (longerTermValue !== 0) {
-            trendRatio = monthlyValue / longerTermValue;
+    if (trend) {
+        const fmt = v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}`;
+        if (trend.stagnacja) {
+            problems.push(`💤 Trend: Stagnacja (brak progresu od 12 tygodni, ${fmt(trend.tempoOstatnie)} pkt/tydz.)`);
+        } else if (trend.trendScore <= -0.33) {
+            problems.push(`🪦 Trend: Gwałtownie malejący (4 tyg.: ${fmt(trend.tempoOstatnie)} vs kwartał: ${fmt(trend.tempoBazowe)} pkt/tydz.)`);
         }
-    }
-
-    if (trendRatio !== null && trendRatio <= 0.5) {
-        problems.push(`🪦 Trend: Gwałtownie malejący (${trendRatio.toFixed(2)})`);
     }
 
     // Zwróć wynik
@@ -13815,25 +13800,11 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
             }
             engagementFactor = Math.round((weeksWithProgress / (playerProgressData.length - 1)) * 100);
 
-            // Trend (uproszczony)
-            if (playerProgressData.length >= 13) {
-                const last4 = playerProgressData.slice(0, 4);
-                const maxLast4 = Math.max(...last4.map(d => d.score));
-                const monthlyProgress = maxLast4 - (playerProgressData[4]?.score || 0);
-
-                const last12 = playerProgressData.slice(0, 12);
-                const maxLast12 = Math.max(...last12.map(d => d.score));
-                const quarterlyProgress = maxLast12 - (playerProgressData[12]?.score || 0);
-
-                const longerTermValue = quarterlyProgress / 3;
-                if (longerTermValue !== 0) {
-                    const trendRatio = monthlyProgress / Math.abs(longerTermValue);
-                    if (trendRatio >= 1.5) trendDescription = '🚀 Gwałtownie rosnący';
-                    else if (trendRatio > 1.1) trendDescription = '↗️ Rosnący';
-                    else if (trendRatio >= 0.9) trendDescription = '⚖️ Constans';
-                    else if (trendRatio > 0.5) trendDescription = '↘️ Malejący';
-                    else trendDescription = '🪦 Gwałtownie malejący';
-                }
+            // Trend — ta sama funkcja co embed `/player-status` (`utils/trend.js`).
+            // Wcześniej była tu TRZECIA wersja wzoru, różna i od embeda, i od raportu
+            const trendTekst = obliczTrend(playerProgressData);
+            if (trendTekst) {
+                trendDescription = `${trendTekst.ikona} ${trendTekst.opis}`;
             }
         }
 
@@ -13923,31 +13894,17 @@ async function generatePlayerStatusTextData(userId, guildId, sharedState) {
     }
 }
 
-// Wykres trendu — oś Y = rolling trendRatio (ta sama formuła co główny wskaźnik)
-// Okno 12 tygodni: baseline = progress12 / 3, recent = progress4, ratio = recent / baseline
+// Wykres trendu — oś Y = rolling trendScore z `utils/trend.js` (ta sama formuła co wskaźnik)
+// Skala -1…+1, gdzie 0 = tempo ostatnich 4 tygodni równe kwartalnemu
 async function generateTrendChart(playerProgressData, trendDescription, trendIcon, playerNick) {
     const sharp = require('sharp');
-    // Wszystkie dane chronologicznie (od najstarszego) — tylko punkty z wynikiem > 0
-    const chronological = [...playerProgressData].reverse().filter(d => d.score > 0);
-    if (chronological.length < 14) return null;
 
-    // Rolling trendRatio z oknem 12 tygodni:
-    //   progress4  = score[i] - score[i - 4]           (progres ostatnich 4 tygodni)
-    //   progress12 = score[i] - score[i - 12]          (progres ostatnich 12 tygodni)
-    //   ratio = (progress12 / 3) / progress4           (avg kwartalny / miesięczny)
-    //   jeśli progress4 <= 0: ratio = 0
-    const allRawRatios = [];
-    for (let i = 12; i < chronological.length; i++) {
-        const progress4 = chronological[i].score - chronological[i - 4].score;
-        const progress12 = chronological[i].score - chronological[i - 12].score;
-        const ratio = progress4 > 0
-            ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
-            : 0;
-        allRawRatios.push({
-            ratio,
-            lbl: `${String(chronological[i].weekNumber).padStart(2, '0')}/${String(chronological[i].year).slice(-2)}`
-        });
-    }
+    const rolling = obliczTrendRolling(playerProgressData);
+    const allRawRatios = rolling.map(r => ({
+        ratio: r.trendScore,
+        lbl: `${String(r.weekNumber).padStart(2, '0')}/${String(r.year).slice(-2)}`
+    }));
+
     // Wyświetlamy ostatnie N punktów (max 20)
     const displayCount = Math.min(20, allRawRatios.length);
     const ratioData = allRawRatios.slice(-displayCount);
@@ -13958,17 +13915,17 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
 
-    // Oś Y stała: od 0 do 2.0
-    const maxRatio = 2.0;
+    // Oś Y stała: -1…+1, zero (równe tempo) dokładnie pośrodku wykresu
     const toX = (i) => M.left + (i / (ratioData.length - 1)) * cW;
-    const toY = (r) => M.top + cH - (r / maxRatio) * cH;
+    const toY = (r) => M.top + cH - ((r + 1) / 2) * cH;
 
     const trendColorMap = {
         'Gwałtownie rosnący': '#00E676',
         'Rosnący': '#43B581',
-        'Constans': '#FAA61A',
+        'Stabilny': '#FAA61A',
         'Malejący': '#FF8A65',
-        'Gwałtownie malejący': '#F04747'
+        'Gwałtownie malejący': '#F04747',
+        'Stagnacja': '#72767D'
     };
     const lineColor = trendColorMap[trendDescription] || '#5865F2';
 
@@ -13992,18 +13949,18 @@ async function generateTrendChart(playerProgressData, trendDescription, trendIco
 
     const linePath = buildCatmullRom(pts);
 
-    // Linie progów — granice kategorii trendu
+    // Linie progów — granice kategorii trendu (0 = tempo bez zmian)
     const thresholds = [
-        { value: 1.5, color: '#00E676', label: '1.5' },
-        { value: 1.1, color: '#43B581', label: '1.1' },
-        { value: 1.0, color: '#B5BAC1', label: '1.0' },
-        { value: 0.9, color: '#FAA61A', label: '0.9' },
-        { value: 0.5, color: '#FF8A65', label: '0.5' },
+        { value: 0.33, color: '#00E676', label: '+0.33' },
+        { value: 0.10, color: '#43B581', label: '+0.10' },
+        { value: 0, color: '#B5BAC1', label: '0' },
+        { value: -0.10, color: '#FF8A65', label: '-0.10' },
+        { value: -0.33, color: '#F04747', label: '-0.33' },
     ];
 
     const thresholdLines = thresholds.map(t => {
         const y = toY(t.value);
-        const isBase = t.value === 1.0;
+        const isBase = t.value === 0;
         return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="${t.color}" stroke-width="${isBase ? 1 : 0.8}" stroke-dasharray="5,5" opacity="${isBase ? 0.35 : 0.55}"/>
     <text x="${M.left - 4}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${t.color}" text-anchor="end" opacity="0.9">${t.label}</text>`;
     }).join('\n    ');
@@ -14230,25 +14187,14 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const color1 = '#5865F2'; // gracz 1 — niebieski
     const color2 = '#EB459E'; // gracz 2 — różowy
 
-    // Rolling trendRatio z oknem 12 tygodni — ta sama formuła co generateTrendChart
+    // Rolling trendScore — ta sama formuła co generateTrendChart (`utils/trend.js`)
     function computeRollingRatios(data) {
-        const chron = [...data].reverse().filter(d => d.score > 0);
-        if (chron.length < 14) return [];
-        const raw = [];
-        for (let i = 12; i < chron.length; i++) {
-            const progress4 = chron[i].score - chron[i - 4].score;
-            const progress12 = chron[i].score - chron[i - 12].score;
-            const ratio = progress4 > 0
-                ? Math.min(2.0, Math.max(0, (progress12 / 3) / progress4))
-                : 0;
-            raw.push({
-                ratio,
-                weekNumber: chron[i].weekNumber,
-                year: chron[i].year,
-                key: `${chron[i].year}-${String(chron[i].weekNumber).padStart(2, '0')}`
-            });
-        }
-        return raw;
+        return obliczTrendRolling(data).map(r => ({
+            ratio: r.trendScore,
+            weekNumber: r.weekNumber,
+            year: r.year,
+            key: `${r.year}-${String(r.weekNumber).padStart(2, '0')}`
+        }));
     }
 
     const ratios1 = computeRollingRatios(data1);
@@ -14271,9 +14217,9 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const M = { top: 54, right: 28, bottom: 44, left: 52 };
     const cW = W - M.left - M.right;
     const cH = H - M.top - M.bottom;
-    const maxRatio = 2.0;
+    // Oś Y: -1…+1, zero (równe tempo) pośrodku
     const toX = (i) => M.left + (i / (allWeeks.length - 1)) * cW;
-    const toY = (r) => M.top + cH - (r / maxRatio) * cH;
+    const toY = (r) => M.top + cH - ((r + 1) / 2) * cH;
 
     function getPlayerPts(ratios) {
         return ratios.map(r => {
@@ -14306,15 +14252,15 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
     const leg2TrendTX = leg2TrendCX + 10;
 
     const thresholds = [
-        { value: 1.5, color: '#00E676', label: '1.5' },
-        { value: 1.1, color: '#43B581', label: '1.1' },
-        { value: 1.0, color: '#B5BAC1', label: '1.0' },
-        { value: 0.9, color: '#FAA61A', label: '0.9' },
-        { value: 0.5, color: '#FF8A65', label: '0.5' },
+        { value: 0.33, color: '#00E676', label: '+0.33' },
+        { value: 0.10, color: '#43B581', label: '+0.10' },
+        { value: 0, color: '#B5BAC1', label: '0' },
+        { value: -0.10, color: '#FF8A65', label: '-0.10' },
+        { value: -0.33, color: '#F04747', label: '-0.33' },
     ];
     const thresholdLines = thresholds.map(t => {
         const y = toY(t.value);
-        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="${t.color}" stroke-width="${t.value === 1.0 ? 1 : 0.8}" stroke-dasharray="5,5" opacity="${t.value === 1.0 ? 0.35 : 0.55}"/>
+        return `<line x1="${M.left}" y1="${y.toFixed(1)}" x2="${W - M.right}" y2="${y.toFixed(1)}" stroke="${t.color}" stroke-width="${t.value === 0 ? 1 : 0.8}" stroke-dasharray="5,5" opacity="${t.value === 0 ? 0.35 : 0.55}"/>
     <text x="${M.left - 4}" y="${(y + 4).toFixed(1)}" font-family="Arial,sans-serif" font-size="9" fill="${t.color}" text-anchor="end" opacity="0.9">${t.label}</text>`;
     }).join('\n    ');
 
@@ -14328,7 +14274,7 @@ async function generateCompareTrendChart(data1, data2, name1, name2, trendDesc1,
         ).join('\n    ');
     }
 
-    const trendColorMap = { 'Gwałtownie rosnący': '#00E676', 'Rosnący': '#43B581', 'Constans': '#FAA61A', 'Malejący': '#FF8A65', 'Gwałtownie malejący': '#F04747' };
+    const trendColorMap = { 'Gwałtownie rosnący': '#00E676', 'Rosnący': '#43B581', 'Stabilny': '#FAA61A', 'Malejący': '#FF8A65', 'Gwałtownie malejący': '#F04747', 'Stagnacja': '#72767D' };
     const tc1 = trendColorMap[trendDesc1] || color1;
     const tc2 = trendColorMap[trendDesc2] || color2;
 

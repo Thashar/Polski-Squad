@@ -175,7 +175,8 @@
   - 🔴 Punktualność < 70%
   - 🔴 Zaangażowanie < 70%
   - 🔴 Responsywność < 25%
-  - 🪦 Trend gwałtownie malejący (trendRatio ≤ 0.5)
+  - 🪦 Trend gwałtownie malejący (`trendScore ≤ -0.33`, czyli tempo ostatnich 4 tygodni spadło ~2× względem kwartalnego) — w treści problemu podawane oba tempa w pkt/tydz.
+  - 💤 Trend: Stagnacja (brak progresu w OBU oknach). ⚠️ **Tego przypadku wcześniej NIE dało się wyłapać**: przy obu progresach ujemnych stary iloraz `monthly / (quarterly/3)` wychodził dodatni (np. `-30 / (-90/3) = 1.0`), więc gracz cofający się nie zapalał żadnej flagi
   - ⚠️ Progres miesięczny < 25 punktów (min 5 tygodni danych)
   - ⚠️ Progres kwartalny < 100 punktów (min 13 tygodni danych)
 - Embed z polami: każdy gracz osobno, posortowani według liczby problemów
@@ -253,19 +254,20 @@
 - **Źródło danych:** EndersEcho Bot eksportuje po każdym `/update` i przy starcie do `shared_data/endersecho_ranking.json` (posortowana lista z rank, userId, username, score, scoreValue)
 
 **Graficzny Trend w `/player-status`** - Osobna sekcja poniżej współczynników:
-- **Nagłówek:** `### 💨 TREND` z opisem słownym i ikoną (`**Rosnący** ↗️`)
+- **Nagłówek:** `### 💨 TREND` z opisem słownym i ikoną (`— Rosnący ↗️`), a pod nim linia z tempami w pkt/tydz. (patrz „Algorytm trendu" niżej)
 - **Sparkline:** 12 znaków Unicode blokowych (`▁▂▃▄▅▆▇█`) od najstarszego (lewo) do najnowszego (prawo)
 - **Puste tygodnie:** Symbol `·` dla tygodni bez danych
 - **Format:** `` `▁▂▃▄▅▆▇█····` *(12 tyg.)* ``
 - **Skala:** Dynamiczna - min(nonZero) = `▁`, max(nonZero) = `█`, proporcjonalnie dla reszty
 - **Implementacja:** `sparklineData = last12Weeks.map(...).reverse()` - reverse bo last12Weeks jest od najnowszego
-- **Algorytm trendRatio (wykres + tekst):** Wymaga min. 13 tygodni z wynikiem > 0
-  - `progress4 = score_newest - score_4_weeks_ago`
-  - `progress12 = score_newest - score_12_weeks_ago`
-  - `trendRatio = (progress12 / 3) / progress4` (clamp 0–2.0; 0 gdy progress4 ≤ 0)
-  - Wysoki ratio → kwartalna średnia silniejsza niż ostatni miesiąc (dobra długoterminowa trajektoria)
-  - Niski ratio → ostatni miesiąc wyprzedza kwartalną średnią
-  - Wykres rolling: liczony dla każdego tygodnia od indeksu 12 wzwyż (nie cała historia)
+- **Algorytm trendu — `Stalker/utils/trend.js`, JEDNO źródło prawdy dla wszystkich komend**
+  - `tempo` = nachylenie regresji liniowej po WSZYSTKICH punktach w oknie, w **pkt/tydzień**
+  - Okna **kalendarzowe** (tygodnie ISO, przez czwartek danego tygodnia): krótkie 4 tyg. (min 3 punkty), długie 12 tyg. (min 6 punktów). Przerwa w grze nie udaje ciągłej historii
+  - `trendScore = (tempoOstatnie - tempoBazowe) / (|tempoOstatnie| + |tempoBazowe|)` → zawsze **-1…+1**, bez clampu, symetryczny (przyspieszenie 2× = `+0.33`, zwolnienie 2× = `-0.33`)
+  - Progi: `≥ +0.33` 🚀 Gwałtownie rosnący · `≥ +0.10` ↗️ Rosnący · `> -0.10` ⚖️ Stabilny · `> -0.33` ↘️ Malejący · reszta 🪦 Gwałtownie malejący. Gdy **oba tempa ≤ 0** → 💤 **Stagnacja** (osobna kategoria, wcześniej mylona ze „Constans")
+  - Pod nagłówkiem trendu w `/player-status` linia z konkretami: `Ostatnie 4 tyg.: +38.0 pkt/tydz. · kwartał: +25.0 pkt/tydz. (+52%)`. Procent pomijany, gdy tempo bazowe ≤ 0. W `/player-compare` tempa doklejone do tej samej linii (limit 1024 znaków na pole embeda)
+  - Wykres rolling (`obliczTrendRolling`): `trendScore` liczony na każdy tydzień z wystarczającą historią; oś Y **-1…+1 z linią zera pośrodku** (wcześniej skala 0–2.0, gdzie „neutralne" leżało przy 1.0)
+  - ⚠️ **Wcześniej ten sam trend liczyło SZEŚĆ miejsc, trzema różnymi wzorami.** `/player-status` (embed), `/player-compare` i oba wykresy używały `(progress12/3) / progress4`, `/player-raport` — **odwrotności** `monthly / (quarterly/3)`, a tekstowa wersja `/player-status` (`generatePlayerStatusTextData`, dla AI Chatu) jeszcze innego wariantu z `Math.abs`. Ten sam gracz bywał „Gwałtownie rosnący" w jednej komendzie i „Gwałtownie malejący" w drugiej. Iloraz miał też cztery wady, których nie naprawiał kierunek dzielenia: dzielenie przez mały `progress4` wymuszało clamp, `progress4 ≤ 0` sklejało stagnację ze zwolnieniem, dwa skrajne punkty przewracał jeden słaby tydzień, a `score[i-4]` oznaczało „4 **wpisy** wstecz", nie 4 tygodnie
 
 **Komenda `/player-compare`** - Porównanie dwóch graczy:
 - **Parametry:** `gracz1` (autocomplete), `gracz2` (autocomplete) - obydwa z listy graczy
