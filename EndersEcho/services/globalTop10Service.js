@@ -20,6 +20,18 @@ const BREAK_INTERVAL_MS  = 4 * 24 * 60 * 60 * 1000;  // 4 dni
 
 const CHECK_INTERVAL_MS  = 60_000; // sprawdzaj co minutę
 
+/** Sezon: 9 bossów po 3 dni + 1 dzień przerwy = 28 dni. */
+const SEASON_MS = CYCLE_LEN * REPORT_INTERVAL_MS + (BREAK_INTERVAL_MS - REPORT_INTERVAL_MS);
+/**
+ * Wersja modelu harmonogramu.
+ * 1 — raport #1 w chwili STARTU sezonu, przerwa po 9. raporcie. Raport za ostatniego bossa
+ *     przychodził przez to dzień po jego końcu (na starcie nowego sezonu, po dniu przerwy).
+ * 2 — raport na KONIEC każdego bossa: `firstTrigger` = start 1. bossa sezonu, raport k-tego bossa
+ *     o `start + 28 dni × sezon + 3 dni × k`. Przerwa (4 dni) wypada między raportem za 9. bossa
+ *     a raportem za 1. bossa kolejnego sezonu.
+ */
+const SCHEDULE_VERSION = 2;
+
 /** Ile dni wstecz obejmuje wykres zmian pozycji pod raportem. */
 const CHART_WINDOW_DAYS = 84;
 /** Nazwa załącznika z wykresem — ta sama w embedzie i w AttachmentBuilder. */
@@ -151,65 +163,100 @@ class GlobalTop10Service {
     /**
      * Terminy WCZEŚNIEJSZYCH raportów, odtworzone wstecz z harmonogramu.
      *
-     * Harmonogram jest deterministyczny (9 raportów co 3 dni, potem 4 dni przerwy), więc
-     * z `nextTrigger` i `triggerCount` da się cofnąć krok po kroku. ⚠️ Działa tylko dopóki
-     * harmonogram nie był po drodze przestawiany — `setSchedule()` zeruje `triggerCount`,
-     * a wtedy cofanie odtworzy terminy, których nigdy nie było.
+     * Harmonogram jest deterministyczny (termin = funkcja `firstTrigger` i numeru raportu),
+     * więc terminy wstecz liczymy wprost, bez cofania krok po kroku. Nie wychodzimy przed
+     * początek harmonogramu — wcześniejszych raportów nie było.
      * @param {number} ile ile terminów wstecz
      * @returns {Date[]} rosnąco
      */
     _pastReportTimes(ile) {
-        if (!this._cfg?.nextTrigger) return [];
+        if (!this._cfg?.firstTrigger) return [];
 
         const out = [];
-        let t = new Date(this._cfg.nextTrigger).getTime();
-        let numer = this._cfg.triggerCount || 0;
-
-        for (let i = 0; i < ile && numer > 0; i++) {
-            // `_stepOnce` dodało interwał liczony na numerze raportu, który właśnie poszedł
-            const interwal = numer % CYCLE_LEN === 0 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
-            t -= interwal;
-            numer -= 1;
-            if (t <= 0) break;
-            out.push(new Date(t));
+        for (let i = (this._cfg.triggerCount || 0) - 1; i >= 0 && out.length < ile; i--) {
+            out.push(new Date(this._reportTimeAt(i)));
         }
-
         return out.reverse();
     }
 
     // ── schedule management ────────────────────────────────────────────────────
 
     /**
-     * Ustawia harmonogram. Wywoływane z panelu admina. Podana data to zawsze początek
-     * cyklu (pierwszy boss sezonu, triggerCount=0).
+     * Termin raportu o numerze `index` (liczonym od `firstTrigger`, może być ujemny).
+     * Raport zamyka bossa: k-ty boss sezonu (k = 1…9) kończy się 3 dni × k po starcie sezonu.
+     * @param {number} index
+     * @returns {number} ms
+     */
+    _reportTimeAt(index) {
+        const start  = Date.parse(this._cfg.firstTrigger);
+        const sezon  = Math.floor(index / CYCLE_LEN);
+        const boss   = index - sezon * CYCLE_LEN; // 0…8
+        return start + sezon * SEASON_MS + (boss + 1) * REPORT_INTERVAL_MS;
+    }
+
+    /** Najmniejszy numer raportu, którego termin jest PÓŹNIEJSZY niż `t`. */
+    _firstIndexAfter(t) {
+        const start = Date.parse(this._cfg.firstTrigger);
+        // Start o sezon wcześniej, niż wynika z dzielenia — pętla dojdzie do właściwego numeru
+        let index = (Math.floor((t - start) / SEASON_MS) - 1) * CYCLE_LEN;
+        while (this._reportTimeAt(index) <= t) index++;
+        return index;
+    }
+
+    /** `triggerCount` = numer NASTĘPNEGO raportu, `nextTrigger` = jego termin. */
+    _setIndex(index) {
+        this._cfg.triggerCount = index;
+        this._cfg.nextTrigger  = new Date(this._reportTimeAt(index)).toISOString();
+    }
+
+    /**
+     * Start bieżącego sezonu (podpowiedź w modalu). Wpisanie jej z powrotem niczego nie zmienia,
+     * bo różni się od `firstTrigger` o pełną wielokrotność sezonu.
+     * @returns {Date|null}
+     */
+    getCurrentSeasonStart() {
+        if (!this._cfg?.firstTrigger) return null;
+        const start = Date.parse(this._cfg.firstTrigger);
+        if (Date.now() < start) return new Date(start);
+        return new Date(start + Math.floor((Date.now() - start) / SEASON_MS) * SEASON_MS);
+    }
+
+    /**
+     * Ustawia harmonogram. Wywoływane z panelu admina. Podana data to START SEZONU (początek
+     * 1. bossa) — pierwszy raport idzie 3 dni później, na koniec tego bossa.
      *
-     * Jeśli podana data jest tożsama z aktualnie zapisanym `nextTrigger` — nic się nie zmienia
-     * (zapobiega przypadkowemu wyzerowaniu pozycji w cyklu przy samym otwarciu i zatwierdzeniu
-     * modala bez faktycznej zmiany daty).
-     * Jeśli podana data jest w przeszłości — traktowana jest jako punkt odniesienia (np. faktyczny
-     * początek sezonu) i harmonogram jest przewijany wg wzorca 9×3 dni + 4 dni przerwy do najbliższego
-     * przyszłego terminu, bez wysyłania pominiętych po drodze raportów.
-     * @param {string} firstTriggerIso  ISO string początku cyklu (może być w przeszłości)
+     * Data przesunięta o pełną wielokrotność sezonu (28 dni, z tolerancją na zmianę czasu)
+     * wyznacza ten sam harmonogram, więc nic się nie zmienia. Chroni to przed rozjechaniem sezonu przy samym
+     * otwarciu i zatwierdzeniu modala — wcześniej modal podpowiadał najbliższy RAPORT, a jego
+     * zatwierdzenie w trakcie sezonu zerowało licznik i przesuwało przerwę nawet o kilkanaście dni.
+     * Data w przeszłości jest punktem odniesienia — harmonogram przewija się do najbliższego
+     * przyszłego terminu bez wysyłania zaległych raportów.
+     * @param {string} firstTriggerIso  ISO string startu sezonu (może być w przeszłości)
+     * @returns {boolean} czy harmonogram się zmienił
      */
     setSchedule(firstTriggerIso) {
-        if (this._cfg.enabled && this._cfg.nextTrigger === firstTriggerIso && this._cfg.triggerCount === 0) {
-            logger.info('[GlobalTop10] Harmonogram bez zmian — pomijam reset cyklu');
-            return;
+        if (this._cfg.enabled && this._cfg.firstTrigger && this._cfg.scheduleVersion === SCHEDULE_VERSION) {
+            // Reszta z dzielenia przez sezon (0…SEASON_MS). Tolerancja ±2 h: podpowiedź w modalu
+            // pokazywana jest w czasie polskim, więc po zmianie czasu letni/zimowy różni się
+            // o godzinę od zapisanego instantu — jej zatwierdzenie nie może przestawiać raportów
+            const roznica = Date.parse(firstTriggerIso) - Date.parse(this._cfg.firstTrigger);
+            const reszta  = ((roznica % SEASON_MS) + SEASON_MS) % SEASON_MS;
+            const TOLERANCJA_MS = 2 * 60 * 60 * 1000;
+            if (reszta <= TOLERANCJA_MS || reszta >= SEASON_MS - TOLERANCJA_MS) {
+                logger.info('[GlobalTop10] Harmonogram bez zmian (ten sam układ sezonów) — pomijam');
+                return false;
+            }
         }
 
-        this._cfg.enabled      = true;
-        this._cfg.firstTrigger = firstTriggerIso;
-        this._cfg.nextTrigger  = firstTriggerIso;
-        this._cfg.triggerCount = 0;
-
-        let skipped = 0;
-        while (new Date(this._cfg.nextTrigger).getTime() <= Date.now()) {
-            this._stepOnce();
-            skipped++;
-        }
+        this._cfg.enabled         = true;
+        this._cfg.firstTrigger    = firstTriggerIso;
+        this._cfg.scheduleVersion = SCHEDULE_VERSION;
+        // Przyszły start sezonu: pierwszy raport za jego 1. bossa, nie „dopowiadamy” raportów sprzed startu
+        this._setIndex(Math.max(0, this._firstIndexAfter(Date.now())));
 
         this._save();
-        logger.info(`[GlobalTop10] Harmonogram ustawiony: początek cyklu ${firstTriggerIso}, kolejny raport ${this._cfg.nextTrigger} (pominięto ${skipped} zaległych, triggerCount=${this._cfg.triggerCount})`);
+        logger.info(`[GlobalTop10] Harmonogram ustawiony: start sezonu ${firstTriggerIso}, kolejny raport ${this._cfg.nextTrigger} (numer ${this._cfg.triggerCount})`);
+        return true;
     }
 
     disableSchedule() {
@@ -218,36 +265,73 @@ class GlobalTop10Service {
         logger.info('[GlobalTop10] Harmonogram wyłączony');
     }
 
+    /** Odstęp między BIEŻĄCYM raportem (`triggerCount`) a następnym — do stopki embeda. */
     _nextIntervalMs() {
-        // Interwał PO bieżącym raporcie — liczony na numerze raportu, jaki właśnie zostanie/został
-        // wysłany (triggerCount+1, zgodnie z _stepOnce, który inkrementuje przed obliczeniem).
-        // Przerwa następuje po KAŻDYM 9. raporcie sezonu (numer podzielny przez CYCLE_LEN=9),
-        // nie po co 10. — inaczej sezon dostawałby dodatkowy raport i przesuwał harmonogram.
-        const reportNumber = (this._cfg.triggerCount || 0) + 1;
-        return reportNumber % CYCLE_LEN === 0 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS;
+        if (!this._cfg?.firstTrigger) return REPORT_INTERVAL_MS;
+        const i = this._cfg.triggerCount || 0;
+        return this._reportTimeAt(i + 1) - this._reportTimeAt(i);
+    }
+
+    /** Jeden krok harmonogramu — bez zapisu do pliku (save robi wywołujący). */
+    _stepOnce() {
+        if (!this._cfg.firstTrigger) {
+            // Awaryjnie (konfiguracja bez startu sezonu) — stały krok 3 dni
+            const od = Date.parse(this._cfg.nextTrigger || new Date().toISOString());
+            this._cfg.nextTrigger  = new Date(od + REPORT_INTERVAL_MS).toISOString();
+            this._cfg.triggerCount = (this._cfg.triggerCount || 0) + 1;
+            return;
+        }
+        this._setIndex((this._cfg.triggerCount || 0) + 1);
     }
 
     /**
-     * Jeden krok postępu harmonogramu (inkrementacja triggerCount + przesunięcie nextTrigger
-     * o właściwy interwał). Używane zarówno przez realny tick (_advanceTrigger), jak i przez
-     * przewijanie zaległych terminów w setSchedule() — bez zapisu do pliku (save robi wywołujący).
+     * Przesunięcie po wysłanym raporcie. Gdy bot był wyłączony dłużej niż jeden interwał,
+     * kolejne terminy też są już w przeszłości — przewijamy je BEZ wysyłania. Wcześniej
+     * termin przesuwał się o jeden krok, więc każdy zaległy termin wysyłał osobny raport
+     * (co minutę, z samymi `=` przy graczach).
      */
-    _stepOnce() {
-        const intervalMs = this._nextIntervalMs();
-        this._cfg.triggerCount = (this._cfg.triggerCount || 0) + 1;
-        const now = new Date(this._cfg.nextTrigger || Date.now());
-        this._cfg.nextTrigger = new Date(now.getTime() + intervalMs).toISOString();
-    }
-
     _advanceTrigger() {
         this._stepOnce();
+        let pominiete = 0;
+        while (Date.parse(this._cfg.nextTrigger) <= Date.now()) {
+            this._stepOnce();
+            pominiete++;
+        }
+        if (pominiete > 0) {
+            logger.warn(`[GlobalTop10] Pominięto ${pominiete} zaległych terminów raportu (bot był wyłączony) — następny: ${this._cfg.nextTrigger}`);
+        }
         this._save();
+    }
+
+    /**
+     * Jednorazowe przejście z modelu 1 na 2 (patrz `SCHEDULE_VERSION`). `firstTrigger` zostaje
+     * — w obu modelach to start sezonu. Następny raport = pierwszy termin nowego modelu po
+     * OSTATNIM WYSŁANYM raporcie starego, więc raport za ostatniego bossa przychodzi o dzień
+     * wcześniej, a żaden termin nie ginie. Gdy taki termin już minął (wdrożenie w dzień przerwy),
+     * `_tick` wyśle raport od razu.
+     */
+    _migrateSchedule() {
+        const cfg = this._cfg;
+        if (!cfg?.enabled || !cfg.firstTrigger || cfg.scheduleVersion === SCHEDULE_VERSION) return;
+
+        const staryNastepny = Date.parse(cfg.nextTrigger);
+        const staryNumer    = cfg.triggerCount || 0;
+        // Model 1: po raporcie numer n (n = triggerCount po kroku) szedł interwał 4 dni, gdy n % 9 === 0
+        const ostatniWyslany = staryNumer > 0 && !Number.isNaN(staryNastepny)
+            ? staryNastepny - (staryNumer % CYCLE_LEN === 0 ? BREAK_INTERVAL_MS : REPORT_INTERVAL_MS)
+            : Date.parse(cfg.firstTrigger) - 1;
+
+        cfg.scheduleVersion = SCHEDULE_VERSION;
+        this._setIndex(Math.max(0, this._firstIndexAfter(ostatniWyslany)));
+        this._save();
+        logger.info(`[GlobalTop10] Harmonogram przeliczony na raport na koniec bossa: następny ${cfg.nextTrigger} (wcześniej ${new Date(staryNastepny).toISOString()})`);
     }
 
     // ── scheduler ─────────────────────────────────────────────────────────────
 
     start() {
         this._load();
+        this._migrateSchedule();
         // Zasianie historii wstecz — bez await, start bota nie ma na to czekać
         this._seedHistoryOnce().catch(() => {});
         this._timer = setInterval(() => this._tick(), CHECK_INTERVAL_MS);

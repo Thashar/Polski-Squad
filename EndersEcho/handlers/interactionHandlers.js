@@ -2442,6 +2442,10 @@ class InteractionHandler {
 
             // Powiadomienie o skonfigurowanym serwerze — webhook logów lub fallback na kanał raportów
             try {
+                // Konfiguracja zapisuje `globalTopNotifications`; stara nazwa `globalTop3Notifications`
+                // zostaje tylko w dawnych wpisach. Czytanie samej starej nazwy dawało zawsze `undefined`,
+                // więc log pokazywał „Włączone” także po wyłączeniu, a zmiana nie trafiała do diffu
+                const raportyTop10Wlaczone = (cfg) => (cfg?.globalTopNotifications ?? cfg?.globalTop3Notifications) !== false;
                 const isEng = (newData.lang || 'pol') === 'eng';
                 const tCfg = (p, e) => isEng ? e : p;
 
@@ -2477,7 +2481,7 @@ class InteractionHandler {
                             { name: tCfg('Język', 'Language'), value: newData.lang || 'pol' },
                             { name: 'Tag', value: newData.tag || '—' },
                             { name: 'Role TOP', value: formatTopRoles(newData.topRoles) },
-                            { name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: newData.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled') },
+                            { name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: raportyTop10Wlaczone(newData) ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled') },
                             { name: tCfg('Kanał raportów', 'Reports channel'), value: newData.invalidReportChannelId ? `<#${newData.invalidReportChannelId}>` : '—' },
                             { name: tCfg('Weryfikacja społeczności', 'Community verification'), value: newData.communityVerification?.enabled ? `${tCfg('✅ Włączona', '✅ Enabled')} (${tCfg('próg', 'threshold')}: ${newData.communityVerification.threshold})` : tCfg('❌ Wyłączona', '❌ Disabled') }
                         )
@@ -2510,9 +2514,9 @@ class InteractionHandler {
                         diffFields.push({ name: tCfg('Role TOP (poprzednie)', 'TOP Roles (previous)'), value: oldDetail });
                         diffFields.push({ name: tCfg('Role TOP (nowe)', 'TOP Roles (new)'), value: newDetail });
                     }
-                    if ((old?.globalTop3Notifications !== false) !== (newData.globalTop3Notifications !== false)) {
-                        const oldVal = old?.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
-                        const newVal = newData.globalTop3Notifications !== false ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
+                    if (raportyTop10Wlaczone(old) !== raportyTop10Wlaczone(newData)) {
+                        const oldVal = raportyTop10Wlaczone(old) ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
+                        const newVal = raportyTop10Wlaczone(newData) ? tCfg('✅ Włączone', '✅ Enabled') : tCfg('❌ Wyłączone', '❌ Disabled');
                         diffFields.push({ name: tCfg('Raporty Global TOP10', 'Global TOP10 Reports'), value: `${oldVal} → ${newVal}` });
                     }
                     const oldCvEnabled = old?.communityVerification?.enabled || false;
@@ -9405,8 +9409,11 @@ class InteractionHandler {
                     await interaction.reply({ content: this.msgs(interaction.guildId).noPermission, flags: ['Ephemeral'] });
                     return;
                 }
-                const cfg = this.globalTop10Service.getConfig();
-                const currentVal = cfg.nextTrigger ? this._fmtWarsaw(new Date(cfg.nextTrigger)) : '';
+                // Podpowiedź = start BIEŻĄCEGO sezonu, nie najbliższy raport. Zatwierdzenie jej bez zmian
+                // niczego nie przestawia (setSchedule rozpoznaje ten sam układ sezonów). Wcześniej
+                // podpowiadany był `nextTrigger`, a jego zatwierdzenie zerowało licznik i przesuwało przerwę
+                const seasonStart = this.globalTop10Service.getCurrentSeasonStart();
+                const currentVal = seasonStart ? this._fmtWarsaw(seasonStart) : '';
                 const t = this._panelT(interaction.guildId);
                 const modal = new ModalBuilder()
                     .setCustomId('top10_interval_modal')
@@ -9415,7 +9422,7 @@ class InteractionHandler {
                     new ActionRowBuilder().addComponents(
                         new TextInputBuilder()
                             .setCustomId('top10_first_trigger')
-                            .setLabel(t('Data/godzina początku cyklu', 'Cycle start date/time'))
+                            .setLabel(t('Start sezonu (początek 1. bossa)', 'Season start (start of boss 1)'))
                             .setStyle(TextInputStyle.Short)
                             .setPlaceholder('DD.MM.RRRR GG:MM  np. 10.05.2026 20:00')
                             .setValue(currentVal)
@@ -16599,23 +16606,26 @@ class InteractionHandler {
         // koniec bossa), harmonogram sam przewinie się do najbliższego przyszłego terminu.
         const wasPast = date.getTime() <= Date.now();
 
-        // Podana data to zawsze początek cyklu (boss #1 sezonu) — setSchedule domyślnie
-        // ustawia triggerCount na 0 (reportNumber=1).
-        this.globalTop10Service.setSchedule(date.toISOString());
+        // Podana data to START SEZONU (początek 1. bossa) — pierwszy raport idzie 3 dni później,
+        // na koniec tego bossa. Data przesunięta o pełne sezony niczego nie zmienia.
+        const changed = this.globalTop10Service.setSchedule(date.toISOString());
         const cfg = this.globalTop10Service.getConfig();
 
         const formatted = `${dd.padStart(2,'0')}.${mm.padStart(2,'0')}.${yyyy} ${hh.padStart(2,'0')}:${min}`;
         const fmtNext = this._fmtWarsaw(new Date(cfg.nextTrigger));
 
-        const recalibrationNote = wasPast
-            ? t(`\n⏪ Punkt odniesienia był w przeszłości — harmonogram przewinięty bez wysyłania zaległych raportów.\n➡️ Najbliższy kolejny raport: **${fmtNext}**`,
-                `\n⏪ Reference point was in the past — schedule fast-forwarded without sending backlog reports.\n➡️ Next upcoming report: **${fmtNext}**`)
+        const header = changed
+            ? t('✅ Harmonogram TOP10 ustawiony.', '✅ TOP10 schedule set.')
+            : t('ℹ️ Harmonogram TOP10 bez zmian (ten sam układ sezonów).', 'ℹ️ TOP10 schedule unchanged (same season layout).');
+        const pastNote = changed && wasPast
+            ? t('\n⏪ Start sezonu był w przeszłości — harmonogram przewinięty bez wysyłania zaległych raportów.',
+                '\n⏪ Season start was in the past — schedule fast-forwarded without sending backlog reports.')
             : '';
 
         await interaction.editReply({
             content: t(
-                `✅ Harmonogram TOP10 ustawiony.\n📅 Początek cyklu: **${formatted}**\n🔁 Kolejne: co 3 dni (po 9 raportach — 4 dni przerwy, powtórz)${recalibrationNote}`,
-                `✅ TOP10 schedule set.\n📅 Cycle start: **${formatted}**\n🔁 Subsequent: every 3 days (after 9 reports — 4 day break, repeat)${recalibrationNote}`
+                `${header}\n📅 Start sezonu: **${formatted}**\n🔁 Raport na koniec każdego bossa (co 3 dni); po 9. bossie 1 dzień przerwy, więc do raportu za 1. bossa nowego sezonu mijają 4 dni${pastNote}\n➡️ Najbliższy raport: **${fmtNext}**`,
+                `${header}\n📅 Season start: **${formatted}**\n🔁 Report at the end of each boss (every 3 days); after boss 9 there is a 1-day break, so the report for boss 1 of the next season comes 4 days later${pastNote}\n➡️ Next report: **${fmtNext}**`
             )
         });
     }
