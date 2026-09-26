@@ -263,7 +263,7 @@ class PhaseService {
 
         // Zakończ sesję OCR (nie wpływa na sesje innych użytkowników)
         if (this.ocrService && session.guildId && session.userId) {
-            await this.ocrService.endOCRSession(session.guildId, session.userId, true);
+            await this.ocrService.endOCRSession(session.guildId, session.userId, true, { startedBefore: session.createdAt });
             logger.info(`[PHASE${session.phase || 1}] 🔓 Zakończono sesję OCR dla użytkownika ${session.userId}`);
         }
 
@@ -727,7 +727,7 @@ class PhaseService {
                     }
                 }
                 try {
-                    await this.ocrService.endOCRSession(guild.id, member.id);
+                    await this.ocrService.endOCRSession(guild.id, member.id, false, { startedBefore: session.createdAt });
                 } catch (e) {
                     logger.warn(`[PHASE${session.phase}] ⚠️ Nie udało się zakończyć sesji OCR: ${e.message}`);
                 }

@@ -443,6 +443,15 @@ class PunishmentService {
 
         logger.info(`[PUNISH] 🧹 Rozpoczynam czyszczenie sesji: ${sessionId}`);
 
+        // Jeśli sesja jest w trakcie analizy, tylko ustaw flagę cancelled (jak w remind/fazach).
+        // Wcześniej sesja była usuwana od razu, a trwająca analiza i tak kończyła się
+        // wyświetleniem embeda z przyciskami „Dodaj punkty” na anulowanej już sesji.
+        if (session.isProcessing) {
+            logger.warn('[PUNISH] ⚠️ Sesja jest w trakcie przetwarzania - ustawiam flagę cancelled');
+            session.cancelled = true;
+            return; // Przetwarzanie samo wyczyści sesję po zakończeniu
+        }
+
         if (session.timeout) {
             clearTimeout(session.timeout);
             session.timeout = null;
@@ -460,7 +469,7 @@ class PunishmentService {
 
         // KRYTYCZNE: Zakończ sesję OCR w kolejce (zapobiega deadlockowi)
         if (this.ocrService && session.guildId && session.userId) {
-            await this.ocrService.endOCRSession(session.guildId, session.userId, true);
+            await this.ocrService.endOCRSession(session.guildId, session.userId, true, { startedBefore: session.createdAt });
             logger.info(`[PUNISH] 🔓 Zakończono sesję OCR dla użytkownika ${session.userId}`);
         }
 
@@ -988,6 +997,9 @@ class PunishmentService {
             if (session.blinkTimer) { clearInterval(session.blinkTimer); session.blinkTimer = null; }
             let w = 0;
             while (session.isUpdatingProgress && w < 50) { await new Promise(r => setTimeout(r, 100)); w++; }
+            // Doczekaj WSZYSTKIE zakolejkowane edycje postępu (jak w fazach) - spóźniona
+            // edycja migania nie może nadpisać embedu z przyciskiem potwierdzenia
+            try { await session.progressEditChain; } catch (_) { /* logowane w _doUpdateBatchProgress */ }
         };
 
         logger.info(`[PUNISH] 🔄 Analiza batch ${totalImages} zdjęć dla sesji ${sessionId}`);
@@ -1080,7 +1092,7 @@ class PunishmentService {
                     }
                 }
                 try {
-                    await ocrService.endOCRSession(guild.id, member.id);
+                    await ocrService.endOCRSession(guild.id, member.id, false, { startedBefore: session.createdAt });
                 } catch (e) {
                     logger.warn(`[PUNISH] ⚠️ Nie udało się zakończyć sesji OCR: ${e.message}`);
                 }
@@ -1133,7 +1145,18 @@ class PunishmentService {
     /**
      * Pasek postępu batch (stepper) dla /punish - pokazuje etapy procesu.
      */
-    async updateBatchProgress(session) {
+    /**
+     * Wszystkie edycje embedu postępu są SERIALIZOWANE przez łańcuch promise per sesja
+     * (jak w phaseService) - kolejna edycja startuje dopiero po zakończeniu poprzedniej,
+     * więc tick migania opóźniony przez rate limit nie nadpisze późniejszego stanu.
+     */
+    updateBatchProgress(session) {
+        session.progressEditChain = (session.progressEditChain || Promise.resolve())
+            .then(() => this._doUpdateBatchProgress(session));
+        return session.progressEditChain;
+    }
+
+    async _doUpdateBatchProgress(session) {
         if (!session.publicInteraction) return;
         try {
             const steps = session.batchSteps || [];

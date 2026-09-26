@@ -37,6 +37,18 @@ async function createSessionThread(inter, ocrService, guildId, userId, threadTit
     });
     ocrService.setSessionThreadId(guildId, userId, thread.id);
 
+    // Właściciel sesji MUSI być członkiem wątku. Discord dostarcza klientowi zdarzenia
+    // wiadomości (MESSAGE_CREATE/UPDATE) z wątku niezawodnie tylko jego członkom - bez tego
+    // klient (zwłaszcza mobilny) potrafił pokazać pusty wątek bez embeda z instrukcją albo
+    // "zamrozić" pasek postępu i nie pokazać przycisku "Wyślij przypomnienia", mimo że
+    // bot poprawnie wysłał/zedytował wiadomość. Wcześniej użytkownik trafiał do wątku
+    // dopiero przez ghost ping - już PO finalnej edycji, którą przegapiał.
+    try {
+        await thread.members.add(userId);
+    } catch (error) {
+        logger.warn(`[OCR] ⚠️ Nie udało się dodać użytkownika ${userId} do wątku sesji: ${error.message}`);
+    }
+
     // Discord wysyła na kanał macierzysty systemową wiadomość "X rozpoczął wątek: ...".
     // Zapisujemy jej ID, żeby usunąć ją razem z wątkiem po zakończeniu sesji - inaczej
     // zaśmieca kanał z embedem listy aktywnych sesji.
@@ -239,6 +251,8 @@ async function handleSlashCommand(interaction, sharedState) {
 }
 
 async function handlePunishCommand(interaction, config, ocrService, punishmentService) {
+    // Czy TO wywołanie otworzyło sesję OCR - catch nie może zamknąć cudzej (np. drugiego kliknięcia)
+    let ocrStarted = false;
     try {
         // ===== SPRAWDZENIE WŁASNEJ AKTYWNEJ SESJI OCR =====
         const guildId = interaction.guild.id;
@@ -269,7 +283,12 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
         }
 
         const runSession = async (inter) => {
-            await ocrService.startOCRSession(guildId, userId, commandName);
+            // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+            if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+                await inter.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+                return;
+            }
+            ocrStarted = true;
             logger.info(`[OCR] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
             // Pobierz timestamp wygaśnięcia OCR
@@ -305,17 +324,19 @@ async function handlePunishCommand(interaction, config, ocrService, punishmentSe
     } catch (error) {
         logger.error('[PUNISH] ❌ Błąd komendy /punish:', error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        const guildId = interaction.guild.id;
-        const userId = interaction.user.id;
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        // Zakończ sesję OCR w przypadku błędu (tylko własną)
+        if (ocrStarted) {
+            await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        }
 
         await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
 
 async function handleRemindCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
+    // Czy TO wywołanie otworzyło sesję OCR - catch nie może zamknąć cudzej (np. drugiego kliknięcia)
+    let ocrStarted = false;
     try {
         // ===== SPRAWDZENIE WŁASNEJ AKTYWNEJ SESJI OCR (przed deferReply) =====
         const guildId = interaction.guild.id;
@@ -380,7 +401,12 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
         }
 
         const runSession = async (inter) => {
-            await ocrService.startOCRSession(guildId, userId, commandName);
+            // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+            if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+                await inter.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+                return;
+            }
+            ocrStarted = true;
             logger.info(`[OCR] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
             // Pobierz timestamp wygaśnięcia OCR
@@ -394,6 +420,8 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
             // Utwórz sesję przypomnienia (w wątku)
             const sessionId = reminderService.createSession(userId, guildId, thread.id, userClanRoleId, ocrExpiresAt);
             const session = reminderService.getSession(sessionId);
+            // Numer przypomnienia, na który sesja dostała zgodę - ponownie weryfikowany przy wysyłce
+            session.expectedReminderNumber = canSend.reminderNumber || null;
 
             // Pokaż embed z prośbą o zdjęcia (w wątku)
             const awaitingEmbed = reminderService.createAwaitingImagesEmbed();
@@ -416,17 +444,19 @@ async function handleRemindCommand(interaction, config, ocrService, reminderServ
     } catch (error) {
         logger.error('[REMIND] ❌ Błąd komendy /remind:', error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        const guildId = interaction.guild.id;
-        const userId = interaction.user.id;
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        // Zakończ sesję OCR w przypadku błędu (tylko własną)
+        if (ocrStarted) {
+            await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        }
 
         await interaction.editReply({ content: messages.errors.ocrError });
     }
 }
 
 async function handleRemindCxCommand(interaction, config, ocrService, reminderService, reminderUsageService) {
+    // Czy TO wywołanie otworzyło sesję OCR - catch nie może zamknąć cudzej (np. drugiego kliknięcia)
+    let ocrStarted = false;
     try {
         // ===== SPRAWDZENIE WŁASNEJ AKTYWNEJ SESJI OCR (przed deferReply) =====
         const guildId = interaction.guild.id;
@@ -489,7 +519,12 @@ async function handleRemindCxCommand(interaction, config, ocrService, reminderSe
             return;
         }
 
-        await ocrService.startOCRSession(guildId, userId, commandName);
+        // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+        if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+            await interaction.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+            return;
+        }
+        ocrStarted = true;
         logger.info(`[OCR] 🟢 ${interaction.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
         // Pobierz timestamp wygaśnięcia OCR
@@ -522,11 +557,11 @@ async function handleRemindCxCommand(interaction, config, ocrService, reminderSe
     } catch (error) {
         logger.error('[REMINDCX] ❌ Błąd RemindCX:', error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        const guildId = interaction.guild.id;
-        const userId = interaction.user.id;
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        // Zakończ sesję OCR w przypadku błędu (tylko własną)
+        if (ocrStarted) {
+            await ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        }
 
         await interaction.editReply({ content: messages.errors.ocrError });
     }
@@ -540,11 +575,18 @@ async function handleRemindCxCommand(interaction, config, ocrService, reminderSe
  */
 async function handleRemindCxCompleteSend(interaction, session, sharedState) {
     // Natychmiast pokaż checklistę wysyłki (usuwa przyciski)
-    await interaction.update({
-        content: buildSendChecklist('remindcx', 'dedup'),
-        embeds: [],
-        components: []
-    });
+    try {
+        await interaction.update({
+            content: buildSendChecklist('remindcx', 'dedup'),
+            embeds: [],
+            components: []
+        });
+    } catch (error) {
+        // Kliknięcie nie zostało potwierdzone (np. wygasła interakcja) - nic się nie
+        // wydarzyło, więc zdejmij blokadę, żeby dało się kliknąć ponownie
+        session._claimedActions?.delete('complete');
+        throw error;
+    }
 
     // Wyznacz brakujących graczy (mają rolę klanową, nie wykryto ich na zdjęciach)
     const missingUsers = sharedState.reminderService.getCxMissingUsers(session);
@@ -1118,6 +1160,13 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Jedna decyzja na jedną osobę - podwójne kliknięcie zapisywało tę samą odpowiedź
+        // także dla NASTĘPNEGO urlopowicza, zanim ktokolwiek zobaczył pytanie o niego
+        if (!claimSessionAction(session, `vacation_${currentVacationIndex}`)) {
+            await rejectDuplicateClick(interaction, 'REMIND');
+            return;
+        }
+
         const currentPlayer = playersWithVacation[currentVacationIndex];
         const userId = currentPlayer.user.member.id;
         const decision = interaction.customId === 'remind_vacation_include';
@@ -1132,6 +1181,12 @@ async function handleButton(interaction, sharedState) {
 
         // Defer update żeby acknowledged button click
         await interaction.deferUpdate();
+
+        // Każda decyzja przedłuża sesję - przy kilku urlopowiczach sesja potrafiła
+        // wygasnąć w połowie pytań (wątek znikał razem z nimi)
+        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+            .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+        sharedState.reminderService.refreshSessionTimeout(session.sessionId);
 
         // Pokaż pytanie o następną osobę lub finalizuj (używając oryginalnej interakcji z sesji)
         try {
@@ -1220,6 +1275,12 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Po „Wyślij/Dodaj punkty” sesja jest już w trakcie finalizacji
+        if (session._claimedActions?.has('complete')) {
+            await rejectDuplicateClick(interaction, 'REMIND');
+            return;
+        }
+
         // Odśwież timeout sesji OCR
         await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
@@ -1253,8 +1314,16 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Odśwież timeout sesji OCR
-        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        // Blokada podwójnego kliknięcia - PRZED jakimkolwiek await
+        if (!claimSessionAction(session, 'complete')) {
+            await rejectDuplicateClick(interaction, 'REMIND');
+            return;
+        }
+
+        // Odśwież timeout sesji OCR (bez await - edycja panelu OCR opóźniała potwierdzenie
+        // interakcji ponad limit 3 s)
+        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+            .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
         // Tryb CX - osobna, uproszczona ścieżka wysyłki (bez urlopów i bez trackingu potwierdzeń)
         if (session.cxMode) {
@@ -1263,11 +1332,30 @@ async function handleButton(interaction, sharedState) {
         }
 
         // Natychmiast pokaż checklistę wysyłki (usuwa przyciski)
-        await interaction.update({
-            content: buildSendChecklist('remind', 'dedup'),
-            embeds: [],
-            components: []
-        });
+        try {
+            await interaction.update({
+                content: buildSendChecklist('remind', 'dedup'),
+                embeds: [],
+                components: []
+            });
+        } catch (error) {
+            // Kliknięcie nie zostało potwierdzone (np. wygasła interakcja) - nic się nie
+            // wydarzyło, więc zdejmij blokadę, żeby dało się kliknąć ponownie
+            session._claimedActions?.delete('complete');
+            throw error;
+        }
+
+        // Ponowna weryfikacja limitu klanu. Sprawdzany był tylko przy starcie komendy, a
+        // sesja trwa do 15 min - dwóch liderów tego samego klanu mogło równolegle wysłać
+        // „to samo” przypomnienie (3 zamiast 2 dziennie) albo wysłać je już po deadline.
+        const limitBlock = await checkRemindLimitStillValid(session, sharedState.reminderUsageService);
+        if (limitBlock) {
+            stopGhostPing(session);
+            await interaction.editReply({ content: limitBlock, embeds: [], components: [] });
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+            return;
+        }
 
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
@@ -1312,77 +1400,45 @@ async function handleButton(interaction, sharedState) {
         await interaction.editReply({ content: buildSendChecklist('remind', 'vacation'), embeds: [], components: [] });
 
         // Sprawdź urlopy przed wysłaniem przypomnień
-        const vacationChannelId = '1269726207633522740';
-        const playersWithVacation = [];
-        const oneMonthAgo = new Date();
-        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        let playersWithVacation = [];
 
         try {
-            const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
-            if (vacationChannel) {
-                logger.info(`[REMIND] 🏖️ Sprawdzanie urlopów dla ${foundUsers.length} graczy`);
+            playersWithVacation = await findPlayersOnVacation(interaction.guild, foundUsers, sharedState.config, 'REMIND');
 
-                for (const userData of foundUsers) {
-                    const member = userData.user.member;
-                    if (!member) continue;
+            // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
+            if (playersWithVacation.length > 0) {
+                logger.info(`[REMIND] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
 
-                    // Sprawdź wiadomości użytkownika na kanale urlopów z ostatniego miesiąca
-                    const messages = await vacationChannel.messages.fetch({ limit: 100 });
-                    const userMessages = messages.filter(msg =>
-                        msg.author.id === member.user.id &&
-                        msg.createdAt >= oneMonthAgo
-                    );
+                // Zapisz dane w sesji dla późniejszego użycia
+                session.vacationDecisionData = {
+                    playersWithVacation: playersWithVacation,
+                    allFoundUsers: foundUsers,
+                    currentVacationIndex: 0,
+                    vacationDecisions: {}, // userId -> true (include) / false (exclude)
+                    interaction: interaction
+                };
 
-                    // Sprawdź czy któraś wiadomość ma reakcje (aktywny urlop)
-                    let hasActiveVacation = false;
-                    for (const userMsg of userMessages.values()) {
-                        if (userMsg.reactions && userMsg.reactions.cache && userMsg.reactions.cache.size > 0) {
-                            hasActiveVacation = true;
-                            break;
-                        }
-                    }
+                // Pokaż pytanie o pierwszą osobę na urlopie
+                try {
+                    await showVacationDecisionPrompt(session, 'remind', sharedState);
+                } catch (error) {
+                    logger.error('[REMIND] ❌ Błąd wyświetlania pytania o urlopy:', error);
 
-                    if (hasActiveVacation) {
-                        playersWithVacation.push(userData);
-                        logger.info(`[REMIND] 🏖️ ${member.displayName} ma aktywny urlop (z reakcjami)`);
-                    }
+                    // Zatrzymaj ghost ping
+                    stopGhostPing(session);
+
+                    // Wyczyść sesje
+                    await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+                    await sharedState.reminderService.cleanupSession(session.sessionId);
+
+                    await interaction.editReply({
+                        content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
+                        embeds: [],
+                        components: []
+                    });
+                    return;
                 }
-
-                // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
-                if (playersWithVacation.length > 0) {
-                    logger.info(`[REMIND] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
-
-                    // Zapisz dane w sesji dla późniejszego użycia
-                    session.vacationDecisionData = {
-                        playersWithVacation: playersWithVacation,
-                        allFoundUsers: foundUsers,
-                        currentVacationIndex: 0,
-                        vacationDecisions: {}, // userId -> true (include) / false (exclude)
-                        interaction: interaction
-                    };
-
-                    // Pokaż pytanie o pierwszą osobę na urlopie
-                    try {
-                        await showVacationDecisionPrompt(session, 'remind', sharedState);
-                    } catch (error) {
-                        logger.error('[REMIND] ❌ Błąd wyświetlania pytania o urlopy:', error);
-
-                        // Zatrzymaj ghost ping
-                        stopGhostPing(session);
-
-                        // Wyczyść sesje
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-                        await sharedState.reminderService.cleanupSession(session.sessionId);
-
-                        await interaction.editReply({
-                            content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
-                            embeds: [],
-                            components: []
-                        });
-                        return;
-                    }
-                    return; // Czekamy na decyzję użytkownika
-                }
+                return; // Czekamy na decyzję użytkownika
             }
         } catch (vacationError) {
             logger.error('[REMIND] ⚠️ Błąd sprawdzania urlopów, kontynuuję bez filtrowania:', vacationError.message);
@@ -1694,6 +1750,13 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Jedna decyzja na jedną osobę - podwójne kliknięcie zapisywało tę samą odpowiedź
+        // także dla NASTĘPNEGO urlopowicza, zanim ktokolwiek zobaczył pytanie o niego
+        if (!claimSessionAction(session, `vacation_${currentVacationIndex}`)) {
+            await rejectDuplicateClick(interaction, 'PUNISH');
+            return;
+        }
+
         const currentPlayer = playersWithVacation[currentVacationIndex];
         const userId = currentPlayer.user.member.id;
         const decision = interaction.customId === 'punish_vacation_include';
@@ -1708,6 +1771,12 @@ async function handleButton(interaction, sharedState) {
 
         // Defer update żeby acknowledged button click
         await interaction.deferUpdate();
+
+        // Każda decyzja przedłuża sesję - przy kilku urlopowiczach sesja potrafiła
+        // wygasnąć w połowie pytań (wątek znikał razem z nimi)
+        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+            .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+        sharedState.punishmentService.refreshSessionTimeout(session.sessionId);
 
         // Pokaż pytanie o następną osobę lub finalizuj (używając oryginalnej interakcji z sesji)
         try {
@@ -1796,6 +1865,12 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
+        // Po „Wyślij/Dodaj punkty” sesja jest już w trakcie finalizacji
+        if (session._claimedActions?.has('complete')) {
+            await rejectDuplicateClick(interaction, 'PUNISH');
+            return;
+        }
+
         // Odśwież timeout sesji OCR
         await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
 
@@ -1829,15 +1904,30 @@ async function handleButton(interaction, sharedState) {
             return;
         }
 
-        // Odśwież timeout sesji OCR
-        await sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id);
+        // Blokada podwójnego kliknięcia - PRZED jakimkolwiek await (inaczej podwójne punkty karne)
+        if (!claimSessionAction(session, 'complete')) {
+            await rejectDuplicateClick(interaction, 'PUNISH');
+            return;
+        }
+
+        // Odśwież timeout sesji OCR (bez await - edycja panelu OCR opóźniała potwierdzenie
+        // interakcji ponad limit 3 s)
+        sharedState.ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
+            .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
 
         // Natychmiast pokaż checklistę nakładania kar (usuwa przyciski)
-        await interaction.update({
-            content: buildSendChecklist('punish', 'dedup'),
-            embeds: [],
-            components: []
-        });
+        try {
+            await interaction.update({
+                content: buildSendChecklist('punish', 'dedup'),
+                embeds: [],
+                components: []
+            });
+        } catch (error) {
+            // Kliknięcie nie zostało potwierdzone (np. wygasła interakcja) - nic się nie
+            // wydarzyło, więc zdejmij blokadę, żeby dało się kliknąć ponownie
+            session._claimedActions?.delete('complete');
+            throw error;
+        }
 
         // Stwórz listę znalezionych użytkowników
         const allFoundUsers = [];
@@ -1882,77 +1972,45 @@ async function handleButton(interaction, sharedState) {
         await interaction.editReply({ content: buildSendChecklist('punish', 'vacation'), embeds: [], components: [] });
 
         // Sprawdź urlopy przed dodaniem punktów
-        const vacationChannelId = '1269726207633522740';
-        const playersWithVacation = [];
-        const oneMonthAgo = new Date();
-        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+        let playersWithVacation = [];
 
         try {
-            const vacationChannel = await interaction.guild.channels.fetch(vacationChannelId);
-            if (vacationChannel) {
-                logger.info(`[PUNISH] 🏖️ Sprawdzanie urlopów dla ${foundUsers.length} graczy`);
+            playersWithVacation = await findPlayersOnVacation(interaction.guild, foundUsers, sharedState.config, 'PUNISH');
 
-                for (const userData of foundUsers) {
-                    const member = userData.user.member;
-                    if (!member) continue;
+            // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
+            if (playersWithVacation.length > 0) {
+                logger.info(`[PUNISH] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
 
-                    // Sprawdź wiadomości użytkownika na kanale urlopów z ostatniego miesiąca
-                    const messages = await vacationChannel.messages.fetch({ limit: 100 });
-                    const userMessages = messages.filter(msg =>
-                        msg.author.id === member.user.id &&
-                        msg.createdAt >= oneMonthAgo
-                    );
+                // Zapisz dane w sesji dla późniejszego użycia
+                session.vacationDecisionData = {
+                    playersWithVacation: playersWithVacation,
+                    allFoundUsers: foundUsers,
+                    currentVacationIndex: 0,
+                    vacationDecisions: {}, // userId -> true (include) / false (exclude)
+                    interaction: interaction
+                };
 
-                    // Sprawdź czy któraś wiadomość ma reakcje (aktywny urlop)
-                    let hasActiveVacation = false;
-                    for (const userMsg of userMessages.values()) {
-                        if (userMsg.reactions && userMsg.reactions.cache && userMsg.reactions.cache.size > 0) {
-                            hasActiveVacation = true;
-                            break;
-                        }
-                    }
+                // Pokaż pytanie o pierwszą osobę na urlopie
+                try {
+                    await showVacationDecisionPrompt(session, 'punish', sharedState);
+                } catch (error) {
+                    logger.error('[PUNISH] ❌ Błąd wyświetlania pytania o urlopy:', error);
 
-                    if (hasActiveVacation) {
-                        playersWithVacation.push(userData);
-                        logger.info(`[PUNISH] 🏖️ ${member.displayName} ma aktywny urlop (z reakcjami)`);
-                    }
+                    // Zatrzymaj ghost ping
+                    stopGhostPing(session);
+
+                    // Wyczyść sesje
+                    await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+                    await sharedState.punishmentService.cleanupSession(session.sessionId);
+
+                    await interaction.editReply({
+                        content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
+                        embeds: [],
+                        components: []
+                    });
+                    return;
                 }
-
-                // Jeśli są urlopowicze, zapisz ich w sesji i pytaj o każdego z osobna
-                if (playersWithVacation.length > 0) {
-                    logger.info(`[PUNISH] 🏖️ Znaleziono ${playersWithVacation.length} urlopowiczów - rozpoczynam pytanie o każdego z osobna`);
-
-                    // Zapisz dane w sesji dla późniejszego użycia
-                    session.vacationDecisionData = {
-                        playersWithVacation: playersWithVacation,
-                        allFoundUsers: foundUsers,
-                        currentVacationIndex: 0,
-                        vacationDecisions: {}, // userId -> true (include) / false (exclude)
-                        interaction: interaction
-                    };
-
-                    // Pokaż pytanie o pierwszą osobę na urlopie
-                    try {
-                        await showVacationDecisionPrompt(session, 'punish', sharedState);
-                    } catch (error) {
-                        logger.error('[PUNISH] ❌ Błąd wyświetlania pytania o urlopy:', error);
-
-                        // Zatrzymaj ghost ping
-                        stopGhostPing(session);
-
-                        // Wyczyść sesje
-                        await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
-                        await sharedState.punishmentService.cleanupSession(session.sessionId);
-
-                        await interaction.editReply({
-                            content: `❌ Wystąpił błąd podczas przetwarzania urlopów: ${error.message}`,
-                            embeds: [],
-                            components: []
-                        });
-                        return;
-                    }
-                    return; // Czekamy na decyzję użytkownika
-                }
+                return; // Czekamy na decyzję użytkownika
             }
         } catch (vacationError) {
             logger.error('[PUNISH] ⚠️ Błąd sprawdzania urlopów, kontynuuję bez filtrowania:', vacationError.message);
@@ -2453,6 +2511,89 @@ function stopGhostPing(session) {
         session.pingTimer = null;
         logger.info(`[GHOST_PING] ⏹️ Zatrzymano ponawianie ghost pingów dla sesji ${session.sessionId}`);
     }
+}
+
+/**
+ * Jednorazowe „zajęcie” akcji w obrębie sesji. Sprawdzenie i zapis są synchroniczne,
+ * więc drugie kliknięcie tego samego przycisku (podwójne tapnięcie na telefonie, lag
+ * klienta) dostaje `false`, zanim pierwsze zdąży zdjąć przyciski z wiadomości.
+ * Guard właściciela sesji przepuszcza oba kliknięcia, bo trafiają w tę samą wiadomość.
+ * Wcześniej skutkiem były m.in. podwójne punkty karne, podwójne DM-y i dwa zużyte
+ * dzienne limity /remind, a w Fazie 2 — przeskoczona lub zdublowana runda.
+ */
+function claimSessionAction(session, key) {
+    if (!session._claimedActions) session._claimedActions = new Set();
+    if (session._claimedActions.has(key)) return false;
+    session._claimedActions.add(key);
+    return true;
+}
+
+/**
+ * Gracze z aktywnym urlopem (ich wiadomość na kanale urlopów z ostatniego miesiąca ma reakcję).
+ * Kanał czytany RAZ - wcześniej pętla pobierała te same 100 wiadomości osobno dla każdego
+ * gracza (N zapytań do Discorda przy każdym „Wyślij”), a ID kanału było wpisane na sztywno
+ * zamiast brane z `STALKER_LME_VACATION_CHANNEL_ID`.
+ */
+async function findPlayersOnVacation(guild, foundUsers, config, tag) {
+    const vacationChannel = await guild.channels.fetch(config.vacations.vacationChannelId);
+    if (!vacationChannel) return [];
+
+    logger.info(`[${tag}] 🏖️ Sprawdzanie urlopów dla ${foundUsers.length} graczy`);
+
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    const messages = await vacationChannel.messages.fetch({ limit: 100 });
+    const authorsOnVacation = new Set();
+    for (const msg of messages.values()) {
+        if (msg.createdAt >= oneMonthAgo && msg.reactions?.cache?.size > 0) {
+            authorsOnVacation.add(msg.author.id);
+        }
+    }
+
+    const playersWithVacation = foundUsers.filter(userData =>
+        userData.user?.member && authorsOnVacation.has(userData.user.member.user.id)
+    );
+    for (const userData of playersWithVacation) {
+        logger.info(`[${tag}] 🏖️ ${userData.user.member.displayName} ma aktywny urlop (z reakcjami)`);
+    }
+    return playersWithVacation;
+}
+
+/**
+ * Czy wysyłka /remind jest nadal dozwolona w chwili kliknięcia „Wyślij”. Zwraca treść
+ * blokady albo `null`. Celowo NIE powtarza pełnego `canSendReminder()` - przypomnienie
+ * rozpoczęte w swoim oknie (np. o 17:19) może zostać potwierdzone chwilę po jego końcu.
+ * Blokuje dwie sytuacje: deadline już minął albo w trakcie tej sesji ktoś z klanu wysłał
+ * to samo przypomnienie (limit 2 dziennie liczony był tylko przy starcie komendy).
+ */
+async function checkRemindLimitStillValid(session, reminderUsageService) {
+    // getMinutesToDeadline() po 17:50 przeskakuje na jutrzejszy deadline (nigdy < 0),
+    // a sesja mogła wystartować najwcześniej w oknie < 360 min - więc ≥ 360 = po deadline
+    if (reminderUsageService.getMinutesToDeadline() >= 360) {
+        return '❌ Nie wysłano przypomnień - dzisiejszy deadline (17:50) już minął.';
+    }
+
+    if (!session.expectedReminderNumber) return null;
+
+    const usage = await reminderUsageService.getReminderUsage(session.userClanRoleId);
+    if (usage.todayCount >= session.expectedReminderNumber) {
+        const last = usage.todayUsage[usage.todayCount - 1];
+        const kto = last?.sentBy ? ` przez <@${last.sentBy}>` : '';
+        const kiedy = last?.timestamp
+            ? ` o **${new Date(last.timestamp).toLocaleTimeString('pl-PL', { timeZone: reminderUsageService.config.timezone, hour: '2-digit', minute: '2-digit' })}**`
+            : '';
+        return `❌ Nie wysłano przypomnień - w trakcie Twojej sesji przypomnienie nr ${session.expectedReminderNumber} dla klanu zostało już wysłane${kiedy}${kto}.`;
+    }
+    return null;
+}
+
+async function rejectDuplicateClick(interaction, tag) {
+    logger.warn(`[${tag}] ⏳ Zignorowano ponowne kliknięcie ${interaction.customId} od ${interaction.user.tag} - akcja już obsłużona`);
+    await interaction.reply({
+        content: '⏳ To kliknięcie zostało już obsłużone - poczekaj na wynik.',
+        flags: MessageFlags.Ephemeral
+    }).catch(() => {});
 }
 
 function createConfirmationButtons(action) {
@@ -3174,7 +3315,7 @@ async function registerSlashCommands(client) {
 }
 
 async function checkVacationsBeforeConfirmation(interaction, zeroScorePlayers, imageUrl, config, punishmentService, ocrText = '') {
-    const vacationChannelId = '1269726207633522740';
+    const vacationChannelId = config.vacations.vacationChannelId;
     const oneMonthAgo = new Date();
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
@@ -4037,6 +4178,8 @@ async function handlePhase1Command(interaction, sharedState) {
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
     const commandName = '/faza1';
+    // Czy TO wywołanie otworzyło sesję OCR - catch nie może zamknąć cudzej (np. drugiego kliknięcia)
+    let ocrStarted = false;
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -4096,7 +4239,12 @@ async function handlePhase1Command(interaction, sharedState) {
         }
 
         const runSession = async (inter) => {
-            await ocrService.startOCRSession(guildId, userId, commandName);
+            // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+            if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+                await inter.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+                return;
+            }
+            ocrStarted = true;
             logger.info(`[OCR] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
             // Pobierz timestamp wygaśnięcia OCR
@@ -4172,9 +4320,11 @@ async function handlePhase1Command(interaction, sharedState) {
     } catch (error) {
         logger.error('[PHASE1] ❌ Błąd komendy /faza1:', error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        // Zakończ sesję OCR w przypadku błędu (tylko własną)
+        if (ocrStarted) {
+            await ocrService.endOCRSession(guildId, userId, true);
+            logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd)`);
+        }
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas inicjalizacji komendy /faza1.'
@@ -4847,6 +4997,8 @@ async function handlePhase2Command(interaction, sharedState) {
     const guildId = interaction.guild.id;
     const userId = interaction.user.id;
     const commandName = '/faza2';
+    // Czy TO wywołanie otworzyło sesję OCR - catch nie może zamknąć cudzej (np. drugiego kliknięcia)
+    let ocrStarted = false;
 
     // Sprawdź uprawnienia (admin lub allowedPunishRoles)
     const isAdmin = interaction.member.permissions.has('Administrator');
@@ -4906,7 +5058,12 @@ async function handlePhase2Command(interaction, sharedState) {
         }
 
         const runSession = async (inter) => {
-            await ocrService.startOCRSession(guildId, userId, commandName);
+            // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+            if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+                await inter.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+                return;
+            }
+            ocrStarted = true;
             logger.info(`[OCR] 🟢 ${inter.user.tag} rozpoczyna sesję OCR (${commandName})`);
 
             // Pobierz timestamp wygaśnięcia OCR
@@ -4982,9 +5139,11 @@ async function handlePhase2Command(interaction, sharedState) {
     } catch (error) {
         logger.info(`[PHASE2] ❌ Błąd komendy /faza2:`, error);
 
-        // Zakończ sesję OCR w przypadku błędu
-        await ocrService.endOCRSession(guildId, userId, true);
-        logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd Phase2)`);
+        // Zakończ sesję OCR w przypadku błędu (tylko własną)
+        if (ocrStarted) {
+            await ocrService.endOCRSession(guildId, userId, true);
+            logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (błąd Phase2)`);
+        }
 
         await interaction.editReply({
             content: '❌ Wystąpił błąd podczas uruchamiania komendy.'
@@ -5113,16 +5272,21 @@ async function handlePhase2CompleteButton(interaction, sharedState) {
         // Zatrzymaj ghost ping - użytkownik kliknął przycisk
         stopGhostPing(session);
 
+        // Format: phase2_resolve_{nick}_{value} - nick może zawierać "_", więc wartość to
+        // OSTATNI segment, a nick to wszystko pomiędzy (jak w Fazie 1). Wcześniej brane były
+        // segmenty [2] i [3]: dla nicku "jj_bojano" wartością stawało się parseInt("bojano") = NaN
         const parts = interaction.customId.split('_');
-        const nick = parts[2];
-        const chosenValue = parseInt(parts[3]);
+        const chosenValue = parseInt(parts[parts.length - 1]) || 0;
+        const nick = parts.slice(2, parts.length - 1).join('_');
 
         logger.info(`[PHASE2] Rozstrzygam konflikt dla nick="${nick}", value="${chosenValue}"`);
 
         const conflict = phaseService.getNextUnresolvedConflict(session);
 
         if (conflict) {
-            phaseService.resolveConflict(session, conflict.nick, chosenValue);
+            // Rozstrzygany jest nick z KLIKNIĘTEGO przycisku, nie „następny w kolejce” - podwójne
+            // kliknięcie przypisywało wartość z pytania o gracza A kolejnemu graczowi B
+            phaseService.resolveConflict(session, nick, chosenValue);
             const nextConflict = phaseService.getNextUnresolvedConflict(session);
 
             if (nextConflict) {
@@ -5218,6 +5382,13 @@ async function handlePhase2FinalConfirmButton(interaction, sharedState) {
         // Anuluj zapis i zakończ sesję OCR (cleanupSession wywołuje endOCRSession)
         await phaseService.cleanupSession(session.sessionId);
         logger.info(`[OCR] 🔴 ${interaction.user.tag} zakończył sesję OCR (anulowanie zapisu Phase2)`);
+        return;
+    }
+
+    // Jeden zapis na sesję - drugie kliknięcie zapisywało dane ponownie i wysyłało
+    // drugie powiadomienie „Dane zostały zaktualizowane” na kanał klanu
+    if (!claimSessionAction(session, 'phase2_save')) {
+        await rejectDuplicateClick(interaction, 'PHASE2');
         return;
     }
 
@@ -5704,6 +5875,13 @@ async function handlePhase2RoundContinue(interaction, sharedState) {
     // Discorda, które opóźniało potwierdzenie interakcji ponad limit 3s → błąd 10062)
     ocrService.refreshOCRSession(interaction.guild.id, interaction.user.id)
         .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+
+    // Jedno przejście na rundę - podwójne kliknięcie wywoływało startNextRound() dwa razy
+    // (przeskoczona runda) albo dopisywało wyniki rundy 3 do roundsData drugi raz (zdublowane sumy)
+    if (!claimSessionAction(session, `round_continue_${session.currentRound}`)) {
+        await rejectDuplicateClick(interaction, 'PHASE2');
+        return;
+    }
 
     // Zatrzymaj ghost ping - użytkownik kliknął przycisk
     stopGhostPing(session);
@@ -11957,6 +12135,16 @@ async function finalizeAfterVacationDecisions(session, type, sharedState) {
 
     // Kontynuuj proces z przefiltrowaną listą użytkowników
     if (type === 'remind') {
+        // Decyzje o urlopowiczach mogły trwać kilka minut - limit klanu sprawdź jeszcze raz
+        const limitBlock = await checkRemindLimitStillValid(session, sharedState.reminderUsageService);
+        if (limitBlock) {
+            stopGhostPing(session);
+            await interaction.editReply({ content: limitBlock, embeds: [], components: [] });
+            await sharedState.ocrService.endOCRSession(interaction.guild.id, interaction.user.id, true);
+            await sharedState.reminderService.cleanupSession(session.sessionId);
+            return;
+        }
+
         // Pokaż progress bar z odliczaniem 5 sekund
         for (let i = 5; i >= 0; i--) {
             const progress = ((5 - i) / 5) * 100;
@@ -12996,7 +13184,11 @@ async function handleEquipmentScanCommand(interaction, sharedState) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const runSession = async (inter) => {
-        await ocrService.startOCRSession(guildId, userId, commandName);
+        // Atomowy start - podwójne kliknięcie w panelu nie utworzy drugiego wątku
+        if (!await ocrService.startOCRSession(guildId, userId, commandName)) {
+            await interaction.editReply({ content: '❌ Masz już aktywną sesję OCR. Dokończ ją lub poczekaj aż wygaśnie.' });
+            return;
+        }
 
         // Poproś o zdjęcie
         await inter.editReply({

@@ -673,6 +673,10 @@ client.on(Events.MessageCreate, async (message) => {
         return; // Nie przetwarzaj dalej jeśli to było pytanie AI
     }
 
+    // Który blok przyjął zdjęcia z tej wiadomości (null = żaden) - do komunikatu,
+    // gdy zdjęcia zostały zignorowane, i do informacji o błędzie po przyjęciu
+    let obrazyPrzyjete = null;
+
     // Obsługa wiadomości z zdjęciami dla Phase 1
     try {
         const session = phaseService.getSessionByUserId(message.author.id);
@@ -689,7 +693,15 @@ client.on(Events.MessageCreate, async (message) => {
                 // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async);
                 // processImagesFromDisk zresetuje flagę w swoim finally
                 session.isProcessing = true;
+                obrazyPrzyjete = 'PHASE1';
                 logger.info(`[PHASE1] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
+
+                // Przesłanie zdjęć to aktywność - przedłuż obie sesje, żeby nie wygasły w trakcie
+                // analizy (wcześniej timeout odświeżał dopiero klik przycisku, więc zdjęcia wysłane
+                // pod koniec 15 minut kończyły się zniknięciem wątku z gotowym wynikiem)
+                ocrService.refreshOCRSession(message.guild.id, message.author.id)
+                    .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+                phaseService.refreshSessionTimeout(session.sessionId);
 
                 // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
                 // więc bez ograniczenia jeden batch mógłby zająć setki MB
@@ -799,6 +811,11 @@ client.on(Events.MessageCreate, async (message) => {
         }
     } catch (error) {
         logger.error(`[PHASE1] ❌ Błąd podczas obsługi wiadomości Phase 1: ${error.message}`);
+
+        // Bez tego użytkownik widział zawieszony pasek postępu i nie wiedział, co dalej
+        if (obrazyPrzyjete === 'PHASE1') {
+            await message.channel.send(`<@${message.author.id}> ❌ Wystąpił błąd podczas analizy zdjęć. Wyślij je ponownie albo anuluj sesję.`).catch(() => {});
+        }
     }
 
     // Obsługa wiadomości z zdjęciami dla /remind
@@ -813,7 +830,15 @@ client.on(Events.MessageCreate, async (message) => {
             if (imageAttachments.size > 0) {
                 // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async)
                 session.isProcessing = true;
+                obrazyPrzyjete = 'REMIND';
                 logger.info(`[REMIND] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
+
+                // Przesłanie zdjęć to aktywność - przedłuż obie sesje, żeby nie wygasły w trakcie
+                // analizy (wcześniej timeout odświeżał dopiero klik przycisku, więc zdjęcia wysłane
+                // pod koniec 15 minut kończyły się zniknięciem wątku z gotowym wynikiem)
+                ocrService.refreshOCRSession(message.guild.id, message.author.id)
+                    .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+                reminderService.refreshSessionTimeout(session.sessionId);
 
                 // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
                 // więc bez ograniczenia jeden batch mógłby zająć setki MB
@@ -873,6 +898,8 @@ client.on(Events.MessageCreate, async (message) => {
                 }
                 if (session.cancelled) {
                     logger.info('[REMIND] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    // Idempotentne - ścieżka batch sprząta sama, fallback po jednym zdjęciu nie
+                    await reminderService.cleanupSession(session.sessionId);
                     return;
                 }
 
@@ -925,6 +952,11 @@ client.on(Events.MessageCreate, async (message) => {
         }
     } catch (error) {
         logger.error(`[REMIND] ❌ Błąd podczas obsługi wiadomości /remind: ${error.message}`);
+
+        // Bez tego użytkownik widział zawieszony pasek postępu i nie wiedział, co dalej
+        if (obrazyPrzyjete === 'REMIND') {
+            await message.channel.send(`<@${message.author.id}> ❌ Wystąpił błąd podczas analizy zdjęć. Wyślij je ponownie albo anuluj sesję.`).catch(() => {});
+        }
     }
 
     // Obsługa wiadomości z zdjęciami dla /punish
@@ -939,7 +971,15 @@ client.on(Events.MessageCreate, async (message) => {
             if (imageAttachments.size > 0) {
                 // Zablokuj równoległe przetwarzanie od razu (pobieranie zdjęć też jest async)
                 session.isProcessing = true;
+                obrazyPrzyjete = 'PUNISH';
                 logger.info(`[PUNISH] 📸 Otrzymano ${imageAttachments.size} zdjęć od ${message.author.tag}`);
+
+                // Przesłanie zdjęć to aktywność - przedłuż obie sesje, żeby nie wygasły w trakcie
+                // analizy (wcześniej timeout odświeżał dopiero klik przycisku, więc zdjęcia wysłane
+                // pod koniec 15 minut kończyły się zniknięciem wątku z gotowym wynikiem)
+                ocrService.refreshOCRSession(message.guild.id, message.author.id)
+                    .catch(error => logger.warn(`[OCR] ⚠️ Nie udało się odświeżyć sesji OCR: ${error.message}`));
+                punishmentService.refreshSessionTimeout(session.sessionId);
 
                 // Limit zdjęć na sesję — screeny trafiają do pamięci na czas analizy,
                 // więc bez ograniczenia jeden batch mógłby zająć setki MB
@@ -999,6 +1039,8 @@ client.on(Events.MessageCreate, async (message) => {
                 }
                 if (session.cancelled) {
                     logger.info('[PUNISH] ℹ️ Sesja anulowana podczas przetwarzania - pomijam embed');
+                    // Idempotentne - ścieżka batch sprząta sama, fallback po jednym zdjęciu nie
+                    await punishmentService.cleanupSession(session.sessionId);
                     return;
                 }
 
@@ -1032,6 +1074,30 @@ client.on(Events.MessageCreate, async (message) => {
         }
     } catch (error) {
         logger.error(`[PUNISH] ❌ Błąd podczas obsługi wiadomości /punish: ${error.message}`);
+
+        // Bez tego użytkownik widział zawieszony pasek postępu i nie wiedział, co dalej
+        if (obrazyPrzyjete === 'PUNISH') {
+            await message.channel.send(`<@${message.author.id}> ❌ Wystąpił błąd podczas analizy zdjęć. Wyślij je ponownie albo anuluj sesję.`).catch(() => {});
+        }
+    }
+
+    // Zdjęcia wysłane do wątku sesji, których żaden blok nie przyjął (trwa analiza albo sesja
+    // czeka na kliknięcie przycisku), były dotąd IGNOROWANE bez słowa - wyglądało to jak
+    // zawieszony bot („wstawiłem zdjęcie i nic się nie działo”)
+    if (!obrazyPrzyjete && message.guild && message.attachments.some(att => att.contentType?.startsWith('image/'))) {
+        const sesjaWatku = [phaseService, reminderService, punishmentService]
+            .map(serwis => serwis.getSessionByUserId(message.author.id))
+            .find(sesja => sesja && sesja.channelId === message.channelId);
+
+        if (sesjaWatku) {
+            const powod = sesjaWatku.isProcessing
+                ? '⏳ Trwa analiza poprzednich zdjęć — poczekaj na wynik, dopiero wtedy doślij kolejne.'
+                : '⚠️ Sesja nie czeka teraz na zdjęcia — dokończ bieżący krok przyciskami powyżej (jeśli jest przycisk „Dodaj więcej”, użyj go, żeby dosłać zdjęcia).';
+            const odpowiedz = await message.reply(powod).catch(() => null);
+            if (odpowiedz) {
+                setTimeout(() => odpowiedz.delete().catch(() => {}), 15000);
+            }
+        }
     }
 
     // Obsługa MessageCreate dla /wyniki została przeniesiona do message collector w interactionHandlers.js
