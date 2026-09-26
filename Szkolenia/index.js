@@ -96,7 +96,7 @@ client.once(Events.ClientReady, async () => {
     logger.success('✅ Szkolenia gotowy - wątki szkoleniowe, AI Chat');
 
     try {
-        await checkThreads(client, sharedState, config, true);
+        await checkThreads(client, sharedState, config);
     } catch (error) {
         logger.error('❌ Błąd sprawdzania wątków przy starcie:', error);
     }

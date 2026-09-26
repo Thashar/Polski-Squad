@@ -71,9 +71,12 @@ class GlobalPositionHistoryService {
         this._data          = null;
         this._timer         = null;
         this.client         = null;
-        // sync() bywa wołany z kilku miejsc naraz (zapis rankingu + timer) — bez tej blokady
-        // dwa przebiegi czytałyby ten sam stan i drugi nadpisywałby wynik pierwszego
-        this._syncInFlight  = false;
+        // sync() bywa wołany z kilku miejsc naraz (zapis rankingu + timer + raport TOP 10) — bez
+        // serializacji dwa przebiegi czytałyby ten sam stan i drugi nadpisywałby wynik pierwszego.
+        // Trzymamy promise trwającego przebiegu (null = brak)
+        this._syncInFlight  = null;
+        // Wywołanie bez rankingu w trakcie przebiegu — przeliczyć raz jeszcze po jego zakończeniu
+        this._syncAgain     = false;
 
         store.register(this._file, {
             defaultValue: () => ({ players: {} }),
@@ -145,8 +148,33 @@ class GlobalPositionHistoryService {
      * @returns {Promise<boolean>} czy stan uległ zmianie
      */
     async sync(ranking = null) {
-        if (this._syncInFlight) return false;
-        this._syncInFlight = true;
+        if (this._syncInFlight) {
+            if (ranking) {
+                // Raport TOP 10 potrzebuje historii zgodnej DOKŁADNIE z kolejnością, którą wysyła.
+                // Wcześniej w trakcie innego przebiegu (np. 10-minutowego timera) wywołanie było
+                // pomijane i wiersz „na tej pozycji od" pokazywał u części graczy „Nowa pozycja"
+                await this._syncInFlight.catch(() => {});
+                return this.sync(ranking);
+            }
+            // Zapis rankingu w trakcie przebiegu — przebieg mógł czytać ranking sprzed zapisu
+            this._syncAgain = true;
+            return false;
+        }
+
+        const run = this._doSync(ranking);
+        this._syncInFlight = run;
+        try {
+            return await run;
+        } finally {
+            this._syncInFlight = null;
+            if (this._syncAgain) {
+                this._syncAgain = false;
+                this.sync().catch(() => {});
+            }
+        }
+    }
+
+    async _doSync(ranking) {
         try {
             if (!this._data) await this.load();
 
@@ -216,8 +244,6 @@ class GlobalPositionHistoryService {
         } catch (err) {
             logger.error(`[PozycjeGlobalne] Błąd synchronizacji pozycji: ${err.message}`);
             return false;
-        } finally {
-            this._syncInFlight = false;
         }
     }
 

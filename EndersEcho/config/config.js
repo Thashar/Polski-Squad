@@ -150,7 +150,8 @@ module.exports = {
                     tag: dynCfg.tag || null,
                     icon: dynCfg.icon || null,
                     topRoles: dynCfg.topRoles || null,
-                    globalTop3Notifications: dynCfg.globalTop3Notifications !== false,
+                    // Zapisywana nazwa to `globalTopNotifications`; stara zostaje tylko w dawnych wpisach
+                    globalTopNotifications: (dynCfg.globalTopNotifications ?? dynCfg.globalTop3Notifications) !== false,
                 };
             }
         }

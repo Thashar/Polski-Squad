@@ -5,7 +5,6 @@ const ReminderStorageService = require('./reminderStorageService');
 const logger = createBotLogger('Szkolenia');
 const reminderStorage = new ReminderStorageService();
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 
 // Ile wątków pobierać jednym żądaniem archiwum (maksimum akceptowane przez Discord to 100).
 const WATKOW_NA_STRONE = 100;
@@ -163,7 +162,7 @@ async function otworzWatek(watek) {
     }
 }
 
-async function checkThreads(client, state, config, isInitialCheck = false) {
+async function checkThreads(client, state, config) {
     try {
         const guild = client.guilds.cache.first();
         const channel = await guild.channels.fetch(config.channels.training);
@@ -172,16 +171,14 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
 
         const now = Date.now();
         const lockThreshold = daysToMilliseconds(config.timing.threadLockDays);
-        const reminderThreshold = daysToMilliseconds(config.timing.threadReminderDays);
 
         const activeThreads = await channel.threads.fetchActive();
         const { watki: archiwalne, kompletna } = await pobierzArchiwalneWatki(channel);
         const allThreads = new Map([...activeThreads.threads, ...archiwalne]);
 
         // ⚠️ Czyścimy osierocone wpisy TYLKO gdy przejrzeliśmy całe archiwum. Przy niepełnej
-        // liście skasowalibyśmy stan wątków, które nadal istnieją (m.in. `reminderSent`
-        // i `ownerId`), przez co przypomnienie poszłoby drugi raz zamiast zamknięcia wątku,
-        // a bot zgubiłby powiązanie wątku z właścicielem.
+        // liście skasowalibyśmy stan wątków, które nadal istnieją (m.in. `ownerId`), przez co
+        // bot zgubiłby powiązanie wątku z właścicielem.
         if (kompletna) {
             await reminderStorage.cleanupOrphanedReminders(state.lastReminderMap, allThreads);
         } else {
@@ -190,10 +187,7 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
 
         for (const [id, thread] of allThreads) {
             try {
-                await processThread(thread, guild, state, config, now, {
-                    lockThreshold,
-                    reminderThreshold
-                }, isInitialCheck);
+                await processThread(thread, state, config, now, lockThreshold);
             } catch (error) {
                 logger.error(`❌ Błąd podczas przetwarzania wątku ${thread.name}:`, error);
             }
@@ -204,112 +198,71 @@ async function checkThreads(client, state, config, isInitialCheck = false) {
     }
 }
 
-async function processThread(thread, guild, state, config, now, thresholds, isInitialCheck = false) {
-    const { lockThreshold, reminderThreshold } = thresholds;
-
+/**
+ * Zamyka wątek po `threadLockDays` dniach BEZ AKTYWNOŚCI — od razu, bez pytania właściciela.
+ *
+ * ⚠️ Wcześniej bot najpierw pytał „Czy mogę zamknąć Twój wątek?", a zamykał dopiero tydzień
+ * później. Pytanie samo stawało się ostatnią wiadomością wątku, a jego znacznik bywał kilka
+ * sekund późniejszy niż zapisany czas przypomnienia (margines 5 s) — bot brał własne pytanie
+ * za odpowiedź właściciela, resetował cykl i zamiast zamknąć wątek pytał co tydzień od nowa.
+ */
+async function processThread(thread, state, config, now, lockThreshold) {
     // Wątek już zablokowany (zamknięty) — nie przetwarzaj go ponownie.
     // Bez tego przy każdym restarcie dawno zamknięte wątki były odarchiwizowywane,
     // dostawały ponownie komunikat o zamknięciu i były zamykane od nowa.
-    // Sprawdzenie PRZED pobraniem wiadomości i PRZED threadOwner (działa też po zmianie nicku).
     if (thread.locked) {
         await reminderStorage.markThreadClosed(state.lastReminderMap, thread.id);
         return;
     }
 
-    const lastMessage = await thread.messages.fetch({ limit: 1 }).then(msgs => msgs.first());
-    const lastMessageTime = lastMessage ? lastMessage.createdTimestamp : thread.createdTimestamp;
-    const inactiveTime = now - lastMessageTime;
+    const lastActivity = await lastActivityTime(thread, config);
+    if (lastActivity === null) return; // nie udało się ustalić — nie ryzykujemy zamknięcia
 
-    if (inactiveTime > lockThreshold) {
+    if (now - lastActivity > lockThreshold) {
         await lockThread(thread, state, config);
-        return;
-    }
-
-    const threadData = state.lastReminderMap.get(thread.id);
-
-    if (threadData && threadData.reminderSent) {
-        if (lastMessageTime > threadData.lastReminder + 5000) {
-            await reminderStorage.resetReminderStatus(state.lastReminderMap, thread.id, lastMessageTime);
-        } else {
-            const timeSinceReminder = now - threadData.lastReminder;
-            if (timeSinceReminder > reminderThreshold) {
-                await lockThread(thread, state, config);
-                return;
-            }
-        }
-    }
-
-    if (isInitialCheck) return;
-
-    const threadOwner = await resolveThreadOwner(thread, guild, threadData);
-    if (!threadOwner) return;
-
-    const reminderAlreadySent = threadData && threadData.reminderSent;
-
-    if (inactiveTime > reminderThreshold && !reminderAlreadySent) {
-        const lastReminderTime = threadData ? threadData.lastReminder : 0;
-        const timeSinceLastReminder = lastReminderTime ? (now - lastReminderTime) : Infinity;
-
-        if (timeSinceLastReminder > reminderThreshold) {
-            await sendInactivityReminder(thread, threadOwner, state, config, now);
-        }
     }
 }
+
+// Wiadomości bota, które NIE są aktywnością: dawne pytania o zamknięcie (w obu wersjach
+// treści) i komunikat o zamknięciu wątku
+const PYTANIE_O_ZAMKNIECIE = [/Czy mogę zamknąć Twój wątek\?/, /wątek jest nieaktywny od \d+ dni/];
+// Kliknięcie „Jeszcze nie zamykaj" edytuje pytanie na tę treść — czas edycji = czas kliknięcia
+const POZOSTAW_OTWARTY = 'Ok, wątek pozostanie otwarty';
 
 /**
- * Ustala właściciela wątku.
- *
- * ⚠️ Samo szukanie po nazwie w `guild.members.cache` bywa zawodne: cache członków
- * zapełnia się dopiero ze zdarzeń, więc po restarcie bota potrafi być prawie pusty
- * — a wtedy przypomnienie nie szło wcale, bez śladu w logu. ID właściciela jest
- * zapisywane przy zakładaniu wątku (`setReminder(..., targetUser.id)`), więc korzystamy
- * z niego w pierwszej kolejności, a szukanie po nazwie zostaje jako zapas dla
- * starych wpisów bez `ownerId`.
+ * Ostatnia aktywność w wątku, ustalana WYŁĄCZNIE z jego treści (przeżywa restart, nie zależy
+ * od `reminders.json`, w którym czas przypomnienia mieszał się z czasem pytania bota):
+ * - wiadomość człowieka,
+ * - kliknięcie „Jeszcze nie zamykaj" (czas edycji pytania),
+ * - pozostałe wiadomości bota — regułka przy założeniu i ponownym otwarciu, „wątek jest wciąż
+ *   otwarty" po reakcji, ping o pomoc (idzie po wiadomości właściciela),
+ * - utworzenie wątku, gdy w ostatnich 50 wiadomościach nie ma nic z powyższych.
+ * Nie liczą się pytania o zamknięcie i komunikat o zamknięciu.
+ * @returns {Promise<number|null>} ms albo null, gdy historii nie da się pobrać
  */
-async function resolveThreadOwner(thread, guild, threadData) {
-    if (threadData?.ownerId) {
-        try {
-            return await guild.members.fetch(threadData.ownerId);
-        } catch {
-            // Użytkownik mógł opuścić serwer — spróbujemy jeszcze po nazwie
-        }
-    }
-
-    return guild.members.cache.find(member =>
-        (member.displayName === thread.name) || (member.user.username === thread.name)
-    ) || null;
-}
-
-async function sendInactivityReminder(thread, threadOwner, state, config, now) {
+async function lastActivityTime(thread, config) {
+    let messages;
     try {
-        if (thread.archived) {
-            await thread.setArchived(false, 'Odarchiwizowanie w celu wysłania przypomnienia');
-        }
-
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId('lock_thread')
-                    .setLabel('Zamknij szkolenie')
-                    .setStyle(ButtonStyle.Danger),
-                new ButtonBuilder()
-                    .setCustomId('keep_open')
-                    .setLabel('Jeszcze nie zamykaj')
-                    .setStyle(ButtonStyle.Secondary)
-            );
-
-        await thread.send({
-            content: config.messages.inactiveReminder(threadOwner.id),
-            components: [row]
-        });
-
-        await reminderStorage.setReminder(state.lastReminderMap, thread.id, now);
-        await reminderStorage.markReminderSent(state.lastReminderMap, thread.id);
-        logger.info(`💬 Wysłano przypomnienie: ${thread.name}`);
-
+        messages = await thread.messages.fetch({ limit: 50 });
     } catch (error) {
-        logger.error(`❌ Błąd podczas wysyłania przypomnienia do wątku ${thread.name}:`, error);
+        logger.warn(`⚠️ Nie można pobrać wiadomości wątku ${thread.name}: ${error.message}`);
+        return null;
     }
+
+    let last = thread.createdTimestamp || 0;
+    for (const msg of messages.values()) {
+        let czas = msg.createdTimestamp;
+        if (msg.author.bot) {
+            const tresc = msg.content || '';
+            if (tresc.startsWith(POZOSTAW_OTWARTY)) {
+                czas = msg.editedTimestamp || msg.createdTimestamp;
+            } else if (tresc === config.messages.threadLocked || PYTANIE_O_ZAMKNIECIE.some(wzor => wzor.test(tresc))) {
+                continue;
+            }
+        }
+        if (czas > last) last = czas;
+    }
+    return last;
 }
 
 async function lockThread(thread, state, config) {
