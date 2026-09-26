@@ -70,8 +70,7 @@ module.exports = {
     // Ustawienia czasowe (w dniach/godzinach)
     timing: {
         threadArchiveDays: 1,
-        threadLockDays: 14, // Automatyczne zamknięcie po 14 dniach nieaktywności
-        threadReminderDays: 7, // Pytanie o zamknięcie po 7 dniach nieaktywności
+        threadLockDays: 7, // Automatyczne zamknięcie po 7 dniach bez aktywności (bez pytania właściciela)
         checkHour: 18, // Godzina sprawdzania wątków (18:00)
         checkMinute: 0 // Minuta sprawdzania wątków (00)
     },
@@ -83,15 +82,10 @@ module.exports = {
         
         threadLocked: 'Wątek zostanie zablokowany. Dziękuję za skorzystanie z pomocy! 🐸💚',
         
-        threadKeptOpen: 'Ok, wątek pozostanie otwarty. Przypomnę o zamknięciu za 7 dni jeśli nie będzie aktywności!',
+        threadKeptOpen: 'Ok, wątek pozostanie otwarty. Zamknę go automatycznie po 7 dniach bez aktywności.',
         
         ownerOnly: 'Tylko właściciel wątku może użyć tych przycisków!',
         
-        // Samo pytanie - bez tłumaczenia się z timerów. Terminy (nieaktywność 7 dni,
-        // auto-zamknięcie po kolejnych 7) są sprawą bota, nie właściciela wątku
-        inactiveReminder: (userId) =>
-            `<@${userId}> Czy mogę zamknąć Twój wątek?`,
-
         threadAlreadyOpen: (userId) =>
             `<@${userId}> Twój wątek jest wciąż otwarty. Możesz z niego korzystać.`,
 

@@ -1,13 +1,21 @@
 ### Szkolenia Bot
 
 **Funkcjonalność:** Reakcja emoji N_SSS -> Prywatny wątek z instrukcjami treningowymi + AI Chat
-**Lifecycle:** Utworzenie -> pytanie o zamknięcie po 7 dniach nieaktywności -> automatyczne zamknięcie po 14 dniach (7 dni po pytaniu bez odpowiedzi). Kliknięcie "nie zamykaj" resetuje cały cykl od nowa.
+**Lifecycle:** Utworzenie -> **automatyczne zamknięcie po 7 dniach bez aktywności** (`threadLockDays: 7`), od razu, BEZ pytania właściciela.
 
-⚠️ **Treść pytania to samo pytanie** (`inactiveReminder`): `Czy mogę zamknąć Twój wątek?` plus dwa przyciski. **Nie dopisuj do niego terminów** — wcześniej komunikat tłumaczył się z timerów („nieaktywny od 7 dni", „zostanie zamknięty za kolejne 7 dni"), co dla właściciela wątku jest szumem: liczby są sprawą bota, a odpowiedź i tak sprowadza się do kliknięcia jednego z przycisków.
+⚠️ **Dawniej bot najpierw pytał „Czy mogę zamknąć Twój wątek?”, a zamykał dopiero 7 dni później — i w praktyce nie zamykał nigdy.** Pytanie samo stawało się ostatnią wiadomością wątku, a jego znacznik bywał kilka sekund późniejszy niż zapisany czas przypomnienia (margines 5 s w `processThread`) — bot brał własne pytanie za odpowiedź właściciela, resetował cykl i pytał co tydzień od nowa. Pytanie zostało usunięte (razem z `threadReminderDays` i `inactiveReminder`).
+
+**Aktywność liczona WYŁĄCZNIE z treści wątku** (`lastActivityTime()` w `threadService.js`, ostatnie 50 wiadomości) — nie z `reminders.json`, w którym `lastReminder` mieszał czas otwarcia z czasem pytania bota:
+- wiadomość człowieka,
+- kliknięcie „Jeszcze nie zamykaj” pod starym pytaniem — przycisk edytuje wiadomość na `threadKeptOpen` („Ok, wątek pozostanie otwarty…”), liczy się czas EDYCJI,
+- pozostałe wiadomości bota: regułka przy założeniu i ponownym otwarciu, „wątek jest wciąż otwarty”, ping o pomoc,
+- utworzenie wątku, gdy w oknie nie ma nic z powyższych.
+
+**Nie liczą się:** dawne pytania o zamknięcie (obie wersje treści — `PYTANIE_O_ZAMKNIECIE`) i komunikat o zamknięciu. Gdy historii nie da się pobrać, wątek NIE jest zamykany. Przyciski „Zamknij szkolenie” / „Jeszcze nie zamykaj” pod starymi pytaniami nadal działają. Przy wdrożeniu wszystkie wątki bez aktywności od ponad 7 dni zamkną się przy najbliższym sprawdzeniu (start bota lub 18:00).
 **Scheduling:** Sprawdzanie wątków codziennie o 18:00 (node-cron, strefa Europe/Warsaw)
 
 **Serwisy:**
-- `threadService.js` - Automatyzacja wątków (cron daily 18:00), dwufazowe zamykanie: pytanie po 7 dniach + auto-close po 14 dniach. Wątki już zablokowane (`thread.locked`) są pomijane na samym początku `processThread` (PRZED pobraniem wiadomości i PRZED threadOwner) — zapobiega odarchiwizowaniu i ponownemu wysyłaniu komunikatu o zamknięciu do dawno zamkniętych wątków przy restarcie. `lockThread` dodatkowo zabezpieczone przed ponownym zamykaniem zablokowanego wątku. Eksportuje też `znajdzWatekUzytkownika`, `otworzWatek` i `pobierzArchiwalneWatki` — używane przez `reactionHandlers` (opis niżej).
+- `threadService.js` - Automatyzacja wątków (cron daily 18:00 + sprawdzenie przy starcie), zamykanie po 7 dniach bez aktywności (`lastActivityTime`). Wątki już zablokowane (`thread.locked`) są pomijane na samym początku `processThread` (PRZED pobraniem wiadomości) — zapobiega odarchiwizowaniu i ponownemu wysyłaniu komunikatu o zamknięciu do dawno zamkniętych wątków przy restarcie. `lockThread` dodatkowo zabezpieczone przed ponownym zamykaniem zablokowanego wątku. Eksportuje też `znajdzWatekUzytkownika`, `otworzWatek` i `pobierzArchiwalneWatki` — używane przez `reactionHandlers` (opis niżej).
 - `reminderStorageService.js` - Persistent JSON z danymi przypomień
 - `aiChatService.js` - AI Chat z trzema providerami: Anthropic (prosty prompt), Grok (web_search) i Perplexity (web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER`
 
@@ -94,8 +102,8 @@ SZKOLENIA_PERPLEXITY_MODEL=sonar-pro
 
 - **Logger:** Używaj createBotLogger('Szkolenia')
 - **Scheduling:** Cron sprawdza wątki codziennie o 18:00 (Europe/Warsaw)
-- **Wątki:** Pytanie o zamknięcie po 7 dniach nieaktywności, automatyczne zamknięcie po 14 dniach. "Nie zamykaj" resetuje cykl. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
-- **Wpis w `reminders.json`:** `{ lastReminder, threadCreated, reminderSent, ownerId, helpPingSent, closed }`. Wpis **przeżywa zamknięcie wątku** — trzyma `ownerId`, jedyne powiązanie wątku z użytkownikiem niezależne od nicku. Kasuje go dopiero `cleanupOrphanedReminders`, gdy wątek zniknie z Discorda (i tylko przy kompletnej liście archiwum). `setReminder` zdejmuje `closed` przy (ponownym) otwarciu.
+- **Wątki:** Automatyczne zamknięcie po 7 dniach bez aktywności, bez pytania. Reakcja na otwarty wątek -> komunikat "wątek jest wciąż otwarty"
+- **Wpis w `reminders.json`:** `{ lastReminder, threadCreated, reminderSent, ownerId, helpPingSent, closed }`. `lastReminder`/`reminderSent` nie decydują już o zamknięciu (liczy się treść wątku) — zostały dla zgodności. Wpis **przeżywa zamknięcie wątku** — trzyma `ownerId`, jedyne powiązanie wątku z użytkownikiem niezależne od nicku. Kasuje go dopiero `cleanupOrphanedReminders`, gdy wątek zniknie z Discorda (i tylko przy kompletnej liście archiwum). `setReminder` zdejmuje `closed` przy (ponownym) otwarciu.
 - **Persistencja:** Przypomnienia w JSON, cooldowny AI Chat w JSON — oba przez `utils/jsonStore` (cache-first): `data/reminders.json` i `data/ai_chat_cooldowns.json` czytane z dysku raz, przy pierwszym sięgnięciu, zapis idzie jednocześnie do pliku i pamięci, atomowo (plik tymczasowy + rename). Obsługa `ENOENT` zniknęła z serwisów — store sam oddaje wartość domyślną przy braku pliku. Zapisywanie promptów AI do `data/prompts/` zostało na zwykłym `fs` (pliki tekstowe, nie JSON)
 - **Odpowiedzi ephemeralne:** `flags: MessageFlags.Ephemeral`, **nie** `ephemeral: true` (przestarzałe w discord.js v14, przestanie działać w v15). Tylko przy pierwszej odpowiedzi — `reply()`, `deferReply()`, `followUp()`; `editReply()` flagi nie przyjmuje. Import `MessageFlags` jest w `index.js` i `handlers/interactionHandlers.js`
 - **AI Chat:** Trzy providery (Anthropic prosty prompt / Grok z web_search / Perplexity z web search). Przełączanie przez `SZKOLENIA_AI_PROVIDER` w .env. Grok/Perplexity: web search, cooldown 1440 min (24h) (admini bez limitu).
