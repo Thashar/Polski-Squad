@@ -1924,9 +1924,6 @@ class OCRService {
     }
 
     /**
-     * Rozpoczyna sesję OCR dla użytkownika (równolegle z sesjami innych użytkowników)
-     */
-    /**
      * Ile sesji OCR trwa RÓWNOCZEŚNIE na wszystkich serwerach.
      *
      * Sesje trzymają w pamięci bufory screenów (po zmianie na pobieranie bez dysku),
@@ -1950,28 +1947,56 @@ class OCRService {
         return { ok: aktywne < limit, aktywne, limit };
     }
 
+    /**
+     * Rozpoczyna sesję OCR. Zwraca `false`, gdy użytkownik MA JUŻ aktywną sesję.
+     *
+     * Sprawdzenie i zapis są synchroniczne (bez `await` pomiędzy), więc są atomowe.
+     * Wywołujący sprawdzają `isOCRActive` wcześniej, ale między tym a startem jest kilka
+     * `await` (deferReply, limity) — podwójne kliknięcie przycisku w panelu przechodziło
+     * oba sprawdzenia i tworzyło DWA wątki. Druga sesja nadpisywała wpis pierwszej, a jej
+     * timer zostawał osierocony: po 15 min „wygaszał” już nową sesję, a pierwszy wątek
+     * nie był nigdy usuwany.
+     */
     async startOCRSession(guildId, userId, commandName) {
         if (!this.activeProcessing.has(guildId)) {
             this.activeProcessing.set(guildId, new Map());
         }
         const guildSessions = this.activeProcessing.get(guildId);
 
+        if (guildSessions.has(userId)) {
+            logger.warn(`[OCR] 🚫 Odrzucono start ${commandName} dla ${userId} - użytkownik ma już aktywną sesję (${guildSessions.get(userId).commandName})`);
+            return false;
+        }
+
         // Określ timeout na podstawie komendy
         const timeoutDuration = this.getSessionTimeout(commandName);
-        const expiresAt = Date.now() + timeoutDuration;
+        const startedAt = Date.now();
+        const expiresAt = startedAt + timeoutDuration;
 
-        // Ustaw timeout który wywoła wygaśnięcie sesji
-        const timeout = setTimeout(async () => {
-            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla "${await this.resolveMemberName(guildId, userId)}" (${commandName})`);
-            await this.expireOCRSession(guildId, userId);
-        }, timeoutDuration);
+        const entry = { commandName, expiresAt, startedAt, timeout: null };
+        entry.timeout = this._scheduleExpiry(guildId, userId, entry, timeoutDuration);
 
-        guildSessions.set(userId, { commandName, expiresAt, timeout });
+        guildSessions.set(userId, entry);
         const minutes = timeoutDuration / (60 * 1000);
         logger.info(`[OCR] 🔒 Użytkownik "${await this.resolveMemberName(guildId, userId)}" rozpoczął ${commandName} (timeout: ${minutes} min, aktywnych sesji: ${guildSessions.size})`);
 
         // Aktualizuj wyświetlanie aktywnych sesji
         await this.updateQueueDisplay(guildId);
+        return true;
+    }
+
+    /**
+     * Planuje wygaśnięcie KONKRETNEGO wpisu sesji. Timer sprawdza, czy wpis nadal jest
+     * aktualną sesją użytkownika — timer sesji już zakończonej/zastąpionej nie może
+     * wygasić nowej sesji tej samej osoby.
+     */
+    _scheduleExpiry(guildId, userId, entry, timeoutDuration) {
+        return setTimeout(async () => {
+            const current = this.activeProcessing.get(guildId)?.get(userId);
+            if (current !== entry) return;
+            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla "${await this.resolveMemberName(guildId, userId)}" (${entry.commandName})`);
+            await this.expireOCRSession(guildId, userId);
+        }, timeoutDuration);
     }
 
     /**
@@ -1993,16 +2018,9 @@ class OCRService {
         const timeoutDuration = this.getSessionTimeout(active.commandName);
         const expiresAt = Date.now() + timeoutDuration;
 
-        // Ustaw nowy timeout
-        const timeout = setTimeout(async () => {
-            logger.warn(`[OCR] ⏰ Sesja OCR wygasła dla "${await this.resolveMemberName(guildId, userId)}" (${active.commandName})`);
-            await this.expireOCRSession(guildId, userId);
-        }, timeoutDuration);
-
-        // Zaktualizuj sesję z nowym timeoutem
+        // Ustaw nowy timeout (powiązany z tym konkretnym wpisem)
         active.expiresAt = expiresAt;
-        active.timeout = timeout;
-        guildSessions.set(userId, active);
+        active.timeout = this._scheduleExpiry(guildId, userId, active, timeoutDuration);
 
         const minutes = timeoutDuration / (60 * 1000);
         logger.info(`[OCR] 🔄 Odświeżono timeout dla "${await this.resolveMemberName(guildId, userId)}" (${active.commandName}, +${minutes} min)`);
@@ -2013,12 +2031,23 @@ class OCRService {
 
     /**
      * Kończy sesję OCR danego użytkownika (nie wpływa na sesje innych osób)
+     *
+     * @param {Object} [options]
+     * @param {number} [options.startedBefore] - kończy sesję tylko, jeśli wystartowała NIE PÓŹNIEJ
+     *   niż ten moment. Serwisy (remind/punish/faza) przekazują tu `createdAt` swojej sesji:
+     *   sprzątanie starej, porzuconej sesji (timeout, koniec anulowanej analizy) nie może
+     *   zamknąć NOWEJ sesji OCR, którą użytkownik zdążył w międzyczasie otworzyć.
      */
-    async endOCRSession(guildId, userId, immediate = false) {
+    async endOCRSession(guildId, userId, immediate = false, options = {}) {
         const guildSessions = this.activeProcessing.get(guildId);
         const active = guildSessions ? guildSessions.get(userId) : undefined;
         if (!active) {
             return; // Sesja już zakończona
+        }
+
+        if (options.startedBefore && active.startedAt > options.startedBefore) {
+            logger.info(`[OCR] ↪️ Pominięto zamknięcie sesji OCR ${userId} - aktywna sesja (${active.commandName}) jest nowsza niż sprzątana`);
+            return;
         }
 
         // Wyczyść timeout jeśli istnieje

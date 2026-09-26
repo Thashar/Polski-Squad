@@ -436,6 +436,10 @@ class ReminderUsageService {
         // Zwiększ całkowity licznik
         clanData.totalSent++;
 
+        // Zapis od razu - wcześniej użycie trafiało na dysk dopiero przy recordPingedUsers(),
+        // więc błąd lub restart pomiędzy gubił wpis i klan odzyskiwał zużyty limit
+        await this.saveUsageData();
+
         logger.info(`📤 Zarejestrowano użycie /remind dla klanu ${roleId} przez użytkownika ${senderId} (${clanData.totalSent} ogółem dla klanu)`);
     }
 
