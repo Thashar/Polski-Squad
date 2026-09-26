@@ -37,6 +37,18 @@ async function createSessionThread(inter, ocrService, guildId, userId, threadTit
     });
     ocrService.setSessionThreadId(guildId, userId, thread.id);
 
+    // Właściciel sesji MUSI być członkiem wątku. Discord dostarcza klientowi zdarzenia
+    // wiadomości (MESSAGE_CREATE/UPDATE) z wątku niezawodnie tylko jego członkom - bez tego
+    // klient (zwłaszcza mobilny) potrafił pokazać pusty wątek bez embeda z instrukcją albo
+    // "zamrozić" pasek postępu i nie pokazać przycisku "Wyślij przypomnienia", mimo że
+    // bot poprawnie wysłał/zedytował wiadomość. Wcześniej użytkownik trafiał do wątku
+    // dopiero przez ghost ping - już PO finalnej edycji, którą przegapiał.
+    try {
+        await thread.members.add(userId);
+    } catch (error) {
+        logger.warn(`[OCR] ⚠️ Nie udało się dodać użytkownika ${userId} do wątku sesji: ${error.message}`);
+    }
+
     // Discord wysyła na kanał macierzysty systemową wiadomość "X rozpoczął wątek: ...".
     // Zapisujemy jej ID, żeby usunąć ją razem z wątkiem po zakończeniu sesji - inaczej
     // zaśmieca kanał z embedem listy aktywnych sesji.
